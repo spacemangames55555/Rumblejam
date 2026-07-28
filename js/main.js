@@ -75,6 +75,7 @@ initOverlays({
 });
 window.addEventListener('pointerdown', ensureAudio, { once: false });
 window.addEventListener('keydown', ensureAudio, { once: false });
+window.uv = app; // debug/testing handle (read-only use)
 showTitle();
 
 // ---------------- lobby: host ----------------

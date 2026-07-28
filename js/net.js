@@ -9,6 +9,20 @@
 import { NET_PREFIX } from './config.js';
 import { randomRoomCode } from './rng.js';
 
+// Optional custom PeerServer via URL params (?peerhost=…&peerport=…&peerpath=…
+// &peersecure=0|1). Default: the free PeerJS cloud. Lets you self-host
+// signaling (peerjs --port 9000) if the cloud is down or blocked.
+function peerOptions() {
+  const q = new URLSearchParams(location.search);
+  if (!q.get('peerhost')) return {};
+  return {
+    host: q.get('peerhost'),
+    port: parseInt(q.get('peerport') || '443', 10),
+    path: q.get('peerpath') || '/',
+    secure: q.get('peersecure') !== '0',
+  };
+}
+
 export class HostTransport {
   constructor() {
     this.peer = null;
@@ -28,7 +42,7 @@ export class HostTransport {
     return new Promise((resolve, reject) => {
       if (typeof Peer === 'undefined') { reject(new Error('PeerJS failed to load')); return; }
       const code = randomRoomCode();
-      const peer = new Peer(NET_PREFIX + code);
+      const peer = new Peer(NET_PREFIX + code, peerOptions());
       const timeout = setTimeout(() => { try { peer.destroy(); } catch { /* noop */ } reject(new Error('timeout')); }, 8000);
       peer.on('open', () => {
         clearTimeout(timeout);
@@ -92,7 +106,7 @@ export class ClientTransport {
   join(code) {
     return new Promise((resolve, reject) => {
       if (typeof Peer === 'undefined') { reject(new Error('PeerJS failed to load — check your connection')); return; }
-      const peer = new Peer();
+      const peer = new Peer(peerOptions());
       let settled = false;
       const fail = err => { if (!settled) { settled = true; try { peer.destroy(); } catch { /* noop */ } reject(err); } };
       const timeout = setTimeout(() => fail(new Error('Could not reach that room (timeout)')), 10000);
