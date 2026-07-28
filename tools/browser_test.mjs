@@ -176,6 +176,69 @@ try {
   const x1 = await A.exec('return window.uv.sim.players[0].x');
   if (x1 > x0 + 30) ok(`player moves with keys (${Math.round(x0)}→${Math.round(x1)})`); else fail(`player did not move (${x0}→${x1})`);
 
+  // ---- start-room re-entry via real doorway mechanics ----
+  const OPP = { n: 's', s: 'n', e: 'w', w: 'e' };
+  const doorPosJs = dir => `const s=window.uv.sim, p=s.players[0], W=s.W, H=s.H, WALL=36;
+    ${dir === 'n' ? 'p.x=W/2; p.y=WALL+p.radius+2;'
+    : dir === 's' ? 'p.x=W/2; p.y=H-WALL-p.radius-2;'
+    : dir === 'w' ? 'p.x=WALL+p.radius+2; p.y=H/2;'
+    : 'p.x=W-WALL-p.radius-2; p.y=H/2;'} return 1;`;
+  async function clearIfLocked(br) {
+    await br.exec(`const s=window.uv.sim; let g=0; while(s.roomLocked && !s.boss && g++<40){s.debug('F3'); for(let i=0;i<20;i++)s.tick();}
+      const p=s.players[0]; let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(0,{kind:'levelup',id:p.pendingOffer[0].id});
+      if (p.treasureOffer) s.uiAction(0,{kind:'treasure',id:null}); return 1;`);
+  }
+  async function walkThroughDoor(br, dir, what) {
+    const from = await br.exec('return window.uv.sim.roomId');
+    for (let i = 0; i < 26; i++) {
+      await br.exec(doorPosJs(dir));
+      await sleep(300);
+      const cur = await br.exec('return window.uv.sim.roomId');
+      if (cur !== from) return cur;
+    }
+    throw new Error(`door walk (${what}, dir ${dir}) never transitioned`);
+  }
+  async function startRoomRoundTrip(floorLabel) {
+    const startId = await A.exec('return window.uv.sim.floor.startId');
+    const dirOut = await A.exec(`const s=window.uv.sim; return Object.keys(s.floor.rooms[s.floor.startId].doors)[0]`);
+    await walkThroughDoor(A, dirOut, `${floorLabel}: leave start`);
+    await clearIfLocked(A);
+    const back = await walkThroughDoor(A, OPP[dirOut], `${floorLabel}: re-enter start`);
+    if (back !== startId) { fail(`${floorLabel}: walked back but landed in room ${back}, not start ${startId}`); return; }
+    // cross through and out a different door if one exists (else the same one)
+    const dirs = await A.exec(`const s=window.uv.sim; return Object.keys(s.floor.rooms[s.floor.startId].doors)`);
+    const dir2 = dirs.find(d => d !== dirOut) || dirOut;
+    await walkThroughDoor(A, dir2, `${floorLabel}: cross out of start`);
+    await clearIfLocked(A);
+    ok(`${floorLabel}: start room exits, re-enters, and crosses (out ${dirOut}, back ${OPP[dirOut]}, out ${dir2})`);
+  }
+  await startRoomRoundTrip('floor 1');
+  await A.exec(`window.uv.sim.debug('F4'); return 1;`);
+  await sleep(300);
+  await startRoomRoundTrip('floor 2');
+
+  // ---- leave-run button: solo abandon → lobby → fresh run ----
+  await A.exec(`document.getElementById('leave-btn').click()`);
+  await A.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')`, 2000, 'leave confirm dialog');
+  const confirmText = await A.exec(`return document.getElementById('leave-confirm').textContent`);
+  if (/whole party/.test(confirmText)) ok('host-flavored confirmation text'); else fail(`confirm text: ${confirmText.slice(0, 120)}`);
+  await A.exec(`document.getElementById('leave-yes').click()`);
+  await A.waitFor(`return window.uv.mode==='lobby' && !document.getElementById('screen-lobby').classList.contains('hidden')`, 3000, 'lobby after abandon');
+  ok('solo abandon → straight to lobby (no results screen)');
+  await A.exec(`document.querySelector('.char-card[data-char="courier"]').click()`);
+  await sleep(300);
+  await A.exec(`document.getElementById('btn-start').click()`);
+  await A.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 4000, 'second run after abandon');
+  const fresh = await A.exec(`const s=window.uv.sim, p=s.players[0]; return JSON.stringify({char:p.charId, mats:p.materials, lvl:p.level, floor:s.floorNum, items:p.items.length})`);
+  const fr = JSON.parse(fresh);
+  if (fr.char === 'courier' && fr.mats === 0 && fr.lvl === 1 && fr.floor === 1 && fr.items === 0) ok(`fresh run after abandon (${fresh})`);
+  else fail(`run not fresh after abandon: ${fresh}`);
+  // play into the second room of the new run
+  const d2 = await A.exec(`const s=window.uv.sim; return Object.keys(s.floor.rooms[s.floor.startId].doors)[0]`);
+  await walkThroughDoor(A, d2, 'second run: first door');
+  await clearIfLocked(A);
+  ok('new run plays into its second room');
+
   // fast full run using sim driving (renderer active the whole time)
   const runResult = await A.exec(`
     const app = window.uv, sim = app.sim;
@@ -314,6 +377,55 @@ if (wantCoop) {
       await B.exec(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}))`);
       const hx1 = await A.exec(`return Math.round(window.uv.sim.players[1].x)`);
       if (hx1 > hx0 + 30) ok(`host sees client movement (${hx0}→${hx1})`); else fail(`client movement not seen by host (${hx0}→${hx1})`);
+
+      // host abandons the run → whole party lands in the lobby together
+      await A.exec(`document.getElementById('leave-btn').click()`);
+      await A.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')`, 2000, 'host confirm dialog');
+      await A.exec(`document.getElementById('leave-yes').click()`);
+      await A.waitFor(`return window.uv.mode==='lobby'`, 4000, 'host in lobby after abandon');
+      await B.waitFor(`return window.uv.mode==='lobby' && !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'client in lobby after abandon');
+      const lobbySizes = [await A.exec(`return window.uv.lobby.players.length`), await B.exec(`return window.uv.lobby.players.length`)];
+      if (lobbySizes[0] === 2 && lobbySizes[1] === 2) ok('host abandon → both players in the lobby, connection intact');
+      else fail(`lobby sizes after abandon: host=${lobbySizes[0]} client=${lobbySizes[1]}`);
+      // both pick fresh characters and start a brand-new run
+      await A.exec(`document.querySelector('.char-card[data-char="lamprey"]').click()`);
+      await B.exec(`document.querySelector('.char-card[data-char="glasswing"]').click()`);
+      await sleep(400);
+      await B.exec(`document.getElementById('btn-ready').click()`);
+      await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'client re-ready');
+      await A.exec(`document.getElementById('btn-start').click()`);
+      await A.waitFor(`return window.uv.mode==='run' && window.uv.sim && window.uv.sim.players[0].charId==='lamprey' && window.uv.sim.players[0].materials===0`, 5000, 'fresh co-op run (host)');
+      await B.waitFor(`return window.uv.mode==='run'`, 5000, 'fresh co-op run (client)');
+      ok('fresh co-op run starts for both after abandon');
+
+      // both players walk out of the start room and back in together
+      const posAllJs = dir => `const s=window.uv.sim, W=s.W, H=s.H, WALL=36;
+        for (const p of s.players) { if (p.gone||p.downed) continue;
+          ${dir === 'n' ? 'p.x=W/2; p.y=WALL+p.radius+2;'
+          : dir === 's' ? 'p.x=W/2; p.y=H-WALL-p.radius-2;'
+          : dir === 'w' ? 'p.x=WALL+p.radius+2; p.y=H/2;'
+          : 'p.x=W-WALL-p.radius-2; p.y=H/2;'} } return 1;`;
+      async function walkAllThroughDoor(dir, what) {
+        const from = await A.exec('return window.uv.sim.roomId');
+        for (let i = 0; i < 26; i++) {
+          await A.exec(posAllJs(dir));
+          await sleep(300);
+          const cur = await A.exec('return window.uv.sim.roomId');
+          if (cur !== from) return cur;
+        }
+        throw new Error(`co-op door walk (${what}, ${dir}) never transitioned`);
+      }
+      const coopOpp = { n: 's', s: 'n', e: 'w', w: 'e' };
+      const cStart = await A.exec('return window.uv.sim.floor.startId');
+      const cDir = await A.exec(`const s=window.uv.sim; return Object.keys(s.floor.rooms[s.floor.startId].doors)[0]`);
+      await walkAllThroughDoor(cDir, 'party leaves start');
+      await A.exec(`const s=window.uv.sim; let g=0; while(s.roomLocked && !s.boss && g++<40){s.debug('F3'); for(let i=0;i<20;i++)s.tick();}
+        for (const p of s.players){let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id}); if (p.treasureOffer) s.uiAction(p.idx,{kind:'treasure',id:null});} return 1;`);
+      const cBack = await walkAllThroughDoor(coopOpp[cDir], 'party re-enters start');
+      if (cBack === cStart) ok('both players walk back into the start room together');
+      else fail(`party walked back into room ${cBack}, not start ${cStart}`);
+      await B.waitFor(`return window.uv.roomInfo && window.uv.roomInfo.roomId===${cStart}`, 4000, 'client sees start room re-entry');
+      ok('client HUD follows the start-room re-entry');
       // client sees host's snapshot state
       const snapAge = await B.exec(`return performance.now() - window.uv.lastSnapAt`);
       if (snapAge < 1000) ok('client receives snapshots'); else fail(`stale snapshots (${Math.round(snapAge)}ms)`);
@@ -402,16 +514,36 @@ if (wantCoop) {
           await C.open('C', { peerjsB64 });
           await C.goto(COOP_URL);
           await C.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title C');
-          await C.exec(`document.getElementById('name-input').value='LATE'; document.getElementById('join-code').value='${code2}'; document.getElementById('btn-join').click()`);
-          await C.waitFor(`return window.uv.mode==='lobby'`, 15000, 'C joins lobby');
-          await B.exec(`document.querySelector('.char-card[data-char="redmaw"]').click()`);
-          await C.waitFor(`return document.querySelector('.char-card[data-char="courier"]')!==null`, 4000, 'C char grid');
-          await C.exec(`document.querySelector('.char-card[data-char="courier"]').click()`);
-          await sleep(400);
-          await C.exec(`document.getElementById('btn-ready').click()`);
-          await B.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'C ready');
-          await B.exec(`document.getElementById('btn-start').click()`);
-          await C.waitFor(`return window.uv.mode==='run'`, 6000, 'C in run');
+          const joinAndStart = async () => {
+            await C.exec(`document.getElementById('name-input').value='LATE'; document.getElementById('join-code').value='${code2}'; document.getElementById('btn-join').click()`);
+            await C.waitFor(`return window.uv.mode==='lobby'`, 15000, 'C joins lobby');
+            await B.waitFor(`return window.uv.lobby.players.length===2`, 5000, 'B sees C');
+            await B.exec(`document.querySelector('.char-card[data-char="redmaw"]').click()`);
+            await C.waitFor(`return document.querySelector('.char-card[data-char="courier"]')!==null`, 4000, 'C char grid');
+            await C.exec(`document.querySelector('.char-card[data-char="courier"]').click()`);
+            await sleep(400);
+            await C.exec(`document.getElementById('btn-ready').click()`);
+            await B.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'C ready');
+            await B.exec(`document.getElementById('btn-start').click()`);
+            await C.waitFor(`return window.uv.mode==='run'`, 6000, 'C in run');
+          };
+          await joinAndStart();
+          // non-host uses the leave button: leaves alone, host's game continues
+          await C.exec(`document.getElementById('leave-btn').click()`);
+          await C.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')`, 2000, 'C confirm dialog');
+          const cText = await C.exec(`return document.getElementById('leave-confirm').textContent`);
+          if (/plays on without you/.test(cText)) ok('non-host-flavored confirmation text'); else fail(`C confirm text: ${cText.slice(0, 120)}`);
+          await C.exec(`document.getElementById('leave-yes').click()`);
+          await C.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 5000, 'C back at title');
+          await B.waitFor(`return window.uv.mode==='run' && window.uv.sim && !window.uv.sim.over && window.uv.sim.players[1].gone`, 8000, 'host continues without C');
+          ok('non-host leave: player exits alone, host run continues');
+          // host abandons its now-solo run → back to a joinable lobby with the same code
+          await B.exec(`document.getElementById('leave-btn').click()`);
+          await B.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')`, 2000, 'B confirm dialog');
+          await B.exec(`document.getElementById('leave-yes').click()`);
+          await B.waitFor(`return window.uv.mode==='lobby'`, 4000, 'B in lobby after abandon');
+          await joinAndStart(); // same room code accepts a rejoin post-abandon
+          ok('post-abandon lobby is joinable with the same code; new run starts');
           await B.close(); // kill the host window mid-run
           await C.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden') && document.getElementById('title-err').textContent.includes('Host disconnected')`, 12000, 'host-disconnected notice');
           ok('client shows "Host disconnected" when the host window dies mid-run');

@@ -66,6 +66,10 @@ is direct browser-to-browser WebRTC.
   countdown; stand on the hatch after a boss to descend.
 - The ⚙ button (bottom right) has SFX volume and a screen-shake toggle; it
   never pauses the simulation.
+- The ↰ button (next to ⚙, in-run only) leaves the run after a confirmation:
+  the host/solo player ends the run for the whole party and everyone returns
+  to the lobby together for a fresh run; a non-host player leaves alone and
+  returns to the title screen.
 
 ## Debug keys
 
@@ -124,6 +128,11 @@ never loads them:
   shop is safe and a floor-4 victory can't be stolen by a stray add.
 - **If the host closes after the run ends**, clients keep their results screen
   instead of being bounced to "Host disconnected".
+- **Abandoning a run** (↰ button) skips the results screen and drops the whole
+  party straight into the lobby with connections and room code intact.
+  Everyone's previous character stays pre-selected but ready states reset, so
+  each player confirms before the next run; the post-abandon lobby also
+  accepts brand-new joiners on the same code.
 - **Hazards hurt players only** — enemies walking through lava tickled the
   balance in unreadable ways.
 - **Melee and the Range stat**: melee weapons gain 30% of the flat Range stat,

@@ -1905,10 +1905,12 @@ function doorAnchor(dir) {
 export function doorwayAt(p, room) {
   const gap = DOOR_W / 2;
   const m = 16; // how close to the wall counts as "in the doorway"
-  if (room.doors.n && Math.abs(p.x - W / 2) < gap && p.y < WALL + p.radius + m) return 'n';
-  if (room.doors.s && Math.abs(p.x - W / 2) < gap && p.y > H - WALL - p.radius - m) return 's';
-  if (room.doors.w && Math.abs(p.y - H / 2) < gap && p.x < WALL + p.radius + m) return 'w';
-  if (room.doors.e && Math.abs(p.y - H / 2) < gap && p.x > W - WALL - p.radius - m) return 'e';
+  // room ids are array indices — id 0 (the start room) is falsy, so these
+  // checks must test for presence, not truthiness
+  if (room.doors.n !== undefined && Math.abs(p.x - W / 2) < gap && p.y < WALL + p.radius + m) return 'n';
+  if (room.doors.s !== undefined && Math.abs(p.x - W / 2) < gap && p.y > H - WALL - p.radius - m) return 's';
+  if (room.doors.w !== undefined && Math.abs(p.y - H / 2) < gap && p.x < WALL + p.radius + m) return 'w';
+  if (room.doors.e !== undefined && Math.abs(p.y - H / 2) < gap && p.x > W - WALL - p.radius - m) return 'e';
   return null;
 }
 

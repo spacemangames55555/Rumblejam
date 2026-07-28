@@ -11,7 +11,8 @@ let bannerTimer = null;
 
 export function showHud(on) {
   $('hud').classList.toggle('hidden', !on);
-  if (!on) { $('hud-players').innerHTML = ''; $('hud-toasts').innerHTML = ''; }
+  $('leave-btn').classList.toggle('hidden', !on);
+  if (!on) { $('hud-players').innerHTML = ''; $('hud-toasts').innerHTML = ''; $('leave-confirm').classList.add('hidden'); }
 }
 
 // meta: my private meta; view: interpolated/live view; ctx: {floorNum, layout, visited, curRoom, boss}
