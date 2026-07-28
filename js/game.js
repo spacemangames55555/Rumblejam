@@ -562,7 +562,7 @@ export class Sim {
       const w = p.weapons[i];
       const def = WEAPON_BY_ID[w.id];
       if (def.cls === 'summon') continue; // structures act on their own
-      const cdMax = def.cd / (1 + p.stats.attackSpeed / 100);
+      const cdMax = def.cd / Math.max(0.25, 1 + p.stats.attackSpeed / 100);
       w.cd -= dt;
       if (w.cd > 0) continue;
       const range = this._weaponRange(p, def);
@@ -575,7 +575,7 @@ export class Sim {
 
   _weaponRange(p, def) {
     const melee = def.cls === 'swing' || def.cls === 'thrust';
-    return def.range + p.stats.range * (melee ? 0.3 : 1);
+    return Math.max(40, def.range + p.stats.range * (melee ? 0.3 : 1));
   }
 
   _fireWeapon(p, w, widx, opts = {}) {
