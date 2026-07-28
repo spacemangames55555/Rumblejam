@@ -1,0 +1,78 @@
+// Math helpers, object pool, spatial hash grid.
+
+export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+export const lerp = (a, b, t) => a + (b - a) * t;
+export const dist2 = (ax, ay, bx, by) => { const dx = bx - ax, dy = by - ay; return dx * dx + dy * dy; };
+export const dist = (ax, ay, bx, by) => Math.sqrt(dist2(ax, ay, bx, by));
+export const angleTo = (ax, ay, bx, by) => Math.atan2(by - ay, bx - ax);
+export const angDiff = (a, b) => {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+};
+export const rint = v => Math.round(v);
+
+// Fixed-capacity object pool. Objects carry `active`; iteration walks a dense
+// list of live indices maintained on alloc/free.
+export class Pool {
+  constructor(capacity, factory) {
+    this.items = new Array(capacity);
+    for (let i = 0; i < capacity; i++) { this.items[i] = factory(); this.items[i]._pi = i; this.items[i].active = false; }
+    this.free = [];
+    for (let i = capacity - 1; i >= 0; i--) this.free.push(i);
+    this.live = new Set();
+  }
+  alloc() {
+    if (!this.free.length) return null; // pool exhausted: caller skips spawn
+    const i = this.free.pop();
+    const o = this.items[i];
+    o.active = true;
+    this.live.add(i);
+    return o;
+  }
+  release(o) {
+    if (!o.active) return;
+    o.active = false;
+    this.live.delete(o._pi);
+    this.free.push(o._pi);
+  }
+  clear() { for (const i of [...this.live]) this.release(this.items[i]); }
+  *[Symbol.iterator]() { for (const i of this.live) yield this.items[i]; }
+  get count() { return this.live.size; }
+}
+
+// Spatial hash over entities with x,y,radius. Rebuilt each tick.
+export class SpatialHash {
+  constructor(cell) { this.cell = cell; this.map = new Map(); }
+  clear() { this.map.clear(); }
+  _key(cx, cy) { return cx * 4096 + cy; }
+  insert(e) {
+    const c = this.cell;
+    const x0 = Math.floor((e.x - e.radius) / c), x1 = Math.floor((e.x + e.radius) / c);
+    const y0 = Math.floor((e.y - e.radius) / c), y1 = Math.floor((e.y + e.radius) / c);
+    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
+      const k = this._key(cx, cy);
+      let arr = this.map.get(k);
+      if (!arr) { arr = []; this.map.set(k, arr); }
+      arr.push(e);
+    }
+  }
+  // Calls fn(e) for entities in cells overlapping the circle; may repeat entities
+  // that span cells — callers must handle idempotently or dedupe by stamp.
+  query(x, y, r, fn) {
+    const c = this.cell;
+    const x0 = Math.floor((x - r) / c), x1 = Math.floor((x + r) / c);
+    const y0 = Math.floor((y - r) / c), y1 = Math.floor((y + r) / c);
+    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
+      const arr = this.map.get(this._key(cx, cy));
+      if (arr) for (let i = 0; i < arr.length; i++) fn(arr[i]);
+    }
+  }
+}
+
+export function formatStatLine(key, val, STAT_NAME, STAT_IS_PCT) {
+  const sign = val > 0 ? '+' : '';
+  const pct = STAT_IS_PCT[key] ? '%' : '';
+  return `${sign}${val}${pct} ${STAT_NAME[key]}`;
+}
