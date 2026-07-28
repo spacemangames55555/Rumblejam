@@ -1275,6 +1275,8 @@ export class Sim {
         const gain = Math.min(it.cap, Math.floor(p.materials * it.rate / 100));
         if (gain > 0) { this._collectMaterial(p, gain); this.pushEvent({ k: 'toast', idx: p.idx, text: `Interest +${gain}` }); }
       }
+      // baseline breather: recover 10% of missing HP at each clear (+item heals)
+      this._heal(p, Math.ceil((p.stats.maxHp - p.hp) * 0.1));
       if (p.hookAgg.roomClearHeal > 0) this._heal(p, p.hookAgg.roomClearHeal);
       // trait growths
       const t = p.char.trait;

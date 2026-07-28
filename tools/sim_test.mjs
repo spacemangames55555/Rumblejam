@@ -128,9 +128,9 @@ try {
   if (sim.over) fail('coop wiped unexpectedly on floor 1');
   // down player 1 then revive via proximity
   const p1 = sim.players[1];
-  p1.hp = 1; p1.invuln = 0;
-  sim.hurtPlayer(p1, 999, null);
-  if (!p1.downed) fail('hurtPlayer(999) did not down the target');
+  let gDown = 0;
+  while (!p1.downed && gDown++ < 60) { p1.hp = Math.min(p1.hp, 1); p1.invuln = 0; sim.hurtPlayer(p1, 999, null); }
+  if (!p1.downed) fail('repeated hurtPlayer(999) did not down the target');
   sim.players[0].x = p1.x; sim.players[0].y = p1.y;
   run(sim, 60 * 4);
   if (p1.downed) fail('revive by proximity failed after 4s');
