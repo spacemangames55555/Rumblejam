@@ -693,7 +693,7 @@ export class Sim {
             vx: Math.cos(a) * def.projSpeed, vy: Math.sin(a) * def.projSpeed,
             dmg, crit, friendly: true, lob: true, ttl: d / def.projSpeed,
             radius: 7, color: def.color, owner: p.idx, pierce: 0, hitIds: null,
-            weaponId: def.id, kind: 'lob',
+            weaponId: def.id, kind: 'lob', summonBurn: null, summonKnock: 0,
           });
         }
         this.pushEvent({ k: 'sfx', s: 'shoot' });
@@ -712,7 +712,7 @@ export class Sim {
       vx: Math.cos(a) * def.projSpeed, vy: Math.sin(a) * def.projSpeed,
       dmg, crit, friendly: true, lob: false, ttl: (range + 60) / def.projSpeed,
       radius: 5, color: def.color, owner: p.idx, pierce, hitIds: new Set(),
-      weaponId: def.id, kind: 'shot',
+      weaponId: def.id, kind: 'shot', summonBurn: null, summonKnock: 0,
     });
   }
 
@@ -778,7 +778,8 @@ export class Sim {
     e.burnOwner = owner;
   }
   _applySlow(e, mult, dur) {
-    if (!e.active || e.boss) return;
+    if (!e.active) return;
+    if (e.boss) mult = 1 - (1 - mult) * 0.5; // bosses shrug off half of any chill
     e.slowMult = Math.min(e.slowMult === undefined || e.slowT <= 0 ? 1 : e.slowMult, mult);
     e.slowT = Math.max(e.slowT || 0, dur);
   }
@@ -950,13 +951,13 @@ export class Sim {
     this.shake = Math.max(this.shake, 3);
     this.pushEvent({ k: 'sfx', s: 'hurt' });
     this.fx.hits.push({ x: Math.round(p.x), y: Math.round(p.y - 24), a: dmg, c: 3 }); // red popup
-    // retaliation vs the attacking enemy
-    if (src && src.active) {
-      if (p.hookAgg.thorns > 0) this.damageEnemy(src, p.hookAgg.thorns, { owner: p, noLifesteal: true });
-      for (const r of p.hookAgg.onHurtRetaliate) {
-        this.fx.booms.push({ x: p.x, y: p.y, r: r.radius });
-        this._areaDamageEnemies(p.x, p.y, r.radius, r.damage, p);
-      }
+    // thorns need an attacker to reflect at; the retaliate nova fires on ANY hit
+    if (src && src.active && p.hookAgg.thorns > 0) {
+      this.damageEnemy(src, p.hookAgg.thorns, { owner: p, noLifesteal: true });
+    }
+    for (const rt of p.hookAgg.onHurtRetaliate) {
+      this.fx.booms.push({ x: p.x, y: p.y, r: rt.radius });
+      this._areaDamageEnemies(p.x, p.y, rt.radius, rt.damage, p);
     }
     if (p.hp <= 0) {
       // second wind item: cheat death once per floor
@@ -1000,7 +1001,9 @@ export class Sim {
             pr.hitIds.add(e.id);
             const owner = this.players[pr.owner];
             const def = WEAPON_BY_ID[pr.weaponId];
-            this._hitEnemy(e, pr.dmg, { owner, crit: pr.crit, weaponDef: def, knock: def ? def.knock * owner.hookAgg.knockMult : 0, baseDmg: pr.dmg }, Math.atan2(pr.vy, pr.vx));
+            const knock = ((def && def.knock) || pr.summonKnock || 0) * owner.hookAgg.knockMult;
+            this._hitEnemy(e, pr.dmg, { owner, crit: pr.crit, weaponDef: def, knock, baseDmg: pr.dmg }, Math.atan2(pr.vy, pr.vx));
+            if (pr.summonBurn && e.active) this._applyBurn(e, pr.summonBurn.dps * (1 + owner.stats.elementalDamage / 100), pr.summonBurn.dur, owner);
             if (pr.pierce > 0) pr.pierce--; else { dead = true; }
           }
         });
@@ -1043,7 +1046,7 @@ export class Sim {
     Object.assign(pr, {
       id: ++this.spawnCounter, x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
       dmg, crit: false, friendly: false, lob: false, ttl: 4, radius, color: color || '#ff5d6c',
-      owner: -1, pierce: 0, hitIds: null, weaponId: null, kind: 'eshot',
+      owner: -1, pierce: 0, hitIds: null, weaponId: null, kind: 'eshot', summonBurn: null, summonKnock: 0,
     });
   }
 
@@ -1121,7 +1124,7 @@ export class Sim {
       for (const p of this.livePlayers()) {
         if (p.downed) continue;
         const d = dist(v.x, v.y, p.x, p.y);
-        if (d < v.pullR && d > 8) {
+        if (d < v.pullR && d > 8 && p.char.trait.key !== 'kb_immune_big') { // Bulwark stands firm
           const a = angleTo(p.x, p.y, v.x, v.y);
           p.pullX += Math.cos(a) * v.pullSpd;
           p.pullY += Math.sin(a) * v.pullSpd;
@@ -1341,9 +1344,8 @@ export class Sim {
     for (const pr of this.projPool) if (!pr.friendly) this.projPool.release(pr);
     this.pushEvent({ k: 'bossDown', name: e.bossDef.name });
     this.pushEvent({ k: 'sfx', s: 'boom' });
-    for (const p of this.livePlayers()) if (p.downed) this._revive(p, CONFIG.REVIVE_HP);
     for (const m of this.pickups) { const p = this.nearestLivingPlayer(m.x, m.y); if (p) m.target = p.idx; }
-    for (const p of this.livePlayers()) this._maybeOffer(p);
+    for (const p of this.livePlayers()) this._clearRewards(p); // boss rooms are room clears too
     if (this.floorNum >= CONFIG.FLOORS) {
       this.pendingEnd = 2.5; // brief beat to vacuum materials, then victory
     } else {
@@ -1551,7 +1553,14 @@ export class Sim {
     if (s.type === 'mirror') {
       const w0 = p.weapons[0];
       const wdef = w0 ? WEAPON_BY_ID[w0.id] : null;
-      return { def: wdef, dmg: wdef ? wdef.dmg * TIER_MULT[w0.tier - 1] * t.factor : 0, cd: wdef ? Math.max(0.3, wdef.cd) : 1, range: wdef ? wdef.range + 120 : 0, hp: 35, projSpeed: wdef && wdef.projSpeed || 650, knock: 10 };
+      const eng0 = 1 + Math.max(-5, p.stats.engineering) * ENG_SCALE;
+      const boost0 = 1 + p.hookAgg.summonDmg / 100;
+      return {
+        def: wdef, dmg: wdef ? wdef.dmg * TIER_MULT[w0.tier - 1] * t.factor * eng0 * boost0 : 0,
+        cd: wdef ? Math.max(0.3, wdef.cd) : 1, range: wdef ? wdef.range + 120 : 0,
+        hp: 35 * eng0 * (1 + p.hookAgg.summonHp / 100),
+        projSpeed: wdef && wdef.projSpeed || 650, knock: 10,
+      };
     }
     const sd = def.summon;
     const eng = 1 + Math.max(-5, p.stats.engineering) * ENG_SCALE;
@@ -1646,6 +1655,7 @@ export class Sim {
           ttl: (st.range + 80) / st.projSpeed, radius: 4,
           color: st.def ? st.def.color : '#4fd8eb', owner: p.idx, pierce: 0, hitIds: new Set(),
           weaponId: s.weaponId || (st.def ? st.def.id : null), kind: 'shot',
+          summonBurn: st.burn || null, summonKnock: st.knock || 0,
         });
       }
     }

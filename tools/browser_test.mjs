@@ -376,12 +376,49 @@ if (wantCoop) {
       await A.waitFor(`return window.uv.mode==='results'`, 5000, 'host results');
       await B.waitFor(`return window.uv.mode==='results'`, 5000, 'client results');
       ok('wipe → results on both host and client');
-      // host disconnect → client notified
+      // host closes while client reads results → client keeps the results screen
       await A.close();
-      await B.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden') && document.getElementById('title-err').textContent.includes('Host disconnected')`, 12000, 'host-disconnected notice');
-      ok('client shows "Host disconnected" when host dies');
-      const berrs = await B.errors();
-      if (berrs.length) fail(`client console errors: ${berrs.join(' | ').slice(0, 300)}`); else ok('no client console errors');
+      await sleep(2500);
+      const stillResults = await B.exec(`return window.uv.mode==='results' && !document.getElementById('screen-results').classList.contains('hidden')`);
+      if (stillResults) ok('client keeps its results screen when the host leaves post-run'); else fail('client lost results screen on host close');
+      await B.exec(`document.getElementById('btn-title').click()`);
+      await B.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 4000, 'client back to title');
+
+      // phase 2 (DoD 6): B hosts a fresh run, C joins, host dies MID-RUN
+      await B.exec(`document.getElementById('name-input').value='HOST2'; document.getElementById('btn-host').click()`);
+      const code2 = await (async () => {
+        const t0 = Date.now();
+        for (;;) {
+          const c = await B.exec(`return window.uv.lobby && window.uv.lobby.code`);
+          if (c) return c;
+          if (Date.now() - t0 > 12000) return null;
+          await sleep(300);
+        }
+      })();
+      if (!code2) fail('re-host registration failed');
+      else {
+        const C = new Browser();
+        try {
+          await C.open('C', { peerjsB64 });
+          await C.goto(COOP_URL);
+          await C.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title C');
+          await C.exec(`document.getElementById('name-input').value='LATE'; document.getElementById('join-code').value='${code2}'; document.getElementById('btn-join').click()`);
+          await C.waitFor(`return window.uv.mode==='lobby'`, 15000, 'C joins lobby');
+          await B.exec(`document.querySelector('.char-card[data-char="redmaw"]').click()`);
+          await C.waitFor(`return document.querySelector('.char-card[data-char="courier"]')!==null`, 4000, 'C char grid');
+          await C.exec(`document.querySelector('.char-card[data-char="courier"]').click()`);
+          await sleep(400);
+          await C.exec(`document.getElementById('btn-ready').click()`);
+          await B.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'C ready');
+          await B.exec(`document.getElementById('btn-start').click()`);
+          await C.waitFor(`return window.uv.mode==='run'`, 6000, 'C in run');
+          await B.close(); // kill the host window mid-run
+          await C.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden') && document.getElementById('title-err').textContent.includes('Host disconnected')`, 12000, 'host-disconnected notice');
+          ok('client shows "Host disconnected" when the host window dies mid-run');
+          const cerrs = await C.errors();
+          if (cerrs.length) fail(`client console errors: ${cerrs.join(' | ').slice(0, 300)}`); else ok('no client console errors');
+        } finally { await C.close(); }
+      }
     }
   } catch (e) {
     fail(`coop test: ${e.message}`);

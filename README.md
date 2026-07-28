@@ -116,7 +116,14 @@ never loads them:
   everyone recovers 10% of missing HP. Pure attrition across ~48 rooms was
   unrecoverable without mandatory sustain builds.
 - **Elite rooms** give every player a free choice of 1 from 3 rare-or-better
-  items (mirrors the treasure room flow, at higher rarity).
+  items (mirrors the treasure room flow, at higher rarity), and spawn half the
+  normal quota of basic enemies alongside the elites so the fight stays about
+  the champions.
+- **Bosses shrug off half of any slow** (chills work at 50% potency on them),
+  and killing a boss sweeps its leftover adds/projectiles so the post-boss
+  shop is safe and a floor-4 victory can't be stolen by a stray add.
+- **If the host closes after the run ends**, clients keep their results screen
+  instead of being bounced to "Host disconnected".
 - **Hazards hurt players only** — enemies walking through lava tickled the
   balance in unreadable ways.
 - **Melee and the Range stat**: melee weapons gain 30% of the flat Range stat,

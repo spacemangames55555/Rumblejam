@@ -25,7 +25,7 @@ export function updateEnemy(sim, e, dt) {
     if (e.eliteMod.blockCd) e.blockT = Math.max(0, (e.blockT || 0) - dt);
     if (e.eliteMod.pullR) {
       for (const p of sim.players) {
-        if (p.downed) continue;
+        if (p.downed || p.gone || p.char.trait.key === 'kb_immune_big') continue; // Bulwark resists pull
         const d = dist(e.x, e.y, p.x, p.y);
         if (d < e.eliteMod.pullR && d > 10) {
           const a = angleTo(p.x, p.y, e.x, e.y);
