@@ -1,7 +1,7 @@
 // UNDERVAULT — global tuning constants and palette. All numbers referenced by the
 // simulation live here or in js/content/ data modules.
 
-export const DEV = false; // enables F1–F6 debug keys (see README)
+export const DEV = true; // enables F1–F6 debug keys (host only; see README). Set false for clean runs.
 
 export const CONFIG = {
   TICK_RATE: 60,

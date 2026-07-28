@@ -409,8 +409,15 @@ export class Sim {
     this._tickSpawning(dt);
     // players
     for (const p of this.players) { if (!p.gone) this._tickPlayer(p, dt); }
-    // periodic stat recompute (auras, low-hp, frenzy expiry)
-    if (this.tickNum % 15 === 0) for (const p of this.players) { if (!p.gone) this._recomputeStats(p); }
+    // periodic stat recompute (auras, low-hp, frenzy expiry); also surface
+    // level-ups earned from post-clear pickup vacuuming without a new clear
+    if (this.tickNum % 15 === 0) {
+      for (const p of this.players) {
+        if (p.gone) continue;
+        this._recomputeStats(p);
+        if (!this.roomLocked && this._rs().cleared && p.banked > 0) this._maybeOffer(p);
+      }
+    }
     // summons
     this._tickSummons(dt);
     // enemies (movement + behaviors)
@@ -1399,6 +1406,9 @@ export class Sim {
   _openShop(p, context = 'shop') {
     if (p.gone) return;
     if (!p.shop || p.shop.key !== `${this.floorNum}:${context}:${this.roomId}`) {
+      // locked offers survive into the next shop even if the overlay was never
+      // explicitly closed (e.g. the party walked out mid-browse)
+      if (p.shop) p.shopLocksCarry = p.shop.stock.filter(s => s.locked && !s.sold);
       p.shopVisit++;
       const rng = subRng(this.seed, 'shop', this.floorNum, this.roomId, p.idx, p.shopVisit);
       p.shop = {
@@ -1679,11 +1689,9 @@ export class Sim {
         if (s && !s.sold) { s.locked = !s.locked; this._sendShop(p); }
         break;
       }
-      case 'closeShop': {
-        // carry locked entries to the next shop
-        if (p.shop) p.shopLocksCarry = p.shop.stock.filter(s => s.locked && !s.sold);
-        break;
-      }
+      case 'closeShop':
+        break; // lock carryover happens when the next shop session opens
+
     }
   }
 
