@@ -85,6 +85,7 @@ function tryGenerate(rng, target, floorNum, relaxed = false) {
       elite.kind = 'elite';
       elite.doors[opp] = a.id;
       a.doors[dir] = elite.id;
+      rooms.push(elite); // rooms[] was snapshotted before the elite was carved
       break outer;
     }
   }

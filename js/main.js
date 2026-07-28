@@ -95,13 +95,13 @@ function hostGame() {
   t.onPeerLeave = key => hostDropPeer(key);
   t.onMessage = (key, msg) => hostOnMessage(key, msg);
   t.createRoom().then(code => {
-    if (app.role !== 'host') return;
+    if (app.role !== 'host' || app.hostT !== t) return; // stale transport (re-hosted meanwhile)
     app.lobby.code = code;
     app.lobby.codePending = false;
     refreshLobby();
   }).catch(err => {
     console.warn('PeerJS room registration failed — offline solo mode', err);
-    if (app.role !== 'host' || !app.lobby) return;
+    if (app.role !== 'host' || app.hostT !== t || !app.lobby) return;
     app.lobby.codePending = false;
     app.lobby.code = null;
     refreshLobby();
@@ -129,7 +129,9 @@ function hostOnMessage(key, msg) {
       if (app.mode !== 'lobby') { app.hostT.send(key, { t: 'refused', reason: 'Run already in progress' }); app.hostT.kick(key); return; }
       if (app.lobby.players.length >= CONFIG.MAX_PLAYERS) { app.hostT.send(key, { t: 'refused', reason: 'Room is full' }); app.hostT.kick(key); return; }
       if (!app.lobby.players.some(p => p.key === key)) {
-        app.lobby.players.push({ key, name: String(msg.name || 'ANON').slice(0, 12), color: PALETTE.players[app.lobby.players.length % 4], charId: null, ready: false, isHost: false });
+        const used = new Set(app.lobby.players.map(p => p.color));
+        const color = PALETTE.players.find(c => !used.has(c)) || PALETTE.players[app.lobby.players.length % 4];
+        app.lobby.players.push({ key, name: String(msg.name || 'ANON').slice(0, 12), color, charId: null, ready: false, isHost: false });
       }
       refreshLobby(); broadcastLobby();
       break;
@@ -210,15 +212,22 @@ function startRunCommon() {
   app.meta = null;
   app.metas = {};
   app.snaps = [];
+  app.lastSnapAt = performance.now(); // grace window before the no-snapshot watchdog may fire
   banner('THE UNDERVAULT', 'Floor 1', 2000);
 }
 
 // ---------------- lobby: client ----------------
 
+let joinPending = false;
 function joinGame(code) {
+  if (joinPending) return; // one attempt at a time
+  joinPending = true;
   const t = new ClientTransport();
   setTitleError('Connecting…');
   t.join(code).then(() => {
+    joinPending = false;
+    // stale resolve: the user moved on (hosted a game / left the title) meanwhile
+    if (app.mode !== 'title' || app.role) { t.close(); return; }
     app.role = 'client';
     app.clientT = t;
     app.mode = 'lobby';
@@ -230,7 +239,9 @@ function joinGame(code) {
     // keepalive so the host's 5 s watchdog only fires on true silence
     app.inputTimer = setInterval(() => clientPump(), 33);
   }).catch(err => {
-    setTitleError(err && err.message ? err.message : 'Could not join');
+    joinPending = false;
+    t.close();
+    if (app.mode === 'title') setTitleError(err && err.message ? err.message : 'Could not join');
   });
 }
 
@@ -245,21 +256,52 @@ function clientPump() {
   }
 }
 
+// Host-sent payloads are untrusted: colors/codes/charIds land in innerHTML or
+// inline styles, so normalize them before they touch the DOM.
+const SAFE_COLOR = /^#[0-9a-fA-F]{3,8}$/;
+function sanitizeMember(p, i) {
+  return {
+    ...p,
+    name: String(p.name || 'ANON').slice(0, 12),
+    color: SAFE_COLOR.test(String(p.color)) ? p.color : PALETTE.players[i % 4],
+    charId: p.charId && CHAR_BY_ID[p.charId] ? p.charId : null,
+  };
+}
+function sanitizeLobby(lobby) {
+  if (!lobby || !Array.isArray(lobby.players)) return { code: null, codePending: false, players: [] };
+  return {
+    code: /^[A-Z2-9]{5}$/.test(String(lobby.code)) ? lobby.code : null,
+    codePending: !!lobby.codePending,
+    players: lobby.players.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember),
+  };
+}
+
 function clientOnMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
   switch (msg.t) {
     case 'lobby':
-      app.lobby = msg.lobby;
+      app.lobby = sanitizeLobby(msg.lobby);
       if (app.mode === 'lobby') showLobby(app.lobby, false, app.myKey);
       break;
     case 'refused':
       clientCleanup();
+      app.mode = 'title';
+      showHud(false);
+      closeAllOverlays();
       showTitle(msg.reason || 'Refused');
       break;
     case 'start': {
-      app.party = msg.party;
-      const me = msg.party.find(p => p.key === app.myKey);
-      app.myIdx = me ? me.idx : 0;
+      if (!Array.isArray(msg.party)) break;
+      const party = msg.party.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember);
+      const me = party.find(p => p.key === app.myKey);
+      if (!me || !me.charId) { // raced the host's START before our hello landed — bail cleanly
+        clientCleanup();
+        app.mode = 'title';
+        showTitle('Run already started without you — try the next one');
+        break;
+      }
+      app.party = party;
+      app.myIdx = me.idx;
       startRunCommon();
       app.predicted = null;
       break;
@@ -278,6 +320,7 @@ function clientOnMessage(msg) {
 
 function clientLostHost() {
   if (app.role !== 'client') return;
+  if (app.mode === 'results') { clientCleanup(); return; } // keep reading the results screen
   clientCleanup();
   showTitle('Host disconnected');
   showHud(false);
@@ -364,6 +407,26 @@ function handleEvent(ev) {
 // ---------------- host loop ----------------
 
 let acc = 0, lastFrame = performance.now(), snapCounter = 0;
+let lastSimTime = performance.now();
+
+// Fixed-timestep host stepping on its own clock. Called from the rAF loop and
+// from a background interval, so a hidden host tab (rAF suspended) keeps the
+// simulation and snapshots alive instead of tripping clients' 5 s watchdogs.
+function advanceHostSim() {
+  if (app.role !== 'host' || app.mode !== 'run' || !app.sim) { lastSimTime = performance.now(); return; }
+  const now = performance.now();
+  acc += Math.min(0.25, (now - lastSimTime) / 1000);
+  lastSimTime = now;
+  const step = CONFIG.DT;
+  let guard = 0;
+  while (acc >= step && guard++ < 16) {
+    acc -= step;
+    if (!app.sim.over) hostTick();
+    else { drainSimOutputs(); acc = 0; break; }
+  }
+  if (acc >= step) acc = 0; // spiral-of-death guard
+}
+setInterval(() => { if (document.hidden) advanceHostSim(); }, 40);
 
 function drainSimOutputs(initial = false) {
   const sim = app.sim;
@@ -486,7 +549,9 @@ function viewFromSnaps(dtFrame) {
       sym: chr ? chr.sym : '●', radius: chr && chr.trait.key === 'kb_immune_big' ? 16 * chr.trait.hitbox : 16,
     });
   }
-  const projs = s1.projs.map(pr => ({ x: pr[1] + pr[3] * (performance.now() - b.rt) / 1000, y: pr[2] + pr[4] * (performance.now() - b.rt) / 1000, friendly: !!pr[5], radius: pr[6], color: pr[7] }));
+  // projectiles ride the same delayed timeline as enemies (bounded extrapolation)
+  const projDt = clamp((targetRt - b.rt) / 1000, -0.2, 0.15);
+  const projs = s1.projs.map(pr => ({ x: pr[1] + pr[3] * projDt, y: pr[2] + pr[4] * projDt, friendly: !!pr[5], radius: pr[6], color: pr[7] }));
   return {
     myIdx: app.myIdx,
     room: { doors: app.roomInfo ? app.roomInfo.doors : {} },
@@ -548,15 +613,7 @@ function frame(now) {
 
   let view = null;
   if (app.role === 'host') {
-    acc += dtFrame;
-    const step = CONFIG.DT;
-    let guard = 0;
-    while (acc >= step && guard++ < 6) {
-      acc -= step;
-      if (app.sim && !app.sim.over) hostTick();
-      else if (app.sim) { drainSimOutputs(); break; }
-    }
-    if (acc >= step) acc = 0; // spiral-of-death guard
+    advanceHostSim();
     if (app.sim) view = viewFromSim(app.sim);
   } else {
     const mv = readMoveKeys();

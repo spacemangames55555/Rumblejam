@@ -227,6 +227,9 @@ export class Sim {
     this.pushEvent({ k: 'floor', layout: serializeFloor(this.floor), floorNum: n });
     for (const p of this.players) {
       if (p.gone) continue;
+      // overlays close on floor transition — re-surface any unresolved offers
+      if (p.pendingOffer) this.pushEvent({ k: 'offer', idx: p.idx, picks: p.pendingOffer, banked: p.banked });
+      if (p.treasureOffer) this.pushEvent({ k: 'treasure', idx: p.idx, kind: p.treasureOffer.kind, picks: p.treasureOffer.picks });
       p.secondWindUsed = false;
       if (n > 1) {
         // heal half of missing HP between floors
@@ -297,6 +300,11 @@ export class Sim {
       for (const p of this.livePlayers()) this._openShop(p);
     }
     if (room.kind === 'treasure') rs.cleared = true;
+    // returning to a beaten boss room: the hatch is still there
+    if (room.kind === 'boss' && rs.cleared && this.floorNum < CONFIG.FLOORS) {
+      this.hatch = { x: W / 2, y: H / 2 };
+    }
+    this.doorGrace = 1.0; // no countdown until entrants step out of the doorway zone
     this.pushEvent({
       k: 'room', roomId, kind: room.kind, hazard: room.hazard, cleared: rs.cleared,
       locked: this.roomLocked, doors: room.doors, fromDir: fromDir || null,
@@ -396,6 +404,14 @@ export class Sim {
     if (this.over) return;
     const dt = DT;
     this.tickNum++; this.time += dt;
+    // batch this tick's fx for the next 15 Hz snapshot so clients see every
+    // hit number/death burst, not just the snapshot-tick's slice
+    if (!this.fxBatch) this.fxBatch = this._emptyFx();
+    const CAPS = { hits: 70, deaths: 40, booms: 24, beams: 24, swings: 30, blocks: 12 };
+    for (const k in this.fx) {
+      const dst = this.fxBatch[k], src = this.fx[k], cap = CAPS[k] || 30;
+      for (const e of src) { if (dst.length >= cap) break; dst.push(e); }
+    }
     this.fx = this._emptyFx();
     this.activeBeams.length = 0;
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 18);
@@ -880,7 +896,7 @@ export class Sim {
         this.hurtPlayer(p, boom.dmg * e.dmgScale, e);
       }
     }
-    e.fusing = false;
+    // keep e.fusing set so _killEnemy skips scheduling a second death-boom
     this._killEnemy(e, null);
   }
 
@@ -916,10 +932,12 @@ export class Sim {
       this.fx.blocks.push({ x: p.x, y: p.y });
       return;
     }
-    // armor
+    // armor: raw × 15/(15+armor); negative armor capped at +50% extra damage
+    // (denominator guarded so armor ≤ −15 can't flip the multiplier negative)
     const armor = p.stats.armor;
-    let mult = CONFIG.ARMOR_K / (CONFIG.ARMOR_K + armor);
-    if (armor < 0) mult = Math.min(1 + CONFIG.NEG_ARMOR_MAX_BONUS, mult);
+    let mult = armor >= 0
+      ? CONFIG.ARMOR_K / (CONFIG.ARMOR_K + armor)
+      : Math.min(1 + CONFIG.NEG_ARMOR_MAX_BONUS, CONFIG.ARMOR_K / Math.max(0.001, CONFIG.ARMOR_K + armor));
     if (t.key === 'glass') mult *= t.takeMult;
     let dmg = Math.max(1, Math.round(raw * mult));
     // overheal shield absorbs first
@@ -1029,7 +1047,11 @@ export class Sim {
     });
   }
 
-  addTelegraph(tg) { this.telegraphs.push({ t: 0, ...tg }); }
+  addTelegraph(tg) {
+    const entry = { t: 0, ...tg };
+    if (entry.follow) entry.followId = entry.follow.id; // pooled slots get reused
+    this.telegraphs.push(entry);
+  }
   addZone(z) { this.zones.push({ t: 0, acc: 0, ...z }); }
   addVortex(x, y, v, scale) { this.vortexes.push({ x, y, t: v.dur, pullR: v.pullR, pullSpd: v.pullSpd, dps: v.dps * scale, coreR: v.coreR, acc: 0 }); }
 
@@ -1058,7 +1080,7 @@ export class Sim {
       const tg = this.telegraphs[i];
       tg.t += dt;
       if (tg.follow) {
-        if (!tg.follow.active) { this.telegraphs.splice(i, 1); continue; }
+        if (!tg.follow.active || tg.follow.id !== tg.followId) { this.telegraphs.splice(i, 1); continue; }
         tg.x = tg.follow.x; tg.y = tg.follow.y;
         if (tg.followAim) tg.angle = tg.follow.aimA;
       }
@@ -1266,37 +1288,41 @@ export class Sim {
       const p = this.nearestLivingPlayer(m.x, m.y);
       if (p) m.target = p.idx;
     }
-    for (const p of this.livePlayers()) {
-      // auto-revive downed at 50%
-      if (p.downed) this._revive(p, CONFIG.REVIVE_HP);
-      // harvesting payout, then 5% (+bonus) growth
-      const harv = Math.floor(p.stats.harvesting);
-      if (harv > 0) {
-        this._collectMaterial(p, harv);
-        this.pushEvent({ k: 'toast', idx: p.idx, text: `Harvest +${harv}` });
-      }
-      const growth = Math.floor(harv * (CONFIG.HARVEST_GROWTH + p.hookAgg.harvestGrowth / 100));
-      if (growth > 0) this._applyPerm(p, { harvesting: growth });
-      // interest
-      for (const it of p.hookAgg.interest) {
-        const gain = Math.min(it.cap, Math.floor(p.materials * it.rate / 100));
-        if (gain > 0) { this._collectMaterial(p, gain); this.pushEvent({ k: 'toast', idx: p.idx, text: `Interest +${gain}` }); }
-      }
-      // baseline breather: recover 10% of missing HP at each clear (+item heals)
-      this._heal(p, Math.ceil((p.stats.maxHp - p.hp) * 0.1));
-      if (p.hookAgg.roomClearHeal > 0) this._heal(p, p.hookAgg.roomClearHeal);
-      // trait growths
-      const t = p.char.trait;
-      if (t.key === 'no_regen_growth') this._applyPerm(p, { maxHp: t.hpPerRoom });
-      if (t.key === 'armor_growth') this._applyPerm(p, { armor: t.perRoom });
-      if (t.key === 'momentum') this._applyPerm(p, { speed: t.speedPerRoom });
-      // banked level-ups resolve now
-      this._maybeOffer(p);
-    }
+    for (const p of this.livePlayers()) this._clearRewards(p);
     // elite room reward: rare+ pick for everyone
     if (this._room().kind === 'elite') {
       for (const p of this.livePlayers()) this._offerTreasure(p, 'elite');
     }
+  }
+
+  // Per-player room-clear resolution — used by combat clears AND boss kills so
+  // harvesting/interest/heals/trait growths never skip a room.
+  _clearRewards(p) {
+    // auto-revive downed at 50%
+    if (p.downed) this._revive(p, CONFIG.REVIVE_HP);
+    // harvesting payout, then 5% (+bonus) growth
+    const harv = Math.floor(p.stats.harvesting);
+    if (harv > 0) {
+      this._collectMaterial(p, harv);
+      this.pushEvent({ k: 'toast', idx: p.idx, text: `Harvest +${harv}` });
+    }
+    const growth = Math.floor(harv * (CONFIG.HARVEST_GROWTH + p.hookAgg.harvestGrowth / 100));
+    if (growth > 0) this._applyPerm(p, { harvesting: growth });
+    // interest
+    for (const it of p.hookAgg.interest) {
+      const gain = Math.min(it.cap, Math.floor(p.materials * it.rate / 100));
+      if (gain > 0) { this._collectMaterial(p, gain); this.pushEvent({ k: 'toast', idx: p.idx, text: `Interest +${gain}` }); }
+    }
+    // baseline breather: recover 10% of missing HP at each clear (+item heals)
+    this._heal(p, Math.ceil((p.stats.maxHp - p.hp) * 0.1));
+    if (p.hookAgg.roomClearHeal > 0) this._heal(p, p.hookAgg.roomClearHeal);
+    // trait growths
+    const t = p.char.trait;
+    if (t.key === 'no_regen_growth') this._applyPerm(p, { maxHp: t.hpPerRoom });
+    if (t.key === 'armor_growth') this._applyPerm(p, { armor: t.perRoom });
+    if (t.key === 'momentum') this._applyPerm(p, { speed: t.speedPerRoom });
+    // banked level-ups resolve now
+    this._maybeOffer(p);
   }
 
   _bossDown(e) {
@@ -1305,6 +1331,14 @@ export class Sim {
     const rs = this._rs();
     rs.cleared = true;
     this.shake = 8;
+    // sweep the battlefield: leftover adds/hazards must not harass the
+    // post-boss shop or flip a floor-4 victory into a wipe during pendingEnd
+    for (const add of [...this.enemyPool]) if (!add.boss) this._killEnemy(add, null);
+    this.spawnQueue.length = 0;
+    this.telegraphs = this.telegraphs.filter(tg => !tg.boom);
+    this.zones = this.zones.filter(z => z.hurts !== 'players');
+    this.vortexes.length = 0;
+    for (const pr of this.projPool) if (!pr.friendly) this.projPool.release(pr);
     this.pushEvent({ k: 'bossDown', name: e.bossDef.name });
     this.pushEvent({ k: 'sfx', s: 'boom' });
     for (const p of this.livePlayers()) if (p.downed) this._revive(p, CONFIG.REVIVE_HP);
@@ -1320,6 +1354,7 @@ export class Sim {
 
   _tickDoors(dt) {
     if (this.roomLocked || this.over) return;
+    if (this.doorGrace > 0) { this.doorGrace -= dt; this.doorCd = null; return; }
     const room = this._room();
     let want = null;
     if (this.hatch) {
@@ -1623,6 +1658,8 @@ export class Sim {
   uiAction(idx, msg) {
     const p = this.players[idx];
     if (!p || p.gone || this.over) return;
+    // slots arrive over the network — accept only small non-negative integers
+    if ('slot' in msg && (!Number.isInteger(msg.slot) || msg.slot < 0 || msg.slot > 15)) return;
     switch (msg.kind) {
       case 'levelup': {
         if (!p.pendingOffer) return;
@@ -1772,7 +1809,7 @@ export class Sim {
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
       beams: this.activeBeams,
       boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp } : null,
-      fx: this.fx,
+      fx: this.fxBatch || this._emptyFx(),
       hazards: (this.hazards || []).map(h => h.type === 'spikes' ? ['s', r(h.y), r(h.h), h.state] : ['l', r(h.x), r(h.y), r(h.r)]),
     };
     for (const e of this.enemyPool) {
@@ -1792,6 +1829,7 @@ export class Sim {
     }
     for (const z of this.zones) snap.zones.push([r(z.x), r(z.y), r(z.r), z.color, z.hurts === 'players' ? 1 : 0]);
     for (const v of this.vortexes) snap.zones.push([r(v.x), r(v.y), r(v.coreR), '#a86ae8', 1]);
+    this.fxBatch = this._emptyFx(); // snapshot consumed the batch
     return snap;
   }
 
@@ -1842,11 +1880,13 @@ function pointToSegDist(px, py, x1, y1, x2, y2) {
 }
 
 function doorAnchor(dir) {
+  // far enough inside the room that no entry formation lands in the doorway
+  // trigger zone (largest hitbox + wall + margin)
   switch (dir) {
-    case 'n': return { x: W / 2, y: WALL + 50 };
-    case 's': return { x: W / 2, y: H - WALL - 50 };
-    case 'w': return { x: WALL + 50, y: H / 2 };
-    case 'e': return { x: W - WALL - 50, y: H / 2 };
+    case 'n': return { x: W / 2, y: WALL + 110 };
+    case 's': return { x: W / 2, y: H - WALL - 110 };
+    case 'w': return { x: WALL + 110, y: H / 2 };
+    case 'e': return { x: W - WALL - 110, y: H / 2 };
   }
   return { x: W / 2, y: H / 2 };
 }
@@ -1876,11 +1916,17 @@ function buildHazards(room, seed, floorNum) {
     }
   } else {
     const n = rng.int(3, 5);
+    const anchors = ['n', 's', 'w', 'e'].map(doorAnchor);
     for (let i = 0; i < n; i++) {
-      out.push({
-        type: 'lava', x: rng.range(WALL + 120, W - WALL - 120), y: rng.range(WALL + 100, H - WALL - 100),
-        r: rng.range(55, 85), dps: 7, acc: 0,
-      });
+      // keep pools clear of the door entry formations
+      for (let tries = 0; tries < 12; tries++) {
+        const x = rng.range(WALL + 120, W - WALL - 120);
+        const y = rng.range(WALL + 100, H - WALL - 100);
+        const r = rng.range(55, 85);
+        if (anchors.some(a => dist(a.x, a.y, x, y) < r + 90)) continue;
+        out.push({ type: 'lava', x, y, r, dps: 7, acc: 0 });
+        break;
+      }
     }
   }
   return out;

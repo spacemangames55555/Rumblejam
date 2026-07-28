@@ -113,7 +113,13 @@ export class ClientTransport {
       peer.on('error', err => {
         if (err.type === 'peer-unavailable') fail(new Error('Room not found'));
         else if (!settled) fail(err);
-        else if (this.onDisconnect && !this.closed) { this.closed = true; this.onDisconnect(); }
+        // Post-join: a 'network' error only means the signaling websocket
+        // dropped — the established WebRTC channel to the host is unaffected.
+        // Real host loss arrives via the connection's close/error handlers.
+        else if (err.type !== 'network' && err.type !== 'disconnected' && this.onDisconnect && !this.closed) {
+          this.closed = true;
+          this.onDisconnect();
+        }
       });
       peer.on('open', () => {
         const conn = peer.connect(NET_PREFIX + code.toUpperCase(), { reliable: true });

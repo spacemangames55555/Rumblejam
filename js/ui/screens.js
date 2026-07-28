@@ -95,7 +95,7 @@ export function showLobby(lobby, isHost, myKey) {
   const me = lobby.players.find(p => p.key === myKey);
   const allReady = lobby.players.length > 0 && lobby.players.every(p => p.charId && (p.ready || p.isHost));
   const codeHtml = lobby.code
-    ? `room code: <span class="room-code">${lobby.code}</span>`
+    ? `room code: <span class="room-code">${escapeHtml(lobby.code)}</span>`
     : (lobby.codePending ? `<span class="dim">registering room…</span>` : `<span class="dim">OFFLINE — solo only (couldn't reach the relay)</span>`);
   el.innerHTML = `
     <div class="panel">

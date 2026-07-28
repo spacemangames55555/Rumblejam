@@ -90,6 +90,8 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 
 /* ---------- Overlays (shop / levelup / treasure) ---------- */
 .overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#0a0b12b8;}
+/* stacking: a pending level-up always shows above shop/treasure */
+#overlay-shop{z-index:10;} #overlay-treasure{z-index:20;} #overlay-levelup{z-index:30;}
 .overlay .panel{min-width:min(92vw,900px);}
 .ov-title{font-size:24px; color:var(--gold); letter-spacing:3px; margin-bottom:2px;}
 .ov-sub{color:var(--dim); margin-bottom:14px; font-size:14px;}

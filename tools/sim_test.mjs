@@ -32,6 +32,32 @@ for (const cls of ['swing', 'thrust', 'single', 'spread', 'lobbed', 'summon']) {
 }
 ok(`weapon classes: ${JSON.stringify(byCls)}`);
 
+// ---- 1b. dungeon structure across many seeds ----
+{
+  const { generateFloor } = await import('../js/dungeon.js');
+  const OPP = { n: 's', s: 'n', e: 'w', w: 'e' };
+  let bad = 0;
+  for (let seed = 1; seed <= 25; seed++) {
+    for (let f = 1; f <= 4; f++) {
+      const fl = generateFloor(seed, f);
+      const kinds = {};
+      for (const r of fl.rooms) kinds[r.kind] = (kinds[r.kind] || 0) + 1;
+      for (const k of ['start', 'shop', 'treasure', 'elite', 'boss']) {
+        if (kinds[k] !== 1) { bad++; fail(`seed ${seed} floor ${f}: ${k} count = ${kinds[k] || 0}`); }
+      }
+      if ((kinds.combat || 0) < 3) { bad++; fail(`seed ${seed} floor ${f}: only ${kinds.combat} combat rooms`); }
+      for (const r of fl.rooms) {
+        for (const [dir, id] of Object.entries(r.doors)) {
+          const n = fl.rooms[id];
+          if (!n) { bad++; fail(`seed ${seed} floor ${f}: room ${r.id} door ${dir} -> missing room ${id}`); }
+          else if (n.doors[OPP[dir]] !== r.id) { bad++; fail(`seed ${seed} floor ${f}: door ${r.id}->${id} not bidirectional`); }
+        }
+      }
+    }
+  }
+  if (!bad) ok('dungeon structure: 100 floors — kinds exact, all doors bidirectional');
+}
+
 // ---- 2. character smoke ----
 let smokeFail = 0;
 for (const c of CHARACTERS) {
@@ -88,8 +114,10 @@ function playFloor(sim, buyStuff) {
   }
   // boss room
   sim._enterRoom(sim.floor.bossId, null);
-  run(sim, 120);
-  if (!sim.boss) fail(`boss did not spawn on floor ${floorN}`);
+  run(sim, 5);
+  const bossSpawned = !!sim.boss;
+  run(sim, 115);
+  if (!bossSpawned) fail(`boss did not spawn on floor ${floorN}`);
   forceKillBoss(sim);
   run(sim, 30);
   for (const p of sim.players) {
