@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UNDERVAULT — co-op dungeon arena roguelite</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/style.css">
+<!-- PeerJS is the only external dependency (networking). Game runs solo without it. -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
+</head>
+<body>
+<div id="app">
+  <canvas id="game-canvas"></canvas>
+  <div id="ui-root">
+    <!-- HUD (in-run) -->
+    <div id="hud" class="hidden">
+      <div id="hud-left">
+        <div id="hud-players"></div>
+      </div>
+      <div id="hud-top">
+        <div id="hud-floor"></div>
+        <div id="hud-materials"></div>
+      </div>
+      <canvas id="minimap" width="180" height="150"></canvas>
+      <div id="hud-weapons"></div>
+      <div id="hud-toasts"></div>
+      <div id="hud-banner" class="hidden"></div>
+    </div>
+    <!-- Screens -->
+    <div id="screen-title" class="screen hidden"></div>
+    <div id="screen-lobby" class="screen hidden"></div>
+    <div id="screen-results" class="screen hidden"></div>
+    <!-- Per-player overlays -->
+    <div id="overlay-levelup" class="overlay hidden"></div>
+    <div id="overlay-shop" class="overlay hidden"></div>
+    <div id="overlay-treasure" class="overlay hidden"></div>
+    <!-- Settings -->
+    <button id="settings-btn" class="hidden" title="Settings">&#9881;</button>
+    <div id="settings-panel" class="hidden"></div>
+    <div id="net-status" class="hidden"></div>
+  </div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
