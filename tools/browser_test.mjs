@@ -266,10 +266,13 @@ try {
   ok('new run plays into its second room');
 
   // ---- build management: combine, sell, 6/6 notice, character sheet ----
+  // drain until the HOST says no level-ups remain — the overlay can be
+  // momentarily hidden while the next banked offer is still on its way
   async function clickAwayLevelups(br) {
-    for (let i = 0; i < 24; i++) {
-      if (!await br.exec(`return !document.getElementById('overlay-levelup').classList.contains('hidden')`)) break;
-      await br.exec(`document.querySelector('#overlay-levelup .offer-card').click()`);
+    for (let i = 0; i < 40; i++) {
+      const st = JSON.parse(await br.exec(`return JSON.stringify({vis:!document.getElementById('overlay-levelup').classList.contains('hidden'), banked:window.uv.sim.players[0].banked, pending:!!window.uv.sim.players[0].pendingOffer})`));
+      if (st.vis) { await br.exec(`const c=document.querySelector('#overlay-levelup .offer-card'); if(c) c.click(); return 1;`); await sleep(150); continue; }
+      if (!st.banked && !st.pending) return;
       await sleep(200);
     }
   }
@@ -489,10 +492,13 @@ try {
         }
       } finally { await M.touchUp(); }
     }
+    // drain until the host reports no banked level-ups (offers can lag the
+    // overlay's hidden state by a periodic-check tick)
     async function tapAwayLevelups() {
-      for (let i = 0; i < 24; i++) {
-        if (!await M.exec(`return !document.getElementById('overlay-levelup').classList.contains('hidden')`)) break;
-        await M.tap('#overlay-levelup .offer-card');
+      for (let i = 0; i < 40; i++) {
+        const st = JSON.parse(await M.exec(`return JSON.stringify({vis:!document.getElementById('overlay-levelup').classList.contains('hidden'), banked:window.uv.sim.players[0].banked, pending:!!window.uv.sim.players[0].pendingOffer})`));
+        if (st.vis) { await M.tap('#overlay-levelup .offer-card'); await sleep(150); continue; }
+        if (!st.banked && !st.pending) return;
         await sleep(200);
       }
     }
