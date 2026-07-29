@@ -172,6 +172,84 @@ try {
   else fail('wipe did not end the run');
 } catch (err) { fail('coop run crashed', err); }
 
+// ---- 4b. build management: combine / sell (host-validated) ----
+try {
+  const { sellValue, weaponBasePrice } = await import('../js/config.js');
+  const { WEAPON_BY_ID } = await import('../js/content/weapons.js');
+  const sim = new Sim({ seed: 31337, party: [{ idx: 0, key: 'k', name: 'MGMT', charId: 'redmaw', color: '#fff' }] });
+  const p = sim.players[0];
+  // duplicates now co-exist (no auto-combine on buy)
+  sim._addWeapon(p, 'coilgun', 1);
+  sim._addWeapon(p, 'coilgun', 1);
+  if (p.weapons.filter(w => w.id === 'coilgun').length !== 2) fail('duplicate purchase no longer keeps both copies');
+  // combine the pair → next tier, slot freed
+  const slots0 = p.weapons.length;
+  sim.uiAction(0, { kind: 'combine', a: 1, b: 2, id: 'coilgun', tier: 1 });
+  const cg = p.weapons.filter(w => w.id === 'coilgun');
+  if (cg.length === 1 && cg[0].tier === 2 && p.weapons.length === slots0 - 1) ok('combine merges pair → tier II and frees a slot');
+  else fail(`combine result wrong: ${JSON.stringify(p.weapons)}`);
+  // invalid combine (mismatched pair / not owned) is rejected without change
+  const before = JSON.stringify(p.weapons);
+  sim.uiAction(0, { kind: 'combine', a: 0, b: 1, id: 'emberfang', tier: 1 });
+  sim.uiAction(0, { kind: 'combine', a: 0, b: 7, id: 'coilgun', tier: 2 });
+  if (JSON.stringify(p.weapons) === before) ok('invalid combine attempts are rejected unchanged');
+  else fail('invalid combine mutated the arsenal');
+  // tier IV cannot combine
+  sim._addWeapon(p, 'twinlash', 4); sim._addWeapon(p, 'twinlash', 4);
+  sim.uiAction(0, { kind: 'combine', a: p.weapons.length - 2, b: p.weapons.length - 1, id: 'twinlash', tier: 4 });
+  if (p.weapons.filter(w => w.id === 'twinlash').length === 2) ok('tier IV pairs refuse to combine');
+  else fail('tier IV combined');
+  // sell a weapon: refund 30% floored, slot freed
+  const mats0 = p.materials;
+  const slot = p.weapons.findIndex(w => w.id === 'coilgun');
+  const expect = sellValue(weaponBasePrice(WEAPON_BY_ID.coilgun, 2), sim.floorNum);
+  sim.uiAction(0, { kind: 'sellWeapon', slot, id: 'coilgun', tier: 2 });
+  if (p.materials === mats0 + expect && !p.weapons.some(w => w.id === 'coilgun')) ok(`sell weapon refunds 30% (+${expect}) and frees the slot`);
+  else fail(`sell weapon: mats ${mats0}→${p.materials} (expected +${expect})`);
+  // summon weapons: two turrets → two structures; combine → one structure at tier II; sell → none
+  sim._addWeapon(p, 'bolt_turret', 1); sim._addWeapon(p, 'bolt_turret', 1);
+  const mine = () => sim.summons.filter(s => s.owner === 0 && s.weaponId === 'bolt_turret');
+  if (mine().length !== 2) fail(`expected 2 turrets, got ${mine().length}`);
+  const ti = p.weapons.map((w, i) => w.id === 'bolt_turret' ? i : -1).filter(i => i >= 0);
+  sim.uiAction(0, { kind: 'combine', a: ti[0], b: ti[1], id: 'bolt_turret', tier: 1 });
+  if (mine().length === 1 && mine()[0].tier === 2) ok('combining turrets merges the structures too');
+  else fail(`turret combine: ${mine().length} structures, tier ${mine()[0] && mine()[0].tier}`);
+  sim.uiAction(0, { kind: 'sellWeapon', slot: p.weapons.findIndex(w => w.id === 'bolt_turret'), id: 'bolt_turret', tier: 2 });
+  if (mine().length === 0) ok('selling a turret weapon removes its structure');
+  else fail('sold turret left its structure behind');
+  // sell a stat item: stat drops, materials rise by shown refund
+  const statItem = ITEMS.find(it => it.stats && it.stats.damage > 0 && !it.hooks);
+  p.items.push(statItem.id);
+  sim._recomputeItems(p); sim._recomputeStats(p);
+  const dmgWith = p.stats.damage, matsI = p.materials;
+  const iExpect = sellValue(statItem.price, sim.floorNum);
+  sim.uiAction(0, { kind: 'sellItem', id: statItem.id });
+  if (p.stats.damage === dmgWith - statItem.stats.damage && p.materials === matsI + iExpect) ok(`sell item drops its stats and refunds +${iExpect}`);
+  else fail(`sell item: dmg ${dmgWith}→${p.stats.damage}, mats ${matsI}→${p.materials}`);
+  // sell a mechanical item: its hook can never fire again
+  const mech = ITEMS.find(it => it.hooks && it.hooks.killExplode);
+  p.items.push(mech.id);
+  sim._recomputeItems(p);
+  if (p.hookAgg.killExplode.length !== 1) fail('mech hook not registered');
+  sim.uiAction(0, { kind: 'sellItem', id: mech.id });
+  if (p.hookAgg.killExplode.length === 0) ok('sold mechanical item is unregistered from hook aggregation');
+  else fail('sold mechanical item still registered');
+  // selling one of a stack keeps the rest
+  p.items.push(statItem.id, statItem.id);
+  sim._recomputeItems(p); sim._recomputeStats(p);
+  sim.uiAction(0, { kind: 'sellItem', id: statItem.id });
+  if (p.items.filter(i => i === statItem.id).length === 1) ok('selling from a stack removes exactly one');
+  else fail('stack sell removed wrong count');
+  // full slots: buy denied with the make-room reason, then sell frees a purchase
+  while (p.weapons.length < p.weaponSlots) sim._addWeapon(p, 'pebbleshot', 1);
+  const okAdd = sim._addWeapon(p, 'rustcleaver', 1);
+  if (!okAdd) ok('purchase at 6/6 is denied (no silent auto-combine)');
+  else fail('purchase at full slots succeeded unexpectedly');
+  sim.uiAction(0, { kind: 'sellWeapon', slot: p.weapons.length - 1, id: p.weapons[p.weapons.length - 1].id, tier: p.weapons[p.weapons.length - 1].tier });
+  if (sim._addWeapon(p, 'rustcleaver', 1)) ok('after selling, a new purchase fits');
+  else fail('purchase still blocked after selling');
+} catch (err) { fail('build management tests crashed', err); }
+
 // ---- 5. stress ----
 try {
   const sim = new Sim({ seed: 99, party: [{ idx: 0, key: 'k', name: 'STRESS', charId: 'threader', color: '#fff' }] });

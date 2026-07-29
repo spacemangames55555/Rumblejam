@@ -10,7 +10,9 @@ import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-const PORT = 8741;
+// per-process ports so overlapping/stale runs can't steal each other's servers
+const PORT = 8700 + (process.pid % 199);
+const RELAY_PORT = 9400 + (process.pid % 199);
 const URL = `http://localhost:${PORT}/index.html`;
 const CHROME = '/opt/pw-browsers/chromium';
 let failures = 0;
@@ -263,6 +265,105 @@ try {
   await clearIfLocked(A);
   ok('new run plays into its second room');
 
+  // ---- build management: combine, sell, 6/6 notice, character sheet ----
+  // drain until the HOST says no level-ups remain — the overlay can be
+  // momentarily hidden while the next banked offer is still on its way
+  async function clickAwayLevelups(br) {
+    for (let i = 0; i < 40; i++) {
+      const st = JSON.parse(await br.exec(`return JSON.stringify({vis:!document.getElementById('overlay-levelup').classList.contains('hidden'), banked:window.uv.sim.players[0].banked, pending:!!window.uv.sim.players[0].pendingOffer})`));
+      if (st.vis) { await br.exec(`const c=document.querySelector('#overlay-levelup .offer-card'); if(c) c.click(); return 1;`); await sleep(150); continue; }
+      if (!st.banked && !st.pending) return;
+      await sleep(200);
+    }
+  }
+  await A.exec(`const s=window.uv.sim; s.debug('F2'); const shop=s.floor.rooms.find(r=>r.kind==='shop'); s._enterRoom(shop.id,null); return 1;`);
+  await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'shop for build mgmt');
+  await clickAwayLevelups(A);
+  // duplicate pair (purchase mechanics covered elsewhere; the combine UI is under test)
+  await A.exec(`const s=window.uv.sim, p=s.players[0]; s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); return 1;`);
+  await A.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'pair in meta');
+  const slotsBefore = await A.exec('return window.uv.meta.weapons.length');
+  // character sheet by C key: shows the pair, and solo PAUSES
+  await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
+  await A.waitFor(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'sheet via C');
+  const sheetHasPair = await A.exec(`return document.getElementById('overlay-sheet').innerText.includes('Coilgun')`);
+  if (sheetHasPair) ok('character sheet lists the owned weapons'); else fail('sheet missing weapons');
+  const tick0 = await A.exec('return window.uv.sim.tickNum');
+  await sleep(700);
+  const tick1 = await A.exec('return window.uv.sim.tickNum');
+  if (tick1 === tick0) ok('solo pauses while the sheet is open'); else fail(`sim ticked ${tick0}→${tick1} with sheet open in solo`);
+  await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
+  await sleep(500);
+  const tick2 = await A.exec('return window.uv.sim.tickNum');
+  if (tick2 > tick1) ok('closing the sheet resumes the solo sim'); else fail('sim did not resume after sheet close');
+  // combine via the arsenal UI: select one, match highlights, confirm
+  await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
+  await A.waitFor(`return document.querySelector('[data-combine]')!==null`, 3000, 'combine affordance on the match');
+  await A.exec(`document.querySelector('[data-combine]').click(); return 1;`);
+  await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'combined pair');
+  const slotsAfter = await A.exec('return window.uv.meta.weapons.length');
+  if (slotsAfter === slotsBefore - 1) ok('combine via UI: pair → tier II, slot freed'); else fail(`slots ${slotsBefore}→${slotsAfter}`);
+  await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
+  await A.waitFor(`return document.getElementById('overlay-sheet').innerText.includes('II')`, 3000, 'sheet shows the new tier');
+  await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
+  ok('character sheet reflects the combine immediately');
+  // sell a stat item with the two-step confirmation; verify stat + refund
+  const pickJs = `const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.damage>0&&!it.hooks); return JSON.stringify({id:it.id,dmg:it.stats.damage})`;
+  const pick = JSON.parse(await A.exec(pickJs));
+  await A.exec(`const s=window.uv.sim,p=s.players[0]; p.items.push(${JSON.stringify(pick.id)}); s._recomputeItems(p); s._recomputeStats(p); return 1;`);
+  await A.waitFor(`return window.uv.meta.items.includes(${JSON.stringify(pick.id)})`, 3000, 'item in meta');
+  const m0 = await A.exec('return window.uv.meta.materials');
+  const dmg0 = await A.exec('return window.uv.meta.stats.damage');
+  const shownRefund = parseInt((await A.exec(`return document.querySelector('[data-selli="${pick.id}"]').textContent`)).replace(/[^0-9]/g, ''), 10);
+  await A.exec(`document.querySelector('[data-selli="${pick.id}"]').click(); return 1;`);
+  const armedTxt = await A.exec(`return document.querySelector('[data-selli="${pick.id}"]').textContent`);
+  if (/tap again/.test(armedTxt)) ok('first tap arms the sell with the refund shown'); else fail(`sell not armed: "${armedTxt}"`);
+  await A.exec(`document.querySelector('[data-selli="${pick.id}"]').click(); return 1;`);
+  await A.waitFor(`return window.uv.meta.materials === ${m0 + shownRefund}`, 4000, 'refund credited');
+  const dmg1 = await A.exec('return window.uv.meta.stats.damage');
+  if (dmg1 === dmg0 - pick.dmg) ok(`sold item: +${shownRefund} materials, Damage ${dmg0}→${dmg1} on the sheet`);
+  else fail(`stat after sell: ${dmg0}→${dmg1} (expected -${pick.dmg})`);
+  // sold mechanical item can never fire again (hook aggregation empties)
+  const mech = JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.hooks&&it.hooks.killExplode); return JSON.stringify({id:it.id})`));
+  await A.exec(`const s=window.uv.sim,p=s.players[0]; p.items.push(${JSON.stringify(mech.id)}); s._recomputeItems(p); s._recomputeStats(p); return 1;`);
+  // wait on the META (which re-renders the owned row), not the sim-side hookAgg
+  await A.waitFor(`return window.uv.meta.items.includes(${JSON.stringify(mech.id)}) && document.querySelector('[data-selli="${mech.id}"]')!==null`, 4000, 'mech item chip rendered');
+  if (!await A.exec(`return window.uv.sim.players[0].hookAgg.killExplode.length===1`)) fail('mech hook not live before sell');
+  await A.exec(`document.querySelector('[data-selli="${mech.id}"]').click(); return 1;`);
+  await A.exec(`document.querySelector('[data-selli="${mech.id}"]').click(); return 1;`);
+  await A.waitFor(`return window.uv.sim.players[0].hookAgg.killExplode.length===0`, 4000, 'mech hook gone');
+  ok('sold mechanical item is unregistered — its effect can never fire again');
+  // 6/6: notice appears, purchase blocked, selling frees it
+  await A.exec(`const s=window.uv.sim,p=s.players[0]; while (p.weapons.length < p.weaponSlots) s._addWeapon(p,'pebbleshot',1); return 1;`);
+  await A.waitFor(`return window.uv.meta.weapons.length === window.uv.meta.weaponSlots`, 3000, 'slots full');
+  const notice = await A.exec(`return document.getElementById('overlay-shop').innerText.includes('sell or combine to make room')`);
+  if (notice) ok('6/6 notice: "sell or combine to make room"'); else fail('full-slots notice missing');
+  // find (reroll if needed) a weapon in stock, verify blocked buy, sell, then buy
+  let stockSlot = -1;
+  for (let r = 0; r < 10; r++) {
+    stockSlot = await A.exec(`const st=window.uv.sim.players[0].shop.stock; return st.findIndex(s=>s.kind==='weapon'&&!s.sold)`);
+    if (stockSlot >= 0) break;
+    await A.exec(`document.getElementById('shop-reroll').click(); return 1;`);
+    await sleep(300);
+  }
+  if (stockSlot < 0) fail('no weapon appeared in stock after rerolls');
+  else {
+    const wCount0 = await A.exec('return window.uv.meta.weapons.length');
+    await A.exec(`document.querySelector('.offer-card[data-slot="${stockSlot}"]').click(); return 1;`);
+    await sleep(500);
+    const wCount1 = await A.exec('return window.uv.meta.weapons.length');
+    if (wCount1 === wCount0) ok('purchase at 6/6 is blocked'); else fail('purchase went through at full slots');
+    const lastIdx = wCount0 - 1;
+    await A.exec(`document.querySelector('[data-sellw="${lastIdx}"]').click(); return 1;`);
+    await A.exec(`document.querySelector('[data-sellw="${lastIdx}"]').click(); return 1;`);
+    await A.waitFor(`return window.uv.meta.weapons.length === ${wCount0 - 1}`, 4000, 'slot freed by sale');
+    stockSlot = await A.exec(`const st=window.uv.sim.players[0].shop.stock; return st.findIndex(s=>s.kind==='weapon'&&!s.sold)`);
+    await A.exec(`document.querySelector('.offer-card[data-slot="${stockSlot}"]').click(); return 1;`);
+    await A.waitFor(`return window.uv.meta.weapons.length === ${wCount0}`, 4000, 'purchase after sale');
+    ok('after selling, the new weapon purchase succeeds');
+  }
+  await A.exec(`document.getElementById('shop-close') && document.getElementById('shop-close').click(); return 1;`);
+
   // fast full run using sim driving (renderer active the whole time)
   const runResult = await A.exec(`
     const app = window.uv, sim = app.sim;
@@ -391,10 +492,13 @@ try {
         }
       } finally { await M.touchUp(); }
     }
+    // drain until the host reports no banked level-ups (offers can lag the
+    // overlay's hidden state by a periodic-check tick)
     async function tapAwayLevelups() {
-      for (let i = 0; i < 24; i++) {
-        if (!await M.exec(`return !document.getElementById('overlay-levelup').classList.contains('hidden')`)) break;
-        await M.tap('#overlay-levelup .offer-card');
+      for (let i = 0; i < 40; i++) {
+        const st = JSON.parse(await M.exec(`return JSON.stringify({vis:!document.getElementById('overlay-levelup').classList.contains('hidden'), banked:window.uv.sim.players[0].banked, pending:!!window.uv.sim.players[0].pendingOffer})`));
+        if (st.vis) { await M.tap('#overlay-levelup .offer-card'); await sleep(150); continue; }
+        if (!st.banked && !st.pending) return;
         await sleep(200);
       }
     }
@@ -433,16 +537,57 @@ try {
     await tapAwayLevelups(); // F2 XP banks levels; the offers stack above the shop
     const matsB = await M.exec('return window.uv.sim.players[0].materials');
     await M.tap('#overlay-shop .offer-card');
-    await sleep(400);
-    const matsA = await M.exec('return window.uv.sim.players[0].materials');
-    if (matsA < matsB) ok(`shop purchase by tap (◆${matsB}→◆${matsA})`); else fail(`tap purchase failed (${matsB}→${matsA})`);
+    let matsA = matsB;
+    try {
+      matsA = await M.waitFor(`const m=window.uv.sim.players[0].materials; return m < ${matsB} ? m : 0`, 3000, 'purchase debit');
+      ok(`shop purchase by tap (◆${matsB}→◆${matsA})`);
+    } catch {
+      const diag = await M.exec(`const g=id=>!document.getElementById(id).classList.contains('hidden');
+        return JSON.stringify({shop:g('overlay-shop'), lvl:g('overlay-levelup'), sheet:g('overlay-sheet'),
+        stock0:window.uv.sim.players[0].shop.stock[0], toasts:document.getElementById('hud-toasts').innerText,
+        weapons:window.uv.sim.players[0].weapons.length, slots:window.uv.sim.players[0].weaponSlots})`);
+      fail(`tap purchase failed (${matsB} unchanged) — diag: ${diag}`);
+    }
     // contextual OPEN SHOP button appears in a cleared shop room after closing
     await M.tap('#shop-close');
+    if (await M.exec(`return !document.getElementById('overlay-shop').classList.contains('hidden')`)) {
+      const diag = await M.exec(`const b=document.getElementById('shop-close'); const r=b?b.getBoundingClientRect():null;
+        return JSON.stringify({closeRect:r&&[r.x,r.y,r.width,r.height], vw:innerWidth, vh:innerHeight})`);
+      fail(`shop did not close on tap — diag: ${diag}`);
+      await M.exec(`document.getElementById('shop-close').click(); return 1;`); // recover for later steps
+    }
     await M.waitFor(`return !document.getElementById('interact-btn').classList.contains('hidden')`, 3000, 'contextual shop button');
     await M.tap('#interact-btn');
     await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'shop reopened by button');
     ok('contextual OPEN SHOP button replaces the E key');
+    // two-step sell by touch, with tap-elsewhere disarm
+    const mItem = JSON.parse(await M.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.armor>0&&!it.hooks); return JSON.stringify({id:it.id})`));
+    await M.exec(`const s=window.uv.sim,p=s.players[0]; p.items.push(${JSON.stringify(mItem.id)}); s._recomputeItems(p); s._recomputeStats(p); return 1;`);
+    await M.waitFor(`return window.uv.meta && window.uv.meta.items.includes(${JSON.stringify(mItem.id)})`, 3000, 'mobile item in meta');
+    await M.tap(`[data-selli="${mItem.id}"]`);
+    if (/tap again/.test(await M.exec(`return document.querySelector('[data-selli="${mItem.id}"]').textContent`))) ok('touch: first tap arms the sell');
+    else fail('mobile sell did not arm');
+    await M.tap('.ov-title'); // tap elsewhere → disarm
+    if (!/tap again/.test(await M.exec(`return document.querySelector('[data-selli="${mItem.id}"]').textContent`))) ok('touch: tapping elsewhere disarms');
+    else fail('sell stayed armed after tapping elsewhere');
+    const mm0 = await M.exec('return window.uv.meta.materials');
+    await M.tap(`[data-selli="${mItem.id}"]`);
+    await M.tap(`[data-selli="${mItem.id}"]`);
+    await M.waitFor(`return window.uv.meta.materials > ${mm0}`, 4000, 'mobile sell refund');
+    ok('touch: second tap sells and credits the refund');
+    // character sheet from inside the shop, and scrollable columns
+    await M.tap('#shop-sheet');
+    await M.waitFor(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'sheet from shop (touch)');
+    if (await M.exec(`return getComputedStyle(document.querySelector('.sheet-cols')).overflowY === 'auto'`)) ok('sheet columns scroll on phones');
+    else fail('sheet not scrollable');
+    await M.tap('#sheet-close');
     await M.tap('#shop-close');
+    // character sheet via the HUD button
+    await M.tap('#sheet-btn');
+    await M.waitFor(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'sheet via HUD button (touch)');
+    await M.tap('#sheet-close');
+    await M.waitFor(`return document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'sheet closed');
+    ok('character sheet opens/closes by HUD button on touch');
     // Leave Run by tap → lobby
     await M.tap('#leave-btn');
     await M.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')`, 3000, 'mobile leave confirm');
@@ -498,10 +643,10 @@ if (wantCoop) {
     process.exit(failures ? 1 : 0);
   }
   const peerjsB64 = readFileSync(PJS).toString('base64');
-  const relay = spawn('node', ['tools/peer_relay.mjs', '9500'], { stdio: 'ignore' });
+  const relay = spawn('node', ['tools/peer_relay.mjs', String(RELAY_PORT)], { stdio: 'ignore' });
   process.on('exit', () => relay.kill());
   await sleep(700);
-  const COOP_URL = `${URL}?peerhost=localhost&peerport=9500&peersecure=0`;
+  const COOP_URL = `${URL}?peerhost=localhost&peerport=${RELAY_PORT}&peersecure=0`;
   const A2 = new Browser();
   const B = new Browser();
   try {
@@ -598,6 +743,49 @@ if (wantCoop) {
       else fail(`party walked back into room ${cBack}, not start ${cStart}`);
       await B.waitFor(`return window.uv.roomInfo && window.uv.roomInfo.roomId===${cStart}`, 4000, 'client sees start room re-entry');
       ok('client HUD follows the start-room re-entry');
+
+      // ---- co-op build management: both players manage simultaneously ----
+      await A.exec(`const s=window.uv.sim; s.debug('F2'); const shop=s.floor.rooms.find(r=>r.kind==='shop'); s._enterRoom(shop.id,null); return 1;`);
+      await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'host shop (mgmt)');
+      await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'client shop (mgmt)');
+      const coopItem = JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.maxHp>0&&!it.hooks); return JSON.stringify({id:it.id})`));
+      await A.exec(`const s=window.uv.sim; for (const p of s.players){ s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); p.items.push(${JSON.stringify(coopItem.id)}); s._recomputeItems(p); s._recomputeStats(p); } return 1;`);
+      await A.waitFor(`return window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'host pair');
+      await B.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 4000, 'client pair');
+      // interleave: host arms a combine while client arms a sell, then both confirm
+      await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
+      await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
+      await A.waitFor(`return document.querySelector('[data-combine]')!==null`, 3000, 'host combine affordance');
+      const bMats0 = await B.exec('return window.uv.meta.materials');
+      await A.exec(`document.querySelector('[data-combine]').click(); return 1;`);
+      await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
+      await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'host combined');
+      await B.waitFor(`return window.uv.meta.materials > ${bMats0} && !window.uv.meta.items.includes(${JSON.stringify(coopItem.id)})`, 4000, 'client sold');
+      // authoritative builds match what each client displays
+      const hostView = await A.exec(`const s=window.uv.sim; return JSON.stringify(s.players.map(p=>({w:p.weapons.map(w=>[w.id,w.tier]), it:p.items.length})))`);
+      const bMetaView = await B.exec(`return JSON.stringify({w:window.uv.meta.weapons.map(w=>[w.id,w.tier]), it:window.uv.meta.items.length})`);
+      const hv = JSON.parse(hostView), bv = JSON.parse(bMetaView);
+      if (JSON.stringify(hv[1]) === JSON.stringify(bv)) ok('simultaneous combine+sell: host build state and client display agree');
+      else fail(`desync: host has ${JSON.stringify(hv[1])}, client shows ${bMetaView}`);
+      // forged invalid action from the client is rejected without effect
+      const bBefore = await A.exec(`return JSON.stringify(window.uv.sim.players[1].weapons.map(w=>[w.id,w.tier]))`);
+      await B.exec(`window.uv.clientT.send({t:'ui', kind:'combine', a:0, b:5, id:'gravemaul', tier:3}); window.uv.clientT.send({t:'ui', kind:'sellWeapon', slot:'__proto__', id:'x', tier:1}); return 1;`);
+      await sleep(800);
+      const bAfter = await A.exec(`return JSON.stringify(window.uv.sim.players[1].weapons.map(w=>[w.id,w.tier]))`);
+      if (bBefore === bAfter) ok('forged invalid combine/sell from a client is safely rejected'); else fail('forged client action mutated the build');
+      // one player's character sheet never touches the other's game
+      await A.exec(`window.uv.sim.debug('F1'); return 1;`);
+      await B.exec(`document.getElementById('sheet-btn').click(); return 1;`);
+      await B.waitFor(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'client sheet in combat');
+      const hTick0 = await A.exec('return window.uv.sim.tickNum');
+      await sleep(800);
+      const hTick1 = await A.exec('return window.uv.sim.tickNum');
+      const hostSheet = await A.exec(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`);
+      if (hTick1 > hTick0 + 30 && !hostSheet) ok("client's mid-combat sheet leaves the host's game untouched");
+      else fail(`sheet isolation: host ticked ${hTick0}→${hTick1}, host sheet visible=${hostSheet}`);
+      await B.exec(`document.getElementById('sheet-close').click(); return 1;`);
+      await A.exec(`const s=window.uv.sim; let g=0; while((s.roomLocked||s.enemyPool.count)&&g++<40){s.debug('F3'); for(let i=0;i<20;i++)s.tick();}
+        for (const p of s.players){let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id}); if (p.treasureOffer) s.uiAction(p.idx,{kind:'treasure',id:null});} return 1;`);
       // client sees host's snapshot state
       const snapAge = await B.exec(`return performance.now() - window.uv.lastSnapAt`);
       if (snapAge < 1000) ok('client receives snapshots'); else fail(`stale snapshots (${Math.round(snapAge)}ms)`);

@@ -109,3 +109,11 @@ export const TIER_PRICE_MULT = [1, 2.1, 4.4, 9];
 export const TIER_NAMES = ['I', 'II', 'III', 'IV'];
 
 export const NET_PREFIX = 'sg-dungeon-';
+
+// Shared pricing helpers — the sim and the shop UI must agree on sell values.
+export function weaponBasePrice(def, tier) {
+  return def.price * TIER_PRICE_MULT[tier - 1];
+}
+export function sellValue(basePrice, floorNum) {
+  return Math.floor(basePrice * (1 + CONFIG.PRICE_FLOOR_SCALE * (floorNum - 1)) * 0.3);
+}

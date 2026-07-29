@@ -12,7 +12,7 @@ import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
-import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure } from './ui/overlays.js';
+import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID } from './content/characters.js';
 import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
@@ -75,14 +75,37 @@ initOverlays({
   closeShop: () => sendUi({ kind: 'closeShop' }),
   pickLevelup: id => sendUi({ kind: 'levelup', id }),
   pickTreasure: id => sendUi({ kind: 'treasure', id }),
+  combine: (a, b, id, tier) => sendUi({ kind: 'combine', a, b, id, tier }),
+  sellWeapon: (slot, id, tier) => sendUi({ kind: 'sellWeapon', slot, id, tier }),
+  sellItem: id => sendUi({ kind: 'sellItem', id }),
+  openSheet: () => toggleSheet(true),
 });
 window.addEventListener('pointerdown', ensureAudio, { once: false });
 window.addEventListener('keydown', ensureAudio, { once: false });
 window.addEventListener('touchstart', ensureAudio, { once: false }); // iOS Safari gesture unlock
 window.uv = app; // debug/testing handle (read-only use)
+window.uvContent = { ITEMS, WEAPONS, CHARACTERS }; // content tables for debug/tests
 initLeaveButton();
 document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
+document.getElementById('sheet-btn').onclick = () => { sfx.click(); toggleSheet(); };
+window.addEventListener('keydown', e => {
+  if (e.code === 'KeyC' && app.mode === 'run' && document.activeElement.tagName !== 'INPUT') toggleSheet();
+});
 showTitle();
+
+// Character sheet: per-player overlay, live numbers from app.meta. In solo the
+// sim pauses while it's open (advanceHostSim checks); in co-op it never pauses
+// and never touches anyone else's screen.
+function toggleSheet(forceOpen = false) {
+  if (isSheetOpen() && !forceOpen) { closeSheet(); return; }
+  if (app.mode !== 'run' || !app.meta) return;
+  const me = app.party && app.party.find(m => m.idx === app.myIdx);
+  showSheet(app.meta, me ? me.charId : null);
+}
+
+function soloSheetPaused() {
+  return isSheetOpen() && (!app.hostT || app.hostT.conns.size === 0);
+}
 
 // ---------------- leave run (corner button + confirmation) ----------------
 
@@ -366,7 +389,7 @@ function clientOnMessage(msg) {
       break;
     }
     case 'ev': for (const ev of msg.list) handleEvent(ev); break;
-    case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); } break;
+    case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); updateSheetMeta(app.meta); } break;
     case 'abandon': // host ended the run for everyone — back to the lobby together
       app.lobby = sanitizeLobby(msg.lobby);
       app.mode = 'lobby';
@@ -445,6 +468,7 @@ function handleEvent(ev) {
     case 'treasureDone': if (ev.idx === app.myIdx) closeTreasure(); break;
     case 'shop': if (ev.idx === app.myIdx) showShop(ev, app.meta); break;
     case 'buyResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't buy: ${ev.reason}`); break;
+    case 'mgmtResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't do that: ${ev.reason}`); break;
     case 'toast': if (ev.idx === app.myIdx) toast(ev.text); break;
     case 'downed': {
       const m = app.party && app.party.find(p => p.idx === ev.idx);
@@ -475,7 +499,7 @@ let lastSimTime = performance.now();
 // from a background interval, so a hidden host tab (rAF suspended) keeps the
 // simulation and snapshots alive instead of tripping clients' 5 s watchdogs.
 function advanceHostSim() {
-  if (app.role !== 'host' || app.mode !== 'run' || !app.sim) { lastSimTime = performance.now(); return; }
+  if (app.role !== 'host' || app.mode !== 'run' || !app.sim || soloSheetPaused()) { lastSimTime = performance.now(); return; }
   const now = performance.now();
   acc += Math.min(0.25, (now - lastSimTime) / 1000);
   lastSimTime = now;
@@ -503,7 +527,7 @@ function drainSimOutputs(initial = false) {
     if (p.metaDirty || initial) {
       const meta = sim.getMeta(p);
       app.metas[p.idx] = meta;
-      if (p.idx === app.myIdx) { app.meta = meta; updateShopMeta(meta); }
+      if (p.idx === app.myIdx) { app.meta = meta; updateShopMeta(meta); updateSheetMeta(meta); }
       else if (app.hostT) {
         const member = app.party.find(m => m.idx === p.idx);
         if (member && member.key !== '_local') app.hostT.send(member.key, meta);
