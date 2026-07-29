@@ -531,11 +531,25 @@ try {
     await tapAwayLevelups(); // F2 XP banks levels; the offers stack above the shop
     const matsB = await M.exec('return window.uv.sim.players[0].materials');
     await M.tap('#overlay-shop .offer-card');
-    await sleep(400);
-    const matsA = await M.exec('return window.uv.sim.players[0].materials');
-    if (matsA < matsB) ok(`shop purchase by tap (◆${matsB}→◆${matsA})`); else fail(`tap purchase failed (${matsB}→${matsA})`);
+    let matsA = matsB;
+    try {
+      matsA = await M.waitFor(`const m=window.uv.sim.players[0].materials; return m < ${matsB} ? m : 0`, 3000, 'purchase debit');
+      ok(`shop purchase by tap (◆${matsB}→◆${matsA})`);
+    } catch {
+      const diag = await M.exec(`const g=id=>!document.getElementById(id).classList.contains('hidden');
+        return JSON.stringify({shop:g('overlay-shop'), lvl:g('overlay-levelup'), sheet:g('overlay-sheet'),
+        stock0:window.uv.sim.players[0].shop.stock[0], toasts:document.getElementById('hud-toasts').innerText,
+        weapons:window.uv.sim.players[0].weapons.length, slots:window.uv.sim.players[0].weaponSlots})`);
+      fail(`tap purchase failed (${matsB} unchanged) — diag: ${diag}`);
+    }
     // contextual OPEN SHOP button appears in a cleared shop room after closing
     await M.tap('#shop-close');
+    if (await M.exec(`return !document.getElementById('overlay-shop').classList.contains('hidden')`)) {
+      const diag = await M.exec(`const b=document.getElementById('shop-close'); const r=b?b.getBoundingClientRect():null;
+        return JSON.stringify({closeRect:r&&[r.x,r.y,r.width,r.height], vw:innerWidth, vh:innerHeight})`);
+      fail(`shop did not close on tap — diag: ${diag}`);
+      await M.exec(`document.getElementById('shop-close').click(); return 1;`); // recover for later steps
+    }
     await M.waitFor(`return !document.getElementById('interact-btn').classList.contains('hidden')`, 3000, 'contextual shop button');
     await M.tap('#interact-btn');
     await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'shop reopened by button');
