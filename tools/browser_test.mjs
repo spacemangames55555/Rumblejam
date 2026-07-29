@@ -10,7 +10,9 @@ import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
 
-const PORT = 8741;
+// per-process ports so overlapping/stale runs can't steal each other's servers
+const PORT = 8700 + (process.pid % 199);
+const RELAY_PORT = 9400 + (process.pid % 199);
 const URL = `http://localhost:${PORT}/index.html`;
 const CHROME = '/opt/pw-browsers/chromium';
 let failures = 0;
@@ -621,10 +623,10 @@ if (wantCoop) {
     process.exit(failures ? 1 : 0);
   }
   const peerjsB64 = readFileSync(PJS).toString('base64');
-  const relay = spawn('node', ['tools/peer_relay.mjs', '9500'], { stdio: 'ignore' });
+  const relay = spawn('node', ['tools/peer_relay.mjs', String(RELAY_PORT)], { stdio: 'ignore' });
   process.on('exit', () => relay.kill());
   await sleep(700);
-  const COOP_URL = `${URL}?peerhost=localhost&peerport=9500&peersecure=0`;
+  const COOP_URL = `${URL}?peerhost=localhost&peerport=${RELAY_PORT}&peersecure=0`;
   const A2 = new Browser();
   const B = new Browser();
   try {
