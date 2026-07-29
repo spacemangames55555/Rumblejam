@@ -7,7 +7,8 @@ import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
 import { HostTransport, ClientTransport } from './net.js';
 import { Renderer } from './render.js';
-import { initInput, sampleInput, takeDebugKey } from './input.js';
+import { initInput, sampleInput, takeDebugKey, pressInteract } from './input.js';
+import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
@@ -35,6 +36,8 @@ const renderer = new Renderer(canvas);
 window.uvRenderer = renderer;
 renderer.shakeEnabled = isShakeEnabled();
 initInput();
+initTouch(canvas);
+renderer.joy = joy; // renderer draws the joystick from the live touch state
 
 const app = {
   mode: 'title',          // title | lobby | run | results
@@ -75,8 +78,57 @@ initOverlays({
 });
 window.addEventListener('pointerdown', ensureAudio, { once: false });
 window.addEventListener('keydown', ensureAudio, { once: false });
+window.addEventListener('touchstart', ensureAudio, { once: false }); // iOS Safari gesture unlock
 window.uv = app; // debug/testing handle (read-only use)
+initLeaveButton();
+document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
 showTitle();
+
+// ---------------- leave run (corner button + confirmation) ----------------
+
+function initLeaveButton() {
+  document.getElementById('leave-btn').onclick = () => {
+    if (app.mode !== 'run') return;
+    sfx.click();
+    const el = document.getElementById('leave-confirm');
+    const isHost = app.role === 'host';
+    el.innerHTML = `
+      <div class="panel">
+        <div class="ov-title">${isHost ? 'ABANDON RUN?' : 'LEAVE RUN?'}</div>
+        <p class="dim">${isHost
+          ? 'The run ends for the whole party. Everyone returns to the lobby to pick characters for a fresh run.'
+          : 'You leave the session and return to the title screen. The rest of the party plays on without you.'}</p>
+        <div class="row">
+          <button id="leave-yes" class="primary">${isHost ? 'Abandon run' : 'Leave'}</button>
+          <button id="leave-no">Keep playing</button>
+        </div>
+      </div>`;
+    el.classList.remove('hidden');
+    el.querySelector('#leave-yes').onclick = () => {
+      sfx.click();
+      el.classList.add('hidden');
+      if (isHost) hostAbandonRun();
+      else leaveToTitle();
+    };
+    el.querySelector('#leave-no').onclick = () => { sfx.click(); el.classList.add('hidden'); };
+  };
+}
+
+// Host (or solo): end the run for everyone and return the whole party to the
+// lobby — connections and room code intact, ready for a fresh run/seed.
+function hostAbandonRun() {
+  if (app.role !== 'host' || !app.sim) return;
+  const players = app.party
+    .filter(m => { const sp = app.sim.players[m.idx]; return sp && !sp.gone; })
+    .map(m => ({ key: m.key, name: m.name, color: m.color, charId: m.charId, ready: m.key === '_local', isHost: m.key === '_local' }));
+  app.sim = null;
+  app.mode = 'lobby';
+  app.lobby = { code: app.hostT ? app.hostT.code : null, codePending: false, players };
+  showHud(false);
+  closeAllOverlays();
+  if (app.hostT) app.hostT.broadcast({ t: 'abandon', lobby: publicLobby() });
+  refreshLobby();
+}
 
 // ---------------- lobby: host ----------------
 
@@ -315,6 +367,16 @@ function clientOnMessage(msg) {
     }
     case 'ev': for (const ev of msg.list) handleEvent(ev); break;
     case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); } break;
+    case 'abandon': // host ended the run for everyone — back to the lobby together
+      app.lobby = sanitizeLobby(msg.lobby);
+      app.mode = 'lobby';
+      app.snaps = [];
+      app.meta = null;
+      app.predicted = null;
+      showHud(false);
+      closeAllOverlays();
+      showLobby(app.lobby, false, app.myKey);
+      break;
   }
 }
 
@@ -634,6 +696,10 @@ function frame(now) {
       curRoomDef: app.roomInfo ? { kind: app.roomInfo.kind, hazard: app.roomInfo.hazard } : null,
       boss: view.boss,
     });
+    // contextual touch button for the E action (reopen shop / shop at hatch)
+    const wantInteract = touchEnabled() && !isShopOpen() && view.cleared
+      && (!!view.hatch || (app.roomInfo && app.roomInfo.kind === 'shop'));
+    document.getElementById('interact-btn').classList.toggle('hidden', !wantInteract);
   }
 }
 requestAnimationFrame(frame);
@@ -651,6 +717,7 @@ function readMoveKeys() {
   if (liveKeys.has('KeyW') || liveKeys.has('ArrowUp')) my -= 1;
   if (liveKeys.has('KeyS') || liveKeys.has('ArrowDown')) my += 1;
   if (mx && my) { mx *= Math.SQRT1_2; my *= Math.SQRT1_2; }
+  if (joy.active && touchEnabled()) { mx = joy.mx; my = joy.my; }
   return { mx, my };
 }
 

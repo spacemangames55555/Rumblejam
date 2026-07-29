@@ -1,5 +1,9 @@
 // Keyboard input → {moveX, moveY, interact}. WASD + arrows; E latches until
-// consumed by the sim (so a tap isn't lost between input samples).
+// consumed by the sim (so a tap isn't lost between input samples). When the
+// floating touch joystick is engaged it overrides the movement vector; the
+// on-screen contextual button feeds the same interact latch as the E key.
+
+import { getTouchMove, touchEnabled } from './touch.js';
 
 const keys = new Set();
 let interactLatch = false;
@@ -23,10 +27,15 @@ export function sampleInput() {
   if (keys.has('KeyW') || keys.has('ArrowUp')) my -= 1;
   if (keys.has('KeyS') || keys.has('ArrowDown')) my += 1;
   if (mx && my) { const s = Math.SQRT1_2; mx *= s; my *= s; }
+  const joy = getTouchMove();
+  if (joy.active && touchEnabled()) { mx = joy.mx; my = joy.my; }
   const interact = interactLatch;
   interactLatch = false;
   return { mx, my, interact };
 }
+
+// on-screen contextual button → same latch as the E key
+export function pressInteract() { interactLatch = true; }
 
 export function takeDebugKey() {
   for (const k of debugPressed) { debugPressed.delete(k); return k; }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>UNDERVAULT — co-op dungeon arena roguelite</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <link rel="stylesheet" href="css/style.css">
 <!-- PeerJS is the only external dependency (networking). Game runs solo without it. -->
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
@@ -34,6 +34,19 @@
     <div id="overlay-levelup" class="overlay hidden"></div>
     <div id="overlay-shop" class="overlay hidden"></div>
     <div id="overlay-treasure" class="overlay hidden"></div>
+    <!-- Touch: contextual interact (shop/hatch) — shown only when relevant -->
+    <button id="interact-btn" class="hidden">OPEN SHOP</button>
+    <!-- Touch: rotate-your-device overlay (portrait phones) -->
+    <div id="rotate-overlay">
+      <div>
+        <div class="rotate-icon">&#8635;</div>
+        <div>Rotate your device</div>
+        <div class="small dim">Undervault plays in landscape</div>
+      </div>
+    </div>
+    <!-- Leave run -->
+    <button id="leave-btn" class="hidden" title="Leave run">&#8688;</button>
+    <div id="leave-confirm" class="hidden"></div>
     <!-- Settings -->
     <button id="settings-btn" class="hidden" title="Settings">&#9881;</button>
     <div id="settings-panel" class="hidden"></div>
