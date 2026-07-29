@@ -12,6 +12,7 @@ let bannerTimer = null;
 export function showHud(on) {
   $('hud').classList.toggle('hidden', !on);
   $('leave-btn').classList.toggle('hidden', !on);
+  $('sheet-btn').classList.toggle('hidden', !on);
   if (!on) {
     $('hud-players').innerHTML = '';
     $('hud-toasts').innerHTML = '';

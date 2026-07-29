@@ -2,7 +2,7 @@
 // rendering. Clients only ever send inputs/UI intents; everything here is the
 // single source of truth. Solo play runs this exact code with one player.
 
-import { CONFIG, TIER_MULT, TIER_PRICE_MULT } from './config.js';
+import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue } from './config.js';
 import { Rng, subRng } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo } from './util.js';
 import { generateFloor, serializeFloor } from './dungeon.js';
@@ -1513,33 +1513,77 @@ export class Sim {
       stock: p.shop.stock.map(s => ({ kind: s.kind, id: s.id, tier: s.tier, price: s.price, sold: s.sold, locked: s.locked })),
       rerollCost: this._rerollCost(p),
       weaponsOnly: p.char.trait.key === 'weapons_only_shop',
+      floor: this.floorNum, // sell values shown in the UI derive from this
     });
   }
 
-  _addWeapon(p, id, tier, opts = {}) {
-    const existing = p.weapons.find(w => w.id === id && w.tier === tier);
-    if (existing && tier < 4) {
-      existing.tier++;
-      this.pushEvent({ k: 'toast', idx: p.idx, text: `Combined into ${WEAPON_BY_ID[id].name} ${['I', 'II', 'III', 'IV'][existing.tier - 1]}!` });
-      this._refreshSummonsFor(p, id);
-      p.metaDirty = true;
-      return true;
-    }
+  // Combining is always an explicit player action in the arsenal UI — buying a
+  // duplicate simply adds a second copy (holding pairs vs. merging for a free
+  // slot is a real decision).
+  _addWeapon(p, id, tier) {
     if (p.weapons.length >= p.weaponSlots) return false;
-    p.weapons.push({ id, tier, cd: 0.3 });
+    const uid = ++this.spawnCounter;
+    p.weapons.push({ id, tier, cd: 0.3, uid });
     const def = WEAPON_BY_ID[id];
-    if (def.cls === 'summon') this._spawnSummon(p, id, tier);
+    if (def.cls === 'summon') this._spawnSummon(p, id, tier, null, uid);
     p.metaDirty = true;
     return true;
   }
 
+  // merge two identical same-tier weapons into one of the next tier (free)
+  _combineWeapons(p, a, b, id, tier) {
+    const wa = p.weapons[a], wb = p.weapons[b];
+    if (a === b || !wa || !wb) return 'invalid pair';
+    if (wa.id !== id || wb.id !== id || wa.tier !== tier || wb.tier !== tier) return 'stale selection';
+    if (tier >= 4) return 'already tier IV';
+    p.weapons.splice(b, 1);
+    wa.tier++;
+    this._removeSummonByUid(p, wb.uid);
+    this._refreshSummonsFor(p, id);
+    p.metaDirty = true;
+    this.pushEvent({ k: 'toast', idx: p.idx, text: `Combined into ${WEAPON_BY_ID[id].name} ${['I', 'II', 'III', 'IV'][wa.tier - 1]}!` });
+    return null;
+  }
+
+  _sellWeapon(p, slot, id, tier) {
+    const w = p.weapons[slot];
+    if (!w || w.id !== id || w.tier !== tier) return 'stale selection';
+    const refund = sellValue(weaponBasePrice(WEAPON_BY_ID[id], tier), this.floorNum);
+    p.weapons.splice(slot, 1);
+    this._removeSummonByUid(p, w.uid);
+    p.materials += refund;
+    p.metaDirty = true;
+    this.pushEvent({ k: 'toast', idx: p.idx, text: `Sold ${WEAPON_BY_ID[id].name} for ${refund}` });
+    return null;
+  }
+
+  _sellItem(p, id) {
+    const i = p.items.indexOf(id);
+    const item = ITEM_BY_ID[id];
+    if (i < 0 || !item) return 'not owned';
+    const refund = sellValue(item.price, this.floorNum);
+    p.items.splice(i, 1); // one instance; stacks sell one at a time
+    this._recomputeItems(p);   // hookAgg rebuilt — sold mechanical effects can never fire again
+    this._recomputeStats(p);
+    p.materials += refund;
+    p.metaDirty = true;
+    this.pushEvent({ k: 'toast', idx: p.idx, text: `Sold ${item.name} for ${refund}` });
+    return null;
+  }
+
+  _removeSummonByUid(p, uid) {
+    if (uid === undefined) return;
+    const i = this.summons.findIndex(s => s.owner === p.idx && s.weaponUid === uid);
+    if (i >= 0) this.summons.splice(i, 1);
+  }
+
   // ---------------- summons ----------------
 
-  _spawnSummon(p, weaponId, tier, forceType) {
+  _spawnSummon(p, weaponId, tier, forceType, weaponUid) {
     const def = weaponId ? WEAPON_BY_ID[weaponId] : null;
     const sd = def ? def.summon : { hp: 25, dmg: 0, cd: 1, range: 0 };
     this.summons.push({
-      owner: p.idx, weaponId, tier, type: forceType || (sd.type || 'turret'),
+      owner: p.idx, weaponId, weaponUid, tier, type: forceType || (sd.type || 'turret'),
       x: p.x + (Math.random() * 60 - 30), y: p.y + (Math.random() * 60 - 30),
       hp: 1, maxHp: 1, cd: 0, orbitA: Math.random() * 6.28, dead: false, aimA: 0,
     });
@@ -1577,7 +1621,9 @@ export class Sim {
     for (const s of this.summons) {
       if (s.owner !== p.idx) continue;
       if (weaponId && s.weaponId === weaponId) {
-        const w = p.weapons.find(w2 => w2.id === weaponId);
+        // prefer the exact owning weapon instance (uid); trait summons have none
+        const w = (s.weaponUid !== undefined && p.weapons.find(w2 => w2.uid === s.weaponUid))
+          || p.weapons.find(w2 => w2.id === weaponId);
         if (w) s.tier = w.tier;
       }
       const st = this._summonStats(s);
@@ -1703,7 +1749,7 @@ export class Sim {
         if (s.kind === 'weapon') {
           if (p.weaponSlots === 0) return this._buyResult(p, msg.slot, false, 'no weapon slots');
           const ok = this._addWeapon(p, s.id, s.tier);
-          if (!ok) return this._buyResult(p, msg.slot, false, 'slots full');
+          if (!ok) return this._buyResult(p, msg.slot, false, 'weapons full — sell or combine');
         } else {
           p.items.push(s.id);
           this._recomputeItems(p);
@@ -1738,6 +1784,28 @@ export class Sim {
       }
       case 'closeShop':
         break; // lock carryover happens when the next shop session opens
+      // ---- build management (host-validated, free-form client input) ----
+      case 'combine': {
+        if (!intIn(msg.a, 8) || !intIn(msg.b, 8)) return;
+        const err = this._combineWeapons(p, msg.a, msg.b, msg.id, msg.tier);
+        this.pushEvent({ k: 'mgmtResult', idx, action: 'combine', ok: !err, reason: err || null });
+        if (!err) this.pushEvent({ k: 'sfx', s: 'buy' }); else this.pushEvent({ k: 'sfx', s: 'deny' });
+        break;
+      }
+      case 'sellWeapon': {
+        if (!intIn(msg.slot, 8)) return;
+        const err = this._sellWeapon(p, msg.slot, msg.id, msg.tier);
+        this.pushEvent({ k: 'mgmtResult', idx, action: 'sellWeapon', ok: !err, reason: err || null });
+        if (!err) this.pushEvent({ k: 'sfx', s: 'buy' }); else this.pushEvent({ k: 'sfx', s: 'deny' });
+        break;
+      }
+      case 'sellItem': {
+        if (typeof msg.id !== 'string') return;
+        const err = this._sellItem(p, msg.id);
+        this.pushEvent({ k: 'mgmtResult', idx, action: 'sellItem', ok: !err, reason: err || null });
+        if (!err) this.pushEvent({ k: 'sfx', s: 'buy' }); else this.pushEvent({ k: 'sfx', s: 'deny' });
+        break;
+      }
 
     }
   }
@@ -1873,6 +1941,9 @@ export class Sim {
 const OPP = { n: 's', s: 'n', e: 'w', w: 'e' };
 
 function r2(v) { return Math.round(v * 10) / 10; }
+
+// network-supplied index guard: small non-negative integer
+function intIn(v, max) { return Number.isInteger(v) && v >= 0 && v <= max; }
 
 function angDiffLocal(a, b) {
   let d = (b - a) % (Math.PI * 2);

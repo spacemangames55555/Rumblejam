@@ -61,7 +61,15 @@ is direct browser-to-browser WebRTC.
 
 - **WASD / arrow keys** — move (weapons attack the nearest enemy on their own; no aiming)
 - **E** — open the shop while standing in a cleared shop room / at the post-boss hatch
+- **C** (or the ☰ HUD button) — character sheet: all sixteen stats, weapons,
+  and items, live. In solo it pauses the game; in co-op it never pauses and
+  only ever covers your own screen.
 - **Mouse** — menus, shop, level-up choices
+- **In the shop**: your weapons and items are listed under the stock. Own two
+  identical same-tier weapons? Tap one, then tap its highlighted match to
+  **combine** them into the next tier for free (frees a slot). Anything you own
+  can be **sold for 30%** of its shop price — tap Sell once to arm, again to
+  confirm; tapping elsewhere cancels.
 - Stand in a doorway of a cleared room to start the 3-second **group** door
   countdown; stand on the hatch after a boss to descend.
 - The ⚙ button (bottom right) has SFX volume and a screen-shake toggle; it
@@ -167,6 +175,16 @@ never loads them:
   character (marked with a ✔ so you know).
 - **Debug keys ship enabled** (`DEV = true`) because this is a jam build meant
   to be poked at; flip to `false` for real runs.
+- **Build management**: combining is always the player's explicit call — buying
+  a duplicate keeps both copies (holding a pair vs. merging for a free slot is
+  a real decision), which replaced the original combine-on-purchase behavior
+  as the single way combining works. Sell refunds use the undiscounted
+  floor-scaled shop price (personal shop discounts neither inflate nor deflate
+  refunds). Selling an item removes its stats and mechanical hooks instantly;
+  permanent gains it already banked (e.g. Max-HP-per-kill already earned, past
+  level-up bonuses) stay — history isn't rewritten. Selling one of a stacked
+  item sells exactly one copy. Selling or combining turret weapons
+  removes/merges their deployed structures via per-weapon instance ids.
 - **Touch details**: only pointers of type `touch` anchor the joystick, so a
   mouse never moves the player by dragging even when touch controls are forced
   On. The joystick floats (anchored wherever you touch) rather than being
