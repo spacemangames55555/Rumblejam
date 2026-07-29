@@ -66,18 +66,30 @@ let lastShopMeta = null;
 let armedSell = null;   // 'w<slot>' | 'i<itemId>' — two-step sell confirmation
 let combineSel = null;  // selected weapon slot awaiting its match
 
+let shopDigest = '';
+function shopMetaDigest(meta) {
+  return meta ? JSON.stringify([meta.materials, meta.weapons, meta.items, meta.weaponSlots]) : '';
+}
+
 export function showShop(ev, meta) {
   shopState = ev;
   armedSell = null;
   combineSel = null;
+  shopDigest = shopMetaDigest(meta);
   renderShop(meta);
   $('overlay-shop').classList.remove('hidden');
 }
 
 export function isShopOpen() { return !$('overlay-shop').classList.contains('hidden'); }
 
+// re-render only when displayed data changed — metas arrive ~4×/s and a
+// rebuild resets panel scroll (miserable on phones, races synthetic taps)
 export function updateShopMeta(meta) {
-  if (isShopOpen() && shopState) renderShop(meta);
+  if (!isShopOpen() || !shopState) return;
+  const d = shopMetaDigest(meta);
+  if (d === shopDigest) return;
+  shopDigest = d;
+  renderShop(meta);
 }
 
 // ---- owned-build section (arsenal + items with combine/sell) ----
@@ -305,16 +317,27 @@ export function closeTreasure() { $('overlay-treasure').classList.add('hidden');
 // never blocks anyone else's game.
 
 let sheetCharId = null;
+let sheetDigest = '';
+function sheetMetaDigest(meta) {
+  return meta ? JSON.stringify([meta.stats, meta.weapons, meta.items, meta.level, meta.materials]) : '';
+}
 
 export function showSheet(meta, charId) {
   sheetCharId = charId;
+  sheetDigest = sheetMetaDigest(meta);
   renderSheet(meta);
   $('overlay-sheet').classList.remove('hidden');
 }
 
 export function closeSheet() { $('overlay-sheet').classList.add('hidden'); }
 export function isSheetOpen() { return !$('overlay-sheet').classList.contains('hidden'); }
-export function updateSheetMeta(meta) { if (isSheetOpen() && meta) renderSheet(meta); }
+export function updateSheetMeta(meta) {
+  if (!isSheetOpen() || !meta) return;
+  const d = sheetMetaDigest(meta);
+  if (d === sheetDigest) return; // live numbers, but no wasteful rebuilds
+  sheetDigest = d;
+  renderSheet(meta);
+}
 
 const RARITY_ORDER = ['legendary', 'rare', 'uncommon', 'common'];
 
