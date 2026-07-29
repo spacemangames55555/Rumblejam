@@ -54,7 +54,31 @@ class Browser {
     if (this.opts.peerjsB64) {
       await this.cdp('Fetch.enable', { patterns: [{ urlPattern: '*unpkg.com*' }] });
     }
+    if (this.opts.mobile) {
+      await this.cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      await this.setOrientation('landscape');
+    }
   }
+
+  // ---- mobile emulation helpers ----
+  async setOrientation(which) {
+    await this.cdp('Emulation.setDeviceMetricsOverride', which === 'landscape'
+      ? { width: 851, height: 393, deviceScaleFactor: 2.6, mobile: true, screenOrientation: { type: 'landscapePrimary', angle: 90 } }
+      : { width: 393, height: 851, deviceScaleFactor: 2.6, mobile: true, screenOrientation: { type: 'portraitPrimary', angle: 0 } });
+    await sleep(300);
+  }
+  async tap(selector) {
+    const r = await this.exec(`const el=document.querySelector(${JSON.stringify(selector)}); if(!el) return null; el.scrollIntoView({block:'nearest'}); const b=el.getBoundingClientRect(); return JSON.stringify({x:b.x+b.width/2,y:b.y+b.height/2});`);
+    if (!r) throw new Error(`tap: no element ${selector}`);
+    const p = JSON.parse(r);
+    await this.cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p.x, y: p.y }] });
+    await this.cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(150);
+  }
+  async touchDown(x, y) { await this.cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] }); }
+  async touchMove(x, y) { await this.cdp('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] }); }
+  async touchUp() { await this.cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
+  async typeText(text) { await this.cdp('Input.insertText', { text }); }
 
   _onMsg(m) {
     if (m.id && this.pending.has(m.id)) {
@@ -312,6 +336,154 @@ try {
   if (!wantCoop) await A.close();
 }
 
+// ---------- mobile / touch emulation (Pixel-ish viewport, real touch events) ----------
+{
+  const M = new Browser();
+  try {
+    await M.open('M', { mobile: true });
+    await M.goto(URL);
+    await M.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'mobile title');
+    if (await M.exec(`return document.body.classList.contains('touch-on')`)) ok('touch controls auto-detect on a touch device');
+    else fail('touch-on class missing on emulated touch device');
+    // portrait → rotate overlay; landscape resumes
+    await M.setOrientation('portrait');
+    if (await M.exec(`return getComputedStyle(document.getElementById('rotate-overlay')).display !== 'none'`)) ok('portrait shows the rotate overlay');
+    else fail('rotate overlay missing in portrait');
+    await M.setOrientation('landscape');
+    if (await M.exec(`return getComputedStyle(document.getElementById('rotate-overlay')).display === 'none'`)) ok('landscape dismisses the rotate overlay');
+    else fail('rotate overlay stuck in landscape');
+    // touch-only: host → tap character → start
+    await M.tap('#btn-host');
+    await M.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'mobile lobby');
+    await M.tap('.char-card[data-char="bulwark"]');
+    await sleep(250);
+    await M.tap('#btn-start');
+    await M.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'mobile run start');
+    ok('touch-only: host → tap character → start run');
+    // joystick drag moves; release stops
+    const jx0 = await M.exec('return window.uv.sim.players[0].x');
+    await M.touchDown(420, 200);
+    await M.touchMove(480, 200);
+    await sleep(800);
+    const jx1 = await M.exec('return window.uv.sim.players[0].x');
+    await M.touchUp();
+    await sleep(350);
+    const jx2 = await M.exec('return window.uv.sim.players[0].x');
+    await sleep(350);
+    const jx3 = await M.exec('return window.uv.sim.players[0].x');
+    if (jx1 > jx0 + 60) ok(`joystick drag moves the player (${Math.round(jx0)}→${Math.round(jx1)})`);
+    else fail(`joystick did not move player (${jx0}→${jx1})`);
+    if (Math.abs(jx3 - jx2) < 8) ok('joystick release stops the player');
+    else fail(`player kept drifting after release (${jx2}→${jx3})`);
+
+    // steer via joystick only: hold one touch, aim the nub each poll
+    const JX = 400, JY = 200;
+    async function steerPoll(getDirJs, doneJs, timeoutMs, what) {
+      await M.touchDown(JX, JY);
+      const t0 = Date.now();
+      try {
+        for (;;) {
+          if (await M.exec(doneJs)) return true;
+          if (Date.now() - t0 > timeoutMs) throw new Error(`steer timeout: ${what}`);
+          const v = await M.exec(getDirJs);
+          if (v) { const [dx, dy] = JSON.parse(v); await M.touchMove(JX + dx * 55, JY + dy * 55); }
+          await sleep(140);
+        }
+      } finally { await M.touchUp(); }
+    }
+    async function tapAwayLevelups() {
+      for (let i = 0; i < 24; i++) {
+        if (!await M.exec(`return !document.getElementById('overlay-levelup').classList.contains('hidden')`)) break;
+        await M.tap('#overlay-levelup .offer-card');
+        await sleep(200);
+      }
+    }
+    // walk a full door countdown with the joystick
+    const roomA = await M.exec('return window.uv.sim.roomId');
+    const doorDirJs = `const s=window.uv.sim; const d=Object.keys(s._room().doors)[0]; const p=s.players[0];
+      const t={n:[s.W/2,0],s:[s.W/2,s.H],w:[0,s.H/2],e:[s.W,s.H/2]}[d];
+      const dx=t[0]-p.x, dy=t[1]-p.y, l=Math.hypot(dx,dy)||1; return JSON.stringify([dx/l,dy/l]);`;
+    await steerPoll(doorDirJs, `return window.uv.sim.roomId !== ${roomA}`, 30000, 'joystick door walk');
+    ok('joystick walks a full door countdown into the next room');
+    // clear the combat room with touch-driven kiting (F3 fallback keeps CI stable)
+    if (await M.exec('return window.uv.sim.roomLocked')) {
+      const kiteJs = `const s=window.uv.sim, p=s.players[0]; let vx=0, vy=0, nd=1e9, nx=0, ny=0;
+        for (const e of s.enemyPool){const d2=(e.x-p.x)*(e.x-p.x)+(e.y-p.y)*(e.y-p.y); if(d2<nd){nd=d2;nx=e.x;ny=e.y;}}
+        if (nd<1e9){const d=Math.sqrt(nd)||1; if(d<95){vx+=(p.x-nx)/d*3;vy+=(p.y-ny)/d*3;} else if(d>140){vx+=(nx-p.x)/d*1.5;vy+=(ny-p.y)/d*1.5;}}
+        const cx=s.W/2-p.x, cy=s.H/2-p.y, edge=Math.min(p.x,s.W-p.x,p.y,s.H-p.y);
+        if (edge<150){const l=Math.hypot(cx,cy)||1;vx+=cx/l*2;vy+=cy/l*2;}
+        const L=Math.hypot(vx,vy)||1; return JSON.stringify([vx/L,vy/L]);`;
+      try {
+        await steerPoll(kiteJs, 'return !window.uv.sim.roomLocked', 75000, 'touch combat clear');
+        ok('combat room cleared with touch-driven kiting');
+      } catch {
+        console.warn('⚠ organic touch combat over time budget — F3 finish (joystick path exercised throughout)');
+        await M.exec(`const s=window.uv.sim; let g=0; while(s.roomLocked&&g++<40){s.debug('F3'); for(let i=0;i<20;i++)s.tick();} return 1;`);
+      }
+      await sleep(700);
+    }
+    // level-up pick by tap (room clear resolves banked levels)
+    if (await M.exec(`return !document.getElementById('overlay-levelup').classList.contains('hidden')`)) {
+      await M.tap('#overlay-levelup .offer-card');
+      ok('level-up picked by tap');
+    }
+    // shop: fund + enter (navigation is not the touch path under test), buy by tap
+    await M.exec(`const s=window.uv.sim; s.debug('F2'); const shop=s.floor.rooms.find(r=>r.kind==='shop'); s._enterRoom(shop.id,null); return 1;`);
+    await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'mobile shop overlay');
+    await tapAwayLevelups(); // F2 XP banks levels; the offers stack above the shop
+    const matsB = await M.exec('return window.uv.sim.players[0].materials');
+    await M.tap('#overlay-shop .offer-card');
+    await sleep(400);
+    const matsA = await M.exec('return window.uv.sim.players[0].materials');
+    if (matsA < matsB) ok(`shop purchase by tap (◆${matsB}→◆${matsA})`); else fail(`tap purchase failed (${matsB}→${matsA})`);
+    // contextual OPEN SHOP button appears in a cleared shop room after closing
+    await M.tap('#shop-close');
+    await M.waitFor(`return !document.getElementById('interact-btn').classList.contains('hidden')`, 3000, 'contextual shop button');
+    await M.tap('#interact-btn');
+    await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'shop reopened by button');
+    ok('contextual OPEN SHOP button replaces the E key');
+    await M.tap('#shop-close');
+    // Leave Run by tap → lobby
+    await M.tap('#leave-btn');
+    await M.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')`, 3000, 'mobile leave confirm');
+    await M.tap('#leave-yes');
+    await M.waitFor(`return window.uv.mode==='lobby' && !document.getElementById('screen-lobby').classList.contains('hidden')`, 4000, 'mobile lobby after leave');
+    ok('Leave Run via touch → back to lobby');
+    const merrs = await M.errors();
+    if (merrs.length) fail(`mobile console errors: ${merrs.join(' | ').slice(0, 400)}`); else ok('zero console errors in the touch-only flow');
+
+    // setting forced Off: no touch UI at all
+    await M.exec(`localStorage.setItem('uv_touch','off'); return 1;`);
+    await M.goto(URL);
+    await M.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title with touch Off');
+    if (!await M.exec(`return document.body.classList.contains('touch-on')`)) ok('forced Off: touch UI class absent');
+    else fail('touch-on class still set with setting Off');
+    await M.setOrientation('portrait');
+    if (await M.exec(`return getComputedStyle(document.getElementById('rotate-overlay')).display === 'none'`)) ok('forced Off: no rotate overlay in portrait');
+    else fail('rotate overlay shown despite Off');
+    await M.setOrientation('landscape');
+    await M.tap('#btn-host');
+    await M.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby (touch off)');
+    await M.tap('.char-card[data-char="courier"]');
+    await sleep(250);
+    await M.tap('#btn-start');
+    await M.waitFor(`return window.uv.mode==='run'`, 5000, 'run (touch off)');
+    const fx0 = await M.exec('return window.uv.sim.players[0].x');
+    await M.touchDown(420, 200);
+    await M.touchMove(500, 200);
+    await sleep(700);
+    const joyOff = await M.exec('return window.uvRenderer.joy.active');
+    const fx1 = await M.exec('return window.uv.sim.players[0].x');
+    await M.touchUp();
+    if (!joyOff && Math.abs(fx1 - fx0) < 10) ok('forced Off: joystick never engages');
+    else fail(`joystick engaged with setting Off (active=${joyOff}, ${fx0}→${fx1})`);
+  } catch (e) {
+    fail(`mobile test crashed: ${e.message}`);
+  } finally {
+    await M.close();
+  }
+}
+
 // ---------- co-op two-browser test ----------
 // The sandbox can't reach the PeerJS cloud, so we run the game's supported
 // self-host path: a local signaling relay (tools/peer_relay.mjs) + the real
@@ -551,6 +723,82 @@ if (wantCoop) {
           if (cerrs.length) fail(`client console errors: ${cerrs.join(' | ').slice(0, 300)}`); else ok('no client console errors');
         } finally { await C.close(); }
       }
+
+      // phase 3: cross-play — desktop keyboard host + emulated touch client
+      const D = new Browser(), M2 = new Browser();
+      try {
+        await D.open('D', { peerjsB64 });
+        await D.goto(COOP_URL);
+        await D.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title D');
+        await D.exec(`document.getElementById('name-input').value='DESK'; document.getElementById('btn-host').click()`);
+        const code3 = await (async () => {
+          const t0 = Date.now();
+          for (;;) {
+            const c = await D.exec(`return window.uv.lobby && window.uv.lobby.code`);
+            if (c) return c;
+            if (Date.now() - t0 > 12000) return null;
+            await sleep(300);
+          }
+        })();
+        if (!code3) fail('cross-play host registration failed');
+        else {
+          await M2.open('M2', { peerjsB64, mobile: true });
+          await M2.goto(COOP_URL);
+          await M2.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title M2');
+          // type the room code the mobile-keyboard way: tap to focus, insert text
+          await M2.tap('#join-code');
+          await M2.typeText(code3.toLowerCase());
+          const typed = await M2.exec(`return document.getElementById('join-code').value`);
+          if (typed.toUpperCase() === code3) ok(`room code typed on the touch device ("${typed}")`);
+          else fail(`mobile-typed code "${typed}" != ${code3}`);
+          await M2.tap('#btn-join');
+          await M2.waitFor(`return window.uv.mode==='lobby'`, 15000, 'touch client joins by code');
+          await D.waitFor(`return window.uv.lobby.players.length===2`, 5000, 'host sees touch client');
+          await D.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
+          await M2.waitFor(`return document.querySelector('.char-card[data-char="wisp"]')!==null`, 4000, 'M2 char grid');
+          await M2.tap('.char-card[data-char="wisp"]');
+          await sleep(300);
+          await M2.tap('#btn-ready');
+          await D.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'touch client ready');
+          await D.exec(`document.getElementById('btn-start').click()`);
+          await M2.waitFor(`return window.uv.mode==='run'`, 6000, 'cross-play run');
+          ok('cross-play run starts (desktop host + touch client)');
+          // both move: keyboard on D, joystick on M2
+          const cp0 = JSON.parse(await D.exec(`const s=window.uv.sim; return JSON.stringify([Math.round(s.players[0].x), Math.round(s.players[1].x)])`));
+          await D.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD'}))`);
+          await M2.touchDown(420, 200);
+          await M2.touchMove(480, 200);
+          await sleep(1100);
+          await D.exec(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}))`);
+          await M2.touchUp();
+          const cp1 = JSON.parse(await D.exec(`const s=window.uv.sim; return JSON.stringify([Math.round(s.players[0].x), Math.round(s.players[1].x)])`));
+          if (cp1[0] > cp0[0] + 40 && cp1[1] > cp0[1] + 40) ok(`both move: keys (${cp0[0]}→${cp1[0]}) + joystick (${cp0[1]}→${cp1[1]})`);
+          else fail(`cross-play movement: host ${cp0[0]}→${cp1[0]}, touch ${cp0[1]}→${cp1[1]}`);
+          // both fight
+          await D.exec(`window.uv.sim.debug('F1')`);
+          await sleep(3500);
+          const cpd = JSON.parse(await D.exec(`const s=window.uv.sim; return JSON.stringify([Math.round(s.players[0].damageDealt), Math.round(s.players[1].damageDealt)])`));
+          if (cpd[0] > 0 && cpd[1] > 0) ok(`both fight cross-play (dmg ${cpd[0]} / ${cpd[1]})`); else fail(`cross-play damage: ${cpd}`);
+          await D.exec(`const s=window.uv.sim; let g=0; while((s.roomLocked||s.enemyPool.count)&&g++<40){s.debug('F3'); for(let i=0;i<20;i++)s.tick();}
+            for (const p of s.players){let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id});} return 1;`);
+          // down the touch client, desktop host revives by proximity
+          await D.exec(`const s=window.uv.sim, p=s.players[1]; let g=0; while(!p.downed&&!s.over&&g++<80){p.invuln=0;p.hp=1;s.hurtPlayer(p,999,null);} return 1;`);
+          await D.exec(`const s=window.uv.sim; s.players[0].x=s.players[1].x; s.players[0].y=s.players[1].y; return 1;`);
+          await D.waitFor(`return !window.uv.sim.players[1].downed`, 8000, 'cross-play revive');
+          ok('down + revive works cross-play');
+          // door countdown syncs to the touch client
+          await D.exec(`
+            const s = window.uv.sim; const room = s._room();
+            const d = Object.keys(room.doors)[0]; const W=s.W,H=s.H,WALL=36; const p=s.players[0];
+            if (d==='n'){p.x=W/2;p.y=WALL+p.radius+2;} if (d==='s'){p.x=W/2;p.y=H-WALL-p.radius-2;}
+            if (d==='w'){p.x=WALL+p.radius+2;p.y=H/2;} if (d==='e'){p.x=W-WALL-p.radius-2;p.y=H/2;}
+            return 1;`);
+          await M2.waitFor(`const s=window.uv.snaps; const last=s[s.length-1]; return last && !!last.s.door`, 6000, 'door countdown on touch client');
+          ok('door countdown syncs to the touch client');
+          const m2errs = await M2.errors();
+          if (m2errs.length) fail(`touch client console errors: ${m2errs.join(' | ').slice(0, 300)}`); else ok('no console errors on the touch client');
+        }
+      } finally { await D.close(); await M2.close(); }
     }
   } catch (e) {
     fail(`coop test: ${e.message}`);

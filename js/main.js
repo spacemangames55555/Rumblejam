@@ -7,7 +7,8 @@ import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
 import { HostTransport, ClientTransport } from './net.js';
 import { Renderer } from './render.js';
-import { initInput, sampleInput, takeDebugKey } from './input.js';
+import { initInput, sampleInput, takeDebugKey, pressInteract } from './input.js';
+import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
@@ -35,6 +36,8 @@ const renderer = new Renderer(canvas);
 window.uvRenderer = renderer;
 renderer.shakeEnabled = isShakeEnabled();
 initInput();
+initTouch(canvas);
+renderer.joy = joy; // renderer draws the joystick from the live touch state
 
 const app = {
   mode: 'title',          // title | lobby | run | results
@@ -75,8 +78,10 @@ initOverlays({
 });
 window.addEventListener('pointerdown', ensureAudio, { once: false });
 window.addEventListener('keydown', ensureAudio, { once: false });
+window.addEventListener('touchstart', ensureAudio, { once: false }); // iOS Safari gesture unlock
 window.uv = app; // debug/testing handle (read-only use)
 initLeaveButton();
+document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
 showTitle();
 
 // ---------------- leave run (corner button + confirmation) ----------------
@@ -691,6 +696,10 @@ function frame(now) {
       curRoomDef: app.roomInfo ? { kind: app.roomInfo.kind, hazard: app.roomInfo.hazard } : null,
       boss: view.boss,
     });
+    // contextual touch button for the E action (reopen shop / shop at hatch)
+    const wantInteract = touchEnabled() && !isShopOpen() && view.cleared
+      && (!!view.hatch || (app.roomInfo && app.roomInfo.kind === 'shop'));
+    document.getElementById('interact-btn').classList.toggle('hidden', !wantInteract);
   }
 }
 requestAnimationFrame(frame);
@@ -708,6 +717,7 @@ function readMoveKeys() {
   if (liveKeys.has('KeyW') || liveKeys.has('ArrowUp')) my -= 1;
   if (liveKeys.has('KeyS') || liveKeys.has('ArrowDown')) my += 1;
   if (mx && my) { mx *= Math.SQRT1_2; my *= Math.SQRT1_2; }
+  if (joy.active && touchEnabled()) { mx = joy.mx; my = joy.my; }
   return { mx, my };
 }
 

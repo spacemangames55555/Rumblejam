@@ -71,6 +71,19 @@ is direct browser-to-browser WebRTC.
   to the lobby together for a fresh run; a non-host player leaves alone and
   returns to the title screen.
 
+### On phones (touch)
+
+- **Floating joystick**: touch anywhere on the playfield and drag — the
+  joystick anchors where you touch; release to stop. That's the only combat
+  input needed (weapons auto-aim).
+- Everything else is tap: menus, character grid, shop, level-ups, the ↰
+  leave button, and the ⚙ settings gear.
+- A gold **OPEN SHOP** button appears when the E key would do something
+  (re-opening the shop in a shop room or at the post-boss hatch).
+- The game plays **landscape only** — portrait shows a rotate prompt.
+- Touch controls switch on automatically on touch devices; force them with
+  **⚙ → Touch controls: Auto / On / Off** (handy for touch-screen laptops).
+
 ## Debug keys
 
 Enabled by the `DEV` flag in `js/config.js` (shipped `true`; set `false` for
@@ -154,6 +167,14 @@ never loads them:
   character (marked with a ✔ so you know).
 - **Debug keys ship enabled** (`DEV = true`) because this is a jam build meant
   to be poked at; flip to `false` for real runs.
+- **Touch details**: only pointers of type `touch` anchor the joystick, so a
+  mouse never moves the player by dragging even when touch controls are forced
+  On. The joystick floats (anchored wherever you touch) rather than being
+  fixed, so it never permanently covers HUD elements. The E action became a
+  contextual on-screen button instead of auto-triggering, since the shop
+  already auto-opens on room entry and re-opening should be intentional.
+  Canvas resolution is capped at 2× devicePixelRatio — 3× phone panels cost
+  fill-rate with no visible gain on a flat-shape art style.
 
 ## Known limitations
 
@@ -167,6 +188,11 @@ never loads them:
   (interpolation buffer). Your own movement is predicted and instant.
 - **Balance is jam-grade**: probed by bots and scripted runs, not hundreds of
   human hours. Luck/economy builds in particular can snowball.
-- **Keyboard + mouse only** — no touch or gamepad (out of scope per brief).
+- **Keyboard + mouse, or touch** — gamepad is still unsupported. Touch support
+  was verified with Chromium's mobile emulation (Pixel-class viewport, real
+  dispatched touch events); real devices — **especially iOS Safari** — can
+  surface quirks emulation can't catch (audio unlock timing, safe-area insets,
+  browser-chrome resizes, 120 Hz scheduling), so treat phone support as
+  well-tested-in-emulation rather than device-certified.
 - The pause-free design means a solo player browsing the shop in a *shop room*
   is safe, but reading tooltips mid-combat is at your own risk — as intended.

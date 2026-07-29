@@ -7,6 +7,7 @@ import { ITEM_BY_ID } from '../content/items.js';
 import { WEAPON_BY_ID } from '../content/weapons.js';
 import { TIER_NAMES } from '../config.js';
 import { getVolume, setVolume, sfx } from '../audio.js';
+import { getTouchMode, setTouchMode } from '../touch.js';
 
 const $ = id => document.getElementById(id);
 let A = null; // actions
@@ -40,7 +41,7 @@ export function showTitle(err = '') {
           <input type="text" id="name-input" maxlength="12" style="letter-spacing:2px; text-transform:none;" value="${escapeHtml(playerName())}" placeholder="ANON">
           <button class="big primary" id="btn-host">HOST GAME</button>
           <div class="row">
-            <input type="text" id="join-code" maxlength="5" placeholder="CODE">
+            <input type="text" id="join-code" maxlength="5" placeholder="CODE" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="join">
             <button class="big" id="btn-join" style="width:auto;">JOIN</button>
           </div>
           <button id="btn-howto">How to play</button>
@@ -203,9 +204,17 @@ function initSettings() {
   btn.onclick = () => {
     if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
     panel.classList.remove('hidden');
+    const tm = getTouchMode();
     panel.innerHTML = `
       <label>SFX volume <input type="range" id="set-vol" min="0" max="100" value="${Math.round(getVolume() * 100)}"></label>
       <label><input type="checkbox" id="set-shake" ${shakeEnabled ? 'checked' : ''}> Screen shake</label>
+      <label>Touch controls
+        <select id="set-touch" style="width:100%; font:inherit; padding:6px; background:#12141f; color:var(--ink); border:2px solid var(--line); border-radius:6px;">
+          <option value="auto" ${tm === 'auto' ? 'selected' : ''}>Auto (detect)</option>
+          <option value="on" ${tm === 'on' ? 'selected' : ''}>On</option>
+          <option value="off" ${tm === 'off' ? 'selected' : ''}>Off</option>
+        </select>
+      </label>
       <button id="set-close" style="width:100%;">Close</button>`;
     panel.querySelector('#set-vol').oninput = e => { setVolume(e.target.value / 100); sfx.click(); };
     panel.querySelector('#set-shake').onchange = e => {
@@ -213,6 +222,7 @@ function initSettings() {
       try { localStorage.setItem('uv_shake', shakeEnabled ? '1' : '0'); } catch { /* ignore */ }
       if (window.uvRenderer) window.uvRenderer.shakeEnabled = shakeEnabled;
     };
+    panel.querySelector('#set-touch').onchange = e => { setTouchMode(e.target.value); sfx.click(); };
     panel.querySelector('#set-close').onclick = () => panel.classList.add('hidden');
   };
 }

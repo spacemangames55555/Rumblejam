@@ -25,8 +25,10 @@ export class Renderer {
   }
 
   _resize() {
-    this.canvas.width = window.innerWidth * devicePixelRatio;
-    this.canvas.height = window.innerHeight * devicePixelRatio;
+    // cap DPR at 2 — 3x panels on phones cost fill-rate for no visible gain
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.canvas.width = window.innerWidth * this.dpr;
+    this.canvas.height = window.innerHeight * this.dpr;
   }
 
   // fx from one sim tick / snapshot → visual effects (idempotent per call)
@@ -120,6 +122,29 @@ export class Renderer {
     this._drawFx(ctx, dtFrame);
     this._drawDoorCountdown(ctx, view);
     if (this.showHitboxes) this._drawHitboxes(ctx, view);
+    this._drawJoystick(ctx);
+  }
+
+  // floating touch joystick (screen space, CSS px coords from touch.js)
+  _drawJoystick(ctx) {
+    const j = this.joy;
+    if (!j || !j.active) return;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#c8cde8';
+    circle(ctx, j.anchorX, j.anchorY, 56); ctx.fill();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#e8e9f2';
+    ctx.lineWidth = 2;
+    circle(ctx, j.anchorX, j.anchorY, 56); ctx.stroke();
+    // thumb nub clamped to the base radius
+    const dx = j.curX - j.anchorX, dy = j.curY - j.anchorY;
+    const len = Math.hypot(dx, dy) || 1;
+    const c = Math.min(len, 52);
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#e8e9f2';
+    circle(ctx, j.anchorX + dx / len * c, j.anchorY + dy / len * c, 24); ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
   _drawRoom(ctx, view) {
