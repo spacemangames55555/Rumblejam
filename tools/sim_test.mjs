@@ -64,7 +64,43 @@ ok(`weapon classes: ${JSON.stringify(byCls)}`);
   if (!dead) ok('no dead stats: every stat on ≥2 weapons, ≥5 items, ≥1 statline');
 }
 
-// ---- 1c. dungeon structure across many seeds ----
+// ---- 1c. stat glossary: complete, short, and covers every rendered stat ----
+{
+  const { STAT_GLOSS } = await import('../js/content/glossary.js');
+  let bad = 0;
+  for (const k of STAT_KEYS) {
+    const g = STAT_GLOSS[k];
+    if (!g || typeof g.short !== 'string' || typeof g.detail !== 'string' || !g.short.length || !g.detail.length) {
+      bad++; fail(`glossary: missing/incomplete entry for '${k}'`); continue;
+    }
+    const words = g.short.split(/\s+/).filter(w => /[a-zA-Z]/.test(w)).length;
+    if (words > 12) { bad++; fail(`glossary: short for '${k}' is ${words} words (>12)`); }
+    // 1-2 sentences plus an optional one-word label ("Fortune.") — the spec's
+    // own Greed example counts three period marks
+    const sentences = (g.detail.match(/[.!?]/g) || []).length;
+    if (sentences < 1 || sentences > 3) { bad++; fail(`glossary: detail for '${k}' has ${sentences} sentence marks (want 1-3)`); }
+  }
+  for (const k of Object.keys(STAT_GLOSS)) {
+    if (!STAT_KEYS.includes(k)) { bad++; fail(`glossary: unknown stat '${k}'`); }
+  }
+  // every stat name the UI can render (weapon scaling tags, item stat blocks
+  // and stat-granting hooks, character statlines, the sheet itself) must
+  // resolve to a glossary entry
+  const rendered = new Set(STAT_KEYS); // the sheet renders all ten
+  for (const w of WEAPONS) for (const k of w.scaling) rendered.add(k);
+  for (const c of CHARACTERS) for (const k of Object.keys(c.stats)) rendered.add(k);
+  for (const it of ITEMS) {
+    for (const k of Object.keys(it.stats || {})) rendered.add(k);
+    const h = it.hooks || {};
+    for (const hk of ['condStats', 'allyAura', 'levelStats', 'floorStats']) {
+      if (h[hk] && h[hk].stats) for (const k of Object.keys(h[hk].stats)) rendered.add(k);
+    }
+  }
+  for (const k of rendered) if (!STAT_GLOSS[k]) { bad++; fail(`glossary: UI renders stat '${k}' with no glossary entry`); }
+  if (!bad) ok(`stat glossary: all 10 entries complete; ${rendered.size} rendered stat names all resolve`);
+}
+
+// ---- 1d. dungeon structure across many seeds ----
 {
   const { generateFloor } = await import('../js/dungeon.js');
   const OPP = { n: 's', s: 'n', e: 'w', w: 'e' };

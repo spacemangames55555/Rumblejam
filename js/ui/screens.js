@@ -2,10 +2,11 @@
 // state lives in main.js / the sim; this module renders and forwards clicks.
 
 import { CHARACTERS, CHAR_BY_ID } from '../content/characters.js';
-import { PALETTE } from '../config.js';
+import { PALETTE, STAT_IS_PCT } from '../config.js';
 import { ITEM_BY_ID } from '../content/items.js';
 import { WEAPON_BY_ID } from '../content/weapons.js';
 import { TIER_NAMES } from '../config.js';
+import { glossify, glossName } from './gloss.js';
 import { getVolume, setVolume, sfx } from '../audio.js';
 import { getTouchMode, setTouchMode } from '../touch.js';
 
@@ -120,7 +121,7 @@ export function showLobby(lobby, isHost, myKey) {
         <div class="char-card ${mine ? 'selected' : ''} ${takenBy.length && !mine ? 'taken' : ''}" data-char="${c.id}" title="${escapeHtml(c.desc)}">
           <svg class="cicon" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="${me ? me.color : PALETTE.players[0]}" stroke="#0b0c12" stroke-width="3"/><text x="20" y="26" text-anchor="middle" font-size="17" fill="#0b0c12" font-weight="bold">${c.sym}</text></svg>
           <div class="cname">${c.name}</div>
-          <div class="ctrait">${escapeHtml(c.desc)}</div>
+          <div class="ctrait">${glossify(c.desc)}</div>
           <div class="cstats">${statSummary(c.stats)}</div>
           ${takenBy.length ? `<div class="towner">✔ ${escapeHtml(takenBy.join(','))}</div>` : ''}
         </div>`;
@@ -146,7 +147,9 @@ export function showLobby(lobby, isHost, myKey) {
 
 function statSummary(stats) {
   const parts = [];
-  for (const [k, v] of Object.entries(stats)) parts.push(`${v > 0 ? '+' : ''}${v} ${k}`);
+  for (const [k, v] of Object.entries(stats)) {
+    parts.push(`${v > 0 ? '+' : ''}${v}${STAT_IS_PCT[k] ? '%' : ''} ${glossName(k)}`);
+  }
   return parts.slice(0, 3).join(' · ');
 }
 

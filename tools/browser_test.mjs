@@ -187,6 +187,20 @@ try {
   await A.exec(`document.getElementById('name-input').value='TESTER'; document.getElementById('btn-host').click()`);
   await A.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby');
   ok('host → lobby');
+
+  // ---- glossary on the character grid: stat inside a trait sentence ----
+  const lobbyGloss = await A.exec(`const card=document.querySelector('.char-card[data-char="bulwark"]');
+    const t=card.querySelector('.ctrait .gloss-term'); if(!t) return '';
+    t.click(); const p=document.getElementById('gloss-pop');
+    return p.classList.contains('hidden') ? '' : p.textContent;`);
+  if (/Grit|Vitality/.test(lobbyGloss)) ok(`lobby: tapping a stat in a trait sentence opens the glossary ("${lobbyGloss.slice(0, 40)}…")`);
+  else fail(`lobby trait glossary: "${lobbyGloss}"`);
+  const pickedByGloss = await A.exec(`return document.querySelector('.char-card[data-char="bulwark"]').classList.contains('selected')`);
+  if (!pickedByGloss) ok('glossary tap does not select the character'); else fail('tapping a gloss term picked the character');
+  const statlineGloss = await A.exec(`return document.querySelector('.char-card .cstats .gloss-term') !== null`);
+  if (statlineGloss) ok('lobby statlines render stat names as glossary terms'); else fail('no gloss terms in lobby statlines');
+  await A.exec(`document.body.click(); return 1;`); // close the popover
+
   // pick char + start
   await A.exec(`document.querySelector('.char-card[data-char="vesper"]').click()`);
   await sleep(300);
@@ -299,6 +313,15 @@ try {
   await A.waitFor(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'sheet via C');
   const sheetHasPair = await A.exec(`return document.getElementById('overlay-sheet').innerText.includes('Coilgun')`);
   if (sheetHasPair) ok('character sheet lists the owned weapons'); else fail('sheet missing weapons');
+  // ---- glossary: hover a stat row in the sheet (desktop) ----
+  const sheetHover = await A.exec(`const r=document.querySelector('[data-glossrow="tempo"]');
+    r.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
+    const p=document.getElementById('gloss-pop');
+    const txt = p.classList.contains('hidden') ? '' : p.textContent;
+    r.dispatchEvent(new MouseEvent('mouseout',{bubbles:true}));
+    return txt;`);
+  if (/Tempo/.test(sheetHover) && /faster/.test(sheetHover)) ok('desktop: hovering a sheet stat shows its glossary detail');
+  else fail(`sheet hover glossary: "${sheetHover}"`);
   const tick0 = await A.exec('return window.uv.sim.tickNum');
   await sleep(700);
   const tick1 = await A.exec('return window.uv.sim.tickNum');
@@ -321,6 +344,15 @@ try {
   // weapon tooltips list their scaling stats (new system)
   const scalingShown = await A.exec(`return document.getElementById('overlay-shop').innerText.includes('scales with:') || document.getElementById('overlay-shop').innerText.includes('scales:') || /Ferocity|Tempo|Vitality|Attunement/.test(document.getElementById('overlay-shop').innerText)`);
   if (scalingShown) ok('shop shows weapon scaling stats'); else fail('weapon scaling stats missing from shop UI');
+  // ---- glossary: hover a stat named inside a shop tooltip (desktop) ----
+  const shopHover = await A.exec(`const t=document.querySelector('#overlay-shop .gloss-term'); if(!t) return '';
+    t.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
+    const p=document.getElementById('gloss-pop');
+    const txt = p.classList.contains('hidden') ? '' : p.textContent;
+    t.dispatchEvent(new MouseEvent('mouseout',{bubbles:true}));
+    return txt;`);
+  if (shopHover.length > 20) ok('desktop: hovering a stat in a shop tooltip shows the glossary');
+  else fail(`shop tooltip glossary hover: "${shopHover}"`);
   // sell a stat item with the two-step confirmation; verify stat + refund
   const pickJs = `const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.ferocity>0&&!it.hooks); return JSON.stringify({id:it.id,dmg:it.stats.ferocity})`;
   const pick = JSON.parse(await A.exec(pickJs));
@@ -563,6 +595,13 @@ try {
     }
     // level-up pick by tap (room clear resolves banked levels)
     if (await M.exec(`return !document.getElementById('overlay-levelup').classList.contains('hidden')`)) {
+      // every boost card carries the stat's glossary short line, no tap needed
+      const lu = JSON.parse(await M.exec(`const cards=[...document.querySelectorAll('#overlay-levelup .offer-card')];
+        return JSON.stringify({ n: cards.length,
+          withShort: cards.filter(c => c.querySelector('.gloss-short') && c.querySelector('.gloss-short').textContent.trim().length > 5).length,
+          h: cards.length ? Math.round(cards[0].getBoundingClientRect().height) : 0 })`));
+      if (lu.n > 0 && lu.withShort === lu.n && lu.h >= 44) ok(`level-up cards all show glossary short lines (${lu.n} cards, ${lu.h}px tall)`);
+      else fail(`level-up short lines: ${JSON.stringify(lu)}`);
       await M.tap('#overlay-levelup .offer-card');
       ok('level-up picked by tap');
     }
@@ -580,7 +619,9 @@ try {
     }
     await tapAwayLevelups(); // F2 XP banks levels; the offers stack above the shop
     const matsB = await M.exec('return window.uv.sim.players[0].materials');
-    await M.tap('#overlay-shop .offer-card');
+    // tap the card's NAME line — the card center can land on a stat term,
+    // which (by design) opens the glossary instead of buying
+    await M.tap('#overlay-shop .offer-card .oname');
     let matsA = matsB;
     try {
       matsA = await M.waitFor(`const m=window.uv.sim.players[0].materials; return m < ${matsB} ? m : 0`, 3000, 'purchase debit');
@@ -592,6 +633,17 @@ try {
         weapons:window.uv.sim.players[0].weapons.length, slots:window.uv.sim.players[0].weaponSlots})`);
       fail(`tap purchase failed (${matsB} unchanged) — diag: ${diag}`);
     }
+    // tapping a stat name inside an offer opens the glossary and never buys
+    const hasTerm = await M.exec(`return document.querySelector('#overlay-shop .offer-card:not(.sold) .gloss-term') !== null`);
+    if (hasTerm) {
+      const matsG = await M.exec('return window.uv.sim.players[0].materials');
+      await M.tap('#overlay-shop .offer-card:not(.sold) .gloss-term');
+      const matsG2 = await M.exec('return window.uv.sim.players[0].materials');
+      const popVis = await M.exec(`return !document.getElementById('gloss-pop').classList.contains('hidden')`);
+      if (matsG2 === matsG && popVis) ok('tapping a stat name in a shop card opens the glossary without buying');
+      else fail(`glossary buy-guard: mats ${matsG}→${matsG2}, popover=${popVis}`);
+      await M.tap('.ov-title'); // close the popover
+    } else fail('no glossary term found in shop stock');
     // contextual OPEN SHOP button appears in a cleared shop room after closing
     await M.tap('#shop-close');
     if (await M.exec(`return !document.getElementById('overlay-shop').classList.contains('hidden')`)) {
@@ -624,6 +676,16 @@ try {
     await M.waitFor(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'sheet from shop (touch)');
     if (await M.exec(`return getComputedStyle(document.querySelector('.sheet-cols')).overflowY === 'auto'`)) ok('sheet columns scroll on phones');
     else fail('sheet not scrollable');
+    // ---- glossary in the sheet: tap Tempo → inline detail; tap again → gone ----
+    const rowH = await M.exec(`return Math.round(document.querySelector('[data-glossrow="tempo"]').getBoundingClientRect().height)`);
+    if (rowH >= 44) ok(`sheet stat rows meet the 44px touch standard (${rowH}px)`); else fail(`sheet row only ${rowH}px tall on touch`);
+    await M.tap('[data-glossrow="tempo"]');
+    const detTxt = await M.exec(`const d=document.querySelector('.gloss-detail'); return d ? d.textContent : ''`);
+    if (/faster/.test(detTxt)) ok('mobile: tapping Tempo expands its glossary detail inline');
+    else fail(`sheet row tap detail: "${detTxt}"`);
+    await M.tap('[data-glossrow="tempo"]');
+    if (await M.exec(`return document.querySelector('.gloss-detail') === null`)) ok('mobile: tapping the row again collapses the detail');
+    else fail('sheet glossary detail did not collapse');
     await M.tap('#sheet-close');
     await M.tap('#shop-close');
     // character sheet via the HUD button
@@ -860,6 +922,11 @@ if (wantCoop) {
       await A.exec(`window.uv.sim.debug('F1'); return 1;`);
       await B.exec(`document.getElementById('sheet-btn').click(); return 1;`);
       await B.waitFor(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'client sheet in combat');
+      // client expands a glossary detail mid-combat — sim must keep running
+      // and the host's screen stays untouched (asserted below)
+      await B.exec(`document.querySelector('[data-glossrow="grit"]').click(); return 1;`);
+      if (await B.exec(`return document.querySelector('.gloss-detail') !== null`)) ok('co-op: client expands a stat glossary in its own sheet');
+      else fail('client glossary detail did not expand');
       const hTick0 = await A.exec('return window.uv.sim.tickNum');
       await sleep(800);
       const hTick1 = await A.exec('return window.uv.sim.tickNum');

@@ -6,6 +6,7 @@ import { WEAPON_BY_ID, WEAPON_CLASS_NAMES } from '../content/weapons.js';
 import { CHAR_BY_ID } from '../content/characters.js';
 import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_NAMES, weaponBasePrice, sellValue } from '../config.js';
 import { escapeHtml } from './screens.js';
+import { glossName, glossShort, glossDetail, glossify } from './gloss.js';
 import { sfx } from '../audio.js';
 
 const $ = id => document.getElementById(id);
@@ -23,7 +24,7 @@ export function statLines(stats) {
   if (!stats) return '';
   return Object.entries(stats).map(([k, v]) => {
     const cls = v >= 0 ? 'stat-line' : 'stat-line stat-neg';
-    return `<span class="${cls}">${v > 0 ? '+' : ''}${v}${STAT_IS_PCT[k] ? '%' : ''} ${STAT_NAME[k] || k}</span>`;
+    return `<span class="${cls}">${v > 0 ? '+' : ''}${v}${STAT_IS_PCT[k] ? '%' : ''} ${glossName(k)}</span>`;
   }).join('');
 }
 
@@ -54,7 +55,7 @@ function weaponCardHtml(def, tier, meta) {
   return `
     <div class="oname">${def.sym} ${escapeHtml(def.name)} <span style="color:var(--gold)">${TIER_NAMES[tier - 1]}</span></div>
     <div class="orarity">${WEAPON_CLASS_NAMES[def.cls]}</div>
-    <div class="odesc">${bits.join('<br>')}<br><span class="dim">scales with: ${def.scaling.map(t => STAT_NAME[t] || t).join(', ')}</span>
+    <div class="odesc">${bits.join('<br>')}<br><span class="dim">scales with: ${def.scaling.map(t => glossName(t)).join(', ')}</span>
     ${combines ? '<br><span class="wpn-note">▲ you own a copy — buy it and combine the pair below (free)</span>' : ''}</div>`;
 }
 
@@ -113,7 +114,7 @@ function ownedHtml(meta, floor) {
       <div class="wchip ${isSel ? 'selected' : ''} ${isMatch ? 'combinable' : ''}" data-wchip="${i}" data-keep="1">
         <span class="wsym" style="color:${def.color}">${def.sym}</span>
         <span><b>${escapeHtml(def.name)}</b> <span style="color:var(--gold)">${TIER_NAMES[w.tier - 1]}</span>
-        <span class="dim small">· ${def.scaling.map(t => STAT_NAME[t] || t).join(', ')}</span></span>
+        <span class="dim small">· ${def.scaling.map(t => glossName(t)).join(', ')}</span></span>
         ${isMatch ? `<button class="chip-btn combine-btn" data-combine="${i}" data-keep="1">⇑ COMBINE</button>` : ''}
         <button class="chip-btn sell-btn ${armedSell === armKey ? 'armed' : ''}" data-sellw="${i}" data-arm="${armKey}" data-keep="1">
           ${armedSell === armKey ? `⟡${val} — tap again` : `Sell ⟡${val}`}</button>
@@ -281,6 +282,7 @@ export function showLevelup(ev) {
         <div class="offer-card r-${p.rarity}" data-id="${p.id}">
           <div class="oname">+${p.amount}${STAT_IS_PCT[p.stat] ? '%' : ''} ${STAT_NAME[p.stat]}</div>
           <div class="orarity">${p.rarity === 'common' ? 'small' : p.rarity === 'uncommon' ? 'medium' : 'large'}</div>
+          <div class="gloss-short">${escapeHtml(glossShort(p.stat))}</div>
         </div>`).join('')}</div>
     </div>`;
   el.querySelectorAll('.offer-card').forEach(card => {
@@ -328,6 +330,7 @@ export function showBoon(ev) {
         <div class="offer-card r-${p.rarity} boon-card" data-id="${p.id}">
           <div class="oname">+${p.amount}${STAT_IS_PCT[p.stat] ? '%' : ''} ${STAT_NAME[p.stat]}</div>
           <div class="orarity">${'◆'.repeat(Math.min(3, p.n))}${'◇'.repeat(Math.max(0, 3 - p.n))} ${p.n >= 3 ? 'permanent!' : `${p.n}/3 to keep`}</div>
+          <div class="gloss-short">${escapeHtml(glossShort(p.stat))}</div>
         </div>`).join('')}</div>
     </div>`;
   el.querySelectorAll('.boon-card').forEach(card => {
@@ -344,6 +347,7 @@ export function closeBoon() { $('overlay-boon').classList.add('hidden'); }
 
 let sheetCharId = null;
 let sheetDigest = '';
+const sheetGlossOpen = new Set(); // stat keys with their inline detail expanded
 function sheetMetaDigest(meta) {
   return meta ? JSON.stringify([meta.stats, meta.weapons, meta.items, meta.level, meta.materials]) : '';
 }
@@ -351,6 +355,7 @@ function sheetMetaDigest(meta) {
 export function showSheet(meta, charId) {
   sheetCharId = charId;
   sheetDigest = sheetMetaDigest(meta);
+  sheetGlossOpen.clear();
   renderSheet(meta);
   $('overlay-sheet').classList.remove('hidden');
 }
@@ -371,17 +376,22 @@ function renderSheet(meta) {
   const el = $('overlay-sheet');
   if (!meta) { el.innerHTML = ''; return; }
   const chr = CHAR_BY_ID[sheetCharId];
-  const statRows = STATS.map(s => {
+  // every stat row is tappable/hoverable: hover shows the glossary popover
+  // (desktop); tapping toggles the plain-language detail inline beneath the
+  // row (the mobile path — works on desktop too)
+  const statRows = STATS.map((s, i) => {
     const cur = Math.round((meta.stats[s.key] || 0) * 10) / 10;
     const base = (STAT_BASE[s.key] || 0) + ((chr && chr.stats[s.key]) || 0);
     const pct = STAT_IS_PCT[s.key] ? '%' : '';
-    return `<div class="sheet-stat"><span class="dim">${s.name}</span>
-      <span><b>${cur}${pct}</b>${cur !== base ? ` <span class="dim small">(base ${base}${pct})</span>` : ''}</span></div>`;
+    const open = sheetGlossOpen.has(s.key);
+    return `<div class="sheet-stat gloss-row ${i % 2 ? '' : 'alt'}" data-glossrow="${s.key}"><span class="dim">${s.name} <span class="dim small">${open ? '▾' : '▸'}</span></span>
+      <span><b>${cur}${pct}</b>${cur !== base ? ` <span class="dim small">(base ${base}${pct})</span>` : ''}</span></div>
+      ${open ? `<div class="gloss-detail">${escapeHtml(glossDetail(s.key))}</div>` : ''}`;
   }).join('');
   const wRows = meta.weapons.map(w => {
     const def = WEAPON_BY_ID[w.id];
     return `<div class="sheet-stat"><span><span class="wsym" style="color:${def.color}">${def.sym}</span> <b>${escapeHtml(def.name)}</b> <span style="color:var(--gold)">${TIER_NAMES[w.tier - 1]}</span></span>
-      <span class="dim small">scales: ${def.scaling.map(t => STAT_NAME[t] || t).join(', ')}</span></div>`;
+      <span class="dim small">scales: ${def.scaling.map(t => glossName(t)).join(', ')}</span></div>`;
   }).join('') || '<div class="dim small">no weapons</div>';
   const counts = new Map();
   for (const id of meta.items) counts.set(id, (counts.get(id) || 0) + 1);
@@ -397,7 +407,7 @@ function renderSheet(meta) {
       <div class="row spread">
         <div>
           <div class="ov-title">${chr ? escapeHtml(chr.name).toUpperCase() : 'CHARACTER'}</div>
-          <div class="ov-sub">level ${meta.level} · ◆ ${meta.materials} · ${chr ? escapeHtml(chr.desc) : ''}</div>
+          <div class="ov-sub">level ${meta.level} · ◆ ${meta.materials} · ${chr ? glossify(chr.desc) : ''}</div>
         </div>
         <button id="sheet-close">Close</button>
       </div>
@@ -415,4 +425,15 @@ function renderSheet(meta) {
       </div>
     </div>`;
   el.querySelector('#sheet-close').onclick = () => { sfx.click(); closeSheet(); };
+  // tap a stat row → toggle its inline glossary detail (never pauses anything
+  // beyond what the sheet itself already does)
+  el.querySelectorAll('[data-glossrow]').forEach(row => {
+    row.onclick = () => {
+      const key = row.dataset.glossrow;
+      if (sheetGlossOpen.has(key)) sheetGlossOpen.delete(key);
+      else sheetGlossOpen.add(key);
+      sfx.click();
+      renderSheet(meta);
+    };
+  });
 }

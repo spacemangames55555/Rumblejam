@@ -107,6 +107,12 @@ is direct browser-to-browser WebRTC.
   where it differs), weapons with their scaling stats, and items, live. In solo
   it pauses the game; in co-op it never pauses and only ever covers your own
   screen.
+- **What does a stat do?** Every stat name you see with a dotted underline —
+  in the sheet, in shop and item tooltips, on the character-select grid — is
+  the same glossary affordance: hover it on desktop for a plain-language
+  explanation, tap it on touch. Sheet rows expand their explanation inline on
+  tap. Level-up and boon cards always print the stat's one-line summary right
+  on the card, no interaction needed.
 - **Mouse** — menus, shop, level-up choices, Facet's boon picker
 - **In the shop**: your weapons and items are listed under the stock. Own two
   identical same-tier weapons? Tap one, then tap its highlighted match to
@@ -294,6 +300,33 @@ never loads them:
   Horizon Glass / Surveyor's Array; momentum (Onrush) → Slaughter Rhythm /
   Greedwind Charm / Chronomancer's Gear. Quartermaster can't buy items by
   design — his fork is fed by weapon scaling stats instead.
+
+### Stat glossary (patch 6)
+
+- **One source of truth**: `js/content/glossary.js` holds a short line
+  (≤12 words) and a 1–2 sentence plain-language detail for each of the ten
+  stats; every surface (sheet, level-up and boon cards, character select,
+  weapon/item tooltips) renders from it, so wording can never drift. The sim
+  suite asserts completeness and that every stat name the UI can render
+  resolves to an entry.
+- **No formulas in glossary text** — exact numbers stay on the character sheet
+  and in the README. The details name what *kinds* of things scale with a stat
+  instead.
+- **One interaction mechanism**: a dotted underline marks every explained stat
+  name. The tap handler runs in the browser's capture phase, so a stat name
+  inside a clickable card (shop offer, treasure pick, character card) opens
+  the glossary *instead of* buying/picking — tapping the term never spends
+  materials or selects a character. Hover works on desktop only; the touch UI
+  is tap-driven throughout.
+- **Sheet rows expand inline** (mobile-first, works on desktop too) rather
+  than using the popover, per the brief; expansion state survives the sheet's
+  live re-renders in co-op. Rows are ≥44px on touch via padding, and stat-name
+  hit areas get an invisible padding boost on touch devices.
+- **Boon cards got the short line too** — the brief named level-up cards, but
+  Facet's boon picks are the same decision moment.
+- **Level-up sentence marks**: the spec's own Greed example ("Fortune. …") is
+  three sentence marks, so the completeness check allows a one-word label plus
+  two sentences.
 
 ### Original build
 
