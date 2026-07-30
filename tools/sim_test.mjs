@@ -346,6 +346,30 @@ try {
   if (!sim.extract) ok('stepping off the portal cancels the countdown'); else fail('countdown survived leaving the portal');
 } catch (err) { fail('extraction consent crashed', err); }
 
+// ---- 7c. the party never spawns inside arena architecture ----
+// (cramped layouts can run walls through the exact midpoint — spawns must nudge off)
+try {
+  let clip = 0;
+  const party4 = ['bulwark', 'wisp', 'cogsmith', 'voltaic'].map((c, i) => ({ idx: i, key: 'k' + i, name: 'S' + i, charId: c, color: '#fff' }));
+  for (let seed = 1; seed <= 25; seed++) {
+    const s = new Sim({ seed: seed * 31, party: party4 });
+    const node = s.floor.nodes.find(n => n.kind === 'combat');
+    for (const template of TEMPLATE_KEYS) {
+      node.template = template;
+      s._travelTo(node.id);
+      for (const p of s.players) if (s._inObstacle(p.x, p.y, p.radius)) { clip++; fail(`seed ${seed * 31} ${template}: player spawned inside an obstacle at ${Math.round(p.x)},${Math.round(p.y)}`); }
+      s.phase = 'map';
+    }
+  }
+  for (let f = 1; f <= 4; f++) { // the bespoke siege arenas too
+    const s = new Sim({ seed: 5, party: party4 });
+    while (s.floorNum < f) s.debug('F4');
+    s._travelTo(s.floor.siegeId);
+    for (const p of s.players) if (s._inObstacle(p.x, p.y, p.radius)) { clip++; fail(`floor ${f} siege: player spawned inside an obstacle`); }
+  }
+  if (!clip) ok('party spawns clear of obstacles (25 seeds × 5 templates + all 4 sieges)');
+} catch (err) { fail('spawn-clip check crashed', err); }
+
 // ---- 8. the Siege end-to-end ----
 try {
   const party = [

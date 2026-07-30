@@ -469,12 +469,15 @@ export class Sim {
       this.siegeCfg = null;
       this.bossT = 0;
     }
-    // drop the party in at the arena center, per-fight trait state fresh
-    const cx = arena.w / 2, cy = arena.h / 2;
+    // drop the party in at the arena center — nudged off any obstacle that
+    // covers it (cramped layouts can run walls through the exact midpoint)
+    const [cx, cy] = this._clearSpot(arena.w / 2, arena.h / 2, 40);
     this.players.forEach((p, i) => {
       if (p.gone) return;
-      p.x = cx + (i % 2 ? -1 : 1) * (30 + 20 * Math.floor(i / 2));
-      p.y = cy + (i < 2 ? -1 : 1) * 26;
+      const [sx, sy] = this._clearSpot(
+        cx + (i % 2 ? -1 : 1) * (30 + 20 * Math.floor(i / 2)),
+        cy + (i < 2 ? -1 : 1) * 26, p.radius + 6);
+      p.x = sx; p.y = sy;
       p.firstHitUsed = false;
       p.pullX = p.pullY = 0;
       // per-FIGHT trait state (the old per-room triggers)
@@ -733,6 +736,19 @@ export class Sim {
       if (x > o.x - r && x < o.x + o.w + r && y > o.y - r && y < o.y + o.h + r) return true;
     }
     return false;
+  }
+
+  // deterministic nearest clear point: rings outward from (x, y)
+  _clearSpot(x, y, r) {
+    if (!this._inObstacle(x, y, r)) return [x, y];
+    for (let ring = 50; ring <= 800; ring += 50) {
+      for (let a = 0; a < 16; a++) {
+        const qx = clamp(x + Math.cos(a / 16 * Math.PI * 2) * ring, WALL + 40, this.W - WALL - 40);
+        const qy = clamp(y + Math.sin(a / 16 * Math.PI * 2) * ring, WALL + 40, this.H - WALL - 40);
+        if (!this._inObstacle(qx, qy, r)) return [qx, qy];
+      }
+    }
+    return [x, y];
   }
 
   // push a circular entity out of any rect it overlaps (smallest axis)
