@@ -11,6 +11,7 @@ import { initInput, sampleInput, takeDebugKey, pressInteract } from './input.js'
 import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
+import { initGloss } from './ui/gloss.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID } from './content/characters.js';
@@ -68,6 +69,7 @@ const actions = {
   startGame: hostStartRun,
 };
 initScreens(actions);
+initGloss(); // stat-glossary popover + document-level term handling
 initOverlays({
   buy: slot => sendUi({ kind: 'buy', slot }),
   reroll: () => sendUi({ kind: 'reroll' }),
