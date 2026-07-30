@@ -25,7 +25,7 @@ export function updateEnemy(sim, e, dt) {
     if (e.eliteMod.blockCd) e.blockT = Math.max(0, (e.blockT || 0) - dt);
     if (e.eliteMod.pullR) {
       for (const p of sim.players) {
-        if (p.downed || p.gone || p.char.trait.key === 'kb_immune_big') continue; // Bulwark resists pull
+        if (p.downed || p.gone) continue; // Grit-based pull resist applies in _tickPlayer; Immovable ignores it entirely
         const d = dist(e.x, e.y, p.x, p.y);
         if (d < e.eliteMod.pullR && d > 10) {
           const a = angleTo(p.x, p.y, e.x, e.y);
@@ -46,7 +46,7 @@ export function updateEnemy(sim, e, dt) {
   if (e.boss) { updateBoss(sim, e, dt, spd); return; }
 
   const t = e.def;
-  const p = sim.nearestLivingPlayer(e.x, e.y);
+  const p = sim.tauntTarget(e.x, e.y);
   e.t += dt;
   switch (t.behavior) {
     case 'chaser': {
@@ -228,7 +228,7 @@ export function updateEnemy(sim, e, dt) {
 function updateBoss(sim, e, dt, spd) {
   const b = e.bossDef;
   const s = e.bs; // boss state bag
-  const p = sim.nearestLivingPlayer(e.x, e.y);
+  const p = sim.tauntTarget(e.x, e.y);
   const p2 = e.hp < e.maxHp * 0.5;
   if (p2 && !s.phase2) {
     s.phase2 = true;

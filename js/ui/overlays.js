@@ -4,7 +4,7 @@
 import { ITEM_BY_ID } from '../content/items.js';
 import { WEAPON_BY_ID, WEAPON_CLASS_NAMES } from '../content/weapons.js';
 import { CHAR_BY_ID } from '../content/characters.js';
-import { STATS, STAT_NAME, STAT_IS_PCT, TIER_MULT, TIER_NAMES, weaponBasePrice, sellValue } from '../config.js';
+import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_NAMES, weaponBasePrice, sellValue } from '../config.js';
 import { escapeHtml } from './screens.js';
 import { sfx } from '../audio.js';
 
@@ -14,7 +14,7 @@ let A = null;
 export function initOverlays(actions) { A = actions; }
 
 export function closeAllOverlays() {
-  for (const id of ['overlay-shop', 'overlay-levelup', 'overlay-treasure', 'overlay-sheet']) $(id).classList.add('hidden');
+  for (const id of ['overlay-shop', 'overlay-levelup', 'overlay-treasure', 'overlay-sheet', 'overlay-boon']) $(id).classList.add('hidden');
 }
 
 // ---------------- tooltips ----------------
@@ -51,17 +51,17 @@ function weaponCardHtml(def, tier, meta) {
   if (def.burn) bits.push(`burns ${def.burn.dps}/s for ${def.burn.dur}s`);
   if (def.slow) bits.push(`slows ${Math.round((1 - def.slow.mult) * 100)}%`);
   if (def.chainHit) bits.push(`chains to ${def.chainHit.count} at ${Math.round(def.chainHit.factor * 100)}%`);
-  if (def.critBonus) bits.push(`+${def.critBonus}% crit`);
   return `
     <div class="oname">${def.sym} ${escapeHtml(def.name)} <span style="color:var(--gold)">${TIER_NAMES[tier - 1]}</span></div>
     <div class="orarity">${WEAPON_CLASS_NAMES[def.cls]}</div>
-    <div class="odesc">${bits.join('<br>')}<br><span class="dim">scales with: ${def.tags.map(t => STAT_NAME[t] || t).join(', ')}</span>
+    <div class="odesc">${bits.join('<br>')}<br><span class="dim">scales with: ${def.scaling.map(t => STAT_NAME[t] || t).join(', ')}</span>
     ${combines ? '<br><span class="wpn-note">▲ you own a copy — buy it and combine the pair below (free)</span>' : ''}</div>`;
 }
 
 // ---------------- shop ----------------
 
 let shopState = null;
+let shopCharId = null;  // for Quartermaster's invested-materials sell display
 let lastShopMeta = null;
 let armedSell = null;   // 'w<slot>' | 'i<itemId>' — two-step sell confirmation
 let combineSel = null;  // selected weapon slot awaiting its match
@@ -71,8 +71,9 @@ function shopMetaDigest(meta) {
   return meta ? JSON.stringify([meta.materials, meta.weapons, meta.items, meta.weaponSlots]) : '';
 }
 
-export function showShop(ev, meta) {
+export function showShop(ev, meta, charId) {
   shopState = ev;
+  if (charId !== undefined) shopCharId = charId;
   armedSell = null;
   combineSel = null;
   shopDigest = shopMetaDigest(meta);
@@ -100,9 +101,11 @@ function ownedHtml(meta, floor) {
   const pairExists = meta.weapons.some((w, i) => w.tier < 4
     && meta.weapons.some((v, j) => j !== i && v.id === w.id && v.tier === w.tier));
   const sel = combineSel !== null ? meta.weapons[combineSel] : null;
+  const chr = shopCharId ? CHAR_BY_ID[shopCharId] : null;
+  const investedSell = chr && chr.trait.key === 'arsenal_doctrine';
   const wchips = meta.weapons.map((w, i) => {
     const def = WEAPON_BY_ID[w.id];
-    const val = sellValue(weaponBasePrice(def, w.tier), floor);
+    const val = investedSell ? (w.invested || 0) : sellValue(weaponBasePrice(def, w.tier), floor);
     const isSel = i === combineSel;
     const isMatch = sel && !isSel && w.id === sel.id && w.tier === sel.tier && w.tier < 4;
     const armKey = `w${i}`;
@@ -110,7 +113,7 @@ function ownedHtml(meta, floor) {
       <div class="wchip ${isSel ? 'selected' : ''} ${isMatch ? 'combinable' : ''}" data-wchip="${i}" data-keep="1">
         <span class="wsym" style="color:${def.color}">${def.sym}</span>
         <span><b>${escapeHtml(def.name)}</b> <span style="color:var(--gold)">${TIER_NAMES[w.tier - 1]}</span>
-        <span class="dim small">· ${def.tags.map(t => STAT_NAME[t] || t).join(', ')}</span></span>
+        <span class="dim small">· ${def.scaling.map(t => STAT_NAME[t] || t).join(', ')}</span></span>
         ${isMatch ? `<button class="chip-btn combine-btn" data-combine="${i}" data-keep="1">⇑ COMBINE</button>` : ''}
         <button class="chip-btn sell-btn ${armedSell === armKey ? 'armed' : ''}" data-sellw="${i}" data-arm="${armKey}" data-keep="1">
           ${armedSell === armKey ? `⟡${val} — tap again` : `Sell ⟡${val}`}</button>
@@ -311,6 +314,29 @@ export function showTreasure(ev) {
 
 export function closeTreasure() { $('overlay-treasure').classList.add('hidden'); }
 
+// ---------------- Facet's Prism boon picker ----------------
+// Per-player and non-blocking: a compact bottom-center strip. The room plays
+// on while it's up (movement still works; it never appears for other players).
+
+export function showBoon(ev) {
+  const el = $('overlay-boon');
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="panel boon-panel">
+      <div class="ov-title" style="font-size:15px;">PRISM — pick a boon for this room</div>
+      <div class="offer-row boon-row">${ev.picks.map(p => `
+        <div class="offer-card r-${p.rarity} boon-card" data-id="${p.id}">
+          <div class="oname">+${p.amount}${STAT_IS_PCT[p.stat] ? '%' : ''} ${STAT_NAME[p.stat]}</div>
+          <div class="orarity">${'◆'.repeat(Math.min(3, p.n))}${'◇'.repeat(Math.max(0, 3 - p.n))} ${p.n >= 3 ? 'permanent!' : `${p.n}/3 to keep`}</div>
+        </div>`).join('')}</div>
+    </div>`;
+  el.querySelectorAll('.boon-card').forEach(card => {
+    card.onclick = () => { sfx.click(); A.pickBoon(card.dataset.id); };
+  });
+}
+
+export function closeBoon() { $('overlay-boon').classList.add('hidden'); }
+
 // ---------------- character sheet ----------------
 // Live view of one player's build: all sixteen stats (base shown where it
 // differs), weapons with tier/tags, items stacked by rarity. Per-player DOM —
@@ -347,7 +373,7 @@ function renderSheet(meta) {
   const chr = CHAR_BY_ID[sheetCharId];
   const statRows = STATS.map(s => {
     const cur = Math.round((meta.stats[s.key] || 0) * 10) / 10;
-    const base = (s.key === 'maxHp' ? 80 : 0) + ((chr && chr.stats[s.key]) || 0);
+    const base = (STAT_BASE[s.key] || 0) + ((chr && chr.stats[s.key]) || 0);
     const pct = STAT_IS_PCT[s.key] ? '%' : '';
     return `<div class="sheet-stat"><span class="dim">${s.name}</span>
       <span><b>${cur}${pct}</b>${cur !== base ? ` <span class="dim small">(base ${base}${pct})</span>` : ''}</span></div>`;
@@ -355,7 +381,7 @@ function renderSheet(meta) {
   const wRows = meta.weapons.map(w => {
     const def = WEAPON_BY_ID[w.id];
     return `<div class="sheet-stat"><span><span class="wsym" style="color:${def.color}">${def.sym}</span> <b>${escapeHtml(def.name)}</b> <span style="color:var(--gold)">${TIER_NAMES[w.tier - 1]}</span></span>
-      <span class="dim small">${def.tags.map(t => STAT_NAME[t] || t).join(', ')}</span></div>`;
+      <span class="dim small">scales: ${def.scaling.map(t => STAT_NAME[t] || t).join(', ')}</span></div>`;
   }).join('') || '<div class="dim small">no weapons</div>';
   const counts = new Map();
   for (const id of meta.items) counts.set(id, (counts.get(id) || 0) + 1);

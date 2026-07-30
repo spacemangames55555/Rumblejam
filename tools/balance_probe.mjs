@@ -65,6 +65,7 @@ function resolveUi() {
   let g = 0;
   while (p.pendingOffer && g++ < 30) sim.uiAction(0, { kind: 'levelup', id: p.pendingOffer[0].id });
   if (p.treasureOffer) sim.uiAction(0, { kind: 'treasure', id: p.treasureOffer.picks[0] });
+  if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
   if (p.shop) {
     for (let s = 0; s < 4; s++) sim.uiAction(0, { kind: 'buy', slot: s });
     sim.uiAction(0, { kind: 'closeShop' });
@@ -89,7 +90,7 @@ for (const floor of [1, 2]) {
     sim.events.length = 0;
     const secs = (sim.tickNum - t0) / 60;
     if (kind !== 'start' && kind !== 'shop' && kind !== 'treasure') {
-      report.push(`floor ${floor} ${kind} room ${id}: ${secs.toFixed(1)}s, hp ${Math.round(p.hp)}/${p.stats.maxHp}, lvl ${p.level}, mats ${p.materials}, weapons ${p.weapons.length}`);
+      report.push(`floor ${floor} ${kind} room ${id}: ${secs.toFixed(1)}s, hp ${Math.round(p.hp)}/${p.stats.vitality}, lvl ${p.level}, mats ${p.materials}, weapons ${p.weapons.length}`);
     }
     if (sim.over) { report.push(`BOT DIED on floor ${floor} in ${kind} room`); break outer; }
     if (ticks >= 60 * 150) {

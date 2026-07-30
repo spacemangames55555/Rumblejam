@@ -12,7 +12,7 @@ import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
-import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta } from './ui/overlays.js';
+import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID } from './content/characters.js';
 import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
@@ -26,9 +26,9 @@ const { ROOM_W: W, ROOM_H: H, WALL } = CONFIG;
 
 console.log(`%cUNDERVAULT%c content loaded — characters: ${CHARACTERS.length}, items: ${ITEMS.length}, weapons: ${WEAPONS.length}, enemy types: ${ENEMIES.length}, bosses: ${BOSSES.length}`,
   'color:#ffd45e;font-weight:bold;font-size:16px', 'color:inherit');
-console.assert(CHARACTERS.length >= 30, 'need ≥30 characters');
+console.assert(CHARACTERS.length === 32, 'need exactly 32 characters');
 console.assert(ITEMS.length >= 100, 'need ≥100 items');
-console.assert(WEAPONS.length >= 25, 'need ≥25 weapons');
+console.assert(WEAPONS.length === 26, 'need exactly 26 weapons');
 console.assert(ENEMIES.length === 12 && BOSSES.length === 4, 'need 12 enemy types + 4 bosses');
 
 const canvas = document.getElementById('game-canvas');
@@ -75,6 +75,7 @@ initOverlays({
   closeShop: () => sendUi({ kind: 'closeShop' }),
   pickLevelup: id => sendUi({ kind: 'levelup', id }),
   pickTreasure: id => sendUi({ kind: 'treasure', id }),
+  pickBoon: id => sendUi({ kind: 'boon', id }),
   combine: (a, b, id, tier) => sendUi({ kind: 'combine', a, b, id, tier }),
   sellWeapon: (slot, id, tier) => sendUi({ kind: 'sellWeapon', slot, id, tier }),
   sellItem: id => sendUi({ kind: 'sellItem', id }),
@@ -466,7 +467,12 @@ function handleEvent(ev) {
     case 'offerDone': if (ev.idx === app.myIdx) closeLevelup(); break;
     case 'treasure': if (ev.idx === app.myIdx) showTreasure(ev); break;
     case 'treasureDone': if (ev.idx === app.myIdx) closeTreasure(); break;
-    case 'shop': if (ev.idx === app.myIdx) showShop(ev, app.meta); break;
+    case 'boon': if (ev.idx === app.myIdx) showBoon(ev); break;
+    case 'boonDone': if (ev.idx === app.myIdx) closeBoon(); break;
+    case 'shop': if (ev.idx === app.myIdx) {
+      const me = app.party && app.party.find(m => m.idx === app.myIdx);
+      showShop(ev, app.meta, me ? me.charId : null);
+    } break;
     case 'buyResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't buy: ${ev.reason}`); break;
     case 'mgmtResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't do that: ${ev.reason}`); break;
     case 'toast': if (ev.idx === app.myIdx) toast(ev.text); break;
@@ -562,9 +568,13 @@ function viewFromSim(sim) {
     hatch: sim.hatch ? [sim.hatch.x, sim.hatch.y] : null,
     players: sim.players.map(p => ({
       idx: p.idx, name: p.name, color: p.color, charId: p.charId, sym: p.char.sym,
-      x: p.x, y: p.y, hp: Math.ceil(p.hp), maxHp: p.stats.maxHp, shield: Math.round(p.shield),
+      x: p.x, y: p.y, hp: Math.ceil(p.hp), maxHp: p.stats.vitality, shield: Math.round(p.shield),
       downed: p.downed, reviveP: p.reviveP, gone: p.gone, radius: p.radius, aimA: p.aimA,
+      meter: sim._displayMeter(p), carrying: !!p.carrying,
     })),
+    auras: sim._snapAuras().map(a => ({ idx: a[0], r: a[1] })),
+    tethers: sim._snapTethers().map(t => ({ x1: t[0], y1: t[1], x2: t[2], y2: t[3] })),
+    decoys: sim.decoys.map(d => ({ x: d.x, y: d.y, frac: d.t / d.dur, owner: d.owner })),
     enemies: [...sim.enemyPool].map(e => ({
       id: e.id, x: e.x, y: e.y, radius: e.radius, shape: e.shape, color: e.color,
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
@@ -631,8 +641,9 @@ function viewFromSnaps(dtFrame) {
     }
     players.push({
       idx, x, y, hp: n[3], maxHp: n[4], downed: !!n[5], reviveP: n[6], shield: n[7], gone: !!n[8], aimA: n[9],
+      meter: n[10] !== undefined ? n[10] : -1, carrying: !!n[11],
       name: member ? member.name : '?', color: member ? member.color : '#fff', charId: member ? member.charId : null,
-      sym: chr ? chr.sym : '●', radius: chr && chr.trait.key === 'kb_immune_big' ? 16 * chr.trait.hitbox : 16,
+      sym: chr ? chr.sym : '●', radius: chr && chr.trait.key === 'immovable' ? 16 * chr.trait.hitbox : 16,
     });
   }
   // projectiles ride the same delayed timeline as enemies (bounded extrapolation)
@@ -656,15 +667,18 @@ function viewFromSnaps(dtFrame) {
       ? { type: 'spikes', y: hz[1], h: hz[2], state: hz[3] }
       : { type: 'lava', x: hz[1], y: hz[2], r: hz[3] }),
     boss: s1.boss,
+    auras: (s1.auras || []).map(a => ({ idx: a[0], r: a[1] })),
+    tethers: (s1.tethers || []).map(t => ({ x1: t[0], y1: t[1], x2: t[2], y2: t[3] })),
+    decoys: (s1.decoys || []).map(d => ({ x: d[0], y: d[1], frac: d[2], owner: d[3] })),
   };
 }
 
 function predictSelf(dtFrame, serverP, chr) {
-  const radius = chr && chr.trait.key === 'kb_immune_big' ? 16 * chr.trait.hitbox : 16;
+  const radius = chr && chr.trait.key === 'immovable' ? 16 * chr.trait.hitbox : 16;
   if (!app.predicted) app.predicted = { x: serverP[1], y: serverP[2] };
   const pr = app.predicted;
-  const speedStat = app.meta ? app.meta.stats.speed : 0;
-  const spd = Math.max(60, CONFIG.BASE_SPEED * (1 + speedStat / 100));
+  const tempo = app.meta ? app.meta.stats.tempo : 0;
+  const spd = Math.max(60, CONFIG.BASE_SPEED * (1 + tempo / 100));
   pr.x += lastMove.mx * spd * dtFrame;
   pr.y += lastMove.my * spd * dtFrame;
   pr.x = clamp(pr.x, WALL + radius, W - WALL - radius);
@@ -720,9 +734,12 @@ function frame(now) {
       curRoomDef: app.roomInfo ? { kind: app.roomInfo.kind, hazard: app.roomInfo.hazard } : null,
       boss: view.boss,
     });
-    // contextual touch button for the E action (reopen shop / shop at hatch)
-    const wantInteract = touchEnabled() && !isShopOpen() && view.cleared
-      && (!!view.hatch || (app.roomInfo && app.roomInfo.kind === 'shop'));
+    // contextual touch button for the E action (reopen shop / shop at hatch /
+    // Overseer turret carry — always available to the Cogsmith)
+    const me = app.party && app.party.find(m => m.idx === app.myIdx);
+    const isOverseer = me && CHAR_BY_ID[me.charId] && CHAR_BY_ID[me.charId].trait.key === 'overseer';
+    const wantInteract = touchEnabled() && !isShopOpen()
+      && (isOverseer || (view.cleared && (!!view.hatch || (app.roomInfo && app.roomInfo.kind === 'shop'))));
     document.getElementById('interact-btn').classList.toggle('hidden', !wantInteract);
   }
 }

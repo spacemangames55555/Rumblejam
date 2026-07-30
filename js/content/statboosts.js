@@ -1,24 +1,20 @@
 // Level-up stat boost pool: small/medium/large per stat, rarity-weighted.
-// Generated from a magnitude table so all sixteen stats are always offerable.
+// Generated from a magnitude table so all ten stats are always offerable.
+// Percent stats (Ferocity/Tempo/Reflex/Recovery/Attunement) are in %; flat
+// stats in points. Crit is not a stat and never appears here.
 
 const T = [
-  // key            small  med  large
-  ['maxHp',           4,    8,   16],
-  ['hpRegen',         1,    2,    4],
-  ['lifeSteal',       1,    2,    4],
-  ['damage',          4,    7,   12],
-  ['meleeDamage',     5,    9,   15],
-  ['rangedDamage',    5,    9,   15],
-  ['elementalDamage', 5,    9,   15],
-  ['attackSpeed',     4,    7,   12],
-  ['critChance',      3,    5,    9],
-  ['engineering',     1,    3,    5],
-  ['range',           8,   15,   28],
-  ['armor',           1,    2,    4],
-  ['dodge',           3,    5,    8],
-  ['speed',           3,    5,    8],
-  ['luck',            3,    6,   10],
-  ['harvesting',      2,    4,    7],
+  // key         small  med  large
+  ['vitality',     6,   12,   22],
+  ['ferocity',     4,    7,   12],
+  ['tempo',        4,    7,   12],
+  ['grit',         1,    2,    4],
+  ['reflex',       3,    5,    8],
+  ['recovery',     6,   10,   18],
+  ['ingenuity',    1,    2,    4],
+  ['attunement',   5,    9,   15],
+  ['greed',        2,    4,    7],
+  ['reach',        8,   15,   28],
 ];
 
 const SIZES = [
