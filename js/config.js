@@ -80,28 +80,36 @@ export const PALETTE = {
   boss: '#ff4560',
 };
 
-// Stat registry — the sixteen player stats. `pct` controls tooltip formatting.
+// Stat registry — the ten player stats (the Great Rebalance sheet).
+// `pct` controls tooltip formatting; `base` is the pre-modifier value.
 export const STATS = [
-  { key: 'maxHp',           name: 'Max HP',        pct: false },
-  { key: 'hpRegen',         name: 'HP Regen',      pct: false },
-  { key: 'lifeSteal',       name: 'Life Steal',    pct: true  },
-  { key: 'damage',          name: 'Damage',        pct: true  },
-  { key: 'meleeDamage',     name: 'Melee Damage',  pct: true  },
-  { key: 'rangedDamage',    name: 'Ranged Damage', pct: true  },
-  { key: 'elementalDamage', name: 'Elemental Damage', pct: true },
-  { key: 'attackSpeed',     name: 'Attack Speed',  pct: true  },
-  { key: 'critChance',      name: 'Crit Chance',   pct: true  },
-  { key: 'engineering',     name: 'Engineering',   pct: false },
-  { key: 'range',           name: 'Range',         pct: false },
-  { key: 'armor',           name: 'Armor',         pct: false },
-  { key: 'dodge',           name: 'Dodge',         pct: true  },
-  { key: 'speed',           name: 'Speed',         pct: true  },
-  { key: 'luck',            name: 'Luck',          pct: false },
-  { key: 'harvesting',      name: 'Harvesting',    pct: false },
+  { key: 'vitality',   name: 'Vitality',   pct: false, base: 80 }, // hit points
+  { key: 'ferocity',   name: 'Ferocity',   pct: true,  base: 0 },  // universal damage %
+  { key: 'tempo',      name: 'Tempo',      pct: true,  base: 0 },  // attack + move speed
+  { key: 'grit',       name: 'Grit',       pct: false, base: 0 },  // mitigation + knockback resist
+  { key: 'reflex',     name: 'Reflex',     pct: true,  base: 0 },  // dodge (cap 60)
+  { key: 'recovery',   name: 'Recovery',   pct: true,  base: 0 },  // amplifies ALL healing received
+  { key: 'ingenuity',  name: 'Ingenuity',  pct: false, base: 0 },  // summon dmg+HP ×(1+0.1×I)
+  { key: 'attunement', name: 'Attunement', pct: true,  base: 0 },  // burn/chill/chain/nova power
+  { key: 'greed',      name: 'Greed',      pct: false, base: 0 },  // rarity bias + floor(G/2) mats per clear
+  { key: 'reach',      name: 'Reach',      pct: false, base: 0 },  // weapon reach + pickup radius
 ];
 export const STAT_KEYS = STATS.map(s => s.key);
 export const STAT_NAME = Object.fromEntries(STATS.map(s => [s.key, s.name]));
 export const STAT_IS_PCT = Object.fromEntries(STATS.map(s => [s.key, s.pct]));
+export const STAT_BASE = Object.fromEntries(STATS.map(s => [s.key, s.base]));
+
+// Weapon-scaling conversion: how much +damage% one point of a FLAT stat gives
+// when that stat is one of the weapon's scaling tags. Percent stats contribute
+// their percentage directly. Crit is not a stat: crits exist only as granted
+// effects (default ×2).
+export const SCALING_RATES = {
+  vitality: 1 / 4,   // 1% per 4 Vitality
+  grit: 1,           // 1% per point
+  ingenuity: 1,
+  greed: 1,
+  reach: 1 / 12,     // 1% per 12 Reach
+};
 
 // Weapon tier multipliers (I–IV): damage etc. scale, price scales.
 export const TIER_MULT = [1, 1.6, 2.5, 3.9];

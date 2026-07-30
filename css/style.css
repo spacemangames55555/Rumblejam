@@ -74,6 +74,10 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 .php .bar i{display:block; height:100%; background:var(--hp); border-radius:3px; transition:width .15s;}
 .php .xpbar{height:4px; background:#12241f; border-radius:2px; margin-top:2px; overflow:hidden;}
 .php .xpbar i{display:block; height:100%; background:var(--xp);}
+/* trait meter (Onrush momentum, Resonant charge, Stillness overwatch, Jester odds) */
+.php .meterbar{height:5px; background:#241a2e; border-radius:2px; margin-top:2px; overflow:hidden;}
+.php .meterbar i{display:block; height:100%; background:#c9a6ff; transition:width .1s linear;}
+.php .meterbar.full i{background:#ffd45e; box-shadow:0 0 6px #ffd45e;}
 .php.downed{border-color:var(--danger); animation:pulse 1s infinite;}
 .php .status{font-size:10px; color:var(--danger);}
 @keyframes pulse{50%{box-shadow:0 0 12px #ff5d6c88;}}
@@ -94,6 +98,12 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 
 /* ---------- Overlays (shop / levelup / treasure) ---------- */
 .overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#0a0b12b8;}
+/* Facet's boon strip: non-blocking — hugs the bottom edge, no backdrop, and
+   the wrapper lets clicks pass through everywhere except the panel itself */
+.overlay.overlay-boon{background:none; pointer-events:none; align-items:flex-end; justify-content:center; padding-bottom:14px;}
+.overlay-boon .boon-panel{pointer-events:auto; min-width:min(94vw,620px); padding:10px 14px;}
+.boon-row{gap:8px;}
+.boon-card{min-width:130px; min-height:56px; padding:10px;}
 /* stacking: a pending level-up always shows above shop/treasure/sheet */
 #overlay-shop{z-index:10;} #overlay-treasure{z-index:20;} #overlay-sheet{z-index:25;} #overlay-levelup{z-index:30;}
 .overlay .panel{min-width:min(92vw,900px);}

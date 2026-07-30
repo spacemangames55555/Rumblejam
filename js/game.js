@@ -2,7 +2,7 @@
 // rendering. Clients only ever send inputs/UI intents; everything here is the
 // single source of truth. Solo play runs this exact code with one player.
 
-import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue } from './config.js';
+import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, SCALING_RATES } from './config.js';
 import { Rng, subRng } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo } from './util.js';
 import { generateFloor, serializeFloor } from './dungeon.js';
@@ -16,7 +16,7 @@ import { updateEnemy } from './entities/enemies.js';
 
 const { ROOM_W: W, ROOM_H: H, WALL, DOOR_W, DT } = CONFIG;
 const SPAWN_CAPS = { wombden: 2, aegimand: 2, stitcher: 2, deadeye: 2, slabjaw: 3 };
-const ENG_SCALE = 0.1; // +10% summon damage & HP per Engineering point
+const ING_SCALE = 0.1; // +10% summon damage & HP per Ingenuity point
 
 export class Sim {
   constructor({ seed, party }) {
@@ -42,10 +42,12 @@ export class Sim {
     this.spawnCounter = 0;
     this.shake = 0;
 
+    this.decoys = [];   // Mirage afterimages — taunt targets that burst on expiry
+
     this.players = party.map((m, i) => this._makePlayer(m, i));
-    // party-wide curses (Tollkeeper)
-    this.greedHp = this.players.some(p => p.char.trait.key === 'greed_curse') ? 1.25 : 1;
-    this.greedMats = this.players.some(p => p.char.trait.key === 'greed_curse') ? 2 : 1;
+    // party-wide curse (Tollkeeper's Toll Road: double mats, +25% enemy HP)
+    this.greedHp = this.players.some(p => p.char.trait.key === 'toll_road') ? 1.25 : 1;
+    this.greedMats = this.players.some(p => p.char.trait.key === 'toll_road') ? 2 : 1;
     this.coopHp = 1 + CONFIG.COOP_HP_SCALE * (this.players.length - 1);
     this.coopSpawn = 1 + CONFIG.COOP_SPAWN_SCALE * (this.players.length - 1);
 
@@ -67,7 +69,7 @@ export class Sim {
     const p = {
       idx, name: member.name || `Player ${idx + 1}`, charId: char.id, char,
       color: member.color, gone: false,
-      x: W / 2, y: H / 2, radius: CONFIG.PLAYER_RADIUS * (char.trait.key === 'kb_immune_big' ? char.trait.hitbox : 1),
+      x: W / 2, y: H / 2, radius: CONFIG.PLAYER_RADIUS * (char.trait.key === 'immovable' ? char.trait.hitbox : 1),
       mx: 0, my: 0, interact: false, moving: false, aimA: 0,
       hp: 1, shield: 0, downed: false, reviveP: 0, invuln: 0, pullX: 0, pullY: 0,
       level: 1, xp: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
@@ -76,143 +78,237 @@ export class Sim {
       boosts: {}, permStats: {}, tempStats: {},
       stats: null, hookAgg: null,
       weaponSlots: CONFIG.WEAPON_SLOT_MAX,
-      dodgeCap: CONFIG.DODGE_CAP, critMult: 2,
-      attackCounter: 0, stillT: 0, critRamp: 0, firstHitUsed: false,
-      nextCrit: false, speedBuffT: 0, dmgBuffT: 0, dmgBuffAmt: 0,
-      frenzy: [], pendingEchoes: [], secondWindUsed: false, blockT: 0,
-      hpKillGained: 0, levelStatsBase: {},
-      chamStat: null, contactAuraAcc: 0, regenAcc: 0, zoneAcc: 0,
+      reflexCap: CONFIG.DODGE_CAP, critMult: 2,
+      firstHitUsed: false, nextCrit: false,
+      tempoBuffT: 0, dmgBuffT: 0, dmgBuffAmt: 0,
+      frenzy: [], secondWindUsed: false, blockT: 0,
+      vitKillGained: 0,
+      contactAuraAcc: 0, regenAcc: 0, healAcc: 0,
       damageDealt: 0, kills: 0,
       pendingOffer: null, treasureOffer: null,
       shop: null, shopLocksCarry: [], shopVisit: 0, rerollFlat: false,
+      // rebalance trait state
+      meter: 0,            // Onrush movement meter 0..1
+      resonCharge: 0,      // Resonant hit charge
+      lastFireT: -10,      // Overwatch cadence (sim time of last weapon fire)
+      lastKillT: -10, roomFirstKillT: -10,
+      critCounter: 0, critArmed: false, jesterOdds: 0,
+      boonCounts: {}, boonOffer: null, boonTemp: null,
+      roomVitGain: 0,      // Vesper per-room overheal→Vitality cap tracker
+      carrying: null, channelT: 0, // Overseer turret carry/redeploy
       metaDirty: true,
     };
     const t = char.trait;
-    if (t.key === 'shop_broker') p.weaponSlots = t.slots;
+    if (t.key === 'insider') { p.weaponSlots = t.slots; p.rerollFlat = true; }
     if (t.key === 'structures_fast') p.weaponSlots = t.slotCap;
-    if (t.key === 'no_weapons_turrets') p.weaponSlots = 0;
-    if (t.key === 'dodge_master') p.dodgeCap = t.cap;
-    if (t.key === 'armor_growth') p.dodgeCap = t.dodgeCap;
-    if (t.key === 'crit_x3') p.critMult = 3;
-    if (t.key === 'no_compound_reroll') p.rerollFlat = true;
+    if (t.key === 'overseer') p.weaponSlots = t.mounts;
+    if (t.key === 'reflex_master') p.reflexCap = t.cap;
+    if (t.key === 'executioner') p.critMult = 3;
     this._recomputeItems(p);
     this._recomputeStats(p);
-    p.hp = p.stats.maxHp;
+    p.hp = p.stats.vitality;
     return p;
   }
 
   _initStartingGear(p) {
     const t = p.char.trait;
-    if (t.key === 'no_weapons_turrets') {
-      for (let i = 0; i < t.turrets; i++) this._spawnSummon(p, 'bolt_turret', 1);
+    if (t.key === 'overseer') {
+      // turrets ARE weapons for the Overseer: combinable, sellable, four mounts.
+      // One to start — full inheritance makes each mount count.
+      this._addWeapon(p, 'bolt_turret', 1);
     } else if (p.char.weapon) {
-      this._addWeapon(p, p.char.weapon, 1, { silent: true });
+      this._addWeapon(p, p.char.weapon, 1);
     }
     if (t.key === 'mirror_drone') this._spawnSummon(p, null, 1, 'mirror');
     if (t.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
   }
 
   _recomputeItems(p) {
-    // aggregate item hooks once per inventory change
+    // aggregate item hooks once per inventory change (rebalance registry)
     const agg = {
-      firstHitCrit: false, killExplode: [], thorns: 0, reviveSpeed: 0, allyAura: [],
-      pickupRadius: 0, roomClearHeal: 0, lowHpBonus: [], critHeal: 0,
-      burnOnHit: [], chainOnHit: [], slowOnHit: [], blockShield: null,
-      secondWind: null, doubleMaterials: 0, eliteBossDamage: 0, interest: [],
-      freeRerolls: 0, shopDiscount: 0, xpBonus: 0, extraPierce: 0, extraProjectiles: 0,
-      killFrenzy: [], contactAura: [], onHurtRetaliate: [], dodgeToDamage: [],
-      harvestGrowth: 0, levelStats: [], floorStats: [], maxHpOnKill: [],
-      summonDmg: 0, summonHp: 0, knockMult: 1, materialHeal: [],
+      // healing sources (all amplified by Recovery)
+      regen: 0, lifesteal: 0, killHeal: 0, materialHeal: [], roomClearHeal: 0, critHeal: 0,
+      reviveSpeed: 0, secondWind: null, blockShield: null,
+      // conditional stats + timed attack bonuses
+      condStats: [], nextAttackAfterDodge: 0,
+      // crit grants (crit is not a stat)
+      critAfterKill: false, critEveryN: 0, critVsChilled: false, critVsBurning: false,
+      critVsFullHp: false, firstHitCrit: false,
+      // pickup procs
+      pickupBlast: [], pickupTempo: [], pickupBonusChance: 0,
+      // status spreaders (attuned)
+      burnOnHit: [], chillOnHit: [], chainOnHit: [], statusBoost: 0,
+      // combat misc
+      killExplode: [], thorns: 0, contactAura: [], onHurtRetaliate: [],
+      killTempo: [], eliteBossDamage: 0, extraPierce: 0, extraProjectiles: 0, knockMult: 1,
+      // party
+      allyAura: [],
+      // economy / growth
+      doubleMaterials: 0, interest: [], freeRerolls: 0, shopDiscount: 0, xpBonus: 0,
+      extraChoice: 0, levelStats: [], floorStats: [], vitalityOnKill: [],
+      summonDmg: 0, summonHp: 0,
     };
     for (const id of p.items) {
       const it = ITEM_BY_ID[id];
       if (!it || !it.hooks) continue;
       const h = it.hooks;
+      if (h.regen) agg.regen += h.regen.hps;
+      if (h.lifesteal) agg.lifesteal += h.lifesteal.pct;
+      if (h.killHeal) agg.killHeal += h.killHeal.amount;
+      if (h.materialHeal) agg.materialHeal.push(h.materialHeal);
+      if (h.roomClearHeal) agg.roomClearHeal += h.roomClearHeal.amount;
+      if (h.critHeal) agg.critHeal += h.critHeal.amount;
+      if (h.reviveSpeed) agg.reviveSpeed += h.reviveSpeed.mult;
+      if (h.secondWind && (!agg.secondWind || h.secondWind.healPercent > agg.secondWind)) agg.secondWind = h.secondWind.healPercent;
+      if (h.blockShield && (!agg.blockShield || h.blockShield.cooldown < agg.blockShield)) agg.blockShield = h.blockShield.cooldown;
+      if (h.condStats) agg.condStats.push(h.condStats);
+      if (h.nextAttackAfterDodge) agg.nextAttackAfterDodge += h.nextAttackAfterDodge.bonus;
+      if (h.critAfterKill) agg.critAfterKill = true;
+      if (h.critEveryN) agg.critEveryN = agg.critEveryN ? Math.min(agg.critEveryN, h.critEveryN.n) : h.critEveryN.n;
+      if (h.critVsChilled) agg.critVsChilled = true;
+      if (h.critVsBurning) agg.critVsBurning = true;
+      if (h.critVsFullHp) agg.critVsFullHp = true;
       if (h.firstHitCrit) agg.firstHitCrit = true;
+      if (h.pickupBlast) agg.pickupBlast.push(h.pickupBlast);
+      if (h.pickupTempo) agg.pickupTempo.push(h.pickupTempo);
+      if (h.pickupBonusChance) agg.pickupBonusChance = Math.min(1, agg.pickupBonusChance + h.pickupBonusChance.chance);
+      if (h.burnOnHit) agg.burnOnHit.push(h.burnOnHit);
+      if (h.chillOnHit) agg.chillOnHit.push(h.chillOnHit);
+      if (h.chainOnHit) agg.chainOnHit.push(h.chainOnHit);
+      if (h.statusBoost) agg.statusBoost += h.statusBoost.pct;
       if (h.killExplode) agg.killExplode.push(h.killExplode);
       if (h.thorns) agg.thorns += h.thorns.damage;
-      if (h.reviveSpeed) agg.reviveSpeed += h.reviveSpeed.mult;
-      if (h.allyAura) agg.allyAura.push(h.allyAura);
-      if (h.pickupRadius) agg.pickupRadius += h.pickupRadius.add;
-      if (h.roomClearHeal) agg.roomClearHeal += h.roomClearHeal.amount;
-      if (h.lowHpBonus) agg.lowHpBonus.push(h.lowHpBonus);
-      if (h.critHeal) agg.critHeal += h.critHeal.amount;
-      if (h.burnOnHit) agg.burnOnHit.push(h.burnOnHit);
-      if (h.chainOnHit) agg.chainOnHit.push(h.chainOnHit);
-      if (h.slowOnHit) agg.slowOnHit.push(h.slowOnHit);
-      if (h.blockShield && (!agg.blockShield || h.blockShield.cooldown < agg.blockShield)) agg.blockShield = h.blockShield.cooldown;
-      if (h.secondWind && (!agg.secondWind || h.secondWind.healPercent > agg.secondWind)) agg.secondWind = h.secondWind.healPercent;
-      if (h.doubleMaterials) agg.doubleMaterials = Math.min(1, agg.doubleMaterials + h.doubleMaterials.chance);
+      if (h.contactAura) agg.contactAura.push(h.contactAura);
+      if (h.onHurtRetaliate) agg.onHurtRetaliate.push(h.onHurtRetaliate);
+      if (h.killTempo) agg.killTempo.push(h.killTempo);
       if (h.eliteBossDamage) agg.eliteBossDamage += h.eliteBossDamage.bonus;
+      if (h.extraPierce) agg.extraPierce += h.extraPierce.add;
+      if (h.extraProjectiles) agg.extraProjectiles += h.extraProjectiles.add;
+      if (h.knockbackBoost) agg.knockMult *= (1 + h.knockbackBoost.mult);
+      if (h.allyAura) agg.allyAura.push(h.allyAura);
+      if (h.doubleMaterials) agg.doubleMaterials = Math.min(1, agg.doubleMaterials + h.doubleMaterials.chance);
       if (h.interest) agg.interest.push(h.interest);
       if (h.freeRerolls) agg.freeRerolls += h.freeRerolls.count;
       if (h.shopDiscount) agg.shopDiscount += h.shopDiscount.percent;
       if (h.xpBonus) agg.xpBonus += h.xpBonus.percent;
-      if (h.extraPierce) agg.extraPierce += h.extraPierce.add;
-      if (h.extraProjectiles) agg.extraProjectiles += h.extraProjectiles.add;
-      if (h.killFrenzy) agg.killFrenzy.push(h.killFrenzy);
-      if (h.contactAura) agg.contactAura.push(h.contactAura);
-      if (h.onHurtRetaliate) agg.onHurtRetaliate.push(h.onHurtRetaliate);
-      if (h.dodgeToDamage) agg.dodgeToDamage.push(h.dodgeToDamage);
-      if (h.harvestGrowth) agg.harvestGrowth += h.harvestGrowth.percent;
+      if (h.extraChoice) agg.extraChoice += h.extraChoice.n;
       if (h.levelStats) agg.levelStats.push(h.levelStats);
       if (h.floorStats) agg.floorStats.push(h.floorStats);
-      if (h.maxHpOnKill) agg.maxHpOnKill.push(h.maxHpOnKill);
+      if (h.vitalityOnKill) agg.vitalityOnKill.push(h.vitalityOnKill);
       if (h.summonBoost) { agg.summonDmg += h.summonBoost.damage; agg.summonHp += h.summonBoost.hp; }
-      if (h.knockbackBoost) agg.knockMult *= (1 + h.knockbackBoost.mult);
-      if (h.materialHeal) agg.materialHeal.push(h.materialHeal);
     }
     p.hookAgg = agg;
   }
 
+  // Evaluate a conditional-item condition for player p (cheap; runs on the
+  // 0.25s recompute cadence, so timed windows use sim time stamps).
+  _condMet(p, cond) {
+    switch (cond.kind) {
+      case 'enemyNear': {
+        const e = this._nearestEnemy(p.x, p.y, cond.r || 60);
+        return !!e;
+      }
+      case 'noEnemyNear': return !this._nearestEnemy(p.x, p.y, cond.r || 150);
+      case 'hpAbove': return p.hp >= (p.stats ? p.stats.vitality : 80) * (cond.pct / 100);
+      case 'hpBelow': return p.hp < (p.stats ? p.stats.vitality : 80) * (cond.pct / 100);
+      case 'afterKill': return this.time - p.lastKillT < (cond.dur || 3);
+      case 'firstKill': return p.roomFirstKillT >= 0 && this.time - p.roomFirstKillT < (cond.dur || 3);
+      case 'moving': return p.moving;
+      case 'still': return !p.moving;
+      case 'roomEntry': return this.time - (this.roomEnteredT || 0) < (cond.dur || 10);
+      case 'bossRoom': return !!this.boss;
+      case 'allyNear': {
+        for (const q of this.players) {
+          if (q !== p && !q.gone && !q.downed && dist2(p.x, p.y, q.x, q.y) < (cond.r || 150) ** 2) return true;
+        }
+        return false;
+      }
+      case 'onMaterials': return true; // handled as per-stack in recompute
+      default: return false;
+    }
+  }
+
+  _materialsUnder(p, r = 30) {
+    let n = 0;
+    for (const m of this.pickups) if (dist2(p.x, p.y, m.x, m.y) < r * r) n++;
+    return n;
+  }
+
   _recomputeStats(p) {
-    const s = {
-      maxHp: 80, hpRegen: 0, lifeSteal: 0, damage: 0, meleeDamage: 0, rangedDamage: 0,
-      elementalDamage: 0, attackSpeed: 0, critChance: 0, engineering: 0, range: 0,
-      armor: 0, dodge: 0, speed: 0, luck: 0, harvesting: 0,
-    };
+    const s = {};
+    for (const st of STATS) s[st.key] = STAT_BASE[st.key];
     const add = mods => { for (const k in mods) if (k in s) s[k] += mods[k]; };
     add(p.char.stats);
     for (const id of p.items) { const it = ITEM_BY_ID[id]; if (it && it.stats) add(it.stats); }
     add(p.boosts);
     add(p.permStats);
-    // temporary/situational stats
-    const t = p.char.trait, hpFrac = p.stats ? clamp(p.hp / Math.max(1, p.stats.maxHp), 0, 1) : 1;
-    const temp = {};
-    const tadd = (k, v) => { temp[k] = (temp[k] || 0) + v; };
-    if (t.key === 'berserk_missing') tadd('damage', Math.round((1 - hpFrac) * 100) * t.perMissing);
-    if (t.key === 'move_ranged_bonus' && p.moving) tadd('rangedDamage', t.bonus);
-    if (t.key === 'crit_ramp') tadd('critChance', p.critRamp);
-    if (p.chamStat) tadd(p.chamStat.stat, p.chamStat.amount);
-    for (const f of p.frenzy) tadd('attackSpeed', f.as);
-    if (p.speedBuffT > 0 && t.key === 'dodge_burst') tadd('speed', t.speed);
-    if (p.dmgBuffT > 0) tadd('damage', p.dmgBuffAmt);
-    if (p.hookAgg) {
-      for (const lh of p.hookAgg.lowHpBonus) if (hpFrac < lh.threshold) add(lh.stats);
-    }
-    // ally auras from other players (players array absent mid-construction)
-    for (const q of this.players || []) {
-      if (q === p || q.gone || q.downed || !q.hookAgg) continue;
-      for (const aura of q.hookAgg.allyAura) {
-        if (dist2(p.x, p.y, q.x, q.y) <= aura.radius * aura.radius) add(aura.stats);
+    const t = p.char.trait;
+    const vitNow = p.stats ? p.stats.vitality : s.vitality;
+    const hpFrac = p.stats ? clamp(p.hp / Math.max(1, vitNow), 0, 1) : 1;
+    // Arsenal Doctrine: every held weapon feeds you the stats it scales with
+    if (t.key === 'arsenal_doctrine') {
+      for (const w of p.weapons) {
+        const def = WEAPON_BY_ID[w.id];
+        for (const key of def.scaling) {
+          if (STAT_IS_PCT[key]) s[key] += 4 * w.tier;                 // percent tags: +4%/tier
+          else s[key] += (key === 'vitality' ? 8 : key === 'reach' ? 12 : 2) * w.tier; // flat per tier
+        }
       }
     }
-    for (const k in temp) s[k] += temp[k];
-    // derived conversions (order matters: after all raw adds)
-    if (t.key === 'dodge_master') {
-      s.maxHp = Math.min(s.maxHp, t.hpCap);
-      tempSafe(s, 'damage', Math.min(s.dodge, t.cap) * t.dmgPerDodge);
+    // temporary/situational
+    if (t.key === 'berserk_missing') s.ferocity += Math.round((1 - hpFrac) * 100) * t.perMissing;
+    for (const f of p.frenzy) s.tempo += f.tempo;                      // killTempo stacks + pickup surges
+    if (p.tempoBuffT > 0 && t.key === 'slipstream') s.tempo += t.tempo;
+    if (p.boonTemp) add(p.boonTemp);                                   // Facet's room boon
+    // conditional items
+    if (p.hookAgg) {
+      for (const c of p.hookAgg.condStats) {
+        if (c.cond.kind === 'onMaterials') {
+          const n = Math.min(c.cond.cap || 10, this._materialsUnder ? this._materialsUnder(p, c.cond.r || 30) : 0);
+          for (const k in c.stats) if (k in s) s[k] += c.stats[k] * n;
+        } else if (this._condMet(p, c.cond)) add(c.stats);
+      }
     }
-    if (t.key === 'armor_to_damage') tempSafe(s, 'damage', Math.max(0, s.armor) * t.perArmor);
-    if (t.key === 'speed_to_damage') tempSafe(s, 'damage', Math.floor(Math.max(0, s.speed) / t.per));
-    if (t.key === 'no_regen_growth') s.hpRegen = 0;
-    s.dodge = clamp(s.dodge, 0, p.dodgeCap);
-    s.maxHp = Math.max(1, Math.round(s.maxHp));
-    const oldMax = p.stats ? p.stats.maxHp : s.maxHp;
+    // ally auras from items, and the Banneret standard
+    for (const q of this.players || []) {
+      if (q.gone || q.downed || !q.hookAgg) continue;
+      if (q !== p) {
+        for (const aura of q.hookAgg.allyAura) {
+          if (dist2(p.x, p.y, q.x, q.y) <= aura.radius * aura.radius) add(aura.stats);
+        }
+      }
+      const qt = q.char.trait;
+      if (qt.key === 'standard_high') {
+        const qVit = q.stats ? q.stats.vitality : 80;
+        const radius = qt.radius + 0.5 * (q.stats ? q.stats.reach : 0);
+        const power = (1 + qVit / 1000) * (q === p ? 0.5 : 1); // self at half effect
+        if (dist2(p.x, p.y, q.x, q.y) <= radius * radius) {
+          s.ferocity += qt.fer * power;
+          s.recovery += qt.rec * power;
+        }
+      }
+    }
+    // conversions (after all raw adds)
+    if (t.key === 'reflex_master') {
+      s.vitality = Math.min(s.vitality, t.hpCap);
+      s.ferocity += Math.min(s.reflex, t.cap) * t.ferPerReflex;
+    }
+    if (t.key === 'living_fortress') {
+      s.ferocity += Math.max(0, s.grit - (p.char.stats.grit || 0)); // +1% Ferocity per bonus Grit
+    }
+    s.reflex = clamp(s.reflex, 0, p.reflexCap);
+    s.vitality = Math.max(1, Math.round(s.vitality));
+    const oldMax = p.stats ? p.stats.vitality : s.vitality;
     p.stats = s;
-    if (s.maxHp > oldMax) p.hp += s.maxHp - oldMax; // growing max HP grants the difference
-    p.hp = Math.min(p.hp, s.maxHp);
+    if (s.vitality > oldMax) p.hp += s.vitality - oldMax; // growing Vitality grants the difference
+    p.hp = Math.min(p.hp, s.vitality);
     p.metaDirty = true;
+  }
+
+  // Attuned damage: everything tagged elemental/status scales with Attunement
+  // (+ any statusBoost items).
+  _attuned(p, base) {
+    return base * (1 + (p.stats.attunement + p.hookAgg.statusBoost) / 100);
   }
 
   // ---------------- floors & rooms ----------------
@@ -232,8 +328,8 @@ export class Sim {
       if (p.treasureOffer) this.pushEvent({ k: 'treasure', idx: p.idx, kind: p.treasureOffer.kind, picks: p.treasureOffer.picks });
       p.secondWindUsed = false;
       if (n > 1) {
-        // heal half of missing HP between floors
-        p.hp = Math.min(p.stats.maxHp, p.hp + Math.ceil((p.stats.maxHp - p.hp) * 0.5));
+        // heal half of missing HP between floors (a source — Recovery applies)
+        this._heal(p, Math.ceil((p.stats.vitality - p.hp) * 0.5));
         for (const fs of p.hookAgg.floorStats) this._applyPerm(p, fs.stats);
         if (p.char.trait.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
       }
@@ -263,19 +359,20 @@ export class Sim {
     // position players at the entry door (or center for floor start)
     const entry = fromDir ? OPP[fromDir] : null;
     const base = entry ? doorAnchor(entry) : { x: W / 2, y: H / 2 };
+    this.decoys.length = 0;
+    this.roomEnteredT = this.time;
     this.players.forEach((p, i) => {
       if (p.gone) return;
       p.x = clamp(base.x + (i % 2 ? -1 : 1) * (26 + 18 * Math.floor(i / 2)), WALL + p.radius, W - WALL - p.radius);
       p.y = clamp(base.y + (i < 2 ? -1 : 1) * 22, WALL + p.radius, H - WALL - p.radius);
       p.firstHitUsed = false;
       p.pullX = p.pullY = 0;
-      if (p.char.trait.key === 'random_room_stat') {
-        const r = subRng(this.seed, 'cham', this.floorNum, roomId, p.idx);
-        const opts = ['damage', 'attackSpeed', 'critChance', 'speed', 'dodge', 'armor', 'maxHp', 'elementalDamage', 'meleeDamage', 'rangedDamage', 'luck'];
-        p.chamStat = { stat: r.pick(opts), amount: r.int(8, 20) };
-        this.pushEvent({ k: 'toast', idx: p.idx, text: `Chameleon: +${p.chamStat.amount} ${p.chamStat.stat} this room` });
-        this._recomputeStats(p);
-      }
+      // per-room trait state
+      p.roomVitGain = 0;        // Vesper's overheal→Vitality cap
+      p.roomFirstKillT = -10;
+      p.boonTemp = null;        // Facet's boon expires at the door
+      p.boonOffer = null;
+      if (p.char.trait.key === 'prism' && !p.downed) this._offerBoon(p);
     });
     // teleport summons along
     for (const s of this.summons) {
@@ -355,6 +452,7 @@ export class Sim {
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
+      hitStamps: {}, echoCd: 0, bulwarkCd: 0,
     });
     this.boss = e;
     this.pushEvent({ k: 'bossSpawn', name: def.name });
@@ -381,6 +479,7 @@ export class Sim {
       t: Math.random(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0.8 + Math.random(), healTarget: null, brood: null, shape: def.shape, color: def.color,
+      hitStamps: {}, echoCd: 0, bulwarkCd: 0,
     });
     return e;
   }
@@ -450,6 +549,8 @@ export class Sim {
     this._tickHazards(dt);
     // pickups
     this._tickPickups(dt);
+    // Mirage decoys (taunt, then burst)
+    this._tickDecoys(dt);
     // revives
     this._tickRevive(dt);
     // room clear check
@@ -504,26 +605,32 @@ export class Sim {
 
   _tickPlayer(p, dt) {
     if (p.invuln > 0) p.invuln -= dt;
-    if (p.speedBuffT > 0) p.speedBuffT -= dt;
+    if (p.tempoBuffT > 0) p.tempoBuffT -= dt;
     if (p.dmgBuffT > 0) p.dmgBuffT -= dt;
     p.frenzy = p.frenzy.filter(f => (f.t -= dt) > 0);
 
     if (p.downed) { p.mx = p.my = 0; p.interact = false; return; }
 
-    // movement
+    // movement — Tempo drives it; Grit shrugs off pulls
     p.moving = (p.mx !== 0 || p.my !== 0);
-    if (p.moving) p.stillT = 0; else p.stillT += dt;
-    let spd = CONFIG.BASE_SPEED * (1 + p.stats.speed / 100);
+    const t = p.char.trait;
+    let spd = CONFIG.BASE_SPEED * (1 + p.stats.tempo / 100);
     spd = Math.max(60, spd);
-    p.x += (p.mx * spd + p.pullX) * dt;
-    p.y += (p.my * spd + p.pullY) * dt;
+    const pullResist = t.key === 'immovable' ? 0 : CONFIG.ARMOR_K / (CONFIG.ARMOR_K + Math.max(0, p.stats.grit));
+    p.x += (p.mx * spd + p.pullX * pullResist) * dt;
+    p.y += (p.my * spd + p.pullY * pullResist) * dt;
     p.pullX = p.pullY = 0;
     p.x = clamp(p.x, WALL + p.radius, W - WALL - p.radius);
     p.y = clamp(p.y, WALL + p.radius, H - WALL - p.radius);
 
-    // regen (per 5s)
-    if (p.stats.hpRegen > 0 && p.hp < p.stats.maxHp) {
-      p.regenAcc += p.stats.hpRegen * dt / 5;
+    // Onrush: moving fills the meter; fill rate scales with Tempo
+    if (t.key === 'momentum_meter') {
+      if (p.moving) p.meter = Math.min(1, p.meter + dt / t.fillSec * (1 + p.stats.tempo / 100));
+    }
+
+    // regen sources (items; a source — amplified by Recovery inside _heal)
+    if (p.hookAgg.regen > 0 && p.hp < p.stats.vitality) {
+      p.regenAcc += p.hookAgg.regen * dt;
       if (p.regenAcc >= 1) { const h = Math.floor(p.regenAcc); p.regenAcc -= h; this._heal(p, h); }
     }
     if (p.blockT > 0) p.blockT -= dt;
@@ -541,34 +648,119 @@ export class Sim {
 
     // weapons
     this._tickWeapons(p, dt);
-    // pending echo attacks (Echo trait)
-    for (let i = p.pendingEchoes.length - 1; i >= 0; i--) {
-      const ec = p.pendingEchoes[i];
-      ec.t -= dt;
-      if (ec.t <= 0) {
-        p.pendingEchoes.splice(i, 1);
-        const w = p.weapons[ec.widx];
-        if (w) this._fireWeapon(p, w, ec.widx, { factor: ec.factor, noEcho: true });
+
+    // Overseer: redeploy channel completes
+    if (p.channelT > 0) {
+      p.channelT -= dt;
+      if (p.channelT <= 0 && p.carrying) {
+        p.carrying.x = p.x + Math.cos(p.aimA) * 30;
+        p.carrying.y = p.y + Math.sin(p.aimA) * 30;
+        p.carrying.carried = false;
+        p.carrying = null;
+        this.pushEvent({ k: 'toast', idx: p.idx, text: 'Turret deployed' });
       }
     }
 
-    // interact: reopen shop while in shop room / post-boss
+    // interact: Overseer turret carry > shop reopen
     if (p.interact) {
       p.interact = false;
-      const room = this._room();
-      if ((room.kind === 'shop' && this._rs().cleared) || this.hatch) {
-        this._openShop(p, this.hatch ? 'boss' : 'shop');
+      if (t.key === 'overseer' && this._overseerInteract(p)) {
+        // handled (picked up or began redeploy)
+      } else {
+        const room = this._room();
+        if ((room.kind === 'shop' && this._rs().cleared) || this.hatch) {
+          this._openShop(p, this.hatch ? 'boss' : 'shop');
+        }
       }
     }
   }
 
-  _heal(p, amount) {
-    if (p.downed || amount <= 0) return;
+  // E for the Overseer: pick up the nearest own turret, or start the short
+  // placement channel when already carrying one.
+  _overseerInteract(p) {
+    if (p.carrying) {
+      if (p.channelT <= 0) p.channelT = 0.8;
+      return true;
+    }
+    let best = null, bd = 60 * 60;
+    for (const s of this.summons) {
+      if (s.owner !== p.idx || s.dead || s.type !== 'turret' || s.carried) continue;
+      const d = dist2(p.x, p.y, s.x, s.y);
+      if (d < bd) { bd = d; best = s; }
+    }
+    if (best) {
+      best.carried = true;
+      p.carrying = best;
+      this.pushEvent({ k: 'toast', idx: p.idx, text: 'Turret picked up — press E to redeploy' });
+      return true;
+    }
+    return false;
+  }
+
+  // All healing funnels through here. Recovery amplifies every source; the
+  // fractional remainder accumulates so small heals aren't lost. Overheal is
+  // routed by trait (shield / permanent Vitality / ally drip / self-shield).
+  _heal(p, amount, opts = {}) {
+    if (p.downed || amount <= 0 || p.gone) return;
     const t = p.char.trait;
+    let amt = amount * (1 + Math.max(-80, p.stats.recovery) / 100);
+    p.healAcc += amt;
+    amt = Math.floor(p.healAcc);
+    p.healAcc -= amt;
+    if (amt <= 0) return;
     const before = p.hp;
-    p.hp = Math.min(p.stats.maxHp, p.hp + amount);
-    const overflow = amount - (p.hp - before);
-    if (overflow > 0 && t.key === 'overheal_shield') p.shield = Math.min(t.cap, p.shield + overflow);
+    p.hp = Math.min(p.stats.vitality, p.hp + amt);
+    const overflow = amt - (p.hp - before);
+    if (overflow > 0) {
+      if (t.key === 'overheal_shield') {
+        p.shield = Math.min(t.cap, p.shield + overflow);
+      } else if (t.key === 'red_tithe') {
+        const room = Math.min(overflow, t.vitCapPerRoom - p.roomVitGain);
+        if (room > 0) {
+          p.roomVitGain += room;
+          this._applyPerm(p, { vitality: room });
+          this.pushEvent({ k: 'toast', idx: p.idx, text: `Red Tithe: +${room} Vitality` });
+        }
+      } else if (t.key === 'field_rites' && !opts.noDrip) {
+        // overflow drips to the nearest injured ally; solo → small self-shield
+        let ally = null, bd = Infinity;
+        for (const q of this.livePlayers()) {
+          if (q === p || q.downed || q.hp >= q.stats.vitality) continue;
+          const d = dist2(p.x, p.y, q.x, q.y);
+          if (d < bd) { bd = d; ally = q; }
+        }
+        if (ally) this._heal(ally, overflow, { noDrip: true, noShare: true });
+        else p.shield = Math.min(t.shieldCap, p.shield + overflow);
+      }
+    }
+    // Soulbond: the bonded pair receives a cut of each other's healing —
+    // whether or not the heal overflowed
+    if (t.key === 'soulbond' && !opts.noShare) {
+      const bond = this._bondTarget(p);
+      if (bond && bond.player) this._heal(bond.player, amt * t.healShare, { noShare: true });
+    }
+    for (const q of this.livePlayers()) {
+      if (q === p || q.char.trait.key !== 'soulbond' || opts.noShare) continue;
+      const b = this._bondTarget(q);
+      if (b && b.player === p) this._heal(q, amt * q.char.trait.healShare, { noShare: true });
+    }
+  }
+
+  // Lodestone's bond: nearest living ally; solo → strongest own summon; else dormant.
+  _bondTarget(p) {
+    let ally = null, bd = Infinity;
+    for (const q of this.livePlayers()) {
+      if (q === p || q.downed) continue;
+      const d = dist2(p.x, p.y, q.x, q.y);
+      if (d < bd) { bd = d; ally = q; }
+    }
+    if (ally) return { player: ally };
+    let sum = null, best = -1;
+    for (const s of this.summons) {
+      if (s.owner !== p.idx || s.dead) continue;
+      if (s.maxHp > best) { best = s.maxHp; sum = s; }
+    }
+    return sum ? { summon: sum } : null;
   }
 
   // ---------------- weapons & attacks ----------------
@@ -578,7 +770,7 @@ export class Sim {
       const w = p.weapons[i];
       const def = WEAPON_BY_ID[w.id];
       if (def.cls === 'summon') continue; // structures act on their own
-      const cdMax = def.cd / Math.max(0.25, 1 + p.stats.attackSpeed / 100);
+      const cdMax = def.cd / Math.max(0.25, 1 + p.stats.tempo / 100);
       w.cd -= dt;
       if (w.cd > 0) continue;
       const range = this._weaponRange(p, def);
@@ -591,7 +783,29 @@ export class Sim {
 
   _weaponRange(p, def) {
     const melee = def.cls === 'swing' || def.cls === 'thrust';
-    return Math.max(40, def.range + p.stats.range * (melee ? 0.3 : 1));
+    let r = Math.max(40, def.range + p.stats.reach * (melee ? 0.3 : 1));
+    // Overwatch: the charged shot also reaches further
+    if (this._overwatchCharged(p, def)) r *= 1 + p.char.trait.reachPct / 100;
+    return r;
+  }
+
+  // Stillness charges by HOLDING fire: the idle window starts after the
+  // weapon's own cooldown, so slow weapons don't get the ×2 for free.
+  _overwatchCharged(p, def) {
+    const t = p.char.trait;
+    if (t.key !== 'overwatch') return false;
+    const cdMax = def.cd / Math.max(0.25, 1 + p.stats.tempo / 100);
+    return this.time - p.lastFireT >= t.idle + cdMax;
+  }
+
+  // Weapon damage: base × tier × (1 + Ferocity/100) × (1 + scaling-tag bonus/100).
+  // Percent scaling tags contribute their value; flat tags convert via SCALING_RATES.
+  _scalingBonus(p, def) {
+    let bonus = 0;
+    for (const key of def.scaling) {
+      bonus += STAT_IS_PCT[key] ? p.stats[key] : p.stats[key] * (SCALING_RATES[key] || 1);
+    }
+    return Math.max(-60, bonus);
   }
 
   _fireWeapon(p, w, widx, opts = {}) {
@@ -601,45 +815,57 @@ export class Sim {
     if (!target) return;
     const a = angleTo(p.x, p.y, target.x, target.y);
     p.aimA = a;
-
-    // damage roll
-    let dmg = def.dmg * TIER_MULT[w.tier - 1];
-    let mult = 1 + p.stats.damage / 100;
-    for (const tag of def.tags) {
-      if (tag === 'meleeDamage') mult *= 1 + p.stats.meleeDamage / 100;
-      if (tag === 'rangedDamage') mult *= 1 + p.stats.rangedDamage / 100;
-      if (tag === 'elementalDamage') mult *= 1 + p.stats.elementalDamage / 100;
-    }
     const t = p.char.trait;
+    const agg = p.hookAgg;
+
+    // damage: base × tier × (1 + Ferocity/100) × (1 + scaling-tag bonus/100)
+    let dmg = def.dmg * TIER_MULT[w.tier - 1];
+    let mult = (1 + p.stats.ferocity / 100) * (1 + this._scalingBonus(p, def) / 100);
     if (t.key === 'glass') mult *= t.dealMult;
-    if (t.key === 'still_charge') {
-      const bonus = Math.min(t.max, t.ratePerSec * p.stillT);
-      if (bonus > 0) { mult *= 1 + bonus / 100; p.stillT = 0; }
-    }
+    // Onrush: consume the movement meter (+60% at full charge)
+    if (t.key === 'momentum_meter' && p.meter > 0.05) { mult *= 1 + t.bonus * p.meter; p.meter = 0; }
+    // Stillness: holding fire charges this shot (computed BEFORE lastFireT updates)
+    if (this._overwatchCharged(p, def)) mult *= t.mult;
+    // after-dodge "next attack" item bonus (short window, consumed on fire)
+    if (p.dmgBuffT > 0 && p.dmgBuffAmt > 0) { mult *= 1 + p.dmgBuffAmt / 100; p.dmgBuffT = 0; }
     if (opts.factor) mult *= opts.factor;
     dmg = Math.max(1, dmg * mult);
 
-    // crit determination (rolled per fire; guaranteed-crit flags consume here)
-    let critChance = p.stats.critChance + (def.critBonus || 0);
-    let guaranteed = false;
-    if (p.nextCrit) { guaranteed = true; p.nextCrit = false; }
-    if (!p.firstHitUsed && (p.hookAgg.firstHitCrit || t.key === 'first_hit_crit_innate')) {
-      guaranteed = true;
-    }
+    // Crit is not a stat: crits exist only as granted effects (default ×2,
+    // Executioner ×3 and never random). Resolved here where the target is known.
+    let crit = false;
+    if (p.nextCrit) { crit = true; p.nextCrit = false; }
+    if (!p.firstHitUsed && agg.firstHitCrit) crit = true;
     p.firstHitUsed = true;
-    const crit = guaranteed || Math.random() * 100 < critChance;
-    if (t.key === 'crit_ramp') { if (crit) p.critRamp = 0; else p.critRamp += t.per; }
+    if (agg.critAfterKill && p.critArmed) { crit = true; p.critArmed = false; }
+    if (agg.critEveryN > 0) {
+      p.critCounter++;
+      if (p.critCounter >= agg.critEveryN) { crit = true; p.critCounter = 0; }
+    }
+    if (agg.critVsChilled && target.slowT > 0) crit = true;
+    if (agg.critVsBurning && target.burnT > 0) crit = true;
+    if ((agg.critVsFullHp || t.key === 'executioner') && target.hp >= target.maxHp) crit = true;
+    // Jester: trait-internal odds that ramp per attack and reset when a crit lands
+    if (t.key === 'crit_ramp') {
+      if (!crit && Math.random() * 100 < p.jesterOdds) crit = true;
+      p.jesterOdds = crit ? 0 : Math.min(t.max, p.jesterOdds + t.per);
+    }
     if (crit) dmg *= p.critMult;
     dmg = Math.round(dmg);
+    p.lastFireT = this.time;
 
-    const knock = def.knock * p.hookAgg.knockMult;
+    const knock = def.knock * agg.knockMult;
     const hitCtx = { owner: p, crit, weaponDef: def, knock, baseDmg: dmg };
 
-    // echo trait: every 4th attack echoes
-    if (!opts.noEcho && t.key === 'echo_4th') {
-      p.attackCounter++;
-      if (p.attackCounter % 4 === 0) {
-        for (let n = 1; n <= t.echoes; n++) p.pendingEchoes.push({ t: 0.14 * n, widx, factor: t.factor });
+    // Resonant: attacks build the charge ring; full → attuned shockwave
+    if (t.key === 'resonance') {
+      p.resonCharge++;
+      if (p.resonCharge >= t.hits) {
+        p.resonCharge = 0;
+        const nova = Math.max(1, Math.round(this._attuned(p, dmg * t.factor)));
+        this.fx.booms.push({ x: p.x, y: p.y, r: t.radius });
+        this.pushEvent({ k: 'sfx', s: 'boom' });
+        this._areaDamageEnemies(p.x, p.y, t.radius, nova, p);
       }
     }
 
@@ -693,7 +919,7 @@ export class Sim {
             vx: Math.cos(a) * def.projSpeed, vy: Math.sin(a) * def.projSpeed,
             dmg, crit, friendly: true, lob: true, ttl: d / def.projSpeed,
             radius: 7, color: def.color, owner: p.idx, pierce: 0, hitIds: null,
-            weaponId: def.id, kind: 'lob', summonBurn: null, summonKnock: 0,
+            weaponId: def.id, kind: 'lob', summonBurn: null, summonKnock: 0, fromSummon: false,
           });
         }
         this.pushEvent({ k: 'sfx', s: 'shoot' });
@@ -712,7 +938,7 @@ export class Sim {
       vx: Math.cos(a) * def.projSpeed, vy: Math.sin(a) * def.projSpeed,
       dmg, crit, friendly: true, lob: false, ttl: (range + 60) / def.projSpeed,
       radius: 5, color: def.color, owner: p.idx, pierce, hitIds: new Set(),
-      weaponId: def.id, kind: 'shot', summonBurn: null, summonKnock: 0,
+      weaponId: def.id, kind: 'shot', summonBurn: null, summonKnock: 0, fromSummon: false,
     });
   }
 
@@ -730,36 +956,68 @@ export class Sim {
       e.knockX += Math.cos(ka) * ctx.knock * 3;
       e.knockY += Math.sin(ka) * ctx.knock * 3;
     }
+    // Soulbond joint-hit echo: both bonded partners struck this enemy within 1s.
+    // Summon hits stamp a separate key so solo (summon-bonded) play works.
+    const stampKey = ctx.summon ? 's' + p.idx : p.idx;
+    this._soulbondEcho(p, e, finalDmg, stampKey);
     this.damageEnemy(e, finalDmg, { crit: ctx.crit, owner: p });
+    if (e.hitStamps) e.hitStamps[stampKey] = this.time;
     if (!e.active) return;
-    // elemental payloads from weapon
+    // status payloads from the weapon — all attuned
     if (def) {
-      if (def.burn) this._applyBurn(e, def.burn.dps * (1 + p.stats.elementalDamage / 100), def.burn.dur, p);
-      if (def.slow) this._applySlow(e, def.slow.mult, def.slow.dur);
+      if (def.burn) this._applyBurn(e, this._attuned(p, def.burn.dps), def.burn.dur, p);
+      if (def.slow) this._applySlow(e, def.slow.mult, def.slow.dur, p);
       if (def.chainHit) this._chainLightning(e, ctx, def.chainHit);
     }
     // character trait payloads
-    if (t.key === 'burn_attacks') this._applyBurn(e, t.dps * (1 + p.stats.elementalDamage / 100), t.dur, p);
-    if (t.key === 'slow_attacks') this._applySlow(e, t.mult, t.dur);
+    if (t.key === 'burn_attacks') this._applyBurn(e, this._attuned(p, t.dps), t.dur, p);
+    if (t.key === 'slow_attacks') this._applySlow(e, t.mult, t.dur, p);
     if (t.key === 'chain_attacks' && Math.random() < t.chance) {
       this._chainLightning(e, ctx, { count: 1, range: t.range, factor: t.factor });
     }
     // item payloads
-    for (const b of p.hookAgg.burnOnHit) if (Math.random() < b.chance) this._applyBurn(e, b.dps, b.duration, p);
-    for (const s of p.hookAgg.slowOnHit) if (Math.random() < s.chance) this._applySlow(e, s.mult, s.duration);
+    for (const b of p.hookAgg.burnOnHit) if (Math.random() < b.chance) this._applyBurn(e, this._attuned(p, b.dps), b.duration, p);
+    for (const s of p.hookAgg.chillOnHit) if (Math.random() < s.chance) this._applySlow(e, s.mult, s.duration, p);
     for (const c of p.hookAgg.chainOnHit) if (Math.random() < c.chance) {
       const near = this._nearestEnemyExcept(e.x, e.y, c.range, e);
-      if (near) { this.fx.beams.push({ x1: e.x, y1: e.y, x2: near.x, y2: near.y, color: '#4fd8eb' }); this.damageEnemy(near, c.damage, { owner: p, elementalFx: true }); }
+      if (near) {
+        this.fx.beams.push({ x1: e.x, y1: e.y, x2: near.x, y2: near.y, color: '#4fd8eb' });
+        this.damageEnemy(near, Math.max(1, Math.round(this._attuned(p, c.damage))), { owner: p });
+      }
     }
     if (ctx.crit && p.hookAgg.critHeal) this._heal(p, p.hookAgg.critHeal);
+  }
+
+  // Lodestone: if the bond partner also hit this enemy within the last second,
+  // the hit echoes for bonus attuned damage (small per-enemy cooldown).
+  _soulbondEcho(p, e, hitDmg, stampKey) {
+    if (!e.hitStamps) return;
+    let holder = null, partnerKey = null;
+    for (const q of this.livePlayers()) {
+      if (q.char.trait.key !== 'soulbond' || q.downed) continue;
+      const b = this._bondTarget(q);
+      if (!b) continue;
+      const qKey = q.idx, bKey = b.player ? b.player.idx : 's' + q.idx;
+      if (stampKey === qKey) { holder = q; partnerKey = bKey; break; }
+      if (stampKey === bKey) { holder = q; partnerKey = qKey; break; }
+    }
+    if (!holder) return;
+    const t = holder.char.trait;
+    const last = e.hitStamps[partnerKey];
+    if (last === undefined || this.time - last > t.window) return;
+    if ((e.echoCd || 0) > this.time) return;
+    e.echoCd = this.time + 0.5;
+    const echo = Math.max(1, Math.round(this._attuned(holder, hitDmg * t.echoFactor)));
+    this.fx.beams.push({ x1: holder.x, y1: holder.y, x2: e.x, y2: e.y, color: '#c9a6ff' });
+    this.damageEnemy(e, echo, { owner: holder });
   }
 
   _chainLightning(e, ctx, chain) {
     const p = ctx.owner;
     let from = e;
-    // chain damage: factor of the hit that triggered it
+    // chain damage: factor of the hit that triggered it, scaling with Attunement
     const base = ctx.baseDmg || (ctx.weaponDef ? ctx.weaponDef.dmg : 5);
-    const dmg = Math.max(1, Math.round(base * chain.factor));
+    const dmg = Math.max(1, Math.round(this._attuned(p, base * chain.factor)));
     const hit = new Set([e.id]);
     for (let i = 0; i < chain.count; i++) {
       const next = this._nearestEnemyExcept(from.x, from.y, chain.range, from, hit);
@@ -777,8 +1035,14 @@ export class Sim {
     e.burnT = Math.max(e.burnT || 0, dur);
     e.burnOwner = owner;
   }
-  _applySlow(e, mult, dur) {
+  // Chill: Attunement deepens the slow and stretches its duration.
+  _applySlow(e, mult, dur, owner) {
     if (!e.active) return;
+    if (owner && owner.stats) {
+      const att = 1 + (owner.stats.attunement + owner.hookAgg.statusBoost) / 100;
+      mult = Math.max(0.15, 1 - (1 - mult) * att);
+      dur *= Math.max(0.25, att);
+    }
     if (e.boss) mult = 1 - (1 - mult) * 0.5; // bosses shrug off half of any chill
     e.slowMult = Math.min(e.slowMult === undefined || e.slowT <= 0 ? 1 : e.slowMult, mult);
     e.slowT = Math.max(e.slowT || 0, dur);
@@ -810,6 +1074,15 @@ export class Sim {
     }
     return best;
   }
+  // What enemies aim at: a nearby Mirage decoy wins over real players.
+  tauntTarget(x, y) {
+    let best = null, bd = Infinity;
+    for (const d of this.decoys) {
+      const dd = dist2(x, y, d.x, d.y);
+      if (dd < d.tauntR * d.tauntR && dd < bd) { bd = dd; best = d; }
+    }
+    return best || this.nearestLivingPlayer(x, y);
+  }
 
   // ---------------- damage plumbing ----------------
 
@@ -833,8 +1106,10 @@ export class Sim {
     const p = opts.owner;
     if (p && p.stats) {
       p.damageDealt += amount;
-      if (p.stats.lifeSteal > 0 && !opts.noLifesteal) {
-        p.lsAcc = (p.lsAcc || 0) + amount * p.stats.lifeSteal / 100;
+      // lifesteal is a healing SOURCE (items + innate traits), amplified by Recovery in _heal
+      const ls = p.hookAgg.lifesteal + (p.char.trait.lifesteal || 0);
+      if (ls > 0 && !opts.noLifesteal) {
+        p.lsAcc = (p.lsAcc || 0) + amount * ls / 100;
         if (p.lsAcc >= 1) { const h = Math.floor(p.lsAcc); p.lsAcc -= h; this._heal(p, h); }
       }
     }
@@ -852,21 +1127,26 @@ export class Sim {
     // killer hooks & traits
     if (killer && killer.stats) {
       killer.kills++;
+      killer.lastKillT = this.time;
+      if (killer.roomFirstKillT < 0) killer.roomFirstKillT = this.time;
       const t = killer.char.trait;
       if (t.key === 'kill_heal') this._heal(killer, t.amount);
+      if (t.key === 'red_tithe') this._heal(killer, t.healPerKill); // Vesper: a 1 HP source, Recovery-amplified
+      if (killer.hookAgg.killHeal > 0) this._heal(killer, killer.hookAgg.killHeal);
+      if (killer.hookAgg.critAfterKill) killer.critArmed = true;
       for (const ke of killer.hookAgg.killExplode) {
         if (Math.random() < ke.chance) {
           this.fx.booms.push({ x, y, r: ke.radius });
-          this._areaDamageEnemies(x, y, ke.radius, ke.damage, killer, { exclude: e });
+          this._areaDamageEnemies(x, y, ke.radius, Math.max(1, Math.round(this._attuned(killer, ke.damage))), killer, { exclude: e });
           this.pushEvent({ k: 'sfx', s: 'boom' });
         }
       }
-      for (const mk of killer.hookAgg.maxHpOnKill) {
-        if (killer.hpKillGained < mk.cap) { killer.hpKillGained += mk.amount; this._applyPerm(killer, { maxHp: mk.amount }); }
+      for (const vk of killer.hookAgg.vitalityOnKill) {
+        if (killer.vitKillGained < vk.cap) { killer.vitKillGained += vk.amount; this._applyPerm(killer, { vitality: vk.amount }); }
       }
-      for (const kf of killer.hookAgg.killFrenzy) {
-        if (killer.frenzy.length < kf.maxStacks) killer.frenzy.push({ as: kf.attackSpeed, t: kf.duration });
-        else { const oldest = killer.frenzy.reduce((a, b) => a.t < b.t ? a : b); oldest.t = kf.duration; }
+      for (const kt of killer.hookAgg.killTempo) {
+        if (killer.frenzy.length < kt.maxStacks) killer.frenzy.push({ tempo: kt.tempo, t: kt.duration });
+        else { const oldest = killer.frenzy.reduce((a, b) => a.t < b.t ? a : b); oldest.t = kt.duration; }
       }
     }
     // death behaviors
@@ -912,19 +1192,17 @@ export class Sim {
     });
   }
 
-  hurtPlayer(p, raw, src) {
+  hurtPlayer(p, raw, src, opts = {}) {
     if (this.over || p.gone || p.downed || p.invuln > 0 || this.god) return;
     const t = p.char.trait;
-    // dodge
-    const dodge = Math.min(p.stats.dodge, p.dodgeCap);
-    if (Math.random() * 100 < dodge) {
+    // Reflex: dodge chance (capped in recompute); every on-dodge effect keys off this
+    if (!opts.shared && Math.random() * 100 < p.stats.reflex) {
       this.fx.hits.push({ x: Math.round(p.x), y: Math.round(p.y - 24), a: 0, c: 2 }); // "dodge" popup
-      if (t.key === 'dodge_burst') { p.speedBuffT = t.dur; p.nextCrit = true; }
-      if (t.key === 'dodge_retaliate') {
-        this.fx.booms.push({ x: p.x, y: p.y, r: t.radius });
-        this._areaDamageEnemies(p.x, p.y, t.radius, t.dmg, p);
+      if (t.key === 'slipstream') { p.tempoBuffT = t.dur; p.nextCrit = true; }
+      if (t.key === 'afterimage') {
+        this.decoys.push({ x: p.x, y: p.y, t: t.dur, dur: t.dur, tauntR: t.tauntR, owner: p.idx, burst: t.burst, radius: t.radius });
       }
-      for (const dd of p.hookAgg.dodgeToDamage) { p.dmgBuffT = dd.duration; p.dmgBuffAmt = dd.bonus; }
+      if (p.hookAgg.nextAttackAfterDodge > 0) { p.dmgBuffT = 3; p.dmgBuffAmt = p.hookAgg.nextAttackAfterDodge; }
       return;
     }
     // auto-block shield item
@@ -933,14 +1211,16 @@ export class Sim {
       this.fx.blocks.push({ x: p.x, y: p.y });
       return;
     }
-    // armor: raw × 15/(15+armor); negative armor capped at +50% extra damage
-    // (denominator guarded so armor ≤ −15 can't flip the multiplier negative)
-    const armor = p.stats.armor;
-    let mult = armor >= 0
-      ? CONFIG.ARMOR_K / (CONFIG.ARMOR_K + armor)
-      : Math.min(1 + CONFIG.NEG_ARMOR_MAX_BONUS, CONFIG.ARMOR_K / Math.max(0.001, CONFIG.ARMOR_K + armor));
+    // Grit: raw × 15/(15+Grit); negative capped at +50% extra damage
+    // (denominator guarded so Grit ≤ −15 can't flip the multiplier negative)
+    const grit = p.stats.grit;
+    let mult = grit >= 0
+      ? CONFIG.ARMOR_K / (CONFIG.ARMOR_K + grit)
+      : Math.min(1 + CONFIG.NEG_ARMOR_MAX_BONUS, CONFIG.ARMOR_K / Math.max(0.001, CONFIG.ARMOR_K + grit));
     if (t.key === 'glass') mult *= t.takeMult;
     let dmg = Math.max(1, Math.round(raw * mult));
+    // Soulbond: 30% of post-mitigation damage flows across the tether
+    if (!opts.shared) dmg = this._soulbondShare(p, dmg);
     // overheal shield absorbs first
     if (p.shield > 0) {
       const absorbed = Math.min(p.shield, dmg);
@@ -957,26 +1237,64 @@ export class Sim {
     }
     for (const rt of p.hookAgg.onHurtRetaliate) {
       this.fx.booms.push({ x: p.x, y: p.y, r: rt.radius });
-      this._areaDamageEnemies(p.x, p.y, rt.radius, rt.damage, p);
+      this._areaDamageEnemies(p.x, p.y, rt.radius, Math.max(1, Math.round(this._attuned(p, rt.damage))), p);
     }
     if (p.hp <= 0) {
       // second wind item: cheat death once per floor
       if (p.hookAgg.secondWind !== null && !p.secondWindUsed) {
         p.secondWindUsed = true;
-        p.hp = Math.max(1, Math.round(p.stats.maxHp * p.hookAgg.secondWind));
+        p.hp = Math.max(1, Math.round(p.stats.vitality * p.hookAgg.secondWind));
         p.invuln = 1.5;
         this.pushEvent({ k: 'toast', idx: p.idx, text: 'Second wind! Death refused.' });
         return;
       }
-      p.hp = 0;
-      p.downed = true;
-      p.reviveP = 0;
-      this.pushEvent({ k: 'downed', idx: p.idx });
-      this.pushEvent({ k: 'sfx', s: 'downed' });
-      if (this.livePlayers().every(q => q.downed)) this._finish(false);
+      this._downPlayer(p);
     } else if (t.key === 'berserk_missing') {
       this._recomputeStats(p);
     }
+  }
+
+  _downPlayer(p) {
+    p.hp = 0;
+    p.downed = true;
+    p.reviveP = 0;
+    this.pushEvent({ k: 'downed', idx: p.idx });
+    this.pushEvent({ k: 'sfx', s: 'downed' });
+    if (this.livePlayers().every(q => q.downed)) this._finish(false);
+  }
+
+  // Lodestone: whoever stands in the tether — the holder or their bond target —
+  // hands 30% of incoming (post-mitigation) damage to the other end. The
+  // transfer lands directly (no second dodge/Grit roll) and CAN down them.
+  _soulbondShare(p, dmg) {
+    let partner = null, share = 0;
+    if (p.char.trait.key === 'soulbond') {
+      const b = this._bondTarget(p);
+      share = p.char.trait.dmgShare;
+      if (b && b.player) partner = b.player;
+      else if (b && b.summon) partner = b.summon;
+    } else {
+      for (const q of this.livePlayers()) {
+        if (q === p || q.downed || q.char.trait.key !== 'soulbond') continue;
+        const b = this._bondTarget(q);
+        if (b && b.player === p) { partner = q; share = q.char.trait.dmgShare; break; }
+      }
+    }
+    if (!partner) return dmg;
+    const moved = Math.floor(dmg * share);
+    if (moved <= 0) return dmg;
+    if (partner.stats) { // a player
+      if (partner.downed || partner.gone) return dmg;
+      let rest = moved;
+      if (partner.shield > 0) { const ab = Math.min(partner.shield, rest); partner.shield -= ab; rest -= ab; }
+      partner.hp -= rest;
+      this.fx.hits.push({ x: Math.round(partner.x), y: Math.round(partner.y - 24), a: rest, c: 3 });
+      if (partner.hp <= 0) this._downPlayer(partner);
+    } else { // the solo bond: a summon soaks it
+      partner.hp -= moved;
+      if (partner.hp <= 0) { partner.dead = true; this.fx.deaths.push({ x: partner.x, y: partner.y, c: '#9aa0bd', r: 12 }); }
+    }
+    return dmg - moved;
   }
 
   // ---------------- projectiles / areas / contact ----------------
@@ -1002,8 +1320,8 @@ export class Sim {
             const owner = this.players[pr.owner];
             const def = WEAPON_BY_ID[pr.weaponId];
             const knock = ((def && def.knock) || pr.summonKnock || 0) * owner.hookAgg.knockMult;
-            this._hitEnemy(e, pr.dmg, { owner, crit: pr.crit, weaponDef: def, knock, baseDmg: pr.dmg }, Math.atan2(pr.vy, pr.vx));
-            if (pr.summonBurn && e.active) this._applyBurn(e, pr.summonBurn.dps * (1 + owner.stats.elementalDamage / 100), pr.summonBurn.dur, owner);
+            this._hitEnemy(e, pr.dmg, { owner, crit: pr.crit, weaponDef: def, knock, baseDmg: pr.dmg, summon: pr.fromSummon }, Math.atan2(pr.vy, pr.vx));
+            if (pr.summonBurn && e.active) this._applyBurn(e, this._attuned(owner, pr.summonBurn.dps), pr.summonBurn.dur, owner);
             if (pr.pierce > 0) pr.pierce--; else { dead = true; }
           }
         });
@@ -1036,7 +1354,7 @@ export class Sim {
       }
     });
     if (def.puddle) {
-      this.addZone({ x: pr.x, y: pr.y, r: def.aoe * 0.9, dps: def.puddle.dps * (1 + owner.stats.elementalDamage / 100), dur: def.puddle.dur, hurts: 'enemies', color: def.color, owner: pr.owner });
+      this.addZone({ x: pr.x, y: pr.y, r: def.aoe * 0.9, dps: this._attuned(owner, def.puddle.dps), dur: def.puddle.dur, hurts: 'enemies', color: def.color, owner: pr.owner });
     }
   }
 
@@ -1124,7 +1442,7 @@ export class Sim {
       for (const p of this.livePlayers()) {
         if (p.downed) continue;
         const d = dist(v.x, v.y, p.x, p.y);
-        if (d < v.pullR && d > 8 && p.char.trait.key !== 'kb_immune_big') { // Bulwark stands firm
+        if (d < v.pullR && d > 8) { // Grit pull-resist / Immovable applied in _tickPlayer
           const a = angleTo(p.x, p.y, v.x, v.y);
           p.pullX += Math.cos(a) * v.pullSpd;
           p.pullY += Math.sin(a) * v.pullSpd;
@@ -1138,15 +1456,25 @@ export class Sim {
 
   _tickContact(dt) {
     for (const e of this.enemyPool) {
-      if (e.contactCd > 0) { e.contactCd -= dt; continue; }
+      if (e.contactCd > 0) e.contactCd -= dt;
+      if (e.bulwarkCd > 0) e.bulwarkCd -= dt;
       for (const p of this.livePlayers()) {
-        if (p.downed || p.invuln > 0) continue;
+        if (p.downed) continue;
         const rr = e.radius + p.radius;
-        if (dist2(e.x, e.y, p.x, p.y) <= rr * rr) {
+        if (dist2(e.x, e.y, p.x, p.y) > rr * rr) continue;
+        // Immovable: whatever touches the Bulwark regrets it (own cadence,
+        // fires even during the player's i-frames)
+        if (p.char.trait.key === 'immovable' && e.bulwarkCd <= 0) {
+          e.bulwarkCd = CONFIG.CONTACT_COOLDOWN;
+          const cd = Math.max(1, Math.round(p.char.trait.base + 0.25 * Math.max(0, p.stats.grit) + 0.05 * p.stats.vitality));
+          this.damageEnemy(e, cd, { owner: p });
+          if (!e.active) break;
+        }
+        if (e.contactCd <= 0 && p.invuln <= 0) {
           e.contactCd = CONFIG.CONTACT_COOLDOWN;
           this.hurtPlayer(p, e.dmg, e);
-          break;
         }
+        break;
       }
     }
   }
@@ -1194,7 +1522,7 @@ export class Sim {
         // find a puller
         for (const p of this.livePlayers()) {
           if (p.downed) continue;
-          const r = CONFIG.PICKUP_RADIUS + p.hookAgg.pickupRadius;
+          const r = CONFIG.PICKUP_RADIUS + Math.max(0, p.stats.reach) * 0.5; // Reach magnetism
           if (dist2(m.x, m.y, p.x, p.y) < r * r) { m.target = p.idx; break; }
         }
       }
@@ -1215,6 +1543,7 @@ export class Sim {
 
   _collectMaterial(p, v) {
     this.pushEvent({ k: 'sfx', s: 'pickup' });
+    if (p.hookAgg.pickupBonusChance > 0 && Math.random() < p.hookAgg.pickupBonusChance) v += 1;
     p.materials += v;
     p.matsCollected += v;
     const xpGain = v * (1 + p.hookAgg.xpBonus / 100);
@@ -1229,9 +1558,19 @@ export class Sim {
       this.pushEvent({ k: 'sfx', s: 'levelup' });
     }
     const t = p.char.trait;
-    if (t.key === 'mat_detonate') {
-      this._areaDamageEnemies(p.x, p.y, t.radius, t.dmg, p, { silent: true });
-      this.fx.booms.push({ x: p.x, y: p.y, r: t.radius * 0.6 });
+    // Powderkeg: pickups detonate — 4 + 40% of Greed attuned, radius 40 + 50% of Reach
+    if (t.key === 'volatile_greed') {
+      const dmg = Math.max(1, Math.round(this._attuned(p, t.base + 0.4 * Math.max(0, p.stats.greed))));
+      const r = t.radius + 0.5 * Math.max(0, p.stats.reach);
+      this._areaDamageEnemies(p.x, p.y, r, dmg, p, { silent: true });
+      this.fx.booms.push({ x: p.x, y: p.y, r: r * 0.6 });
+    }
+    for (const pb of p.hookAgg.pickupBlast) {
+      this._areaDamageEnemies(p.x, p.y, pb.radius, Math.max(1, Math.round(this._attuned(p, pb.damage))), p, { silent: true });
+      this.fx.booms.push({ x: p.x, y: p.y, r: pb.radius * 0.6 });
+    }
+    for (const pt of p.hookAgg.pickupTempo) {
+      if (p.frenzy.length < (pt.maxStacks || 5)) p.frenzy.push({ tempo: pt.tempo, t: pt.duration });
     }
     for (const mh of p.hookAgg.materialHeal) if (Math.random() < mh.chance) this._heal(p, mh.amount);
     p.metaDirty = true;
@@ -1244,32 +1583,54 @@ export class Sim {
 
   // ---------------- revive / clear / doors ----------------
 
+  // Mirage afterimages: hold aggro for their lifetime, then burst attuned.
+  _tickDecoys(dt) {
+    for (let i = this.decoys.length - 1; i >= 0; i--) {
+      const d = this.decoys[i];
+      d.t -= dt;
+      if (d.t > 0) continue;
+      this.decoys.splice(i, 1);
+      const owner = this.players[d.owner];
+      if (!owner || owner.gone) continue;
+      const dmg = Math.max(1, Math.round(this._attuned(owner, d.burst)));
+      this.fx.booms.push({ x: Math.round(d.x), y: Math.round(d.y), r: d.radius });
+      this.pushEvent({ k: 'sfx', s: 'boom' });
+      this._areaDamageEnemies(d.x, d.y, d.radius, dmg, owner);
+    }
+  }
+
   _tickRevive(dt) {
     for (const p of this.players) {
       if (p.gone || !p.downed) continue;
-      let bestRate = 0;
+      let bestRate = 0, reviver = null;
       for (const q of this.livePlayers()) {
         if (q.downed || q === p) continue;
         if (dist2(p.x, p.y, q.x, q.y) < CONFIG.REVIVE_RADIUS * CONFIG.REVIVE_RADIUS) {
-          bestRate = Math.max(bestRate, 1 + q.hookAgg.reviveSpeed);
+          const rate = 1 + q.hookAgg.reviveSpeed + (q.char.trait.key === 'field_rites' ? q.char.trait.reviveBoost : 0);
+          if (rate > bestRate) { bestRate = rate; reviver = q; }
         }
       }
       if (bestRate > 0) {
         p.reviveP += dt * bestRate / CONFIG.REVIVE_TIME;
-        if (p.reviveP >= 1) this._revive(p, CONFIG.REVIVE_HP);
+        if (p.reviveP >= 1) this._revive(p, CONFIG.REVIVE_HP, reviver);
       } else {
         p.reviveP = Math.max(0, p.reviveP - dt / CONFIG.REVIVE_TIME);
       }
     }
   }
 
-  _revive(p, frac) {
+  _revive(p, frac, reviver) {
     p.downed = false;
     p.reviveP = 0;
-    p.hp = Math.max(1, Math.round(p.stats.maxHp * frac));
+    p.hp = Math.max(1, Math.round(p.stats.vitality * frac));
     p.invuln = 1.2;
     this.pushEvent({ k: 'revived', idx: p.idx });
     this.pushEvent({ k: 'sfx', s: 'revive' });
+    // Sawbones: every revive he performs toughens the whole party
+    if (reviver && reviver.char.trait.key === 'field_rites') {
+      for (const q of this.livePlayers()) this._applyPerm(q, { vitality: reviver.char.trait.partyVit });
+      this.pushEvent({ k: 'toast', idx: reviver.idx, text: `Field Rites: party +${reviver.char.trait.partyVit} Vitality` });
+    }
   }
 
   _checkClear() {
@@ -1299,31 +1660,27 @@ export class Sim {
   }
 
   // Per-player room-clear resolution — used by combat clears AND boss kills so
-  // harvesting/interest/heals/trait growths never skip a room.
+  // Greed tithe/interest/heals/trait growths never skip a room.
   _clearRewards(p) {
     // auto-revive downed at 50%
     if (p.downed) this._revive(p, CONFIG.REVIVE_HP);
-    // harvesting payout, then 5% (+bonus) growth
-    const harv = Math.floor(p.stats.harvesting);
-    if (harv > 0) {
-      this._collectMaterial(p, harv);
-      this.pushEvent({ k: 'toast', idx: p.idx, text: `Harvest +${harv}` });
+    // Greed: floor(G/2) bonus materials at every room clear (no self-growth)
+    const tithe = Math.floor(Math.max(0, p.stats.greed) / 2);
+    if (tithe > 0) {
+      this._collectMaterial(p, tithe);
+      this.pushEvent({ k: 'toast', idx: p.idx, text: `Greed +${tithe}` });
     }
-    const growth = Math.floor(harv * (CONFIG.HARVEST_GROWTH + p.hookAgg.harvestGrowth / 100));
-    if (growth > 0) this._applyPerm(p, { harvesting: growth });
     // interest
     for (const it of p.hookAgg.interest) {
       const gain = Math.min(it.cap, Math.floor(p.materials * it.rate / 100));
       if (gain > 0) { this._collectMaterial(p, gain); this.pushEvent({ k: 'toast', idx: p.idx, text: `Interest +${gain}` }); }
     }
     // baseline breather: recover 10% of missing HP at each clear (+item heals)
-    this._heal(p, Math.ceil((p.stats.maxHp - p.hp) * 0.1));
+    this._heal(p, Math.ceil((p.stats.vitality - p.hp) * 0.1));
     if (p.hookAgg.roomClearHeal > 0) this._heal(p, p.hookAgg.roomClearHeal);
-    // trait growths
+    // Rampart: the fortress keeps growing
     const t = p.char.trait;
-    if (t.key === 'no_regen_growth') this._applyPerm(p, { maxHp: t.hpPerRoom });
-    if (t.key === 'armor_growth') this._applyPerm(p, { armor: t.perRoom });
-    if (t.key === 'momentum') this._applyPerm(p, { speed: t.speedPerRoom });
+    if (t.key === 'living_fortress') this._applyPerm(p, { grit: t.perRoom });
     // banked level-ups resolve now
     this._maybeOffer(p);
   }
@@ -1391,14 +1748,13 @@ export class Sim {
 
   _maybeOffer(p) {
     if (p.gone || p.banked <= 0 || p.pendingOffer) return;
-    const t = p.char.trait;
-    const n = t.key === 'five_choices' ? t.choices : 4;
+    const n = 4 + (p.hookAgg.extraChoice || 0);
     const rng = subRng(this.seed, 'offer', this.floorNum, this.roomId, p.idx, p.level, p.banked);
     const picks = [];
     const used = new Set();
     let guard = 0;
     while (picks.length < n && guard++ < 80) {
-      const rarity = this._rollRarity(rng, p.stats.luck, { common: 62, uncommon: 26, rare: 12, legendary: 0 });
+      const rarity = this._rollRarity(rng, p.stats.greed, { common: 62, uncommon: 26, rare: 12, legendary: 0 });
       const pool = STAT_BOOSTS.filter(b => b.rarity === rarity && !used.has(b.stat));
       if (!pool.length) continue;
       const b = rng.pick(pool);
@@ -1415,7 +1771,7 @@ export class Sim {
     const used = new Set();
     let guard = 0;
     while (picks.length < 3 && guard++ < 120) {
-      let rarity = this._rollRarity(rng, p.stats.luck);
+      let rarity = this._rollRarity(rng, p.stats.greed);
       if (kind === 'elite' && (rarity === 'common' || rarity === 'uncommon')) rarity = rng.chance(0.75) ? 'rare' : 'legendary';
       const pool = ITEMS.filter(it => it.rarity === rarity && !used.has(it.id));
       if (!pool.length) continue;
@@ -1427,8 +1783,36 @@ export class Sim {
     this.pushEvent({ k: 'treasure', idx: p.idx, kind, picks });
   }
 
-  _rollRarity(rng, luck, weights = CONFIG.RARITY_WEIGHTS) {
-    const lf = 1 + Math.max(-50, luck) / 100;
+  // Facet's Prism: 1 of 3 temporary boons at each room's entry door. Offer
+  // quality rides the same Greed-biased rarity roll; picks are non-blocking
+  // (the room plays on while the overlay is up). A boon chosen 3 times total
+  // becomes permanent.
+  _offerBoon(p) {
+    const t = p.char.trait;
+    const rng = subRng(this.seed, 'boon', this.floorNum, this.roomId, p.idx);
+    const picks = [];
+    const used = new Set();
+    let guard = 0;
+    while (picks.length < 3 && guard++ < 60) {
+      const rarity = this._rollRarity(rng, p.stats.greed, { common: 50, uncommon: 32, rare: 14, legendary: 4 });
+      const pool = STAT_BOOSTS.filter(b => b.rarity === rarity && !used.has(b.stat));
+      if (!pool.length) continue;
+      const b = rng.pick(pool);
+      used.add(b.stat);
+      picks.push({
+        id: b.id, stat: b.stat,
+        amount: Math.round(b.amount * t.boonMult), // room-length, so beefier than a level-up
+        rarity: b.rarity,
+        n: p.boonCounts[b.id] || 0,                // shown as pips toward permanence
+      });
+    }
+    p.boonOffer = picks;
+    this.pushEvent({ k: 'boon', idx: p.idx, picks });
+  }
+
+  // Greed biases every rarity roll: uncommon+ weights ×(1 + Greed/100)
+  _rollRarity(rng, greed, weights = CONFIG.RARITY_WEIGHTS) {
+    const lf = 1 + Math.max(-50, greed) / 100;
     const entries = [
       { r: 'common', w: weights.common },
       { r: 'uncommon', w: weights.uncommon * lf },
@@ -1451,7 +1835,7 @@ export class Sim {
       p.shop = {
         key: `${this.floorNum}:${context}:${this.roomId}`,
         rng, rerolls: 0,
-        freeLeft: (p.char.trait.key === 'shop_broker' ? 1 : 0) + p.hookAgg.freeRerolls,
+        freeLeft: p.hookAgg.freeRerolls,
         stock: [],
       };
       this._fillStock(p);
@@ -1474,17 +1858,21 @@ export class Sim {
     const t = p.char.trait;
     const floorScale = 1 + CONFIG.PRICE_FLOOR_SCALE * (this.floorNum - 1);
     let discount = 1 - p.hookAgg.shopDiscount / 100;
-    if (t.key === 'shop_broker') discount *= 1 - t.discount / 100;
-    const wantWeapon = t.key === 'weapons_only_shop' ? true
+    if (t.key === 'insider') discount *= 1 - t.discount / 100;
+    // Quartermaster buys only weapons; Gilded One buys only legendary items;
+    // the Overseer's weapon rolls come from the summon rack (turrets/drones)
+    const weaponChance = t.key === 'overseer' ? 0.5 : CONFIG.SHOP_WEAPON_CHANCE;
+    const wantWeapon = t.key === 'arsenal_doctrine' ? true
       : t.key === 'legendary_shop' ? false
-      : rng.chance(CONFIG.SHOP_WEAPON_CHANCE);
+      : rng.chance(weaponChance);
     if (wantWeapon) {
-      const def = rng.pick(WEAPONS);
+      const pool = t.key === 'overseer' ? WEAPONS.filter(wd => wd.cls === 'summon') : WEAPONS;
+      const def = rng.pick(pool);
       const tier = this._rollTier(rng);
-      let price = Math.round(def.price * TIER_PRICE_MULT[tier - 1] * floorScale * discount * (t.key === 'weapons_only_shop' ? 1 - t.discountWeapons / 100 : 1));
+      const price = Math.round(def.price * TIER_PRICE_MULT[tier - 1] * floorScale * discount);
       return { kind: 'weapon', id: def.id, tier, price: Math.max(1, price), sold: false, locked: false };
     }
-    const rarity = t.key === 'legendary_shop' ? 'legendary' : this._rollRarity(rng, p.stats.luck);
+    const rarity = t.key === 'legendary_shop' ? 'legendary' : this._rollRarity(rng, p.stats.greed);
     const pool = ITEMS.filter(it => it.rarity === rarity);
     const it = rng.pick(pool);
     const price = Math.max(1, Math.round(it.price * floorScale * discount));
@@ -1512,7 +1900,7 @@ export class Sim {
       k: 'shop', idx: p.idx,
       stock: p.shop.stock.map(s => ({ kind: s.kind, id: s.id, tier: s.tier, price: s.price, sold: s.sold, locked: s.locked })),
       rerollCost: this._rerollCost(p),
-      weaponsOnly: p.char.trait.key === 'weapons_only_shop',
+      weaponsOnly: p.char.trait.key === 'arsenal_doctrine',
       floor: this.floorNum, // sell values shown in the UI derive from this
     });
   }
@@ -1520,17 +1908,24 @@ export class Sim {
   // Combining is always an explicit player action in the arsenal UI — buying a
   // duplicate simply adds a second copy (holding pairs vs. merging for a free
   // slot is a real decision).
-  _addWeapon(p, id, tier) {
+  // invested: materials actually paid (Quartermaster's sell lineage). Starting
+  // gear counts its base price as invested.
+  _addWeapon(p, id, tier, invested) {
     if (p.weapons.length >= p.weaponSlots) return false;
     const uid = ++this.spawnCounter;
-    p.weapons.push({ id, tier, cd: 0.3, uid });
     const def = WEAPON_BY_ID[id];
+    p.weapons.push({
+      id, tier, cd: 0.3, uid,
+      invested: invested !== undefined ? invested : Math.round(weaponBasePrice(def, tier)),
+    });
     if (def.cls === 'summon') this._spawnSummon(p, id, tier, null, uid);
+    if (p.char.trait.key === 'arsenal_doctrine') this._recomputeStats(p);
     p.metaDirty = true;
     return true;
   }
 
-  // merge two identical same-tier weapons into one of the next tier (free)
+  // merge two identical same-tier weapons into one of the next tier (free);
+  // invested materials carry through the combine
   _combineWeapons(p, a, b, id, tier) {
     const wa = p.weapons[a], wb = p.weapons[b];
     if (a === b || !wa || !wb) return 'invalid pair';
@@ -1538,8 +1933,10 @@ export class Sim {
     if (tier >= 4) return 'already tier IV';
     p.weapons.splice(b, 1);
     wa.tier++;
+    wa.invested = (wa.invested || 0) + (wb.invested || 0);
     this._removeSummonByUid(p, wb.uid);
     this._refreshSummonsFor(p, id);
+    if (p.char.trait.key === 'arsenal_doctrine') this._recomputeStats(p);
     p.metaDirty = true;
     this.pushEvent({ k: 'toast', idx: p.idx, text: `Combined into ${WEAPON_BY_ID[id].name} ${['I', 'II', 'III', 'IV'][wa.tier - 1]}!` });
     return null;
@@ -1548,10 +1945,14 @@ export class Sim {
   _sellWeapon(p, slot, id, tier) {
     const w = p.weapons[slot];
     if (!w || w.id !== id || w.tier !== tier) return 'stale selection';
-    const refund = sellValue(weaponBasePrice(WEAPON_BY_ID[id], tier), this.floorNum);
+    // Quartermaster recovers exactly what went in; everyone else gets 30%
+    const refund = p.char.trait.key === 'arsenal_doctrine'
+      ? (w.invested || 0)
+      : sellValue(weaponBasePrice(WEAPON_BY_ID[id], tier), this.floorNum);
     p.weapons.splice(slot, 1);
     this._removeSummonByUid(p, w.uid);
     p.materials += refund;
+    if (p.char.trait.key === 'arsenal_doctrine') this._recomputeStats(p);
     p.metaDirty = true;
     this.pushEvent({ k: 'toast', idx: p.idx, text: `Sold ${WEAPON_BY_ID[id].name} for ${refund}` });
     return null;
@@ -1590,31 +1991,40 @@ export class Sim {
     this._refreshSummonsFor(p, weaponId);
   }
 
+  // Summon damage/HP scale with Ingenuity ×(1 + 0.1×I). The Overseer's turrets
+  // additionally inherit the pilot's stats: Ferocity on damage, Tempo on rate,
+  // Reach on range (Attunement already rides along on their burns). The weapon
+  // scaling-tag bonus is NOT applied to summon damage — Ingenuity's 10%/point
+  // already covers it and would double-dip.
   _summonStats(s) {
     const p = this.players[s.owner];
     const def = s.weaponId ? WEAPON_BY_ID[s.weaponId] : null;
     const t = p.char.trait;
+    const ing = 1 + Math.max(-8, p.stats.ingenuity) * ING_SCALE;
+    const dmgBoost = 1 + p.hookAgg.summonDmg / 100;
+    const hpBoost = 1 + p.hookAgg.summonHp / 100;
     if (s.type === 'mirror') {
       const w0 = p.weapons[0];
       const wdef = w0 ? WEAPON_BY_ID[w0.id] : null;
-      const eng0 = 1 + Math.max(-5, p.stats.engineering) * ENG_SCALE;
-      const boost0 = 1 + p.hookAgg.summonDmg / 100;
       return {
-        def: wdef, dmg: wdef ? wdef.dmg * TIER_MULT[w0.tier - 1] * t.factor * eng0 * boost0 : 0,
+        def: wdef, dmg: wdef ? wdef.dmg * TIER_MULT[w0.tier - 1] * t.factor * ing * dmgBoost : 0,
         cd: wdef ? Math.max(0.3, wdef.cd) : 1, range: wdef ? wdef.range + 120 : 0,
-        hp: 35 * eng0 * (1 + p.hookAgg.summonHp / 100),
+        hp: 35 * ing * hpBoost,
         projSpeed: wdef && wdef.projSpeed || 650, knock: 10,
       };
     }
     const sd = def.summon;
-    const eng = 1 + Math.max(-5, p.stats.engineering) * ENG_SCALE;
-    const boost = 1 + p.hookAgg.summonDmg / 100;
-    let dmg = sd.dmg * TIER_MULT[s.tier - 1] * eng * boost;
-    if (t.key === 'no_weapons_turrets') dmg *= 1 + (p.stats.damage / 100) * t.inheritDmg;
+    let dmg = sd.dmg * TIER_MULT[s.tier - 1] * ing * dmgBoost;
     let cd = sd.cd;
+    let range = sd.range;
+    if (t.key === 'overseer') {
+      dmg *= 1 + p.stats.ferocity / 100;
+      cd /= Math.max(0.25, 1 + p.stats.tempo / 100);
+      range += Math.max(0, p.stats.reach);
+    }
     if (t.key === 'structures_fast') cd /= t.rate;
-    const hp = sd.hp * TIER_MULT[s.tier - 1] * eng * (1 + p.hookAgg.summonHp / 100);
-    return { def, dmg, cd, range: sd.range, hp, projSpeed: sd.projSpeed || 650, knock: sd.knock || 0, burn: sd.burn, orbit: sd.orbit, speed: sd.speed };
+    const hp = sd.hp * TIER_MULT[s.tier - 1] * ing * hpBoost;
+    return { def, dmg, cd: Math.max(0.15, cd), range, hp, projSpeed: sd.projSpeed || 650, knock: sd.knock || 0, burn: sd.burn, orbit: sd.orbit, speed: sd.speed };
   }
 
   _refreshSummonsFor(p, weaponId) {
@@ -1640,6 +2050,11 @@ export class Sim {
       const st = this._summonStats(s);
       if (!st.def && s.type === 'mirror') continue;
       if (s.maxHp <= 1 && st.hp > 1) { s.maxHp = Math.round(st.hp); s.hp = s.maxHp; }
+      // carried turret (Overseer): rides on the carrier's shoulder, inert
+      if (s.carried) {
+        s.x = p.x; s.y = p.y - 26;
+        continue;
+      }
       // positioning
       if (s.type === 'drone' || s.type === 'mirror') {
         s.orbitA += dt * 1.6;
@@ -1701,7 +2116,7 @@ export class Sim {
           ttl: (st.range + 80) / st.projSpeed, radius: 4,
           color: st.def ? st.def.color : '#4fd8eb', owner: p.idx, pierce: 0, hitIds: new Set(),
           weaponId: s.weaponId || (st.def ? st.def.id : null), kind: 'shot',
-          summonBurn: st.burn || null, summonKnock: st.knock || 0,
+          summonBurn: st.burn || null, summonKnock: st.knock || 0, fromSummon: true,
         });
       }
     }
@@ -1728,6 +2143,22 @@ export class Sim {
         this._maybeOffer(p);
         break;
       }
+      case 'boon': {
+        if (!p.boonOffer) return;
+        const pick = p.boonOffer.find(o => o.id === msg.id) || p.boonOffer[0];
+        p.boonOffer = null;
+        p.boonCounts[pick.id] = (p.boonCounts[pick.id] || 0) + 1;
+        if (p.boonCounts[pick.id] === 3) {
+          this._applyPerm(p, { [pick.stat]: pick.amount });
+          this.pushEvent({ k: 'toast', idx, text: `Prism: the ${pick.stat} boon is now PERMANENT` });
+        } else {
+          p.boonTemp = { [pick.stat]: pick.amount };
+          if (p.boonCounts[pick.id] > 3) this.pushEvent({ k: 'toast', idx, text: 'Boon taken (already permanent — stacks this room)' });
+        }
+        this._recomputeStats(p);
+        this.pushEvent({ k: 'boonDone', idx });
+        break;
+      }
       case 'treasure': {
         if (!p.treasureOffer) return;
         if (msg.id && p.treasureOffer.picks.includes(msg.id)) {
@@ -1745,10 +2176,11 @@ export class Sim {
         const s = p.shop.stock[msg.slot];
         if (!s || s.sold) return this._buyResult(p, msg.slot, false, 'gone');
         if (p.materials < s.price) return this._buyResult(p, msg.slot, false, 'poor');
-        if (s.kind === 'item' && p.char.trait.key === 'weapons_only_shop') return this._buyResult(p, msg.slot, false, 'weapons only');
+        if (s.kind === 'item' && p.char.trait.key === 'arsenal_doctrine') return this._buyResult(p, msg.slot, false, 'weapons only — Arsenal Doctrine');
+        if (s.kind === 'weapon' && p.char.trait.key === 'overseer' && WEAPON_BY_ID[s.id].cls !== 'summon') return this._buyResult(p, msg.slot, false, 'turret mounts only');
         if (s.kind === 'weapon') {
           if (p.weaponSlots === 0) return this._buyResult(p, msg.slot, false, 'no weapon slots');
-          const ok = this._addWeapon(p, s.id, s.tier);
+          const ok = this._addWeapon(p, s.id, s.tier, s.price);
           if (!ok) return this._buyResult(p, msg.slot, false, 'weapons full — sell or combine');
         } else {
           p.items.push(s.id);
@@ -1883,12 +2315,16 @@ export class Sim {
       shake: +this.shake.toFixed(1),
       door: this.doorCd ? { kind: this.doorCd.kind, dir: this.doorCd.dir || null, t: +this.doorCd.t.toFixed(2) } : null,
       hatch: this.hatch ? [r(this.hatch.x), r(this.hatch.y)] : null,
-      players: this.players.map(p => [p.idx, r(p.x), r(p.y), r(p.hp), p.stats.maxHp, p.downed ? 1 : 0, +p.reviveP.toFixed(2), r(p.shield), p.gone ? 1 : 0, +p.aimA.toFixed(2)]),
+      players: this.players.map(p => [p.idx, r(p.x), r(p.y), r(p.hp), p.stats.vitality, p.downed ? 1 : 0, +p.reviveP.toFixed(2), r(p.shield), p.gone ? 1 : 0, +p.aimA.toFixed(2), +this._displayMeter(p).toFixed(2), p.carrying ? 1 : 0]),
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
       beams: this.activeBeams,
       boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp } : null,
       fx: this.fxBatch || this._emptyFx(),
       hazards: (this.hazards || []).map(h => h.type === 'spikes' ? ['s', r(h.y), r(h.h), h.state] : ['l', r(h.x), r(h.y), r(h.r)]),
+      // trait visuals — rendered on every screen (visibility is the trait)
+      auras: this._snapAuras(),
+      tethers: this._snapTethers(),
+      decoys: this.decoys.map(d => [r(d.x), r(d.y), +(d.t / d.dur).toFixed(2), d.owner]),
     };
     for (const e of this.enemyPool) {
       snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0), r(e.radius)]);
@@ -1911,15 +2347,55 @@ export class Sim {
     return snap;
   }
 
+  // The HUD meter each trait exposes (−1 = no meter for this character)
+  _displayMeter(p) {
+    const t = p.char.trait;
+    if (t.key === 'momentum_meter') return p.meter;
+    if (t.key === 'resonance') return Math.min(1, p.resonCharge / t.hits);
+    if (t.key === 'overwatch') {
+      const w = p.weapons[0];
+      const cdMax = w ? WEAPON_BY_ID[w.id].cd / Math.max(0.25, 1 + p.stats.tempo / 100) : 0;
+      return Math.min(1, (this.time - p.lastFireT) / (t.idle + cdMax));
+    }
+    if (t.key === 'crit_ramp') return Math.min(1, p.jesterOdds / t.max);
+    return -1;
+  }
+
+  _snapAuras() {
+    const r = Math.round;
+    const out = [];
+    for (const q of this.players) {
+      if (q.gone || q.downed) continue;
+      const qt = q.char.trait;
+      if (qt.key === 'standard_high') out.push([q.idx, r(qt.radius + 0.5 * Math.max(0, q.stats.reach))]);
+      for (const aura of q.hookAgg.allyAura) out.push([q.idx, r(aura.radius)]);
+    }
+    return out;
+  }
+
+  _snapTethers() {
+    const r = Math.round;
+    const out = [];
+    for (const q of this.players) {
+      if (q.gone || q.downed || q.char.trait.key !== 'soulbond') continue;
+      const b = this._bondTarget(q);
+      if (!b) continue;
+      const end = b.player || b.summon;
+      out.push([r(q.x), r(q.y), r(end.x), r(end.y)]);
+    }
+    return out;
+  }
+
   // per-player private meta (stats, inventory) — sent when dirty
   getMeta(p) {
     p.metaDirty = false;
     return {
       t: 'meta', idx: p.idx, level: p.level, xp: r2(p.xp), xpNext: p.xpNext,
       materials: p.materials, banked: p.banked,
-      weapons: p.weapons.map(w => ({ id: w.id, tier: w.tier })),
+      weapons: p.weapons.map(w => ({ id: w.id, tier: w.tier, invested: w.invested })),
       items: [...p.items],
-      stats: { ...p.stats }, speed: p.stats.speed, weaponSlots: p.weaponSlots,
+      stats: { ...p.stats }, weaponSlots: p.weaponSlots,
+      boonCounts: p.char.trait.key === 'prism' ? { ...p.boonCounts } : undefined,
     };
   }
 
@@ -2014,5 +2490,3 @@ function buildHazards(room, seed, floorNum) {
   }
   return out;
 }
-
-function tempSafe(s, key, v) { s[key] += v; }

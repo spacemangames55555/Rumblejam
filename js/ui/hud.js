@@ -36,6 +36,7 @@ export function updateHud(meta, view, hctx) {
         <span>${p.downed ? `<span class="status">DOWN ${p.reviveP > 0 ? Math.round(p.reviveP * 100) + '%' : ''}</span>` : `${p.hp}/${p.maxHp}${p.shield > 0 ? ' +' + p.shield + '🛡' : ''}`}</span></div>
         <div class="bar"><i style="width:${Math.round(100 * p.hp / Math.max(1, p.maxHp))}%"></i></div>
         ${mine && meta ? `<div class="xpbar"><i style="width:${Math.round(100 * meta.xp / meta.xpNext)}%"></i></div>` : ''}
+        ${mine && p.meter >= 0 ? `<div class="meterbar ${p.meter >= 1 ? 'full' : ''}"><i style="width:${Math.round(100 * Math.min(1, p.meter))}%"></i></div>` : ''}
       </div>`);
   }
   wrap.innerHTML = rows.join('');

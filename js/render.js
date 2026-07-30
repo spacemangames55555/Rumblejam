@@ -88,6 +88,8 @@ export class Renderer {
       circle(ctx, z.x, z.y, z.r); ctx.stroke();
     }
     if (view.hatch) this._drawHatch(ctx, view.hatch[0], view.hatch[1]);
+    this._drawAuras(ctx, view);
+    this._drawTethers(ctx, view);
     this._drawTelegraphs(ctx, view);
     // pickups
     ctx.fillStyle = PALETTE.material;
@@ -98,6 +100,7 @@ export class Renderer {
       diamond(ctx, m.x, m.y + bob, 7);
       ctx.fill(); ctx.stroke();
     }
+    for (const d of view.decoys || []) this._drawDecoy(ctx, d, view);
     for (const s of view.summons || []) this._drawSummon(ctx, s, view);
     for (const e of view.enemies || []) this._drawEnemy(ctx, e);
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
@@ -123,6 +126,61 @@ export class Renderer {
     this._drawDoorCountdown(ctx, view);
     if (this.showHitboxes) this._drawHitboxes(ctx, view);
     this._drawJoystick(ctx);
+  }
+
+  // Banneret's standard (and item auras): a soft banner-colored ring centered
+  // on the caster — drawn on every screen so the buff zone is always readable.
+  _drawAuras(ctx, view) {
+    for (const a of view.auras || []) {
+      const p = (view.players || []).find(q => q.idx === a.idx);
+      if (!p || p.gone || p.downed) continue;
+      const pulse = 1 + 0.015 * Math.sin(this.t * 2.2);
+      ctx.globalAlpha = 0.09;
+      ctx.fillStyle = p.color;
+      circle(ctx, p.x, p.y, a.r * pulse); ctx.fill();
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 8]);
+      circle(ctx, p.x, p.y, a.r * pulse); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Lodestone's soulbond tether: a living line between the bonded pair.
+  _drawTethers(ctx, view) {
+    for (const t of view.tethers || []) {
+      const wob = Math.sin(this.t * 5) * 3;
+      const mx = (t.x1 + t.x2) / 2, my = (t.y1 + t.y2) / 2 + wob;
+      ctx.globalAlpha = 0.75;
+      ctx.strokeStyle = '#c9a6ff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(t.x1, t.y1);
+      ctx.quadraticCurveTo(mx, my + 14, t.x2, t.y2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#c9a6ff';
+      circle(ctx, mx, my + 7, 4); ctx.fill();
+    }
+  }
+
+  // Mirage's afterimage: a fading ghost that enemies chase, with a burst ring
+  // telegraphing its detonation.
+  _drawDecoy(ctx, d, view) {
+    const member = (view.players || []).find(q => q.idx === d.owner);
+    const color = member ? member.color : '#c8cde8';
+    ctx.globalAlpha = 0.25 + 0.35 * d.frac;
+    ctx.fillStyle = color;
+    circle(ctx, d.x, d.y, 16); ctx.fill();
+    ctx.globalAlpha = 0.8;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    circle(ctx, d.x, d.y, 20 + 8 * (1 - d.frac)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
   }
 
   // floating touch joystick (screen space, CSS px coords from touch.js)
@@ -369,6 +427,23 @@ export class Renderer {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(p.sym || '●', 0, 1);
+      // trait charge ring (Onrush/Resonant/Stillness/Jester) — golden when full
+      if (p.meter !== undefined && p.meter >= 0) {
+        const full = p.meter >= 1;
+        ctx.strokeStyle = full ? '#ffd45e' : '#c9a6ff';
+        ctx.globalAlpha = full ? 0.95 : 0.7;
+        ctx.lineWidth = full ? 4 : 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 7, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, p.meter));
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      // carried turret marker (Overseer)
+      if (p.carrying) {
+        ctx.fillStyle = '#4fd8eb';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText('⌖', 0, -r - 20);
+      }
     }
     ctx.fillStyle = p.idx === view.myIdx ? '#fff' : '#c8cde8';
     ctx.font = 'bold 12px sans-serif';

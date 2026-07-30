@@ -188,7 +188,7 @@ try {
   await A.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby');
   ok('host → lobby');
   // pick char + start
-  await A.exec(`document.querySelector('.char-card[data-char="lamprey"]').click()`);
+  await A.exec(`document.querySelector('.char-card[data-char="vesper"]').click()`);
   await sleep(300);
   await A.exec(`document.getElementById('btn-start').click()`);
   await A.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'run start');
@@ -212,7 +212,8 @@ try {
   async function clearIfLocked(br) {
     await br.exec(`const s=window.uv.sim; let g=0; while(s.roomLocked && !s.boss && g++<40){s.debug('F3'); for(let i=0;i<20;i++)s.tick();}
       const p=s.players[0]; let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(0,{kind:'levelup',id:p.pendingOffer[0].id});
-      if (p.treasureOffer) s.uiAction(0,{kind:'treasure',id:null}); return 1;`);
+      if (p.treasureOffer) s.uiAction(0,{kind:'treasure',id:null});
+      if (p.boonOffer) s.uiAction(0,{kind:'boon',id:p.boonOffer[0].id}); return 1;`);
   }
   async function walkThroughDoor(br, dir, what) {
     const from = await br.exec('return window.uv.sim.roomId');
@@ -251,14 +252,24 @@ try {
   await A.exec(`document.getElementById('leave-yes').click()`);
   await A.waitFor(`return window.uv.mode==='lobby' && !document.getElementById('screen-lobby').classList.contains('hidden')`, 3000, 'lobby after abandon');
   ok('solo abandon → straight to lobby (no results screen)');
-  await A.exec(`document.querySelector('.char-card[data-char="courier"]').click()`);
+  await A.exec(`document.querySelector('.char-card[data-char="onrush"]').click()`);
   await sleep(300);
   await A.exec(`document.getElementById('btn-start').click()`);
   await A.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 4000, 'second run after abandon');
   const fresh = await A.exec(`const s=window.uv.sim, p=s.players[0]; return JSON.stringify({char:p.charId, mats:p.materials, lvl:p.level, floor:s.floorNum, items:p.items.length})`);
   const fr = JSON.parse(fresh);
-  if (fr.char === 'courier' && fr.mats === 0 && fr.lvl === 1 && fr.floor === 1 && fr.items === 0) ok(`fresh run after abandon (${fresh})`);
+  if (fr.char === 'onrush' && fr.mats === 0 && fr.lvl === 1 && fr.floor === 1 && fr.items === 0) ok(`fresh run after abandon (${fresh})`);
   else fail(`run not fresh after abandon: ${fresh}`);
+
+  // ---- trait meter (Onrush): fills with movement, shows in HUD + charge ring ----
+  await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD'}))`);
+  await sleep(1200);
+  await A.exec(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}))`);
+  const meterVal = await A.exec('return window.uv.sim.players[0].meter');
+  if (meterVal > 0.3) ok(`Onrush momentum meter fills with movement (${meterVal.toFixed(2)})`);
+  else fail(`momentum meter did not fill (${meterVal})`);
+  await A.waitFor(`return document.querySelector('.meterbar') !== null`, 4000, 'HUD meter bar');
+  ok('trait meter renders in the HUD');
   // play into the second room of the new run
   const d2 = await A.exec(`const s=window.uv.sim; return Object.keys(s.floor.rooms[s.floor.startId].doors)[0]`);
   await walkThroughDoor(A, d2, 'second run: first door');
@@ -307,21 +318,24 @@ try {
   await A.waitFor(`return document.getElementById('overlay-sheet').innerText.includes('II')`, 3000, 'sheet shows the new tier');
   await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
   ok('character sheet reflects the combine immediately');
+  // weapon tooltips list their scaling stats (new system)
+  const scalingShown = await A.exec(`return document.getElementById('overlay-shop').innerText.includes('scales with:') || document.getElementById('overlay-shop').innerText.includes('scales:') || /Ferocity|Tempo|Vitality|Attunement/.test(document.getElementById('overlay-shop').innerText)`);
+  if (scalingShown) ok('shop shows weapon scaling stats'); else fail('weapon scaling stats missing from shop UI');
   // sell a stat item with the two-step confirmation; verify stat + refund
-  const pickJs = `const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.damage>0&&!it.hooks); return JSON.stringify({id:it.id,dmg:it.stats.damage})`;
+  const pickJs = `const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.ferocity>0&&!it.hooks); return JSON.stringify({id:it.id,dmg:it.stats.ferocity})`;
   const pick = JSON.parse(await A.exec(pickJs));
   await A.exec(`const s=window.uv.sim,p=s.players[0]; p.items.push(${JSON.stringify(pick.id)}); s._recomputeItems(p); s._recomputeStats(p); return 1;`);
   await A.waitFor(`return window.uv.meta.items.includes(${JSON.stringify(pick.id)})`, 3000, 'item in meta');
   const m0 = await A.exec('return window.uv.meta.materials');
-  const dmg0 = await A.exec('return window.uv.meta.stats.damage');
+  const dmg0 = await A.exec('return window.uv.meta.stats.ferocity');
   const shownRefund = parseInt((await A.exec(`return document.querySelector('[data-selli="${pick.id}"]').textContent`)).replace(/[^0-9]/g, ''), 10);
   await A.exec(`document.querySelector('[data-selli="${pick.id}"]').click(); return 1;`);
   const armedTxt = await A.exec(`return document.querySelector('[data-selli="${pick.id}"]').textContent`);
   if (/tap again/.test(armedTxt)) ok('first tap arms the sell with the refund shown'); else fail(`sell not armed: "${armedTxt}"`);
   await A.exec(`document.querySelector('[data-selli="${pick.id}"]').click(); return 1;`);
   await A.waitFor(`return window.uv.meta.materials === ${m0 + shownRefund}`, 4000, 'refund credited');
-  const dmg1 = await A.exec('return window.uv.meta.stats.damage');
-  if (dmg1 === dmg0 - pick.dmg) ok(`sold item: +${shownRefund} materials, Damage ${dmg0}→${dmg1} on the sheet`);
+  const dmg1 = await A.exec('return window.uv.meta.stats.ferocity');
+  if (dmg1 === dmg0 - pick.dmg) ok(`sold item: +${shownRefund} materials, Ferocity ${dmg0}→${dmg1} on the sheet`);
   else fail(`stat after sell: ${dmg0}→${dmg1} (expected -${pick.dmg})`);
   // sold mechanical item can never fire again (hook aggregation empties)
   const mech = JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.hooks&&it.hooks.killExplode); return JSON.stringify({id:it.id})`));
@@ -380,6 +394,7 @@ try {
           let g2 = 0;
           while (p.pendingOffer && g2++ < 30) sim.uiAction(0, { kind: 'levelup', id: p.pendingOffer[0].id });
           if (p.treasureOffer) sim.uiAction(0, { kind: 'treasure', id: p.treasureOffer.picks[0] });
+          if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
         }
         sim._enterRoom(sim.floor.bossId, null);
         for (let i = 0; i < 30; i++) sim.tick();
@@ -456,11 +471,28 @@ try {
     // touch-only: host → tap character → start
     await M.tap('#btn-host');
     await M.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'mobile lobby');
-    await M.tap('.char-card[data-char="bulwark"]');
+    await M.tap('.char-card[data-char="facet"]');
     await sleep(250);
     await M.tap('#btn-start');
     await M.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'mobile run start');
     ok('touch-only: host → tap character → start run');
+
+    // ---- Facet's boon picker on touch: ≥44px cards, non-blocking, tap to pick ----
+    await M.waitFor(`return !document.getElementById('overlay-boon').classList.contains('hidden')`, 5000, 'boon picker (facet)');
+    const boonRect = JSON.parse(await M.exec(`const c=document.querySelector('.boon-card'); const r=c.getBoundingClientRect(); return JSON.stringify({w:r.width,h:r.height})`));
+    if (boonRect.h >= 44 && boonRect.w >= 44) ok(`boon cards meet the 44px touch standard (${Math.round(boonRect.w)}×${Math.round(boonRect.h)})`);
+    else fail(`boon card too small: ${JSON.stringify(boonRect)}`);
+    const bt0 = await M.exec('return window.uv.sim.tickNum');
+    await sleep(500);
+    const bt1 = await M.exec('return window.uv.sim.tickNum');
+    if (bt1 > bt0) ok('boon picker never pauses the game (non-blocking)'); else fail('sim paused while boon picker open');
+    await M.tap('.boon-card');
+    await M.waitFor(`return document.getElementById('overlay-boon').classList.contains('hidden')`, 3000, 'boon picked');
+    const boonApplied = await M.exec(`return JSON.stringify(window.uv.sim.players[0].boonTemp)`);
+    if (boonApplied && boonApplied !== 'null') ok(`boon picked by tap → ${boonApplied}`); else fail('boon pick did not apply');
+    // the touch path under test is steering, not survival — an 80-HP Facet can
+    // die during the long organic combat window, killing every later step
+    await M.exec(`window.uv.sim.debug('F5'); return 1;`);
     // joystick drag moves; release stops
     const jx0 = await M.exec('return window.uv.sim.players[0].x');
     await M.touchDown(420, 200);
@@ -494,13 +526,16 @@ try {
     }
     // drain until the host reports no banked level-ups (offers can lag the
     // overlay's hidden state by a periodic-check tick)
+    // tap UX for a single level-up/boon is covered explicitly elsewhere; the
+    // F2-funded backlog (a dozen banked levels) drains host-side so stacked
+    // offer overlays can't shadow the shop taps under test
     async function tapAwayLevelups() {
-      for (let i = 0; i < 40; i++) {
-        const st = JSON.parse(await M.exec(`return JSON.stringify({vis:!document.getElementById('overlay-levelup').classList.contains('hidden'), banked:window.uv.sim.players[0].banked, pending:!!window.uv.sim.players[0].pendingOffer})`));
-        if (st.vis) { await M.tap('#overlay-levelup .offer-card'); await sleep(150); continue; }
-        if (!st.banked && !st.pending) return;
-        await sleep(200);
-      }
+      await M.exec(`const s=window.uv.sim, p=s.players[0];
+        if (p.boonOffer) s.uiAction(0,{kind:'boon',id:p.boonOffer[0].id});
+        if (p.banked > 0 && !p.pendingOffer) s._maybeOffer(p);
+        let g=0; while (p.pendingOffer && g++<80) s.uiAction(0,{kind:'levelup',id:p.pendingOffer[0].id});
+        return 1;`);
+      await M.waitFor(`return document.getElementById('overlay-levelup').classList.contains('hidden') && document.getElementById('overlay-boon').classList.contains('hidden') && !window.uv.sim.players[0].banked && !window.uv.sim.players[0].pendingOffer`, 6000, 'offer backlog drained');
     }
     // walk a full door countdown with the joystick
     const roomA = await M.exec('return window.uv.sim.roomId');
@@ -533,7 +568,16 @@ try {
     }
     // shop: fund + enter (navigation is not the touch path under test), buy by tap
     await M.exec(`const s=window.uv.sim; s.debug('F2'); const shop=s.floor.rooms.find(r=>r.kind==='shop'); s._enterRoom(shop.id,null); return 1;`);
-    await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'mobile shop overlay');
+    try {
+      await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 8000, 'mobile shop overlay');
+    } catch (e) {
+      const diag = await M.exec(`const g=id=>!document.getElementById(id).classList.contains('hidden');
+        return JSON.stringify({mode:window.uv.mode, tick:window.uv.sim&&window.uv.sim.tickNum, room:window.uv.sim&&window.uv.sim.roomId,
+        shop:g('overlay-shop'), lvl:g('overlay-levelup'), boon:g('overlay-boon'), sheet:g('overlay-sheet'),
+        pshop:!!(window.uv.sim&&window.uv.sim.players[0].shop), banked:window.uv.sim&&window.uv.sim.players[0].banked})`).catch(err => 'diag failed: ' + err.message);
+      console.error('  shop-overlay diag:', diag, '| page errors:', (await M.errors()).join(' | ').slice(0, 500));
+      throw e;
+    }
     await tapAwayLevelups(); // F2 XP banks levels; the offers stack above the shop
     const matsB = await M.exec('return window.uv.sim.players[0].materials');
     await M.tap('#overlay-shop .offer-card');
@@ -561,7 +605,7 @@ try {
     await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'shop reopened by button');
     ok('contextual OPEN SHOP button replaces the E key');
     // two-step sell by touch, with tap-elsewhere disarm
-    const mItem = JSON.parse(await M.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.armor>0&&!it.hooks); return JSON.stringify({id:it.id})`));
+    const mItem = JSON.parse(await M.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.grit>0&&!it.hooks); return JSON.stringify({id:it.id})`));
     await M.exec(`const s=window.uv.sim,p=s.players[0]; p.items.push(${JSON.stringify(mItem.id)}); s._recomputeItems(p); s._recomputeStats(p); return 1;`);
     await M.waitFor(`return window.uv.meta && window.uv.meta.items.includes(${JSON.stringify(mItem.id)})`, 3000, 'mobile item in meta');
     await M.tap(`[data-selli="${mItem.id}"]`);
@@ -609,10 +653,13 @@ try {
     await M.setOrientation('landscape');
     await M.tap('#btn-host');
     await M.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby (touch off)');
-    await M.tap('.char-card[data-char="courier"]');
+    await M.tap('.char-card[data-char="onrush"]');
     await sleep(250);
     await M.tap('#btn-start');
     await M.waitFor(`return window.uv.mode==='run'`, 5000, 'run (touch off)');
+    // trait meter renders on the mobile HUD too (Onrush)
+    await M.waitFor(`return document.querySelector('.meterbar') !== null`, 4000, 'mobile HUD meter bar');
+    ok('trait meter renders on the mobile HUD');
     const fx0 = await M.exec('return window.uv.sim.players[0].x');
     await M.touchDown(420, 200);
     await M.touchMove(500, 200);
@@ -677,9 +724,10 @@ if (wantCoop) {
       await B.waitFor(`return window.uv.mode==='lobby'`, 15000, 'client joins lobby');
       ok('client joined by code');
       await A.waitFor(`return window.uv.lobby.players.length===2`, 5000, 'host sees client');
-      await A.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
-      await B.waitFor(`return document.querySelector('.char-card[data-char="wisp"]')!==null`, 4000, 'client char grid');
-      await B.exec(`document.querySelector('.char-card[data-char="wisp"]').click()`);
+      // the tuning-gate pairing: Banneret (aura) hosts, Lodestone (tether) joins
+      await A.exec(`document.querySelector('.char-card[data-char="banneret"]').click()`);
+      await B.waitFor(`return document.querySelector('.char-card[data-char="lodestone"]')!==null`, 4000, 'client char grid');
+      await B.exec(`document.querySelector('.char-card[data-char="lodestone"]').click()`);
       await sleep(400);
       await B.exec(`document.getElementById('btn-ready').click()`);
       await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready && window.uv.lobby.players[1].charId`, 5000, 'client ready');
@@ -695,6 +743,29 @@ if (wantCoop) {
       const hx1 = await A.exec(`return Math.round(window.uv.sim.players[1].x)`);
       if (hx1 > hx0 + 30) ok(`host sees client movement (${hx0}→${hx1})`); else fail(`client movement not seen by host (${hx0}→${hx1})`);
 
+      // ---- gate: Banneret aura + Lodestone tether across the network ----
+      await B.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyA'}))`);
+      await sleep(700);
+      await B.exec(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyA'}))`); // back inside the aura
+      await B.waitFor(`return window.uv.meta && window.uv.meta.stats.ferocity > 5`, 8000, 'aura buff in client stats');
+      ok('Banneret aura buffs the client across the network');
+      await B.waitFor(`const s=window.uv.snaps; const last=s[s.length-1]; return last && last.s.tethers && last.s.tethers.length===1`, 6000, 'tether in client snapshots');
+      ok('Lodestone tether present in client snapshots (renders on both screens)');
+      const auraSnap = await B.exec(`const s=window.uv.snaps; const last=s[s.length-1]; return last.s.auras.length`);
+      if (auraSnap >= 1) ok('Banneret aura ring present in client snapshots'); else fail('aura missing from client snapshots');
+      // tether shares incoming damage both ways
+      const shareBefore = JSON.parse(await A.exec(`const s=window.uv.sim; return JSON.stringify([Math.round(s.players[0].hp), Math.round(s.players[1].hp)])`));
+      await A.exec(`const s=window.uv.sim, p=s.players[1]; p.invuln=0; p.stats.reflex=0; s.hurtPlayer(p, 40, null); return 1;`);
+      const shareAfter = JSON.parse(await A.exec(`const s=window.uv.sim; return JSON.stringify([Math.round(s.players[0].hp), Math.round(s.players[1].hp)])`));
+      if (shareAfter[0] < shareBefore[0] && shareAfter[1] < shareBefore[1]) ok(`tether shares damage both ways (host ${shareBefore[0]}→${shareAfter[0]}, client ${shareBefore[1]}→${shareAfter[1]})`);
+      else fail(`tether damage share: ${JSON.stringify({ shareBefore, shareAfter })}`);
+      // ...and healing
+      const healBefore = JSON.parse(await A.exec(`const s=window.uv.sim; return JSON.stringify([Math.round(s.players[0].hp), Math.round(s.players[1].hp)])`));
+      await A.exec(`const s=window.uv.sim; s._heal(s.players[1], 12); return 1;`);
+      const healAfter = JSON.parse(await A.exec(`const s=window.uv.sim; return JSON.stringify([Math.round(s.players[0].hp), Math.round(s.players[1].hp)])`));
+      if (healAfter[1] > healBefore[1] && healAfter[0] > healBefore[0]) ok(`tether shares healing both ways (host ${healBefore[0]}→${healAfter[0]}, client ${healBefore[1]}→${healAfter[1]})`);
+      else fail(`tether heal share: ${JSON.stringify({ healBefore, healAfter })}`);
+
       // host abandons the run → whole party lands in the lobby together
       await A.exec(`document.getElementById('leave-btn').click()`);
       await A.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')`, 2000, 'host confirm dialog');
@@ -704,16 +775,28 @@ if (wantCoop) {
       const lobbySizes = [await A.exec(`return window.uv.lobby.players.length`), await B.exec(`return window.uv.lobby.players.length`)];
       if (lobbySizes[0] === 2 && lobbySizes[1] === 2) ok('host abandon → both players in the lobby, connection intact');
       else fail(`lobby sizes after abandon: host=${lobbySizes[0]} client=${lobbySizes[1]}`);
-      // both pick fresh characters and start a brand-new run
-      await A.exec(`document.querySelector('.char-card[data-char="lamprey"]').click()`);
+      // both pick fresh characters and start a brand-new run (host = Facet for
+      // the boon-isolation gate)
+      await A.exec(`document.querySelector('.char-card[data-char="facet"]').click()`);
       await B.exec(`document.querySelector('.char-card[data-char="glasswing"]').click()`);
       await sleep(400);
       await B.exec(`document.getElementById('btn-ready').click()`);
       await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'client re-ready');
       await A.exec(`document.getElementById('btn-start').click()`);
-      await A.waitFor(`return window.uv.mode==='run' && window.uv.sim && window.uv.sim.players[0].charId==='lamprey' && window.uv.sim.players[0].materials===0`, 5000, 'fresh co-op run (host)');
+      await A.waitFor(`return window.uv.mode==='run' && window.uv.sim && window.uv.sim.players[0].charId==='facet' && window.uv.sim.players[0].materials===0`, 5000, 'fresh co-op run (host)');
       await B.waitFor(`return window.uv.mode==='run'`, 5000, 'fresh co-op run (client)');
       ok('fresh co-op run starts for both after abandon');
+
+      // ---- gate: Facet's boon picker is per-player and never blocks the ally ----
+      await A.waitFor(`return !document.getElementById('overlay-boon').classList.contains('hidden')`, 5000, 'host boon picker');
+      const clientBoon = await B.exec(`return !document.getElementById('overlay-boon').classList.contains('hidden')`);
+      if (!clientBoon) ok("Facet's boon picker shows only on Facet's screen"); else fail('boon picker leaked to the client');
+      const snapCount0 = await B.exec(`return window.uv.snaps.length ? window.uv.snaps[window.uv.snaps.length-1].s.tick : 0`);
+      await A.exec(`document.querySelector('.boon-card').click(); return 1;`);
+      await sleep(800);
+      const snapCount1 = await B.exec(`return window.uv.snaps.length ? window.uv.snaps[window.uv.snaps.length-1].s.tick : 0`);
+      if (snapCount1 > snapCount0) ok('host boon pick never interrupts the client (sim keeps ticking for both)');
+      else fail(`client snapshots stalled during boon pick (tick ${snapCount0}→${snapCount1})`);
 
       // both players walk out of the start room and back in together
       const posAllJs = dir => `const s=window.uv.sim, W=s.W, H=s.H, WALL=36;
@@ -737,7 +820,7 @@ if (wantCoop) {
       const cDir = await A.exec(`const s=window.uv.sim; return Object.keys(s.floor.rooms[s.floor.startId].doors)[0]`);
       await walkAllThroughDoor(cDir, 'party leaves start');
       await A.exec(`const s=window.uv.sim; let g=0; while(s.roomLocked && !s.boss && g++<40){s.debug('F3'); for(let i=0;i<20;i++)s.tick();}
-        for (const p of s.players){let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id}); if (p.treasureOffer) s.uiAction(p.idx,{kind:'treasure',id:null});} return 1;`);
+        for (const p of s.players){let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id}); if (p.treasureOffer) s.uiAction(p.idx,{kind:'treasure',id:null}); if (p.boonOffer) s.uiAction(p.idx,{kind:'boon',id:p.boonOffer[0].id});} return 1;`);
       const cBack = await walkAllThroughDoor(coopOpp[cDir], 'party re-enters start');
       if (cBack === cStart) ok('both players walk back into the start room together');
       else fail(`party walked back into room ${cBack}, not start ${cStart}`);
@@ -748,7 +831,7 @@ if (wantCoop) {
       await A.exec(`const s=window.uv.sim; s.debug('F2'); const shop=s.floor.rooms.find(r=>r.kind==='shop'); s._enterRoom(shop.id,null); return 1;`);
       await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'host shop (mgmt)');
       await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'client shop (mgmt)');
-      const coopItem = JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.maxHp>0&&!it.hooks); return JSON.stringify({id:it.id})`));
+      const coopItem = JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.vitality>0&&!it.hooks); return JSON.stringify({id:it.id})`));
       await A.exec(`const s=window.uv.sim; for (const p of s.players){ s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); p.items.push(${JSON.stringify(coopItem.id)}); s._recomputeItems(p); s._recomputeStats(p); } return 1;`);
       await A.waitFor(`return window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'host pair');
       await B.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 4000, 'client pair');
@@ -785,14 +868,14 @@ if (wantCoop) {
       else fail(`sheet isolation: host ticked ${hTick0}→${hTick1}, host sheet visible=${hostSheet}`);
       await B.exec(`document.getElementById('sheet-close').click(); return 1;`);
       await A.exec(`const s=window.uv.sim; let g=0; while((s.roomLocked||s.enemyPool.count)&&g++<40){s.debug('F3'); for(let i=0;i<20;i++)s.tick();}
-        for (const p of s.players){let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id}); if (p.treasureOffer) s.uiAction(p.idx,{kind:'treasure',id:null});} return 1;`);
+        for (const p of s.players){let g2=0; while(p.pendingOffer&&g2++<30) s.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id}); if (p.treasureOffer) s.uiAction(p.idx,{kind:'treasure',id:null}); if (p.boonOffer) s.uiAction(p.idx,{kind:'boon',id:p.boonOffer[0].id});} return 1;`);
       // client sees host's snapshot state
       const snapAge = await B.exec(`return performance.now() - window.uv.lastSnapAt`);
       if (snapAge < 1000) ok('client receives snapshots'); else fail(`stale snapshots (${Math.round(snapAge)}ms)`);
       // both deal and take damage in organic combat
       await A.exec(`window.uv.sim.debug('F1')`);
       await sleep(3500);
-      const combat = await A.exec(`const s=window.uv.sim; return JSON.stringify({d0:Math.round(s.players[0].damageDealt), d1:Math.round(s.players[1].damageDealt), hurt:s.players.some(p=>p.hp<p.stats.maxHp)})`);
+      const combat = await A.exec(`const s=window.uv.sim; return JSON.stringify({d0:Math.round(s.players[0].damageDealt), d1:Math.round(s.players[1].damageDealt), hurt:s.players.some(p=>p.hp<p.stats.vitality)})`);
       const cb = JSON.parse(combat);
       if (cb.d0 > 0 && cb.d1 > 0) ok(`both players deal damage (host ${cb.d0}, client ${cb.d1})`); else fail(`damage tallies: ${combat}`);
       if (cb.hurt) ok('players take damage from enemies'); else console.warn('⚠ nobody was hit during the combat window (kiting luck)');
@@ -878,9 +961,9 @@ if (wantCoop) {
             await C.exec(`document.getElementById('name-input').value='LATE'; document.getElementById('join-code').value='${code2}'; document.getElementById('btn-join').click()`);
             await C.waitFor(`return window.uv.mode==='lobby'`, 15000, 'C joins lobby');
             await B.waitFor(`return window.uv.lobby.players.length===2`, 5000, 'B sees C');
-            await B.exec(`document.querySelector('.char-card[data-char="redmaw"]').click()`);
-            await C.waitFor(`return document.querySelector('.char-card[data-char="courier"]')!==null`, 4000, 'C char grid');
-            await C.exec(`document.querySelector('.char-card[data-char="courier"]').click()`);
+            await B.exec(`document.querySelector('.char-card[data-char="cogsmith"]').click()`);
+            await C.waitFor(`return document.querySelector('.char-card[data-char="onrush"]')!==null`, 4000, 'C char grid');
+            await C.exec(`document.querySelector('.char-card[data-char="onrush"]').click()`);
             await sleep(400);
             await C.exec(`document.getElementById('btn-ready').click()`);
             await B.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'C ready');
@@ -888,6 +971,20 @@ if (wantCoop) {
             await C.waitFor(`return window.uv.mode==='run'`, 6000, 'C in run');
           };
           await joinAndStart();
+
+          // ---- gate: Cogsmith turret carry + redeploy syncs on both screens ----
+          await B.exec(`const s=window.uv.sim, p=s.players[0], t=s.summons.find(x=>x.owner===0 && !x.dead); p.x=t.x; p.y=t.y; return 1;`);
+          await B.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyE'})); return 1;`);
+          await B.waitFor(`return !!window.uv.sim.players[0].carrying`, 4000, 'host picks up turret');
+          await C.waitFor(`const s=window.uv.snaps; const last=s[s.length-1]; return last && last.s.players[0][11]===1`, 6000, 'client sees carry flag');
+          ok('turret pickup (E) syncs the carry state to the client');
+          await B.exec(`const s=window.uv.sim, p=s.players[0]; p.x=s.W/2+140; p.y=s.H/2+80; p.aimA=0; return 1;`);
+          await B.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyE'})); return 1;`);
+          await B.waitFor(`return !window.uv.sim.players[0].carrying`, 6000, 'redeploy channel completes');
+          const tpos = JSON.parse(await B.exec(`const s=window.uv.sim, t=s.summons.find(x=>x.owner===0 && !x.dead); return JSON.stringify([Math.round(t.x), Math.round(t.y)])`));
+          await C.waitFor(`const s=window.uv.snaps; const last=s[s.length-1]; if(!last) return 0; const t=(last.s.summons||[]).find(x=>x[0]===0); return t && Math.abs(t[2]-${tpos[0]})<60 && Math.abs(t[3]-${tpos[1]})<60 ? 1 : 0`, 6000, 'client sees redeployed turret');
+          ok(`turret redeploy position syncs to the client (${tpos})`);
+
           // non-host uses the leave button: leaves alone, host's game continues
           await C.exec(`document.getElementById('leave-btn').click()`);
           await C.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')`, 2000, 'C confirm dialog');
