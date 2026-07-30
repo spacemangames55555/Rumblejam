@@ -120,8 +120,10 @@ export function waveConfig(floorNum, depth, kind) {
   const elite = kind === 'elite';
   const siege = kind === 'siege';
   const dur = siege ? Infinity : Math.round(60 + depth * 5 + floorNum * 5); // 60–90s
-  const r0 = 0.7 + 0.22 * floorNum + (elite ? 0.2 : 0);
-  const r1 = 1.7 + 0.45 * floorNum + 0.16 * depth + (elite ? 0.5 : 0);
+  // floor 1 is the baseline a one-weapon starting kit can chew through
+  // (~0.6 kills/sec organic); later floors outpace it and force build growth
+  const r0 = 0.5 + 0.25 * (floorNum - 1) + (elite ? 0.2 : 0);
+  const r1 = 1.2 + 0.55 * (floorNum - 1) + 0.18 * depth + (elite ? 0.5 : 0);
   return {
     t: 0, acc: 0, dur, r0, r1,
     rampT: siege ? 150 : dur,          // sieges plateau at 150s and hold

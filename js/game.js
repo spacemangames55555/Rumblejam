@@ -16,7 +16,14 @@ import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
 
 const { WALL, DT } = CONFIG;
-const SPAWN_CAPS = { wombden: 2, aegimand: 3, stitcher: 3, deadeye: 4, slabjaw: 6 }; // alive-at-once caps (siege density)
+// Alive-at-once caps. Ranged and special types are capped so long sieges can't
+// pile one type into a degenerate wall (a low-DPS build vs 60 lobbers is a
+// stalemate, not a fight); melee chaff stays uncapped — swarms are the point,
+// and capped spawn rolls redirect into chaff.
+const SPAWN_CAPS = {
+  wombden: 2, aegimand: 3, stitcher: 3, deadeye: 4, slabjaw: 6,
+  lobber: 22, gemmite: 18, gyre: 16, fusehead: 10, lancerfish: 14,
+};
 const ING_SCALE = 0.1; // +10% summon damage & HP per Ingenuity point
 const VOTE_TIME = 4;   // consent countdown (node picks and extraction)
 // the Siege's ward pylon — a destructible structure, not a roster enemy
@@ -70,6 +77,7 @@ export class Sim {
     this.extract = null;      // {t} — countdown while someone stands on the portal
     this.afterSiege = false;  // portal descends instead of returning to the map
     this.mutations = null; this.mutIdx = 0; this.siegeT = 0; this.bossAt = Infinity;
+    this.bossSpawned = false; this.bossT = 0; this.siegeCfg = null;
     this.holdCircle = null;   // {x,y,r,held} — spawn-choke sub-objective
     this.pylonId = null; this.enemyBuff = 1;
     this._startFloor(1);
@@ -450,6 +458,7 @@ export class Sim {
       this.mutIdx = 0;
       this.siegeT = 0;
       this.bossSpawned = false;
+      this.bossT = 0;
       this.siegeCfg = arena;
       const last = arena.mutations[arena.mutations.length - 1];
       this.bossAt = last.at + arena.bossDelay;
@@ -457,6 +466,8 @@ export class Sim {
     } else {
       this.mutations = null;
       this.bossAt = Infinity;
+      this.siegeCfg = null;
+      this.bossT = 0;
     }
     // drop the party in at the arena center, per-fight trait state fresh
     const cx = arena.w / 2, cy = arena.h / 2;
@@ -501,7 +512,15 @@ export class Sim {
     w.t += dt;
     if (w.t >= w.dur) { w.done = true; return; }
     let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn;
-    if (this.boss) rate *= this.siegeCfg ? this.siegeCfg.addRate : 0.35;
+    if (this.boss) {
+      // "reduced add spawns" while the boss is up — and tapering to silence,
+      // so a siege is never an unwinnable DPS race against infinite inflow:
+      // once the taper runs out the fight is finite (boss + standing field)
+      this.bossT += dt;
+      const taper = Math.max(0, 1 - this.bossT / 75);
+      rate *= (this.siegeCfg ? this.siegeCfg.addRate : 0.35) * taper;
+      if (taper === 0) { w.done = true; return; } // survivors rush (enemies.js)
+    }
     if (this.holdCircle && this.holdCircle.held) rate *= 0.3; // the sigil chokes the spawning
     w.acc += rate * dt;
     // elite injections (elite nodes and sieges)

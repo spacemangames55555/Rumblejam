@@ -47,6 +47,9 @@ export function updateEnemy(sim, e, dt) {
 
   const t = e.def;
   const p = sim.tauntTarget(e.x, e.y);
+  // once the fight's spawning stops, survivors press the attack instead of
+  // kiting — the field must be cleared to end the fight, so nobody hides
+  const rush = sim.wave && sim.wave.done;
   e.t += dt;
   switch (t.behavior) {
     case 'pylon': break; // the siege's ward pylon just stands there, humming
@@ -70,7 +73,8 @@ export function updateEnemy(sim, e, dt) {
     case 'spitter': {
       if (!p) break;
       const d = dist(e.x, e.y, p.x, p.y);
-      if (d < t.keepDist - 30) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
+      if (rush) { if (d > 90) sim.walk(e, p.x, p.y, spd, dt); }
+      else if (d < t.keepDist - 30) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
       else if (d > t.keepDist + 40) sim.walk(e, p.x, p.y, spd, dt);
       e.fireT = (e.fireT || 0) - dt;
       if (e.fireT <= 0 && d < 520) {
@@ -150,7 +154,8 @@ export function updateEnemy(sim, e, dt) {
       } else if (p) {
         e.healing = 0;
         const d = dist(e.x, e.y, p.x, p.y);
-        if (d < 300) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
+        if (rush) sim.walk(e, p.x, p.y, spd, dt);
+        else if (d < 300) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
       }
       break;
     }
@@ -208,7 +213,8 @@ export function updateEnemy(sim, e, dt) {
       } else {
         if (p) {
           const d = dist(e.x, e.y, p.x, p.y);
-          if (d < 260) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
+          if (rush) sim.walk(e, p.x, p.y, spd, dt);
+          else if (d < 260) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
           else sim.walk(e, p.x, p.y, spd * 0.5, dt);
         }
         e.fireCd = (e.fireCd ?? B.cd * Math.random()) - dt;
