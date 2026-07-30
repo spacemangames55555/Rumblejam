@@ -6,7 +6,9 @@ import { CONFIG, PALETTE } from './config.js';
 import { WEAPON_BY_ID } from './content/weapons.js';
 import { clamp } from './util.js';
 
-const { ROOM_W: W, ROOM_H: H, WALL, DOOR_W } = CONFIG;
+// The camera viewport is one "screen" of world units (the old room size);
+// arenas are several screens wide and the camera follows your character.
+const { ROOM_W: VIEW_W, ROOM_H: VIEW_H, WALL } = CONFIG;
 
 export class Renderer {
   constructor(canvas) {
@@ -67,19 +69,51 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#0c0d13';
     ctx.fillRect(0, 0, cw, ch);
-    if (!view) return;
+    if (!view || view.mode === 'map') { this._drawJoystick(ctx); return; } // the node map is a DOM screen
 
-    const scale = Math.min(cw / W, ch / H);
-    let ox = (cw - W * scale) / 2, oy = (ch - H * scale) / 2;
+    const aw = view.aw || VIEW_W, ah = view.ah || VIEW_H;
+    const scale = Math.min(cw / VIEW_W, ch / VIEW_H); // fixed zoom: one room-screen of world
+    const vw = cw / scale, vh = ch / scale;           // visible world units
+
+    // ---- camera: smooth follow of MY character with velocity lookahead ----
+    const me = (view.players || []).find(p => p.idx === view.myIdx && !p.gone);
+    if (this._camKey !== view.arenaKey) { // new arena: snap, no glide across the map
+      this._camKey = view.arenaKey;
+      this.camX = me ? me.x : aw / 2; this.camY = me ? me.y : ah / 2;
+      this.lookX = 0; this.lookY = 0;
+      this._prevMe = null;
+    }
+    if (me) {
+      if (this._prevMe) {
+        const vx = (me.x - this._prevMe.x) / Math.max(dtFrame, 0.001);
+        const vy = (me.y - this._prevMe.y) / Math.max(dtFrame, 0.001);
+        const k = Math.min(1, dtFrame * 3.2);
+        this.lookX += (clamp(vx * 0.3, -130, 130) - this.lookX) * k;
+        this.lookY += (clamp(vy * 0.3, -130, 130) - this.lookY) * k;
+      }
+      this._prevMe = { x: me.x, y: me.y };
+      const k = Math.min(1, dtFrame * 6);
+      this.camX += (me.x + this.lookX - this.camX) * k;
+      this.camY += (me.y + this.lookY - this.camY) * k;
+    }
+    this.camX = clamp(this.camX, Math.min(vw / 2, aw / 2), Math.max(aw - vw / 2, aw / 2));
+    this.camY = clamp(this.camY, Math.min(vh / 2, ah / 2), Math.max(ah - vh / 2, ah / 2));
+    let ox = cw / 2 - this.camX * scale, oy = ch / 2 - this.camY * scale;
     if (this.shakeEnabled && view.shake > 0) {
       ox += (Math.random() * 2 - 1) * view.shake * scale;
       oy += (Math.random() * 2 - 1) * view.shake * scale;
     }
     ctx.setTransform(scale, 0, 0, scale, ox, oy);
+    // culling bounds (world coords, with margin for radii/bars)
+    const cl = this.camX - vw / 2 - 90, cr = this.camX + vw / 2 + 90;
+    const ct = this.camY - vh / 2 - 90, cb = this.camY + vh / 2 + 90;
+    const inView = (x, y, m = 0) => x > cl - m && x < cr + m && y > ct - m && y < cb + m;
+    this._screen = { scale, cw, ch, vw, vh };
 
-    this._drawRoom(ctx, view);
-    this._drawHazards(ctx, view);
+    this._drawArena(ctx, view, aw, ah, cl, cr, ct, cb);
+    this._drawHazards(ctx, view, inView);
     for (const z of view.zones || []) {
+      if (!inView(z.x, z.y, z.r)) continue;
       ctx.globalAlpha = 0.3 + 0.08 * Math.sin(this.t * 6);
       ctx.fillStyle = z.color || '#ff7b3a';
       circle(ctx, z.x, z.y, z.r); ctx.fill();
@@ -87,25 +121,45 @@ export class Renderer {
       ctx.strokeStyle = z.color; ctx.lineWidth = 2;
       circle(ctx, z.x, z.y, z.r); ctx.stroke();
     }
-    if (view.hatch) this._drawHatch(ctx, view.hatch[0], view.hatch[1]);
+    // the hold-the-circle sub-objective (siege)
+    if (view.hold) {
+      const [hx, hy, hr, held] = view.hold;
+      ctx.globalAlpha = held ? 0.16 : 0.08;
+      ctx.fillStyle = held ? '#ffd45e' : '#ff5d6c';
+      circle(ctx, hx, hy, hr); ctx.fill();
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = held ? '#ffd45e' : '#ff5d6c';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([16, 10]);
+      circle(ctx, hx, hy, hr + 3 * Math.sin(this.t * 2.5)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = held ? '#ffd45e' : '#ff5d6c';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(held ? 'HELD — SPAWNS CHOKED' : 'HOLD THE SIGIL', hx, hy - hr - 12);
+    }
+    if (view.hatch) this._drawHatch(ctx, view.hatch[0], view.hatch[1], view.afterSiege);
     this._drawAuras(ctx, view);
     this._drawTethers(ctx, view);
-    this._drawTelegraphs(ctx, view);
+    this._drawTelegraphs(ctx, view, inView);
     // pickups
     ctx.fillStyle = PALETTE.material;
     ctx.strokeStyle = PALETTE.materialEdge;
     ctx.lineWidth = 2;
     for (const m of view.pickups || []) {
+      if (!inView(m.x, m.y)) continue;
       const bob = Math.sin(this.t * 5 + m.x * 0.13) * 2;
       diamond(ctx, m.x, m.y + bob, 7);
       ctx.fill(); ctx.stroke();
     }
-    for (const d of view.decoys || []) this._drawDecoy(ctx, d, view);
-    for (const s of view.summons || []) this._drawSummon(ctx, s, view);
-    for (const e of view.enemies || []) this._drawEnemy(ctx, e);
+    for (const d of view.decoys || []) { if (inView(d.x, d.y)) this._drawDecoy(ctx, d, view); }
+    for (const s of view.summons || []) { if (inView(s.x, s.y)) this._drawSummon(ctx, s, view); }
+    for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e); }
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
     // projectiles
     for (const pr of view.projs || []) {
+      if (!inView(pr.x, pr.y)) continue;
       ctx.fillStyle = pr.color || (pr.friendly ? '#fff' : '#ff5d6c');
       ctx.strokeStyle = PALETTE.outline;
       ctx.lineWidth = 1.5;
@@ -123,9 +177,77 @@ export class Renderer {
       ctx.restore();
     }
     this._drawFx(ctx, dtFrame);
-    this._drawDoorCountdown(ctx, view);
+    this._drawEdgeArrows(ctx, view);
+    this._drawExtract(ctx, view);
     if (this.showHitboxes) this._drawHitboxes(ctx, view);
     this._drawJoystick(ctx);
+  }
+
+  // Off-screen indicators: allies always (downed ones scream for help),
+  // elites/bosses when present, plus the extraction portal and siege
+  // objectives. Screen-space triangles clamped to the viewport edge.
+  _drawEdgeArrows(ctx, view) {
+    const s = this._screen;
+    if (!s) return;
+    const margin = 34;
+    const targets = [];
+    for (const p of view.players || []) {
+      if (p.gone || p.idx === view.myIdx) continue;
+      targets.push({ x: p.x, y: p.y, color: p.color, downed: p.downed, label: p.downed ? '✚' : null });
+    }
+    for (const e of view.enemies || []) {
+      if (e.boss) targets.push({ x: e.x, y: e.y, color: PALETTE.boss, big: true });
+      else if (e.elite) targets.push({ x: e.x, y: e.y, color: PALETTE.elite });
+      else if (e.pylon) targets.push({ x: e.x, y: e.y, color: '#c05eff', label: '⌖' });
+    }
+    if (view.hatch) targets.push({ x: view.hatch[0], y: view.hatch[1], color: PALETTE.doorOpen, label: '➤' });
+    if (view.hold) targets.push({ x: view.hold[0], y: view.hold[1], color: '#ffd45e', label: '◎' });
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const cwCss = s.cw / this.dpr, chCss = s.ch / this.dpr;
+    for (const tg of targets) {
+      // world → screen (css px)
+      const sx = ((tg.x - this.camX) * s.scale + s.cw / 2) / this.dpr;
+      const sy = ((tg.y - this.camY) * s.scale + s.ch / 2) / this.dpr;
+      if (sx > margin && sx < cwCss - margin && sy > margin && sy < chCss - margin) continue; // on screen
+      const cx = clamp(sx, margin, cwCss - margin), cy = clamp(sy, margin, chCss - margin);
+      const a = Math.atan2(sy - chCss / 2, sx - cwCss / 2);
+      const pulse = tg.downed ? 0.55 + 0.45 * Math.sin(this.t * 8) : 1;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(a);
+      ctx.globalAlpha = 0.9 * pulse;
+      ctx.fillStyle = tg.color;
+      ctx.strokeStyle = '#0b0c12';
+      ctx.lineWidth = 2;
+      const sz = tg.big ? 15 : 11;
+      ctx.beginPath();
+      ctx.moveTo(sz, 0); ctx.lineTo(-sz * 0.7, -sz * 0.7); ctx.lineTo(-sz * 0.7, sz * 0.7);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.rotate(-a);
+      if (tg.label) {
+        ctx.fillStyle = tg.color;
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(tg.label, 0, -14);
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // extraction countdown banner (any player standing on the portal)
+  _drawExtract(ctx, view) {
+    if (view.extract === null || view.extract === undefined) return;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const cw = this.canvas.width / this.dpr;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 30px sans-serif';
+    ctx.fillStyle = PALETTE.doorOpen;
+    ctx.strokeStyle = '#0b0c12';
+    ctx.lineWidth = 5;
+    const label = `${view.afterSiege ? 'DESCENDING' : 'EXTRACTING'} in ${Math.ceil(view.extract)}`;
+    ctx.strokeText(label, cw / 2, 84);
+    ctx.fillText(label, cw / 2, 84);
   }
 
   // Banneret's standard (and item auras): a soft banner-colored ring centered
@@ -205,45 +327,43 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
-  _drawRoom(ctx, view) {
-    // floor
+  // The arena: floor grid (visible span only), border walls, and obstacles.
+  _drawArena(ctx, view, aw, ah, cl, cr, ct, cb) {
+    // floor over the visible region
     ctx.fillStyle = PALETTE.bg;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(Math.max(0, cl), Math.max(0, ct), Math.min(aw, cr) - Math.max(0, cl), Math.min(ah, cb) - Math.max(0, ct));
     ctx.strokeStyle = PALETTE.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let x = WALL; x <= W - WALL; x += 64) { ctx.moveTo(x, WALL); ctx.lineTo(x, H - WALL); }
-    for (let y = WALL; y <= H - WALL; y += 64) { ctx.moveTo(WALL, y); ctx.lineTo(W - WALL, y); }
+    const gx0 = Math.max(WALL, Math.floor(cl / 64) * 64), gx1 = Math.min(aw - WALL, cr);
+    const gy0 = Math.max(WALL, Math.floor(ct / 64) * 64), gy1 = Math.min(ah - WALL, cb);
+    for (let x = gx0; x <= gx1; x += 64) { ctx.moveTo(x, Math.max(WALL, ct)); ctx.lineTo(x, Math.min(ah - WALL, cb)); }
+    for (let y = gy0; y <= gy1; y += 64) { ctx.moveTo(Math.max(WALL, cl), y); ctx.lineTo(Math.min(aw - WALL, cr), y); }
     ctx.stroke();
-    // walls
+    // border walls
     ctx.fillStyle = PALETTE.wall;
-    ctx.fillRect(0, 0, W, WALL); ctx.fillRect(0, H - WALL, W, WALL);
-    ctx.fillRect(0, 0, WALL, H); ctx.fillRect(W - WALL, 0, WALL, H);
+    if (ct < WALL) ctx.fillRect(0, 0, aw, WALL);
+    if (cb > ah - WALL) ctx.fillRect(0, ah - WALL, aw, WALL);
+    if (cl < WALL) ctx.fillRect(0, 0, WALL, ah);
+    if (cr > aw - WALL) ctx.fillRect(aw - WALL, 0, WALL, ah);
     ctx.strokeStyle = PALETTE.wallEdge;
     ctx.lineWidth = 3;
-    ctx.strokeRect(WALL, WALL, W - 2 * WALL, H - 2 * WALL);
-    // doors
-    const doors = view.room ? view.room.doors : {};
-    const open = view.room && view.cleared && !view.locked;
-    const col = open ? PALETTE.doorOpen : PALETTE.doorLocked;
-    ctx.fillStyle = col;
-    const g = DOOR_W;
-    if (doors.n !== undefined) ctx.fillRect(W / 2 - g / 2, 6, g, WALL - 12);
-    if (doors.s !== undefined) ctx.fillRect(W / 2 - g / 2, H - WALL + 6, g, WALL - 12);
-    if (doors.w !== undefined) ctx.fillRect(6, H / 2 - g / 2, WALL - 12, g);
-    if (doors.e !== undefined) ctx.fillRect(W - WALL + 6, H / 2 - g / 2, WALL - 12, g);
-    if (open) {
-      ctx.fillStyle = '#0c2a1e';
-      if (doors.n !== undefined) ctx.fillRect(W / 2 - g / 2 + 8, 10, g - 16, WALL - 20);
-      if (doors.s !== undefined) ctx.fillRect(W / 2 - g / 2 + 8, H - WALL + 10, g - 16, WALL - 20);
-      if (doors.w !== undefined) ctx.fillRect(10, H / 2 - g / 2 + 8, WALL - 20, g - 16);
-      if (doors.e !== undefined) ctx.fillRect(W - WALL + 10, H / 2 - g / 2 + 8, WALL - 20, g - 16);
+    ctx.strokeRect(WALL, WALL, aw - 2 * WALL, ah - 2 * WALL);
+    // obstacles (pillars / internal walls)
+    for (const o of view.obstacles || []) {
+      if (o[0] + o[2] < cl || o[0] > cr || o[1] + o[3] < ct || o[1] > cb) continue;
+      ctx.fillStyle = PALETTE.wall;
+      ctx.fillRect(o[0], o[1], o[2], o[3]);
+      ctx.strokeStyle = PALETTE.wallEdge;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(o[0], o[1], o[2], o[3]);
     }
   }
 
-  _drawHazards(ctx, view) {
+  _drawHazards(ctx, view, inView) {
     for (const hz of view.hazards || []) {
       if (hz.type === 'lava') {
+        if (!inView(hz.x, hz.y, hz.r + 10)) continue;
         ctx.fillStyle = '#7a2c10';
         circle(ctx, hz.x, hz.y, hz.r + 4); ctx.fill();
         ctx.fillStyle = PALETTE.hazardLava;
@@ -255,24 +375,25 @@ export class Renderer {
           ctx.fill();
         }
       } else if (hz.type === 'spikes') {
-        const y = hz.y, h = hz.h;
+        // spike STRIP: a banded rect {x,y,w,h}
+        if (!inView(hz.x + hz.w / 2, hz.y + hz.h / 2, Math.max(hz.w, hz.h))) continue;
         if (hz.state === 0) {
           ctx.fillStyle = 'rgba(200,205,232,0.08)';
-          ctx.fillRect(WALL, y - h / 2, W - 2 * WALL, h);
+          ctx.fillRect(hz.x, hz.y, hz.w, hz.h);
         } else if (hz.state === 1) {
           ctx.fillStyle = 'rgba(255,93,108,0.25)';
-          ctx.fillRect(WALL, y - h / 2, W - 2 * WALL, h);
+          ctx.fillRect(hz.x, hz.y, hz.w, hz.h);
         } else {
           ctx.fillStyle = 'rgba(200,205,232,0.25)';
-          ctx.fillRect(WALL, y - h / 2, W - 2 * WALL, h);
+          ctx.fillRect(hz.x, hz.y, hz.w, hz.h);
           ctx.fillStyle = PALETTE.hazardSpike;
           ctx.strokeStyle = PALETTE.outline;
           ctx.lineWidth = 1.5;
-          for (let x = WALL + 12; x < W - WALL - 12; x += 26) {
+          for (let x = hz.x + 6; x < hz.x + hz.w - 18; x += 26) {
             ctx.beginPath();
-            ctx.moveTo(x, y + h / 2 - 4);
-            ctx.lineTo(x + 9, y - h / 2 + 4);
-            ctx.lineTo(x + 18, y + h / 2 - 4);
+            ctx.moveTo(x, hz.y + hz.h - 4);
+            ctx.lineTo(x + 9, hz.y + 4);
+            ctx.lineTo(x + 18, hz.y + hz.h - 4);
             ctx.closePath();
             ctx.fill(); ctx.stroke();
           }
@@ -281,25 +402,27 @@ export class Renderer {
     }
   }
 
-  _drawHatch(ctx, x, y) {
+  // the extraction portal (fights) / descent portal (post-siege)
+  _drawHatch(ctx, x, y, afterSiege) {
     ctx.save();
     ctx.translate(x, y);
     ctx.fillStyle = '#0a0b12';
     ctx.strokeStyle = PALETTE.doorOpen;
     ctx.lineWidth = 4;
-    circle(ctx, 0, 0, 46); ctx.fill(); ctx.stroke();
+    circle(ctx, 0, 0, 52); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = '#1e6e4e';
     ctx.lineWidth = 3;
-    circle(ctx, 0, 0, 30 + 6 * Math.sin(this.t * 3)); ctx.stroke();
+    circle(ctx, 0, 0, 34 + 7 * Math.sin(this.t * 3)); ctx.stroke();
     ctx.fillStyle = PALETTE.doorOpen;
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('DESCEND', 0, 4);
+    ctx.fillText(afterSiege ? 'DESCEND' : 'EXTRACT', 0, 4);
     ctx.restore();
   }
 
-  _drawTelegraphs(ctx, view) {
+  _drawTelegraphs(ctx, view, inView = () => true) {
     for (const tg of view.tele || []) {
+      if (tg.shape === 'c' && !inView(tg.x, tg.y, tg.r)) continue;
       if (tg.shape === 'c') {
         if (tg.spawnMark) {
           ctx.strokeStyle = '#a86ae8';
@@ -549,19 +672,6 @@ export class Renderer {
       ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
-  }
-
-  _drawDoorCountdown(ctx, view) {
-    if (!view.door) return;
-    const t = Math.max(0, view.door.t);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.strokeStyle = PALETTE.outline;
-    ctx.lineWidth = 6;
-    const label = view.door.kind === 'hatch' ? `Descending in ${t.toFixed(1)}` : `Moving on in ${t.toFixed(1)}`;
-    ctx.strokeText(label, W / 2, 120);
-    ctx.fillText(label, W / 2, 120);
   }
 
   _drawHitboxes(ctx, view) {

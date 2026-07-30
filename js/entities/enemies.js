@@ -49,6 +49,7 @@ export function updateEnemy(sim, e, dt) {
   const p = sim.tauntTarget(e.x, e.y);
   e.t += dt;
   switch (t.behavior) {
+    case 'pylon': break; // the siege's ward pylon just stands there, humming
     case 'chaser': {
       if (p) sim.walk(e, p.x, p.y, spd, dt);
       break;
