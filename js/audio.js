@@ -1,5 +1,11 @@
-// WebAudio-synthesized SFX. No audio files. Context is created lazily on first
-// user gesture (browser autoplay policy). Master volume persisted in localStorage.
+// Game SFX. Most sounds are WebAudio-synthesized; owner-added asset files
+// (assets/) load through loadSample/playSample below and share the same
+// master gain, so the volume slider and mute govern everything alike.
+// The context is created suspended at preload time and resumed on the first
+// user gesture (browser autoplay policy) — ensureAudio handles the unlock.
+// Master volume persisted in localStorage.
+
+import { CONFIG } from './config.js';
 
 let ctx = null;
 let master = null;
@@ -15,14 +21,94 @@ export function setVolume(v) {
   try { localStorage.setItem('uv_volume', String(volume)); } catch { /* ignore */ }
 }
 
-export function ensureAudio() {
-  if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return;
+// create the context WITHOUT a gesture (it starts suspended — that's fine for
+// decoding); ensureAudio resumes it on the first real interaction as before
+function initCtx() {
+  if (ctx) return true;
+  const AC = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
+  if (!AC) return false;
   ctx = new AC();
   master = ctx.createGain();
   master.gain.value = volume * volume;
   master.connect(ctx.destination);
+  return true;
+}
+
+export function ensureAudio() {
+  if (!initCtx()) return;
+  if (ctx.state === 'suspended') ctx.resume();
+}
+
+// test/diagnostic introspection (harmless in production)
+export const audioStats = { samplesLoaded: 0, horns: 0, blips: 0, hornLog: [], warnings: 0 };
+export function getCtxState() { return ctx ? ctx.state : 'none'; }
+export function getMasterGainValue() { return master ? master.gain.value : -1; }
+
+// ---------------- external samples (the asset pipeline) ----------------
+// loadSample(path) → decoded AudioBuffer, cached per path. playSample routes
+// through the master gain like every synthesized sound. See README:
+// "Adding a sound asset".
+
+const samples = new Map(); // path -> AudioBuffer
+
+export async function loadSample(path) {
+  if (samples.has(path)) return samples.get(path);
+  if (!initCtx()) throw new Error('WebAudio unavailable');
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  const raw = await res.arrayBuffer();
+  const buf = await ctx.decodeAudioData(raw);
+  samples.set(path, buf);
+  audioStats.samplesLoaded++;
+  return buf;
+}
+
+export function playSample(buffer, vol = 1) {
+  if (!ctx || !buffer) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const g = ctx.createGain();
+  g.gain.value = vol;
+  src.connect(g); g.connect(master);
+  src.start();
+}
+
+// ---------------- the level-up airhorn ----------------
+// Replaces the synth blip when the asset is present; a missing/undecodable
+// asset falls back to the blip with one console warning — level-ups never
+// depend on an asset existing.
+
+let airhornBuf = null;
+let hornLastAt = -Infinity;
+
+export async function preloadAirhorn() {
+  try {
+    airhornBuf = await loadSample(CONFIG.AIRHORN_PATH);
+  } catch (err) {
+    audioStats.warnings++;
+    console.warn(`airhorn preload failed (${err && err.message}) — level-ups fall back to the synth blip`);
+  }
+}
+
+// test hook (also lets a future skin swap the buffer)
+export function setAirhornBuffer(buf) { airhornBuf = buf; }
+
+// One horn per resolution moment: a batch of banked level-ups landing
+// together plays once; own level-ups are loud, an ally's is quiet, and the
+// debounce window is global so a 4-player extraction is a celebration, not
+// a traffic jam. All three numbers live in config.
+export function levelupHorn(own, nowMs = performance.now()) {
+  if (nowMs - hornLastAt < CONFIG.AIRHORN_DEBOUNCE_S * 1000) return;
+  hornLastAt = nowMs;
+  const vol = own ? CONFIG.AIRHORN_VOL_OWN : CONFIG.AIRHORN_VOL_ALLY;
+  if (audioStats.hornLog.length < 50) audioStats.hornLog.push(vol);
+  if (airhornBuf) {
+    audioStats.horns++;
+    playSample(airhornBuf, vol);
+  } else {
+    audioStats.blips++;
+    sfx.levelup();
+  }
 }
 
 function env(gain, t0, attack, peak, decay) {

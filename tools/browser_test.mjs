@@ -53,9 +53,10 @@ class Browser {
     this.ws.onmessage = e => this._onMsg(JSON.parse(e.data));
     await this.cdp('Runtime.enable');
     await this.cdp('Page.enable');
-    if (this.opts.peerjsB64) {
-      await this.cdp('Fetch.enable', { patterns: [{ urlPattern: '*unpkg.com*' }] });
-    }
+    const patterns = [];
+    if (this.opts.peerjsB64) patterns.push({ urlPattern: '*unpkg.com*' });
+    if (this.opts.failPattern) patterns.push({ urlPattern: `*${this.opts.failPattern}*` });
+    if (patterns.length) await this.cdp('Fetch.enable', { patterns });
     if (this.opts.mobile) {
       await this.cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
       await this.setOrientation('landscape');
@@ -91,11 +92,16 @@ class Browser {
       return;
     }
     if (m.method === 'Fetch.requestPaused') {
-      this.cdp('Fetch.fulfillRequest', {
-        requestId: m.params.requestId, responseCode: 200,
-        responseHeaders: [{ name: 'Content-Type', value: 'application/javascript' }, { name: 'Access-Control-Allow-Origin', value: '*' }],
-        body: this.opts.peerjsB64,
-      }).catch(() => {});
+      const url = m.params.request.url || '';
+      if (this.opts.failPattern && url.includes(this.opts.failPattern)) {
+        this.cdp('Fetch.failRequest', { requestId: m.params.requestId, errorReason: 'ConnectionRefused' }).catch(() => {});
+      } else {
+        this.cdp('Fetch.fulfillRequest', {
+          requestId: m.params.requestId, responseCode: 200,
+          responseHeaders: [{ name: 'Content-Type', value: 'application/javascript' }, { name: 'Access-Control-Allow-Origin', value: '*' }],
+          body: this.opts.peerjsB64,
+        }).catch(() => {});
+      }
       return;
     }
     if (m.method === 'Runtime.exceptionThrown') {
@@ -204,6 +210,11 @@ try {
   let errs = await A.errors();
   if (errs.length) fail(`console errors at boot: ${errs.join(' | ').slice(0, 400)}`); else ok('no console errors at boot');
 
+  // the airhorn preloads at boot (fetch + decode on the suspended context)
+  await A.waitFor(`return window.uvAudio && window.uvAudio.stats.samplesLoaded >= 1 ? 1 : 0`, 6000, 'airhorn preload');
+  const preWarn = await A.exec('return window.uvAudio.stats.warnings');
+  if (preWarn === 0) ok('airhorn preloaded at boot, no warnings'); else fail(`preload warnings: ${preWarn}`);
+
   // character smoke inside the real browser
   const smoke = await A.exec('return window.uvSmoke().length');
   if (smoke === 0) ok('in-browser uvSmoke: all characters pass'); else fail(`uvSmoke failures: ${smoke}`);
@@ -284,6 +295,17 @@ try {
   await A.exec(`const s=window.uv.sim,p=s.players[0]; const i=p.shop.stock.findIndex(x=>x.kind==='weapon'&&!x.sold); s.uiAction(0,{kind:'buy',slot:i}); s.uiAction(0,{kind:'reroll'}); return 1;`);
   const exM1 = await A.exec('return window.uv.sim.players[0].materials');
   if (exM1 < exM0) ok('buy + reroll work at the extraction shop'); else fail('extraction shop buy/reroll no-op');
+  // level-ups banked during this stretch fired the airhorn (debounced)
+  const hornsSoFar = await A.exec('return window.uvAudio.stats.horns');
+  if (hornsSoFar >= 1) ok(`level-ups play the airhorn (${hornsSoFar} scheduled so far)`);
+  else fail('no airhorn scheduled despite level-ups');
+  // master volume governs the horn: the sample path routes through the same gain
+  await A.exec('window.uvAudio.setVolume(0); return 1;');
+  const mg0 = await A.exec('return window.uvAudio.masterGain()');
+  await A.exec('window.uvAudio.setVolume(0.6); return 1;');
+  const mg1 = await A.exec('return window.uvAudio.masterGain()');
+  if (mg0 === 0 && Math.abs(mg1 - 0.36) < 0.001) ok('master volume/mute governs the horn (gain 0 when muted, 0.36 at 60%)');
+  else fail(`master gain: muted=${mg0} restored=${mg1}`);
   // confirming extraction with the shop still open behaves sanely: the party
   // travels, the map returns underneath, the browse survives
   await extractToMap(A, 'solo first fight');
@@ -585,6 +607,33 @@ try {
   await A.close();
 }
 
+// ---------- asset-missing fallback: level-ups survive a broken asset path ----------
+{
+  const F = new Browser();
+  try {
+    await F.open('F', { failPattern: 'airhorn' });
+    await F.goto(URL);
+    await F.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title (no asset)');
+    await F.waitFor(`return window.uvAudio && window.uvAudio.stats.warnings === 1 ? 1 : 0`, 6000, 'one preload warning');
+    ok('broken asset path: exactly one console warning at preload');
+    await F.exec(`document.getElementById('btn-host').click()`);
+    await F.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby (no asset)');
+    await F.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
+    await sleep(250);
+    await F.exec(`document.getElementById('btn-start').click()`);
+    await F.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'run (no asset)');
+    await F.exec(`window.uv.sim.debug('F2'); return 1;`); // banks level-ups → levelUp events
+    await F.waitFor(`return window.uvAudio.stats.blips >= 1 ? 1 : 0`, 5000, 'blip fallback');
+    const fstats = JSON.parse(await F.exec(`return JSON.stringify({blips:window.uvAudio.stats.blips, horns:window.uvAudio.stats.horns, banked:window.uv.sim.players[0].banked})`));
+    if (fstats.blips >= 1 && fstats.horns === 0 && fstats.banked > 0) ok(`level-ups resolve on the synth blip with the asset absent (${fstats.blips} blips, ${fstats.banked} banked)`);
+    else fail(`fallback state: ${JSON.stringify(fstats)}`);
+    const ferrs = await F.errors();
+    if (ferrs.length) fail(`console errors with asset missing: ${ferrs.join(' | ').slice(0, 300)}`); else ok('zero console errors with the asset missing');
+  } catch (e) {
+    fail(`fallback test crashed: ${e.message}`);
+  } finally { await F.close(); }
+}
+
 // ---------- mobile / touch emulation (Pixel-ish viewport, real touch events) ----------
 {
   const M = new Browser();
@@ -609,6 +658,10 @@ try {
     await M.tap('#btn-start');
     await M.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'mobile run start');
     ok('touch-only: host → tap character → start run');
+    // the preloaded (suspended) context resumed on the first touch
+    const ctxSt = await M.exec(`return window.uvAudio.ctxState()`);
+    if (ctxSt === 'running') ok('first-touch unlock resumed the preloaded audio context');
+    else fail(`audio context state after touch flow: ${ctxSt}`);
 
     // ---- the node map on touch: ≥44px nodes, tap to travel ----
     await M.waitFor(`return !document.getElementById('screen-map').classList.contains('hidden')`, 4000, 'mobile map screen');
@@ -904,10 +957,23 @@ if (wantCoop) {
     process.exit(failures ? 1 : 0);
   }
   const peerjsB64 = readFileSync(PJS).toString('base64');
-  const relay = spawn('node', ['tools/peer_relay.mjs', String(RELAY_PORT)], { stdio: 'ignore' });
-  process.on('exit', () => relay.kill());
-  await sleep(1500);
-  const COOP_URL = `${URL}?peerhost=localhost&peerport=${RELAY_PORT}&peersecure=0`;
+  // boot the relay and PROBE it — a blind sleep races slow starts and port
+  // collisions, which shows up as flaky "registration failed" runs
+  let relayPort = RELAY_PORT;
+  let relayUp = false;
+  for (let attempt = 0; attempt < 3 && !relayUp; attempt++) {
+    const port = RELAY_PORT + attempt * 7;
+    const relay = spawn('node', ['tools/peer_relay.mjs', String(port)], { stdio: 'ignore' });
+    process.on('exit', () => relay.kill());
+    for (let i = 0; i < 24 && !relayUp; i++) {
+      await sleep(250);
+      try { const r = await fetch(`http://localhost:${port}/peerjs/id`); relayUp = r.ok; } catch { /* not yet */ }
+    }
+    if (relayUp) relayPort = port;
+    else { relay.kill(); console.warn(`⚠ relay did not come up on :${port}, trying :${port + 7}`); }
+  }
+  if (!relayUp) console.warn('⚠ relay never came up — co-op will report registration failure');
+  const COOP_URL = `${URL}?peerhost=localhost&peerport=${relayPort}&peersecure=0`;
   const A2 = new Browser();
   const B = new Browser();
   try {
@@ -1127,6 +1193,17 @@ if (wantCoop) {
       await A.exec(`const s=window.uv.sim; s.players[0].x=s.players[1].x; s.players[0].y=s.players[1].y;`);
       await A.waitFor(`return !window.uv.sim.players[1].downed`, 6000, 'revive');
       ok('proximity revive works in co-op');
+
+      // ---- the airhorn in co-op: own = loud, ally = quiet, debounced ----
+      await sleep(1200); // clear any debounce window from organic levels
+      await A.exec(`const s=window.uv.sim; s._collectMaterial(s.players[0], 150); return 1;`);
+      await A.waitFor(`return window.uvAudio.stats.hornLog.includes(1) ? 1 : 0`, 4000, 'own horn on host');
+      await B.waitFor(`return window.uvAudio.stats.hornLog.includes(0.35) ? 1 : 0`, 4000, 'ally horn on client');
+      await sleep(1200); // past the debounce window
+      await A.exec(`const s=window.uv.sim; s._collectMaterial(s.players[1], 150); return 1;`);
+      await B.waitFor(`return window.uvAudio.stats.hornLog.includes(1) ? 1 : 0`, 4000, 'own horn on client');
+      await A.waitFor(`return window.uvAudio.stats.hornLog.includes(0.35) ? 1 : 0`, 4000, 'ally horn on host');
+      ok('co-op level-ups: each side hears its own loud and the ally quiet, debounced');
 
       // ---- patch 8 co-op: extraction shops for both; auto-combine, swap,
       // and rerolls run in parallel with host validation, no desync ----

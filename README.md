@@ -11,9 +11,12 @@ destroy **The Vault Regent** on floor 4. If the whole party goes down, the run
 is over.
 
 Everything is plain JavaScript (ES modules) + Canvas 2D + WebAudio. All art is
-drawn with canvas primitives and all sound is synthesized — there are no asset
-files. The only external dependency is the PeerJS client, loaded from a CDN
-`<script>` tag, used for the peer-to-peer co-op networking.
+drawn with canvas primitives and nearly all sound is synthesized; the only
+asset files are the owner-added samples in `assets/` (currently one: the
+level-up airhorn), loaded through a tiny decode-and-cache pipeline that falls
+back to synthesis if a file is missing. The only external dependency is the
+PeerJS client, loaded from a CDN `<script>` tag, used for the peer-to-peer
+co-op networking.
 
 - **Content**: 32 characters · 136 items · 26 weapons across 6 classes ·
   12 enemy types · 4 two-phase bosses · elites with 4 modifiers · 5 arena
@@ -208,6 +211,28 @@ is direct browser-to-browser WebRTC.
 - Touch controls switch on automatically on touch devices; force them with
   **⚙ → Touch controls: Auto / On / Off** (handy for touch-screen laptops).
 
+## Adding a sound asset
+
+Until the airhorn, every sound was WebAudio-synthesized; that constraint is
+lifted for assets added deliberately to `assets/`. The pipeline is two
+functions in `js/audio.js`:
+
+1. Drop the file in `assets/` (MP3/OGG/WAV — anything `decodeAudioData`
+   accepts).
+2. Preload it near boot: `const buf = await loadSample('assets/yourfile.mp3')`
+   — fetches, decodes into the shared (suspended-until-gesture) context, and
+   caches per path. Wrap the call in a try/catch and fall back to a synth
+   sound: **a missing asset must never break the game** (see
+   `preloadAirhorn` for the pattern — one `console.warn`, then the fallback).
+3. Play it: `playSample(buf, volume)` — routes through the master gain, so
+   the volume slider and mute govern it like every synthesized sound. The
+   iOS/mobile first-touch unlock already covers samples; nothing extra to do.
+
+The level-up airhorn (`assets/airhorn.mp3`) is the reference user: preloaded
+at boot, debounced to one horn per resolution moment
+(`CONFIG.AIRHORN_DEBOUNCE_S`), own level-ups at `CONFIG.AIRHORN_VOL_OWN`,
+allies' at `CONFIG.AIRHORN_VOL_ALLY`.
+
 ## Debug keys
 
 Enabled by the `DEV` flag in `js/config.js` (shipped `true`; set `false` for
@@ -240,7 +265,8 @@ never loads them:
   the roster median, table printed), 4-player co-op + wipe, build management,
   the shop-economy gates (extraction shops, 100-seed stock guarantees with
   rerolls, auto-combine at 6/6, 5/5 and 4/4, atomic swap + rollback, the
-  density/HP knob spot-checks), a floor-4 siege stress (crest ≥150 alive,
+  density/HP knob spot-checks), the airhorn's debounce/volume/fallback rules
+  (headless — no WebAudio needed), a floor-4 siege stress (crest ≥150 alive,
   tick time), snapshot serialization in both phases.
 - `node tools/browser_test.mjs [--coop]` — boots real headless Chromium over
   the DevTools protocol: title → lobby → map → arena → results with zero
@@ -269,6 +295,34 @@ never loads them:
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### The airhorn (the first asset pipeline)
+
+- **The synth-only constraint is lifted** — for assets the owner adds
+  deliberately. `assets/airhorn.mp3` (owner-uploaded to the repo root,
+  moved into `assets/` as the pipeline's canonical home) is the first;
+  `loadSample`/`playSample` in `js/audio.js` are the generic path future
+  sounds and music will use. Everything still routes through the one master
+  gain.
+- **The context is now created suspended at preload time** (was: lazily on
+  the first gesture) so `decodeAudioData` can run at boot; the existing
+  first-gesture `ensureAudio` resume is unchanged and the mobile unlock is
+  unaffected — creating a suspended context without a gesture is exactly
+  what the autoplay policy permits.
+- **The horn fires where the old blip did** — the moment a level banks (the
+  "LEVEL UP!" beat), not when the boost cards are picked. Banked levels
+  landing in a burst at an extraction arrive within the 1 s debounce window
+  and play once; picking cards afterwards is silent, so reading four cards
+  slowly never re-triggers a celebration per tap. The generic
+  `sfx: 'levelup'` broadcast was removed — the idx-aware `levelUp` event is
+  the sole trigger, which is what makes own-vs-ally volume possible.
+- **The debounce window is global, not per-player** (per the brief): the
+  first level-up in a window decides that window's volume. Four friends
+  leveling at one extraction = one horn.
+- **Failure is designed for**: fetch or decode failure → one console
+  warning, `audioStats.warnings` increments, and every level-up plays the
+  old synth blip. The suite boots a browser with the asset request forcibly
+  failed to prove level-ups, offers, and the run all survive assetless.
 
 ### Shop economy (patch 8)
 
@@ -320,10 +374,50 @@ never loads them:
   permanent firing squad no melee starting kit could reach — Gilded One's
   Vaultspike could never close the last 8 Lobbers. Survivors now walk into
   the blade; ranged kits kill them approaching either way.
-- **Gilded One's trait shops ignore the new guarantees** — 2 slots of
-  legendary items IS the trait; the Quartermaster's all-weapon rack now
-  extends to the Black Market's 6 slots (his rare+-item guarantee is
-  meaningless and skipped).
+- **Trait shops ignore the new guarantees** — their slot rule IS their
+  stock rule (see the patch-8.1 restatement of Gilded One's below); the
+  Quartermaster's all-weapon rack extends to the Black Market's 6 slots
+  (his rare+-item guarantee is meaningless and skipped).
+
+### The Gilded One rescue (patch 8.1)
+
+- **Root cause, restated**: weapons have tiers, not rarities — so a trait
+  that fills shop slots with "legendary" goods produced an items-only shop
+  *by definition*, locking the economy character out of the weapon economy
+  the game now runs on; and `enemyHpMult` 1.12 moved Lobbers past its old
+  Vaultspike's one-shot threshold in the first fight, before any shop
+  exists.
+- **Starting weapon: Kegbomb** (Greed-scaled) — the economy statline powers
+  the weapon from the first second, and every Greed purchase grows it.
+  Vaultspike untouched (Duskblade ripples). The Kegbomb itself went 17 dmg
+  (from 20): its AoE already measures rich in the multi-dummy DPS harness,
+  and Greed-15 on top pushed Gilded One to +53% of median — past the ±40%
+  gate from the other side. At 17, Gilded One measures +33% and Powderkeg
+  (the other Kegbomb start) +13% — both in-gate, both closer to median
+  than before. This is the one ripple the rescue allowed, and it follows
+  the patch-5 precedent (Kegbomb has been tuned at this gate before:
+  24 → 20 → 17).
+- **The trait, restated for the real economy**: shop slots always hold the
+  finest goods available — legendary items or the floor's top rollable
+  weapon tier (II on floor 1, III on floor 2, IV from floor 3) — but only
+  2 of them (3 at the Black Market, which also keeps its reroll discount).
+  The trait overrides the standard weapon-guarantee composition everywhere;
+  auto-combine, the make-room swap, and locks work against its stock like
+  anyone else's. Pricing is the existing tier/rarity pricing — top-shelf
+  goods cost top-shelf prices, which is the fantasy.
+- **Verified organically**: the probe now clears the first fight in ~91 s
+  and WINS the full 4-floor run outright (2 weapons after fight one, a full
+  rack by floor 2, the Vault Regent down at level ~49) — stronger than the
+  "documented close final-boss loss" the gate required. Mirage, Broker, and
+  Powderkeg re-probed clean.
+- **Probe learned to hunt sources** (general fixes surfaced by the first
+  4-floor runs, not Gilded-specific): once spawning stops it walks onto
+  Wombden nests (broods replenish forever), Aegimand wardens (shield auras
+  make neighbors immortal to nearest-target weapons), and Stitcher medics
+  (out-heal low kits) — and it routes around the Champion branch like a
+  human playing a below-median build (the map guarantees elites are
+  optional; that's what the branch is for). Extraction walking no longer
+  counts against the fight-time cap.
 
 ### The Gauntlet (patch 7)
 
@@ -430,7 +524,9 @@ never loads them:
   26.4 (+17%), hemomancer 22.5 (0%), jester 31.1 (+38%), cindermage 22.5 (0%),
   frostcaller 23.4 (+4%), longshot 22.0 (−2%), threader 15.8 (−30%), tinker
   19.8 (−12%), hivewright 28.8 (+28%). Economy/support characters sit low by
-  design; nothing breaches the gate.
+  design; nothing breaches the gate. (Historical snapshot — patch 8.1's
+  Kegbomb re-tune moved its two owners: gilded_one 30.0 (+33%), powderkeg
+  25.5 (+13%).)
 - **Healing model details**: every heal source is multiplied by Recovery, with
   a fractional accumulator so small amplified heals aren't lost to rounding.
   Overheal routing (Hemomancer shield, Vesper's permanent Vitality with its
@@ -619,19 +715,6 @@ never loads them:
   deliberately not done: the level-up overlay is full-screen, and popping it
   mid-siege (especially over the touch joystick) is worse than the flatness.
   A non-blocking mid-siege card UI would be the real fix.
-- **Gilded One's floor 1 is past the knife-edge after the patch-8 tuning**
-  (numbers, per the tuning brief's flag-don't-revert guardrail): its trait
-  locks it out of the weapon economy entirely — legendary items only, never
-  weapons — so the extraction-shop interlock that funds everyone else's
-  growth passes it by, and `enemyHpMult` 1.12 pushes Lobbers from 9 to 10 HP,
-  exactly across its 9-damage Vaultspike's one-shot threshold in the one
-  fight it must clear before any shop can open. The organic probe now fails
-  the FIRST floor-1 fight (stalls at the 200 s cap with 6–8 Lobbers standing,
-  or dies at ~111 s charging them; pre-patch it cleared in ~130–170 s). The
-  headless all-32 gate still passes (harness-driven), mirage and broker — the
-  other two lowest-DPS characters — clear floors 1–2 organically with full
-  racks. The honest fix is a character touch (an 11-damage Vaultspike, or one
-  Black-Market weapon exception), which the patch-8 brief kept out of scope.
 - **Keyboard + mouse, or touch** — gamepad is still unsupported. Touch support
   was verified with Chromium's mobile emulation (Pixel-class viewport, real
   dispatched touch events); real devices — **especially iOS Safari** — can

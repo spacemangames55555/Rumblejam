@@ -28,6 +28,8 @@ const ING_SCALE = 0.1; // +10% summon damage & HP per Ingenuity point
 const VOTE_TIME = 4;   // consent countdown (node picks and extraction)
 // the Siege's ward pylon — a destructible structure, not a roster enemy
 const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', behavior: 'pylon', hp: 260, spd: 0, dmg: 0, radius: 26, mats: 6, shape: 'square', color: '#c05eff' };
+// shop tier weights per floor (chance out of 100 for tiers I–IV)
+const TIER_WEIGHTS = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 40, 20]];
 
 export class Sim {
   constructor({ seed, party }) {
@@ -1869,8 +1871,9 @@ export class Sim {
       p.banked++;
       p.xpNext = CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * p.level;
       for (const ls of p.hookAgg.levelStats) this._applyPerm(p, ls.stats);
+      // the level-up sound is idx-aware and debounced client-side (airhorn) —
+      // the levelUp event is its sole trigger, no generic sfx broadcast
       this.pushEvent({ k: 'levelUp', idx: p.idx });
-      this.pushEvent({ k: 'sfx', s: 'levelup' });
     }
     const t = p.char.trait;
     // Powderkeg: pickups detonate — 4 + 40% of Greed attuned, radius 40 + 50% of Reach
@@ -2112,7 +2115,9 @@ export class Sim {
   _fillStock(p) {
     const t = p.char.trait;
     const shop = p.shop;
-    const slots = t.key === 'legendary_shop' ? t.slots : shop.black ? 6 : CONFIG.SHOP_SLOTS;
+    // Gilded One's finest-goods rack: 2 slots (3 at the Black Market)
+    const slots = t.key === 'legendary_shop' ? t.slots + (shop.black ? 1 : 0)
+      : shop.black ? 6 : CONFIG.SHOP_SLOTS;
     const keep = shop.stock.filter(s => s.locked && !s.sold);
     const carry = p.shopLocksCarry.splice(0);
     shop.stock = [...keep, ...carry];
@@ -2121,8 +2126,8 @@ export class Sim {
     // Stock guarantees — rerolls re-run this, so they hold there too:
     // standard shops ≥1 weapon (≥2 on floor 1, where kits are hungriest);
     // the Black Market ≥2 weapons and ≥1 rare-or-better item. Trait shops
-    // keep their own rules (Gilded One's 2 legendaries, Quartermaster's
-    // all-weapon rack). Locked slots are never replaced.
+    // keep their own rules (Gilded One's finest-goods rack IS its stock
+    // rule, Quartermaster is all-weapon). Locked slots are never replaced.
     if (t.key === 'legendary_shop') return;
     const swappable = s => !s.locked && !s.sold;
     const needW = t.key === 'arsenal_doctrine' ? 0 : (shop.black ? 2 : (this.floorNum === 1 ? 2 : 1));
@@ -2149,18 +2154,18 @@ export class Sim {
     const floorScale = 1 + CONFIG.PRICE_FLOOR_SCALE * (this.floorNum - 1);
     let discount = 1 - p.hookAgg.shopDiscount / 100;
     if (t.key === 'insider') discount *= 1 - t.discount / 100;
-    // Quartermaster buys only weapons; Gilded One buys only legendary items;
-    // the Overseer's weapon rolls come from the summon rack (turrets/drones)
+    // Quartermaster buys only weapons; Gilded One stocks only the finest
+    // goods (legendary items, or weapons at the floor's top tier); the
+    // Overseer's weapon rolls come from the summon rack (turrets/drones)
     const weaponChance = t.key === 'overseer' ? 0.5 : CONFIG.SHOP_WEAPON_CHANCE;
     const wantWeapon = force === 'weapon' ? true
       : force === 'rareplus' ? false
       : t.key === 'arsenal_doctrine' ? true
-      : t.key === 'legendary_shop' ? false
       : rng.chance(weaponChance);
     if (wantWeapon) {
       const pool = t.key === 'overseer' ? WEAPONS.filter(wd => wd.cls === 'summon') : WEAPONS;
       const def = rng.pick(pool);
-      const tier = this._rollTier(rng);
+      const tier = t.key === 'legendary_shop' ? this._topTier() : this._rollTier(rng);
       const price = Math.round(def.price * TIER_PRICE_MULT[tier - 1] * floorScale * discount);
       return { kind: 'weapon', id: def.id, tier, price: Math.max(1, price), sold: false, locked: false };
     }
@@ -2173,10 +2178,17 @@ export class Sim {
   }
 
   _rollTier(rng) {
-    const T = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 40, 20]][this.floorNum - 1];
+    const T = TIER_WEIGHTS[this.floorNum - 1];
     const roll = rng.float() * 100;
     let acc = 0;
     for (let i = 0; i < 4; i++) { acc += T[i]; if (roll < acc) return i + 1; }
+    return 1;
+  }
+
+  // the highest tier the current floor can roll at all (Gilded One's shelf)
+  _topTier() {
+    const T = TIER_WEIGHTS[this.floorNum - 1];
+    for (let i = 3; i >= 0; i--) if (T[i] > 0) return i + 1;
     return 1;
   }
 

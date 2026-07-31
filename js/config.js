@@ -50,6 +50,12 @@ export const CONFIG = {
   spawnBudgetMult: 1.25,   // arena + siege inflow, and the alive-at-once caps
   enemyHpMult: 1.12,       // every enemy: chaff, ranged, specials, elites, bosses
 
+  // Level-up airhorn (the game's first external asset — see assets/)
+  AIRHORN_PATH: 'assets/airhorn.mp3',
+  AIRHORN_VOL_OWN: 1.0,    // your own level-up
+  AIRHORN_VOL_ALLY: 0.35,  // an ally's level-up (co-op)
+  AIRHORN_DEBOUNCE_S: 1.0, // one horn per resolution moment, not per level
+
   ELITE_HP_MULT: 3,
   ELITE_DMG_MULT: 1.5,
 

@@ -741,6 +741,96 @@ try {
   }
 } catch (err) { fail('shop economy tests crashed', err); }
 
+// ---- 9e. patch 8.1: the Gilded One rescue — finest-goods stock + Kegbomb ----
+try {
+  const { ITEM_BY_ID } = await import('../js/content/items.js');
+  const finest = (sim, s) => s.kind === 'weapon' ? s.tier === sim._topTier()
+    : ITEM_BY_ID[s.id].rarity === 'legendary';
+
+  // starts with the Kegbomb (Greed-scaled — its own statline powers it)
+  const ks = new Sim({ seed: 61, party: [{ idx: 0, key: 'k', name: 'G', charId: 'gilded_one', color: '#fff' }] });
+  if (ks.players[0].weapons[0].id === 'kegbomb') ok('Gilded One starts with the Kegbomb');
+  else fail(`starting weapon: ${ks.players[0].weapons[0].id}`);
+
+  // stock rule across floors and 30 seeds: every slot is a legendary item or
+  // a top-tier weapon; 2 slots standard, 3 at the Black Market; rerolls too
+  let bad = 0, sawWeapon = 0;
+  for (let seed = 1; seed <= 30 && bad < 5; seed++) {
+    const gs = new Sim({ seed: seed * 101, party: [{ idx: 0, key: 'k', name: 'G', charId: 'gilded_one', color: '#fff' }] });
+    const gp = gs.players[0];
+    gp.materials = 9999;
+    for (let f = 1; f <= 3; f++) {
+      if (f > 1) gs.debug('F4');
+      gs.currentNode = 0; gs._openShop(gp, 'clear');
+      for (let r = 0; r < 2; r++) {
+        if (gp.shop.stock.length !== 2) { bad++; fail(`seed ${seed * 101} f${f}: std slots ${gp.shop.stock.length}`); }
+        for (const s of gp.shop.stock) {
+          if (!finest(gs, s)) { bad++; fail(`seed ${seed * 101} f${f}: not finest — ${s.kind}:${s.id}/T${s.tier}`); }
+          if (s.kind === 'weapon') sawWeapon++;
+        }
+        gs.uiAction(0, { kind: 'reroll' });
+      }
+      gs._travelTo(gs.floor.nodes.find(n => n.kind === 'shop').id);
+      if (gp.shop.stock.length !== 3) { bad++; fail(`seed ${seed * 101} f${f}: BM slots ${gp.shop.stock.length}`); }
+      for (const s of gp.shop.stock) if (!finest(gs, s)) { bad++; fail(`seed ${seed * 101} f${f} BM: ${s.kind}:${s.id}`); }
+      gs.phase = 'map';
+    }
+  }
+  if (!bad) ok(`Gilded One stock: only legendary items / top-tier weapons, 2 std + 3 BM slots (30 seeds × 3 floors; ${sawWeapon} weapon offers seen)`);
+  if (sawWeapon > 20) ok('the finest-goods rack participates in the weapon economy'); else fail(`only ${sawWeapon} weapon offers across the sweep`);
+
+  // auto-combine, swap, and locks against the 2-slot trait stock
+  const cs = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: 'gilded_one', color: '#fff' }] });
+  const cp = cs.players[0];
+  cp.materials = 2000;
+  cs.currentNode = 0; cs._openShop(cp, 'clear');
+  while (cp.weapons.length < cp.weaponSlots) cs._addWeapon(cp, 'kegbomb', 2);
+  cp.shop.stock[0] = { kind: 'weapon', id: 'kegbomb', tier: 2, price: 60, sold: false, locked: false };
+  cs.uiAction(0, { kind: 'buy', slot: 0 });
+  // the starting Kegbomb is tier I — the first TIER-II copy absorbs the buy
+  if (cp.weapons.some(w => w.id === 'kegbomb' && w.tier === 3) && cp.weapons.length === cp.weaponSlots)
+    ok('auto-combine works on the 2-slot trait stock');
+  else fail(`gilded auto-combine: ${JSON.stringify(cp.weapons.map(w => [w.id, w.tier]))}`);
+  cp.shop.stock[1] = { kind: 'weapon', id: 'longbarrel', tier: 2, price: 60, sold: false, locked: false };
+  cs.uiAction(0, { kind: 'swapBuy', slot: 1, sell: 5, sellId: cp.weapons[5].id, sellTier: cp.weapons[5].tier });
+  if (cp.weapons.some(w => w.id === 'longbarrel') && cp.weapons.length === cp.weaponSlots) ok('make-room swap works on the trait stock');
+  else fail('gilded swap failed');
+  cs.uiAction(0, { kind: 'reroll' }); // fresh unsold stock, then lock through a reroll
+  cs.uiAction(0, { kind: 'lock', slot: 0 });
+  const lockedId2 = cp.shop.stock[0].id;
+  cs.uiAction(0, { kind: 'reroll' });
+  if (cp.shop.stock.some(s => s.locked && s.id === lockedId2) && cp.shop.stock.length === 2) ok('locks survive rerolls in the 2-slot stock');
+  else fail(`gilded lock: ${JSON.stringify(cp.shop.stock.map(s => s.id + (s.locked ? '🔒' : '')))}`);
+} catch (err) { fail('Gilded One rescue tests crashed', err); }
+
+// ---- 9f. the airhorn: debounce, volumes, fallback (headless, no WebAudio) ----
+try {
+  const { levelupHorn, setAirhornBuffer, audioStats } = await import('../js/audio.js');
+  const { CONFIG: C8 } = await import('../js/config.js');
+  setAirhornBuffer({ length: 1 }); // any truthy buffer — we count scheduling, not playback
+  const h0 = audioStats.horns;
+  levelupHorn(true, 10000);
+  if (audioStats.horns === h0 + 1) ok('a level-up resolution schedules the airhorn once');
+  else fail(`single resolution scheduled ${audioStats.horns - h0}`);
+  levelupHorn(true, 10150); levelupHorn(true, 10600); // a batch of 3 banked levels
+  if (audioStats.horns === h0 + 1) ok('a batch of 3 banked levels resolving together schedules it once');
+  else fail(`batch debounce: ${audioStats.horns - h0} horns`);
+  levelupHorn(true, 12000); // 2 s after the first
+  if (audioStats.horns === h0 + 2) ok('two resolutions 2 s apart schedule it twice');
+  else fail(`spaced resolutions: ${audioStats.horns - h0} horns`);
+  if (audioStats.hornLog[audioStats.hornLog.length - 1] === C8.AIRHORN_VOL_OWN) ok(`own level-up plays at the config volume (${C8.AIRHORN_VOL_OWN})`);
+  else fail(`own volume: ${audioStats.hornLog[audioStats.hornLog.length - 1]}`);
+  levelupHorn(false, 14000);
+  if (audioStats.hornLog[audioStats.hornLog.length - 1] === C8.AIRHORN_VOL_ALLY) ok(`an ally's level-up plays at the config volume (${C8.AIRHORN_VOL_ALLY})`);
+  else fail(`ally volume: ${audioStats.hornLog[audioStats.hornLog.length - 1]}`);
+  // asset missing → the synth blip path, and nothing crashes without WebAudio
+  setAirhornBuffer(null);
+  const b0 = audioStats.blips;
+  levelupHorn(true, 16000);
+  if (audioStats.blips === b0 + 1) ok('missing asset falls back to the synth blip — level-ups never depend on the file');
+  else fail(`fallback blips: ${audioStats.blips - b0}`);
+} catch (err) { fail('airhorn tests crashed', err); }
+
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {
   const sim = new Sim({ seed: 9999, party: [{ idx: 0, key: 'k', name: 'DPS', charId, color: '#fff' }] });
