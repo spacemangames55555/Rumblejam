@@ -78,6 +78,7 @@ initMapScreen({
 });
 initOverlays({
   buy: slot => sendUi({ kind: 'buy', slot }),
+  swapBuy: (slot, sell, sellId, sellTier) => sendUi({ kind: 'swapBuy', slot, sell, sellId, sellTier }),
   reroll: () => sendUi({ kind: 'reroll' }),
   lock: slot => sendUi({ kind: 'lock', slot }),
   closeShop: () => sendUi({ kind: 'closeShop' }),

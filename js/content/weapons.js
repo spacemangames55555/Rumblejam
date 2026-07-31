@@ -117,3 +117,35 @@ export const WEAPON_CLASS_NAMES = {
   swing: 'Melee · Swing', thrust: 'Melee · Thrust', single: 'Ranged · Shot',
   spread: 'Ranged · Spread', lobbed: 'Lobbed · AoE', summon: 'Structure',
 };
+
+// ---------------- tooltip math (patch 8) ----------------
+// Live scaling contribution and an effective-DPS estimate, computed from a
+// player's CURRENT stats. Used by the shop's detail cards so an owned weapon
+// and a stock offer compare apples-to-apples. This is a uniform single-target
+// baseline, not a combat sim: every projectile of a spread is assumed to hit,
+// chains/burns/blasts and travel time are ignored, and turrets use the plain
+// Ingenuity rule (character-specific inheritance like the Overseer's is not
+// modeled). Label it "est." wherever it's shown.
+import { TIER_MULT as _TM, STAT_IS_PCT as _PCT, SCALING_RATES as _SR } from '../config.js';
+
+// per-stat contribution to the weapon's scaling-tag bonus, in percent
+export function scalingParts(def, stats) {
+  return def.scaling.map(k => ({
+    stat: k,
+    pct: Math.round(_PCT[k] ? (stats && stats[k] || 0) : (stats && stats[k] || 0) * (_SR[k] || 1)),
+  }));
+}
+
+export function estimateDps(def, tier, stats) {
+  const s = stats || {};
+  if (def.summon) {
+    const sd = def.summon;
+    if (!sd.dmg) return 0;
+    const ing = 1 + Math.max(-8, s.ingenuity || 0) * 0.1;
+    return sd.dmg * _TM[tier - 1] * ing / Math.max(0.15, sd.cd);
+  }
+  const bonus = Math.max(-60, scalingParts(def, s).reduce((b, part) => b + part.pct, 0));
+  const dmg = Math.max(1, def.dmg * _TM[tier - 1] * (1 + (s.ferocity || 0) / 100) * (1 + bonus / 100));
+  const cd = def.cd / Math.max(0.25, 1 + (s.tempo || 0) / 100);
+  return dmg * (def.count || 1) / Math.max(0.05, cd);
+}

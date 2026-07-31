@@ -73,7 +73,10 @@ export function updateEnemy(sim, e, dt) {
     case 'spitter': {
       if (!p) break;
       const d = dist(e.x, e.y, p.x, p.y);
-      if (rush) { if (d > 90) sim.walk(e, p.x, p.y, spd, dt); }
+      // rush closes to CONTACT, not to firing range — a beaten wave's
+      // survivors must come to the blade, or melee kits face a permanent
+      // firing squad hovering just outside reach
+      if (rush) { if (d > 40) sim.walk(e, p.x, p.y, spd, dt); }
       else if (d < t.keepDist - 30) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
       else if (d > t.keepDist + 40) sim.walk(e, p.x, p.y, spd, dt);
       e.fireT = (e.fireT || 0) - dt;

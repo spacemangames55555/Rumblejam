@@ -269,11 +269,28 @@ try {
   if (Math.abs(camInfo.cam - camInfo.px) < 80 && camInfo.cam > cam0 + 250) ok(`camera follows the player (cam ${cam0}→${camInfo.cam}, player at ${camInfo.px}, arena ${camInfo.aw}w)`);
   else fail(`camera follow: cam ${cam0}→${camInfo.cam}, player ${camInfo.px}`);
 
-  // ---- clear the fight, extract via the hatch countdown, return to the map ----
+  // ---- clear the fight: the shop opens right at extraction (patch 8) ----
   if (!await A.exec(clearFightJs)) fail('first fight never cleared under F3');
   await A.exec(drainJs);
+  await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 4000, 'extraction shop');
+  const exTitle = await A.exec(`return document.querySelector('#overlay-shop .ov-title').textContent`);
+  if (exTitle === 'TRADER') ok('extraction shop opens at the fight clear (standard, not Black Market)');
+  else fail(`extraction shop title: ${exTitle}`);
+  const exW = await A.exec(`return window.uv.sim.players[0].shop.stock.filter(s=>s.kind==='weapon').length`);
+  if (exW >= 2) ok(`floor-1 extraction stock guarantees weapons (${exW} in 4 slots)`); else fail(`floor-1 stock weapons: ${exW}`);
+  // buy + reroll right here
+  await A.exec(`window.uv.sim.debug('F2'); return 1;`);
+  const exM0 = await A.exec('return window.uv.sim.players[0].materials');
+  await A.exec(`const s=window.uv.sim,p=s.players[0]; const i=p.shop.stock.findIndex(x=>x.kind==='weapon'&&!x.sold); s.uiAction(0,{kind:'buy',slot:i}); s.uiAction(0,{kind:'reroll'}); return 1;`);
+  const exM1 = await A.exec('return window.uv.sim.players[0].materials');
+  if (exM1 < exM0) ok('buy + reroll work at the extraction shop'); else fail('extraction shop buy/reroll no-op');
+  // confirming extraction with the shop still open behaves sanely: the party
+  // travels, the map returns underneath, the browse survives
   await extractToMap(A, 'solo first fight');
   await A.waitFor(`return !document.getElementById('screen-map').classList.contains('hidden')`, 3000, 'map screen after extraction');
+  const shopSurvived = await A.exec(`return !document.getElementById('overlay-shop').classList.contains('hidden')`);
+  if (shopSurvived) ok('extraction with the shop open: browse survives onto the map'); else fail('shop overlay vanished on extraction');
+  await A.exec(`document.getElementById('shop-close').click(); return 1;`);
   const visitedMark = await A.exec(`return document.querySelector('.map-node.visited') !== null`);
   if (visitedMark) ok('extraction returns to the map with the fight marked visited'); else fail('no visited node on the map after extraction');
 
@@ -313,6 +330,12 @@ try {
   await extractToMap(A, 'onrush fight');
   await A.exec(`const s=window.uv.sim; s.debug('F2'); const shop=s.floor.nodes.find(n=>n.kind==='shop'); s._travelTo(shop.id); return 1;`);
   await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'shop for build mgmt');
+  // Trader nodes are the Black Market now: 6 slots, ≥2 weapons, banner says so
+  await A.waitFor(`return document.querySelector('#overlay-shop .ov-title').textContent === 'BLACK MARKET'`, 3000, 'Black Market banner');
+  const bmInfo = JSON.parse(await A.exec(`const st=window.uv.sim.players[0].shop.stock;
+    return JSON.stringify({slots: st.length, weapons: st.filter(s=>s.kind==='weapon').length})`));
+  if (bmInfo.slots === 6 && bmInfo.weapons >= 2) ok(`Black Market: ${bmInfo.slots} slots, ${bmInfo.weapons} weapons in stock`);
+  else fail(`Black Market stock: ${JSON.stringify(bmInfo)}`);
   // drain until the HOST says no level-ups remain
   async function clickAwayLevelups(br) {
     for (let i = 0; i < 40; i++) {
@@ -397,35 +420,86 @@ try {
   await A.exec(`document.querySelector('[data-selli="${mech.id}"]').click(); return 1;`);
   await A.waitFor(`return window.uv.sim.players[0].hookAgg.killExplode.length===0`, 4000, 'mech hook gone');
   ok('sold mechanical item is unregistered — its effect can never fire again');
-  // 6/6: notice appears, purchase blocked, selling frees it
+  // ---- full-slot flows (patch 8): combine badge, auto-combine, tier-IV
+  // reason, and the make-room swap picker ----
   await A.exec(`const s=window.uv.sim,p=s.players[0]; while (p.weapons.length < p.weaponSlots) s._addWeapon(p,'pebbleshot',1); return 1;`);
   await A.waitFor(`return window.uv.meta.weapons.length === window.uv.meta.weaponSlots`, 3000, 'slots full');
   const notice = await A.exec(`return document.getElementById('overlay-shop').innerText.includes('sell or combine to make room')`);
   if (notice) ok('6/6 notice: "sell or combine to make room"'); else fail('full-slots notice missing');
-  // find (reroll if needed) a weapon in stock, verify blocked buy, sell, then buy
-  let stockSlot = -1;
-  for (let r = 0; r < 10; r++) {
-    stockSlot = await A.exec(`const st=window.uv.sim.players[0].shop.stock; return st.findIndex(s=>s.kind==='weapon'&&!s.sold)`);
-    if (stockSlot >= 0) break;
-    await A.exec(`document.getElementById('shop-reroll').click(); return 1;`);
-    await sleep(300);
-  }
-  if (stockSlot < 0) fail('no weapon appeared in stock after rerolls');
-  else {
-    const wCount0 = await A.exec('return window.uv.meta.weapons.length');
-    await A.exec(`document.querySelector('.offer-card[data-slot="${stockSlot}"]').click(); return 1;`);
-    await sleep(500);
-    const wCount1 = await A.exec('return window.uv.meta.weapons.length');
-    if (wCount1 === wCount0) ok('purchase at 6/6 is blocked'); else fail('purchase went through at full slots');
-    const lastIdx = wCount0 - 1;
-    await A.exec(`document.querySelector('[data-sellw="${lastIdx}"]').click(); return 1;`);
-    await A.exec(`document.querySelector('[data-sellw="${lastIdx}"]').click(); return 1;`);
-    await A.waitFor(`return window.uv.meta.weapons.length === ${wCount0 - 1}`, 4000, 'slot freed by sale');
-    stockSlot = await A.exec(`const st=window.uv.sim.players[0].shop.stock; return st.findIndex(s=>s.kind==='weapon'&&!s.sold)`);
-    await A.exec(`document.querySelector('.offer-card[data-slot="${stockSlot}"]').click(); return 1;`);
-    await A.waitFor(`return window.uv.meta.weapons.length === ${wCount0}`, 4000, 'purchase after sale');
-    ok('after selling, the new weapon purchase succeeds');
-  }
+  // deterministic stock: a duplicate, a non-duplicate, and later a tier-IV trap
+  await A.exec(`const s=window.uv.sim,p=s.players[0];
+    p.shop.stock[0]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
+    p.shop.stock[1]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
+    s._sendShop(p); return 1;`);
+  await A.waitFor(`return document.querySelector('.offer-card[data-slot="0"] .wpn-upg') !== null`, 3000, 'combine badge');
+  const badgeTxt = await A.exec(`return document.querySelector('.offer-card[data-slot="0"] .wpn-upg').textContent`);
+  if (/⇑/.test(badgeTxt) && /combines with your Pebbleshot I/.test(badgeTxt)) ok(`combine badge shows the outcome before purchase ("${badgeTxt.trim().slice(0, 60)}…")`);
+  else fail(`badge text: ${badgeTxt}`);
+  // buying the duplicate at 6/6 auto-combines in place, charged once
+  const acM0 = await A.exec('return window.uv.meta.materials');
+  await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
+  await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='pebbleshot'&&w.tier===2)`, 4000, 'auto-combined tier-up');
+  const acAfter = JSON.parse(await A.exec(`return JSON.stringify({n:window.uv.meta.weapons.length, m:window.uv.meta.materials, sold:window.uv.sim.players[0].shop.stock[0].sold})`));
+  if (acAfter.n === await A.exec('return window.uv.meta.weaponSlots') && acAfter.m === acM0 - 12 && acAfter.sold)
+    ok(`full-slot duplicate purchase auto-combines (still ${acAfter.n}/${acAfter.n}, charged ◆12 once)`);
+  else fail(`auto-combine state: ${JSON.stringify(acAfter)} (mats ${acM0}→)`);
+  // a tier-IV match shows why it can't be bought, and tapping it changes nothing
+  await A.exec(`const s=window.uv.sim,p=s.players[0]; p.weapons.find(w=>w.id==='pebbleshot').tier=4; p.metaDirty=true;
+    p.shop.stock[2]={kind:'weapon',id:'pebbleshot',tier:4,price:12,sold:false,locked:false}; s._sendShop(p); return 1;`);
+  await A.waitFor(`return document.querySelector('.offer-card[data-slot="2"] .wpn-blocked') !== null`, 3000, 'tier-IV blocked reason');
+  ok('tier-IV match shows its blocked reason on the card');
+  const t4W = await A.exec('return JSON.stringify(window.uv.meta.weapons)');
+  await A.exec(`document.querySelector('.offer-card[data-slot="2"]').click(); return 1;`);
+  await sleep(600);
+  if (t4W === await A.exec('return JSON.stringify(window.uv.meta.weapons)')) ok('tapping the tier-IV card leaves the build unchanged');
+  else fail('tier-IV tap mutated the build');
+  // the make-room picker: non-duplicate at full slots
+  await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
+  await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'make-room picker');
+  const pickerCards = JSON.parse(await A.exec(`const cards=[...document.querySelectorAll('.swap-card')];
+    return JSON.stringify({ n: cards.length, detailed: cards.filter(c=>c.querySelector('.wdetail .wd-dps')).length,
+      withNet: cards.filter(c=>/net [+\\-−]?\\d+/.test(c.textContent)).length })`));
+  if (pickerCards.n === await A.exec('return window.uv.meta.weapons.length') && pickerCards.detailed === pickerCards.n && pickerCards.withNet === pickerCards.n)
+    ok(`picker lists every owned weapon as a full detail card with its net cost (${pickerCards.n})`);
+  else fail(`picker cards: ${JSON.stringify(pickerCards)}`);
+  // cancel returns to the shop unchanged
+  const preCancel = await A.exec('return JSON.stringify([window.uv.meta.weapons, window.uv.meta.materials])');
+  await A.exec(`document.getElementById('swap-cancel').click(); return 1;`);
+  await A.waitFor(`return document.querySelector('.swap-card') === null && document.querySelector('.offer-card[data-slot="1"]') !== null`, 3000, 'picker cancelled');
+  if (preCancel === await A.exec('return JSON.stringify([window.uv.meta.weapons, window.uv.meta.materials])')) ok('cancel returns to the shop with nothing changed');
+  else fail('cancel mutated state');
+  // run the swap: arm (net shown), confirm → atomic sell+buy
+  await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
+  await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'picker again');
+  await A.exec(`document.querySelector('.swap-card:not(.cantafford)').click(); return 1;`);
+  const armedNet = await A.exec(`return document.querySelector('.swap-card.armed') ? document.querySelector('.swap-card.armed .oprice').textContent : ''`);
+  if (/sell \+\d+ ⟡ → buy −14 ⟡ · net [+\-−]?\d+ ⟡ — tap again/.test(armedNet)) ok(`swap arms with the full net line ("${armedNet.trim()}")`);
+  else fail(`armed net line: "${armedNet}"`);
+  const swM0 = await A.exec('return window.uv.meta.materials');
+  await A.exec(`document.querySelector('.swap-card.armed').click(); return 1;`);
+  await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='rustcleaver')`, 4000, 'swap executed');
+  const swAfter = JSON.parse(await A.exec(`return JSON.stringify({n:window.uv.meta.weapons.length, m:window.uv.meta.materials})`));
+  const netShown = parseInt((armedNet.match(/net ([+\-−]?\d+)/) || [])[1], 10);
+  if (swAfter.n === await A.exec('return window.uv.meta.weaponSlots') && swAfter.m === swM0 + netShown)
+    ok(`swap executes atomically at the shown net (${netShown} ⟡, still ${swAfter.n} weapons)`);
+  else fail(`swap result: ${JSON.stringify(swAfter)} net shown ${netShown} from ${swM0}`);
+
+  // ---- detail cards: owned chips expand; est. DPS is live ----
+  await A.exec(`const s=window.uv.sim,p=s.players[0]; p.weapons.length=0; s._addWeapon(p,'gravemaul',1); p.metaDirty=true; return 1;`);
+  await A.waitFor(`return window.uv.meta.weapons.length===1 && window.uv.meta.weapons[0].id==='gravemaul'`, 3000, 'gravemaul only');
+  await A.exec(`document.querySelector('[data-wchip="0"]').click(); return 1;`);
+  await A.waitFor(`return document.querySelector('.wchip.expanded .wdetail .wd-dps') !== null`, 3000, 'owned detail card');
+  const detTxt0 = await A.exec(`return document.querySelector('.wchip.expanded .wdetail').textContent`);
+  if (/scales:/.test(detTxt0) && /Vitality \+\d+%/.test(detTxt0) && /est\./.test(detTxt0)) ok('owned chip expands: scaling contribution + est. DPS shown');
+  else fail(`owned detail: "${detTxt0.slice(0, 120)}"`);
+  const dps0 = parseFloat(await A.exec(`return document.querySelector('.wchip.expanded .wd-dps b').textContent`));
+  // buying (granting) Vitality must immediately raise a Vitality-scaler's DPS
+  await A.exec(`const s=window.uv.sim,p=s.players[0]; p.boosts.vitality=(p.boosts.vitality||0)+40; s._recomputeStats(p); p.metaDirty=true; return 1;`);
+  await A.waitFor(`const el=document.querySelector('.wchip.expanded .wd-dps b'); return el && parseFloat(el.textContent) > ${dps0} ? 1 : 0`, 4000, 'live DPS update');
+  const dps1 = parseFloat(await A.exec(`return document.querySelector('.wchip.expanded .wd-dps b').textContent`));
+  ok(`est. DPS is live: +40 Vitality moved Gravemaul ${dps0} → ${dps1}`);
+  const stockDps = await A.exec(`return document.querySelector('.offer-card .wd-dps') !== null`);
+  if (stockDps) ok('stock weapon cards show est.-DPS-if-bought'); else fail('stock cards missing est. DPS');
   // close the shop → the map screen offers a reopen button while parked here
   await A.exec(`document.getElementById('shop-close') && document.getElementById('shop-close').click(); return 1;`);
   await A.waitFor(`return document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'shop closed');
@@ -494,13 +568,13 @@ try {
   const crest = await A.exec(`const s=window.uv.sim; if (!s.god) s.debug('F5');
     for (const id of ['coilgun','hailburst','gravelmouth','sparkbolt']) s._addWeapon(s.players[0], id, 4);
     s._travelTo(s.floor.siegeId);
-    let t=0; while (s.enemyPool.count < 250 && t++ < 12) s.debug('F1');
+    let t=0; while (s.enemyPool.count < 300 && t++ < 16) s.debug('F1');
     return s.enemyPool.count;`);
   const dFps = await measureFps(A);
   const dAlive = await A.exec('return window.uv.sim.enemyPool.count');
   console.log(`  PERF desktop host: ${dFps} fps @ ${crest}→${dAlive} alive (siege arena, headless SwiftShader)`);
-  if (crest >= 250) ok(`siege crest reached ${crest} alive for the perf gate`); else fail(`crest only ${crest} alive`);
-  if (dFps >= 55) ok(`desktop perf gate: ${dFps} fps ≥ 55 at crest`);
+  if (crest >= 300) ok(`siege crest reached ${crest} alive for the perf gate (patch-8 density)`); else fail(`crest only ${crest} alive`);
+  if (dFps >= 55) ok(`desktop perf gate: ${dFps} fps ≥ 55 at the ~300 crest`);
   else console.warn(`⚠ desktop headless fps ${dFps} @ ${dAlive} alive (headless SwiftShader is unrepresentative; sim tick <1ms)`);
 
   errs = await A.errors();
@@ -561,19 +635,23 @@ try {
     // the touch path under test is steering, not survival — an 80-HP Facet can
     // die during the long organic combat window, killing every later step
     await M.exec(`window.uv.sim.debug('F5'); return 1;`);
-    // joystick drag moves; release stops
-    const jx0 = await M.exec('return window.uv.sim.players[0].x');
+    // joystick drag moves; release stops (two directions — one axis can be
+    // blocked by arena architecture beside the spawn)
+    const jp0 = JSON.parse(await M.exec(`const p=window.uv.sim.players[0]; return JSON.stringify([p.x,p.y])`));
     await M.touchDown(420, 200);
     await M.touchMove(480, 200);
-    await sleep(800);
-    const jx1 = await M.exec('return window.uv.sim.players[0].x');
+    await sleep(500);
+    await M.touchMove(420, 260);
+    await sleep(500);
+    const jp1 = JSON.parse(await M.exec(`const p=window.uv.sim.players[0]; return JSON.stringify([p.x,p.y])`));
     await M.touchUp();
     await sleep(350);
     const jx2 = await M.exec('return window.uv.sim.players[0].x');
     await sleep(350);
     const jx3 = await M.exec('return window.uv.sim.players[0].x');
-    if (jx1 > jx0 + 60) ok(`joystick drag moves the player (${Math.round(jx0)}→${Math.round(jx1)})`);
-    else fail(`joystick did not move player (${jx0}→${jx1})`);
+    const jMoved = Math.hypot(jp1[0] - jp0[0], jp1[1] - jp0[1]);
+    if (jMoved > 60) ok(`joystick drag moves the player (${Math.round(jMoved)}u travelled)`);
+    else fail(`joystick did not move player (${Math.round(jMoved)}u)`);
     if (Math.abs(jx3 - jx2) < 8) ok('joystick release stops the player');
     else fail(`player kept drifting after release (${jx2}→${jx3})`);
     // camera follows on mobile too
@@ -608,6 +686,11 @@ try {
     ok('level-up picked by tap');
     await M.exec(drainJs); // the rest drain host-side so overlays can't block the joystick
     await M.waitFor(`return document.getElementById('overlay-levelup').classList.contains('hidden')`, 5000, 'offer backlog drained');
+    // the extraction shop opened at the clear — close it by touch to walk out
+    await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 4000, 'extraction shop on touch');
+    ok('extraction shop opens at the clear on touch');
+    await M.tap('#shop-close');
+    await M.waitFor(`return document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'extraction shop closed');
     // steer to the hatch with the joystick only — the extraction countdown runs
     const JX = 400, JY = 200;
     async function steerPoll(getDirJs, doneJs, timeoutMs, what) {
@@ -727,17 +810,39 @@ try {
     await M.tap('#map-reopen-shop');
     await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'shop reopened by map button');
     ok('map "Reopen shop" button works by touch');
+
+    // ---- touch detail cards, combine badge, and the swap picker (≥44px) ----
+    await M.exec(`const s=window.uv.sim,p=s.players[0]; while (p.weapons.length < p.weaponSlots) s._addWeapon(p,'pebbleshot',1);
+      p.shop.stock[0]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
+      p.shop.stock[1]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
+      s._sendShop(p); return 1;`);
+    await M.waitFor(`return window.uv.meta.weapons.length === window.uv.meta.weaponSlots`, 3000, 'mobile slots full');
+    const mbadge = JSON.parse(await M.exec(`const b=document.querySelector('.offer-card[data-slot="1"] .wpn-upg');
+      if (!b) return 'null'; const r=b.getBoundingClientRect(); return JSON.stringify({h:Math.round(r.height), len:b.textContent.trim().length})`) || 'null');
+    if (mbadge && mbadge.h >= 14 && mbadge.len > 20) ok(`combine badge is readable on touch (${mbadge.h}px tall)`);
+    else fail(`mobile combine badge: ${JSON.stringify(mbadge)}`);
+    await M.tap('[data-wchip="0"] .wsym'); // the symbol — a chip-center tap can land on the sell button
+    await M.waitFor(`return document.querySelector('.wchip.expanded .wdetail .wd-dps') !== null`, 3000, 'mobile owned detail');
+    ok('touch: owned chip expands to the full detail card');
+    await M.tap('.offer-card[data-slot="0"] .oname'); // non-duplicate at cap → picker
+    await M.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'mobile swap picker');
+    const mswap = JSON.parse(await M.exec(`const c=document.querySelector('.swap-card'); const r=c.getBoundingClientRect();
+      return JSON.stringify({h:Math.round(r.height), scroll:getComputedStyle(document.querySelector('.swap-row')).overflowY})`));
+    if (mswap.h >= 44 && mswap.scroll === 'auto') ok(`swap picker cards ≥44px and the list scrolls (${mswap.h}px)`);
+    else fail(`mobile picker: ${JSON.stringify(mswap)}`);
+    await M.tap('#swap-cancel');
+    await M.waitFor(`return document.querySelector('.swap-card') === null`, 3000, 'mobile picker cancelled');
     await M.tap('#shop-close');
 
-    // ---- perf gate: mobile emulation at a siege crest (≥40 fps at 150 alive) ----
+    // ---- perf gate: mobile emulation at the new siege crest (≥40 fps at ~200) ----
     await M.exec(`const s=window.uv.sim; if (!s.god) s.debug('F5'); s._travelTo(s.floor.siegeId);
-      let t=0; while (s.enemyPool.count < 150 && t++ < 8) s.debug('F1'); return 1;`);
+      let t=0; while (s.enemyPool.count < 200 && t++ < 10) s.debug('F1'); return 1;`);
     const mAlive0 = await M.exec('return window.uv.sim.enemyPool.count');
     const mFps = await measureFps(M);
     const mPerf = JSON.parse(await M.exec(`return JSON.stringify({alive:window.uv.sim.enemyPool.count, dpr:window.uvRenderer.dpr})`));
     console.log(`  PERF mobile emulation: ${mFps} fps @ ${mAlive0}→${mPerf.alive} alive, dpr cap ${mPerf.dpr} (headless SwiftShader)`);
-    if (mAlive0 >= 150) ok(`mobile siege crest reached ${mAlive0} alive for the perf gate`); else fail(`mobile crest only ${mAlive0}`);
-    if (mFps >= 40) ok(`mobile perf gate: ${mFps} fps ≥ 40 at crest (dpr ${mPerf.dpr})`);
+    if (mAlive0 >= 200) ok(`mobile siege crest reached ${mAlive0} alive for the perf gate`); else fail(`mobile crest only ${mAlive0}`);
+    if (mFps >= 40) ok(`mobile perf gate: ${mFps} fps ≥ 40 at the ~200 crest (dpr ${mPerf.dpr})`);
     else console.warn(`⚠ mobile headless fps ${mFps} (headless SwiftShader is unrepresentative; DPR capped at ${mPerf.dpr})`);
 
     // Leave Run by tap (from the siege arena) → lobby
@@ -801,7 +906,7 @@ if (wantCoop) {
   const peerjsB64 = readFileSync(PJS).toString('base64');
   const relay = spawn('node', ['tools/peer_relay.mjs', String(RELAY_PORT)], { stdio: 'ignore' });
   process.on('exit', () => relay.kill());
-  await sleep(700);
+  await sleep(1500);
   const COOP_URL = `${URL}?peerhost=localhost&peerport=${RELAY_PORT}&peersecure=0`;
   const A2 = new Browser();
   const B = new Browser();
@@ -809,9 +914,9 @@ if (wantCoop) {
     await A2.open('A2', { peerjsB64 });
     await A2.goto(COOP_URL);
     const A = A2; // reuse flow variable name below
-    await A.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title A');
-    await A.exec(`document.getElementById('name-input').value='HOST'; document.getElementById('btn-host').click()`);
-    const code = await (async () => {
+    const tryRegister = async () => {
+      await A.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title A');
+      await A.exec(`document.getElementById('name-input').value='HOST'; document.getElementById('btn-host').click()`);
       const t0 = Date.now();
       for (;;) {
         const c = await A.exec(`return window.uv.lobby && window.uv.lobby.code`);
@@ -821,7 +926,13 @@ if (wantCoop) {
         if (Date.now() - t0 > 12000) return null;
         await sleep(300);
       }
-    })();
+    };
+    let code = await tryRegister();
+    if (!code) { // the relay can be slow to bind under load — one clean retry
+      await sleep(1500);
+      await A.goto(COOP_URL);
+      code = await tryRegister();
+    }
     if (!code) {
       fail('room registration failed against local relay');
     } else {
@@ -1017,8 +1128,46 @@ if (wantCoop) {
       await A.waitFor(`return !window.uv.sim.players[1].downed`, 6000, 'revive');
       ok('proximity revive works in co-op');
 
-      // ---- DoD 6: the full Siege in co-op — mutations, mercy revive, boss, payout ----
+      // ---- patch 8 co-op: extraction shops for both; auto-combine, swap,
+      // and rerolls run in parallel with host validation, no desync ----
       await A.exec(clearFightJs);
+      await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'host extraction shop');
+      await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'client extraction shop');
+      ok('extraction shop opens for BOTH players at the co-op clear');
+      await A.exec(`const s=window.uv.sim,p0=s.players[0],p1=s.players[1];
+        while (p0.weapons.length < p0.weaponSlots) s._addWeapon(p0,'pebbleshot',1);
+        p0.materials=500; p1.materials=500;
+        p0.shop.stock[0]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
+        p0.shop.stock[1]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
+        s._sendShop(p0); s._sendShop(p1); return 1;`);
+      await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'host at cap');
+      // simultaneous: client rerolls while the host's duplicate buy auto-combines
+      await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
+      await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
+      await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='pebbleshot'&&w.tier===2)`, 4000, 'co-op auto-combine');
+      await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===1`, 4000, 'client reroll validated');
+      ok('client rerolls while the host auto-combines at full slots — host validates both');
+      // simultaneous: client rerolls again while the host runs a make-room swap
+      await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
+      await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
+      await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'co-op swap picker');
+      await A.exec(`document.querySelector('.swap-card:not(.cantafford)').click(); return 1;`);
+      await A.exec(`const c=document.querySelector('.swap-card.armed'); if (c) c.click(); return 1;`);
+      await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='rustcleaver')`, 4000, 'co-op swap executed');
+      await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===2`, 4000, 'client second reroll validated');
+      const coopSlots = await A.exec('return window.uv.meta.weaponSlots');
+      const coopN = await A.exec('return window.uv.meta.weapons.length');
+      if (coopN === coopSlots) ok(`swap + parallel rerolls: host still at ${coopN}/${coopSlots}, no desync`);
+      else fail(`co-op swap count: ${coopN}/${coopSlots}`);
+      // client display agrees with the authoritative build
+      const cv = await B.exec(`return JSON.stringify(window.uv.meta.weapons.map(w=>[w.id,w.tier]))`);
+      const hv2 = await A.exec(`return JSON.stringify(window.uv.sim.players[1].weapons.map(w=>[w.id,w.tier]))`);
+      if (cv === hv2) ok('client build display matches the host after the parallel session');
+      else fail(`co-op shop desync: host ${hv2} client ${cv}`);
+      await A.exec(`document.getElementById('shop-close') && document.getElementById('shop-close').click(); return 1;`);
+      await B.exec(`document.getElementById('shop-close') && document.getElementById('shop-close').click(); return 1;`);
+
+      // ---- DoD 6: the full Siege in co-op — mutations, mercy revive, boss, payout ----
       await A.exec(drainJs);
       await A.exec(`const s=window.uv.sim; s._travelTo(s.floor.siegeId); return 1;`);
       await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.arenaNode.kind==='siege'`, 3000, 'host in siege');
