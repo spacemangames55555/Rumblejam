@@ -12,6 +12,7 @@ import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
 import { initGloss } from './ui/gloss.js';
+import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID } from './content/characters.js';
@@ -21,7 +22,7 @@ import { ENEMIES } from './content/enemies.js';
 import { BOSSES } from './content/bosses.js';
 import { clamp } from './util.js';
 
-const { ROOM_W: W, ROOM_H: H, WALL } = CONFIG;
+const { WALL } = CONFIG;
 
 // ---------------- boot ----------------
 
@@ -51,9 +52,10 @@ const app = {
   myKey: '_local',
   meta: null,             // my latest private meta
   metas: {},              // host: last metas per idx (for HUD)
-  layout: null, floorNum: 1,
-  visited: new Set(),
-  roomInfo: null,         // latest 'room' event
+  floorNum: 1,
+  map: null,              // latest 'map' event (node layout + reachable)
+  arena: null,            // latest 'arena' event (dims + obstacles)
+  runMode: 'map',         // 'map' | 'arena'
   bossInfo: null,
   // client interpolation state
   snaps: [], predicted: null, lastSnapAt: 0, inputTimer: null, seqNo: 0,
@@ -70,6 +72,10 @@ const actions = {
 };
 initScreens(actions);
 initGloss(); // stat-glossary popover + document-level term handling
+initMapScreen({
+  pickNode: nodeId => sendUi({ kind: 'pickNode', nodeId }),
+  reopenShop: () => sendUi({ kind: 'reopenShop' }),
+});
 initOverlays({
   buy: slot => sendUi({ kind: 'buy', slot }),
   reroll: () => sendUi({ kind: 'reroll' }),
@@ -152,6 +158,7 @@ function hostAbandonRun() {
   app.lobby = { code: app.hostT ? app.hostT.code : null, codePending: false, players };
   showHud(false);
   closeAllOverlays();
+  hideMapScreen();
   if (app.hostT) app.hostT.broadcast({ t: 'abandon', lobby: publicLobby() });
   refreshLobby();
 }
@@ -283,10 +290,11 @@ function startRunCommon() {
   hideScreens();
   closeAllOverlays();
   showHud(true);
-  app.visited = new Set();
-  app.layout = null;
-  app.roomInfo = null;
+  app.map = null;      // latest 'map' event (layout + visited/reachable)
+  app.arena = null;    // latest 'arena' event (dims + obstacles + kind)
+  app.runMode = 'map'; // 'map' | 'arena'
   app.bossInfo = null;
+  hideMapScreen();
   app.meta = null;
   app.metas = {};
   app.snaps = [];
@@ -366,6 +374,7 @@ function clientOnMessage(msg) {
       app.mode = 'title';
       showHud(false);
       closeAllOverlays();
+      hideMapScreen();
       showTitle(msg.reason || 'Refused');
       break;
     case 'start': {
@@ -401,6 +410,7 @@ function clientOnMessage(msg) {
       app.predicted = null;
       showHud(false);
       closeAllOverlays();
+      hideMapScreen();
       showLobby(app.lobby, false, app.myKey);
       break;
   }
@@ -413,6 +423,7 @@ function clientLostHost() {
   showTitle('Host disconnected');
   showHud(false);
   closeAllOverlays();
+  hideMapScreen();
   app.mode = 'title';
 }
 
@@ -439,6 +450,7 @@ function leaveToTitle() {
   app.party = null;
   showHud(false);
   closeAllOverlays();
+  hideMapScreen();
   setNetStatus('');
   showTitle();
 }
@@ -447,22 +459,42 @@ function leaveToTitle() {
 function handleEvent(ev) {
   switch (ev.k) {
     case 'sfx': if (sfx[ev.s]) sfx[ev.s](); break;
-    case 'floor':
-      app.layout = ev.layout;
-      app.floorNum = ev.floorNum;
-      app.visited = new Set();
+    case 'map': {
+      const newFloor = !app.map || app.map.floorNum !== ev.floorNum;
+      app.map = ev;
+      app.arena = null;
+      app.runMode = 'map';
       app.bossInfo = null;
-      closeAllOverlays();
-      if (ev.floorNum > 1) banner(`FLOOR ${ev.floorNum}`, ['', 'The walls weep rust.', 'Something hums below.', 'The Vault is awake.'][ev.floorNum - 1] || '', 2200);
+      if (newFloor) {
+        app.floorNum = ev.floorNum;
+        closeAllOverlays();
+        if (ev.floorNum > 1) banner(`FLOOR ${ev.floorNum}`, ['', 'The walls weep rust.', 'Something hums below.', 'The Vault is awake.'][ev.floorNum - 1] || '', 2200);
+      }
+      if (app.mode === 'run') showMapScreen(mapScreenState());
       break;
-    case 'room':
-      app.roomInfo = ev;
-      app.visited.add(ev.roomId);
+    }
+    case 'arena':
+      app.arena = ev;
+      app.runMode = 'arena';
       app.bossInfo = null;
+      hideMapScreen();
+      if (ev.kind === 'siege') banner(ev.name || 'THE SIEGE', 'survive the shifting vault', 2600);
+      else if (ev.kind === 'elite') banner(ev.name || '', 'CHAMPION HUNT', 1600);
       break;
-    case 'locked': break;
+    case 'nodeVote': {
+      const m = app.party && app.party.find(x => x.idx === ev.byIdx);
+      if (ev.byIdx !== app.myIdx) toast(`${m ? m.name : 'A player'} ${ev.redirected ? 'redirected the path' : 'chose a path'}`);
+      break;
+    }
+    case 'obstacles': // siege collapse: walls changed
+      if (app.arena) app.arena.obstacles = ev.obstacles;
+      break;
+    case 'mutation':
+      banner(ev.text || 'THE VAULT SHIFTS', '', 2200);
+      sfx.roar();
+      break;
     case 'roomClear':
-      banner('ROOM CLEAR', '', 1200);
+      banner('FIELD CLEAR', 'gather the spoils — extraction is open', 1600);
       break;
     case 'levelUp': if (ev.idx === app.myIdx) toast('Level up! (pick at room clear)'); break;
     case 'offer': if (ev.idx === app.myIdx) showLevelup(ev); break;
@@ -477,7 +509,7 @@ function handleEvent(ev) {
     } break;
     case 'buyResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't buy: ${ev.reason}`); break;
     case 'mgmtResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't do that: ${ev.reason}`); break;
-    case 'toast': if (ev.idx === app.myIdx) toast(ev.text); break;
+    case 'toast': if (ev.idx === app.myIdx || ev.idx === -1) toast(ev.text); break;
     case 'downed': {
       const m = app.party && app.party.find(p => p.idx === ev.idx);
       banner(ev.idx === app.myIdx ? 'YOU ARE DOWN' : `${m ? m.name : 'ALLY'} IS DOWN`, ev.idx === app.myIdx ? 'an ally can revive you' : 'stand close to revive', 1800);
@@ -492,6 +524,7 @@ function handleEvent(ev) {
       app.mode = 'results';
       showHud(false);
       closeAllOverlays();
+      hideMapScreen();
       showResults(ev.result, app.myIdx);
       break;
     }
@@ -559,14 +592,50 @@ function hostTick() {
 
 // ---------------- view building ----------------
 
+// state for the node-map DOM screen (host reads the sim; clients the events + snaps)
+function mapScreenState() {
+  const m = app.map;
+  const sim = app.sim;
+  let vote = null;
+  if (sim && sim.nodeVote) vote = { nodeId: sim.nodeVote.nodeId, t: sim.nodeVote.t, byIdx: sim.nodeVote.byIdx };
+  else if (!sim && app.snaps.length) {
+    const last = app.snaps[app.snaps.length - 1].s;
+    if (last.vote) vote = last.vote;
+  }
+  const voter = vote && app.party ? app.party.find(x => x.idx === vote.byIdx) : null;
+  const curNode = m.layout.nodes[m.current];
+  return {
+    layout: m.layout, floorNum: m.floorNum,
+    current: m.current, visited: m.visited, reachable: m.reachable,
+    vote, voteName: voter ? voter.name : null,
+    onShop: !!(curNode && curNode.kind === 'shop'),
+  };
+}
+
 function viewFromSim(sim) {
-  const room = sim._room();
-  const rs = sim._rs();
+  if (sim.phase === 'map') {
+    return {
+      myIdx: app.myIdx, mode: 'map', shake: 0,
+      players: sim.players.map(p => ({
+        idx: p.idx, name: p.name, color: p.color, charId: p.charId, sym: p.char.sym,
+        x: 0, y: 0, hp: Math.ceil(p.hp), maxHp: p.stats.vitality, shield: Math.round(p.shield),
+        downed: p.downed, reviveP: 0, gone: p.gone, meter: -1,
+      })),
+      boss: null,
+    };
+  }
   return {
     myIdx: app.myIdx,
-    room: { doors: room.doors }, cleared: rs.cleared, locked: sim.roomLocked,
+    mode: 'arena',
+    aw: sim.W, ah: sim.H,
+    arenaKey: `${sim.floorNum}:${sim.currentNode}`,
+    kind: sim.arenaNode ? sim.arenaNode.kind : null,
+    afterSiege: sim.afterSiege,
+    obstacles: sim.obstacles.map(o => [o.x, o.y, o.w, o.h]),
+    cleared: sim.cleared, locked: !sim.cleared,
     shake: sim.shake,
-    door: sim.doorCd ? { kind: sim.doorCd.kind, dir: sim.doorCd.dir, t: sim.doorCd.t } : null,
+    extract: sim.extract ? sim.extract.t : null,
+    hold: sim.holdCircle ? [sim.holdCircle.x, sim.holdCircle.y, sim.holdCircle.r, sim.holdCircle.held ? 1 : 0] : null,
     hatch: sim.hatch ? [sim.hatch.x, sim.hatch.y] : null,
     players: sim.players.map(p => ({
       idx: p.idx, name: p.name, color: p.color, charId: p.charId, sym: p.char.sym,
@@ -580,7 +649,7 @@ function viewFromSim(sim) {
     enemies: [...sim.enemyPool].map(e => ({
       id: e.id, x: e.x, y: e.y, radius: e.radius, shape: e.shape, color: e.color,
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
-      flash: e.hitFlash > 0, fusing: e.fusing,
+      flash: e.hitFlash > 0, fusing: e.fusing, pylon: e.typeIdx === -2,
     })),
     projs: [...sim.projPool].map(pr => ({ x: pr.x, y: pr.y, radius: pr.radius, color: pr.color, friendly: pr.friendly })),
     pickups: sim.pickups,
@@ -618,13 +687,20 @@ function viewFromSnaps(dtFrame) {
   for (const e of s0.enemies) {
     const n = emap.get(e[0]) || e;
     const flags = n[5];
-    let shape, color;
-    if (flags & 2) { const bd = BOSSES[app.floorNum - 1]; shape = bd.shape; color = bd.color; }
-    else { const def = ENEMIES[n[1]]; shape = def ? def.shape : 'circle'; color = def ? def.color : '#e2504c'; }
+    const pylon = !!(flags & 32);
+    let shape, color, radius;
+    if (flags & 2) { const bd = BOSSES[app.floorNum - 1]; shape = bd.shape; color = bd.color; radius = bd.radius; }
+    else if (pylon) { shape = 'square'; color = '#c05eff'; radius = 26; }
+    else {
+      const def = ENEMIES[n[1]];
+      shape = def ? def.shape : 'circle'; color = def ? def.color : '#e2504c';
+      // radius derived, not sent: base × elite/mini scaling
+      radius = (def ? def.radius : 14) * ((flags & 1) ? 1.45 : 1) * ((flags & 4) ? 0.6 : 1);
+    }
     enemies.push({
-      id: e[0], x: L(e[2], n[2]), y: L(e[3], n[3]), hpFrac: L(e[4], n[4]), radius: n[6],
+      id: e[0], x: L(e[2], n[2]), y: L(e[3], n[3]), hpFrac: L(e[4], n[4]), radius,
       elite: !!(flags & 1), boss: !!(flags & 2), mini: !!(flags & 4), flash: !!(flags & 8), fusing: !!(flags & 16),
-      shape, color,
+      pylon, shape, color,
     });
   }
   const pmap = new Map();
@@ -653,10 +729,18 @@ function viewFromSnaps(dtFrame) {
   const projs = s1.projs.map(pr => ({ x: pr[1] + pr[3] * projDt, y: pr[2] + pr[4] * projDt, friendly: !!pr[5], radius: pr[6], color: pr[7] }));
   return {
     myIdx: app.myIdx,
-    room: { doors: app.roomInfo ? app.roomInfo.doors : {} },
-    cleared: !!s1.cleared, locked: !!s1.locked,
+    mode: s1.mode === 0 ? 'map' : 'arena',
+    aw: app.arena ? app.arena.w : undefined,
+    ah: app.arena ? app.arena.h : undefined,
+    arenaKey: `${app.floorNum}:${s1.node}`,
+    kind: app.arena ? app.arena.kind : null,
+    afterSiege: app.arena ? app.arena.kind === 'siege' : false,
+    obstacles: app.arena ? app.arena.obstacles : [],
+    cleared: !!s1.cleared, locked: !s1.cleared,
     shake: s1.shake,
-    door: s1.door, hatch: s1.hatch,
+    extract: s1.extract !== undefined ? s1.extract : null,
+    hold: s1.hold || null,
+    hatch: s1.hatch,
     players, enemies, projs,
     pickups: s1.pickups.map(m => ({ x: m[0], y: m[1] })),
     summons: s1.summons.map(sm => ({ owner: sm[0], type: sm[1], x: sm[2], y: sm[3], aimA: sm[5] })),
@@ -666,7 +750,7 @@ function viewFromSnaps(dtFrame) {
     zones: s1.zones.map(z => ({ x: z[0], y: z[1], r: z[2], color: z[3], hostile: !!z[4] })),
     beams: (s1.beams || []).map(bm => ({ x: bm.x, y: bm.y, a: bm.a, len: bm.len, w: bm.w })),
     hazards: (s1.hazards || []).map(hz => hz[0] === 's'
-      ? { type: 'spikes', y: hz[1], h: hz[2], state: hz[3] }
+      ? { type: 'spikes', x: hz[1], y: hz[2], w: hz[3], h: hz[4], state: hz[5] }
       : { type: 'lava', x: hz[1], y: hz[2], r: hz[3] }),
     boss: s1.boss,
     auras: (s1.auras || []).map(a => ({ idx: a[0], r: a[1] })),
@@ -683,8 +767,10 @@ function predictSelf(dtFrame, serverP, chr) {
   const spd = Math.max(60, CONFIG.BASE_SPEED * (1 + tempo / 100));
   pr.x += lastMove.mx * spd * dtFrame;
   pr.y += lastMove.my * spd * dtFrame;
-  pr.x = clamp(pr.x, WALL + radius, W - WALL - radius);
-  pr.y = clamp(pr.y, WALL + radius, H - WALL - radius);
+  // clamp to the CURRENT arena's bounds (obstacles reconcile via the server)
+  const aw = app.arena ? app.arena.w : 1280, ah = app.arena ? app.arena.h : 720;
+  pr.x = clamp(pr.x, WALL + radius, aw - WALL - radius);
+  pr.y = clamp(pr.y, WALL + radius, ah - WALL - radius);
   // soft reconciliation
   const ex = serverP[1] - pr.x, ey = serverP[2] - pr.y;
   const err = Math.hypot(ex, ey);
@@ -725,23 +811,30 @@ function frame(now) {
 
   renderer.draw(view, dtFrame);
 
+  // node-map screen follows the run mode (host and client alike)
+  const inMap = view && view.mode === 'map';
+  if (inMap && app.map) {
+    if (!isMapScreenOpen()) showMapScreen(mapScreenState());
+    else updateMapScreen(mapScreenState());
+  } else if (!inMap && isMapScreenOpen()) {
+    hideMapScreen();
+  }
+
   hudTimer += dtFrame;
   if (view && hudTimer >= 0.1) {
     hudTimer = 0;
     updateHud(app.meta, view, {
       floorNum: app.floorNum,
-      layout: app.layout,
-      visited: app.visited,
-      curRoom: app.roomInfo ? app.roomInfo.roomId : 0,
-      curRoomDef: app.roomInfo ? { kind: app.roomInfo.kind, hazard: app.roomInfo.hazard } : null,
+      arenaName: app.arena && view.mode === 'arena' ? app.arena.name : null,
+      kind: view.mode === 'arena' ? view.kind : null,
       boss: view.boss,
     });
-    // contextual touch button for the E action (reopen shop / shop at hatch /
-    // Overseer turret carry — always available to the Cogsmith)
+    // contextual touch button for the E action (Overseer turret carry in
+    // arenas; the post-siege shop at the descent portal)
     const me = app.party && app.party.find(m => m.idx === app.myIdx);
     const isOverseer = me && CHAR_BY_ID[me.charId] && CHAR_BY_ID[me.charId].trait.key === 'overseer';
-    const wantInteract = touchEnabled() && !isShopOpen()
-      && (isOverseer || (view.cleared && (!!view.hatch || (app.roomInfo && app.roomInfo.kind === 'shop'))));
+    const wantInteract = touchEnabled() && !isShopOpen() && view.mode === 'arena'
+      && (isOverseer || (view.afterSiege && view.cleared && !!view.hatch));
     document.getElementById('interact-btn').classList.toggle('hidden', !wantInteract);
   }
 }
@@ -798,6 +891,7 @@ window.uvSmoke = function () {
   for (const c of CHARACTERS) {
     try {
       const sim = new Sim({ seed: 123456789, party: [{ idx: 0, key: '_local', name: 'SMOKE', charId: c.id, color: '#fff' }] });
+      sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] }); // into the first arena
       sim.debug('F1');
       for (let i = 0; i < 180; i++) sim.tick();
       sim.getSnapshot();

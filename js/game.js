@@ -5,7 +5,8 @@
 import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, SCALING_RATES } from './config.js';
 import { Rng, subRng } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo } from './util.js';
-import { generateFloor, serializeFloor } from './dungeon.js';
+import { generateFloorMap, serializeMap } from './dungeon.js';
+import { buildArena, waveConfig } from './arenas.js';
 import { CHAR_BY_ID } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
@@ -14,14 +15,24 @@ import { BOSS_BY_FLOOR } from './content/bosses.js';
 import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
 
-const { ROOM_W: W, ROOM_H: H, WALL, DOOR_W, DT } = CONFIG;
-const SPAWN_CAPS = { wombden: 2, aegimand: 2, stitcher: 2, deadeye: 2, slabjaw: 3 };
+const { WALL, DT } = CONFIG;
+// Alive-at-once caps. Ranged and special types are capped so long sieges can't
+// pile one type into a degenerate wall (a low-DPS build vs 60 lobbers is a
+// stalemate, not a fight); melee chaff stays uncapped — swarms are the point,
+// and capped spawn rolls redirect into chaff.
+const SPAWN_CAPS = {
+  wombden: 2, aegimand: 3, stitcher: 3, deadeye: 4, slabjaw: 6,
+  lobber: 22, gemmite: 18, gyre: 16, fusehead: 10, lancerfish: 14,
+};
 const ING_SCALE = 0.1; // +10% summon damage & HP per Ingenuity point
+const VOTE_TIME = 4;   // consent countdown (node picks and extraction)
+// the Siege's ward pylon — a destructible structure, not a roster enemy
+const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', behavior: 'pylon', hp: 260, spd: 0, dmg: 0, radius: 26, mats: 6, shape: 'square', color: '#c05eff' };
 
 export class Sim {
   constructor({ seed, party }) {
     this.seed = seed >>> 0;
-    this.W = W; this.H = H;
+    this.W = 1280; this.H = 720; // placeholder until the first arena sets real dims
     this.tickNum = 0;
     this.time = 0;
     this.events = [];
@@ -52,8 +63,23 @@ export class Sim {
     this.coopSpawn = 1 + CONFIG.COOP_SPAWN_SCALE * (this.players.length - 1);
 
     this.floorNum = 0;
-    this.doorCd = null;     // {kind:'door'|'hatch', target, t}
     this.pendingEnd = 0;
+    // ---- Gauntlet flow state ----
+    this.phase = 'map';       // 'map' (node screen) | 'arena' (fighting)
+    this.currentNode = null;  // node id we're on (null before the first pick)
+    this.visited = new Set();
+    this.nodeVote = null;     // {nodeId, byIdx, t, redirected} — consent countdown
+    this.arenaNode = null;    // the node object while phase === 'arena'
+    this.wave = null;         // budget-curve spawn state
+    this.cleared = false;     // arena fight finished (portal up)
+    this.obstacles = [];      // axis-aligned rects
+    this.hatch = null;        // the extraction portal (fights) / descent (post-siege)
+    this.extract = null;      // {t} — countdown while someone stands on the portal
+    this.afterSiege = false;  // portal descends instead of returning to the map
+    this.mutations = null; this.mutIdx = 0; this.siegeT = 0; this.bossAt = Infinity;
+    this.bossSpawned = false; this.bossT = 0; this.siegeCfg = null;
+    this.holdCircle = null;   // {x,y,r,held} — spawn-choke sub-objective
+    this.pylonId = null; this.enemyBuff = 1;
     this._startFloor(1);
     for (const p of this.players) this._initStartingGear(p);
   }
@@ -69,7 +95,7 @@ export class Sim {
     const p = {
       idx, name: member.name || `Player ${idx + 1}`, charId: char.id, char,
       color: member.color, gone: false,
-      x: W / 2, y: H / 2, radius: CONFIG.PLAYER_RADIUS * (char.trait.key === 'immovable' ? char.trait.hitbox : 1),
+      x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.key === 'immovable' ? char.trait.hitbox : 1),
       mx: 0, my: 0, interact: false, moving: false, aimA: 0,
       hp: 1, shield: 0, downed: false, reviveP: 0, invuln: 0, pullX: 0, pullY: 0,
       level: 1, xp: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
@@ -315,12 +341,16 @@ export class Sim {
 
   _startFloor(n) {
     this.floorNum = n;
-    this.floor = generateFloor(this.seed, n);
-    this.roomStates = new Map();
-    for (const r of this.floor.rooms) {
-      this.roomStates.set(r.id, { cleared: r.kind === 'start', visited: false, treasureDone: false, shopStocked: false });
-    }
-    this.pushEvent({ k: 'floor', layout: serializeFloor(this.floor), floorNum: n });
+    this.floor = generateFloorMap(this.seed, n);
+    this.phase = 'map';
+    this.currentNode = null;
+    this.visited = new Set();
+    this.nodeVote = null;
+    this.arenaNode = null;
+    this.cleared = false;
+    this.hatch = null; this.extract = null; this.afterSiege = false;
+    this.boss = null;
+    this.holdCircle = null; this.pylonId = null; this.enemyBuff = 1;
     for (const p of this.players) {
       if (p.gone) continue;
       // overlays close on floor transition — re-surface any unresolved offers
@@ -334,120 +364,360 @@ export class Sim {
         if (p.char.trait.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
       }
     }
-    this._enterRoom(this.floor.startId, null);
+    this._mapEvent();
   }
 
-  _room() { return this.floor.rooms[this.roomId]; }
-  _rs() { return this.roomStates.get(this.roomId); }
+  // ---------------- the node map (between fights) ----------------
 
-  _enterRoom(roomId, fromDir) {
-    this.roomId = roomId;
-    const room = this._room();
-    const rs = this._rs();
-    this.doorCd = null;
+  reachableNodes() {
+    if (this.phase !== 'map') return [];
+    if (this.currentNode === null) return [...this.floor.startIds];
+    return [...this.floor.nodes[this.currentNode].edges];
+  }
+
+  _mapEvent() {
+    this.pushEvent({
+      k: 'map', layout: serializeMap(this.floor), floorNum: this.floorNum,
+      current: this.currentNode, visited: [...this.visited], reachable: this.reachableNodes(),
+    });
+  }
+
+  // Any player taps a reachable node → 4s consent countdown on every screen.
+  // A DIFFERENT player tapping a DIFFERENT node redirects it once, then the
+  // selection locks. Solo taps travel immediately.
+  _pickNode(idx, nodeId) {
+    if (this.phase !== 'map' || this.over) return;
+    if (!this.reachableNodes().includes(nodeId)) return;
+    if (this.livePlayers().length <= 1) { this._travelTo(nodeId); return; }
+    const v = this.nodeVote;
+    if (!v) {
+      this.nodeVote = { nodeId, byIdx: idx, t: VOTE_TIME, redirected: false };
+      this.pushEvent({ k: 'nodeVote', nodeId, byIdx: idx, redirected: false });
+      this.pushEvent({ k: 'sfx', s: 'door' });
+    } else if (!v.redirected && v.byIdx !== idx && v.nodeId !== nodeId) {
+      this.nodeVote = { nodeId, byIdx: idx, t: VOTE_TIME, redirected: true };
+      this.pushEvent({ k: 'nodeVote', nodeId, byIdx: idx, redirected: true });
+      this.pushEvent({ k: 'sfx', s: 'door' });
+    } // redirected once → locked; further taps are ignored
+  }
+
+  _tickVote(dt) {
+    if (!this.nodeVote) return;
+    this.nodeVote.t -= dt;
+    if (this.nodeVote.t <= 0) {
+      const id = this.nodeVote.nodeId;
+      this.nodeVote = null;
+      this._travelTo(id);
+    }
+  }
+
+  _travelTo(nodeId) {
+    const node = this.floor.nodes[nodeId];
+    this.currentNode = nodeId;
+    this.visited.add(nodeId);
+    this.nodeVote = null;
+    if (node.kind === 'combat' || node.kind === 'elite' || node.kind === 'siege') {
+      this._enterArena(node);
+      return;
+    }
+    // full-screen stops: the map stays the home screen underneath
+    if (node.kind === 'shop') {
+      for (const p of this.livePlayers()) this._openShop(p, `node${nodeId}`);
+    } else if (node.kind === 'treasure') {
+      for (const p of this.livePlayers()) this._offerTreasure(p, 'treasure');
+    }
+    this._mapEvent(); // next choices open immediately behind the stop
+  }
+
+  // ---------------- arenas (the stage) ----------------
+
+  _enterArena(node) {
+    const arena = buildArena(this.seed, this.floorNum, node);
+    this.phase = 'arena';
+    this.arenaNode = node;
+    this.W = arena.w; this.H = arena.h;
+    this.obstacles = arena.obstacles;
+    this.hazards = arena.hazards.map(h => ({ ...h }));
+    this.cleared = false;
+    this.hatch = null; this.extract = null;
+    this.afterSiege = node.kind === 'siege';
     this.telegraphs.length = 0; this.zones.length = 0; this.vortexes.length = 0;
     this.activeBeams.length = 0;
     this.enemyPool.clear();
     this.projPool.clear();
     this.pickups.length = 0;
-    this.hatch = null;
     this.spawnQueue = [];
-    this.pulses = [];
-    this.roomLocked = false;
-    this.boss = null;
-
-    // position players at the entry door (or center for floor start)
-    const entry = fromDir ? OPP[fromDir] : null;
-    const base = entry ? doorAnchor(entry) : { x: W / 2, y: H / 2 };
     this.decoys.length = 0;
+    this.boss = null;
     this.roomEnteredT = this.time;
+    this.waveRng = subRng(this.seed, 'wave', this.floorNum, node.id);
+    this.wave = waveConfig(this.floorNum, node.col, node.kind);
+    // siege script
+    if (node.kind === 'siege') {
+      this.mutations = arena.mutations;
+      this.mutIdx = 0;
+      this.siegeT = 0;
+      this.bossSpawned = false;
+      this.bossT = 0;
+      this.siegeCfg = arena;
+      const last = arena.mutations[arena.mutations.length - 1];
+      this.bossAt = last.at + arena.bossDelay;
+      this.pushEvent({ k: 'toast', idx: -1, text: arena.name });
+    } else {
+      this.mutations = null;
+      this.bossAt = Infinity;
+      this.siegeCfg = null;
+      this.bossT = 0;
+    }
+    // drop the party in at the arena center — nudged off any obstacle that
+    // covers it (cramped layouts can run walls through the exact midpoint)
+    const [cx, cy] = this._clearSpot(arena.w / 2, arena.h / 2, 40);
     this.players.forEach((p, i) => {
       if (p.gone) return;
-      p.x = clamp(base.x + (i % 2 ? -1 : 1) * (26 + 18 * Math.floor(i / 2)), WALL + p.radius, W - WALL - p.radius);
-      p.y = clamp(base.y + (i < 2 ? -1 : 1) * 22, WALL + p.radius, H - WALL - p.radius);
+      const [sx, sy] = this._clearSpot(
+        cx + (i % 2 ? -1 : 1) * (30 + 20 * Math.floor(i / 2)),
+        cy + (i < 2 ? -1 : 1) * 26, p.radius + 6);
+      p.x = sx; p.y = sy;
       p.firstHitUsed = false;
       p.pullX = p.pullY = 0;
-      // per-room trait state
+      // per-FIGHT trait state (the old per-room triggers)
       p.roomVitGain = 0;        // Vesper's overheal→Vitality cap
       p.roomFirstKillT = -10;
-      p.boonTemp = null;        // Facet's boon expires at the door
+      p.boonTemp = null;        // Facet's boon expires with the fight
       p.boonOffer = null;
       if (p.char.trait.key === 'prism' && !p.downed) this._offerBoon(p);
     });
-    // teleport summons along
+    // teleport summons along; structures rebuild between fights
     for (const s of this.summons) {
       const owner = this.players[s.owner];
       s.x = owner.x + (Math.random() * 80 - 40); s.y = owner.y + (Math.random() * 80 - 40);
-      if (s.dead) { s.dead = false; s.hp = s.maxHp; } // structures rebuild between rooms
+      if (s.dead) { s.dead = false; s.hp = s.maxHp; }
     }
-    // hazards
-    this.hazards = buildHazards(room, this.seed, this.floorNum);
-    rs.visited = true;
-
-    if (!rs.cleared && (room.kind === 'combat' || room.kind === 'elite')) {
-      this._beginCombat(room, rs);
-    } else if (!rs.cleared && room.kind === 'boss') {
-      this._beginBoss(room);
-    } else if (room.kind === 'treasure' && !rs.treasureDone) {
-      rs.treasureDone = true;
-      for (const p of this.livePlayers()) this._offerTreasure(p, 'treasure');
-      rs.cleared = true;
-    } else if (room.kind === 'shop') {
-      rs.cleared = true;
-      for (const p of this.livePlayers()) this._openShop(p);
-    }
-    if (room.kind === 'treasure') rs.cleared = true;
-    // returning to a beaten boss room: the hatch is still there
-    if (room.kind === 'boss' && rs.cleared && this.floorNum < CONFIG.FLOORS) {
-      this.hatch = { x: W / 2, y: H / 2 };
-    }
-    this.doorGrace = 1.0; // no countdown until entrants step out of the doorway zone
     this.pushEvent({
-      k: 'room', roomId, kind: room.kind, hazard: room.hazard, cleared: rs.cleared,
-      locked: this.roomLocked, doors: room.doors, fromDir: fromDir || null,
+      k: 'arena', nodeId: node.id, kind: node.kind, template: node.template,
+      name: arena.name, w: arena.w, h: arena.h,
+      obstacles: this.obstacles.map(o => [o.x, o.y, o.w, o.h]),
+      hazards: this._serializeHazardDefs(),
     });
   }
 
-  _beginCombat(room, rs) {
-    this.roomLocked = true;
-    const rng = subRng(this.seed, 'spawn', this.floorNum, room.id);
-    const isElite = room.kind === 'elite';
-    let quota = Math.round((CONFIG.QUOTA_BASE + CONFIG.QUOTA_PER_FLOOR * this.floorNum) * this.coopSpawn);
-    if (isElite) quota = Math.round(quota * 0.5);
-    const table = FLOOR_TABLES[this.floorNum - 1];
-    const counts = {};
-    const comp = [];
-    for (let i = 0; i < quota; i++) {
-      let id = table[Math.floor(rng.float() * table.length)];
-      const cap = SPAWN_CAPS[id];
-      if (cap && (counts[id] || 0) >= cap) id = table[0] === id ? table[1] : table[0];
-      counts[id] = (counts[id] || 0) + 1;
-      comp.push({ id, elite: false });
-    }
-    if (isElite) {
-      const eliteCount = this.floorNum >= 3 ? 2 : 1;
-      for (let i = 0; i < eliteCount; i++) {
-        comp.push({ id: rng.pick(table.filter(t => t !== 'wombden')), elite: true, mod: rng.pick(ELITE_MODS) });
-      }
-    }
-    // 3 pulses: 40/30/30
-    const p1 = Math.ceil(comp.length * 0.4), p2 = Math.ceil(comp.length * 0.3);
-    this.pulses = [comp.slice(0, p1), comp.slice(p1, p1 + p2), comp.slice(p1 + p2)];
-    this.pulseTimer = 0.6;
-    this.pulseIdx = 0;
-    this.pulseRng = rng;
-    this.pushEvent({ k: 'locked' });
+  _serializeHazardDefs() {
+    return (this.hazards || []).map(h => h.type === 'spikes'
+      ? { type: 'spikes', x: h.x, y: h.y, w: h.w, h: h.h }
+      : { type: 'lava', x: h.x, y: h.y, r: h.r });
   }
 
-  _beginBoss(room) {
-    this.roomLocked = true;
+  // Budget-curve spawning: rate ramps r0→r1 over rampT, runs for dur seconds
+  // (forever in sieges), then stops; the fight ends when the field is cleared.
+  _tickWave(dt) {
+    const w = this.wave;
+    if (!w || w.done) return;
+    w.t += dt;
+    if (w.t >= w.dur) { w.done = true; return; }
+    let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn;
+    if (this.boss) {
+      // "reduced add spawns" while the boss is up — and tapering to silence,
+      // so a siege is never an unwinnable DPS race against infinite inflow:
+      // once the taper runs out the fight is finite (boss + standing field)
+      this.bossT += dt;
+      const taper = Math.max(0, 1 - this.bossT / 75);
+      rate *= (this.siegeCfg ? this.siegeCfg.addRate : 0.35) * taper;
+      if (taper === 0) { w.done = true; return; } // survivors rush (enemies.js)
+    }
+    if (this.holdCircle && this.holdCircle.held) rate *= 0.3; // the sigil chokes the spawning
+    w.acc += rate * dt;
+    // elite injections (elite nodes and sieges)
+    if (w.eliteEvery > 0) {
+      w.eliteT -= dt;
+      if (w.eliteT <= 0) {
+        w.eliteT = w.eliteEvery;
+        const table = FLOOR_TABLES[this.floorNum - 1];
+        const id = this.waveRng.pick(table.filter(t => t !== 'wombden'));
+        const pos = this._spawnWavePos();
+        this.spawnQueue.push({ t: 0.7, id, elite: true, mod: this.waveRng.pick(ELITE_MODS), x: pos.x, y: pos.y });
+        this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 34, dur: 0.7, spawnMark: true });
+      }
+    }
+    let guard = 0;
+    while (w.acc >= 1 && guard++ < 20) {
+      w.acc -= 1;
+      if (this.enemyPool.count + this.spawnQueue.length >= CONFIG.POOL_ENEMIES - 10) break; // pool headroom
+      const table = FLOOR_TABLES[this.floorNum - 1];
+      let id = table[Math.floor(this.waveRng.float() * table.length)];
+      const cap = SPAWN_CAPS[id];
+      if (cap && this._aliveOfType(id) >= cap) id = table[0] === id ? table[1] : table[0];
+      const pos = this._spawnWavePos();
+      this.spawnQueue.push({ t: 0.7, id, x: pos.x, y: pos.y });
+      this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 26, dur: 0.7, spawnMark: true });
+    }
+  }
+
+  _aliveOfType(id) {
+    let n = 0;
+    for (const e of this.enemyPool) if (!e.boss && e.def.id === id) n++;
+    return n;
+  }
+
+  _spawnWavePos() {
+    const rng = this.waveRng;
+    for (let tries = 0; tries < 24; tries++) {
+      const x = WALL + 60 + rng.float() * (this.W - 2 * WALL - 120);
+      const y = WALL + 60 + rng.float() * (this.H - 2 * WALL - 120);
+      if (this._inObstacle(x, y, 24)) continue;
+      let ok = true;
+      for (const p of this.livePlayers()) if (dist2(x, y, p.x, p.y) < 300 * 300) { ok = false; break; }
+      if (ok) return { x, y };
+    }
+    return { x: clamp(this.W / 2 + (rng.float() - 0.5) * this.W * 0.8, WALL + 60, this.W - WALL - 60), y: WALL + 80 };
+  }
+
+  // fight over when the budget is spent and the field is empty
+  _checkFightClear() {
+    if (this.phase !== 'arena' || this.cleared || this.over) return;
+    if (this.arenaNode.kind === 'siege') return; // sieges end on the boss, not on empty
+    if (!this.wave.done || this.spawnQueue.length > 0 || this.enemyPool.count > 0) return;
+    this._clearFight();
+  }
+
+  _clearFight() {
+    this.cleared = true;
+    this.pushEvent({ k: 'roomClear' });
+    this.pushEvent({ k: 'sfx', s: 'door' });
+    // magnet the field to the nearest players, resolve the fight's rewards
+    for (const m of this.pickups) {
+      const p = this.nearestLivingPlayer(m.x, m.y);
+      if (p) m.target = p.idx;
+    }
+    for (const p of this.livePlayers()) this._clearRewards(p);
+    if (this.arenaNode.kind === 'elite') {
+      for (const p of this.livePlayers()) this._offerTreasure(p, 'elite');
+    }
+    // the extraction portal — leave via the same consent countdown
+    this.hatch = this._openSpot(this.W / 2, this.H / 2);
+  }
+
+  _openSpot(x, y) {
+    // nudge a point out of any obstacle
+    for (let tries = 0; tries < 20 && this._inObstacle(x, y, 60); tries++) {
+      x += (Math.random() - 0.5) * 300; y += (Math.random() - 0.5) * 300;
+      x = clamp(x, WALL + 80, this.W - WALL - 80); y = clamp(y, WALL + 80, this.H - WALL - 80);
+    }
+    return { x, y };
+  }
+
+  // Extraction: any live player standing on the portal runs the 4s countdown
+  // (shown on every screen); stepping off cancels it.
+  _tickExtract(dt) {
+    if (!this.hatch || this.over) return;
+    let on = false;
+    for (const p of this.livePlayers()) {
+      if (!p.downed && dist2(p.x, p.y, this.hatch.x, this.hatch.y) < 70 * 70) { on = true; break; }
+    }
+    if (!on) { this.extract = null; return; }
+    if (!this.extract) {
+      this.extract = { t: VOTE_TIME };
+      this.pushEvent({ k: 'sfx', s: 'door' });
+    } else {
+      this.extract.t -= dt;
+      if (this.extract.t <= 0) {
+        this.extract = null;
+        if (this.afterSiege) this._startFloor(this.floorNum + 1);
+        else this._finishNode();
+      }
+    }
+  }
+
+  _finishNode() {
+    const node = this.arenaNode;
+    this.phase = 'map';
+    this.arenaNode = null;
+    this.wave = null;
+    this.hatch = null; this.extract = null;
+    this.enemyPool.clear(); this.projPool.clear();
+    this.pickups.length = 0; this.decoys.length = 0;
+    this.telegraphs.length = 0; this.zones.length = 0; this.vortexes.length = 0;
+    this.hazards = [];
+    // boons expire with the fight
+    for (const p of this.players) { p.boonTemp = null; p.boonOffer = null; }
+    for (const p of this.livePlayers()) this._recomputeStats(p);
+    this._mapEvent();
+  }
+
+  // ---------------- the Siege (mutations, sub-objectives, the boss) ----------------
+
+  _tickSiege(dt) {
+    if (this.phase !== 'arena' || this.arenaNode.kind !== 'siege' || this.over || this.cleared) return;
+    this.siegeT += dt;
+    // scripted mutations
+    while (this.mutIdx < this.mutations.length && this.siegeT >= this.mutations[this.mutIdx].at) {
+      this._applyMutation(this.mutations[this.mutIdx++]);
+    }
+    // hold-circle contest state
+    if (this.holdCircle) {
+      const c = this.holdCircle;
+      c.held = this.livePlayers().some(p => !p.downed && dist2(p.x, p.y, c.x, c.y) < c.r * c.r);
+    }
+    // the floor boss enters (once) after the final mutation
+    if (!this.bossSpawned && this.siegeT >= this.bossAt) {
+      this.bossSpawned = true;
+      this._spawnSiegeBoss();
+    }
+  }
+
+  _applyMutation(m) {
+    this.shake = Math.max(this.shake, 7);
+    this.pushEvent({ k: 'mutation', kind: m.kind, text: m.text });
+    this.pushEvent({ k: 'sfx', s: 'boom' });
+    // the vault shifts and the fallen stir — every mutation revives at 25%
+    for (const p of this.livePlayers()) if (p.downed) this._revive(p, 0.25);
+    if (m.kind === 'collapse') {
+      for (const o of this.obstacles) {
+        if (o.group === m.group) this.fx.booms.push({ x: o.x + o.w / 2, y: o.y + o.h / 2, r: Math.max(o.w, o.h) });
+      }
+      this.obstacles = this.obstacles.filter(o => o.group !== m.group);
+      this.pushEvent({ k: 'obstacles', obstacles: this.obstacles.map(o => [o.x, o.y, o.w, o.h]) });
+    } else if (m.kind === 'hazard_field') {
+      this.hazards.push({
+        type: 'lava', x: m.from.x, y: m.from.y, r: m.r, dps: m.dps, acc: 0,
+        vx: (m.to.x - m.from.x) / m.travel, vy: (m.to.y - m.from.y) / m.travel, travelT: m.travel,
+      });
+      this.addTelegraph({ shape: 'circle', x: m.from.x, y: m.from.y, r: m.r, dur: 2 });
+    } else if (m.kind === 'pylon') {
+      this._spawnPylon(m.x, m.y);
+    } else if (m.kind === 'circle') {
+      this.holdCircle = { x: m.x, y: m.y, r: m.r, held: false };
+    }
+  }
+
+  _spawnPylon(x, y) {
+    const e = this.enemyPool.alloc();
+    if (!e) return;
+    const hp = Math.round(PYLON_DEF.hp * Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1) * this.coopHp);
+    Object.assign(e, {
+      id: ++this.spawnCounter, def: PYLON_DEF, typeIdx: -2, boss: false, bossDef: null,
+      x, y, hp, maxHp: hp, radius: PYLON_DEF.radius, spd: 0, dmg: 0, dmgScale: 1,
+      mats: PYLON_DEF.mats, mini: false, elite: false, eliteMod: null,
+      t: 0, phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
+      hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
+      fireT: 0, healTarget: null, brood: null, shape: PYLON_DEF.shape, color: PYLON_DEF.color,
+      hitStamps: {}, echoCd: 0, bulwarkCd: 0,
+    });
+    this.pylonId = e.id;
+    this.enemyBuff = 1.3; // while the pylon stands, everything hits harder
+    this.addTelegraph({ shape: 'circle', x, y, r: 90, dur: 1.2 });
+  }
+
+  _spawnSiegeBoss() {
     const def = BOSS_BY_FLOOR[this.floorNum];
     const e = this.enemyPool.alloc();
     if (!e) return;
-    const id = ++this.spawnCounter;
+    // enter away from the party's centroid
+    const live = this.livePlayers();
+    const cx = live.reduce((s, p) => s + p.x, 0) / Math.max(1, live.length);
+    const x = cx < this.W / 2 ? this.W * 0.8 : this.W * 0.2;
     Object.assign(e, {
-      id, def: null, typeIdx: -1, boss: true, bossDef: def, bs: {},
-      x: W / 2, y: H * 0.3, hp: Math.round(def.hp * this.coopHp * this.greedHp),
+      id: ++this.spawnCounter, def: null, typeIdx: -1, boss: true, bossDef: def, bs: {},
+      x, y: this.H * 0.3, hp: Math.round(def.hp * this.coopHp * this.greedHp),
       maxHp: Math.round(def.hp * this.coopHp * this.greedHp),
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
@@ -455,7 +725,55 @@ export class Sim {
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
     });
     this.boss = e;
+    this.addTelegraph({ shape: 'circle', x, y: this.H * 0.3, r: def.radius + 60, dur: 1.5 });
     this.pushEvent({ k: 'bossSpawn', name: def.name });
+  }
+
+  // ---------------- obstacles ----------------
+
+  _inObstacle(x, y, r = 0) {
+    for (const o of this.obstacles) {
+      if (x > o.x - r && x < o.x + o.w + r && y > o.y - r && y < o.y + o.h + r) return true;
+    }
+    return false;
+  }
+
+  // deterministic nearest clear point: rings outward from (x, y)
+  _clearSpot(x, y, r) {
+    if (!this._inObstacle(x, y, r)) return [x, y];
+    for (let ring = 50; ring <= 800; ring += 50) {
+      for (let a = 0; a < 16; a++) {
+        const qx = clamp(x + Math.cos(a / 16 * Math.PI * 2) * ring, WALL + 40, this.W - WALL - 40);
+        const qy = clamp(y + Math.sin(a / 16 * Math.PI * 2) * ring, WALL + 40, this.H - WALL - 40);
+        if (!this._inObstacle(qx, qy, r)) return [qx, qy];
+      }
+    }
+    return [x, y];
+  }
+
+  // push a circular entity out of any rect it overlaps (smallest axis)
+  _pushOut(ent, r) {
+    for (const o of this.obstacles) {
+      const nx = clamp(ent.x, o.x, o.x + o.w);
+      const ny = clamp(ent.y, o.y, o.y + o.h);
+      const dx = ent.x - nx, dy = ent.y - ny;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= r * r) continue;
+      if (d2 > 0.0001) {
+        const d = Math.sqrt(d2);
+        ent.x = nx + dx / d * r;
+        ent.y = ny + dy / d * r;
+      } else {
+        // center inside the rect: exit through the nearest face
+        const exits = [
+          [o.x - r - ent.x, 0], [o.x + o.w + r - ent.x, 0],
+          [0, o.y - r - ent.y], [0, o.y + o.h + r - ent.y],
+        ];
+        let best = exits[0];
+        for (const e2 of exits) if (Math.hypot(e2[0], e2[1]) < Math.hypot(best[0], best[1])) best = e2;
+        ent.x += best[0]; ent.y += best[1];
+      }
+    }
   }
 
   spawnEnemyById(id, x, y, opts = {}) {
@@ -469,7 +787,7 @@ export class Sim {
     if (opts.mini) hp *= 0.35;
     Object.assign(e, {
       id: ++this.spawnCounter, def, typeIdx: ENEMY_INDEX[id], boss: false, bossDef: null,
-      x: clamp(x, WALL + 20, W - WALL - 20), y: clamp(y, WALL + 20, H - WALL - 20),
+      x: clamp(x, WALL + 20, this.W - WALL - 20), y: clamp(y, WALL + 20, this.H - WALL - 20),
       hp: Math.round(hp), maxHp: Math.round(hp),
       radius: def.radius * (opts.elite ? 1.45 : 1) * (opts.mini ? 0.6 : 1),
       spd: def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1),
@@ -520,8 +838,23 @@ export class Sim {
       if (this.pendingEnd <= 0) { this._finish(true); return; }
     }
 
-    // spawn pulses
-    this._tickSpawning(dt);
+    // ---- map phase: the node screen. Just the consent countdown and offers ----
+    if (this.phase === 'map') {
+      this._tickVote(dt);
+      if (this.tickNum % 15 === 0) {
+        for (const p of this.players) {
+          if (p.gone) continue;
+          this._recomputeStats(p);
+          if (p.banked > 0) this._maybeOffer(p);
+        }
+      }
+      return;
+    }
+
+    // ---- arena phase ----
+    this._tickWave(dt);
+    this._flushSpawnQueue(dt);
+    if (this.arenaNode && this.arenaNode.kind === 'siege') this._tickSiege(dt);
     // players
     for (const p of this.players) { if (!p.gone) this._tickPlayer(p, dt); }
     // periodic stat recompute (auras, low-hp, frenzy expiry); also surface
@@ -530,7 +863,7 @@ export class Sim {
       for (const p of this.players) {
         if (p.gone) continue;
         this._recomputeStats(p);
-        if (!this.roomLocked && this._rs().cleared && p.banked > 0) this._maybeOffer(p);
+        if (this.cleared && p.banked > 0) this._maybeOffer(p);
       }
     }
     // summons
@@ -553,29 +886,9 @@ export class Sim {
     this._tickDecoys(dt);
     // revives
     this._tickRevive(dt);
-    // room clear check
-    this._checkClear();
-    // door countdown
-    this._tickDoors(dt);
-  }
-
-  _tickSpawning(dt) {
-    if (!this.roomLocked || this.boss) { this._flushSpawnQueue(dt); return; }
-    if (this.pulseIdx < this.pulses.length) {
-      this.pulseTimer -= dt;
-      const aliveCount = this.enemyPool.count + this.spawnQueue.length;
-      const trigger = this.pulseTimer <= 0 || (this.pulseIdx > 0 && aliveCount <= 3);
-      if (trigger) {
-        const batch = this.pulses[this.pulseIdx++];
-        this.pulseTimer = 9;
-        for (const spec of batch) {
-          const pos = this._spawnPos();
-          this.spawnQueue.push({ t: 0.7, ...spec, x: pos.x, y: pos.y });
-          this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 26, dur: 0.7, spawnMark: true });
-        }
-      }
-    }
-    this._flushSpawnQueue(dt);
+    // fight clear + extraction portal countdown
+    this._checkFightClear();
+    this._tickExtract(dt);
   }
 
   _flushSpawnQueue(dt) {
@@ -587,18 +900,6 @@ export class Sim {
         this.spawnEnemyById(q.id, q.x, q.y, { elite: q.elite, mod: q.mod });
       }
     }
-  }
-
-  _spawnPos() {
-    const rng = this.pulseRng;
-    for (let tries = 0; tries < 20; tries++) {
-      const x = WALL + 40 + rng.float() * (W - 2 * WALL - 80);
-      const y = WALL + 40 + rng.float() * (H - 2 * WALL - 80);
-      let ok = true;
-      for (const p of this.livePlayers()) if (dist2(x, y, p.x, p.y) < 220 * 220) { ok = false; break; }
-      if (ok) return { x, y };
-    }
-    return { x: W / 2, y: WALL + 60 };
   }
 
   // ---------------- player tick ----------------
@@ -620,8 +921,9 @@ export class Sim {
     p.x += (p.mx * spd + p.pullX * pullResist) * dt;
     p.y += (p.my * spd + p.pullY * pullResist) * dt;
     p.pullX = p.pullY = 0;
-    p.x = clamp(p.x, WALL + p.radius, W - WALL - p.radius);
-    p.y = clamp(p.y, WALL + p.radius, H - WALL - p.radius);
+    p.x = clamp(p.x, WALL + p.radius, this.W - WALL - p.radius);
+    p.y = clamp(p.y, WALL + p.radius, this.H - WALL - p.radius);
+    this._pushOut(p, p.radius);
 
     // Onrush: moving fills the meter; fill rate scales with Tempo
     if (t.key === 'momentum_meter') {
@@ -661,16 +963,13 @@ export class Sim {
       }
     }
 
-    // interact: Overseer turret carry > shop reopen
+    // interact: Overseer turret carry > post-siege shop reopen at the portal
     if (p.interact) {
       p.interact = false;
       if (t.key === 'overseer' && this._overseerInteract(p)) {
         // handled (picked up or began redeploy)
-      } else {
-        const room = this._room();
-        if ((room.kind === 'shop' && this._rs().cleared) || this.hatch) {
-          this._openShop(p, this.hatch ? 'boss' : 'shop');
-        }
+      } else if (this.hatch && this.afterSiege) {
+        this._openShop(p, 'boss');
       }
     }
   }
@@ -1120,6 +1419,13 @@ export class Sim {
     const { x, y } = e;
     this.fx.deaths.push({ x: Math.round(x), y: Math.round(y), c: e.boss ? e.bossDef.color : e.def.color, r: e.radius });
     this.pushEvent({ k: 'sfx', s: 'enemyDie' });
+    // the ward pylon falls: the empowerment ends
+    if (e.id === this.pylonId) {
+      this.pylonId = null;
+      this.enemyBuff = 1;
+      this.pushEvent({ k: 'toast', idx: -1, text: 'The ward pylon shatters — the empowerment ends' });
+      this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
+    }
     // drops
     let mats = e.mats * this.greedMats;
     if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && Math.random() < killer.hookAgg.doubleMaterials) mats *= 2;
@@ -1194,6 +1500,7 @@ export class Sim {
 
   hurtPlayer(p, raw, src, opts = {}) {
     if (this.over || p.gone || p.downed || p.invuln > 0 || this.god) return;
+    raw *= this.enemyBuff; // the siege's ward pylon empowers everything
     const t = p.char.trait;
     // Reflex: dodge chance (capped in recompute); every on-dodge effect keys off this
     if (!opts.shared && Math.random() * 100 < p.stats.reflex) {
@@ -1304,7 +1611,7 @@ export class Sim {
       pr.x += pr.vx * dt; pr.y += pr.vy * dt;
       pr.ttl -= dt;
       const expired = pr.ttl <= 0;
-      const oob = pr.x < WALL - 10 || pr.x > W - WALL + 10 || pr.y < WALL - 10 || pr.y > H - WALL + 10;
+      const oob = pr.x < WALL - 10 || pr.x > this.W - WALL + 10 || pr.y < WALL - 10 || pr.y > this.H - WALL + 10;
       if (pr.friendly) {
         if (pr.lob) {
           if (expired || oob) { this._lobExplode(pr); this.projPool.release(pr); }
@@ -1483,15 +1790,21 @@ export class Sim {
     if (!this.hazards) return;
     for (const hz of this.hazards) {
       if (hz.type === 'spikes') {
+        // spike STRIPS: banded rects on the old safe/warn/fire cycle
         const cyc = (this.time + hz.offset) % hz.period;
         hz.state = cyc < hz.safe ? 0 : cyc < hz.safe + hz.warn ? 1 : 2;
         if (hz.state === 2) {
           for (const p of this.livePlayers()) {
             if (p.downed || p.invuln > 0) continue;
-            if (p.y > hz.y - hz.h / 2 && p.y < hz.y + hz.h / 2) this.hurtPlayer(p, hz.dmg, null);
+            if (p.x > hz.x && p.x < hz.x + hz.w && p.y > hz.y && p.y < hz.y + hz.h) this.hurtPlayer(p, hz.dmg, null);
           }
         }
       } else if (hz.type === 'lava') {
+        // a migrating field (siege mutation) moves toward its target, then stays
+        if (hz.vx !== undefined && hz.travelT > 0) {
+          hz.x += hz.vx * dt; hz.y += hz.vy * dt;
+          hz.travelT -= dt;
+        }
         hz.acc = (hz.acc || 0) + dt;
         if (hz.acc >= 0.5) {
           hz.acc = 0;
@@ -1512,7 +1825,7 @@ export class Sim {
       m.v += value;
       return;
     }
-    this.pickups.push({ x: clamp(x, WALL + 10, W - WALL - 10), y: clamp(y, WALL + 10, H - WALL - 10), v: value, vx: 0, vy: 0, target: -1 });
+    this.pickups.push({ x: clamp(x, WALL + 10, this.W - WALL - 10), y: clamp(y, WALL + 10, this.H - WALL - 10), v: value, vx: 0, vy: 0, target: -1 });
   }
 
   _tickPickups(dt) {
@@ -1633,38 +1946,12 @@ export class Sim {
     }
   }
 
-  _checkClear() {
-    if (!this.roomLocked || this.over) return;
-    if (this.boss) return; // boss clear handled in _bossDown
-    if (this.pulseIdx < this.pulses.length) return;
-    if (this.spawnQueue.length > 0 || this.enemyPool.count > 0) return;
-    this._clearRoom();
-  }
-
-  _clearRoom() {
-    this.roomLocked = false;
-    const rs = this._rs();
-    rs.cleared = true;
-    this.pushEvent({ k: 'roomClear' });
-    this.pushEvent({ k: 'sfx', s: 'door' });
-    // magnet all materials to nearest players
-    for (const m of this.pickups) {
-      const p = this.nearestLivingPlayer(m.x, m.y);
-      if (p) m.target = p.idx;
-    }
-    for (const p of this.livePlayers()) this._clearRewards(p);
-    // elite room reward: rare+ pick for everyone
-    if (this._room().kind === 'elite') {
-      for (const p of this.livePlayers()) this._offerTreasure(p, 'elite');
-    }
-  }
-
-  // Per-player room-clear resolution — used by combat clears AND boss kills so
-  // Greed tithe/interest/heals/trait growths never skip a room.
+  // Per-player fight-clear resolution — used by arena clears AND the siege's
+  // boss kill so Greed tithe/interest/heals/trait growths never skip a fight.
   _clearRewards(p) {
     // auto-revive downed at 50%
     if (p.downed) this._revive(p, CONFIG.REVIVE_HP);
-    // Greed: floor(G/2) bonus materials at every room clear (no self-growth)
+    // Greed: floor(G/2) bonus materials at every fight clear (no self-growth)
     const tithe = Math.floor(Math.max(0, p.stats.greed) / 2);
     if (tithe > 0) {
       this._collectMaterial(p, tithe);
@@ -1685,12 +1972,18 @@ export class Sim {
     this._maybeOffer(p);
   }
 
+  // Boss death ends the siege: sweep, full payout, post-boss shop, and the
+  // descent portal (victory on floor 4).
   _bossDown(e) {
+    // capture before the add-sweep: a splitter dying there can spawn minis
+    // that reuse (and overwrite) the boss's just-released pool slot
+    const bossName = e.bossDef.name;
     this.boss = null;
-    this.roomLocked = false;
-    const rs = this._rs();
-    rs.cleared = true;
+    this.cleared = true;
+    if (this.wave) this.wave.done = true;
     this.shake = 8;
+    this.holdCircle = null;
+    this.enemyBuff = 1;
     // sweep the battlefield: leftover adds/hazards must not harass the
     // post-boss shop or flip a floor-4 victory into a wipe during pendingEnd
     for (const add of [...this.enemyPool]) if (!add.boss) this._killEnemy(add, null);
@@ -1698,50 +1991,18 @@ export class Sim {
     this.telegraphs = this.telegraphs.filter(tg => !tg.boom);
     this.zones = this.zones.filter(z => z.hurts !== 'players');
     this.vortexes.length = 0;
+    this.hazards = this.hazards.filter(h => !h.vx); // the migrating field burns out
     for (const pr of this.projPool) if (!pr.friendly) this.projPool.release(pr);
-    this.pushEvent({ k: 'bossDown', name: e.bossDef.name });
+    this.pushEvent({ k: 'bossDown', name: bossName });
     this.pushEvent({ k: 'sfx', s: 'boom' });
     for (const m of this.pickups) { const p = this.nearestLivingPlayer(m.x, m.y); if (p) m.target = p.idx; }
-    for (const p of this.livePlayers()) this._clearRewards(p); // boss rooms are room clears too
+    for (const p of this.livePlayers()) this._clearRewards(p); // the siege is a fight clear too
     if (this.floorNum >= CONFIG.FLOORS) {
       this.pendingEnd = 2.5; // brief beat to vacuum materials, then victory
     } else {
-      this.hatch = { x: W / 2, y: H / 2 };
+      this.hatch = this._openSpot(this.W / 2, this.H / 2); // descend from here
       for (const p of this.livePlayers()) this._openShop(p, 'boss');
     }
-  }
-
-  _tickDoors(dt) {
-    if (this.roomLocked || this.over) return;
-    if (this.doorGrace > 0) { this.doorGrace -= dt; this.doorCd = null; return; }
-    const room = this._room();
-    let want = null;
-    if (this.hatch) {
-      for (const p of this.livePlayers()) {
-        if (!p.downed && dist2(p.x, p.y, this.hatch.x, this.hatch.y) < 60 * 60) { want = { kind: 'hatch' }; break; }
-      }
-    }
-    if (!want && this._rs().cleared) {
-      for (const p of this.livePlayers()) {
-        if (p.downed) continue;
-        const dir = doorwayAt(p, room);
-        if (dir) { want = { kind: 'door', dir, target: room.doors[dir] }; break; }
-      }
-    }
-    if (want) {
-      if (!this.doorCd || this.doorCd.kind !== want.kind || this.doorCd.dir !== want.dir) {
-        this.doorCd = { ...want, t: CONFIG.DOOR_COUNTDOWN };
-        this.pushEvent({ k: 'sfx', s: 'door' });
-      } else {
-        this.doorCd.t -= dt;
-        if (this.doorCd.t <= 0) {
-          const cd = this.doorCd;
-          this.doorCd = null;
-          if (cd.kind === 'hatch') this._startFloor(this.floorNum + 1);
-          else this._enterRoom(cd.target, cd.dir);
-        }
-      }
-    } else this.doorCd = null;
   }
 
   // ---------------- offers: level-ups & treasure ----------------
@@ -1749,7 +2010,7 @@ export class Sim {
   _maybeOffer(p) {
     if (p.gone || p.banked <= 0 || p.pendingOffer) return;
     const n = 4 + (p.hookAgg.extraChoice || 0);
-    const rng = subRng(this.seed, 'offer', this.floorNum, this.roomId, p.idx, p.level, p.banked);
+    const rng = subRng(this.seed, 'offer', this.floorNum, this.currentNode ?? -1, p.idx, p.level, p.banked);
     const picks = [];
     const used = new Set();
     let guard = 0;
@@ -1766,7 +2027,7 @@ export class Sim {
   }
 
   _offerTreasure(p, kind) {
-    const rng = subRng(this.seed, 'treas', this.floorNum, this.roomId, p.idx);
+    const rng = subRng(this.seed, 'treas', this.floorNum, this.currentNode ?? -1, p.idx);
     const picks = [];
     const used = new Set();
     let guard = 0;
@@ -1789,7 +2050,7 @@ export class Sim {
   // becomes permanent.
   _offerBoon(p) {
     const t = p.char.trait;
-    const rng = subRng(this.seed, 'boon', this.floorNum, this.roomId, p.idx);
+    const rng = subRng(this.seed, 'boon', this.floorNum, this.currentNode ?? -1, p.idx);
     const picks = [];
     const used = new Set();
     let guard = 0;
@@ -1826,14 +2087,14 @@ export class Sim {
 
   _openShop(p, context = 'shop') {
     if (p.gone) return;
-    if (!p.shop || p.shop.key !== `${this.floorNum}:${context}:${this.roomId}`) {
+    if (!p.shop || p.shop.key !== `${this.floorNum}:${context}:${this.currentNode ?? -1}`) {
       // locked offers survive into the next shop even if the overlay was never
       // explicitly closed (e.g. the party walked out mid-browse)
       if (p.shop) p.shopLocksCarry = p.shop.stock.filter(s => s.locked && !s.sold);
       p.shopVisit++;
-      const rng = subRng(this.seed, 'shop', this.floorNum, this.roomId, p.idx, p.shopVisit);
+      const rng = subRng(this.seed, 'shop', this.floorNum, this.currentNode ?? -1, p.idx, p.shopVisit);
       p.shop = {
-        key: `${this.floorNum}:${context}:${this.roomId}`,
+        key: `${this.floorNum}:${context}:${this.currentNode ?? -1}`,
         rng, rerolls: 0,
         freeLeft: p.hookAgg.freeRerolls,
         stock: [],
@@ -2072,8 +2333,8 @@ export class Sim {
           const a = angleTo(s.x, s.y, p.x, p.y);
           if (dist2(s.x, s.y, p.x, p.y) > 90 * 90) { s.x += Math.cos(a) * 260 * dt; s.y += Math.sin(a) * 260 * dt; }
         }
-        s.x = clamp(s.x, WALL + 12, W - WALL - 12);
-        s.y = clamp(s.y, WALL + 12, H - WALL - 12);
+        s.x = clamp(s.x, WALL + 12, this.W - WALL - 12);
+        s.y = clamp(s.y, WALL + 12, this.H - WALL - 12);
       }
       // contact damage from enemies to structures
       for (const e of this.enemyPool) {
@@ -2141,6 +2402,18 @@ export class Sim {
         this._recomputeStats(p);
         this.pushEvent({ k: 'offerDone', idx });
         this._maybeOffer(p);
+        break;
+      }
+      case 'pickNode': {
+        if (!Number.isInteger(msg.nodeId) || msg.nodeId < 0 || msg.nodeId > 63) return;
+        this._pickNode(idx, msg.nodeId);
+        break;
+      }
+      case 'reopenShop': {
+        // back into a shop stop from the node map
+        if (this.phase !== 'map' || this.currentNode === null) return;
+        if (this.floor.nodes[this.currentNode].kind !== 'shop') return;
+        this._openShop(p, `node${this.currentNode}`);
         break;
       }
       case 'boon': {
@@ -2284,9 +2557,11 @@ export class Sim {
   debug(cmd) {
     switch (cmd) {
       case 'F1': {
+        if (this.phase !== 'arena') break;
         const table = FLOOR_TABLES[this.floorNum - 1];
         for (let i = 0; i < 50; i++) {
-          const pos = { x: WALL + 40 + Math.random() * (W - 2 * WALL - 80), y: WALL + 40 + Math.random() * (H - 2 * WALL - 80) };
+          const pos = { x: WALL + 40 + Math.random() * (this.W - 2 * WALL - 80), y: WALL + 40 + Math.random() * (this.H - 2 * WALL - 80) };
+          if (this._inObstacle(pos.x, pos.y, 20)) continue;
           this.spawnEnemyById(table[(Math.random() * table.length) | 0], pos.x, pos.y, { noMats: false });
         }
         break;
@@ -2295,8 +2570,8 @@ export class Sim {
       case 'F3': {
         for (const e of [...this.enemyPool]) this._killEnemy(e, null);
         this.spawnQueue.length = 0;
-        this.pulseIdx = this.pulses.length;
-        if (this.roomLocked && !this.boss) this._clearRoom();
+        if (this.wave) this.wave.done = true;
+        this._checkFightClear();
         break;
       }
       case 'F4': if (this.floorNum < CONFIG.FLOORS) this._startFloor(this.floorNum + 1); break;
@@ -2309,25 +2584,32 @@ export class Sim {
   getSnapshot() {
     const r = Math.round;
     const snap = {
-      t: 'snap', tick: this.tickNum, roomId: this.roomId,
-      locked: this.roomLocked ? 1 : 0,
-      cleared: this._rs().cleared ? 1 : 0,
+      t: 'snap', tick: this.tickNum,
+      mode: this.phase === 'map' ? 0 : 1,
+      node: this.currentNode,
+      cleared: this.cleared ? 1 : 0,
       shake: +this.shake.toFixed(1),
-      door: this.doorCd ? { kind: this.doorCd.kind, dir: this.doorCd.dir || null, t: +this.doorCd.t.toFixed(2) } : null,
+      // consent countdowns: node vote (map) and extraction (arena)
+      vote: this.nodeVote ? { nodeId: this.nodeVote.nodeId, t: +this.nodeVote.t.toFixed(2), byIdx: this.nodeVote.byIdx } : null,
+      extract: this.extract ? +this.extract.t.toFixed(2) : null,
       hatch: this.hatch ? [r(this.hatch.x), r(this.hatch.y)] : null,
+      hold: this.holdCircle ? [r(this.holdCircle.x), r(this.holdCircle.y), r(this.holdCircle.r), this.holdCircle.held ? 1 : 0] : null,
       players: this.players.map(p => [p.idx, r(p.x), r(p.y), r(p.hp), p.stats.vitality, p.downed ? 1 : 0, +p.reviveP.toFixed(2), r(p.shield), p.gone ? 1 : 0, +p.aimA.toFixed(2), +this._displayMeter(p).toFixed(2), p.carrying ? 1 : 0]),
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
       beams: this.activeBeams,
       boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp } : null,
       fx: this.fxBatch || this._emptyFx(),
-      hazards: (this.hazards || []).map(h => h.type === 'spikes' ? ['s', r(h.y), r(h.h), h.state] : ['l', r(h.x), r(h.y), r(h.r)]),
+      hazards: (this.hazards || []).map(h => h.type === 'spikes'
+        ? ['s', r(h.x), r(h.y), r(h.w), r(h.h), h.state]
+        : ['l', r(h.x), r(h.y), r(h.r)]),
       // trait visuals — rendered on every screen (visibility is the trait)
       auras: this._snapAuras(),
       tethers: this._snapTethers(),
       decoys: this.decoys.map(d => [r(d.x), r(d.y), +(d.t / d.dur).toFixed(2), d.owner]),
     };
+    // radius is derived client-side from type + elite/mini flags — not sent
     for (const e of this.enemyPool) {
-      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0), r(e.radius)]);
+      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0)]);
     }
     for (const pr of this.projPool) {
       snap.projs.push([pr.id, r(pr.x), r(pr.y), r(pr.vx), r(pr.vy), pr.friendly ? 1 : 0, pr.radius, pr.color]);
@@ -2407,14 +2689,13 @@ export class Sim {
     this.clampToRoom(e);
   }
   clampToRoom(e) {
-    e.x = clamp(e.x, WALL + e.radius * 0.6, W - WALL - e.radius * 0.6);
-    e.y = clamp(e.y, WALL + e.radius * 0.6, H - WALL - e.radius * 0.6);
+    e.x = clamp(e.x, WALL + e.radius * 0.6, this.W - WALL - e.radius * 0.6);
+    e.y = clamp(e.y, WALL + e.radius * 0.6, this.H - WALL - e.radius * 0.6);
+    this._pushOut(e, e.radius * 0.6);
   }
 }
 
 // ---------------- module helpers ----------------
-
-const OPP = { n: 's', s: 'n', e: 'w', w: 'e' };
 
 function r2(v) { return Math.round(v * 10) / 10; }
 
@@ -2436,57 +2717,3 @@ function pointToSegDist(px, py, x1, y1, x2, y2) {
   return dist(px, py, x1 + dx * t, y1 + dy * t);
 }
 
-function doorAnchor(dir) {
-  // far enough inside the room that no entry formation lands in the doorway
-  // trigger zone (largest hitbox + wall + margin)
-  switch (dir) {
-    case 'n': return { x: W / 2, y: WALL + 110 };
-    case 's': return { x: W / 2, y: H - WALL - 110 };
-    case 'w': return { x: WALL + 110, y: H / 2 };
-    case 'e': return { x: W - WALL - 110, y: H / 2 };
-  }
-  return { x: W / 2, y: H / 2 };
-}
-
-// player p standing in a doorway of room? returns dir or null
-export function doorwayAt(p, room) {
-  const gap = DOOR_W / 2;
-  const m = 16; // how close to the wall counts as "in the doorway"
-  // room ids are array indices — id 0 (the start room) is falsy, so these
-  // checks must test for presence, not truthiness
-  if (room.doors.n !== undefined && Math.abs(p.x - W / 2) < gap && p.y < WALL + p.radius + m) return 'n';
-  if (room.doors.s !== undefined && Math.abs(p.x - W / 2) < gap && p.y > H - WALL - p.radius - m) return 's';
-  if (room.doors.w !== undefined && Math.abs(p.y - H / 2) < gap && p.x < WALL + p.radius + m) return 'w';
-  if (room.doors.e !== undefined && Math.abs(p.y - H / 2) < gap && p.x > W - WALL - p.radius - m) return 'e';
-  return null;
-}
-
-function buildHazards(room, seed, floorNum) {
-  if (!room.hazard) return [];
-  const rng = subRng(seed, 'haz', floorNum, room.id);
-  const out = [];
-  if (room.hazard === 'spikes') {
-    const rows = rng.int(2, 3);
-    for (let i = 0; i < rows; i++) {
-      out.push({
-        type: 'spikes', y: H * (0.28 + 0.44 * (i / Math.max(1, rows - 1))), h: 46,
-        period: 4, safe: 2, warn: 0.8, offset: i * 1.3, dmg: 8, state: 0,
-      });
-    }
-  } else {
-    const n = rng.int(3, 5);
-    const anchors = ['n', 's', 'w', 'e'].map(doorAnchor);
-    for (let i = 0; i < n; i++) {
-      // keep pools clear of the door entry formations
-      for (let tries = 0; tries < 12; tries++) {
-        const x = rng.range(WALL + 120, W - WALL - 120);
-        const y = rng.range(WALL + 100, H - WALL - 100);
-        const r = rng.range(55, 85);
-        if (anchors.some(a => dist(a.x, a.y, x, y) < r + 90)) continue;
-        out.push({ type: 'lava', x, y, r, dps: 7, acc: 0 });
-        break;
-      }
-    }
-  }
-  return out;
-}

@@ -19,10 +19,10 @@ critical hits exist only as granted effects (default ×2).
 | **Tempo** | One stat for all speed. | Attack cooldown = `base / max(0.25, 1 + Tempo%/100)`; move speed = `300 × (1 + Tempo%/100)`, floored at 60. | 5 | 16 | 5 |
 | **Grit** | Mitigation and stubbornness. | Damage taken = `raw × 15 / (15 + Grit)` (negative capped at +50% extra); pulls/knockback resisted by the same ratio. Scaling rate: 1%/point. | 3 | 14 | 2 |
 | **Reflex** | Chance to ignore a hit entirely. | Percent roll per hit, capped at 60 (Wisp raises to 90). Every on-dodge effect (Slipstream, Afterimage, items) keys off this. | 4 | 8 | 2 |
-| **Recovery** | Amplifies ALL healing received. | Every healing source (regen, lifesteal, kill-heals, room-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`. | 2 | 12 | 2 |
+| **Recovery** | Amplifies ALL healing received. | Every healing source (regen, lifesteal, kill-heals, fight-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`. | 2 | 12 | 2 |
 | **Ingenuity** | Power source for summons/structures. | Summon damage AND HP `×(1 + 0.1 × Ingenuity)`. Scaling rate: 1%/point on summon-tagged weapons. | 4 | 7 | 4 |
 | **Attunement** | Elemental/status amplifier. | Burns, chills (strength and duration), chains, novas, blasts and echoes all scale `×(1 + Attunement%/100)`. | 3 | 10 | 10 |
-| **Greed** | Fortune unified. | Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every room clear. No self-growth. Scaling rate: 1%/point. | 5 | 13 | 3 |
+| **Greed** | Fortune unified. | Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every fight clear. No self-growth. Scaling rate: 1%/point. | 5 | 13 | 3 |
 | **Reach** | Weapon reach and magnetism. | Ranged/lobbed weapons +100% of Reach, melee +30% (floor 40); pickup radius = `60 + Reach × 0.5`. Scaling rate: 1% per 12 points. | 3 | 7 | 2 |
 
 ## 2. Full character roster
@@ -36,12 +36,12 @@ Pick appeal is an honest pre-playtest guess (H/M/L). Verdict and Notes are for t
 | 3 | **Zephyr** | +20% reflex, +15% tempo, -15 vitality | Twinlash | Slipstream: dodging grants +40% Tempo for 2s and your next attack is a guaranteed crit. | **H** — Dodge-crits plus tempo bursts feel amazing | | |
 | 4 | **Tollkeeper** | +5 greed | Pikefang | Toll Road: enemies drop double materials but gain +25% HP (affects the whole party). | **M** — Party-wide tradeoff sparks table arguments | | |
 | 5 | **Duskblade** | +15% ferocity, -25 vitality | Vaultspike | Executioner: attacks never crit randomly; granted crits deal ×3 instead of ×2; your first hit against any full-HP enemy is a guaranteed crit. | **H** — Triple crits with a clear first-hit rule | | |
-| 6 | **Rampart** | +6 grit, +20 vitality | Pikefang | Living Fortress: +1 permanent Grit per room cleared, and +1% Ferocity per point of bonus Grit. | **M** — Ever-growing Grit that feeds damage back | | |
+| 6 | **Rampart** | +6 grit, +20 vitality | Pikefang | Living Fortress: +1 permanent Grit per fight cleared, and +1% Ferocity per point of bonus Grit. | **M** — Ever-growing Grit that feeds damage back | | |
 | 7 | **Onrush** | +25% tempo, -10 vitality | Threadneedle | Momentum: moving fills a meter (~2s, faster with Tempo); your next attack consumes it for up to +60% damage. | **H** — A visible meter you charge by playing well | | |
-| 8 | **Vesper** | +8% recovery | Serpent Awl | Red Tithe: kills heal 1 HP (Recovery applies); healing beyond full HP becomes permanent Vitality, up to +3 per room. | **M** — Overheal into permanent HP rewards sustain builds | | |
+| 8 | **Vesper** | +8% recovery | Serpent Awl | Red Tithe: kills heal 1 HP (Recovery applies); healing beyond full HP becomes permanent Vitality, up to +3 per fight. | **M** — Overheal into permanent HP rewards sustain builds | | |
 | 9 | **The Broker** | +10 greed | Pebbleshot | Insider Trading: shop prices −25% and reroll cost never compounds, but only 5 weapon slots. | **M** — Cheap shopping with a slot squeeze | | |
 | 10 | **Resonant** | +5% ferocity | Rustcleaver | Resonance: attacks build a charge ring (9 hits); when full, your next hit releases an attuned shockwave for 200% weapon damage. | **M** — The charge-ring shockwave is readable and rhythmic | | |
-| 11 | **Facet** | +5 greed | Fanblade | Prism: at each room’s door, pick 1 of 3 boons for that room (quality scales with Greed). Any boon chosen 3 times becomes permanent. | **H** — A draft pick at every door; collection subgame | | |
+| 11 | **Facet** | +5 greed | Fanblade | Prism: entering each fight, pick 1 of 3 boons for that battle (quality scales with Greed). Any boon chosen 3 times becomes permanent. | **H** — A draft pick at every door; collection subgame | | |
 | 12 | **Stillness** | +10% ferocity, +40 reach | Longbarrel | Overwatch: after 1.5s without attacking (moving is fine), your next attack is charged — ×2 damage and +50% Reach on that hit. | **M** — Hold-fire charge shots reward deliberate play | | |
 | 13 | **Powderkeg** | +10 vitality | Kegbomb | Volatile Greed: materials explode on pickup for 4 + 40% of Greed attuned damage; blast radius 40 + 50% of Reach. | **M** — Pickup explosions that scale with Greed and Reach | | |
 | 14 | **Quartermaster** | +5% ferocity | Gravelmouth | Arsenal Doctrine: cannot buy items; every weapon held also grants you the stats it scales with. Weapons sell for exactly the materials invested in them. | **M** — Weapons-only economy with full-refund selling | | |

@@ -40,8 +40,8 @@ export const STAT_GLOSS = {
     detail: 'Everything elemental — fire, frost, chain lightning, explosions and shockwaves — hits harder and lingers longer. The stat for status-effect builds.',
   },
   greed: {
-    short: 'Better loot rarity, plus bonus materials each room.',
-    detail: 'Fortune. Improves the rarity of everything the game offers you, and pays bonus materials every room you clear. Some weapons and blasts scale with it.',
+    short: 'Better loot rarity, plus bonus materials each fight.',
+    detail: 'Fortune. Improves the rarity of everything the game offers you, and pays bonus materials every fight you clear. Some weapons and blasts scale with it.',
   },
   reach: {
     short: 'Longer weapon range and a bigger pickup magnet.',

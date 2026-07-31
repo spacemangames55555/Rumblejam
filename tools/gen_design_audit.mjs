@@ -34,10 +34,10 @@ const STAT_DOC = {
   tempo: ['One stat for all speed.', 'Attack cooldown = `base / max(0.25, 1 + Tempo%/100)`; move speed = `300 × (1 + Tempo%/100)`, floored at 60.'],
   grit: ['Mitigation and stubbornness.', 'Damage taken = `raw × 15 / (15 + Grit)` (negative capped at +50% extra); pulls/knockback resisted by the same ratio. Scaling rate: 1%/point.'],
   reflex: ['Chance to ignore a hit entirely.', 'Percent roll per hit, capped at 60 (Wisp raises to 90). Every on-dodge effect (Slipstream, Afterimage, items) keys off this.'],
-  recovery: ['Amplifies ALL healing received.', 'Every healing source (regen, lifesteal, kill-heals, room-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`.'],
+  recovery: ['Amplifies ALL healing received.', 'Every healing source (regen, lifesteal, kill-heals, fight-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`.'],
   ingenuity: ['Power source for summons/structures.', 'Summon damage AND HP `×(1 + 0.1 × Ingenuity)`. Scaling rate: 1%/point on summon-tagged weapons.'],
   attunement: ['Elemental/status amplifier.', 'Burns, chills (strength and duration), chains, novas, blasts and echoes all scale `×(1 + Attunement%/100)`.'],
-  greed: ['Fortune unified.', 'Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every room clear. No self-growth. Scaling rate: 1%/point.'],
+  greed: ['Fortune unified.', 'Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every fight clear. No self-growth. Scaling rate: 1%/point.'],
   reach: ['Weapon reach and magnetism.', 'Ranged/lobbed weapons +100% of Reach, melee +30% (floor 40); pickup radius = `60 + Reach × 0.5`. Scaling rate: 1% per 12 points.'],
 };
 

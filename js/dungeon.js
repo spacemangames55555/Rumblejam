@@ -1,116 +1,100 @@
-// Floor generation: random-walk room grid, Isaac-style. Deterministic from the
-// run seed via a per-floor sub-stream. Every floor gets exactly one start,
-// shop, treasure, elite (dead-end), and boss room (farthest from start);
-// 1-2 combat rooms get hazard variants.
+// Floor generation, Gauntlet edition: each floor is a branching NODE MAP —
+// 5 columns deep (4 fight/stop columns + the Siege), 9–10 nodes total,
+// 2–3 choices per step, all paths converging on the floor's Siege finale.
+// Guaranteed per floor: ≥1 Shop, ≥1 Treasure, and ≥1 Elite on an optional
+// branch (at least one path avoids it). Everything else is Combat.
+// Deterministic from the run seed via a per-floor sub-stream.
 
-import { CONFIG } from './config.js';
 import { subRng } from './rng.js';
+import { TEMPLATE_KEYS } from './arenas.js';
 
-const DIRS = [ [0, -1, 'n', 's'], [1, 0, 'e', 'w'], [0, 1, 's', 'n'], [-1, 0, 'w', 'e'] ];
-
-export function generateFloor(seed, floorNum) {
-  const rng = subRng(seed, 'floor', floorNum);
-  const target = rng.int(CONFIG.ROOMS_MIN, CONFIG.ROOMS_MAX);
-  // one retry loop: layouts can rarely fail to place the elite dead-end
-  for (let attempt = 0; attempt < 24; attempt++) {
-    const floor = tryGenerate(rng, target, floorNum);
-    if (floor) return floor;
+export function generateFloorMap(seed, floorNum) {
+  const rng = subRng(seed, 'map', floorNum);
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const map = tryMap(rng, floorNum);
+    if (map) return map;
   }
-  // fallback never expected; tryGenerate with relaxed elite requirement
-  return tryGenerate(rng, target, floorNum, true);
+  throw new Error('node map generation failed'); // never expected (verified across seeds)
 }
 
-function key(x, y) { return `${x},${y}`; }
+function tryMap(rng, floorNum) {
+  // column sizes: [2,2,2,2] or one middle column of 3 → 9–10 nodes with the Siege
+  const sizes = [2, 2, 2, 2];
+  if (rng.chance(0.6)) sizes[rng.int(1, 2)] = 3;
+  const nodes = [];
+  const cols = sizes.map((n, c) => {
+    const col = [];
+    for (let r = 0; r < n; r++) {
+      const nd = { id: nodes.length, col: c, row: r, kind: 'combat', template: null, edges: [] };
+      nodes.push(nd); col.push(nd);
+    }
+    return col;
+  });
+  const siege = { id: nodes.length, col: sizes.length, row: 0, kind: 'siege', template: null, edges: [] };
+  nodes.push(siege);
+  cols.push([siege]);
 
-function tryGenerate(rng, target, floorNum, relaxed = false) {
-  const cells = new Map(); // "x,y" -> room
-  const add = (x, y) => {
-    const r = { id: cells.size, gx: x, gy: y, kind: 'combat', hazard: null, doors: {} };
-    cells.set(key(x, y), r);
-    return r;
-  };
-  add(0, 0);
-  let guard = 0;
-  while (cells.size < target && guard++ < 500) {
-    const rooms = [...cells.values()];
-    const from = rng.pick(rooms);
-    const [dx, dy] = rng.pick(DIRS);
-    const nx = from.gx + dx, ny = from.gy + dy;
-    if (cells.has(key(nx, ny))) continue;
-    // avoid 2x2 clumps for a more corridor-like layout (soft rule)
-    let neighbors = 0;
-    for (const [ax, ay] of DIRS) if (cells.has(key(nx + ax, ny + ay))) neighbors++;
-    if (neighbors > 1 && rng.chance(0.7)) continue;
-    add(nx, ny);
-  }
-  const rooms = [...cells.values()];
-  // connect doors between adjacent rooms
-  for (const r of rooms) {
-    for (const [dx, dy, dir] of DIRS) {
-      const n = cells.get(key(r.gx + dx, r.gy + dy));
-      if (n) r.doors[dir] = n.id;
+  // edges: non-crossing range mapping col→col+1 (every node has an exit,
+  // every next-column node an entrance), plus a chance to widen the choice
+  for (let c = 0; c < cols.length - 1; c++) {
+    const A = cols[c], B = cols[c + 1];
+    for (let i = 0; i < A.length; i++) {
+      const lo = Math.floor(i * B.length / A.length);
+      const hi = Math.floor(((i + 1) * B.length - 1) / A.length);
+      for (let j = lo; j <= hi; j++) A[i].edges.push(B[j].id);
+      if (hi + 1 < B.length && rng.chance(0.45)) A[i].edges.push(B[hi + 1].id);
     }
   }
-  // BFS distance from start
-  const dist = new Array(rooms.length).fill(-1);
-  dist[0] = 0;
-  const q = [rooms[0]];
-  while (q.length) {
-    const r = q.shift();
-    for (const nid of Object.values(r.doors)) {
-      if (dist[nid] === -1) { dist[nid] = dist[r.id] + 1; q.push(rooms[nid]); }
-    }
-  }
-  rooms[0].kind = 'start';
-  // boss: farthest room
-  let bossId = 1;
-  for (let i = 1; i < rooms.length; i++) if (dist[i] > dist[bossId]) bossId = i;
-  rooms[bossId].kind = 'boss';
-  // candidates for shop/treasure: not start/boss, prefer dead ends
-  const isLeaf = r => Object.keys(r.doors).length === 1;
-  const others = rooms.filter(r => r.kind === 'combat');
-  const sorted = [...others].sort((a, b) => (isLeaf(b) - isLeaf(a)) || (dist[b.id] - dist[a.id]));
-  if (sorted.length < 3) return null;
-  sorted[0].kind = 'shop';
-  sorted[1].kind = 'treasure';
-  // elite: attach a NEW dead-end room adjacent to some mid-distance room
+
+  // kind assignment: shop, treasure, elite on distinct non-entry fight nodes
+  const mid = nodes.filter(n => n.col >= 1 && n.col <= 3 && n.kind === 'combat');
+  const picks = rng.shuffle([...mid]);
+  if (picks.length < 3) return null;
+  picks[0].kind = 'shop';
+  picks[1].kind = 'treasure';
+  // elite: must be avoidable — some path from an entry to the siege skips it
   let elite = null;
-  const anchors = rng.shuffle(rooms.filter(r => r.kind === 'combat' && dist[r.id] >= 1));
-  outer:
-  for (const a of anchors) {
-    for (const [dx, dy, dir, opp] of rng.shuffle([...DIRS])) {
-      const nx = a.gx + dx, ny = a.gy + dy;
-      if (cells.has(key(nx, ny))) continue;
-      elite = add(nx, ny);
-      elite.kind = 'elite';
-      elite.doors[opp] = a.id;
-      a.doors[dir] = elite.id;
-      rooms.push(elite); // rooms[] was snapshotted before the elite was carved
-      break outer;
-    }
+  for (const cand of picks.slice(2)) {
+    if (avoidablePathExists(nodes, cols[0], siege.id, cand.id)) { elite = cand; break; }
   }
-  if (!elite && !relaxed) return null;
-  if (!elite) { // relaxed fallback: convert a leaf combat room
-    const leaf = sorted.find(r => r.kind === 'combat');
-    if (!leaf) return null;
-    leaf.kind = 'elite';
-  }
-  // hazards on 1-2 combat rooms
-  const combats = rng.shuffle(rooms.filter(r => r.kind === 'combat'));
-  const hazardCount = Math.min(combats.length, rng.int(1, 2));
-  for (let i = 0; i < hazardCount; i++) {
-    combats[i].hazard = rng.chance(0.5) ? 'spikes' : 'lava';
-  }
-  if (rooms.filter(r => r.kind === 'combat').length < 3) return null;
-  return { floorNum, rooms, startId: 0, bossId, dist };
+  if (!elite) return null;
+  elite.kind = 'elite';
+
+  // arena templates: deal a seeded shuffle round-robin across the fight nodes
+  // (6–7 of them) so every floor draws from all five shapes
+  const fights = nodes.filter(n => n.kind === 'combat' || n.kind === 'elite');
+  const deck = rng.shuffle([...TEMPLATE_KEYS]);
+  fights.forEach((n, i) => { n.template = deck[i % deck.length]; });
+
+  return {
+    floorNum, nodes,
+    siegeId: siege.id,
+    startIds: cols[0].map(n => n.id),
+  };
 }
 
-// Serializable layout for clients (minimap + room rendering)
-export function serializeFloor(floor) {
+// path from any entry to target avoiding `skip`?
+function avoidablePathExists(nodes, entries, targetId, skipId) {
+  const seen = new Set();
+  const q = entries.filter(n => n.id !== skipId).map(n => n.id);
+  for (const id of q) seen.add(id);
+  while (q.length) {
+    const id = q.shift();
+    if (id === targetId) return true;
+    for (const nid of nodes[id].edges) {
+      if (nid === skipId || seen.has(nid)) continue;
+      seen.add(nid); q.push(nid);
+    }
+  }
+  return false;
+}
+
+// Serializable layout for clients (the node-map screen)
+export function serializeMap(map) {
   return {
-    floorNum: floor.floorNum,
-    startId: floor.startId,
-    bossId: floor.bossId,
-    rooms: floor.rooms.map(r => ({ id: r.id, gx: r.gx, gy: r.gy, kind: r.kind, hazard: r.hazard, doors: r.doors })),
+    floorNum: map.floorNum,
+    siegeId: map.siegeId,
+    startIds: map.startIds,
+    nodes: map.nodes.map(n => ({ id: n.id, col: n.col, row: n.row, kind: n.kind, template: n.template, edges: n.edges })),
   };
 }

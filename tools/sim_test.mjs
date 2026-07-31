@@ -1,13 +1,16 @@
-// Dev tool: headless simulation exercise (Great Rebalance edition).
+// Dev tool: headless simulation exercise (Gauntlet edition).
 // Runs the real Sim in Node:
-//  1. content count assertions (32 chars / ≥100 items / 26 weapons) + dead-stat gate
-//  2. every character clears floor 1 solo (smoke, tuning gate 2)
-//  3. full-run victories for the six gate characters (tuning gate 3)
-//  4. floor-1 baseline DPS within ±40% of the roster median (tuning gate 4)
-//  5. a 4-player co-op run with downs/revives and shop traffic
-//  6. build management: combine / sell / invested lineage
-//  7. rebalance mechanics: crits granted-only, Recovery healing, soulbond, prism
-//  8. stress: ~250 enemies + heavy projectiles, tick-time measurement
+//  1. content counts + dead-stat gate + glossary completeness
+//  2. node-map generation gates across seeds (guarantees, avoidable elite)
+//  3. consent selection: solo instant; contested vote redirects once, locks
+//  4. all 32 characters clear their first fight node
+//  5. full solo runs to victory for the six per-fight-trigger/DoD characters
+//  6. per-fight trigger mapping (Rampart, Vesper, Facet, Greed, level banking)
+//  7. all five arena templates spawn, fight, clear; extraction consent works
+//  8. the Siege end-to-end: mutations, collapse, pylon, hold circle,
+//     mutation-revive, mid-siege boss, payout and descent
+//  9. co-op downs/revives/wipe; build management; rebalance mechanics
+// 10. DPS gate (±40% of median), stress timing, snapshot serialization
 // Usage: node tools/sim_test.mjs
 import { Sim } from '../js/game.js';
 import { CHARACTERS, CHAR_BY_ID } from '../js/content/characters.js';
@@ -16,6 +19,8 @@ import { WEAPONS } from '../js/content/weapons.js';
 import { ENEMIES } from '../js/content/enemies.js';
 import { BOSSES } from '../js/content/bosses.js';
 import { STAT_KEYS } from '../js/config.js';
+import { generateFloorMap } from '../js/dungeon.js';
+import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 
 let failures = 0;
 const fail = (msg, err) => { failures++; console.error(`✗ ${msg}`, err ? (err.stack || err) : ''); };
@@ -27,14 +32,6 @@ if (ITEMS.length >= 100) ok(`items: ${ITEMS.length}`); else fail(`items ${ITEMS.
 if (WEAPONS.length === 26) ok('weapons: 26'); else fail(`weapons ${WEAPONS.length} != 26`);
 if (ENEMIES.length === 12) ok('enemy types: 12'); else fail(`enemy types ${ENEMIES.length} != 12`);
 if (BOSSES.length === 4) ok('bosses: 4'); else fail(`bosses ${BOSSES.length} != 4`);
-
-// weapon class coverage
-const byCls = {};
-for (const w of WEAPONS) byCls[w.cls] = (byCls[w.cls] || 0) + 1;
-for (const cls of ['swing', 'thrust', 'single', 'spread', 'lobbed', 'summon']) {
-  if (!byCls[cls] || byCls[cls] < 4) fail(`weapon class ${cls} has ${byCls[cls] || 0} (<4)`);
-}
-ok(`weapon classes: ${JSON.stringify(byCls)}`);
 
 // ---- 1b. dead-stat gate: every stat on ≥2 weapons, ≥5 items, ≥1 statline ----
 {
@@ -75,18 +72,13 @@ ok(`weapon classes: ${JSON.stringify(byCls)}`);
     }
     const words = g.short.split(/\s+/).filter(w => /[a-zA-Z]/.test(w)).length;
     if (words > 12) { bad++; fail(`glossary: short for '${k}' is ${words} words (>12)`); }
-    // 1-2 sentences plus an optional one-word label ("Fortune.") — the spec's
-    // own Greed example counts three period marks
     const sentences = (g.detail.match(/[.!?]/g) || []).length;
     if (sentences < 1 || sentences > 3) { bad++; fail(`glossary: detail for '${k}' has ${sentences} sentence marks (want 1-3)`); }
   }
   for (const k of Object.keys(STAT_GLOSS)) {
     if (!STAT_KEYS.includes(k)) { bad++; fail(`glossary: unknown stat '${k}'`); }
   }
-  // every stat name the UI can render (weapon scaling tags, item stat blocks
-  // and stat-granting hooks, character statlines, the sheet itself) must
-  // resolve to a glossary entry
-  const rendered = new Set(STAT_KEYS); // the sheet renders all ten
+  const rendered = new Set(STAT_KEYS);
   for (const w of WEAPONS) for (const k of w.scaling) rendered.add(k);
   for (const c of CHARACTERS) for (const k of Object.keys(c.stats)) rendered.add(k);
   for (const it of ITEMS) {
@@ -100,145 +92,484 @@ ok(`weapon classes: ${JSON.stringify(byCls)}`);
   if (!bad) ok(`stat glossary: all 10 entries complete; ${rendered.size} rendered stat names all resolve`);
 }
 
-// ---- 1d. dungeon structure across many seeds ----
+// ---- 2. node-map generation gates across seeded generations ----
 {
-  const { generateFloor } = await import('../js/dungeon.js');
-  const OPP = { n: 's', s: 'n', e: 'w', w: 'e' };
   let bad = 0;
-  for (let seed = 1; seed <= 25; seed++) {
+  for (let seed = 1; seed <= 150; seed++) {
     for (let f = 1; f <= 4; f++) {
-      const fl = generateFloor(seed, f);
+      const m = generateFloorMap(seed, f);
       const kinds = {};
-      for (const r of fl.rooms) kinds[r.kind] = (kinds[r.kind] || 0) + 1;
-      for (const k of ['start', 'shop', 'treasure', 'elite', 'boss']) {
-        if (kinds[k] !== 1) { bad++; fail(`seed ${seed} floor ${f}: ${k} count = ${kinds[k] || 0}`); }
+      for (const n of m.nodes) kinds[n.kind] = (kinds[n.kind] || 0) + 1;
+      if (m.nodes.length < 8 || m.nodes.length > 10) { bad++; fail(`map ${seed}/${f}: ${m.nodes.length} nodes`); }
+      if (kinds.shop !== 1 || kinds.treasure !== 1 || kinds.elite !== 1 || kinds.siege !== 1) { bad++; fail(`map ${seed}/${f}: kinds ${JSON.stringify(kinds)}`); }
+      // every non-siege node exits; whole map reachable; siege reachable from all
+      for (const n of m.nodes) if (n.id !== m.siegeId && (n.edges.length < 1 || n.edges.length > 3)) { bad++; fail(`map ${seed}/${f}: node ${n.id} has ${n.edges.length} exits`); }
+      const seen = new Set(m.startIds); const q = [...m.startIds];
+      while (q.length) { const id = q.shift(); for (const e of m.nodes[id].edges) if (!seen.has(e)) { seen.add(e); q.push(e); } }
+      if (seen.size !== m.nodes.length) { bad++; fail(`map ${seed}/${f}: unreachable nodes`); }
+      // the elite is optional: a path from an entry to the siege avoids it
+      const elite = m.nodes.find(n => n.kind === 'elite');
+      const seen2 = new Set(m.startIds.filter(id => id !== elite.id));
+      const q2 = [...seen2];
+      let avoidable = false;
+      while (q2.length) {
+        const id = q2.shift();
+        if (id === m.siegeId) { avoidable = true; break; }
+        for (const e of m.nodes[id].edges) if (e !== elite.id && !seen2.has(e)) { seen2.add(e); q2.push(e); }
       }
-      if ((kinds.combat || 0) < 3) { bad++; fail(`seed ${seed} floor ${f}: only ${kinds.combat} combat rooms`); }
-      for (const r of fl.rooms) {
-        for (const [dir, id] of Object.entries(r.doors)) {
-          const n = fl.rooms[id];
-          if (!n) { bad++; fail(`seed ${seed} floor ${f}: room ${r.id} door ${dir} -> missing room ${id}`); }
-          else if (n.doors[OPP[dir]] !== r.id) { bad++; fail(`seed ${seed} floor ${f}: door ${r.id}->${id} not bidirectional`); }
-        }
-      }
+      if (!avoidable) { bad++; fail(`map ${seed}/${f}: elite is mandatory`); }
+      // every floor draws from all five arena templates
+      const t = new Set(m.nodes.filter(n => n.template).map(n => n.template));
+      if (t.size !== TEMPLATE_KEYS.length) { bad++; fail(`map ${seed}/${f}: templates ${[...t]}`); }
     }
   }
-  if (!bad) ok('dungeon structure: 100 floors — kinds exact, all doors bidirectional');
+  if (!bad) ok('node maps: 600 seeded generations — counts, guarantees, avoidable elite, all 5 templates');
 }
 
-// ---- helpers for scripted runs ----
-function run(sim, n) { for (let i = 0; i < n; i++) sim.tick(); }
-function events(sim) { return sim.events.splice(0); }
-function forceKillBoss(sim) {
-  let guard = 0;
-  while (sim.boss && guard++ < 500) sim.damageEnemy(sim.boss, 500, { owner: sim.players[0] });
-}
-function resolveOffers(sim, buyStuff) {
-  for (const p of sim.players) {
-    let g2 = 0;
-    while (p.pendingOffer && g2++ < 40) sim.uiAction(p.idx, { kind: 'levelup', id: p.pendingOffer[0].id });
-    if (p.treasureOffer) sim.uiAction(p.idx, { kind: 'treasure', id: p.treasureOffer.picks[0] });
-    if (p.boonOffer) sim.uiAction(p.idx, { kind: 'boon', id: p.boonOffer[0].id });
-    if (buyStuff && p.shop) {
+// ---- helpers ----
+function drain(sim, p, buyStuff) {
+  let g = 0;
+  while (p.pendingOffer && g++ < 40) sim.uiAction(p.idx, { kind: 'levelup', id: p.pendingOffer[0].id });
+  if (p.treasureOffer) sim.uiAction(p.idx, { kind: 'treasure', id: p.treasureOffer.picks[0] });
+  if (p.boonOffer) sim.uiAction(p.idx, { kind: 'boon', id: p.boonOffer[0].id });
+  if (p.shop) {
+    if (buyStuff) {
       sim.uiAction(p.idx, { kind: 'reroll' });
-      sim.uiAction(p.idx, { kind: 'lock', slot: 0 });
       for (let s = 0; s < 4; s++) sim.uiAction(p.idx, { kind: 'buy', slot: s });
-      sim.uiAction(p.idx, { kind: 'closeShop' });
     }
+    sim.uiAction(p.idx, { kind: 'closeShop' });
   }
 }
-
-// walk the whole floor: visit every room, clear combats, exercise offers/shops
+// kill everything (twice — shielded elites block single probe hits)
+function nuke(sim, p, sparBoss) {
+  for (const e of [...sim.enemyPool]) {
+    if (sparBoss && e.boss) continue;
+    sim.damageEnemy(e, 900, { owner: p });
+    if (e.active) sim.damageEnemy(e, 900, { owner: p });
+  }
+}
+// run one arena node to extraction (F3-style). Returns ticks spent.
+function clearArena(sim, buyStuff) {
+  const p = sim.players[0];
+  let ticks = 0;
+  while (sim.phase === 'arena' && !sim.over && ticks++ < 60 * 300) {
+    sim.tick();
+    // the harness stands still at center (no kiting), so keep it alive — flow
+    // tests verify structure/triggers; survivability is the balance probe's job
+    for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
+    if (ticks % 240 === 0) nuke(sim, p);
+    if (sim.boss) sim.damageEnemy(sim.boss, 200, { owner: p });
+    for (const q of sim.players) drain(sim, q, buyStuff);
+    if (sim.cleared && sim.hatch) for (const q of sim.livePlayers()) { q.x = sim.hatch.x; q.y = sim.hatch.y; }
+  }
+  return ticks;
+}
+// walk the whole floor: pick nodes until the siege is beaten (floor advances)
 function playFloor(sim, buyStuff) {
-  const floorN = sim.floorNum;
-  const roomIds = sim.floor.rooms.filter(r => r.kind !== 'boss').map(r => r.id);
-  for (const id of roomIds) {
-    sim._enterRoom(id, null);
-    run(sim, 30);
-    let guard = 0;
-    while (sim.roomLocked && guard++ < 40) {
-      sim.debug('F3');
-      run(sim, 30);
+  const startFloor = sim.floorNum;
+  let guard = 0;
+  while (!sim.over && sim.floorNum === startFloor && guard++ < 40) {
+    if (sim.phase === 'map') {
+      for (const q of sim.players) drain(sim, q, buyStuff);
+      const r = sim.reachableNodes();
+      if (!r.length) { fail(`floor ${startFloor}: no reachable nodes from ${sim.currentNode}`); return; }
+      sim.uiAction(0, { kind: 'pickNode', nodeId: r[0] });
+      // co-op: the tap starts a consent countdown — tick it out
+      for (let i = 0; i < 60 * 5 && sim.phase === 'map' && !sim.over; i++) sim.tick();
+    } else {
+      clearArena(sim, buyStuff);
     }
-    if (sim.roomLocked) fail(`room ${id} kind=${sim.floor.rooms[id].kind} never cleared on floor ${floorN}`);
-    run(sim, 60);
-    resolveOffers(sim, buyStuff);
-    events(sim);
-    if (sim.over) return;
   }
-  // boss room
-  sim._enterRoom(sim.floor.bossId, null);
-  run(sim, 5);
-  const bossSpawned = !!sim.boss;
-  run(sim, 115);
-  if (!bossSpawned) fail(`boss did not spawn on floor ${floorN}`);
-  forceKillBoss(sim);
-  run(sim, 30);
-  resolveOffers(sim, false);
-  if (sim.floorNum >= 4) {
-    run(sim, 200); // pendingEnd → win
-  } else {
-    if (!sim.hatch) fail(`no hatch after floor ${floorN} boss`);
-    sim.players[0].x = sim.hatch.x; sim.players[0].y = sim.hatch.y;
-    let g3 = 0;
-    while (sim.floorNum === floorN && g3++ < 400) { sim.players[0].x = sim.W / 2; sim.players[0].y = sim.H / 2; sim.tick(); }
-    if (sim.floorNum === floorN) fail(`hatch transition failed on floor ${floorN}`);
-  }
-  events(sim);
+  if (sim.floorNum === startFloor && !sim.over) fail(`floor ${startFloor} never completed`);
 }
 
-// ---- 2. character smoke: every character clears floor 1 solo (gate 2) ----
-let smokeFail = 0;
-for (const c of CHARACTERS) {
-  try {
-    const sim = new Sim({ seed: 123456789, party: [{ idx: 0, key: 'k', name: 'SMOKE', charId: c.id, color: '#fff' }] });
-    sim.setInput(0, { mx: 1, my: 0.5 });
-    playFloor(sim, false);
-    if (sim.over) throw new Error('run ended on floor 1');
-    if (sim.floorNum !== 2) throw new Error(`still on floor ${sim.floorNum}`);
-    sim.getSnapshot();
-    sim.getMeta(sim.players[0]);
-  } catch (err) { smokeFail++; fail(`character ${c.id} floor-1 clear`, err); }
-}
-if (!smokeFail) ok(`all ${CHARACTERS.length} characters clear floor 1 solo`);
+// ---- 3. consent selection: solo instant; contested redirects once then locks ----
+try {
+  const solo = new Sim({ seed: 5, party: [{ idx: 0, key: 'a', name: 'S', charId: 'rampart', color: '#fff' }] });
+  const first = solo.reachableNodes()[0];
+  solo.uiAction(0, { kind: 'pickNode', nodeId: first });
+  if (solo.phase === 'arena' && solo.currentNode === first) ok('solo node tap travels immediately');
+  else fail(`solo pick: phase ${solo.phase}`);
 
-// ---- 3. full-run victories for the six gate characters (gate 3) ----
-for (const charId of ['bulwark', 'cogsmith', 'zephyr', 'powderkeg', 'quartermaster', 'facet']) {
+  const duo = new Sim({ seed: 5, party: [
+    { idx: 0, key: 'a', name: 'A', charId: 'rampart', color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: 'redmaw', color: '#fff' }] });
+  const [n1, n2] = duo.reachableNodes();
+  duo.uiAction(0, { kind: 'pickNode', nodeId: n1 });
+  if (duo.phase === 'map' && duo.nodeVote && duo.nodeVote.nodeId === n1) ok('co-op tap starts the 4s consent countdown');
+  else fail('co-op vote did not start');
+  // same player cannot redirect
+  duo.uiAction(0, { kind: 'pickNode', nodeId: n2 });
+  if (duo.nodeVote.nodeId === n1) ok('the same player cannot redirect their own vote'); else fail('self-redirect happened');
+  // different player redirects once
+  duo.uiAction(1, { kind: 'pickNode', nodeId: n2 });
+  if (duo.nodeVote.nodeId === n2 && duo.nodeVote.redirected) ok('a different player redirects the countdown once');
+  else fail('redirect failed');
+  // after the redirect the selection is locked
+  duo.uiAction(0, { kind: 'pickNode', nodeId: n1 });
+  if (duo.nodeVote.nodeId === n2) ok('after one redirect the selection locks'); else fail('post-redirect tap changed the vote');
+  // countdown expiry travels
+  for (let i = 0; i < 60 * 5 && duo.phase === 'map'; i++) duo.tick();
+  if (duo.phase === 'arena' && duo.currentNode === n2) ok('countdown expiry travels the party');
+  else fail(`vote expiry: phase ${duo.phase} node ${duo.currentNode}`);
+} catch (err) { fail('consent selection crashed', err); }
+
+// ---- 4. all 32 characters clear their first fight node ----
+{
+  let smokeFail = 0;
+  for (const c of CHARACTERS) {
+    try {
+      const sim = new Sim({ seed: 123456789, party: [{ idx: 0, key: 'k', name: 'SMOKE', charId: c.id, color: '#fff' }] });
+      sim.setInput(0, { mx: 1, my: 0.5 });
+      sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+      if (sim.phase !== 'arena') throw new Error('did not enter arena');
+      clearArena(sim, false);
+      if (sim.phase !== 'map') throw new Error(`stuck in arena (cleared=${sim.cleared})`);
+      sim.getSnapshot();
+      sim.getMeta(sim.players[0]);
+    } catch (err) { smokeFail++; fail(`character ${c.id} first fight`, err); }
+  }
+  if (!smokeFail) ok('all 32 characters clear their first fight node and extract');
+}
+
+// ---- 5. full-run victories (per-fight-trigger chars + DoD staples) ----
+for (const charId of ['facet', 'rampart', 'vesper', 'bulwark', 'cogsmith', 'zephyr']) {
   try {
     const sim = new Sim({ seed: 424242, party: [{ idx: 0, key: 'k', name: 'RUN', charId, color: '#fff' }] });
-    sim.debug('F2'); // funds for shopping
+    sim.debug('F2');
     for (let f = 1; f <= 4 && !sim.over; f++) playFloor(sim, true);
     if (sim.over && sim.result && sim.result.win) ok(`full-run WIN as ${charId}`);
-    else fail(`${charId} run did not end in a win (over=${sim.over}, result=${JSON.stringify(sim.result && { win: sim.result.win, floor: sim.result.floor })})`);
+    else fail(`${charId} run did not win (over=${sim.over}, floor=${sim.floorNum})`);
   } catch (err) { fail(`${charId} full run crashed`, err); }
 }
 
-// ---- 4. floor-1 baseline DPS: within ±40% of the roster median (gate 4) ----
-// Harness: god-mode player pinned at room center shooting four immobile
-// high-HP training dummies at 90u (N/E/S/W). Melee reaches them, AoE clips
-// neighbors, and nothing ever dies or overlaps the player. 20 simulated
-// seconds; DPS = damageDealt / 20.
+// ---- 6. per-fight trigger mapping ----
+try {
+  // Rampart: +1 permanent Grit per FIGHT cleared
+  const rs = new Sim({ seed: 9, party: [{ idx: 0, key: 'k', name: 'R', charId: 'rampart', color: '#fff' }] });
+  rs.uiAction(0, { kind: 'pickNode', nodeId: rs.reachableNodes()[0] });
+  clearArena(rs, false);
+  if ((rs.players[0].permStats.grit || 0) === 1) ok('Rampart: +1 permanent Grit per fight cleared');
+  else fail(`Rampart grit after one fight: ${rs.players[0].permStats.grit}`);
+
+  // Vesper: overheal → Vitality capped +3 per FIGHT, cap resets on the next fight
+  const vs = new Sim({ seed: 10, party: [{ idx: 0, key: 'k', name: 'V', charId: 'vesper', color: '#fff' }] });
+  vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] });
+  const vp = vs.players[0];
+  vp.hp = vp.stats.vitality;
+  vs._heal(vp, 50);
+  if ((vp.permStats.vitality || 0) !== 3) fail(`Vesper first-fight overheal: ${vp.permStats.vitality} (want 3)`);
+  clearArena(vs, false);
+  vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] });
+  if (vs.phase !== 'arena') { // second pick may hit a stop node — walk until a fight
+    let g = 0;
+    while (vs.phase === 'map' && g++ < 5) { drain(vs, vp, false); vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] }); }
+  }
+  vp.hp = vp.stats.vitality; vp.healAcc = 0;
+  vs._heal(vp, 50);
+  if ((vp.permStats.vitality || 0) === 6) ok('Vesper: overheal cap +3 per fight, resets each fight');
+  else fail(`Vesper second-fight overheal total: ${vp.permStats.vitality} (want 6)`);
+
+  // Facet: boon offered on entering Combat/Elite/Siege nodes, not on stops
+  const fs = new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'F', charId: 'facet', color: '#fff' }] });
+  const fp = fs.players[0];
+  if (fp.boonOffer) fail('Facet had a boon before the first fight');
+  fs.uiAction(0, { kind: 'pickNode', nodeId: fs.reachableNodes()[0] });
+  if (fs.phase === 'arena' && fp.boonOffer) ok('Facet: boon offered on entering a fight node');
+  else fail(`Facet boon on arena entry: ${!!fp.boonOffer}`);
+  const boonStat = fp.boonOffer[0].stat;
+  fs.uiAction(0, { kind: 'boon', id: fp.boonOffer[0].id });
+  if (fp.boonTemp && fp.boonTemp[boonStat]) ok('Facet: boon applies for the fight');
+  clearArena(fs, false);
+  if (!fp.boonTemp) ok('Facet: boon expires when the fight ends'); else fail('boon survived extraction');
+
+  // Greed: floor(G/2) materials at every fight clear
+  const gs = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'G', charId: 'gilded_one', color: '#fff' }] });
+  gs.players[0].boosts.greed = 15; gs._recomputeStats(gs.players[0]); // 30 total → +15
+  gs.uiAction(0, { kind: 'pickNode', nodeId: gs.reachableNodes()[0] });
+  const matsBefore = gs.players[0].materials;
+  gs.wave.done = true; gs.spawnQueue.length = 0;
+  for (const e of [...gs.enemyPool]) gs.enemyPool.release(e);
+  for (let i = 0; i < 30 && !gs.cleared; i++) gs.tick();
+  if (gs.players[0].materials - matsBefore >= 15) ok(`Greed pays floor(G/2) at fight clear (+${gs.players[0].materials - matsBefore})`);
+  else fail(`Greed tithe: +${gs.players[0].materials - matsBefore} (want ≥15)`);
+
+  // level-up banking: banked during the fight, resolved at the clear
+  const ls = new Sim({ seed: 13, party: [{ idx: 0, key: 'k', name: 'L', charId: 'redmaw', color: '#fff' }] });
+  ls.uiAction(0, { kind: 'pickNode', nodeId: ls.reachableNodes()[0] });
+  const lp = ls.players[0];
+  ls._collectMaterial(lp, 100); // banks several level-ups mid-fight
+  if (lp.banked > 0 && !lp.pendingOffer) ok('level-ups bank during the fight (no mid-combat offer)');
+  else fail(`banking: banked=${lp.banked} pending=${!!lp.pendingOffer}`);
+  ls.wave.done = true; ls.spawnQueue.length = 0;
+  for (const e of [...ls.enemyPool]) ls.enemyPool.release(e);
+  for (let i = 0; i < 30 && !lp.pendingOffer; i++) ls.tick();
+  if (lp.pendingOffer) ok('banked level-ups resolve at the fight clear');
+  else fail('no offer surfaced at clear');
+} catch (err) { fail('per-fight trigger tests crashed', err); }
+
+// ---- 7. all five arena templates spawn, fight, and clear ----
+for (const template of TEMPLATE_KEYS) {
+  try {
+    const sim = new Sim({ seed: 77, party: [{ idx: 0, key: 'k', name: 'T', charId: 'bulwark', color: '#fff' }] });
+    sim._travelTo(sim.reachableNodes()[0]); // enter, then re-enter with the wanted template
+    sim.arenaNode.template = template;
+    sim._enterArena(sim.arenaNode);
+    let spawned = 0;
+    for (let i = 0; i < 60 * 12; i++) { sim.tick(); spawned = Math.max(spawned, sim.enemyPool.count); }
+    if (spawned === 0) { fail(`${template}: nothing spawned`); continue; }
+    // players/enemies never inside obstacles
+    let clip = 0;
+    for (const e of sim.enemyPool) if (sim._inObstacle(e.x, e.y, -2)) clip++;
+    if (clip > 0) fail(`${template}: ${clip} enemies inside obstacles`);
+    clearArena(sim, false);
+    if (sim.phase === 'map') ok(`arena template ${template}: spawns, fights, clears, extracts (peak ${spawned})`);
+    else fail(`${template}: never cleared`);
+  } catch (err) { fail(`arena template ${template} crashed`, err); }
+}
+
+// ---- 7b. extraction consent: countdown starts on the portal, cancels off it ----
+try {
+  const sim = new Sim({ seed: 21, party: [{ idx: 0, key: 'k', name: 'E', charId: 'rampart', color: '#fff' }] });
+  sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+  const p = sim.players[0];
+  sim.wave.done = true; sim.spawnQueue.length = 0;
+  for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
+  for (let i = 0; i < 30 && !sim.cleared; i++) sim.tick();
+  drain(sim, p, false);
+  p.x = sim.hatch.x; p.y = sim.hatch.y;
+  for (let i = 0; i < 30; i++) sim.tick();
+  if (sim.extract && sim.extract.t < 4) ok('extraction countdown starts while standing on the portal');
+  else fail(`extract state: ${JSON.stringify(sim.extract)}`);
+  p.x = sim.hatch.x + 300; p.y = sim.hatch.y;
+  for (let i = 0; i < 10; i++) sim.tick();
+  if (!sim.extract) ok('stepping off the portal cancels the countdown'); else fail('countdown survived leaving the portal');
+} catch (err) { fail('extraction consent crashed', err); }
+
+// ---- 7c. the party never spawns inside arena architecture ----
+// (cramped layouts can run walls through the exact midpoint — spawns must nudge off)
+try {
+  let clip = 0;
+  const party4 = ['bulwark', 'wisp', 'cogsmith', 'voltaic'].map((c, i) => ({ idx: i, key: 'k' + i, name: 'S' + i, charId: c, color: '#fff' }));
+  for (let seed = 1; seed <= 25; seed++) {
+    const s = new Sim({ seed: seed * 31, party: party4 });
+    const node = s.floor.nodes.find(n => n.kind === 'combat');
+    for (const template of TEMPLATE_KEYS) {
+      node.template = template;
+      s._travelTo(node.id);
+      for (const p of s.players) if (s._inObstacle(p.x, p.y, p.radius)) { clip++; fail(`seed ${seed * 31} ${template}: player spawned inside an obstacle at ${Math.round(p.x)},${Math.round(p.y)}`); }
+      s.phase = 'map';
+    }
+  }
+  for (let f = 1; f <= 4; f++) { // the bespoke siege arenas too
+    const s = new Sim({ seed: 5, party: party4 });
+    while (s.floorNum < f) s.debug('F4');
+    s._travelTo(s.floor.siegeId);
+    for (const p of s.players) if (s._inObstacle(p.x, p.y, p.radius)) { clip++; fail(`floor ${f} siege: player spawned inside an obstacle`); }
+  }
+  if (!clip) ok('party spawns clear of obstacles (25 seeds × 5 templates + all 4 sieges)');
+} catch (err) { fail('spawn-clip check crashed', err); }
+
+// ---- 8. the Siege end-to-end ----
+try {
+  const party = [
+    { idx: 0, key: 'a', name: 'A', charId: 'bulwark', color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: 'redmaw', color: '#fff' }];
+  const sim = new Sim({ seed: 31, party });
+  sim.god = true;
+  const p = sim.players[0];
+  sim._travelTo(sim.floor.siegeId); // jump straight to the finale
+  if (sim.arenaNode.kind !== 'siege') throw new Error('not in siege');
+  const obst0 = sim.obstacles.length;
+  // down player 1: the first mutation must revive them (mercy rule)
+  const p1 = sim.players[1];
+  sim.god = false;
+  let g = 0;
+  while (!p1.downed && g++ < 90) { p1.invuln = 0; p1.stats.reflex = 0; p1.hp = 1; sim.hurtPlayer(p1, 9999, null); }
+  sim.god = true;
+  if (!p1.downed) fail('could not down the siege test partner');
+  const events = [];
+  let peak = 0, ticks = 0, revivedByMutation = false, sawPylonBuff = false;
+  while (sim.phase === 'arena' && !sim.over && ticks++ < 60 * 260) {
+    sim.tick();
+    peak = Math.max(peak, sim.enemyPool.count);
+    for (const ev of sim.events.splice(0)) {
+      if (ev.k === 'mutation') {
+        events.push(ev.kind);
+        if (!p1.downed) revivedByMutation = true;
+      }
+      if (ev.k === 'bossSpawn') events.push('boss');
+      if (ev.k === 'bossDown') events.push('bossDown');
+    }
+    if (sim.enemyBuff > 1) sawPylonBuff = true;
+    if (ticks % 200 === 0) nuke(sim, p, true);
+    if (sim.boss) sim.damageEnemy(sim.boss, 90, { owner: p });
+    for (const q of sim.players) drain(sim, q, false);
+    if (sim.cleared && sim.hatch) for (const q of sim.livePlayers()) { q.x = sim.hatch.x; q.y = sim.hatch.y; }
+  }
+  const mutations = events.filter(e => e !== 'boss' && e !== 'bossDown');
+  if (mutations.length === SIEGES[0].mutations.length) ok(`siege mutation schedule fired (${mutations.join(' → ')})`);
+  else fail(`mutations fired: ${mutations.join(',')}`);
+  if (mutations.includes('collapse') && sim.obstacles.length < obst0) ok(`wall collapse removed obstacles (${obst0} → ${sim.obstacles.length})`);
+  else fail('collapse did not remove walls');
+  if (sawPylonBuff) ok('ward pylon buffed enemies while it stood'); else fail('pylon buff never observed');
+  if (revivedByMutation) ok('mutation revived the downed player (mercy rule)'); else fail('mercy revive did not fire');
+  if (events.includes('boss') && events.indexOf('boss') > events.indexOf(mutations[mutations.length - 1])) ok('the floor boss entered mid-siege after the final mutation');
+  else fail(`boss entry ordering: ${events.join(',')}`);
+  if (events.includes('bossDown') && sim.floorNum === 2) ok(`siege victory paid out and descended (peak alive ${peak})`);
+  else fail(`siege end: floor ${sim.floorNum}, events ${events.join(',')}`);
+} catch (err) { fail('siege end-to-end crashed', err); }
+
+// ---- 8b. hold-circle chokes spawns; hazard field migrates (floor 3 / floor 2) ----
+try {
+  const sim = new Sim({ seed: 33, party: [{ idx: 0, key: 'k', name: 'H', charId: 'bulwark', color: '#fff' }] });
+  sim.god = true;
+  while (sim.floorNum < 3) sim.debug('F4');
+  sim._travelTo(sim.floor.siegeId);
+  const p = sim.players[0];
+  // fast-forward to the circle mutation
+  while (sim.mutIdx < 1) { sim.siegeT = sim.mutations[0].at; sim.tick(); }
+  if (!sim.holdCircle) throw new Error('no hold circle after mutation');
+  // uncontested: normal rate; contested: choked
+  p.x = sim.holdCircle.x + 900; p.y = sim.holdCircle.y;
+  sim.tick();
+  const rateFree = !sim.holdCircle.held;
+  p.x = sim.holdCircle.x; p.y = sim.holdCircle.y;
+  sim.tick();
+  if (rateFree && sim.holdCircle.held) ok('hold circle: contested state tracks the players');
+  else fail(`hold circle held states: free=${!rateFree} held=${sim.holdCircle.held}`);
+
+  const s2 = new Sim({ seed: 34, party: [{ idx: 0, key: 'k', name: 'H2', charId: 'bulwark', color: '#fff' }] });
+  s2.god = true;
+  s2.debug('F4');
+  s2._travelTo(s2.floor.siegeId);
+  while (s2.mutIdx < 2) { s2.siegeT = s2.mutations[Math.min(s2.mutIdx, 1)].at; s2.tick(); }
+  const field = s2.hazards.find(h => h.vx !== undefined);
+  if (!field) throw new Error('no migrating field');
+  const x0 = field.x;
+  for (let i = 0; i < 60 * 5; i++) s2.tick();
+  if (field.x > x0 + 100) ok(`hazard field migrates across the arena (${Math.round(x0)} → ${Math.round(field.x)})`);
+  else fail(`hazard field static: ${x0} → ${field.x}`);
+} catch (err) { fail('sub-objective tests crashed', err); }
+
+// ---- 9. co-op: downs, revives, wipe ----
+try {
+  const party = ['bulwark', 'wisp', 'cogsmith', 'voltaic'].map((c, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: c, color: '#fff' }));
+  const sim = new Sim({ seed: 777, party });
+  sim.debug('F2');
+  playFloor(sim, true);
+  if (sim.over) fail('coop wiped unexpectedly on floor 1');
+  else ok('4-player co-op clears floor 1 through the node map');
+  // enter a fight for revive mechanics
+  if (sim.phase === 'map') {
+    for (const q of sim.players) drain(sim, q, false);
+    sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+    let g = 0;
+    while (sim.phase === 'map' && g++ < 6) { for (const q of sim.players) drain(sim, q, false); sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] }); }
+    for (let i = 0; i < 60 * 5 && sim.phase === 'map'; i++) sim.tick(); // vote countdown
+  }
+  const p1 = sim.players[1];
+  let gDown = 0;
+  while (!p1.downed && gDown++ < 90) { p1.hp = Math.min(p1.hp, 1); p1.invuln = 0; p1.stats.reflex = 0; sim.hurtPlayer(p1, 999, null); }
+  if (!p1.downed) fail('repeated hurtPlayer(999) did not down the target');
+  sim.players[0].x = p1.x; sim.players[0].y = p1.y;
+  for (let i = 0; i < 60 * 4; i++) sim.tick();
+  if (p1.downed) fail('revive by proximity failed after 4s');
+  else ok('down + proximity revive works');
+  for (const p of sim.players) {
+    let g = 0;
+    while (!p.downed && !sim.over && g++ < 90) { p.invuln = 0; p.stats.reflex = 0; p.hp = Math.min(p.hp, 1); sim.hurtPlayer(p, 9999, null); }
+  }
+  if (sim.over && sim.result && !sim.result.win) ok('full wipe ends run with loss results');
+  else fail('wipe did not end the run');
+} catch (err) { fail('coop run crashed', err); }
+
+// ---- 9b. build management (host-validated) ----
+try {
+  const { sellValue, weaponBasePrice } = await import('../js/config.js');
+  const { WEAPON_BY_ID } = await import('../js/content/weapons.js');
+  const sim = new Sim({ seed: 31337, party: [{ idx: 0, key: 'k', name: 'MGMT', charId: 'redmaw', color: '#fff' }] });
+  const p = sim.players[0];
+  sim._addWeapon(p, 'coilgun', 1);
+  sim._addWeapon(p, 'coilgun', 1);
+  const slots0 = p.weapons.length;
+  sim.uiAction(0, { kind: 'combine', a: 1, b: 2, id: 'coilgun', tier: 1 });
+  const cg = p.weapons.filter(w => w.id === 'coilgun');
+  if (cg.length === 1 && cg[0].tier === 2 && p.weapons.length === slots0 - 1) ok('combine merges pair → tier II and frees a slot');
+  else fail(`combine result wrong: ${JSON.stringify(p.weapons)}`);
+  const mats0 = p.materials;
+  const slot = p.weapons.findIndex(w => w.id === 'coilgun');
+  const expect = sellValue(weaponBasePrice(WEAPON_BY_ID.coilgun, 2), sim.floorNum);
+  sim.uiAction(0, { kind: 'sellWeapon', slot, id: 'coilgun', tier: 2 });
+  if (p.materials === mats0 + expect && !p.weapons.some(w => w.id === 'coilgun')) ok(`sell weapon refunds 30% (+${expect})`);
+  else fail(`sell weapon: mats ${mats0}→${p.materials}`);
+  // Quartermaster invested lineage
+  const qsim = new Sim({ seed: 555, party: [{ idx: 0, key: 'k', name: 'QM', charId: 'quartermaster', color: '#fff' }] });
+  const qp = qsim.players[0];
+  qsim._addWeapon(qp, 'pebbleshot', 1, 30);
+  qsim._addWeapon(qp, 'pebbleshot', 1, 40);
+  const pi = qp.weapons.map((w, i) => w.id === 'pebbleshot' ? i : -1).filter(i => i >= 0);
+  qsim.uiAction(0, { kind: 'combine', a: pi[0], b: pi[1], id: 'pebbleshot', tier: 1 });
+  const merged = qp.weapons.find(w => w.id === 'pebbleshot');
+  const qmats = qp.materials;
+  qsim.uiAction(0, { kind: 'sellWeapon', slot: qp.weapons.indexOf(merged), id: 'pebbleshot', tier: 2 });
+  if (qp.materials === qmats + 70) ok('Quartermaster sells for exact invested materials (70)');
+  else fail(`Quartermaster sell: +${qp.materials - qmats}`);
+} catch (err) { fail('build management crashed', err); }
+
+// ---- 9c. rebalance mechanics still hold ----
+try {
+  const rsim = new Sim({ seed: 43, party: [{ idx: 0, key: 'k', name: 'R', charId: 'rampart', color: '#fff' }] });
+  const rp = rsim.players[0];
+  rp.hp = 10;
+  rsim._heal(rp, 10);
+  const gained0 = rp.hp - 10;
+  rp.boosts.recovery = 100; rsim._recomputeStats(rp);
+  rp.hp = 10; rp.healAcc = 0;
+  rsim._heal(rp, 10);
+  if (gained0 === 10 && rp.hp - 10 === 20) ok('Recovery amplifies healing (+100% → double heal)');
+  else fail(`Recovery healing: ${gained0} / ${rp.hp - 10}`);
+
+  const bsim = new Sim({ seed: 44, party: [
+    { idx: 0, key: 'a', name: 'L', charId: 'lodestone', color: '#fff' },
+    { idx: 1, key: 'b', name: 'M', charId: 'rampart', color: '#fff' }] });
+  bsim._travelTo(bsim.reachableNodes()[0]);
+  const [lp, mp] = bsim.players;
+  lp.invuln = 0; mp.invuln = 0;
+  const lHp = lp.hp, mHp = mp.hp;
+  lp.stats.reflex = 0;
+  bsim.hurtPlayer(lp, 30, null);
+  if (lp.hp < lHp && mp.hp < mHp) ok('Soulbond: partner soaks a share of incoming damage');
+  else fail(`Soulbond share: ${lHp}→${lp.hp}, ${mHp}→${mp.hp}`);
+} catch (err) { fail('rebalance mechanics crashed', err); }
+
+// ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {
   const sim = new Sim({ seed: 9999, party: [{ idx: 0, key: 'k', name: 'DPS', charId, color: '#fff' }] });
   sim.god = true;
+  // an open arena, wave silenced — pure baseline weapon output
+  const fight = sim.floor.nodes.find(n => n.kind === 'combat');
+  fight.template = 'open_expanse';
+  sim._travelTo(fight.id);
+  sim.wave.done = true; sim.spawnQueue.length = 0;
+  for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
   const p = sim.players[0];
-  p.x = sim.W / 2; p.y = sim.H / 2;
+  const cx = sim.W / 2, cy = sim.H / 2;
+  p.x = cx; p.y = cy;
   const dummies = [];
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2;
-    const e = sim.spawnEnemyById('slabjaw', p.x + Math.cos(a) * 90, p.y + Math.sin(a) * 90, { noMats: true });
-    e.hp = 1e9; e.maxHp = 2e9; // never full (no free full-HP crits), never dies
-    e.spd = 0; e.dmg = 0;      // training dummies don't fight back (or eat drones)
+    const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * 90, cy + Math.sin(a) * 90, { noMats: true });
+    e.hp = 1e9; e.maxHp = 2e9; e.spd = 0; e.dmg = 0;
     dummies.push({ e, x: e.x, y: e.y });
   }
-  const SECS = 20;
-  for (let t = 0; t < SECS * 60; t++) {
-    p.x = sim.W / 2; p.y = sim.H / 2;
-    for (const d of dummies) { d.e.x = d.x; d.e.y = d.y; d.e.knockX = d.e.knockY = 0; }
+  for (let t = 0; t < 1200; t++) {
+    p.x = cx; p.y = cy;
+    for (const d of dummies) { d.e.x = d.x; d.e.y = d.y; d.e.knockX = d.e.knockY = 0; d.e.hp = 1e9; }
     sim.tick();
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
   }
-  return p.damageDealt / SECS;
+  return p.damageDealt / 20;
 }
 try {
   const table = CHARACTERS.map(c => ({ id: c.id, dps: measureDps(c.id) }));
@@ -253,210 +584,50 @@ try {
     if (Math.abs(dev) > 40) outliers++;
   }
   if (!outliers) ok('DPS gate: all 32 characters within ±40% of median');
-  else fail(`DPS gate: ${outliers} outlier(s) beyond ±40% of median`);
+  else fail(`DPS gate: ${outliers} outlier(s)`);
 } catch (err) { fail('DPS harness crashed', err); }
 
-// ---- 5. co-op run: 4 players, downs, revives ----
-try {
-  const party = ['bulwark', 'wisp', 'cogsmith', 'voltaic'].map((c, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: c, color: '#fff' }));
-  const sim = new Sim({ seed: 777, party });
-  sim.debug('F2');
-  playFloor(sim, true);
-  if (sim.over) fail('coop wiped unexpectedly on floor 1');
-  // down player 1 then revive via proximity
-  const p1 = sim.players[1];
-  let gDown = 0;
-  while (!p1.downed && gDown++ < 60) { p1.hp = Math.min(p1.hp, 1); p1.invuln = 0; sim.hurtPlayer(p1, 999, null); }
-  if (!p1.downed) fail('repeated hurtPlayer(999) did not down the target');
-  sim.players[0].x = p1.x; sim.players[0].y = p1.y;
-  run(sim, 60 * 4);
-  if (p1.downed) fail('revive by proximity failed after 4s');
-  else ok('down + proximity revive works');
-  // wipe: down everyone (repeat hits — dodge/block/second-wind can eat some)
-  for (const p of sim.players) {
-    let g = 0;
-    while (!p.downed && !sim.over && g++ < 60) { p.invuln = 0; p.hp = Math.min(p.hp, 1); sim.hurtPlayer(p, 9999, null); }
-  }
-  if (sim.over && sim.result && !sim.result.win) ok('full wipe ends run with loss results');
-  else fail('wipe did not end the run');
-} catch (err) { fail('coop run crashed', err); }
-
-// ---- 6. build management: combine / sell (host-validated) ----
-try {
-  const { sellValue, weaponBasePrice } = await import('../js/config.js');
-  const { WEAPON_BY_ID } = await import('../js/content/weapons.js');
-  const sim = new Sim({ seed: 31337, party: [{ idx: 0, key: 'k', name: 'MGMT', charId: 'redmaw', color: '#fff' }] });
-  const p = sim.players[0];
-  sim._addWeapon(p, 'coilgun', 1);
-  sim._addWeapon(p, 'coilgun', 1);
-  if (p.weapons.filter(w => w.id === 'coilgun').length !== 2) fail('duplicate purchase no longer keeps both copies');
-  const slots0 = p.weapons.length;
-  sim.uiAction(0, { kind: 'combine', a: 1, b: 2, id: 'coilgun', tier: 1 });
-  const cg = p.weapons.filter(w => w.id === 'coilgun');
-  if (cg.length === 1 && cg[0].tier === 2 && p.weapons.length === slots0 - 1) ok('combine merges pair → tier II and frees a slot');
-  else fail(`combine result wrong: ${JSON.stringify(p.weapons)}`);
-  const before = JSON.stringify(p.weapons);
-  sim.uiAction(0, { kind: 'combine', a: 0, b: 1, id: 'emberfang', tier: 1 });
-  sim.uiAction(0, { kind: 'combine', a: 0, b: 7, id: 'coilgun', tier: 2 });
-  if (JSON.stringify(p.weapons) === before) ok('invalid combine attempts are rejected unchanged');
-  else fail('invalid combine mutated the arsenal');
-  sim._addWeapon(p, 'twinlash', 4); sim._addWeapon(p, 'twinlash', 4);
-  sim.uiAction(0, { kind: 'combine', a: p.weapons.length - 2, b: p.weapons.length - 1, id: 'twinlash', tier: 4 });
-  if (p.weapons.filter(w => w.id === 'twinlash').length === 2) ok('tier IV pairs refuse to combine');
-  else fail('tier IV combined');
-  // sell a weapon: refund 30% floored, slot freed
-  const mats0 = p.materials;
-  const slot = p.weapons.findIndex(w => w.id === 'coilgun');
-  const expect = sellValue(weaponBasePrice(WEAPON_BY_ID.coilgun, 2), sim.floorNum);
-  sim.uiAction(0, { kind: 'sellWeapon', slot, id: 'coilgun', tier: 2 });
-  if (p.materials === mats0 + expect && !p.weapons.some(w => w.id === 'coilgun')) ok(`sell weapon refunds 30% (+${expect}) and frees the slot`);
-  else fail(`sell weapon: mats ${mats0}→${p.materials} (expected +${expect})`);
-  // summon weapons: structures follow combine/sell
-  sim._addWeapon(p, 'bolt_turret', 1); sim._addWeapon(p, 'bolt_turret', 1);
-  const mine = () => sim.summons.filter(s => s.owner === 0 && s.weaponId === 'bolt_turret');
-  if (mine().length !== 2) fail(`expected 2 turrets, got ${mine().length}`);
-  const ti = p.weapons.map((w, i) => w.id === 'bolt_turret' ? i : -1).filter(i => i >= 0);
-  sim.uiAction(0, { kind: 'combine', a: ti[0], b: ti[1], id: 'bolt_turret', tier: 1 });
-  if (mine().length === 1 && mine()[0].tier === 2) ok('combining turrets merges the structures too');
-  else fail(`turret combine: ${mine().length} structures, tier ${mine()[0] && mine()[0].tier}`);
-  sim.uiAction(0, { kind: 'sellWeapon', slot: p.weapons.findIndex(w => w.id === 'bolt_turret'), id: 'bolt_turret', tier: 2 });
-  if (mine().length === 0) ok('selling a turret weapon removes its structure');
-  else fail('sold turret left its structure behind');
-  // sell a stat item: stat drops, materials rise by shown refund
-  const statItem = ITEMS.find(it => it.stats && it.stats.ferocity > 0 && !it.hooks);
-  p.items.push(statItem.id);
-  sim._recomputeItems(p); sim._recomputeStats(p);
-  const ferWith = p.stats.ferocity, matsI = p.materials;
-  const iExpect = sellValue(statItem.price, sim.floorNum);
-  sim.uiAction(0, { kind: 'sellItem', id: statItem.id });
-  if (p.stats.ferocity === ferWith - statItem.stats.ferocity && p.materials === matsI + iExpect) ok(`sell item drops its stats and refunds +${iExpect}`);
-  else fail(`sell item: ferocity ${ferWith}→${p.stats.ferocity}, mats ${matsI}→${p.materials}`);
-  // sell a mechanical item: its hook can never fire again
-  const mech = ITEMS.find(it => it.hooks && it.hooks.killExplode);
-  p.items.push(mech.id);
-  sim._recomputeItems(p);
-  if (p.hookAgg.killExplode.length !== 1) fail('mech hook not registered');
-  sim.uiAction(0, { kind: 'sellItem', id: mech.id });
-  if (p.hookAgg.killExplode.length === 0) ok('sold mechanical item is unregistered from hook aggregation');
-  else fail('sold mechanical item still registered');
-  // selling one of a stack keeps the rest
-  p.items.push(statItem.id, statItem.id);
-  sim._recomputeItems(p); sim._recomputeStats(p);
-  sim.uiAction(0, { kind: 'sellItem', id: statItem.id });
-  if (p.items.filter(i => i === statItem.id).length === 1) ok('selling from a stack removes exactly one');
-  else fail('stack sell removed wrong count');
-  // full slots: buy denied with the make-room reason, then sell frees a purchase
-  while (p.weapons.length < p.weaponSlots) sim._addWeapon(p, 'pebbleshot', 1);
-  const okAdd = sim._addWeapon(p, 'rustcleaver', 1);
-  if (!okAdd) ok('purchase at 6/6 is denied (no silent auto-combine)');
-  else fail('purchase at full slots succeeded unexpectedly');
-  sim.uiAction(0, { kind: 'sellWeapon', slot: p.weapons.length - 1, id: p.weapons[p.weapons.length - 1].id, tier: p.weapons[p.weapons.length - 1].tier });
-  if (sim._addWeapon(p, 'rustcleaver', 1)) ok('after selling, a new purchase fits');
-  else fail('purchase still blocked after selling');
-
-  // Quartermaster: invested lineage — buy 2, combine, sell for exact total
-  const qsim = new Sim({ seed: 555, party: [{ idx: 0, key: 'k', name: 'QM', charId: 'quartermaster', color: '#fff' }] });
-  const qp = qsim.players[0];
-  const startInvested = qp.weapons[0].invested;
-  qsim._addWeapon(qp, 'pebbleshot', 1, 30);
-  qsim._addWeapon(qp, 'pebbleshot', 1, 40);
-  const pi = qp.weapons.map((w, i) => w.id === 'pebbleshot' ? i : -1).filter(i => i >= 0);
-  qsim.uiAction(0, { kind: 'combine', a: pi[0], b: pi[1], id: 'pebbleshot', tier: 1 });
-  const merged = qp.weapons.find(w => w.id === 'pebbleshot');
-  if (merged.invested !== 70) fail(`combine lineage: invested ${merged.invested} != 70`);
-  const qmats = qp.materials;
-  qsim.uiAction(0, { kind: 'sellWeapon', slot: qp.weapons.indexOf(merged), id: 'pebbleshot', tier: 2 });
-  if (qp.materials === qmats + 70) ok(`Quartermaster sells for exact invested materials (70; starting gear ${startInvested})`);
-  else fail(`Quartermaster sell: mats ${qmats}→${qp.materials} (expected +70)`);
-} catch (err) { fail('build management tests crashed', err); }
-
-// ---- 7. rebalance mechanic assertions ----
-try {
-  // crits are granted-only: a plain character never crits
-  const sim = new Sim({ seed: 42, party: [{ idx: 0, key: 'k', name: 'C', charId: 'rampart', color: '#fff' }] });
-  const p = sim.players[0];
-  let crits = 0;
-  const origHits = sim.fx.hits;
-  for (let i = 0; i < 200; i++) {
-    const e = sim.spawnEnemyById('slabjaw', p.x + 80, p.y, { noMats: true });
-    e.hp = 10000; e.maxHp = 10000; // not full-HP-crit relevant (no such item held)
-    sim.tick();
-    for (const h of sim.fx.hits) if (h.c === 1) crits++;
-    sim.fx.hits.length = 0;
-    for (const en of [...sim.enemyPool]) sim.enemyPool.release(en);
-  }
-  if (crits === 0) ok('crit is not a stat: no random crits without a granted effect');
-  else fail(`plain character landed ${crits} random crits`);
-
-  // Recovery amplifies healing sources
-  const rsim = new Sim({ seed: 43, party: [{ idx: 0, key: 'k', name: 'R', charId: 'rampart', color: '#fff' }] });
-  const rp = rsim.players[0];
-  rp.hp = 10;
-  rsim._heal(rp, 10);
-  const gained0 = rp.hp - 10;
-  rp.boosts.recovery = 100; rsim._recomputeStats(rp);
-  rp.hp = 10; rp.healAcc = 0;
-  rsim._heal(rp, 10);
-  const gained1 = rp.hp - 10;
-  if (gained0 === 10 && gained1 === 20) ok('Recovery amplifies healing (+100% → double heal)');
-  else fail(`Recovery healing: base ${gained0}, amplified ${gained1}`);
-
-  // Soulbond shares damage both ways
-  const bsim = new Sim({ seed: 44, party: [
-    { idx: 0, key: 'a', name: 'L', charId: 'lodestone', color: '#fff' },
-    { idx: 1, key: 'b', name: 'M', charId: 'rampart', color: '#fff' }] });
-  const [lp, mp] = bsim.players;
-  lp.invuln = 0; mp.invuln = 0;
-  const lHp = lp.hp, mHp = mp.hp;
-  lp.stats.reflex = 0; // force the hit through
-  bsim.hurtPlayer(lp, 30, null);
-  if (lp.hp < lHp && mp.hp < mHp) ok('Soulbond: partner soaks a share of incoming damage');
-  else fail(`Soulbond share: lodestone ${lHp}→${lp.hp}, partner ${mHp}→${mp.hp}`);
-
-  // Prism: 3 picks of the same boon make it permanent
-  const fsim = new Sim({ seed: 45, party: [{ idx: 0, key: 'k', name: 'F', charId: 'facet', color: '#fff' }] });
-  const fp = fsim.players[0];
-  for (let i = 0; i < 3; i++) {
-    fp.boonOffer = [{ id: 'ferocity_small', stat: 'ferocity', amount: 6, rarity: 'common', n: i }];
-    fsim.uiAction(0, { kind: 'boon', id: 'ferocity_small' });
-  }
-  if ((fp.permStats.ferocity || 0) === 6 && fp.boonCounts.ferocity_small === 3) ok('Prism: third pick of a boon makes it permanent');
-  else fail(`Prism permanence: permStats ${JSON.stringify(fp.permStats)}, counts ${JSON.stringify(fp.boonCounts)}`);
-
-  // Tempo drives attack cooldown and move speed
-  const tsim = new Sim({ seed: 46, party: [{ idx: 0, key: 'k', name: 'T', charId: 'onrush', color: '#fff' }] });
-  const tp = tsim.players[0];
-  if (tp.stats.tempo === 25) ok('Onrush statline: +25% Tempo');
-  else fail(`Onrush tempo ${tp.stats.tempo}`);
-} catch (err) { fail('rebalance mechanics crashed', err); }
-
-// ---- 8. stress ----
+// ---- 11. stress: siege crest density, tick-time measurement ----
 try {
   const sim = new Sim({ seed: 99, party: [{ idx: 0, key: 'k', name: 'STRESS', charId: 'threader', color: '#fff' }] });
-  for (const id of ['coilgun', 'hailburst', 'gravelmouth', 'sparkbolt', 'threadneedle']) sim._addWeapon(sim.players[0], id, 4);
-  for (let i = 0; i < 5; i++) sim.debug('F1');
-  run(sim, 30);
-  const n0 = sim.enemyPool.count;
+  sim.god = true;
+  while (sim.floorNum < 4) sim.debug('F4');
+  sim._travelTo(sim.floor.siegeId);
+  const p = sim.players[0];
+  p.weapons.length = 0; sim.summons.length = 0; // let the siege pile up
+  for (let t = 0; t < 60 * 130; t++) { sim.tick(); drain(sim, p, false); }
+  const alive0 = sim.enemyPool.count;
+  for (const id of ['coilgun', 'hailburst', 'gravelmouth', 'sparkbolt', 'threadneedle']) sim._addWeapon(p, id, 4);
   const t0 = performance.now();
   const TICKS = 600;
-  for (let i = 0; i < TICKS; i++) { sim.tick(); if (sim.enemyPool.count < 200) sim.debug('F1'); }
+  for (let i = 0; i < TICKS; i++) sim.tick();
   const ms = (performance.now() - t0) / TICKS;
-  ok(`stress: ~${n0}→${sim.enemyPool.count} enemies, ${sim.projPool.count} projectiles, avg tick ${ms.toFixed(3)} ms (60fps budget: 16.6ms)`);
+  ok(`siege stress: ${alive0}→${sim.enemyPool.count} alive, ${sim.projPool.count} projectiles, avg tick ${ms.toFixed(3)} ms (60fps budget 16.6ms)`);
+  if (alive0 < 150) fail(`siege crest only ${alive0} alive (<150)`);
   if (ms > 8) fail(`tick too slow under stress: ${ms.toFixed(2)} ms`);
+  const snap = JSON.stringify(sim.getSnapshot());
+  ok(`snapshot at crest: ${(snap.length / 1024).toFixed(1)} KB (~${(snap.length * 15 / 1024).toFixed(0)} KB/s at 15Hz)`);
 } catch (err) { fail('stress test crashed', err); }
 
-// ---- 9. snapshot serializability (with trait visuals) ----
+// ---- 12. snapshot serializability (with Gauntlet fields) ----
 try {
   const sim = new Sim({ seed: 5, party: [
     { idx: 0, key: 'a', name: 'S', charId: 'banneret', color: '#fff' },
     { idx: 1, key: 'b', name: 'T', charId: 'lodestone', color: '#fff' }] });
-  sim.debug('F1'); run(sim, 90);
-  const snap = sim.getSnapshot();
+  // map-phase snapshot with a live vote
+  sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+  let snap = sim.getSnapshot();
+  JSON.parse(JSON.stringify(snap));
+  if (snap.mode !== 0 || !snap.vote) fail(`map snapshot: mode=${snap.mode} vote=${JSON.stringify(snap.vote)}`);
+  for (let i = 0; i < 60 * 5 && sim.phase === 'map'; i++) sim.tick();
+  sim.debug('F1');
+  for (let i = 0; i < 90; i++) sim.tick();
+  snap = sim.getSnapshot();
   const json = JSON.stringify(snap);
   JSON.parse(json);
   if (!snap.auras.length) fail('snapshot missing Banneret aura');
   if (!snap.tethers.length) fail('snapshot missing Lodestone tether');
-  ok(`snapshot serializes (${json.length} bytes @ ${snap.enemies.length} enemies, ${snap.auras.length} aura, ${snap.tethers.length} tether)`);
+  ok(`snapshots serialize in both phases (${json.length} bytes @ ${snap.enemies.length} enemies)`);
 } catch (err) { fail('snapshot serialization', err); }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');

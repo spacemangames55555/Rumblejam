@@ -40,11 +40,9 @@ export function updateHud(meta, view, hctx) {
       </div>`);
   }
   wrap.innerHTML = rows.join('');
-  // top: floor & materials
-  const room = hctx.curRoomDef;
-  const roomName = room ? ({ start: 'Vault Entry', combat: 'Chamber', shop: 'Trader Alcove', treasure: 'Reliquary', elite: 'Champion Den', boss: 'Sanctum' })[room.kind] : '';
-  const hzd = room && room.hazard ? (room.hazard === 'spikes' ? ' · spikes!' : ' · lava!') : '';
-  let top = `FLOOR ${hctx.floorNum} / 4 — ${roomName}${hzd}`;
+  // top: floor & arena
+  const kindName = ({ combat: 'Skirmish', elite: 'Champion Hunt', siege: 'SIEGE' })[hctx.kind] || '';
+  let top = `FLOOR ${hctx.floorNum} / 4${hctx.arenaName ? ` — ${escapeHtml(hctx.arenaName)}` : ''}${kindName ? ` · ${kindName}` : ''}`;
   if (hctx.boss) {
     top += ` — <b style="color:var(--danger)">${escapeHtml(hctx.boss.name)}</b> ${bossBar(hctx.boss)}`;
   }
@@ -62,7 +60,7 @@ export function updateHud(meta, view, hctx) {
     }
     $('hud-weapons').innerHTML = slots.join('');
   }
-  drawMinimap(hctx);
+  drawRadar(view);
 }
 
 function bossBar(boss) {
@@ -87,43 +85,46 @@ export function banner(text, sub = '', dur = 2200) {
   bannerTimer = setTimeout(() => el.classList.add('hidden'), dur);
 }
 
-// ---------------- minimap ----------------
+// ---------------- arena radar ----------------
+// A simple radar of the whole arena: allies (their colors), elites (purple),
+// the boss and pylon, the extraction portal, and the hold-circle objective.
+// In map phase the canvas clears — the node map screen is the navigation.
 
-const KIND_ICON = { shop: '$', treasure: '★', elite: '!', boss: '☠', start: '' };
-
-function drawMinimap(hctx) {
+function drawRadar(view) {
   const cv = $('minimap');
   const ctx = cv.getContext('2d');
   ctx.clearRect(0, 0, cv.width, cv.height);
-  const layout = hctx.layout;
-  if (!layout) return;
-  const cell = 24, gap = 4;
-  let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-  const known = layout.rooms.filter(r => hctx.visited.has(r.id) || isAdjacentToVisited(r, layout, hctx.visited));
-  for (const r of known) {
-    minx = Math.min(minx, r.gx); maxx = Math.max(maxx, r.gx);
-    miny = Math.min(miny, r.gy); maxy = Math.max(maxy, r.gy);
-  }
-  if (!known.length) return;
-  const w = (maxx - minx + 1) * (cell + gap), h = (maxy - miny + 1) * (cell + gap);
+  if (!view || view.mode === 'map' || !view.aw) return;
+  const pad = 6;
+  const sc = Math.min((cv.width - pad * 2) / view.aw, (cv.height - pad * 2) / view.ah);
+  const w = view.aw * sc, h = view.ah * sc;
   const ox = (cv.width - w) / 2, oy = (cv.height - h) / 2;
-  for (const r of known) {
-    const x = ox + (r.gx - minx) * (cell + gap), y = oy + (r.gy - miny) * (cell + gap);
-    const visited = hctx.visited.has(r.id);
-    ctx.fillStyle = r.id === hctx.curRoom ? '#7a5cff' : visited ? '#3a3f5c' : '#22253a';
-    ctx.fillRect(x, y, cell, cell);
-    if (r.id === hctx.curRoom) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, cell - 2, cell - 2); }
-    const icon = KIND_ICON[r.kind];
-    if (icon && (visited || true)) {
-      ctx.fillStyle = r.kind === 'boss' ? '#ff5d6c' : PALETTE.material;
-      ctx.font = 'bold 13px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(icon, x + cell / 2, y + cell / 2 + 1);
-    }
+  ctx.fillStyle = '#12141fdd';
+  ctx.fillRect(ox, oy, w, h);
+  ctx.strokeStyle = '#454b6e';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(ox, oy, w, h);
+  const dot = (x, y, r, color) => {
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(ox + x * sc, oy + y * sc, r, 0, Math.PI * 2); ctx.fill();
+  };
+  for (const o of view.obstacles || []) {
+    ctx.fillStyle = '#2b2f45';
+    ctx.fillRect(ox + o[0] * sc, oy + o[1] * sc, Math.max(1, o[2] * sc), Math.max(1, o[3] * sc));
   }
-}
-
-function isAdjacentToVisited(r, layout, visited) {
-  return Object.values(r.doors).some(id => visited.has(id));
+  if (view.hold) {
+    ctx.strokeStyle = view.hold[3] ? '#ffd45e' : '#ff5d6c';
+    ctx.beginPath(); ctx.arc(ox + view.hold[0] * sc, oy + view.hold[1] * sc, Math.max(3, view.hold[2] * sc), 0, Math.PI * 2); ctx.stroke();
+  }
+  if (view.hatch) dot(view.hatch[0], view.hatch[1], 4, PALETTE.doorOpen);
+  for (const e of view.enemies || []) {
+    if (e.boss) dot(e.x, e.y, 4.5, '#ff5d6c');
+    else if (e.pylon) dot(e.x, e.y, 3.5, '#c05eff');
+    else if (e.elite) dot(e.x, e.y, 3, PALETTE.elite);
+  }
+  for (const p of view.players || []) {
+    if (p.gone) continue;
+    dot(p.x, p.y, p.idx === view.myIdx ? 3.5 : 2.8, p.downed ? '#ff5d6c' : p.color);
+    if (p.downed) { ctx.strokeStyle = '#ff5d6c'; ctx.beginPath(); ctx.arc(ox + p.x * sc, oy + p.y * sc, 6, 0, Math.PI * 2); ctx.stroke(); }
+  }
 }
