@@ -20,10 +20,15 @@ function steerTo(x, y) {
 }
 
 function botInput() {
-  // a "mediocre human": kite at ring distance, avoid walls, hunt stragglers
+  // a "mediocre human": kite at ring distance, avoid walls, hunt stragglers.
+  // Mop-up stance: once spawning is over and only stragglers remain, stand
+  // ground at mid-range instead of kiting to the horizon — hits must land.
+  // no HP gate: fleeing forever isn't an option the game offers — the fight
+  // must be finished to leave, so a hurt bot fights hurt (and may die honestly)
+  const mopUp = sim.wave && sim.wave.done && sim.enemyPool.count <= 12;
   const wdef = p.weapons[0] ? WEAPON_BY_ID[p.weapons[0].id] : null;
   const melee = wdef && (wdef.cls === 'swing' || wdef.cls === 'thrust');
-  const ring = wdef ? (melee ? Math.max(70, wdef.range * 0.75) : 230) : 200;
+  const ring = wdef ? (melee ? Math.max(70, wdef.range * 0.75) : (mopUp ? 110 : 230)) : 200;
   let vx = 0, vy = 0;
   let nearest = null, nd = Infinity, count = 0;
   for (const e of sim.enemyPool) {
@@ -48,6 +53,14 @@ function botInput() {
     const d = Math.sqrt(nd);
     vx += (nearest.x - p.x) / d * 1.6;
     vy += (nearest.y - p.y) / d * 1.6;
+  }
+  // melee mop-up: charge the nearest straggler down through its fire —
+  // flee-forever against a handful of ranged holdouts is the one thing a
+  // human never does (overrides kite + projectile-dodge, keeps telegraphs)
+  if (mopUp && melee && nearest) {
+    const d = Math.sqrt(nd) || 1;
+    vx = (nearest.x - p.x) / d * 4;
+    vy = (nearest.y - p.y) / d * 4;
   }
   // wall avoidance: strong pull toward center when near arena edges
   const cx = sim.W / 2 - p.x, cy = sim.H / 2 - p.y;
@@ -103,11 +116,16 @@ function botInput() {
   sim.setInput(0, { mx: vx / len, my: vy / len });
 }
 
+// materials-flow ledger, reported per floor (the economy interlock: denser
+// waves fund the shop at every extraction)
+const econ = { spent: 0, bought: 0, weapons: 0, sessions: 0, lastShopKey: null };
+
 function resolveUi() {
   let g = 0;
   while (p.pendingOffer && g++ < 30) sim.uiAction(0, { kind: 'levelup', id: p.pendingOffer[0].id });
   if (p.treasureOffer) sim.uiAction(0, { kind: 'treasure', id: p.treasureOffer.picks[0] });
   if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
+  if (p.shop && p.shop.key !== econ.lastShopKey) { econ.lastShopKey = p.shop.key; econ.sessions++; }
   if (p.shop) {
     // like a human on a budget: cheapest affordable first (high-Greed characters
     // roll pricier rarities and would otherwise walk out empty-handed)
@@ -124,7 +142,9 @@ function resolveUi() {
       });
       if (best < 0) break;
       tried.add(best);
+      const m0 = p.materials, isW = p.shop.stock[best].kind === 'weapon';
       sim.uiAction(0, { kind: 'buy', slot: best });
+      if (p.materials < m0) { econ.spent += m0 - p.materials; econ.bought++; if (isW) econ.weapons++; }
     }
     sim.uiAction(0, { kind: 'closeShop' });
   }
@@ -141,8 +161,15 @@ function pickNode() {
 
 const report = [];
 let stuck = false;
+let floorMark = { floor: sim.floorNum, collected: 0, spent: 0, bought: 0, weapons: 0, sessions: 0 };
+function floorEconLine() {
+  const earned = p.matsCollected - floorMark.collected;
+  report.push(`  floor ${floorMark.floor} economy: earned ${earned}, spent ${econ.spent - floorMark.spent} across ${econ.sessions - floorMark.sessions} shop sessions (${econ.bought - floorMark.bought} buys, ${econ.weapons - floorMark.weapons} weapons), holding ${p.materials}`);
+  floorMark = { floor: sim.floorNum, collected: p.matsCollected, spent: econ.spent, bought: econ.bought, weapons: econ.weapons, sessions: econ.sessions };
+}
 outer:
 while (!sim.over && sim.floorNum <= maxFloor && !stuck) {
+  if (sim.floorNum !== floorMark.floor) floorEconLine();
   if (sim.phase === 'map') {
     resolveUi();
     pickNode();
@@ -178,6 +205,7 @@ while (!sim.over && sim.floorNum <= maxFloor && !stuck) {
     stuck = true;
   }
 }
+floorEconLine();
 console.log(`=== balance probe: ${charId} (floors 1-${maxFloor}) ===`);
 console.log(report.join('\n'));
 console.log(sim.over ? (sim.result && sim.result.win ? 'WON' : 'DIED') : stuck ? 'STUCK — see above' : `alive on floor ${sim.floorNum} after the probe — looks sane`);

@@ -45,6 +45,11 @@ export const CONFIG = {
   FLOOR_HP_MULT: 1.35,
   FLOOR_DMG_MULT: 1.2,
 
+  // The two canonical difficulty knobs (patch 8) — all future density/health
+  // tuning is a one-line change here.
+  spawnBudgetMult: 1.25,   // arena + siege inflow, and the alive-at-once caps
+  enemyHpMult: 1.12,       // every enemy: chaff, ranged, specials, elites, bosses
+
   ELITE_HP_MULT: 3,
   ELITE_DMG_MULT: 1.5,
 

@@ -514,7 +514,7 @@ export class Sim {
     if (!w || w.done) return;
     w.t += dt;
     if (w.t >= w.dur) { w.done = true; return; }
-    let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn;
+    let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult;
     if (this.boss) {
       // "reduced add spawns" while the boss is up — and tapering to silence,
       // so a siege is never an unwinnable DPS race against infinite inflow:
@@ -544,7 +544,7 @@ export class Sim {
       if (this.enemyPool.count + this.spawnQueue.length >= CONFIG.POOL_ENEMIES - 10) break; // pool headroom
       const table = FLOOR_TABLES[this.floorNum - 1];
       let id = table[Math.floor(this.waveRng.float() * table.length)];
-      const cap = SPAWN_CAPS[id];
+      const cap = SPAWN_CAPS[id] && Math.round(SPAWN_CAPS[id] * CONFIG.spawnBudgetMult);
       if (cap && this._aliveOfType(id) >= cap) id = table[0] === id ? table[1] : table[0];
       const pos = this._spawnWavePos();
       this.spawnQueue.push({ t: 0.7, id, x: pos.x, y: pos.y });
@@ -592,6 +592,8 @@ export class Sim {
     if (this.arenaNode.kind === 'elite') {
       for (const p of this.livePlayers()) this._offerTreasure(p, 'elite');
     }
+    // the valley after every peak: extraction includes a shop browse
+    for (const p of this.livePlayers()) this._openShop(p, 'clear');
     // the extraction portal — leave via the same consent countdown
     this.hatch = this._openSpot(this.W / 2, this.H / 2);
   }
@@ -692,7 +694,7 @@ export class Sim {
   _spawnPylon(x, y) {
     const e = this.enemyPool.alloc();
     if (!e) return;
-    const hp = Math.round(PYLON_DEF.hp * Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1) * this.coopHp);
+    const hp = Math.round(PYLON_DEF.hp * Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1) * this.coopHp * CONFIG.enemyHpMult);
     Object.assign(e, {
       id: ++this.spawnCounter, def: PYLON_DEF, typeIdx: -2, boss: false, bossDef: null,
       x, y, hp, maxHp: hp, radius: PYLON_DEF.radius, spd: 0, dmg: 0, dmgScale: 1,
@@ -717,8 +719,8 @@ export class Sim {
     const x = cx < this.W / 2 ? this.W * 0.8 : this.W * 0.2;
     Object.assign(e, {
       id: ++this.spawnCounter, def: null, typeIdx: -1, boss: true, bossDef: def, bs: {},
-      x, y: this.H * 0.3, hp: Math.round(def.hp * this.coopHp * this.greedHp),
-      maxHp: Math.round(def.hp * this.coopHp * this.greedHp),
+      x, y: this.H * 0.3, hp: Math.round(def.hp * this.coopHp * this.greedHp * CONFIG.enemyHpMult),
+      maxHp: Math.round(def.hp * this.coopHp * this.greedHp * CONFIG.enemyHpMult),
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
@@ -783,7 +785,7 @@ export class Sim {
     if (!e) return null;
     const fl = Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1);
     const dmgScale = Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1);
-    let hp = def.hp * fl * this.coopHp * this.greedHp * (opts.elite ? CONFIG.ELITE_HP_MULT : 1);
+    let hp = def.hp * fl * this.coopHp * this.greedHp * CONFIG.enemyHpMult * (opts.elite ? CONFIG.ELITE_HP_MULT : 1);
     if (opts.mini) hp *= 0.35;
     Object.assign(e, {
       id: ++this.spawnCounter, def, typeIdx: ENEMY_INDEX[id], boss: false, bossDef: null,
@@ -2098,6 +2100,9 @@ export class Sim {
         rng, rerolls: 0,
         freeLeft: p.hookAgg.freeRerolls,
         stock: [],
+        // Trader NODES are the Black Market: 6 slots, cheaper rerolls, and
+        // richer guarantees — a destination, now that every extraction shops
+        black: /^node/.test(context),
       };
       this._fillStock(p);
     }
@@ -2106,16 +2111,40 @@ export class Sim {
 
   _fillStock(p) {
     const t = p.char.trait;
-    const slots = t.key === 'legendary_shop' ? t.slots : CONFIG.SHOP_SLOTS;
     const shop = p.shop;
+    const slots = t.key === 'legendary_shop' ? t.slots : shop.black ? 6 : CONFIG.SHOP_SLOTS;
     const keep = shop.stock.filter(s => s.locked && !s.sold);
     const carry = p.shopLocksCarry.splice(0);
     shop.stock = [...keep, ...carry];
     while (shop.stock.length < slots) shop.stock.push(this._rollStockEntry(p, shop.rng));
     shop.stock.length = Math.min(shop.stock.length, slots);
+    // Stock guarantees — rerolls re-run this, so they hold there too:
+    // standard shops ≥1 weapon (≥2 on floor 1, where kits are hungriest);
+    // the Black Market ≥2 weapons and ≥1 rare-or-better item. Trait shops
+    // keep their own rules (Gilded One's 2 legendaries, Quartermaster's
+    // all-weapon rack). Locked slots are never replaced.
+    if (t.key === 'legendary_shop') return;
+    const swappable = s => !s.locked && !s.sold;
+    const needW = t.key === 'arsenal_doctrine' ? 0 : (shop.black ? 2 : (this.floorNum === 1 ? 2 : 1));
+    let weapons = shop.stock.filter(s => s.kind === 'weapon').length;
+    for (let i = shop.stock.length - 1; i >= 0 && weapons < needW; i--) {
+      const s = shop.stock[i];
+      if (s.kind === 'item' && swappable(s)) { shop.stock[i] = this._rollStockEntry(p, shop.rng, 'weapon'); weapons++; }
+    }
+    if (shop.black && t.key !== 'arsenal_doctrine') {
+      const rarePlus = s => s.kind === 'item' && ITEM_BY_ID[s.id]
+        && (ITEM_BY_ID[s.id].rarity === 'rare' || ITEM_BY_ID[s.id].rarity === 'legendary');
+      if (!shop.stock.some(rarePlus)) {
+        for (let i = shop.stock.length - 1; i >= 0; i--) {
+          const s = shop.stock[i];
+          if (s.kind === 'item' && swappable(s)) { shop.stock[i] = this._rollStockEntry(p, shop.rng, 'rareplus'); break; }
+        }
+      }
+    }
   }
 
-  _rollStockEntry(p, rng) {
+  // force: 'weapon' | 'rareplus' — used by the stock guarantees
+  _rollStockEntry(p, rng, force = null) {
     const t = p.char.trait;
     const floorScale = 1 + CONFIG.PRICE_FLOOR_SCALE * (this.floorNum - 1);
     let discount = 1 - p.hookAgg.shopDiscount / 100;
@@ -2123,7 +2152,9 @@ export class Sim {
     // Quartermaster buys only weapons; Gilded One buys only legendary items;
     // the Overseer's weapon rolls come from the summon rack (turrets/drones)
     const weaponChance = t.key === 'overseer' ? 0.5 : CONFIG.SHOP_WEAPON_CHANCE;
-    const wantWeapon = t.key === 'arsenal_doctrine' ? true
+    const wantWeapon = force === 'weapon' ? true
+      : force === 'rareplus' ? false
+      : t.key === 'arsenal_doctrine' ? true
       : t.key === 'legendary_shop' ? false
       : rng.chance(weaponChance);
     if (wantWeapon) {
@@ -2133,7 +2164,8 @@ export class Sim {
       const price = Math.round(def.price * TIER_PRICE_MULT[tier - 1] * floorScale * discount);
       return { kind: 'weapon', id: def.id, tier, price: Math.max(1, price), sold: false, locked: false };
     }
-    const rarity = t.key === 'legendary_shop' ? 'legendary' : this._rollRarity(rng, p.stats.greed);
+    let rarity = t.key === 'legendary_shop' ? 'legendary' : this._rollRarity(rng, p.stats.greed);
+    if (force === 'rareplus' && rarity !== 'rare' && rarity !== 'legendary') rarity = 'rare';
     const pool = ITEMS.filter(it => it.rarity === rarity);
     const it = rng.pick(pool);
     const price = Math.max(1, Math.round(it.price * floorScale * discount));
@@ -2151,8 +2183,9 @@ export class Sim {
   _rerollCost(p) {
     const base = CONFIG.REROLL_BASE + CONFIG.REROLL_PER_FLOOR * (this.floorNum - 1);
     if (p.shop.freeLeft > 0) return 0;
-    if (p.rerollFlat) return base;
-    return Math.round(base * Math.pow(CONFIG.REROLL_GROWTH, p.shop.rerolls));
+    let cost = p.rerollFlat ? base : Math.round(base * Math.pow(CONFIG.REROLL_GROWTH, p.shop.rerolls));
+    if (p.shop.black) cost = Math.round(cost * 0.75); // Black Market: rerolls −25%
+    return cost;
   }
 
   _sendShop(p) {
@@ -2162,6 +2195,7 @@ export class Sim {
       stock: p.shop.stock.map(s => ({ kind: s.kind, id: s.id, tier: s.tier, price: s.price, sold: s.sold, locked: s.locked })),
       rerollCost: this._rerollCost(p),
       weaponsOnly: p.char.trait.key === 'arsenal_doctrine',
+      black: !!p.shop.black,
       floor: this.floorNum, // sell values shown in the UI derive from this
     });
   }
@@ -2453,13 +2487,52 @@ export class Sim {
         if (s.kind === 'weapon' && p.char.trait.key === 'overseer' && WEAPON_BY_ID[s.id].cls !== 'summon') return this._buyResult(p, msg.slot, false, 'turret mounts only');
         if (s.kind === 'weapon') {
           if (p.weaponSlots === 0) return this._buyResult(p, msg.slot, false, 'no weapon slots');
-          const ok = this._addWeapon(p, s.id, s.tier, s.price);
-          if (!ok) return this._buyResult(p, msg.slot, false, 'weapons full — sell or combine');
+          if (p.weapons.length >= p.weaponSlots) {
+            // at max slots a matching owned copy absorbs the purchase — the
+            // auto-combine (same type, same tier, below IV; first match wins)
+            const mi = p.weapons.findIndex(w => w.id === s.id && w.tier === s.tier);
+            if (mi < 0) return this._buyResult(p, msg.slot, false, 'weapons full — swap or combine');
+            if (s.tier >= 4) return this._buyResult(p, msg.slot, false, 'your copy is tier IV — nothing higher to combine into');
+            const w = p.weapons[mi];
+            w.tier++;
+            w.invested = (w.invested || 0) + s.price;
+            this._refreshSummonsFor(p, s.id);
+            if (p.char.trait.key === 'arsenal_doctrine') this._recomputeStats(p);
+            this.pushEvent({ k: 'toast', idx: p.idx, text: `Combined into ${WEAPON_BY_ID[s.id].name} ${['I', 'II', 'III', 'IV'][w.tier - 1]}!` });
+          } else {
+            const ok = this._addWeapon(p, s.id, s.tier, s.price);
+            if (!ok) return this._buyResult(p, msg.slot, false, 'weapons full — sell or combine');
+          }
         } else {
           p.items.push(s.id);
           this._recomputeItems(p);
           this._recomputeStats(p);
         }
+        p.materials -= s.price;
+        s.sold = true;
+        p.metaDirty = true;
+        this.pushEvent({ k: 'sfx', s: 'buy' });
+        this._buyResult(p, msg.slot, true);
+        this._sendShop(p);
+        break;
+      }
+      case 'swapBuy': {
+        // one-step "make room": sell an owned weapon and buy a stock weapon as
+        // a single transaction — both legs succeed or neither does
+        if (!p.shop) return;
+        if (!intIn(msg.slot, 8) || !intIn(msg.sell, 8)) return;
+        const s = p.shop.stock[msg.slot];
+        if (!s || s.sold || s.kind !== 'weapon') return this._buyResult(p, msg.slot, false, 'gone');
+        const w = p.weapons[msg.sell];
+        if (!w || w.id !== msg.sellId || w.tier !== msg.sellTier) return this._buyResult(p, msg.slot, false, 'stale selection');
+        if (p.char.trait.key === 'overseer' && WEAPON_BY_ID[s.id].cls !== 'summon') return this._buyResult(p, msg.slot, false, 'turret mounts only');
+        const refund = p.char.trait.key === 'arsenal_doctrine'
+          ? (w.invested || 0)
+          : sellValue(weaponBasePrice(WEAPON_BY_ID[w.id], w.tier), this.floorNum);
+        if (p.materials + refund < s.price) return this._buyResult(p, msg.slot, false, 'poor');
+        // every check passed — commit both legs
+        this._sellWeapon(p, msg.sell, w.id, w.tier);
+        this._addWeapon(p, s.id, s.tier, s.price);
         p.materials -= s.price;
         s.sold = true;
         p.metaDirty = true;

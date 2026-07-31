@@ -132,10 +132,12 @@ function drain(sim, p, buyStuff) {
   while (p.pendingOffer && g++ < 40) sim.uiAction(p.idx, { kind: 'levelup', id: p.pendingOffer[0].id });
   if (p.treasureOffer) sim.uiAction(p.idx, { kind: 'treasure', id: p.treasureOffer.picks[0] });
   if (p.boonOffer) sim.uiAction(p.idx, { kind: 'boon', id: p.boonOffer[0].id });
-  if (p.shop) {
+  // shops now open at every extraction — act ONCE per shop session, not per tick
+  if (p.shop && p._drainKey !== p.shop.key) {
+    p._drainKey = p.shop.key;
     if (buyStuff) {
       sim.uiAction(p.idx, { kind: 'reroll' });
-      for (let s = 0; s < 4; s++) sim.uiAction(p.idx, { kind: 'buy', slot: s });
+      for (let s = 0; s < p.shop.stock.length; s++) sim.uiAction(p.idx, { kind: 'buy', slot: s });
     }
     sim.uiAction(p.idx, { kind: 'closeShop' });
   }
@@ -542,6 +544,202 @@ try {
   if (lp.hp < lHp && mp.hp < mHp) ok('Soulbond: partner soaks a share of incoming damage');
   else fail(`Soulbond share: ${lHp}→${lp.hp}, ${mHp}→${mp.hp}`);
 } catch (err) { fail('rebalance mechanics crashed', err); }
+
+// ---- 9d. patch 8: shop economy — cadence, guarantees, auto-combine, swaps ----
+try {
+  const { ITEM_BY_ID } = await import('../js/content/items.js');
+  const { CONFIG } = await import('../js/config.js');
+  const rarePlus = s => s.kind === 'item' && ['rare', 'legendary'].includes(ITEM_BY_ID[s.id].rarity);
+
+  // shop at every extraction: clearing a combat node opens each player's shop
+  const es = new Sim({ seed: 71, party: [
+    { idx: 0, key: 'a', name: 'A', charId: 'bulwark', color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: 'redmaw', color: '#fff' }] });
+  es._travelTo(es.reachableNodes()[0]);
+  es.wave.done = true; es.spawnQueue.length = 0;
+  for (const e of [...es.enemyPool]) es.enemyPool.release(e);
+  for (let i = 0; i < 60 * 5 && !es.cleared; i++) es.tick(); // co-op vote... none needed; F3-less clear
+  if (es.cleared && es.players.every(q => q.shop && /:clear:/.test(q.shop.key))) ok('extraction shop opens per player at the fight clear');
+  else fail(`extraction shop: cleared=${es.cleared} shops=${es.players.map(q => q.shop && q.shop.key)}`);
+  const ep = es.players[0];
+  ep.materials = 500;
+  const w0 = ep.shop.stock.findIndex(s => s.kind === 'weapon' && !s.sold);
+  es.uiAction(0, { kind: 'buy', slot: w0 });
+  if (ep.weapons.length === 2) ok('buying at the extraction shop works'); else fail('extraction shop buy failed');
+  es.uiAction(0, { kind: 'lock', slot: (w0 + 1) % ep.shop.stock.length });
+  const lockedId = ep.shop.stock[(w0 + 1) % ep.shop.stock.length].id;
+  es.uiAction(0, { kind: 'reroll' });
+  if (ep.shop.stock.some(s => s.locked && s.id === lockedId)) ok('lock + reroll work at the extraction shop');
+  else fail('lock did not survive extraction-shop reroll');
+  // the lock carries into the NEXT shop (the Black Market)
+  es._finishNode();
+  es._travelTo(es.floor.nodes.find(n => n.kind === 'shop').id);
+  if (ep.shop.black && ep.shop.stock.some(s => s.locked && s.id === lockedId)) ok('locks carry from the extraction shop into the Black Market');
+  else fail(`lock carry: black=${ep.shop.black} stock=${ep.shop.stock.map(s => s.id + (s.locked ? '🔒' : ''))}`);
+
+  // 100 seeded rolls incl. rerolls: standard ≥1 weapon (≥2 floor 1); BM ≥2 + rare+ + 6 slots + cheaper rerolls
+  let rollBad = 0;
+  for (let seed = 1; seed <= 100 && rollBad < 5; seed++) {
+    const s1 = new Sim({ seed: seed * 7919, party: [{ idx: 0, key: 'k', name: 'S', charId: 'bulwark', color: '#fff' }] });
+    const p1 = s1.players[0];
+    p1.materials = 10000;
+    for (let f = 1; f <= 2; f++) {
+      if (f === 2) s1.debug('F4');
+      s1.currentNode = s1.floor.nodes.find(n => n.kind === 'combat').id;
+      s1._openShop(p1, 'clear');
+      const needW = f === 1 ? 2 : 1;
+      for (let r = 0; r < 3; r++) {
+        const w = p1.shop.stock.filter(s => s.kind === 'weapon').length;
+        if (w < needW) { rollBad++; fail(`seed ${seed * 7919} floor ${f} standard roll ${r}: ${w} weapons (< ${needW})`); }
+        s1.uiAction(0, { kind: 'reroll' });
+      }
+      s1._travelTo(s1.floor.nodes.find(n => n.kind === 'shop').id);
+      for (let r = 0; r < 3; r++) {
+        const st = p1.shop.stock;
+        if (st.length !== 6) { rollBad++; fail(`seed ${seed * 7919} floor ${f} BM roll ${r}: ${st.length} slots`); }
+        if (st.filter(s => s.kind === 'weapon').length < 2) { rollBad++; fail(`seed ${seed * 7919} floor ${f} BM roll ${r}: <2 weapons`); }
+        if (!st.some(rarePlus)) { rollBad++; fail(`seed ${seed * 7919} floor ${f} BM roll ${r}: no rare+ item`); }
+        s1.uiAction(0, { kind: 'reroll' });
+      }
+      s1.phase = 'map';
+    }
+  }
+  if (!rollBad) ok('100 seeded shop rolls × rerolls: standard ≥1 weapon (≥2 floor 1); Black Market 6 slots, ≥2 weapons, ≥1 rare+');
+  // BM reroll discount: fresh sims, same reroll count
+  {
+    const a = new Sim({ seed: 3, party: [{ idx: 0, key: 'k', name: 'X', charId: 'bulwark', color: '#fff' }] });
+    const pa = a.players[0];
+    a.currentNode = 0; a._openShop(pa, 'clear');
+    const std = a._rerollCost(pa);
+    a._travelTo(a.floor.nodes.find(n => n.kind === 'shop').id);
+    const bm = a._rerollCost(pa);
+    if (bm === Math.round(std * 0.75)) ok(`Black Market rerolls cost −25% (${std} → ${bm})`);
+    else fail(`BM reroll cost ${bm} vs standard ${std}`);
+  }
+
+  // full-slot duplicate purchase auto-combines — at 6/6, Broker's 5/5, Tinker's 4/4
+  for (const [charId, wantCap] of [['bulwark', 6], ['broker', 5], ['tinker', 4]]) {
+    const cs = new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'C', charId, color: '#fff' }] });
+    const cp = cs.players[0];
+    if (cp.weaponSlots !== wantCap) { fail(`${charId} weapon cap ${cp.weaponSlots} (want ${wantCap})`); continue; }
+    cp.materials = 500;
+    cs.currentNode = 0; cs._openShop(cp, 'clear');
+    while (cp.weapons.length < cp.weaponSlots - 1) cs._addWeapon(cp, 'pebbleshot', 1);
+    cs._addWeapon(cp, 'coilgun', 2);
+    cp.shop.stock[0] = { kind: 'weapon', id: 'coilgun', tier: 2, price: 40, sold: false, locked: false };
+    const m0 = cp.materials;
+    cs.uiAction(0, { kind: 'buy', slot: 0 });
+    const cg = cp.weapons.find(w => w.id === 'coilgun');
+    if (cp.weapons.length === wantCap && cg && cg.tier === 3 && cp.materials === m0 - 40 && cp.shop.stock[0].sold)
+      ok(`auto-combine at ${wantCap}/${wantCap} (${charId}): copy bought → tier III in place, charged once`);
+    else fail(`${charId} auto-combine: n=${cp.weapons.length} tier=${cg && cg.tier} mats ${m0}→${cp.materials}`);
+    // tier-IV match is refused with a reason, not silently
+    cg.tier = 4;
+    cp.shop.stock[1] = { kind: 'weapon', id: 'coilgun', tier: 4, price: 40, sold: false, locked: false };
+    cs.events.length = 0;
+    cs.uiAction(0, { kind: 'buy', slot: 1 });
+    const br = cs.events.find(e => e.k === 'buyResult');
+    if (br && !br.ok && /tier IV/.test(br.reason)) { if (charId === 'bulwark') ok('tier-IV match refuses with a shown reason'); }
+    else fail(`${charId} T4 refusal: ${JSON.stringify(br)}`);
+  }
+  // below max slots a duplicate still adds a copy (manual combine stays a choice)
+  {
+    const ds = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'D', charId: 'bulwark', color: '#fff' }] });
+    const dp = ds.players[0];
+    dp.materials = 500;
+    ds.currentNode = 0; ds._openShop(dp, 'clear');
+    ds._addWeapon(dp, 'coilgun', 1);
+    dp.shop.stock[0] = { kind: 'weapon', id: 'coilgun', tier: 1, price: 30, sold: false, locked: false };
+    ds.uiAction(0, { kind: 'buy', slot: 0 });
+    const pair = dp.weapons.filter(w => w.id === 'coilgun');
+    if (pair.length === 2 && pair.every(w => w.tier === 1)) ok('below max slots a duplicate purchase still adds a copy');
+    else fail(`below-max duplicate: ${JSON.stringify(dp.weapons)}`);
+    ds.uiAction(0, { kind: 'combine', a: dp.weapons.indexOf(pair[0]), b: dp.weapons.indexOf(pair[1]), id: 'coilgun', tier: 1 });
+    if (dp.weapons.filter(w => w.id === 'coilgun').length === 1) ok('manual combine still works below max');
+    else fail('manual combine broke');
+  }
+
+  // Quartermaster: all-weapon stock everywhere, invested-cost sell unchanged
+  {
+    const qs = new Sim({ seed: 13, party: [{ idx: 0, key: 'k', name: 'Q', charId: 'quartermaster', color: '#fff' }] });
+    const qp = qs.players[0];
+    qp.materials = 5000;
+    qs.currentNode = 0; qs._openShop(qp, 'clear');
+    let allW = qp.shop.stock.every(s => s.kind === 'weapon');
+    qs.uiAction(0, { kind: 'reroll' });
+    allW = allW && qp.shop.stock.every(s => s.kind === 'weapon');
+    qs._travelTo(qs.floor.nodes.find(n => n.kind === 'shop').id);
+    allW = allW && qp.shop.stock.every(s => s.kind === 'weapon') && qp.shop.stock.length === 6;
+    if (allW) ok('Quartermaster stock is all weapons (standard + reroll + 6-slot Black Market)');
+    else fail(`QM stock: ${qp.shop.stock.map(s => s.kind)}`);
+  }
+
+  // atomic swap-buy: both legs or neither; insufficient funds rejected cleanly
+  {
+    const ss = new Sim({ seed: 14, party: [{ idx: 0, key: 'k', name: 'W', charId: 'bulwark', color: '#fff' }] });
+    const sp = ss.players[0];
+    ss.currentNode = 0; ss._openShop(sp, 'clear');
+    while (sp.weapons.length < sp.weaponSlots) ss._addWeapon(sp, 'pebbleshot', 1);
+    sp.shop.stock[0] = { kind: 'weapon', id: 'rustcleaver', tier: 1, price: 30, sold: false, locked: false };
+    sp.materials = 28; // can't afford outright — the refund covers the difference
+    ss.uiAction(0, { kind: 'swapBuy', slot: 0, sell: 0, sellId: sp.weapons[0].id, sellTier: sp.weapons[0].tier });
+    if (sp.weapons.length === sp.weaponSlots && sp.weapons.some(w => w.id === 'rustcleaver') && sp.shop.stock[0].sold)
+      ok(`swap-buy executes atomically (refund funds the purchase, still ${sp.weaponSlots}/${sp.weaponSlots})`);
+    else fail(`swap: ${JSON.stringify(sp.weapons.map(w => w.id))} mats=${sp.materials}`);
+    // rejection: price beyond refund+mats leaves EVERYTHING untouched
+    sp.materials = 0;
+    sp.shop.stock[1] = { kind: 'weapon', id: 'longbarrel', tier: 4, price: 900, sold: false, locked: false };
+    const snap = JSON.stringify([sp.weapons.map(w => [w.id, w.tier]), sp.materials]);
+    ss.events.length = 0;
+    ss.uiAction(0, { kind: 'swapBuy', slot: 1, sell: 0, sellId: sp.weapons[0].id, sellTier: sp.weapons[0].tier });
+    const rbr = ss.events.find(e => e.k === 'buyResult');
+    if (snap === JSON.stringify([sp.weapons.map(w => [w.id, w.tier]), sp.materials]) && !sp.shop.stock[1].sold && rbr && !rbr.ok)
+      ok('unaffordable swap is rejected with both legs rolled back');
+    else fail('poor swap mutated state');
+  }
+
+  // the two difficulty knobs: HP spot-checks and the ~1.25× density ratio
+  {
+    const hs = new Sim({ seed: 15, party: [{ idx: 0, key: 'k', name: 'H', charId: 'bulwark', color: '#fff' }] });
+    hs._travelTo(hs.reachableNodes()[0]);
+    const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
+    const chaff = hs.spawnEnemyById('skulker', 400, 400, {});
+    const elite = hs.spawnEnemyById('lobber', 500, 500, { elite: true, mod: { key: 'none' } });
+    const wantChaff = Math.round(ENEMY_BY_ID.skulker.hp * CONFIG.enemyHpMult);
+    const wantElite = Math.round(ENEMY_BY_ID.lobber.hp * CONFIG.ELITE_HP_MULT * CONFIG.enemyHpMult);
+    const okChaff = chaff.maxHp === wantChaff, okElite = elite.maxHp === wantElite;
+    // boss: use the floor-1 siege boss
+    const bs = new Sim({ seed: 16, party: [{ idx: 0, key: 'k', name: 'B', charId: 'bulwark', color: '#fff' }] });
+    bs._travelTo(bs.floor.siegeId);
+    bs.siegeT = bs.bossAt; bs.tick();
+    const { BOSS_BY_FLOOR } = await import('../js/content/bosses.js');
+    const okBoss = bs.boss && bs.boss.maxHp === Math.round(BOSS_BY_FLOOR[1].hp * CONFIG.enemyHpMult);
+    if (okChaff && okElite && okBoss) ok(`enemyHpMult ${CONFIG.enemyHpMult} applies to chaff (${wantChaff}), elite (${wantElite}), boss (${bs.boss.maxHp})`);
+    else fail(`hp spot checks: chaff ${chaff.maxHp}/${wantChaff} elite ${elite.maxHp}/${wantElite} boss ${bs.boss && bs.boss.maxHp}`);
+    // density: identical no-kill fight with the knob on vs off. Count spawn
+    // EVENTS (a contact-damage or armed character would cull the field and
+    // flatten the ratio); redmaw with no weapons kills nothing.
+    const countSpawns = () => {
+      const d = new Sim({ seed: 17, party: [{ idx: 0, key: 'k', name: 'D', charId: 'redmaw', color: '#fff' }] });
+      d._travelTo(d.reachableNodes()[0]);
+      d.god = true;
+      d.players[0].weapons.length = 0;
+      let n = 0;
+      const orig = d.spawnEnemyById.bind(d);
+      d.spawnEnemyById = (...a) => { const e = orig(...a); if (e) n++; return e; };
+      for (let i = 0; i < 60 * 50; i++) d.tick();
+      return n;
+    };
+    const withKnob = countSpawns();
+    const saved = CONFIG.spawnBudgetMult;
+    CONFIG.spawnBudgetMult = 1;
+    const baseline = countSpawns();
+    CONFIG.spawnBudgetMult = saved;
+    const ratio = withKnob / Math.max(1, baseline);
+    if (ratio > 1.1 && ratio < 1.45) ok(`spawnBudgetMult density ratio ≈ ${ratio.toFixed(2)}× (${baseline} → ${withKnob} spawned in 50s)`);
+    else fail(`density ratio ${ratio.toFixed(2)} (${baseline} → ${withKnob})`);
+  }
+} catch (err) { fail('shop economy tests crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {

@@ -196,6 +196,21 @@ body.touch-on .gloss-row{min-height:44px; align-items:center;}
 .chip-btn{font-size:12px; padding:5px 10px; border-radius:6px;}
 .chip-btn.combine-btn{border-color:var(--xp); color:var(--xp); font-weight:bold;}
 .chip-btn.sell-btn.armed{border-color:var(--danger); color:var(--danger); font-weight:bold;}
+/* weapon detail card (owned-chip expansion, stock cards, make-room picker) */
+.wchip.expanded{flex-wrap:wrap; border-color:var(--gold);}
+.wdetail{flex-basis:100%; display:flex; flex-direction:column; gap:2px; margin-top:6px;
+  padding-top:6px; border-top:1px dashed var(--line); font-size:12px; color:var(--ink-dim); cursor:default;}
+.wdetail b{color:var(--ink);}
+.wd-dps{color:var(--gold); font-size:12px;}
+.wpn-note.wpn-upg{color:var(--gold); font-weight:bold;}
+.wpn-note.wpn-blocked{color:var(--danger);}
+/* make-room swap picker */
+.swap-row{max-height:52vh; overflow-y:auto;}
+.swap-card{min-width:min(88vw,250px); min-height:44px; text-align:left;}
+.swap-card.armed{border-color:var(--danger); box-shadow:0 0 12px #e2504c55;}
+.swap-card.cantafford{opacity:0.45;}
+body.touch-on .swap-card{min-height:64px;}
+body.touch-on .wdetail{font-size:13px;}
 .sheet-panel{width:min(94vw,900px);}
 .sheet-cols{display:grid; grid-template-columns:1fr 1.2fr; gap:18px; max-height:60vh; overflow-y:auto; padding-right:4px;}
 .sheet-stats{display:grid; grid-template-columns:1fr; gap:2px;}
