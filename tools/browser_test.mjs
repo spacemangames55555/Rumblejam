@@ -635,19 +635,23 @@ try {
     // the touch path under test is steering, not survival — an 80-HP Facet can
     // die during the long organic combat window, killing every later step
     await M.exec(`window.uv.sim.debug('F5'); return 1;`);
-    // joystick drag moves; release stops
-    const jx0 = await M.exec('return window.uv.sim.players[0].x');
+    // joystick drag moves; release stops (two directions — one axis can be
+    // blocked by arena architecture beside the spawn)
+    const jp0 = JSON.parse(await M.exec(`const p=window.uv.sim.players[0]; return JSON.stringify([p.x,p.y])`));
     await M.touchDown(420, 200);
     await M.touchMove(480, 200);
-    await sleep(800);
-    const jx1 = await M.exec('return window.uv.sim.players[0].x');
+    await sleep(500);
+    await M.touchMove(420, 260);
+    await sleep(500);
+    const jp1 = JSON.parse(await M.exec(`const p=window.uv.sim.players[0]; return JSON.stringify([p.x,p.y])`));
     await M.touchUp();
     await sleep(350);
     const jx2 = await M.exec('return window.uv.sim.players[0].x');
     await sleep(350);
     const jx3 = await M.exec('return window.uv.sim.players[0].x');
-    if (jx1 > jx0 + 60) ok(`joystick drag moves the player (${Math.round(jx0)}→${Math.round(jx1)})`);
-    else fail(`joystick did not move player (${jx0}→${jx1})`);
+    const jMoved = Math.hypot(jp1[0] - jp0[0], jp1[1] - jp0[1]);
+    if (jMoved > 60) ok(`joystick drag moves the player (${Math.round(jMoved)}u travelled)`);
+    else fail(`joystick did not move player (${Math.round(jMoved)}u)`);
     if (Math.abs(jx3 - jx2) < 8) ok('joystick release stops the player');
     else fail(`player kept drifting after release (${jx2}→${jx3})`);
     // camera follows on mobile too
@@ -817,7 +821,7 @@ try {
       if (!b) return 'null'; const r=b.getBoundingClientRect(); return JSON.stringify({h:Math.round(r.height), len:b.textContent.trim().length})`) || 'null');
     if (mbadge && mbadge.h >= 14 && mbadge.len > 20) ok(`combine badge is readable on touch (${mbadge.h}px tall)`);
     else fail(`mobile combine badge: ${JSON.stringify(mbadge)}`);
-    await M.tap('[data-wchip="0"]');
+    await M.tap('[data-wchip="0"] .wsym'); // the symbol — a chip-center tap can land on the sell button
     await M.waitFor(`return document.querySelector('.wchip.expanded .wdetail .wd-dps') !== null`, 3000, 'mobile owned detail');
     ok('touch: owned chip expands to the full detail card');
     await M.tap('.offer-card[data-slot="0"] .oname'); // non-duplicate at cap → picker
@@ -902,7 +906,7 @@ if (wantCoop) {
   const peerjsB64 = readFileSync(PJS).toString('base64');
   const relay = spawn('node', ['tools/peer_relay.mjs', String(RELAY_PORT)], { stdio: 'ignore' });
   process.on('exit', () => relay.kill());
-  await sleep(700);
+  await sleep(1500);
   const COOP_URL = `${URL}?peerhost=localhost&peerport=${RELAY_PORT}&peersecure=0`;
   const A2 = new Browser();
   const B = new Browser();
@@ -910,9 +914,9 @@ if (wantCoop) {
     await A2.open('A2', { peerjsB64 });
     await A2.goto(COOP_URL);
     const A = A2; // reuse flow variable name below
-    await A.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title A');
-    await A.exec(`document.getElementById('name-input').value='HOST'; document.getElementById('btn-host').click()`);
-    const code = await (async () => {
+    const tryRegister = async () => {
+      await A.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title A');
+      await A.exec(`document.getElementById('name-input').value='HOST'; document.getElementById('btn-host').click()`);
       const t0 = Date.now();
       for (;;) {
         const c = await A.exec(`return window.uv.lobby && window.uv.lobby.code`);
@@ -922,7 +926,13 @@ if (wantCoop) {
         if (Date.now() - t0 > 12000) return null;
         await sleep(300);
       }
-    })();
+    };
+    let code = await tryRegister();
+    if (!code) { // the relay can be slow to bind under load — one clean retry
+      await sleep(1500);
+      await A.goto(COOP_URL);
+      code = await tryRegister();
+    }
     if (!code) {
       fail('room registration failed against local relay');
     } else {

@@ -260,6 +260,7 @@ function wireOwned(el, meta) {
 
 function renderShop(meta) {
   const ev = shopState;
+  if (!ev) return; // a bubbling close click can reach stale handlers after closeShop()
   const el = $('overlay-shop');
   lastShopMeta = meta;
   const mats = meta ? meta.materials : 0;
@@ -391,6 +392,9 @@ function renderSwapPicker(el, meta, s) {
 export function closeShop() {
   $('overlay-shop').classList.add('hidden');
   shopState = null;
+  expandedChip = null;
+  swapSlot = null;
+  swapArmed = null;
   A.closeShop();
 }
 

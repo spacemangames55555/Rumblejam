@@ -46,9 +46,15 @@ files. The only external dependency is the PeerJS client, loaded from a CDN
   HUD minimap is a radar of the whole arena.
 - **Fights are budget curves, not door-locked waves**: spawning ramps for
   60–90 s (rate grows with floor and map depth), then stops — survivors rush
-  you — and the fight ends when the field is empty. Level-ups **bank** during
-  the fight and resolve at the clear, when the field's materials magnet to
-  the party.
+  you to contact — and the fight ends when the field is empty. Level-ups
+  **bank** during the fight and resolve at the clear, when the field's
+  materials magnet to the party.
+- **Every extraction is a shop.** Clearing a Combat or Champion node opens
+  each player's own 4-slot shop right at the portal (reroll, lock, browse at
+  your own pace — even after the countdown travels the party). Standard
+  shops always stock at least 1 weapon (2 on floor 1). Trader nodes are the
+  **Black Market**: 6 slots, rerolls −25%, at least 2 weapons and 1
+  rare-or-better item — a destination, not the only shop.
 - **The Siege** ends every floor: 2.5–4 minutes of continuous spawning in a
   bespoke handcrafted arena, punctuated by 2–3 scripted **mutations** ~45–60 s
   apart — walls collapse, a lava field migrates across the floor, a ward
@@ -161,6 +167,19 @@ is direct browser-to-browser WebRTC.
   can be **sold for 30%** of its shop price (the Quartermaster instead recovers
   exactly the materials invested) — tap Sell once to arm, again to confirm;
   tapping elsewhere cancels.
+- **Weapon detail cards**: tap (or hover, on desktop) an owned weapon chip
+  for its full card — tier, class, numbers, each scaling stat's live
+  contribution from your current build, and an **est. DPS** with your stats
+  right now. Stock weapon cards show the same math as est.-DPS-if-bought, so
+  offers and owned weapons compare directly; every number updates the moment
+  a stat changes.
+- **At full weapon slots**: buying a copy of a weapon you own (same tier,
+  below IV) **combines straight into your copy** — the card shows a ⇑ badge
+  with the outcome first; a tier-IV match explains why it can't be bought.
+  Buying a *different* weapon opens the **make-room picker**: every owned
+  weapon as a detail card with its sell refund and the net cost — pick one,
+  confirm, and the sell + buy execute as a single transaction (or cancel and
+  keep everything).
 - After a fight clears, stand on the **extraction portal** to run the 4-second
   countdown back to the map (anyone stepping off cancels it); the same portal
   descends to the next floor after a Siege.
@@ -219,21 +238,29 @@ never loads them:
   spawn-clip regression, the Siege end-to-end (mutations, mercy revive, pylon
   buff, boss ordering, payout), sub-objectives, the floor-1 DPS gate (±40% of
   the roster median, table printed), 4-player co-op + wipe, build management,
-  a floor-4 siege stress (crest ≥150 alive, tick time), snapshot
-  serialization in both phases.
+  the shop-economy gates (extraction shops, 100-seed stock guarantees with
+  rerolls, auto-combine at 6/6, 5/5 and 4/4, atomic swap + rollback, the
+  density/HP knob spot-checks), a floor-4 siege stress (crest ≥150 alive,
+  tick time), snapshot serialization in both phases.
 - `node tools/browser_test.mjs [--coop]` — boots real headless Chromium over
   the DevTools protocol: title → lobby → map → arena → results with zero
   console errors, node-map taps, camera-follow checks, extraction, trait
   meters and the boon picker in real DOM, mobile emulation with dispatched
   touch events (map nodes at the 44 px standard, joystick extraction walk),
-  perf gates at siege density, plus the two-browser co-op checklist against a
-  local relay: contested node pick with redirect + lock, independent cameras,
-  the full Siege synced (mercy revive, wall collapse, boss entry, post-boss
-  shop on both, extraction countdown, descent), aura/tether across the
-  network, turret carry/redeploy sync, cross-play desktop + touch.
+  perf gates at siege density, the patch-8 shop flows (extraction shop,
+  Black Market, combine badge, auto-combine, tier-IV reason, make-room swap
+  with cancel/atomic-net, live est.-DPS updates, touch sizing), plus the
+  two-browser co-op checklist against a local relay: contested node pick
+  with redirect + lock, independent cameras, the full Siege synced (mercy
+  revive, wall collapse, boss entry, post-boss shop on both, extraction
+  countdown, descent), simultaneous shopping with parallel rerolls /
+  auto-combine / swaps, aura/tether across the network, turret
+  carry/redeploy sync, cross-play desktop + touch.
 - `node tools/balance_probe.mjs <charId> [floors]` — a kiting bot plays the
-  real node flow organically (picks nodes, shops on a budget, dives siege
-  objectives) to flag balance disasters.
+  real node flow organically (picks nodes, shops on a budget weapons-first,
+  dives siege objectives, charges melee stragglers) to flag balance
+  disasters; prints a per-floor materials-flow ledger (earned / spent /
+  buys / shop sessions).
 - `node tools/validate_items.mjs js/content/items.js` — item catalog contract
   validator (hook schemas, price bands, category minimums, stat coverage).
 - `node tools/gen_design_audit.mjs` — regenerates `docs/design-audit.md` from
@@ -242,6 +269,61 @@ never loads them:
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### Shop economy (patch 8)
+
+- **The two difficulty knobs live in `js/config.js`**: `spawnBudgetMult`
+  (1.25 — wave/siege inflow and the alive-at-once caps scale together) and
+  `enemyHpMult` (1.12 — chaff, ranged, specials, elites, bosses, and the
+  ward pylon). Measured: spawn ratio 1.27× on a seeded no-kill fight,
+  floor-4 siege crest ~311 alive (pool-capped), host tick ~0.4 ms.
+- **Perf at the new crests, measured**: desktop host 60 fps at a 320→284
+  alive siege crest; mobile emulation 60 fps at 234→222 alive with the DPR
+  cap at 2 (headless SwiftShader numbers — "no render cliff", not device
+  benchmarks).
+- **The economy interlock, probed organically** (kiting bot, floors 1–2,
+  combined effect of density + extraction shops): a median character
+  (Bulwark) earns ~820 on floor 1 and spends ~310 across 4 shop sessions
+  (13 buys, 6 weapons — a full rack before the floor-1 siege, vs 3 weapons
+  pre-patch), then earns ~1 240 / spends ~510 on floor 2. Fight times settle
+  at 80–105 s after the first fight because build growth is front-loaded;
+  sieges run 130–215 s. Flagged, not fixed: unspent surplus grows (~1 200
+  held at floor 2's end) — prices could absorb more later-floor income, but
+  per the brief pricing stays as-is.
+- **The est.-DPS method** (`estimateDps` in `js/content/weapons.js`): base ×
+  tier × (1 + Ferocity/100) × (1 + scaling-tag bonus/100) × attack rate
+  after Tempo, × projectile count for spreads; turrets use turret damage ×
+  Ingenuity ÷ fire period. A uniform single-target baseline — every pellet
+  assumed to hit, chains/burns/blasts/travel ignored, and character-specific
+  inheritance (the Overseer's) not modeled. It's labeled "est." everywhere
+  and exists to compare weapons, not to predict combat.
+- **Auto-combine specifics**: "match" means same type AND same tier below
+  IV; with two same-tier copies the first owned slot absorbs the purchase;
+  the price paid joins the weapon's invested total (so the Quartermaster's
+  sell lineage stays exact). An owned tier-IV copy plus a tier-IV offer
+  shows "nothing higher to combine into" on the card. A same-type,
+  *different*-tier offer is not a match — at full slots it goes through the
+  make-room picker like any other weapon.
+- **The swap is validated as one transaction**: the host re-checks stock,
+  ownership (id + tier, stale selections rejected), trait rules, and that
+  `materials + refund ≥ price` before touching anything; then both legs
+  commit. The refund may fund the purchase (you can swap while short on
+  cash). There is no partial state to roll back because nothing mutates
+  until every check has passed.
+- **Extraction shops persist through travel**: close is the only way out —
+  walking to the portal with the shop open keeps it browsable on the map
+  screen (co-op partners are never blocked by a browsing teammate; the shop
+  is per-player). The map's "Reopen shop" button remains Black-Market-only;
+  a closed extraction shop is gone (the next clear brings a fresh one).
+- **Wave-end rush closes to contact** (was: to firing range). Found by the
+  probe: a beaten wave's ranged survivors hovering at 90 u formed a
+  permanent firing squad no melee starting kit could reach — Gilded One's
+  Vaultspike could never close the last 8 Lobbers. Survivors now walk into
+  the blade; ranged kits kill them approaching either way.
+- **Gilded One's trait shops ignore the new guarantees** — 2 slots of
+  legendary items IS the trait; the Quartermaster's all-weapon rack now
+  extends to the Black Market's 6 slots (his rare+-item guarantee is
+  meaningless and skipped).
 
 ### The Gauntlet (patch 7)
 
@@ -537,13 +619,19 @@ never loads them:
   deliberately not done: the level-up overlay is full-screen, and popping it
   mid-siege (especially over the touch joystick) is worse than the flatness.
   A non-blocking mid-siege card UI would be the real fix.
-- **Gilded One's floor-1 siege is knife-edge.** Its trait (2-slot,
-  legendary-only shop, never weapons) means its damage barely grows on
-  floor 1; the organic probe bot beats the siege's field but loses the final
-  boss duel with ~250 boss HP left. The spawn taper made it winnable in
-  principle; a human who dodges better than the bot should scrape through.
-  The six DoD gate characters all win full runs organically-adjacent
-  (harness-driven) and the probe clears floors 1–2 with mainline characters.
+- **Gilded One's floor 1 is past the knife-edge after the patch-8 tuning**
+  (numbers, per the tuning brief's flag-don't-revert guardrail): its trait
+  locks it out of the weapon economy entirely — legendary items only, never
+  weapons — so the extraction-shop interlock that funds everyone else's
+  growth passes it by, and `enemyHpMult` 1.12 pushes Lobbers from 9 to 10 HP,
+  exactly across its 9-damage Vaultspike's one-shot threshold in the one
+  fight it must clear before any shop can open. The organic probe now fails
+  the FIRST floor-1 fight (stalls at the 200 s cap with 6–8 Lobbers standing,
+  or dies at ~111 s charging them; pre-patch it cleared in ~130–170 s). The
+  headless all-32 gate still passes (harness-driven), mirage and broker — the
+  other two lowest-DPS characters — clear floors 1–2 organically with full
+  racks. The honest fix is a character touch (an 11-damage Vaultspike, or one
+  Black-Market weapon exception), which the patch-8 brief kept out of scope.
 - **Keyboard + mouse, or touch** — gamepad is still unsupported. Touch support
   was verified with Chromium's mobile emulation (Pixel-class viewport, real
   dispatched touch events); real devices — **especially iOS Safari** — can
