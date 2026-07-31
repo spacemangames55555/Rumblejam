@@ -1871,8 +1871,9 @@ export class Sim {
       p.banked++;
       p.xpNext = CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * p.level;
       for (const ls of p.hookAgg.levelStats) this._applyPerm(p, ls.stats);
+      // the level-up sound is idx-aware and debounced client-side (airhorn) —
+      // the levelUp event is its sole trigger, no generic sfx broadcast
       this.pushEvent({ k: 'levelUp', idx: p.idx });
-      this.pushEvent({ k: 'sfx', s: 'levelup' });
     }
     const t = p.char.trait;
     // Powderkeg: pickups detonate — 4 + 40% of Greed attuned, radius 40 + 50% of Reach

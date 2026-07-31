@@ -9,7 +9,7 @@ import { HostTransport, ClientTransport } from './net.js';
 import { Renderer } from './render.js';
 import { initInput, sampleInput, takeDebugKey, pressInteract } from './input.js';
 import { initTouch, joy, touchEnabled } from './touch.js';
-import { ensureAudio, sfx } from './audio.js';
+import { ensureAudio, sfx, preloadAirhorn, levelupHorn, audioStats, getCtxState, getMasterGainValue, setVolume, getVolume } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
 import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
@@ -95,6 +95,8 @@ window.addEventListener('keydown', ensureAudio, { once: false });
 window.addEventListener('touchstart', ensureAudio, { once: false }); // iOS Safari gesture unlock
 window.uv = app; // debug/testing handle (read-only use)
 window.uvContent = { ITEMS, WEAPONS, CHARACTERS }; // content tables for debug/tests
+window.uvAudio = { stats: audioStats, ctxState: getCtxState, masterGain: getMasterGainValue, setVolume, getVolume }; // audio introspection for tests
+preloadAirhorn(); // fire-and-forget: a missing asset falls back to the synth blip
 initLeaveButton();
 document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
 document.getElementById('sheet-btn').onclick = () => { sfx.click(); toggleSheet(); };
@@ -497,7 +499,10 @@ function handleEvent(ev) {
     case 'roomClear':
       banner('FIELD CLEAR', 'gather the spoils — extraction is open', 1600);
       break;
-    case 'levelUp': if (ev.idx === app.myIdx) toast('Level up! (pick at room clear)'); break;
+    case 'levelUp':
+      levelupHorn(ev.idx === app.myIdx); // own = loud, ally = quiet, debounced
+      if (ev.idx === app.myIdx) toast('Level up! (pick at room clear)');
+      break;
     case 'offer': if (ev.idx === app.myIdx) showLevelup(ev); break;
     case 'offerDone': if (ev.idx === app.myIdx) closeLevelup(); break;
     case 'treasure': if (ev.idx === app.myIdx) showTreasure(ev); break;

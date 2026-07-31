@@ -803,6 +803,34 @@ try {
   else fail(`gilded lock: ${JSON.stringify(cp.shop.stock.map(s => s.id + (s.locked ? '🔒' : '')))}`);
 } catch (err) { fail('Gilded One rescue tests crashed', err); }
 
+// ---- 9f. the airhorn: debounce, volumes, fallback (headless, no WebAudio) ----
+try {
+  const { levelupHorn, setAirhornBuffer, audioStats } = await import('../js/audio.js');
+  const { CONFIG: C8 } = await import('../js/config.js');
+  setAirhornBuffer({ length: 1 }); // any truthy buffer — we count scheduling, not playback
+  const h0 = audioStats.horns;
+  levelupHorn(true, 10000);
+  if (audioStats.horns === h0 + 1) ok('a level-up resolution schedules the airhorn once');
+  else fail(`single resolution scheduled ${audioStats.horns - h0}`);
+  levelupHorn(true, 10150); levelupHorn(true, 10600); // a batch of 3 banked levels
+  if (audioStats.horns === h0 + 1) ok('a batch of 3 banked levels resolving together schedules it once');
+  else fail(`batch debounce: ${audioStats.horns - h0} horns`);
+  levelupHorn(true, 12000); // 2 s after the first
+  if (audioStats.horns === h0 + 2) ok('two resolutions 2 s apart schedule it twice');
+  else fail(`spaced resolutions: ${audioStats.horns - h0} horns`);
+  if (audioStats.hornLog[audioStats.hornLog.length - 1] === C8.AIRHORN_VOL_OWN) ok(`own level-up plays at the config volume (${C8.AIRHORN_VOL_OWN})`);
+  else fail(`own volume: ${audioStats.hornLog[audioStats.hornLog.length - 1]}`);
+  levelupHorn(false, 14000);
+  if (audioStats.hornLog[audioStats.hornLog.length - 1] === C8.AIRHORN_VOL_ALLY) ok(`an ally's level-up plays at the config volume (${C8.AIRHORN_VOL_ALLY})`);
+  else fail(`ally volume: ${audioStats.hornLog[audioStats.hornLog.length - 1]}`);
+  // asset missing → the synth blip path, and nothing crashes without WebAudio
+  setAirhornBuffer(null);
+  const b0 = audioStats.blips;
+  levelupHorn(true, 16000);
+  if (audioStats.blips === b0 + 1) ok('missing asset falls back to the synth blip — level-ups never depend on the file');
+  else fail(`fallback blips: ${audioStats.blips - b0}`);
+} catch (err) { fail('airhorn tests crashed', err); }
+
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {
   const sim = new Sim({ seed: 9999, party: [{ idx: 0, key: 'k', name: 'DPS', charId, color: '#fff' }] });

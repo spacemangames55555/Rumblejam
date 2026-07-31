@@ -11,9 +11,12 @@ destroy **The Vault Regent** on floor 4. If the whole party goes down, the run
 is over.
 
 Everything is plain JavaScript (ES modules) + Canvas 2D + WebAudio. All art is
-drawn with canvas primitives and all sound is synthesized — there are no asset
-files. The only external dependency is the PeerJS client, loaded from a CDN
-`<script>` tag, used for the peer-to-peer co-op networking.
+drawn with canvas primitives and nearly all sound is synthesized; the only
+asset files are the owner-added samples in `assets/` (currently one: the
+level-up airhorn), loaded through a tiny decode-and-cache pipeline that falls
+back to synthesis if a file is missing. The only external dependency is the
+PeerJS client, loaded from a CDN `<script>` tag, used for the peer-to-peer
+co-op networking.
 
 - **Content**: 32 characters · 136 items · 26 weapons across 6 classes ·
   12 enemy types · 4 two-phase bosses · elites with 4 modifiers · 5 arena
@@ -208,6 +211,28 @@ is direct browser-to-browser WebRTC.
 - Touch controls switch on automatically on touch devices; force them with
   **⚙ → Touch controls: Auto / On / Off** (handy for touch-screen laptops).
 
+## Adding a sound asset
+
+Until the airhorn, every sound was WebAudio-synthesized; that constraint is
+lifted for assets added deliberately to `assets/`. The pipeline is two
+functions in `js/audio.js`:
+
+1. Drop the file in `assets/` (MP3/OGG/WAV — anything `decodeAudioData`
+   accepts).
+2. Preload it near boot: `const buf = await loadSample('assets/yourfile.mp3')`
+   — fetches, decodes into the shared (suspended-until-gesture) context, and
+   caches per path. Wrap the call in a try/catch and fall back to a synth
+   sound: **a missing asset must never break the game** (see
+   `preloadAirhorn` for the pattern — one `console.warn`, then the fallback).
+3. Play it: `playSample(buf, volume)` — routes through the master gain, so
+   the volume slider and mute govern it like every synthesized sound. The
+   iOS/mobile first-touch unlock already covers samples; nothing extra to do.
+
+The level-up airhorn (`assets/airhorn.mp3`) is the reference user: preloaded
+at boot, debounced to one horn per resolution moment
+(`CONFIG.AIRHORN_DEBOUNCE_S`), own level-ups at `CONFIG.AIRHORN_VOL_OWN`,
+allies' at `CONFIG.AIRHORN_VOL_ALLY`.
+
 ## Debug keys
 
 Enabled by the `DEV` flag in `js/config.js` (shipped `true`; set `false` for
@@ -240,7 +265,8 @@ never loads them:
   the roster median, table printed), 4-player co-op + wipe, build management,
   the shop-economy gates (extraction shops, 100-seed stock guarantees with
   rerolls, auto-combine at 6/6, 5/5 and 4/4, atomic swap + rollback, the
-  density/HP knob spot-checks), a floor-4 siege stress (crest ≥150 alive,
+  density/HP knob spot-checks), the airhorn's debounce/volume/fallback rules
+  (headless — no WebAudio needed), a floor-4 siege stress (crest ≥150 alive,
   tick time), snapshot serialization in both phases.
 - `node tools/browser_test.mjs [--coop]` — boots real headless Chromium over
   the DevTools protocol: title → lobby → map → arena → results with zero
@@ -269,6 +295,34 @@ never loads them:
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### The airhorn (the first asset pipeline)
+
+- **The synth-only constraint is lifted** — for assets the owner adds
+  deliberately. `assets/airhorn.mp3` (owner-uploaded to the repo root,
+  moved into `assets/` as the pipeline's canonical home) is the first;
+  `loadSample`/`playSample` in `js/audio.js` are the generic path future
+  sounds and music will use. Everything still routes through the one master
+  gain.
+- **The context is now created suspended at preload time** (was: lazily on
+  the first gesture) so `decodeAudioData` can run at boot; the existing
+  first-gesture `ensureAudio` resume is unchanged and the mobile unlock is
+  unaffected — creating a suspended context without a gesture is exactly
+  what the autoplay policy permits.
+- **The horn fires where the old blip did** — the moment a level banks (the
+  "LEVEL UP!" beat), not when the boost cards are picked. Banked levels
+  landing in a burst at an extraction arrive within the 1 s debounce window
+  and play once; picking cards afterwards is silent, so reading four cards
+  slowly never re-triggers a celebration per tap. The generic
+  `sfx: 'levelup'` broadcast was removed — the idx-aware `levelUp` event is
+  the sole trigger, which is what makes own-vs-ally volume possible.
+- **The debounce window is global, not per-player** (per the brief): the
+  first level-up in a window decides that window's volume. Four friends
+  leveling at one extraction = one horn.
+- **Failure is designed for**: fetch or decode failure → one console
+  warning, `audioStats.warnings` increments, and every level-up plays the
+  old synth blip. The suite boots a browser with the asset request forcibly
+  failed to prove level-ups, offers, and the run all survive assetless.
 
 ### Shop economy (patch 8)
 
