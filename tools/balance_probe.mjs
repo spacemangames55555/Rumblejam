@@ -92,12 +92,26 @@ function botInput() {
   // (it buffs everything), then focus the boss — weapons hit what you stand near
   let objective = sim.boss;
   for (const e of sim.enemyPool) if (e.def && e.def.behavior === 'pylon') { objective = e; break; }
+  // once spawning stops, hunt the SOURCES first — the enemies that keep the
+  // rest alive: Wombden nests replenish the field, Aegimand wardens shield
+  // it, Stitcher medics out-heal a low-DPS kit. Nearest-target weapons never
+  // break those stalemates on their own; a player reads the field and walks.
+  const SOURCES = { nest: 1, warden: 1, medic: 1 };
+  if (!objective && sim.wave && sim.wave.done) {
+    let bestD = Infinity;
+    for (const e of sim.enemyPool) {
+      if (!e.def || !SOURCES[e.def.behavior]) continue;
+      const d2 = dist2(p.x, p.y, e.x, e.y);
+      if (d2 < bestD) { bestD = d2; objective = e; }
+    }
+  }
   if (objective) {
     const d = Math.hypot(objective.x - p.x, objective.y - p.y) || 1;
-    // healthy → commit to the dive (shove through chaff like a player);
-    // hurt → hover nearby and whittle
+    // healthy → commit to the dive (shove through chaff like a player) and
+    // walk all the way ON TO the objective — hovering at the edge leaves its
+    // brood/adds holding the nearest-target slot; hurt → hover and whittle
     const healthy = p.hp > p.stats.vitality * 0.45;
-    const pull = d > 160 ? (healthy ? 7 : 2.2) : 1.2;
+    const pull = d > 60 ? (healthy ? 7 : 2.2) : 1.2;
     vx += (objective.x - p.x) / d * pull; vy += (objective.y - p.y) / d * pull;
   }
   // contest the hold circle when it's safe-ish
@@ -150,11 +164,16 @@ function resolveUi() {
   }
 }
 
-// prefer stops and treasure like a human would; siege only when it's the only road
+// prefer stops and treasure like a human would; dodge the Champion road (the
+// map guarantees elites are optional — that's what the branch is FOR when
+// playing a below-median kit); siege only when it's the only road
 function pickNode() {
   const r = sim.reachableNodes();
   const byKind = k => r.find(id => sim.floor.nodes[id].kind === k);
-  const id = byKind('treasure') ?? byKind('shop') ?? r.find(n => sim.floor.nodes[n].kind !== 'siege') ?? r[0];
+  const id = byKind('treasure') ?? byKind('shop')
+    ?? r.find(n => !['siege', 'elite'].includes(sim.floor.nodes[n].kind))
+    ?? r.find(n => sim.floor.nodes[n].kind !== 'siege')
+    ?? r[0];
   sim.uiAction(0, { kind: 'pickNode', nodeId: id });
   return id;
 }
@@ -180,9 +199,12 @@ while (!sim.over && sim.floorNum <= maxFloor && !stuck) {
   const isSiege = node.kind === 'siege';
   const t0 = sim.tickNum;
   let ticks = 0, peak = 0;
-  // low-DPS economy characters legitimately take ~2.5min on their first fight
+  // low-DPS economy characters legitimately take ~2.5min on their first fight;
+  // a CLEARED fight gets extra time for the extraction walk — only the fight
+  // itself counts against the cap
   const cap = 60 * (isSiege ? 360 : 200);
-  while (sim.phase === 'arena' && !sim.over && ticks++ < cap) {
+  const extractCap = cap + 60 * 45;
+  while (sim.phase === 'arena' && !sim.over && ticks++ < (sim.cleared ? extractCap : cap)) {
     if (!sim.cleared) botInput();
     else if (sim.hatch) steerTo(sim.hatch.x, sim.hatch.y);
     sim.tick();
@@ -197,8 +219,13 @@ while (!sim.over && sim.floorNum <= maxFloor && !stuck) {
   sim.events.length = 0;
   const secs = (sim.tickNum - t0) / 60;
   report.push(`floor ${floor} ${node.kind}${isSiege ? '' : ` (${node.template})`}: ${secs.toFixed(1)}s, peak ${peak} alive, hp ${Math.round(p.hp)}/${p.stats.vitality}, lvl ${p.level}, mats ${p.materials}, weapons ${p.weapons.length}`);
-  if (sim.over) { report.push(`BOT DIED on floor ${floor} in the ${node.kind} node`); break outer; }
-  if (ticks >= cap) {
+  if (sim.over) {
+    report.push(sim.result && sim.result.win
+      ? `RUN WON — the Vault Regent fell on floor ${floor}`
+      : `BOT DIED on floor ${floor} in the ${node.kind} node`);
+    break outer;
+  }
+  if (sim.phase === 'arena' && ticks >= (sim.cleared ? extractCap : cap)) {
     const left = {};
     for (const e of sim.enemyPool) { const k = e.boss ? 'BOSS' : e.def.id; left[k] = (left[k] || 0) + 1; }
     report.push(`STUCK: floor ${floor} ${node.kind} node — cleared=${sim.cleared} remaining=${JSON.stringify(left)} queue=${sim.spawnQueue.length}`);

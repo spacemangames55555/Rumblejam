@@ -51,7 +51,7 @@ Pick appeal is an honest pre-playtest guess (H/M/L). Verdict and Notes are for t
 | 18 | **Lodestone** | +15 vitality, +3 grit | Gravemaul | Soulbond: a tether to your nearest ally — you share 30% of incoming damage and 25% of healing both ways; hitting the same enemy within 1s echoes attuned damage. Solo it binds your strongest summon; with none, it lies dormant. | **M** — A visible lifeline to your ally; co-op signature | | |
 | 19 | **Voltaic** | +12% attunement, -10% ferocity | Sparkbolt | Attacks have a 30% chance to chain lightning to a nearby enemy at 60% damage (chains scale with Attunement). | **M** — Flashy chains with Attunement scaling | | |
 | 20 | **Wisp** | +40% reflex, +10% tempo | Threadneedle | Reflex cap raised to 90% and +1% Ferocity per 1% Reflex, but Vitality is capped at 30. | **M** — Thrilling 30-HP evasion build for veterans | | |
-| 21 | **Gilded One** | +15 greed | Vaultspike | Shop slots are always legendary — but there are only 2 of them. | **M** — Legendary-only shop is a fun lottery | | |
+| 21 | **Gilded One** | +15 greed | Kegbomb | Shops hold only the finest goods — legendary items or the floor's top weapon tier — but just 2 of them. | **M** — Legendary-only shop is a fun lottery | | |
 | 22 | **Redmaw** | +20% ferocity, +15 vitality | Emberfang | Deals +1% Ferocity for every 1% of HP missing. | **M** — Simple readable berserker fantasy | | |
 | 23 | **Glasswing** | +15% tempo, +10% reflex | Hailburst | Deals +50% damage — and takes +50% damage. | **M** — Double-edged risk appeals to gamblers | | |
 | 24 | **Twinsoul** | +3 ingenuity | Pebbleshot | A mirror-drone hovers beside you, copying your first weapon at 50% damage. | **M** — Mirror drone doubles your favorite weapon | | |

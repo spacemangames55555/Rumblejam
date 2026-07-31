@@ -78,7 +78,7 @@ export const WEAPONS = [
 
   // ---- lobbed: AoE ----
   { id: 'kegbomb', name: 'Kegbomb', cls: 'lobbed', sym: '●', color: '#ffab4f',
-    dmg: 20, cd: 2.0, range: 420, knock: 180, projSpeed: 420, aoe: 110,
+    dmg: 17, cd: 2.0, range: 420, knock: 180, projSpeed: 420, aoe: 110,
     scaling: ['attunement', 'greed'], price: 22 },
   { id: 'bogflask', name: 'Bogflask', cls: 'lobbed', sym: '⌘', color: '#7dee6a',
     dmg: 10, cd: 1.6, range: 380, knock: 20, projSpeed: 400, aoe: 95,

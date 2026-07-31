@@ -320,10 +320,50 @@ never loads them:
   permanent firing squad no melee starting kit could reach — Gilded One's
   Vaultspike could never close the last 8 Lobbers. Survivors now walk into
   the blade; ranged kits kill them approaching either way.
-- **Gilded One's trait shops ignore the new guarantees** — 2 slots of
-  legendary items IS the trait; the Quartermaster's all-weapon rack now
-  extends to the Black Market's 6 slots (his rare+-item guarantee is
-  meaningless and skipped).
+- **Trait shops ignore the new guarantees** — their slot rule IS their
+  stock rule (see the patch-8.1 restatement of Gilded One's below); the
+  Quartermaster's all-weapon rack extends to the Black Market's 6 slots
+  (his rare+-item guarantee is meaningless and skipped).
+
+### The Gilded One rescue (patch 8.1)
+
+- **Root cause, restated**: weapons have tiers, not rarities — so a trait
+  that fills shop slots with "legendary" goods produced an items-only shop
+  *by definition*, locking the economy character out of the weapon economy
+  the game now runs on; and `enemyHpMult` 1.12 moved Lobbers past its old
+  Vaultspike's one-shot threshold in the first fight, before any shop
+  exists.
+- **Starting weapon: Kegbomb** (Greed-scaled) — the economy statline powers
+  the weapon from the first second, and every Greed purchase grows it.
+  Vaultspike untouched (Duskblade ripples). The Kegbomb itself went 17 dmg
+  (from 20): its AoE already measures rich in the multi-dummy DPS harness,
+  and Greed-15 on top pushed Gilded One to +53% of median — past the ±40%
+  gate from the other side. At 17, Gilded One measures +33% and Powderkeg
+  (the other Kegbomb start) +13% — both in-gate, both closer to median
+  than before. This is the one ripple the rescue allowed, and it follows
+  the patch-5 precedent (Kegbomb has been tuned at this gate before:
+  24 → 20 → 17).
+- **The trait, restated for the real economy**: shop slots always hold the
+  finest goods available — legendary items or the floor's top rollable
+  weapon tier (II on floor 1, III on floor 2, IV from floor 3) — but only
+  2 of them (3 at the Black Market, which also keeps its reroll discount).
+  The trait overrides the standard weapon-guarantee composition everywhere;
+  auto-combine, the make-room swap, and locks work against its stock like
+  anyone else's. Pricing is the existing tier/rarity pricing — top-shelf
+  goods cost top-shelf prices, which is the fantasy.
+- **Verified organically**: the probe now clears the first fight in ~91 s
+  and WINS the full 4-floor run outright (2 weapons after fight one, a full
+  rack by floor 2, the Vault Regent down at level ~49) — stronger than the
+  "documented close final-boss loss" the gate required. Mirage, Broker, and
+  Powderkeg re-probed clean.
+- **Probe learned to hunt sources** (general fixes surfaced by the first
+  4-floor runs, not Gilded-specific): once spawning stops it walks onto
+  Wombden nests (broods replenish forever), Aegimand wardens (shield auras
+  make neighbors immortal to nearest-target weapons), and Stitcher medics
+  (out-heal low kits) — and it routes around the Champion branch like a
+  human playing a below-median build (the map guarantees elites are
+  optional; that's what the branch is for). Extraction walking no longer
+  counts against the fight-time cap.
 
 ### The Gauntlet (patch 7)
 
@@ -430,7 +470,9 @@ never loads them:
   26.4 (+17%), hemomancer 22.5 (0%), jester 31.1 (+38%), cindermage 22.5 (0%),
   frostcaller 23.4 (+4%), longshot 22.0 (−2%), threader 15.8 (−30%), tinker
   19.8 (−12%), hivewright 28.8 (+28%). Economy/support characters sit low by
-  design; nothing breaches the gate.
+  design; nothing breaches the gate. (Historical snapshot — patch 8.1's
+  Kegbomb re-tune moved its two owners: gilded_one 30.0 (+33%), powderkeg
+  25.5 (+13%).)
 - **Healing model details**: every heal source is multiplied by Recovery, with
   a fractional accumulator so small amplified heals aren't lost to rounding.
   Overheal routing (Hemomancer shield, Vesper's permanent Vitality with its
@@ -619,19 +661,6 @@ never loads them:
   deliberately not done: the level-up overlay is full-screen, and popping it
   mid-siege (especially over the touch joystick) is worse than the flatness.
   A non-blocking mid-siege card UI would be the real fix.
-- **Gilded One's floor 1 is past the knife-edge after the patch-8 tuning**
-  (numbers, per the tuning brief's flag-don't-revert guardrail): its trait
-  locks it out of the weapon economy entirely — legendary items only, never
-  weapons — so the extraction-shop interlock that funds everyone else's
-  growth passes it by, and `enemyHpMult` 1.12 pushes Lobbers from 9 to 10 HP,
-  exactly across its 9-damage Vaultspike's one-shot threshold in the one
-  fight it must clear before any shop can open. The organic probe now fails
-  the FIRST floor-1 fight (stalls at the 200 s cap with 6–8 Lobbers standing,
-  or dies at ~111 s charging them; pre-patch it cleared in ~130–170 s). The
-  headless all-32 gate still passes (harness-driven), mirage and broker — the
-  other two lowest-DPS characters — clear floors 1–2 organically with full
-  racks. The honest fix is a character touch (an 11-damage Vaultspike, or one
-  Black-Market weapon exception), which the patch-8 brief kept out of scope.
 - **Keyboard + mouse, or touch** — gamepad is still unsupported. Touch support
   was verified with Chromium's mobile emulation (Pixel-class viewport, real
   dispatched touch events); real devices — **especially iOS Safari** — can
