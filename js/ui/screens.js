@@ -35,7 +35,7 @@ export function showTitle(err = '') {
   el.innerHTML = `
     <div class="panel">
       <h1 class="logo">UNDERVAULT</h1>
-      <div class="tagline">a co-op dungeon arena roguelite · 1–4 players</div>
+      <div class="tagline">a co-op dungeon arena roguelite · 1–8 players</div>
       <div class="row" style="gap:24px; align-items:flex-start;">
         <div class="menu-col">
           <label class="dim small">Your name</label>
@@ -56,7 +56,7 @@ export function showTitle(err = '') {
           <h3>Materials</h3>
           Enemies drop materials: they are both money and XP. Level-ups are banked during combat and picked when the room is clear.
           <h3>Co-op</h3>
-          Host a room, send friends the code. Downed friends revive if you stand next to them for 3s. Cleared a room? Stand in a doorway to start the 3-second group countdown.
+          Host a room, send friends the code — up to 8 play together. Downed friends revive if you stand next to them for 3s. Big rooms want the host on solid wifi (see the README's host guidance).
         </div>
       </div>
     </div>`;

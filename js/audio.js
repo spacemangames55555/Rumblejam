@@ -79,7 +79,9 @@ export function playSample(buffer, vol = 1) {
 // depend on an asset existing.
 
 let airhornBuf = null;
-let hornLastAt = -Infinity;
+let hornWinStart = -Infinity; // debounce window anchor
+let hornOwnPlayed = false;    // own horn: once per window
+let hornAllyCount = 0;        // ally horns: capped per window (the Warband rule)
 
 export async function preloadAirhorn() {
   try {
@@ -93,13 +95,23 @@ export async function preloadAirhorn() {
 // test hook (also lets a future skin swap the buffer)
 export function setAirhornBuffer(buf) { airhornBuf = buf; }
 
-// One horn per resolution moment: a batch of banked level-ups landing
-// together plays once; own level-ups are loud, an ally's is quiet, and the
-// debounce window is global so a 4-player extraction is a celebration, not
-// a traffic jam. All three numbers live in config.
+// One horn per resolution moment, per source: within each debounce window
+// your own level-ups play at most once (loud) and ally level-ups at most
+// AIRHORN_ALLY_CAP times (quiet) — with 7 friends leveling at an extraction,
+// the room celebrates without becoming a traffic jam. Numbers in config.
 export function levelupHorn(own, nowMs = performance.now()) {
-  if (nowMs - hornLastAt < CONFIG.AIRHORN_DEBOUNCE_S * 1000) return;
-  hornLastAt = nowMs;
+  if (nowMs - hornWinStart >= CONFIG.AIRHORN_DEBOUNCE_S * 1000) {
+    hornWinStart = nowMs;
+    hornOwnPlayed = false;
+    hornAllyCount = 0;
+  }
+  if (own) {
+    if (hornOwnPlayed) return;
+    hornOwnPlayed = true;
+  } else {
+    if (hornAllyCount >= CONFIG.AIRHORN_ALLY_CAP) return;
+    hornAllyCount++;
+  }
   const vol = own ? CONFIG.AIRHORN_VOL_OWN : CONFIG.AIRHORN_VOL_ALLY;
   if (audioStats.hornLog.length < 50) audioStats.hornLog.push(vol);
   if (airhornBuf) {

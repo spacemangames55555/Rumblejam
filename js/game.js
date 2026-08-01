@@ -61,8 +61,8 @@ export class Sim {
     // party-wide curse (Tollkeeper's Toll Road: double mats, +25% enemy HP)
     this.greedHp = this.players.some(p => p.char.trait.key === 'toll_road') ? 1.25 : 1;
     this.greedMats = this.players.some(p => p.char.trait.key === 'toll_road') ? 2 : 1;
-    this.coopHp = 1 + CONFIG.COOP_HP_SCALE * (this.players.length - 1);
-    this.coopSpawn = 1 + CONFIG.COOP_SPAWN_SCALE * (this.players.length - 1);
+    this.coopHp = coopCurve(this.players.length, CONFIG.COOP_HP_SCALE, CONFIG.COOP_HP_SOFT);
+    this.coopSpawn = coopCurve(this.players.length, CONFIG.COOP_SPAWN_SCALE, CONFIG.COOP_SPAWN_SOFT);
 
     this.floorNum = 0;
     this.pendingEnd = 0;
@@ -435,7 +435,7 @@ export class Sim {
   // ---------------- arenas (the stage) ----------------
 
   _enterArena(node) {
-    const arena = buildArena(this.seed, this.floorNum, node);
+    const arena = buildArena(this.seed, this.floorNum, node, this.players.length);
     this.phase = 'arena';
     this.arenaNode = node;
     this.W = arena.w; this.H = arena.h;
@@ -537,23 +537,31 @@ export class Sim {
       if (taper === 0) { w.done = true; return; } // survivors rush (enemies.js)
     }
     if (this.holdCircle && this.holdCircle.held) rate *= 0.3; // the sigil chokes the spawning
-    w.acc += rate * dt;
+    // the accumulator IS the bank: when the alive ceiling binds below, budget
+    // pools here (capped) and flows in as slots free — longer, never laggier
+    w.acc = Math.min(CONFIG.SPAWN_BANK_CAP, w.acc + rate * dt);
     // elite injections (elite nodes and sieges)
     if (w.eliteEvery > 0) {
       w.eliteT -= dt;
       if (w.eliteT <= 0) {
-        w.eliteT = w.eliteEvery;
-        const table = FLOOR_TABLES[this.floorNum - 1];
-        const id = this.waveRng.pick(table.filter(t => t !== 'wombden'));
-        const pos = this._spawnWavePos();
-        this.spawnQueue.push({ t: 0.7, id, elite: true, mod: this.waveRng.pick(ELITE_MODS), x: pos.x, y: pos.y });
-        this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 34, dur: 0.7, spawnMark: true });
+        if (this.enemyPool.count + this.spawnQueue.length >= Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10)) {
+          w.eliteT = 2; // ceiling bound — the champion waits for a slot
+        } else {
+          w.eliteT = w.eliteEvery;
+          const table = FLOOR_TABLES[this.floorNum - 1];
+          const id = this.waveRng.pick(table.filter(t => t !== 'wombden'));
+          const pos = this._spawnWavePos();
+          this.spawnQueue.push({ t: 0.7, id, elite: true, mod: this.waveRng.pick(ELITE_MODS), x: pos.x, y: pos.y });
+          this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 34, dur: 0.7, spawnMark: true });
+        }
       }
     }
     let guard = 0;
     while (w.acc >= 1 && guard++ < 20) {
+      // ceiling check BEFORE spending the unit: a bound ceiling banks the
+      // budget in w.acc instead of discarding it
+      if (this.enemyPool.count + this.spawnQueue.length >= Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10)) break;
       w.acc -= 1;
-      if (this.enemyPool.count + this.spawnQueue.length >= CONFIG.POOL_ENEMIES - 10) break; // pool headroom
       const prof = this.profile || {};
       const table = FLOOR_TABLES[this.floorNum - 1];
       let id = table[Math.floor(this.waveRng.float() * table.length)];
@@ -2835,7 +2843,10 @@ export class Sim {
       // consent countdowns: node vote (map) and extraction (arena)
       vote: this.nodeVote ? { nodeId: this.nodeVote.nodeId, t: +this.nodeVote.t.toFixed(2), byIdx: this.nodeVote.byIdx } : null,
       extract: this.extract ? +this.extract.t.toFixed(2) : null,
-      // the enemy counter's two states + the siege looting countdown
+      // the enemy counter's two states + the siege looting countdown.
+      // ec is the AUTHORITATIVE alive count — with interest culling below,
+      // enemies.length on the wire can be smaller than the real field
+      ec: this.enemyPool.count,
       inc: this.phase === 'arena' && this.wave && !this.wave.done ? 1 : 0,
       loot: this.lootT !== null && this.lootT !== undefined ? +this.lootT.toFixed(2) : null,
       hatch: this.hatch ? [r(this.hatch.x), r(this.hatch.y)] : null,
@@ -2853,8 +2864,19 @@ export class Sim {
       tethers: this._snapTethers(),
       decoys: this.decoys.map(d => [r(d.x), r(d.y), +(d.t / d.dur).toFixed(2), d.owner]),
     };
-    // radius is derived client-side from type + elite/mini flags — not sent
+    // radius is derived client-side from type + elite/mini flags — not sent.
+    // Interest culling: chaff farther than SNAP_CULL_R from EVERY live player
+    // is off every screen (radar and edge arrows only track elites/bosses/
+    // pylons, which always ship) — skipping it is visually lossless and cuts
+    // the 8-player siege-crest snapshot hard. The HUD counter reads ec above.
+    const live = this.players.filter(p => !p.gone && !p.downed);
+    const cullR2 = CONFIG.SNAP_CULL_R * CONFIG.SNAP_CULL_R;
     for (const e of this.enemyPool) {
+      if (!e.boss && !e.elite && e.typeIdx !== -2 && live.length) {
+        let seen = false;
+        for (const p of live) { if (dist2(e.x, e.y, p.x, p.y) < cullR2) { seen = true; break; } }
+        if (!seen) continue;
+      }
       snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0)]);
     }
     for (const pr of this.projPool) {
@@ -2942,6 +2964,14 @@ export class Sim {
 }
 
 // ---------------- module helpers ----------------
+
+// Co-op difficulty curve: linear per-player through the knee (4 players),
+// softened beyond — a party of 8 is a warband, not a ×4.5 enemy flood.
+export function coopCurve(n, scale, soft) {
+  const knee = CONFIG.COOP_SOFT_AT;
+  if (n <= knee) return 1 + scale * (n - 1);
+  return 1 + scale * (knee - 1) + soft * (n - knee);
+}
 
 function r2(v) { return Math.round(v * 10) / 10; }
 

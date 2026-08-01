@@ -23,15 +23,27 @@ export function showHud(on) {
 
 // meta: my private meta; view: interpolated/live view; ctx: {floorNum, layout, visited, curRoom, boss}
 export function updateHud(meta, view, hctx) {
-  // party bars
+  // party bars — 5+ players compact into a two-column strip (own row stays
+  // full width and detailed; allies condense to name + bar)
   const wrap = $('hud-players');
+  const present = (view.players || []).filter(p => !p.gone);
+  const crowd = present.length >= 5;
+  wrap.classList.toggle('crowd', crowd);
   const rows = [];
-  for (const p of view.players || []) {
-    if (p.gone) continue;
+  for (const p of present) {
     const mine = p.idx === view.myIdx;
     const chr = CHAR_BY_ID[p.charId];
+    if (crowd && !mine) {
+      rows.push(`
+      <div class="php mini ${p.downed ? 'downed' : ''}" style="border-left:4px solid ${p.color};">
+        <div class="nm"><span><b>${escapeHtml(p.name)}</b></span>
+        <span>${p.downed ? `<span class="status">DOWN${p.reviveP > 0 ? ' ' + Math.round(p.reviveP * 100) + '%' : ''}</span>` : `${p.hp}${p.shield > 0 ? '+' + p.shield : ''}`}</span></div>
+        <div class="bar"><i style="width:${Math.round(100 * p.hp / Math.max(1, p.maxHp))}%"></i></div>
+      </div>`);
+      continue;
+    }
     rows.push(`
-      <div class="php ${p.downed ? 'downed' : ''}" style="border-left:4px solid ${p.color}; ${mine ? '' : 'width:190px; opacity:.92;'}">
+      <div class="php ${p.downed ? 'downed' : ''} ${mine && crowd ? 'own-row' : ''}" style="border-left:4px solid ${p.color}; ${mine || crowd ? '' : 'width:190px; opacity:.92;'}">
         <div class="nm"><span><b>${escapeHtml(p.name)}</b> <span class="dim">${chr ? chr.name : ''}</span></span>
         <span>${p.downed ? `<span class="status">DOWN ${p.reviveP > 0 ? Math.round(p.reviveP * 100) + '%' : ''}</span>` : `${p.hp}/${p.maxHp}${p.shield > 0 ? ' +' + p.shield + '🛡' : ''}`}</span></div>
         <div class="bar"><i style="width:${Math.round(100 * p.hp / Math.max(1, p.maxHp))}%"></i></div>
@@ -52,9 +64,11 @@ export function updateHud(meta, view, hctx) {
   // number alive — the switch is the sweep signal (leave stragglers, run for money)
   const ec = $('enemy-counter');
   const looting = view.loot !== null && view.loot !== undefined;
-  if (view.mode === 'arena' && (view.inc || looting || (view.enemies && view.enemies.length))) {
+  // ec is the authoritative count — the enemy list may be interest-culled
+  const alive = view.ec !== undefined && view.ec !== null ? view.ec : (view.enemies ? view.enemies.length : 0);
+  if (view.mode === 'arena' && (view.inc || looting || alive)) {
     ec.classList.remove('hidden');
-    const n = view.enemies ? view.enemies.length : 0;
+    const n = alive;
     if (looting) {
       ec.innerHTML = `<b class="ec-loot">◆ sweep! ${Math.ceil(view.loot)}s</b>`;
     } else if (view.inc) {

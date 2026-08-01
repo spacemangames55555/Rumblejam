@@ -6,6 +6,7 @@ import { CONFIG, DEV, PALETTE } from './config.js';
 import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
 import { HostTransport, ClientTransport } from './net.js';
+import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
 import { Renderer } from './render.js';
 import { initInput, sampleInput, takeDebugKey, pressInteract } from './input.js';
 import { initTouch, joy, touchEnabled } from './touch.js';
@@ -218,7 +219,7 @@ function hostOnMessage(key, msg) {
       if (app.lobby.players.length >= CONFIG.MAX_PLAYERS) { app.hostT.send(key, { t: 'refused', reason: 'Room is full' }); app.hostT.kick(key); return; }
       if (!app.lobby.players.some(p => p.key === key)) {
         const used = new Set(app.lobby.players.map(p => p.color));
-        const color = PALETTE.players.find(c => !used.has(c)) || PALETTE.players[app.lobby.players.length % 4];
+        const color = PALETTE.players.find(c => !used.has(c)) || PALETTE.players[app.lobby.players.length % PALETTE.players.length];
         app.lobby.players.push({ key, name: String(msg.name || 'ANON').slice(0, 12), color, charId: null, ready: false, isHost: false });
       }
       refreshLobby(); broadcastLobby();
@@ -352,7 +353,7 @@ function sanitizeMember(p, i) {
   return {
     ...p,
     name: String(p.name || 'ANON').slice(0, 12),
-    color: SAFE_COLOR.test(String(p.color)) ? p.color : PALETTE.players[i % 4],
+    color: SAFE_COLOR.test(String(p.color)) ? p.color : PALETTE.players[i % PALETTE.players.length],
     charId: p.charId && CHAR_BY_ID[p.charId] ? p.charId : null,
   };
 }
@@ -397,10 +398,11 @@ function clientOnMessage(msg) {
       break;
     }
     case 'snap': {
+      const snap = decodeSnap(msg); // unpack the wire buffers once, at ingest
       app.lastSnapAt = performance.now();
-      app.snaps.push({ rt: app.lastSnapAt, s: msg });
+      app.snaps.push({ rt: app.lastSnapAt, s: snap });
       if (app.snaps.length > 30) app.snaps.splice(0, app.snaps.length - 30);
-      renderer.ingestFx(msg.fx);
+      renderer.ingestFx(snap.fx);
       break;
     }
     case 'ev': for (const ev of msg.list) handleEvent(ev); break;
@@ -586,6 +588,19 @@ function drainSimOutputs(initial = false) {
   }
 }
 
+// Host bandwidth ledger (window.uvNet): what the snapshot stream costs,
+// per peer and in total — the README's host guidance quotes these numbers.
+const uvNet = { snaps: 0, snapBytes: 0, lastSnapBytes: 0, bytesOut: 0, hz: CONFIG.SNAPSHOT_HZ };
+window.uvNet = uvNet;
+
+function snapshotDivisor() {
+  // 8-player rooms trade snapshot rate for headroom: 12/s at 6+ players.
+  // The client interpolates on receive timestamps, so nothing else changes.
+  const n = app.sim ? app.sim.players.filter(p => !p.gone).length : 1;
+  uvNet.hz = n >= CONFIG.SNAPSHOT_CROWD_AT ? CONFIG.SNAPSHOT_HZ_CROWD : CONFIG.SNAPSHOT_HZ;
+  return Math.round(CONFIG.TICK_RATE / uvNet.hz);
+}
+
 function hostTick() {
   const sim = app.sim;
   const inp = sampleInput();
@@ -593,9 +608,17 @@ function hostTick() {
   sim.tick();
   renderer.ingestFx(sim.fx);
   drainSimOutputs();
-  if (++snapCounter >= Math.round(CONFIG.TICK_RATE / CONFIG.SNAPSHOT_HZ)) {
+  if (++snapCounter >= snapshotDivisor()) {
     snapCounter = 0;
-    if (app.hostT && app.hostT.conns.size) app.hostT.broadcast(sim.getSnapshot());
+    if (app.hostT && app.hostT.conns.size) {
+      const wire = encodeSnap(sim.getSnapshot());
+      const sz = wireSize(wire);
+      uvNet.snaps++;
+      uvNet.snapBytes += sz;
+      uvNet.lastSnapBytes = sz;
+      uvNet.bytesOut += sz * app.hostT.conns.size;
+      app.hostT.broadcast(wire);
+    }
   }
 }
 
@@ -644,6 +667,7 @@ function viewFromSim(sim) {
     cleared: sim.cleared, locked: !sim.cleared,
     shake: sim.shake,
     extract: sim.extract ? sim.extract.t : null,
+    ec: sim.enemyPool.count,
     inc: sim.phase === 'arena' && sim.wave && !sim.wave.done ? 1 : 0,
     loot: sim.lootT !== null && sim.lootT !== undefined ? sim.lootT : null,
     hold: sim.holdCircle ? [sim.holdCircle.x, sim.holdCircle.y, sim.holdCircle.r, sim.holdCircle.held ? 1 : 0] : null,
@@ -750,6 +774,7 @@ function viewFromSnaps(dtFrame) {
     cleared: !!s1.cleared, locked: !s1.cleared,
     shake: s1.shake,
     extract: s1.extract !== undefined ? s1.extract : null,
+    ec: s1.ec !== undefined ? s1.ec : null,
     inc: s1.inc || 0,
     loot: s1.loot !== undefined ? s1.loot : null,
     hold: s1.hold || null,

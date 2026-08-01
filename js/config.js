@@ -39,9 +39,21 @@ export const CONFIG = {
   QUOTA_BASE: 12, QUOTA_PER_FLOOR: 4, // room quota = (12+4*floor) * playerScale
   SPAWN_PULSES: 3,
 
-  // co-op scaling
-  COOP_SPAWN_SCALE: 0.5,   // spawns *(1+0.5*(n-1))
-  COOP_HP_SCALE: 0.35,     // enemy hp *(1+0.35*(n-1))
+  // co-op scaling — linear through 4 players, softened above (the Warband):
+  // count ×(1+0.5(n−1)) to ×2.5 at 4p, then +0.3/player → ×3.7 at 8p;
+  // HP ×(1+0.35(n−1)) to ×2.05 at 4p, then +0.2/player → ×2.85 at 8p.
+  COOP_SPAWN_SCALE: 0.5,   // per player through COOP_SOFT_AT
+  COOP_HP_SCALE: 0.35,
+  COOP_SOFT_AT: 4,         // the knee: linear to here, softened beyond
+  COOP_SPAWN_SOFT: 0.3,    // per player beyond the knee
+  COOP_HP_SOFT: 0.2,
+  // hard alive ceiling (enemies on the field + queued). When it binds, the
+  // spawn budget BANKS (capped) and flows in as slots free — fights get
+  // longer, not laggier. Sized to the render/tick budget, under POOL_ENEMIES.
+  ALIVE_CEILING: 300,
+  SPAWN_BANK_CAP: 45,      // banked budget units — bounds the post-ceiling flood
+  ARENA_CROWD_AT: 5,       // parties this size and up fight in scaled arenas
+  ARENA_CROWD_SCALE: 1.25, // bounds ×1.25 (same templates, geometry scaled)
   FLOOR_HP_MULT: 1.35,
   FLOOR_DMG_MULT: 1.2,
 
@@ -62,6 +74,7 @@ export const CONFIG = {
   AIRHORN_VOL_OWN: 1.0,    // your own level-up
   AIRHORN_VOL_ALLY: 0.35,  // an ally's level-up (co-op)
   AIRHORN_DEBOUNCE_S: 1.0, // one horn per resolution moment, not per level
+  AIRHORN_ALLY_CAP: 2,     // ally horns per debounce window (7 friends ≠ 7 horns)
 
   ELITE_HP_MULT: 3,
   ELITE_DMG_MULT: 1.5,
@@ -76,7 +89,13 @@ export const CONFIG = {
   HARVEST_GROWTH: 0.05,    // harvesting grows 5% (floored) per room clear
 
   DISCONNECT_TIMEOUT: 5,   // s of silence before a client is dropped
-  MAX_PLAYERS: 4,
+  MAX_PLAYERS: 8,
+
+  // snapshot pacing and interest culling (the Warband netcode)
+  SNAPSHOT_HZ_CROWD: 12,   // rate at CROWD_AT+ players (interp adjusts itself)
+  SNAPSHOT_CROWD_AT: 6,
+  SNAP_CULL_R: 1400,       // chaff farther than this from EVERY player is not
+                           // sent — off every screen, radar shows elites only
 
   // performance
   POOL_ENEMIES: 320, POOL_PROJECTILES: 700, POOL_PARTICLES: 900,
@@ -86,7 +105,8 @@ export const CONFIG = {
 export const PALETTE = {
   bg: '#14161f', grid: '#1b1e2b', wall: '#2b2f45', wallEdge: '#454b6e',
   floorSafe: '#181b28', doorOpen: '#5ee0a8', doorLocked: '#ff5d6c',
-  players: ['#4fd8eb', '#ffab4f', '#7dee6a', '#ff7ad9'],
+  // 8 seats — chosen against the enemy reds, elite purple and material gold
+  players: ['#4fd8eb', '#ffab4f', '#7dee6a', '#ff7ad9', '#6a8dff', '#eef75e', '#b993ff', '#f0f0f0'],
   material: '#ffd45e', materialEdge: '#a87f14',
   hpBar: '#ff5d6c', xpBar: '#5ee0a8',
   outline: '#0b0c12',

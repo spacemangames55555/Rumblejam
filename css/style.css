@@ -49,8 +49,11 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 #screen-lobby .panel{width:min(94vw,1060px);}
 .lobby-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; flex-wrap:wrap; gap:8px;}
 .room-code{font-size:26px; letter-spacing:6px; color:var(--gold); background:#12141f; border:2px dashed var(--line); border-radius:8px; padding:4px 16px;}
-.lobby-players{display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
-.lobby-player{display:flex; gap:8px; align-items:center; background:var(--panel2); border:2px solid var(--line); border-radius:8px; padding:6px 12px; min-width:190px;}
+/* 8 seats wrap into a grid — readable on a phone without scrolling the panel away */
+.lobby-players{display:grid; grid-template-columns:repeat(auto-fill, minmax(168px, 1fr)); gap:8px; margin-bottom:14px;}
+.lobby-player{display:flex; gap:8px; align-items:center; background:var(--panel2); border:2px solid var(--line); border-radius:8px; padding:6px 10px; min-height:44px; min-width:0;}
+.lobby-player > div:last-child{min-width:0;}
+.lobby-player b{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:110px; display:inline-block; vertical-align:bottom;}
 .lobby-player .dot{width:16px; height:16px; border-radius:50%; border:2px solid #000;}
 .lobby-player.ready{border-color:var(--xp);}
 .char-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:8px; max-height:44vh; overflow:auto; padding:4px; border:2px solid var(--line); border-radius:8px; background:#161828;}
@@ -80,6 +83,13 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 .php .meterbar.full i{background:#ffd45e; box-shadow:0 0 6px #ffd45e;}
 .php.downed{border-color:var(--danger); animation:pulse 1s infinite;}
 .php .status{font-size:10px; color:var(--danger);}
+/* the Warband strip: 5+ players condense into two columns; own row spans both */
+#hud-players.crowd{display:grid; grid-template-columns:repeat(2, 128px); gap:4px;}
+#hud-players.crowd .php.own-row{grid-column:1 / -1; width:auto;}
+#hud-players.crowd .php.mini{width:auto; padding:3px 6px;}
+#hud-players.crowd .php.mini .nm{font-size:10px;}
+#hud-players.crowd .php.mini .nm b{max-width:70px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom;}
+#hud-players.crowd .php.mini .bar{height:6px; margin-top:2px;}
 @keyframes pulse{50%{box-shadow:0 0 12px #ff5d6c88;}}
 #hud-top{position:absolute; top:10px; left:50%; transform:translateX(-50%); text-align:center;}
 #hud-floor{font-size:15px; letter-spacing:2px; color:var(--dim); background:#101220cc; padding:3px 14px; border-radius:6px; border:1px solid var(--line);}
@@ -283,8 +293,9 @@ body.touch-on .char-card{min-height:120px;}
 }
 
 /* ---------- Results ---------- */
-.results-grid{display:flex; gap:12px; flex-wrap:wrap; margin:14px 0;}
-.result-card{background:var(--panel2); border:2px solid var(--line); border-radius:10px; padding:12px; min-width:220px; flex:1;}
+/* 8 result rows: grid + a scroll fence so the seed line and button stay reachable */
+.results-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:12px; margin:14px 0; max-height:62vh; overflow:auto;}
+.result-card{background:var(--panel2); border:2px solid var(--line); border-radius:10px; padding:12px; min-width:0;}
 .result-card h4{margin-bottom:6px;}
 .result-card .stat{display:flex; justify-content:space-between; font-size:13px; color:var(--dim);}
 .result-card .stat b{color:var(--ink);}

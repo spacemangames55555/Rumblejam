@@ -186,15 +186,25 @@ export class Renderer {
   // Off-screen indicators: allies always (downed ones scream for help),
   // elites/bosses when present, plus the extraction portal and siege
   // objectives. Screen-space triangles clamped to the viewport edge.
+  // Warband declutter: alive allies just past the screen edge fade — you know
+  // roughly where they are — while distant ones stay solid; downed allies are
+  // always full-strength, pulsing, and drawn on top of everything.
   _drawEdgeArrows(ctx, view) {
     const s = this._screen;
     if (!s) return;
     const margin = 34;
     const targets = [];
+    const me = (view.players || []).find(q => q.idx === view.myIdx);
     for (const p of view.players || []) {
       if (p.gone || p.idx === view.myIdx) continue;
-      targets.push({ x: p.x, y: p.y, color: p.color, downed: p.downed, label: p.downed ? '✚' : null });
+      let fade = 1;
+      if (!p.downed && me) {
+        const d = Math.hypot(p.x - me.x, p.y - me.y);
+        fade = clamp((d - 700) / 600, 0.3, 1); // near = ghosted, far = solid
+      }
+      targets.push({ x: p.x, y: p.y, color: p.color, downed: p.downed, label: p.downed ? '✚' : null, fade, late: p.downed });
     }
+    targets.sort((a, b) => (a.late ? 1 : 0) - (b.late ? 1 : 0)); // downed drawn last (on top)
     for (const e of view.enemies || []) {
       if (e.boss) targets.push({ x: e.x, y: e.y, color: PALETTE.boss, big: true });
       else if (e.elite) targets.push({ x: e.x, y: e.y, color: PALETTE.elite });
@@ -215,7 +225,7 @@ export class Renderer {
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(a);
-      ctx.globalAlpha = 0.9 * pulse;
+      ctx.globalAlpha = 0.9 * pulse * (tg.fade !== undefined ? tg.fade : 1);
       ctx.fillStyle = tg.color;
       ctx.strokeStyle = '#0b0c12';
       ctx.lineWidth = 2;
