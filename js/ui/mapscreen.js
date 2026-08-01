@@ -88,6 +88,7 @@ function renderMap(state) {
         <svg class="map-edges" id="map-edges"></svg>
         ${colHtml}
       </div>
+      <div class="map-legend">⚔ Skirmish · ☠ Champion · ◆ Trader · ★ Reliquary · ⛨ Siege · <span class="mn-bastion-inline">⛊</span> Bastion: hold-your-ground</div>
     </div>`;
   el.querySelectorAll('.map-node').forEach(btn => {
     btn.onclick = () => { sfx.click(); A.pickNode(parseInt(btn.dataset.node, 10)); };

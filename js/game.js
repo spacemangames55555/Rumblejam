@@ -988,7 +988,7 @@ export class Sim {
     // players
     for (const p of this.players) { if (!p.gone) this._tickPlayer(p, dt); }
     // periodic stat recompute (auras, low-hp, frenzy expiry); also surface
-    // level-ups earned from post-clear pickup vacuuming without a new clear
+    // level-ups earned from post-clear scooping (the siege looting window)
     if (this.tickNum % 15 === 0) {
       for (const p of this.players) {
         if (p.gone) continue;

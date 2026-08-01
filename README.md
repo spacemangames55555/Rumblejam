@@ -50,8 +50,19 @@ co-op networking.
 - **Fights are budget curves, not door-locked waves**: spawning ramps for
   60–90 s (rate grows with floor and map depth), then stops — survivors rush
   you to contact — and the fight ends when the field is empty. Level-ups
-  **bank** during the fight and resolve at the clear, when the field's
-  materials magnet to the party.
+  **bank** during the fight and resolve at the clear.
+- **Money doesn't wait.** Materials must be walked over *during* the fight —
+  there is no end-of-fight vacuum. Whatever is still on the ground when the
+  last enemy dies fizzles where it sat, and the clear banner reports both
+  numbers (`◆ N collected · M lost`). The **enemy counter** at the top of the
+  HUD is the sweep signal: it reads *incoming* while the spawn budget is
+  still flowing, then flips to the exact live count the moment spawning
+  stops — when that number is small, leave the stragglers and run for the
+  money. Sieges get an **8-second looting window** after the boss falls
+  (a visible countdown) before the spoils fizzle and the descent opens.
+- **Every fight rolls a pressure profile** (see the next section). Roughly
+  one combat node in four rolls **Bastion** — marked with a ⛊ shield on the
+  node map — where holding your ground is the sanctioned play.
 - **Every extraction is a shop.** Clearing a Combat or Champion node opens
   each player's own 4-slot shop right at the portal (reroll, lock, browse at
   your own pace — even after the countdown travels the party). Standard
@@ -67,6 +78,48 @@ co-op networking.
   mutation the **floor boss** enters with reduced add spawns (tapering to
   silence, so a siege is never an unwinnable inflow race). Boss down → full
   payout, post-boss shop, and the descent portal.
+
+## Pressure profiles: standing still is a choice
+
+Every Combat and Champion node rolls a **pressure profile** at map
+generation — a recipe for *how* the fight applies force, so camping in a
+corner stops being the default optimum without any single fight maxing every
+lever. The levers:
+
+- **Ring spawning** (all non-Bastion profiles): the swarm assembles around
+  the players' *current* positions, just off-screen, biased toward backs and
+  flanks — running away is running into the next spawn arc. In co-op the
+  per-player rings merge: no spawn ever lands on anyone's screen.
+- **Mortars**: some Lobbers arrive as artillery — a telegraphed ground
+  circle at your current position, a beat of delay, then the impact. Stand
+  still and every shell is a direct hit; drift and they always land where
+  you were.
+- **Death puddles**: profile-flagged chaff leaves an acid puddle where it
+  dies (capped at 14 on the field; the oldest fade first), so melee-mulching
+  a swarm *in place* carpets your ground.
+- **Flankers as wave citizens**: Dashers and Orbiters — enemies that attack
+  from angles auto-aim doesn't cover — appear in regular waves, not just as
+  elites.
+- **Wave-end rushers overshoot**: when spawning ends, survivors dash
+  *through* your position and past it, turning the mop-up into crossing
+  traffic instead of a queue walking into your muzzle.
+
+The named profiles blend these: **Artillery** (mortar-heavy), **Flanker**,
+**Puddle**, **Swarm** (higher spawn rate, lighter levers), **Mixed** (a bit
+of everything), and the floor's Siege always runs high-friction. Each
+floor's deck is shuffled so all of them show up across a run.
+
+**Bastion (~1 combat node in 4, ⛊ on the map)** is the sanctioned camp: a
+single melee-only stream from one arena edge, no artillery, no puddle
+chaff, few flankers, at a rate a hold-your-ground build can grind down.
+Fortress characters get their fantasy — on the fights marked for it.
+
+**Line of sight is real, for everyone.** Walls absorb straight projectiles —
+yours, enemies', turrets' — and block melee swings, chain-lightning hops and
+blast damage symmetrically. Auto-aim and turrets target the nearest *visible*
+enemy, so a pillar is genuine cover both ways. Lobbed weapons and mortar
+shells arc **over** walls (that's their niche), and enemy gunners drift
+sideways for an angle rather than plinking masonry forever.
 
 ## The stat sheet (the Great Rebalance)
 
@@ -183,6 +236,12 @@ is direct browser-to-browser WebRTC.
   weapon as a detail card with its sell refund and the net cost — pick one,
   confirm, and the sell + buy execute as a single transaction (or cancel and
   keep everything).
+- **Pick up your money mid-fight** — walk over materials as you go (Reach
+  widens the scoop radius). Whatever is on the ground when the last enemy
+  dies is lost, and the clear banner shows the split. The top-center
+  **enemy counter** tells you when to sweep: *incoming* → exact count means
+  spawning has stopped. After a Siege boss falls, a **sweep! countdown**
+  gives 8 seconds to loot the field before the descent opens.
 - After a fight clears, stand on the **extraction portal** to run the 4-second
   countdown back to the map (anyone stepping off cancels it); the same portal
   descends to the next floor after a Siege.
@@ -266,8 +325,15 @@ never loads them:
   the shop-economy gates (extraction shops, 100-seed stock guarantees with
   rerolls, auto-combine at 6/6, 5/5 and 4/4, atomic swap + rollback, the
   density/HP knob spot-checks), the airhorn's debounce/volume/fallback rules
-  (headless — no WebAudio needed), a floor-4 siege stress (crest ≥150 alive,
-  tick time), snapshot serialization in both phases.
+  (headless — no WebAudio needed), the friction gates (40-seed profile
+  coverage with the Bastion share and elite exclusion, the symmetric Statue
+  Test — a never-moving probe dies on floor 1 in every non-Bastion profile ×
+  all five templates and survives floor-1 Bastion — plus the Bulwark clause,
+  the line-of-sight lab: pillar blocks both sides, lobs arc over, auto-aim
+  skips walled-off targets, chains refuse blocked hops, blasts clip; the
+  money rule's fizzle ledger and the siege looting window), a floor-4 siege
+  stress (crest ≥150 alive, tick time, LoS on), snapshot serialization in
+  both phases.
 - `node tools/browser_test.mjs [--coop]` — boots real headless Chromium over
   the DevTools protocol: title → lobby → map → arena → results with zero
   console errors, node-map taps, camera-follow checks, extraction, trait
@@ -275,13 +341,17 @@ never loads them:
   touch events (map nodes at the 44 px standard, joystick extraction walk),
   perf gates at siege density, the patch-8 shop flows (extraction shop,
   Black Market, combine badge, auto-combine, tier-IV reason, make-room swap
-  with cancel/atomic-net, live est.-DPS updates, touch sizing), plus the
-  two-browser co-op checklist against a local relay: contested node pick
-  with redirect + lock, independent cameras, the full Siege synced (mercy
-  revive, wall collapse, boss entry, post-boss shop on both, extraction
-  countdown, descent), simultaneous shopping with parallel rerolls /
-  auto-combine / swaps, aura/tether across the network, turret
-  carry/redeploy sync, cross-play desktop + touch.
+  with cancel/atomic-net, live est.-DPS updates, touch sizing), the patch-9
+  HUD (enemy counter incoming→exact in real DOM, touch-sized on mobile, the
+  Bastion ⛊ on the node map, perf gates re-measured with 14 acid puddles +
+  LoS at the crests), plus the two-browser co-op checklist against a local
+  relay: contested node pick with redirect + lock, independent cameras,
+  merged-ring spawn distances from both players, the full Siege synced
+  (mercy revive, wall collapse, boss entry, the looting-window countdown on
+  both HUDs, post-boss shop on both, extraction countdown, descent),
+  simultaneous shopping with parallel rerolls / auto-combine / swaps,
+  aura/tether across the network, turret carry/redeploy sync, cross-play
+  desktop + touch.
 - `node tools/balance_probe.mjs <charId> [floors]` — a kiting bot plays the
   real node flow organically (picks nodes, shops on a budget weapons-first,
   dives siege objectives, charges melee stragglers) to flag balance
@@ -295,6 +365,78 @@ never loads them:
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### The Friction Patch (patch 9)
+
+- **Profile recipes.** Each Combat/Champion node rolls one profile at map
+  generation; the non-Bastion keys cycle through a shuffled per-floor deck so
+  every role appears across a floor. The knobs (js/arenas.js `PROFILES`):
+
+  | profile | ring | artillery | puddle | flankers | rate | notes |
+  |---|---|---|---|---|---|---|
+  | artillery | ✓ | 0.28 | 0.05 | 0.08 | ×1.0 | mortars own the fight |
+  | flanker | ✓ | 0.05 | 0.05 | 0.32 | ×1.0 | Gyres/Lancerfish as citizens |
+  | puddle | ✓ | 0.05 | 0.35 | 0.08 | ×1.0 | the ground fills in |
+  | swarm | ✓ | 0.04 | 0.08 | 0.08 | ×1.18 | pressure by volume |
+  | mixed | ✓ | 0.14 | 0.14 | 0.16 | ×1.0 | a bit of everything |
+  | bastion | ✗ (one edge) | 0 | 0 | 0 | ×0.65 | melee-only stream |
+  | siege | ✓ | 0.10 | 0.08 | 0.12 | ×1.0 | always high-friction |
+
+  No profile maxes every lever — each fight asks one clear question. Elites
+  never roll Bastion (a Champion should never be the easy room).
+- **Bastion is melee-only by ban list, streaming from a single edge, at
+  ×0.65 rate.** The experiments that set this: two fronts split a
+  stationary player's nearest-enemy auto-aim and killed the camping statue;
+  Fuseheads (telegraphed self-detonation at your feet) and Lobbers
+  (keep-distance 260 outranges short weapons) are *definitional* stillness
+  punishers, so any of them in the mix un-sanctions the camp. The ban list
+  (`fusehead, lobber, deadeye, wombden, lancerfish, gyre`) redirects those
+  rolls to the floor's chaff.
+- **The Statue Test's two sides use different archetypes on purpose.** The
+  DIE side runs the median-DPS caster (Cindermage) — it must die on floor 1
+  in every non-Bastion profile × all five arena templates, and does. The
+  SURVIVE side runs Bulwark, the hold-your-ground archetype the profile
+  exists for. A spread-pellet caster whiffs most of its fan on single
+  approaching targets past ~190 u (pellet spread wider than an enemy body),
+  so "any character can camp a Bastion" was never the claim — the claim is
+  *the camper's fantasy works there*, and the Bulwark clause (outlasts the
+  median by ×1.5+ in open profiles, still dies eventually) pins the
+  archetype gap in numbers: 22–24 s median vs 39–40 s Bulwark in the same
+  storm.
+- **The muzzle moved from 18 u to 6 u.** LoS testing surfaced the old
+  Known-limitations whiff: projectiles spawned 18 u toward the target could
+  start *past* a contact-range enemy and miss forever. Bastion sanctions
+  standing still, so point-blank contact has to be hittable; the entry is
+  fixed, not worked around.
+- **The looting window is 8 seconds** (`CONFIG.SIEGE_LOOT_WINDOW_S`). The
+  brief asked for a "short looting window" on sieges; 8 s crosses a big
+  siege arena once with typical Tempo but doesn't stall the descent. It's
+  a visible synced countdown ("◆ sweep!"), then the fizzle report, then
+  hatch + post-boss shops. On floor 4 the run ends after the window instead.
+- **The economy shift is real and intended**: with the vacuum gone, probe
+  bots collect ~75% of a floor's drops mid-fight (floor-1 earned ~820 →
+  ~610–705; end-of-floor-2 holdings ~1,240 → ~750–1,011). That eats most of
+  the patch-8 "buy anything late-run" surplus without touching prices, and
+  it makes **Reach** (pickup radius) and **Greed's flat clear bonus**
+  (immune to fizzle) quietly better — logged here as the intended direction,
+  not a bug.
+- **Line of sight exposed a real deadlock, fixed with a stall detector, not
+  pathfinding.** Pre-LoS, through-wall shots were a hidden crutch: a
+  straggler wedged in a concave wall pocket still died to auto-aim. With
+  walls real, a wave-end rusher that stops making progress (moved <24 u in
+  1.2 s) now picks a random 420 u detour waypoint and tries again. Cheap,
+  and it kept every scripted full run finishable; proper pathfinding stays
+  out of jam scope.
+- **Enemy gunners may still fire into walls occasionally** — deliberate.
+  Denied line of sight they drift sideways toward an angle, hold most
+  shots (25% fire anyway), and retry sooner. Perfectly wall-aware enemies
+  read as psychic; occasionally dusting masonry reads as dumb, which is
+  correct.
+- **Perf, re-measured with LoS raycasts + a full puddle cap at the crests**:
+  sim siege stress 311→157 alive runs ~0.33 ms/tick (60 Hz budget: 16.6 ms);
+  the headless-browser render gates with 14 acid puddles active and LoS on
+  held 60 fps at the ~300-alive desktop crest and 60 fps at the ~230-alive
+  mobile-emulation crest (the suite logs `PERF` lines each run).
 
 ### The airhorn (the first asset pipeline)
 
@@ -700,10 +842,14 @@ never loads them:
   Lodestone's bond target re-evaluate on the periodic 0.25 s stat pass, so
   crossing an aura edge or swapping bond targets can lag by up to a quarter
   second. Invisible in play; measurable in a frame-by-frame test.
-- **Point-blank projectiles**: a ranged shot fired at an enemy standing
-  *exactly* on the player's center spawns just past it and can whiff. Only
-  reproducible with a pinned player in a harness — in real play enemies sit at
-  contact range and the player moves.
+- **No pathfinding**: enemies steer straight at you and slide along walls.
+  Line of sight made this visible — a straggler can wedge into a concave
+  wall pocket it can't steer out of. A stall detector re-routes any
+  wave-end rusher that stops making progress (a random detour waypoint), so
+  fights stay finishable, but the detour is a wander, not a route. Enemy
+  gunners denied line of sight drift sideways for an angle and occasionally
+  fire into the wall anyway — that one is deliberate (they're dumb, not
+  psychic).
 - **Balance is jam-grade**: probed by bots, a DPS harness and scripted runs,
   not hundreds of human hours. The ±40%-of-median DPS gate holds at floor-1
   baseline; full-run scaling (especially Greed economies and Overseer turret

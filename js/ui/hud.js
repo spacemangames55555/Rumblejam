@@ -51,10 +51,11 @@ export function updateHud(meta, view, hctx) {
   // the enemy counter: "incoming" while the spawn budget flows, then the exact
   // number alive — the switch is the sweep signal (leave stragglers, run for money)
   const ec = $('enemy-counter');
-  if (view.mode === 'arena' && (view.inc || (view.enemies && view.enemies.length))) {
+  const looting = view.loot !== null && view.loot !== undefined;
+  if (view.mode === 'arena' && (view.inc || looting || (view.enemies && view.enemies.length))) {
     ec.classList.remove('hidden');
     const n = view.enemies ? view.enemies.length : 0;
-    if (view.loot !== null && view.loot !== undefined) {
+    if (looting) {
       ec.innerHTML = `<b class="ec-loot">◆ sweep! ${Math.ceil(view.loot)}s</b>`;
     } else if (view.inc) {
       ec.innerHTML = `<span class="ec-inc">〰 incoming</span><span class="ec-n">${n}</span>`;
