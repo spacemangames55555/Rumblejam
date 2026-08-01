@@ -68,6 +68,7 @@ function renderMap(state) {
       return `<button class="${cls}" data-node="${n.id}" ${reachable.has(n.id) ? '' : 'disabled'}>
         <span class="mn-sym">${meta.sym}</span>
         <span class="mn-name">${meta.name}</span>
+        ${n.profile === 'bastion' ? '<span class="mn-bastion" title="Bastion — hold-your-ground fight">⛊</span>' : ''}
         ${state.vote && state.vote.nodeId === n.id ? `<span class="mn-count">${Math.ceil(state.vote.t)}</span>` : ''}
       </button>`;
     }).join('')}</div>`).join('');

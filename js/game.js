@@ -4,9 +4,9 @@
 
 import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, SCALING_RATES } from './config.js';
 import { Rng, subRng } from './rng.js';
-import { Pool, SpatialHash, clamp, dist, dist2, angleTo } from './util.js';
+import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
-import { buildArena, waveConfig } from './arenas.js';
+import { buildArena, waveConfig, PROFILES } from './arenas.js';
 import { CHAR_BY_ID } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
@@ -80,6 +80,7 @@ export class Sim {
     this.afterSiege = false;  // portal descends instead of returning to the map
     this.mutations = null; this.mutIdx = 0; this.siegeT = 0; this.bossAt = Infinity;
     this.bossSpawned = false; this.bossT = 0; this.siegeCfg = null;
+    this.profile = null; this.fronts = [0, 2]; this.fightLoot = 0; this.lootT = null;
     this.holdCircle = null;   // {x,y,r,held} — spawn-choke sub-objective
     this.pylonId = null; this.enemyBuff = 1;
     this._startFloor(1);
@@ -98,7 +99,7 @@ export class Sim {
       idx, name: member.name || `Player ${idx + 1}`, charId: char.id, char,
       color: member.color, gone: false,
       x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.key === 'immovable' ? char.trait.hitbox : 1),
-      mx: 0, my: 0, interact: false, moving: false, aimA: 0,
+      mx: 0, my: 0, interact: false, moving: false, aimA: 0, stillT: 0,
       hp: 1, shield: 0, downed: false, reviveP: 0, invuln: 0, pullX: 0, pullY: 0,
       level: 1, xp: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
       materials: 0, matsCollected: 0, banked: 0,
@@ -454,6 +455,14 @@ export class Sim {
     this.roomEnteredT = this.time;
     this.waveRng = subRng(this.seed, 'wave', this.floorNum, node.id);
     this.wave = waveConfig(this.floorNum, node.col, node.kind);
+    // the fight's pressure profile: sieges are always high-friction; stops
+    // have none; combat/elite carry the recipe rolled at map generation
+    this.profile = node.kind === 'siege' ? PROFILES.siege : (PROFILES[node.profile] || PROFILES.mixed);
+    // Bastion streams from ONE arena edge (0=n 1=e 2=s 3=w) — a single front
+    // is a queue, and holding ground against a queue is the sanctioned play
+    this.fronts = [this.waveRng.int(0, 3)];
+    this.fightLoot = 0;  // materials actually picked up this fight
+    this.lootT = null;   // the siege's post-boss looting countdown
     // siege script
     if (node.kind === 'siege') {
       this.mutations = arena.mutations;
@@ -516,7 +525,8 @@ export class Sim {
     if (!w || w.done) return;
     w.t += dt;
     if (w.t >= w.dur) { w.done = true; return; }
-    let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult;
+    let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult
+      * ((this.profile && this.profile.rateMult) || 1);
     if (this.boss) {
       // "reduced add spawns" while the boss is up — and tapering to silence,
       // so a siege is never an unwinnable DPS race against infinite inflow:
@@ -544,12 +554,23 @@ export class Sim {
     while (w.acc >= 1 && guard++ < 20) {
       w.acc -= 1;
       if (this.enemyPool.count + this.spawnQueue.length >= CONFIG.POOL_ENEMIES - 10) break; // pool headroom
+      const prof = this.profile || {};
       const table = FLOOR_TABLES[this.floorNum - 1];
       let id = table[Math.floor(this.waveRng.float() * table.length)];
+      let mortar = false, puddle = false;
+      // profile levers shape the roll: flankers become wave citizens,
+      // artillery turns Lobbers into mortars, chaff picks up death-puddles
+      if (prof.flankers && this.waveRng.chance(prof.flankers)) {
+        id = this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish';
+      } else if (prof.artillery && this.waveRng.chance(prof.artillery)) {
+        id = 'lobber'; mortar = true;
+      }
+      if (prof.ban && prof.ban.includes(id)) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
       const cap = SPAWN_CAPS[id] && Math.round(SPAWN_CAPS[id] * CONFIG.spawnBudgetMult);
-      if (cap && this._aliveOfType(id) >= cap) id = table[0] === id ? table[1] : table[0];
+      if (cap && this._aliveOfType(id) >= cap) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
+      if (prof.puddle && (id === 'skulker' || id === 'flit') && this.waveRng.chance(prof.puddle)) puddle = true;
       const pos = this._spawnWavePos();
-      this.spawnQueue.push({ t: 0.7, id, x: pos.x, y: pos.y });
+      this.spawnQueue.push({ t: 0.7, id, x: pos.x, y: pos.y, mortar, puddle });
       this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 26, dur: 0.7, spawnMark: true });
     }
   }
@@ -560,14 +581,53 @@ export class Sim {
     return n;
   }
 
+  // Spawn geometry is the profile's first lever:
+  //  - ring (default outside Bastion): the swarm assembles around the players'
+  //    CURRENT positions, just off-screen, biased toward backs and flanks.
+  //    Co-op merges per-player rings (anchor rotates; never on anyone's screen).
+  //  - fronts (Bastion): enemies stream in from two arena edges — the
+  //    hold-your-ground fight.
   _spawnWavePos() {
     const rng = this.waveRng;
+    const live = this.livePlayers().filter(p => !p.downed);
+    if (this.profile && this.profile.ring && live.length) {
+      for (let tries = 0; tries < 24; tries++) {
+        const anchor = live[Math.floor(rng.float() * live.length)];
+        let a = rng.float() * Math.PI * 2;
+        if (anchor.moving) {
+          // bias behind and beside the runner — the swarm cuts off retreat
+          const back = Math.atan2(-anchor.my, -anchor.mx);
+          a = back + (rng.float() - 0.5) * Math.PI * 1.5;
+        }
+        const R = 640 + rng.float() * 180;
+        const x = clamp(anchor.x + Math.cos(a) * R, WALL + 40, this.W - WALL - 40);
+        const y = clamp(anchor.y + Math.sin(a) * R, WALL + 40, this.H - WALL - 40);
+        if (this._inObstacle(x, y, 24)) continue;
+        let ok = true;
+        for (const p of live) if (dist2(x, y, p.x, p.y) < 520 * 520) { ok = false; break; }
+        if (ok) return { x, y };
+      }
+    }
+    if (this.profile && !this.profile.ring) {
+      // Bastion fronts: stream along the fight's two designated edges
+      for (let tries = 0; tries < 24; tries++) {
+        const edge = this.fronts[Math.floor(rng.float() * this.fronts.length)];
+        const along = rng.float();
+        const inset = WALL + 50 + rng.float() * 60;
+        const x = edge === 1 ? this.W - inset : edge === 3 ? inset : WALL + 60 + along * (this.W - 2 * WALL - 120);
+        const y = edge === 0 ? inset : edge === 2 ? this.H - inset : WALL + 60 + along * (this.H - 2 * WALL - 120);
+        if (this._inObstacle(x, y, 24)) continue;
+        let ok = true;
+        for (const p of live) if (dist2(x, y, p.x, p.y) < 300 * 300) { ok = false; break; }
+        if (ok) return { x, y };
+      }
+    }
     for (let tries = 0; tries < 24; tries++) {
       const x = WALL + 60 + rng.float() * (this.W - 2 * WALL - 120);
       const y = WALL + 60 + rng.float() * (this.H - 2 * WALL - 120);
       if (this._inObstacle(x, y, 24)) continue;
       let ok = true;
-      for (const p of this.livePlayers()) if (dist2(x, y, p.x, p.y) < 300 * 300) { ok = false; break; }
+      for (const p of live) if (dist2(x, y, p.x, p.y) < 300 * 300) { ok = false; break; }
       if (ok) return { x, y };
     }
     return { x: clamp(this.W / 2 + (rng.float() - 0.5) * this.W * 0.8, WALL + 60, this.W - WALL - 60), y: WALL + 80 };
@@ -583,13 +643,12 @@ export class Sim {
 
   _clearFight() {
     this.cleared = true;
-    this.pushEvent({ k: 'roomClear' });
+    // money doesn't wait: no end-of-fight vacuum — whatever wasn't collected
+    // during the fight fizzles the moment the last enemy dies, and the banner
+    // reports both numbers so the rule teaches itself
+    const lost = this._fizzleLoot();
+    this.pushEvent({ k: 'roomClear', collected: this.fightLoot, lost });
     this.pushEvent({ k: 'sfx', s: 'door' });
-    // magnet the field to the nearest players, resolve the fight's rewards
-    for (const m of this.pickups) {
-      const p = this.nearestLivingPlayer(m.x, m.y);
-      if (p) m.target = p.idx;
-    }
     for (const p of this.livePlayers()) this._clearRewards(p);
     if (this.arenaNode.kind === 'elite') {
       for (const p of this.livePlayers()) this._offerTreasure(p, 'elite');
@@ -607,6 +666,31 @@ export class Sim {
       x = clamp(x, WALL + 80, this.W - WALL - 80); y = clamp(y, WALL + 80, this.H - WALL - 80);
     }
     return { x, y };
+  }
+
+  // uncollected materials vanish — visibly (little pops where they sat)
+  _fizzleLoot() {
+    let lost = 0;
+    for (let i = 0; i < this.pickups.length; i++) {
+      lost += this.pickups[i].v;
+      if (i < 14) this.fx.booms.push({ x: Math.round(this.pickups[i].x), y: Math.round(this.pickups[i].y), r: 12 });
+    }
+    this.pickups.length = 0;
+    return Math.round(lost);
+  }
+
+  // the Siege's looting window: after the boss dies, a visible countdown to
+  // sweep the field before the spoils fizzle and extraction opens
+  _tickLoot(dt) {
+    if (this.lootT === null || this.lootT === undefined || this.over) return;
+    this.lootT -= dt;
+    if (this.lootT > 0) return;
+    this.lootT = null;
+    const lost = this._fizzleLoot();
+    this.pushEvent({ k: 'lootOver', collected: this.fightLoot, lost });
+    if (this.floorNum >= CONFIG.FLOORS) { this.pendingEnd = 0.8; return; }
+    this.hatch = this._openSpot(this.W / 2, this.H / 2); // descend from here
+    for (const p of this.livePlayers()) this._openShop(p, 'boss');
   }
 
   // Extraction: any live player standing on the portal runs the 4s countdown
@@ -742,6 +826,44 @@ export class Sim {
     return false;
   }
 
+  // ---------------- line of sight (patch 9): walls block attacks ----------------
+
+  losBlocked(x0, y0, x1, y1) {
+    for (const o of this.obstacles) {
+      // cheap bbox reject before the raycast
+      if (Math.max(x0, x1) < o.x || Math.min(x0, x1) > o.x + o.w
+        || Math.max(y0, y1) < o.y || Math.min(y0, y1) > o.y + o.h) continue;
+      if (segHitsRect(x0, y0, x1, y1, o.x, o.y, o.w, o.h)) return true;
+    }
+    return false;
+  }
+
+  // clip a ray to the first wall it hits (sniper beams, etc.)
+  losClipLen(x, y, a, len) {
+    if (!this.obstacles.length) return len;
+    const x1 = x + Math.cos(a) * len, y1 = y + Math.sin(a) * len;
+    let best = len;
+    for (const o of this.obstacles) {
+      const t = segRectEntryT(x, y, x1, y1, o.x, o.y, o.w, o.h);
+      if (t >= 0) best = Math.min(best, t * len);
+    }
+    return best;
+  }
+
+  // auto-aim never targets an enemy the shot can't reach: nearest VISIBLE.
+  // Walked in distance order — the first raycast that passes wins.
+  _nearestVisibleEnemy(x, y, range) {
+    if (!this.obstacles.length) return this._nearestEnemy(x, y, range);
+    const cands = [];
+    for (const e of this.enemyPool) {
+      const d = dist2(x, y, e.x, e.y);
+      if (d < range * range) cands.push({ d, e });
+    }
+    cands.sort((a, b) => a.d - b.d);
+    for (const c of cands) if (!this.losBlocked(x, y, c.e.x, c.e.y)) return c.e;
+    return null;
+  }
+
   // deterministic nearest clear point: rings outward from (x, y)
   _clearSpot(x, y, r) {
     if (!this._inObstacle(x, y, r)) return [x, y];
@@ -802,6 +924,10 @@ export class Sim {
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0.8 + Math.random(), healTarget: null, brood: null, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
+      // pressure-profile variants (patch 9)
+      mortar: !!opts.mortar,   // Lobber artillery: telegraphed shells on your position
+      puddle: !!opts.puddle,   // chaff that leaves an acid puddle on death
+      rushSet: false, rushX: 0, rushY: 0, // wave-end rush overshoot target
     });
     return e;
   }
@@ -890,8 +1016,9 @@ export class Sim {
     this._tickDecoys(dt);
     // revives
     this._tickRevive(dt);
-    // fight clear + extraction portal countdown
+    // fight clear + the siege looting window + extraction portal countdown
     this._checkFightClear();
+    this._tickLoot(dt);
     this._tickExtract(dt);
   }
 
@@ -901,7 +1028,7 @@ export class Sim {
       q.t -= dt;
       if (q.t <= 0) {
         this.spawnQueue.splice(i, 1);
-        this.spawnEnemyById(q.id, q.x, q.y, { elite: q.elite, mod: q.mod });
+        this.spawnEnemyById(q.id, q.x, q.y, { elite: q.elite, mod: q.mod, mortar: q.mortar, puddle: q.puddle });
       }
     }
   }
@@ -918,6 +1045,7 @@ export class Sim {
 
     // movement — Tempo drives it; Grit shrugs off pulls
     p.moving = (p.mx !== 0 || p.my !== 0);
+    p.stillT = p.moving ? 0 : (p.stillT || 0) + dt; // snipers lock faster onto statues
     const t = p.char.trait;
     let spd = CONFIG.BASE_SPEED * (1 + p.stats.tempo / 100);
     spd = Math.max(60, spd);
@@ -1114,7 +1242,11 @@ export class Sim {
   _fireWeapon(p, w, widx, opts = {}) {
     const def = WEAPON_BY_ID[w.id];
     const range = this._weaponRange(p, def);
-    const target = opts.target || this._nearestEnemy(p.x, p.y, range);
+    // lobbed weapons arc over walls — that's their identity; everything else
+    // targets the nearest VISIBLE enemy
+    const target = opts.target || (def.cls === 'lobbed'
+      ? this._nearestEnemy(p.x, p.y, range)
+      : this._nearestVisibleEnemy(p.x, p.y, range));
     if (!target) return;
     const a = angleTo(p.x, p.y, target.x, target.y);
     p.aimA = a;
@@ -1182,6 +1314,7 @@ export class Sim {
           if (d > range + e.radius) return;
           const da = Math.abs(angDiffLocal(a, angleTo(p.x, p.y, e.x, e.y)));
           if (da > def.arc / 2) return;
+          if (this.losBlocked(p.x, p.y, e.x, e.y)) return; // melee can't hit through walls
           e._swingStamp = this.tickNum + widx * 1000;
           this._hitEnemy(e, dmg, hitCtx, a);
           hits++;
@@ -1195,6 +1328,7 @@ export class Sim {
         const hits = [];
         this.grid.query(p.x + Math.cos(a) * range / 2, p.y + Math.sin(a) * range / 2, range / 2 + 40, e => {
           if (!e.active || hits.includes(e)) return;
+          if (this.losBlocked(p.x, p.y, e.x, e.y)) return; // no thrusting through walls
           if (pointToSegDist(e.x, e.y, p.x, p.y, p.x + Math.cos(a) * range, p.y + Math.sin(a) * range) < (def.thrustW / 2 + e.radius)) hits.push(e);
         });
         hits.sort((e1, e2) => dist2(p.x, p.y, e1.x, e1.y) - dist2(p.x, p.y, e2.x, e2.y));
@@ -1237,7 +1371,9 @@ export class Sim {
     let pierce = (def.pierce || 0) + p.hookAgg.extraPierce;
     if (p.char.trait.key === 'pierce_innate') pierce += p.char.trait.add;
     Object.assign(pr, {
-      id: ++this.spawnCounter, x: p.x + Math.cos(a) * 18, y: p.y + Math.sin(a) * 18,
+      // spawn at the muzzle's base (6u), NOT 18u out: an enemy standing on the
+      // player's center must be hittable — Bastion sanctions standing still
+      id: ++this.spawnCounter, x: p.x + Math.cos(a) * 6, y: p.y + Math.sin(a) * 6,
       vx: Math.cos(a) * def.projSpeed, vy: Math.sin(a) * def.projSpeed,
       dmg, crit, friendly: true, lob: false, ttl: (range + 60) / def.projSpeed,
       radius: 5, color: def.color, owner: p.idx, pierce, hitIds: new Set(),
@@ -1325,6 +1461,8 @@ export class Sim {
     for (let i = 0; i < chain.count; i++) {
       const next = this._nearestEnemyExcept(from.x, from.y, chain.range, from, hit);
       if (!next) break;
+      // lightning doesn't bend around corners: each hop needs line of sight
+      if (this.losBlocked(from.x, from.y, next.x, next.y)) break;
       hit.add(next.id);
       this.fx.beams.push({ x1: from.x, y1: from.y, x2: next.x, y2: next.y, color: '#4fd8eb' });
       this.damageEnemy(next, dmg, { owner: p });
@@ -1461,6 +1599,19 @@ export class Sim {
     }
     // death behaviors
     if (!e.boss) {
+      // death-puddle chaff: campers manufacture their own toxic lake
+      if (e.puddle) {
+        const puds = this.zones.filter(z => z.acid);
+        if (puds.length >= CONFIG.PUDDLE_CAP) {
+          // oldest fades first (capped for perf and readability)
+          const oldest = puds.reduce((a, b) => (a.t > b.t ? a : b));
+          oldest.dur = Math.min(oldest.dur, oldest.t + 0.5);
+        }
+        this.addZone({
+          x, y, r: CONFIG.PUDDLE_R, dps: CONFIG.PUDDLE_DPS * e.dmgScale,
+          dur: CONFIG.PUDDLE_DUR, hurts: 'players', color: '#7dee6a', acid: true,
+        });
+      }
       if (e.def.behavior === 'splitter' && !e.mini) {
         for (let i = 0; i < e.def.splitInto; i++) {
           this.spawnEnemyById(e.def.id, x + (i ? 18 : -18), y + (Math.random() * 20 - 10), { mini: true, noMats: false });
@@ -1483,7 +1634,8 @@ export class Sim {
     this.pushEvent({ k: 'sfx', s: 'boom' });
     this.shake = Math.max(this.shake, 5);
     for (const p of this.livePlayers()) {
-      if (!p.downed && dist2(x, y, p.x, p.y) < (boom.radius + p.radius) * (boom.radius + p.radius)) {
+      if (!p.downed && dist2(x, y, p.x, p.y) < (boom.radius + p.radius) * (boom.radius + p.radius)
+        && !this.losBlocked(x, y, p.x, p.y)) { // blasts don't reach through walls
         this.hurtPlayer(p, boom.dmg * e.dmgScale, e);
       }
     }
@@ -1497,6 +1649,7 @@ export class Sim {
       if (!e.active || seen.has(e.id) || e === opts.exclude) return;
       seen.add(e.id);
       if (dist2(x, y, e.x, e.y) <= (radius + e.radius) * (radius + e.radius)) {
+        if (this.losBlocked(x, y, e.x, e.y)) return; // blasts are clipped by walls
         this.damageEnemy(e, dmg, { owner, silent: opts.silent, crit: false });
       }
     });
@@ -1621,6 +1774,8 @@ export class Sim {
           if (expired || oob) { this._lobExplode(pr); this.projPool.release(pr); }
           continue;
         }
+        // straight shots are absorbed by walls (lobs above arc over)
+        if (this.obstacles.length && this._inObstacle(pr.x, pr.y, 0)) { this.projPool.release(pr); continue; }
         if (expired || oob) { this.projPool.release(pr); continue; }
         // vs enemies
         let dead = false;
@@ -1638,6 +1793,8 @@ export class Sim {
         });
         if (dead) this.projPool.release(pr);
       } else {
+        // enemy shots are absorbed by walls too — cover is symmetric and real
+        if (this.obstacles.length && this._inObstacle(pr.x, pr.y, 0)) { this.projPool.release(pr); continue; }
         if (expired || oob) { this.projPool.release(pr); continue; }
         for (const p of this.livePlayers()) {
           if (p.downed) continue;
@@ -1661,6 +1818,7 @@ export class Sim {
       if (!e.active || seen.has(e.id)) return;
       seen.add(e.id);
       if (dist2(pr.x, pr.y, e.x, e.y) <= (def.aoe + e.radius) * (def.aoe + e.radius)) {
+        if (this.losBlocked(pr.x, pr.y, e.x, e.y)) return; // the shell arcs over, the blast doesn't
         this._hitEnemy(e, pr.dmg, { owner, crit: pr.crit, weaponDef: def, knock: def.knock * owner.hookAgg.knockMult, baseDmg: pr.dmg });
       }
     });
@@ -1688,6 +1846,7 @@ export class Sim {
   addVortex(x, y, v, scale) { this.vortexes.push({ x, y, t: v.dur, pullR: v.pullR, pullSpd: v.pullSpd, dps: v.dps * scale, coreR: v.coreR, acc: 0 }); }
 
   fireBeam(x, y, a, len, width, dmg, src) {
+    len = this.losClipLen(x, y, a, len); // beams stop at the first wall
     this.fx.beams.push({ x1: x, y1: y, x2: x + Math.cos(a) * len, y2: y + Math.sin(a) * len, color: '#ff5d6c', w: width });
     for (const p of this.livePlayers()) {
       if (p.downed) continue;
@@ -1698,6 +1857,7 @@ export class Sim {
   }
 
   beamDamageTick(x, y, a, len, width, dps, dt) {
+    len = this.losClipLen(x, y, a, len); // beams stop at the first wall
     this.activeBeams.push({ x: Math.round(x), y: Math.round(y), a: +a.toFixed(3), len, w: width });
     for (const p of this.livePlayers()) {
       if (p.downed) continue;
@@ -1723,7 +1883,8 @@ export class Sim {
           this.pushEvent({ k: 'sfx', s: 'boom' });
           this.shake = Math.max(this.shake, 4);
           for (const p of this.livePlayers()) {
-            if (!p.downed && dist2(tg.x, tg.y, p.x, p.y) <= (tg.boom.radius + p.radius) * (tg.boom.radius + p.radius)) {
+            if (!p.downed && dist2(tg.x, tg.y, p.x, p.y) <= (tg.boom.radius + p.radius) * (tg.boom.radius + p.radius)
+              && !this.losBlocked(tg.x, tg.y, p.x, p.y)) { // blasts don't reach through walls
               this.hurtPlayer(p, tg.boom.dmg, null);
             }
           }
@@ -1852,6 +2013,7 @@ export class Sim {
         m.y += Math.sin(a) * m.spd * dt;
         if (dist2(m.x, m.y, p.x, p.y) < (p.radius + 8) * (p.radius + 8)) {
           this.pickups.splice(i, 1);
+          this.fightLoot += m.v; // the fight's "collected" tally for the clear banner
           this._collectMaterial(p, m.v);
         }
       }
@@ -2000,14 +2162,10 @@ export class Sim {
     for (const pr of this.projPool) if (!pr.friendly) this.projPool.release(pr);
     this.pushEvent({ k: 'bossDown', name: bossName });
     this.pushEvent({ k: 'sfx', s: 'boom' });
-    for (const m of this.pickups) { const p = this.nearestLivingPlayer(m.x, m.y); if (p) m.target = p.idx; }
     for (const p of this.livePlayers()) this._clearRewards(p); // the siege is a fight clear too
-    if (this.floorNum >= CONFIG.FLOORS) {
-      this.pendingEnd = 2.5; // brief beat to vacuum materials, then victory
-    } else {
-      this.hatch = this._openSpot(this.W / 2, this.H / 2); // descend from here
-      for (const p of this.livePlayers()) this._openShop(p, 'boss');
-    }
+    // the looting window: the boss's payout just dropped and nobody could
+    // safely sweep during phases — 8 s to run the field, THEN extraction
+    this.lootT = CONFIG.SIEGE_LOOT_WINDOW_S;
   }
 
   // ---------------- offers: level-ups & treasure ----------------
@@ -2370,7 +2528,7 @@ export class Sim {
         s.x += (tx - s.x) * Math.min(1, dt * 8);
         s.y += (ty - s.y) * Math.min(1, dt * 8);
       } else if (s.type === 'ram') {
-        const target = this._nearestEnemy(s.x, s.y, st.range + 100);
+        const target = this._nearestVisibleEnemy(s.x, s.y, st.range + 100); // turrets/summons are LoS-aware too
         if (target) {
           const a = angleTo(s.x, s.y, target.x, target.y);
           s.x += Math.cos(a) * (st.speed || 300) * dt;
@@ -2409,7 +2567,7 @@ export class Sim {
         if (hit) s.cd = st.cd;
         continue;
       }
-      const target = this._nearestEnemy(s.x, s.y, st.range);
+      const target = this._nearestVisibleEnemy(s.x, s.y, st.range); // turrets/summons are LoS-aware too
       if (!target) { s.cd = 0.1; continue; }
       s.cd = st.cd;
       const a = angleTo(s.x, s.y, target.x, target.y);
@@ -2677,6 +2835,9 @@ export class Sim {
       // consent countdowns: node vote (map) and extraction (arena)
       vote: this.nodeVote ? { nodeId: this.nodeVote.nodeId, t: +this.nodeVote.t.toFixed(2), byIdx: this.nodeVote.byIdx } : null,
       extract: this.extract ? +this.extract.t.toFixed(2) : null,
+      // the enemy counter's two states + the siege looting countdown
+      inc: this.phase === 'arena' && this.wave && !this.wave.done ? 1 : 0,
+      loot: this.lootT !== null && this.lootT !== undefined ? +this.lootT.toFixed(2) : null,
       hatch: this.hatch ? [r(this.hatch.x), r(this.hatch.y)] : null,
       hold: this.holdCircle ? [r(this.holdCircle.x), r(this.holdCircle.y), r(this.holdCircle.r), this.holdCircle.held ? 1 : 0] : null,
       players: this.players.map(p => [p.idx, r(p.x), r(p.y), r(p.hp), p.stats.vitality, p.downed ? 1 : 0, +p.reviveP.toFixed(2), r(p.shield), p.gone ? 1 : 0, +p.aimA.toFixed(2), +this._displayMeter(p).toFixed(2), p.carrying ? 1 : 0]),

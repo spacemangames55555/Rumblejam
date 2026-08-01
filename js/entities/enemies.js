@@ -4,6 +4,33 @@
 
 import { dist, dist2, angleTo, clamp } from '../util.js';
 
+// wave-end rush: dash THROUGH the player's position and overshoot — the
+// fight ends in chaos, not a queue politely settling at melee range.
+// Stall detection re-rolls the waypoint randomly: an enemy wedged in a
+// concave wall pocket (there is no pathfinding) escapes stochastically
+// instead of grinding into the wall forever — with line of sight live,
+// a wall-stuck straggler would otherwise make the fight unfinishable.
+function rushMove(sim, e, p, spd, dt) {
+  e.stuckT = (e.stuckT || 0) + dt;
+  if (e.stuckT >= 1.2) {
+    const moved = dist2(e.x, e.y, e.stuckX || 0, e.stuckY || 0);
+    e.stuckX = e.x; e.stuckY = e.y; e.stuckT = 0;
+    if (moved < 24 * 24) { // barely moved: detour somewhere open at random
+      const a = Math.random() * Math.PI * 2;
+      e.rushX = clamp(e.x + Math.cos(a) * 420, 40, sim.W - 40);
+      e.rushY = clamp(e.y + Math.sin(a) * 420, 40, sim.H - 40);
+      e.rushSet = true;
+    }
+  }
+  if (!e.rushSet || dist2(e.x, e.y, e.rushX, e.rushY) < 40 * 40) {
+    const a = angleTo(e.x, e.y, p.x, p.y);
+    e.rushX = clamp(p.x + Math.cos(a) * 240, 40, sim.W - 40);
+    e.rushY = clamp(p.y + Math.sin(a) * 240, 40, sim.H - 40);
+    e.rushSet = true;
+  }
+  sim.walk(e, e.rushX, e.rushY, spd * 1.3, dt);
+}
+
 export function updateEnemy(sim, e, dt) {
   // status effects
   if (e.burnT > 0) {
@@ -51,14 +78,40 @@ export function updateEnemy(sim, e, dt) {
   // kiting — the field must be cleared to end the fight, so nobody hides
   const rush = sim.wave && sim.wave.done;
   e.t += dt;
+
+  // artillery (pressure-profile variant): a mortar Lobber lobs telegraphed
+  // shells at the target's CURRENT position — shells land where you WERE,
+  // so stillness is the one behavior it punishes. Shells arc over walls.
+  if (e.mortar) {
+    const M = t.mortar || { cd: 3.4, dmg: 8, radius: 62, windup: 1.35, range: 950 };
+    if (p) {
+      if (rush) rushMove(sim, e, p, spd, dt);
+      else {
+        const d0 = dist(e.x, e.y, p.x, p.y);
+        if (d0 < 340) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
+        else if (d0 > 640) sim.walk(e, p.x, p.y, spd, dt);
+      }
+      e.fireT -= dt;
+      if (e.fireT <= 0 && dist(e.x, e.y, p.x, p.y) < M.range) {
+        e.fireT = M.cd * (0.85 + Math.random() * 0.3);
+        sim.addTelegraph({
+          shape: 'circle', x: p.x, y: p.y, r: M.radius, dur: M.windup,
+          boom: { dmg: Math.round(M.dmg * e.dmgScale), radius: M.radius },
+        });
+      }
+    }
+    return;
+  }
+
   switch (t.behavior) {
     case 'pylon': break; // the siege's ward pylon just stands there, humming
     case 'chaser': {
-      if (p) sim.walk(e, p.x, p.y, spd, dt);
+      if (p) { if (rush) rushMove(sim, e, p, spd, dt); else sim.walk(e, p.x, p.y, spd, dt); }
       break;
     }
     case 'sprinter': {
       if (p) {
+        if (rush) { rushMove(sim, e, p, spd, dt); break; }
         // weave: sine offset perpendicular to approach
         const a = angleTo(e.x, e.y, p.x, p.y);
         const wob = Math.sin(e.t * 6 + e.id) * 0.7;
@@ -67,20 +120,22 @@ export function updateEnemy(sim, e, dt) {
       break;
     }
     case 'brute': {
-      if (p) sim.walk(e, p.x, p.y, spd, dt);
+      if (p) { if (rush) rushMove(sim, e, p, spd, dt); else sim.walk(e, p.x, p.y, spd, dt); }
       break;
     }
     case 'spitter': {
       if (!p) break;
       const d = dist(e.x, e.y, p.x, p.y);
-      // rush closes to CONTACT, not to firing range — a beaten wave's
-      // survivors must come to the blade, or melee kits face a permanent
-      // firing squad hovering just outside reach
-      if (rush) { if (d > 40) sim.walk(e, p.x, p.y, spd, dt); }
+      const blocked = sim.losBlocked(e.x, e.y, p.x, p.y);
+      if (rush) rushMove(sim, e, p, spd, dt);
+      else if (blocked) sim.walk(e, p.x, p.y, spd, dt); // drift toward line of sight
       else if (d < t.keepDist - 30) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
       else if (d > t.keepDist + 40) sim.walk(e, p.x, p.y, spd, dt);
       e.fireT = (e.fireT || 0) - dt;
       if (e.fireT <= 0 && d < 520) {
+        // an occasional shot into the wall is fine (cover WORKING is the
+        // point) — but mostly they hold fire and reposition
+        if (blocked && Math.random() > 0.25) { e.fireT = t.fireCd * 0.35; break; }
         e.fireT = t.fireCd * (0.8 + Math.random() * 0.4);
         const a = angleTo(e.x, e.y, p.x, p.y);
         sim.spawnEnemyProj(e.x, e.y, a, t.proj.speed, Math.round(t.proj.dmg * e.dmgScale), t.proj.radius, e.def.color);
@@ -95,6 +150,7 @@ export function updateEnemy(sim, e, dt) {
         e.diveT -= dt;
         if (e.diveT <= 0) e.phase = 0;
       } else {
+        if (rush) { rushMove(sim, e, p, spd, dt); break; }
         e.orbitA = (e.orbitA ?? Math.random() * 6.28) + dt * 1.4;
         const tx = p.x + Math.cos(e.orbitA) * t.orbitR;
         const ty = p.y + Math.sin(e.orbitA) * t.orbitR;
@@ -110,7 +166,7 @@ export function updateEnemy(sim, e, dt) {
       break;
     }
     case 'splitter': {
-      if (p) sim.walk(e, p.x, p.y, spd, dt);
+      if (p) { if (rush) rushMove(sim, e, p, spd, dt); else sim.walk(e, p.x, p.y, spd, dt); }
       break; // split handled on death in sim
     }
     case 'bomber': {
@@ -157,7 +213,7 @@ export function updateEnemy(sim, e, dt) {
       } else if (p) {
         e.healing = 0;
         const d = dist(e.x, e.y, p.x, p.y);
-        if (rush) sim.walk(e, p.x, p.y, spd, dt);
+        if (rush) rushMove(sim, e, p, spd, dt);
         else if (d < 300) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
       }
       break;
@@ -187,7 +243,7 @@ export function updateEnemy(sim, e, dt) {
         e.dashT -= dt;
         if (e.dashT <= 0) { e.phase = 0; e.dashCd = D.cd * (0.8 + Math.random() * 0.4); }
       } else {
-        if (p) sim.walk(e, p.x, p.y, spd * 0.9, dt);
+        if (p) { if (rush) rushMove(sim, e, p, spd, dt); else sim.walk(e, p.x, p.y, spd * 0.9, dt); }
         e.dashCd = (e.dashCd ?? D.cd * Math.random()) - dt;
         if (e.dashCd <= 0 && p && dist(e.x, e.y, p.x, p.y) < 420) {
           e.phase = 1; e.windT = D.windup;
@@ -216,15 +272,16 @@ export function updateEnemy(sim, e, dt) {
       } else {
         if (p) {
           const d = dist(e.x, e.y, p.x, p.y);
-          if (rush) sim.walk(e, p.x, p.y, spd, dt);
+          if (rush) rushMove(sim, e, p, spd, dt);
           else if (d < 260) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
           else sim.walk(e, p.x, p.y, spd * 0.5, dt);
         }
         e.fireCd = (e.fireCd ?? B.cd * Math.random()) - dt;
         if (e.fireCd <= 0 && p) {
-          e.phase = 1; e.windT = B.windup;
+          // snipers lock on faster against stationary targets
+          e.phase = 1; e.windT = B.windup * (p.stillT > 0.8 ? 0.55 : 1);
           e.aimA = angleTo(e.x, e.y, p.x, p.y);
-          sim.addTelegraph({ shape: 'beam', x: e.x, y: e.y, angle: e.aimA, w: B.width, len: B.len, dur: B.windup, follow: e, followAim: true });
+          sim.addTelegraph({ shape: 'beam', x: e.x, y: e.y, angle: e.aimA, w: B.width, len: B.len, dur: e.windT, follow: e, followAim: true });
         }
       }
       break;

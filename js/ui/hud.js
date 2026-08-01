@@ -48,6 +48,20 @@ export function updateHud(meta, view, hctx) {
   }
   $('hud-floor').innerHTML = top;
   $('hud-materials').innerHTML = meta ? `◆ ${meta.materials} <span class="dim" style="font-size:13px">· lvl ${meta.level}${meta.banked > 0 ? ` · <b style="color:var(--xp)">+${meta.banked} level-up${meta.banked > 1 ? 's' : ''} banked</b>` : ''}</span>` : '';
+  // the enemy counter: "incoming" while the spawn budget flows, then the exact
+  // number alive — the switch is the sweep signal (leave stragglers, run for money)
+  const ec = $('enemy-counter');
+  if (view.mode === 'arena' && (view.inc || (view.enemies && view.enemies.length))) {
+    ec.classList.remove('hidden');
+    const n = view.enemies ? view.enemies.length : 0;
+    if (view.loot !== null && view.loot !== undefined) {
+      ec.innerHTML = `<b class="ec-loot">◆ sweep! ${Math.ceil(view.loot)}s</b>`;
+    } else if (view.inc) {
+      ec.innerHTML = `<span class="ec-inc">〰 incoming</span><span class="ec-n">${n}</span>`;
+    } else {
+      ec.innerHTML = `<b class="ec-n exact">⚔ ${n}</b>`;
+    }
+  } else ec.classList.add('hidden');
   // weapons
   if (meta) {
     const slots = [];

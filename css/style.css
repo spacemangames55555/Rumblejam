@@ -117,6 +117,17 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 .map-node.voted{border-color:#5ee0a8; animation:votepulse .8s infinite;}
 .map-node.mn-siege{min-height:84px; border-width:3px;}
 .map-node.mn-siege .mn-sym{font-size:30px; color:var(--danger);}
+.map-node .mn-bastion{position:absolute; top:2px; left:4px; font-size:13px; color:#8fa3c8; opacity:0.85;}
+/* the enemy counter — top-center, readable at a glance, clear of tap targets */
+#enemy-counter{position:absolute; top:8px; left:50%; transform:translateX(-50%);
+  min-width:96px; min-height:30px; padding:4px 14px; text-align:center;
+  background:#12141fd9; border:1px solid var(--line); border-radius:16px;
+  font-size:16px; pointer-events:none; z-index:5;}
+#enemy-counter .ec-inc{color:#8fa3c8; letter-spacing:1px;}
+#enemy-counter .ec-n{margin-left:8px; color:var(--ink);}
+#enemy-counter .ec-n.exact{color:var(--gold); font-size:18px;}
+#enemy-counter .ec-loot{color:var(--gold); font-size:18px; animation:votepulse 1s infinite;}
+body.touch-on #enemy-counter{min-height:44px; min-width:120px; font-size:18px; padding:8px 18px; top:6px;}
 .map-node .mn-count{position:absolute; top:-12px; right:-10px; background:#5ee0a8; color:#0b0c12;
   font-weight:bold; font-size:15px; min-width:26px; min-height:26px; border-radius:13px;
   display:flex; align-items:center; justify-content:center;}

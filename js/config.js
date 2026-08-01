@@ -50,6 +50,13 @@ export const CONFIG = {
   spawnBudgetMult: 1.25,   // arena + siege inflow, and the alive-at-once caps
   enemyHpMult: 1.12,       // every enemy: chaff, ranged, specials, elites, bosses
 
+  // The Friction Patch (patch 9)
+  PUDDLE_DPS: 8,           // acid puddle from death-puddle chaff (×floor dmg scale)
+  PUDDLE_R: 46,
+  PUDDLE_DUR: 6,
+  PUDDLE_CAP: 14,          // live puddles at once — oldest fades first
+  SIEGE_LOOT_WINDOW_S: 8,  // sweep-the-field countdown after the siege boss dies
+
   // Level-up airhorn (the game's first external asset — see assets/)
   AIRHORN_PATH: 'assets/airhorn.mp3',
   AIRHORN_VOL_OWN: 1.0,    // your own level-up
