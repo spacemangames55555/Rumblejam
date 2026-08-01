@@ -1017,6 +1017,259 @@ try {
   }
 } catch (err) { fail('friction gates crashed', err); }
 
+// ---- 9h. the Warband: 8-player scaling, ceiling, codec, traits, organic-8 ----
+try {
+  const { coopCurve } = await import('../js/game.js');
+  const { encodeSnap, decodeSnap, wireSize } = await import('../js/netcodec.js');
+  const { CONFIG: CW } = await import('../js/config.js');
+  const mkParty = ids => ids.map((c, i) => ({ idx: i, key: `w${i}`, name: `W${i}`, charId: c, color: '#fff' }));
+  const octet = n => mkParty(Array.from({ length: n }, (_, i) => ['bulwark', 'cindermage', 'zephyr', 'redmaw', 'longshot', 'frostcaller', 'banneret', 'voltaic'][i % 8]));
+
+  // softened curves at 2/4/6/8 — the exact numbers from the brief
+  const wantSpawn = { 2: 1.5, 4: 2.5, 6: 3.1, 8: 3.7 };
+  const wantHp = { 2: 1.35, 4: 2.05, 6: 2.45, 8: 2.85 };
+  let curvesOk = true;
+  for (const n of [2, 4, 6, 8]) {
+    const s = coopCurve(n, CW.COOP_SPAWN_SCALE, CW.COOP_SPAWN_SOFT);
+    const h = coopCurve(n, CW.COOP_HP_SCALE, CW.COOP_HP_SOFT);
+    if (Math.abs(s - wantSpawn[n]) > 1e-9 || Math.abs(h - wantHp[n]) > 1e-9) { curvesOk = false; fail(`curve at ${n}p: spawn ${s} hp ${h}`); }
+  }
+  if (curvesOk) ok('softened co-op curves: count ×1.5/2.5/3.1/3.7, HP ×1.35/2.05/2.45/2.85 at 2/4/6/8');
+  const w8 = new Sim({ seed: 616101, party: octet(8) });
+  if (Math.abs(w8.coopSpawn - 3.7) < 1e-9 && Math.abs(w8.coopHp - 2.85) < 1e-9) ok('an 8-player sim applies the softened multipliers');
+  else fail(`8p sim mults: ${w8.coopSpawn}/${w8.coopHp}`);
+
+  // arena scale-up: 5+ fights in ×1.25 bounds, ≤4 unchanged (same templates)
+  const dims = n => {
+    const s = new Sim({ seed: 424243, party: octet(n) });
+    s._travelTo(s.reachableNodes()[0]);
+    return [s.W, s.H, s.arenaNode.template];
+  };
+  const [w4, h4, t4] = dims(4);
+  const [w5, h5, t5] = dims(5);
+  if (t4 === t5 && Math.round(w4 * CW.ARENA_CROWD_SCALE) === w5 && Math.round(h4 * CW.ARENA_CROWD_SCALE) === h5)
+    ok(`5+ parties fight in ×${CW.ARENA_CROWD_SCALE} bounds, same template (${w4}×${h4} → ${w5}×${h5} ${t5})`);
+  else fail(`arena scale: 4p ${w4}×${h4} ${t4}, 5p ${w5}×${h5} ${t5}`);
+  // siege mutations scale with the arena so scripts land where the walls are
+  const s8 = new Sim({ seed: 424244, party: octet(8) });
+  s8._travelTo(s8.floor.siegeId);
+  const s1p = new Sim({ seed: 424244, party: octet(1) });
+  s1p._travelTo(s1p.floor.siegeId);
+  const m8 = s8.mutations.find(m => m.x !== undefined), m1 = s1p.mutations.find(m => m.x !== undefined);
+  if (m8 && m1 && m8.x === Math.round(m1.x * CW.ARENA_CROWD_SCALE)) ok('siege mutation coordinates scale with the 8-player arena');
+  else fail(`mutation scale: ${m1 && m1.x} → ${m8 && m8.x}`);
+
+  // the alive ceiling banks the budget instead of discarding it
+  {
+    const g = new Sim({ seed: 515151, party: octet(8) });
+    g._travelTo(g.reachableNodes()[0]);
+    for (const q of g.players) q.weapons.length = 0; // pacifists — nothing dies, the ceiling must bind
+    g.wave.r0 = g.wave.r1 = 400; // firehose
+    for (let i = 0; i < 60 * 8; i++) { g.tick(); for (const q of g.players) { q.hp = q.stats.vitality; q.invuln = 1; } }
+    const alive = g.enemyPool.count + g.spawnQueue.length;
+    if (alive <= CW.ALIVE_CEILING + 25) ok(`alive ceiling holds under a firehose (${alive} ≤ ${CW.ALIVE_CEILING}+splits)`);
+    else fail(`ceiling breach: ${alive}`);
+    if (g.wave.acc >= CW.SPAWN_BANK_CAP - 1 && g.wave.acc <= CW.SPAWN_BANK_CAP + 1e-6)
+      ok(`the spawn budget banks at the ceiling, capped at ${CW.SPAWN_BANK_CAP}`);
+    else fail(`bank at ceiling: acc=${g.wave.acc.toFixed(1)}`);
+    let killed = 0;
+    for (const e of [...g.enemyPool]) { if (killed++ >= 150) break; g.damageEnemy(e, 99999, { owner: g.players[0] }); if (e.active) g.damageEnemy(e, 99999, { owner: g.players[0] }); }
+    const drained = g.enemyPool.count;
+    for (let i = 0; i < 90; i++) { g.tick(); for (const q of g.players) { q.hp = q.stats.vitality; q.invuln = 1; } }
+    const refilled = g.enemyPool.count + g.spawnQueue.length;
+    if (refilled > drained + 60) ok(`banked budget flows in as slots free (${drained} → ${refilled} in 1.5 s)`);
+    else fail(`bank did not flow: ${drained} → ${refilled}`);
+  }
+
+  // codec: round-trip fidelity + wire size at a dense moment
+  {
+    const g = new Sim({ seed: 626262, party: octet(8) });
+    g._travelTo(g.floor.siegeId);
+    for (let i = 0; i < 7; i++) g.debug('F1');
+    for (let i = 0; i < 40; i++) { g.tick(); for (const q of g.players) { q.hp = q.stats.vitality; q.invuln = 1; } }
+    const snap = g.getSnapshot();
+    if (snap.ec === g.enemyPool.count) ok(`snapshot carries the authoritative alive count (ec ${snap.ec})`);
+    else fail(`ec ${snap.ec} vs pool ${g.enemyPool.count}`);
+    if (snap.enemies.length <= snap.ec) ok(`interest culling ships ${snap.enemies.length}/${snap.ec} enemies (chaff beyond ${CW.SNAP_CULL_R}u of every player stays home)`);
+    else fail('culled list larger than the field');
+    const bossSent = !snap.enemies.length || g.enemyPool.count === 0 || [...g.enemyPool].filter(e => e.boss || e.elite).every(e => snap.enemies.some(se => se[0] === e.id));
+    if (bossSent) ok('elites and bosses are never culled'); else fail('an elite/boss was culled');
+    const wire = encodeSnap(snap);
+    const back = decodeSnap(wire);
+    let rt = back.enemies.length === snap.enemies.length && back.projs.length === snap.projs.length
+      && back.pickups.length === snap.pickups.length && back.zones.length === snap.zones.length
+      && back.tele.length === snap.tele.length && back.fx.hits.length === snap.fx.hits.length
+      && back.fx.deaths.length === snap.fx.deaths.length;
+    for (let i = 0; i < snap.enemies.length && rt; i++) {
+      const a = snap.enemies[i], b = back.enemies[i];
+      rt = (a[0] & 0xffff) === b[0] && a[1] === b[1] && Math.abs(a[2] - b[2]) <= 1 && Math.abs(a[3] - b[3]) <= 1
+        && Math.abs(a[4] - b[4]) <= 0.01 && a[5] === b[5];
+    }
+    for (let i = 0; i < snap.projs.length && rt; i++) {
+      const a = snap.projs[i], b = back.projs[i];
+      rt = Math.abs(a[1] - b[1]) <= 1 && Math.abs(a[3] - b[3]) <= 1 && a[7] === b[7] && !a[5] === !b[5];
+    }
+    for (let i = 0; i < snap.tele.length && rt; i++) rt = snap.tele[i][0] === back.tele[i][0];
+    if (rt) ok('wire codec round-trips enemies/projs/pickups/zones/telegraphs/fx within quantization');
+    else fail('codec round-trip mismatch');
+    const wSz = wireSize(wire), jSz = JSON.stringify(snap).length;
+    if (wSz <= jSz * 0.55) ok(`packed snapshot is ≤55% of the JSON shape (${(wSz / 1024).toFixed(1)} KB vs ${(jSz / 1024).toFixed(1)} KB)`);
+    else fail(`packing too weak: ${wSz} vs ${jSz}`);
+    // the headline number: estimated host upload at the 8-player siege crest
+    let tot = 0, nS = 10;
+    for (let s = 0; s < nS; s++) {
+      for (let i = 0; i < 5; i++) { g.tick(); for (const q of g.players) { q.hp = q.stats.vitality; q.invuln = 1; } }
+      tot += wireSize(encodeSnap(g.getSnapshot()));
+    }
+    const avg = tot / nS;
+    const upload = avg * CW.SNAPSHOT_HZ_CROWD * 7;
+    console.log(`  NET estimate: avg snapshot ${(avg / 1024).toFixed(2)} KB at ${g.enemyPool.count} alive → host upload ≈ ${(upload / 1024).toFixed(0)} KB/s at 8 players (${CW.SNAPSHOT_HZ_CROWD} Hz × 7 peers)`);
+    if (upload <= 450 * 1024) ok(`estimated 8-player host upload ${(upload / 1024).toFixed(0)} KB/s ≤ 450 KB/s at the siege crest`);
+    else fail(`upload estimate breach: ${(upload / 1024).toFixed(0)} KB/s`);
+  }
+
+  // party traits at 8: toll, aura, tether, drips
+  {
+    const g = new Sim({ seed: 737373, party: mkParty(['banneret', 'lodestone', 'sawbones', 'tollkeeper', 'cindermage', 'cindermage', 'cindermage', 'cindermage']) });
+    if (g.greedHp === 1.25 && g.greedMats === 2) ok("Tollkeeper's toll applies party-wide once at 8 players");
+    else fail(`toll at 8: hp×${g.greedHp} mats×${g.greedMats}`);
+    g._travelTo(g.reachableNodes()[0]);
+    const [ban, lode, saw, , c4, c5, c6] = g.players;
+    // aura: same-character allies inside vs outside the banner radius
+    ban.x = g.W / 2; ban.y = g.H / 2;
+    c4.x = ban.x + 60; c4.y = ban.y; c5.x = ban.x + 1600; c5.y = ban.y;
+    lode.x = ban.x - 900; lode.y = ban.y - 300; c6.x = lode.x + 40; c6.y = lode.y; // c6 = lodestone's nearest
+    saw.x = ban.x + 400; saw.y = ban.y + 300;
+    for (let i = 0; i < 40; i++) { g.tick(); for (const q of g.players) { q.hp = Math.min(q.hp, q.stats.vitality); q.invuln = 1; } }
+    if (c4.stats.ferocity > c5.stats.ferocity) ok(`Banneret's aura reaches allies in radius at 8 (${c4.stats.ferocity}% vs ${c5.stats.ferocity}% Ferocity)`);
+    else fail(`aura at 8: near ${c4.stats.ferocity} far ${c5.stats.ferocity}`);
+    const tether = g._snapTethers();
+    const hit = tether.some(t => Math.abs(t[2] - c6.x) < 60 && Math.abs(t[3] - c6.y) < 60);
+    if (hit) ok('Lodestone tethers the nearest of 7 allies');
+    else fail(`tether endpoints: ${JSON.stringify(tether)} (want near ${Math.round(c6.x)},${Math.round(c6.y)})`);
+    // sawbones drips: overheal reaches the nearest injured ally
+    c4.x = saw.x + 50; c4.y = saw.y; c4.hp = 10;
+    saw.hp = saw.stats.vitality;
+    const before = c4.hp;
+    g._heal(saw, 40);
+    for (let i = 0; i < 20; i++) { g.tick(); for (const q of g.players) q.invuln = 1; }
+    if (c4.hp > before) ok(`Sawbones' overheal drips to the nearest injured of 7 allies (+${Math.round(c4.hp - before)} HP)`);
+    else fail(`drip at 8: ${before} → ${c4.hp}`);
+  }
+
+  // merged ring spawning at 8 spread players
+  {
+    const g = new Sim({ seed: 848484, party: octet(8) });
+    g._travelTo(g.reachableNodes()[0]);
+    g.profile = { ring: true, artillery: 0, puddle: 0, flankers: 0, rateMult: 1 };
+    g.players.forEach((p, i) => { // two spread clusters across the scaled arena
+      p.x = (i < 4 ? 0.3 : 0.7) * g.W + (i % 4) * 60;
+      p.y = 0.5 * g.H + (i % 2 ? 130 : -130);
+    });
+    let bad = 0, minD = 1e9;
+    for (let s = 0; s < 40; s++) {
+      const pos = g._spawnWavePos();
+      for (const p of g.players) {
+        const d = Math.hypot(pos.x - p.x, pos.y - p.y);
+        minD = Math.min(minD, d);
+        if (d < 519) { bad++; break; }
+      }
+    }
+    if (bad === 0) ok(`8-player merged ring: 40 samples all ≥520u from every player (closest ${Math.round(minD)}u)`);
+    else fail(`ring at 8: ${bad}/40 samples inside 520u (closest ${Math.round(minD)})`);
+  }
+
+  // airhorn: ally horns cap at 2 per window; own unaffected
+  {
+    const { levelupHorn, setAirhornBuffer, audioStats } = await import('../js/audio.js');
+    setAirhornBuffer({ length: 1 });
+    const h0 = audioStats.horns;
+    const T = 200000; // far past every previous test window
+    levelupHorn(false, T); levelupHorn(false, T + 80); levelupHorn(false, T + 160); levelupHorn(false, T + 240);
+    if (audioStats.horns === h0 + CW.AIRHORN_ALLY_CAP) ok(`7 friends leveling at once: ally horns cap at ${CW.AIRHORN_ALLY_CAP} per window`);
+    else fail(`ally cap: ${audioStats.horns - h0} horns`);
+    levelupHorn(true, T + 300);
+    if (audioStats.horns === h0 + CW.AIRHORN_ALLY_CAP + 1) ok('your own horn still plays inside a capped ally window');
+    else fail(`own horn blocked by ally cap`);
+    levelupHorn(false, T + 2000);
+    if (audioStats.horns === h0 + CW.AIRHORN_ALLY_CAP + 2) ok('a fresh window resets the ally cap');
+    else fail('window reset failed');
+    setAirhornBuffer(null);
+  }
+
+  // gate 5: a mixed-8 party clears floor 1 ORGANICALLY (no nukes, no hp pins)
+  {
+    const g = new Sim({ seed: 959596, party: mkParty(['bulwark', 'cindermage', 'zephyr', 'banneret', 'sawbones', 'redmaw', 'longshot', 'frostcaller']) });
+    const steer = () => {
+      for (const p of g.players) {
+        if (p.gone || p.downed) continue;
+        let mx = 0, my = 0;
+        // rescue first: nearest downed ally within 900u
+        let dn = null, dd = 900 * 900;
+        for (const q of g.players) {
+          if (q === p || q.gone || !q.downed) continue;
+          const d2 = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
+          if (d2 < dd) { dd = d2; dn = q; }
+        }
+        if (dn) {
+          const l = Math.hypot(dn.x - p.x, dn.y - p.y) || 1;
+          mx = (dn.x - p.x) / l; my = (dn.y - p.y) / l;
+        } else {
+          // kite while spawning flows; once it stops, HUNT the stragglers to
+          // weapon range (ring ~150u) — fleeing forever is how fights never end
+          const hunting = g.wave && g.wave.done && !g.boss;
+          let ne = null, nd = hunting ? 1e18 : 300 * 300;
+          for (const e of g.enemyPool) {
+            const d2 = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+            if (d2 < nd) { nd = d2; ne = e; }
+          }
+          if (ne) {
+            const d = Math.sqrt(nd) || 1;
+            if (hunting && d > 180) { mx += (ne.x - p.x) / d * 1.1; my += (ne.y - p.y) / d * 1.1; }
+            else if (d < (hunting ? 120 : 300)) { mx += (p.x - ne.x) / d * 1.4; my += (p.y - ne.y) / d * 1.4; }
+          }
+          // money doesn't wait: scoop the nearest pickup inside 500u
+          let np = null, pd = 500 * 500;
+          for (const m of g.pickups) {
+            const d2 = (m.x - p.x) ** 2 + (m.y - p.y) ** 2;
+            if (d2 < pd) { pd = d2; np = m; }
+          }
+          if (np) {
+            const l = Math.hypot(np.x - p.x, np.y - p.y) || 1;
+            mx += (np.x - p.x) / l * 0.8; my += (np.y - p.y) / l * 0.8;
+          }
+          // drift off the walls
+          if (p.x < 260) mx += 0.5; if (p.x > g.W - 260) mx -= 0.5;
+          if (p.y < 260) my += 0.5; if (p.y > g.H - 260) my -= 0.5;
+          if (g.cleared && g.hatch) { // walk out organically too
+            const l = Math.hypot(g.hatch.x - p.x, g.hatch.y - p.y) || 1;
+            mx = (g.hatch.x - p.x) / l; my = (g.hatch.y - p.y) / l;
+          }
+        }
+        const L = Math.hypot(mx, my) || 1;
+        g.setInput(p.idx, { mx: mx / L, my: my / L, interact: false });
+      }
+    };
+    let guard = 0;
+    while (!g.over && g.floorNum === 1 && guard++ < 60 * 60 * 14) {
+      if (g.phase === 'map') {
+        for (const q of g.players) drain(g, q, true);
+        const r = g.reachableNodes();
+        if (!r.length) { fail('organic-8: no reachable nodes'); break; }
+        g.uiAction(0, { kind: 'pickNode', nodeId: r[0] });
+        for (let i = 0; i < 60 * 5 && g.phase === 'map' && !g.over; i++) g.tick();
+      } else {
+        steer();
+        g.tick();
+        if (guard % 30 === 0) for (const q of g.players) drain(g, q, true);
+      }
+    }
+    const standing = g.players.filter(p => !p.gone && !p.downed).length;
+    if (!g.over && g.floorNum === 2) ok(`mixed-8 party clears floor 1 organically (no nukes) — ${standing}/8 standing at the descent`);
+    else fail(`organic-8: over=${g.over} floor=${g.floorNum} after ${guard} ticks (${standing}/8 standing)`);
+  }
+} catch (err) { fail('Warband gates crashed', err); }
+
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {
   const sim = new Sim({ seed: 9999, party: [{ idx: 0, key: 'k', name: 'DPS', charId, color: '#fff' }] });

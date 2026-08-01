@@ -1518,6 +1518,196 @@ if (wantCoop) {
           if (m2errs.length) fail(`touch client console errors: ${m2errs.join(' | ').slice(0, 300)}`); else ok('no console errors on the touch client');
         }
       } finally { await D.close(); await M2.close(); }
+
+      // ---- phase 4: the Warband — 8 windows, one room ----
+      // Full flow at the new cap: 8 join by code, fight with merged rings,
+      // complete a siege (mercy revive, boss, looting window, shops ×8) and
+      // descend. Plus the hard numbers: host upload via WebRTC getStats at
+      // the crest, snapshot age/smoothness on the 7th peer, fps on host and
+      // the mobile client, and the 8-seat UI checks.
+      const W = [new Browser()];
+      const WCHARS = ['banneret', 'lodestone', 'sawbones', 'tollkeeper', 'bulwark', 'cindermage', 'zephyr', 'redmaw'];
+      try {
+        const W0 = W[0];
+        await W0.open('W0', { peerjsB64 });
+        await W0.goto(COOP_URL);
+        await W0.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title W0');
+        await W0.exec(`document.getElementById('name-input').value='WARLORD'; document.getElementById('btn-host').click()`);
+        const code4 = await (async () => {
+          const t0 = Date.now();
+          for (;;) {
+            const c = await W0.exec(`return window.uv.lobby && window.uv.lobby.code`);
+            if (c) return c;
+            if (Date.now() - t0 > 15000) return null;
+            await sleep(300);
+          }
+        })();
+        if (!code4) fail('warband host registration failed');
+        else {
+          await W0.exec(`document.querySelector('.char-card[data-char="${WCHARS[0]}"]').click(); return 1;`);
+          // 7 peers join by code — the 8th window is the mobile client
+          for (let i = 1; i <= 7; i++) {
+            const mob = i === 7;
+            const Wi = new Browser();
+            W.push(Wi);
+            await Wi.open(`W${i}`, { peerjsB64, mobile: mob });
+            await Wi.goto(COOP_URL);
+            await Wi.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 10000, `title W${i}`);
+            await Wi.exec(`document.getElementById('name-input').value='WARB${i}'; document.getElementById('join-code').value='${code4}'; document.getElementById('btn-join').click(); return 1;`);
+            await Wi.waitFor(`return window.uv.mode==='lobby'`, 20000, `W${i} joins`);
+            await Wi.waitFor(`return document.querySelector('.char-card[data-char="${WCHARS[i]}"]') !== null`, 6000, `W${i} char grid`);
+            await Wi.exec(`document.querySelector('.char-card[data-char="${WCHARS[i]}"]').click(); return 1;`);
+            await sleep(250);
+            await Wi.exec(`document.getElementById('btn-ready').click(); return 1;`);
+          }
+          await W0.waitFor(`return window.uv.lobby.players.length===8`, 10000, 'host sees 8 seats');
+          ok('8 players join one room by code');
+          const seatInfo = JSON.parse(await W0.exec(`const ps=window.uv.lobby.players; return JSON.stringify({n:ps.length, colors:new Set(ps.map(p=>p.color)).size, seats:document.querySelectorAll('.lobby-player').length})`));
+          if (seatInfo.colors === 8 && seatInfo.seats === 8) ok('8 seats render with 8 distinct colors');
+          else fail(`lobby at 8: ${JSON.stringify(seatInfo)}`);
+          // the mobile window's lobby: 8 seats visible, touch-sized
+          const mseat = JSON.parse(await W[7].exec(`const els=[...document.querySelectorAll('.lobby-player')]; const r=els.length?els[0].getBoundingClientRect():{height:0};
+            return JSON.stringify({n:els.length, h:Math.round(r.height)})`));
+          if (mseat.n === 8 && mseat.h >= 44) ok(`mobile lobby renders 8 seats at the 44px standard (${mseat.h}px)`);
+          else fail(`mobile lobby seats: ${JSON.stringify(mseat)}`);
+          await W0.waitFor(`return window.uv.lobby.players.every(p=>p.charId && (p.ready||p.isHost))`, 10000, 'all 8 ready');
+          await W0.exec(`document.getElementById('btn-start').click(); return 1;`);
+          await W0.waitFor(`return window.uv.mode==='run'`, 8000, 'warband run starts');
+          for (const Wi of [W[1], W[4], W[7]]) await Wi.waitFor(`return window.uv.mode==='run'`, 10000, 'client in run');
+          ok('the 8-player run starts on every screen');
+          // shrink the middle clients' windows — they stay live (input keepalive,
+          // snapshots) but render cheap, so perf numbers measure the game, not
+          // six extra headless compositors
+          for (let i = 2; i <= 6; i++) await W[i].cdp('Emulation.setDeviceMetricsOverride', { width: 360, height: 220, deviceScaleFactor: 1, mobile: false });
+          // crowd snapshot rate: 12/s at 6+ players
+          const hz0 = await W0.exec(`window.uvNet.snaps=0; window.uvNet.snapBytes=0; return window.uvNet.hz`);
+          // into the first fight (consent countdown expires and travels)
+          await W0.exec(`const s=window.uv.sim; s.uiAction(0,{kind:'pickNode', nodeId:s.reachableNodes()[0]}); return 1;`);
+          await W0.waitFor(`return window.uv.sim.phase==='arena'`, 12000, 'warband arena (vote expiry)');
+          await W[7].waitFor(`return window.uv.arena !== null`, 8000, 'mobile client got the arena');
+          if (hz0 === 12 || await W0.exec(`return window.uvNet.hz`) === 12) ok('snapshot rate drops to 12/s at 6+ players');
+          else fail(`crowd snapshot rate: ${await W0.exec(`return window.uvNet.hz`)} Hz`);
+          // merged rings with 8 live players
+          const ring8 = JSON.parse(await W0.exec(`const s=window.uv.sim;
+            const keep=s.profile; s.profile={ring:true, artillery:0, puddle:0, flankers:0, rateMult:1};
+            let bad=0, minD=1e9;
+            for (let i=0;i<30;i++){ const pos=s._spawnWavePos();
+              for (const p of s.players){ if (p.gone||p.downed) continue;
+                const d=Math.hypot(pos.x-p.x,pos.y-p.y); minD=Math.min(minD,d); if (d<519){bad++;break;} } }
+            s.profile=keep; return JSON.stringify({bad, minD:Math.round(minD)});`));
+          if (ring8.bad === 0) ok(`merged ring at 8: 30 samples all ≥520u from every player (closest ${ring8.minD}u)`);
+          else fail(`ring at 8: ${ring8.bad}/30 inside 520u`);
+          // the arena scaled up for the warband
+          const dims8 = JSON.parse(await W0.exec(`const s=window.uv.sim; return JSON.stringify([s.W,s.H])`));
+          ok(`8-player arena bounds ${dims8[0]}×${dims8[1]} (×1.25 templates)`);
+          // HUD at 8: condensed two-column strip, own row prominent
+          await sleep(1200);
+          const strip = JSON.parse(await W0.exec(`const w=document.getElementById('hud-players');
+            return JSON.stringify({crowd:w.classList.contains('crowd'), rows:w.querySelectorAll('.php').length, own:w.querySelectorAll('.php.own-row').length, minis:w.querySelectorAll('.php.mini').length})`));
+          if (strip.crowd && strip.rows === 8 && strip.own === 1 && strip.minis === 7) ok('HP strip condenses to the two-column crowd layout (own row + 7 minis)');
+          else fail(`crowd strip: ${JSON.stringify(strip)}`);
+          const mstrip = JSON.parse(await W[7].exec(`const w=document.getElementById('hud-players'); const r=w.getBoundingClientRect();
+            const mini=w.querySelector('.php.mini'); const mr=mini?mini.getBoundingClientRect():{height:0};
+            return JSON.stringify({h:Math.round(r.height), miniH:Math.round(mr.height), vh:window.innerHeight})`));
+          if (mstrip.h <= mstrip.vh * 0.5 && mstrip.miniH >= 16) ok(`mobile HP strip stays compact at 8 (${mstrip.h}px of ${mstrip.vh}px, minis ${mstrip.miniH}px)`);
+          else fail(`mobile strip at 8: ${JSON.stringify(mstrip)}`);
+          // organic combat everywhere, then snapshot health on the 7th peer
+          await sleep(2500);
+          const gaps = JSON.parse(await W[7].exec(`const s=window.uv.snaps; const g=[]; for (let i=1;i<s.length;i++) g.push(Math.round(s[i].rt-s[i-1].rt)); return JSON.stringify(g.slice(-20))`));
+          const age7 = await W[7].exec(`return Math.round(performance.now() - window.uv.lastSnapAt)`);
+          const maxGap = Math.max(...gaps);
+          console.log(`  NET 7th peer: snapshot age ${age7}ms, gaps max ${maxGap}ms of ${gaps.length} sampled (12Hz nominal 83ms)`);
+          if (age7 < 600 && maxGap <= 450) ok(`7th peer interpolates smoothly (age ${age7}ms, max gap ${maxGap}ms)`);
+          else fail(`7th peer snapshot health: age ${age7}ms, max gap ${maxGap}ms`);
+          // clear the fight → all 8 get their extraction shop
+          await W0.exec(clearFightJs);
+          await W0.waitFor(`return window.uv.sim.players.every(p=>p.gone||p.shop)`, 8000, 'shops ×8');
+          ok('extraction shops open for all 8 players');
+          await W[4].waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 8000, 'mid client shop');
+          await W0.exec(drainJs);
+          await W0.exec(`const s=window.uv.sim; for (const p of s.players) if (p.shop) s.uiAction(p.idx,{kind:'closeShop'}); return 1;`);
+          await extractToMap(W0, 'warband extraction');
+          // ---- the 8-player siege ----
+          await W0.exec(drainJs);
+          await W0.exec(`const s=window.uv.sim; s._travelTo(s.floor.siegeId); return 1;`);
+          await W0.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.arenaNode.kind==='siege'`, 10000, 'warband siege');
+          await W[7].waitFor(`return window.uv.arena && window.uv.arena.kind==='siege'`, 12000, 'mobile client in siege');
+          ok('all 8 enter the siege');
+          // crest: fill to the alive ceiling, then measure the real wire
+          await W0.exec(`const s=window.uv.sim; if (!s.god) s.debug('F5'); let t=0; while (s.enemyPool.count < 290 && t++ < 8) s.debug('F1'); return s.enemyPool.count;`);
+          const crest8 = await W0.exec('return window.uv.sim.enemyPool.count');
+          await sleep(1000);
+          const bw = JSON.parse(await W0.exec(`return (async () => {
+            const conns = [...window.uv.hostT.conns.values()];
+            const grab = async () => {
+              let bytes = 0;
+              for (const c of conns) {
+                if (!c.peerConnection) continue;
+                const st = await c.peerConnection.getStats();
+                st.forEach(r => { if (r.type === 'data-channel') bytes += (r.bytesSent || 0); });
+              }
+              return bytes;
+            };
+            const est0 = window.uvNet.bytesOut;
+            const b0 = await grab(); const t0 = performance.now();
+            await new Promise(r => setTimeout(r, 8000));
+            const b1 = await grab(); const t1 = performance.now();
+            return JSON.stringify({ real: Math.round((b1 - b0) / ((t1 - t0) / 1000)), est: Math.round((window.uvNet.bytesOut - est0) / ((t1 - t0) / 1000)), peers: conns.length, alive: window.uv.sim.enemyPool.count, snapKB: +(window.uvNet.lastSnapBytes / 1024).toFixed(2) });
+          })()`));
+          console.log(`  NET host upload @ 8-player siege crest: ${(bw.real / 1024).toFixed(0)} KB/s real (getStats, ${bw.peers} peers, ${bw.alive} alive) · estimator ${(bw.est / 1024).toFixed(0)} KB/s · last snapshot ${bw.snapKB} KB`);
+          if (bw.real > 0 && bw.real <= 450 * 1024) ok(`host upload ${(bw.real / 1024).toFixed(0)} KB/s ≤ 450 KB/s at the 8-player crest (target from a ~1.5 MB/s naive baseline)`);
+          else fail(`host upload gate: ${(bw.real / 1024).toFixed(0)} KB/s`);
+          // perf at the ceiling: desktop host and the mobile CLIENT
+          const fps8 = await measureFps(W0);
+          const fps7 = await measureFps(W[7]);
+          const ceil8 = await W0.exec(`return (async()=>{ const m = await import('./js/config.js'); return m.CONFIG.ALIVE_CEILING; })()`);
+          console.log(`  PERF warband: host ${fps8} fps @ ${crest8} alive (ceiling ${ceil8}), mobile client ${fps7} fps (headless SwiftShader, 8 browsers sharing CPU)`);
+          if (fps8 >= 50) ok(`desktop host ${fps8} fps ≥ 50 at the 8-player crest`);
+          else console.warn(`⚠ host headless fps ${fps8} with 8 concurrent Chromiums (SwiftShader; sim tick <1ms — see sim stress gate)`);
+          if (fps7 >= 40) ok(`mobile client ${fps7} fps ≥ 40 at the crest`);
+          else console.warn(`⚠ mobile-client headless fps ${fps7} under 8-browser CPU contention (unrepresentative)`);
+          // measurements done — god OFF (it shielded the crest fill), sweep the
+          // field and steady the party so the scripted boss steps run clean
+          await W0.exec(`const s=window.uv.sim; if (s.god) s.debug('F5');
+            for (const e of [...s.enemyPool]) if (!e.boss) s._killEnemy(e, null);
+            for (const p of s.players) { p.hp = p.stats.vitality; p.invuln = 2; } return 1;`);
+          // mercy revive at 8: down the mobile client's player, first mutation revives
+          await W0.exec(`const s=window.uv.sim, p=s.players[7]; p.invuln=0; p.stats.reflex=0; let g=0; while(!p.downed&&g++<90){p.hp=1;s.hurtPlayer(p,9999,null);} return 1;`);
+          await W0.waitFor(`return window.uv.sim.players[7].downed`, 4000, 'W7 downed');
+          await W0.exec(`const s=window.uv.sim; s.siegeT = Math.max(s.siegeT, s.mutations[0].at); s.tick(); return 1;`);
+          await W0.waitFor(`return !window.uv.sim.players[7].downed`, 4000, 'mercy revive at 8');
+          ok('mutation mercy-revives the downed 8th player');
+          // boss → looting window synced to the far peer → shops ×8 → descend
+          await W0.exec(`const s=window.uv.sim; s.siegeT = Math.max(s.siegeT, s.bossAt); s.tick(); return 1;`);
+          await W0.waitFor(`return !!window.uv.sim.boss`, 5000, 'warband boss up');
+          await W0.exec(`const s=window.uv.sim; let b=0; while (s.boss && b++<4000) s.damageEnemy(s.boss, 500, {owner:s.players[0]}); for (let i=0;i<20;i++) s.tick(); return 1;`);
+          await W0.waitFor(`return window.uv.sim.cleared`, 5000, 'warband boss down');
+          await W[7].waitFor(`const s=window.uv.snaps; const last=s[s.length-1]; return last && last.s.loot !== null && last.s.loot !== undefined && last.s.loot > 0 ? 1 : 0`, 6000, 'loot countdown on the 7th peer');
+          ok('the looting window syncs across the 8-player room');
+          await W0.exec(`const s=window.uv.sim; if (s.lootT !== null && s.lootT !== undefined) s.lootT = Math.min(s.lootT, 0.4); return 1;`);
+          await W0.waitFor(`return window.uv.sim.players.every(p=>p.gone||p.shop)`, 8000, 'post-boss shops ×8');
+          ok('post-boss shops open for all 8');
+          await W0.exec(drainJs);
+          await W0.exec(`const s=window.uv.sim; for (const p of s.players) if (p.shop) s.uiAction(p.idx,{kind:'closeShop'}); return 1;`);
+          await W0.exec(`const s=window.uv.sim; for (const p of s.players) if (!p.gone) { p.x=s.hatch.x; p.y=s.hatch.y; } return 1;`);
+          await W0.waitFor(`return window.uv.sim.floorNum===2`, 15000, 'warband descent');
+          await W[7].waitFor(`return window.uv.floorNum===2`, 10000, 'mobile client on floor 2');
+          ok('the warband descends to floor 2 together');
+          // wipe → results with 8 rows on the mobile screen
+          await W0.exec(`const s=window.uv.sim; for (const p of s.players){let g=0; while(!p.downed&&!s.over&&g++<90){p.invuln=0;p.stats.reflex=0;p.hp=1;s.hurtPlayer(p,9999,null);}} return 1;`);
+          await W[7].waitFor(`return window.uv.mode==='results'`, 10000, 'results on mobile client');
+          const res8 = JSON.parse(await W[7].exec(`const cards=document.querySelectorAll('.result-card'); const b=document.getElementById('btn-title'); const r=b?b.getBoundingClientRect():{height:0};
+            return JSON.stringify({cards:cards.length, btnH:Math.round(r.height)})`));
+          if (res8.cards === 8 && res8.btnH >= 44) ok(`results screen renders 8 rows on mobile (button ${res8.btnH}px)`);
+          else fail(`results at 8: ${JSON.stringify(res8)}`);
+          // zero console errors across sampled windows
+          for (const [name, Wi] of [['host', W0], ['client W1', W[1]], ['mobile W7', W[7]]]) {
+            const errs8 = await Wi.errors();
+            if (errs8.length) fail(`${name} console errors: ${errs8.join(' | ').slice(0, 300)}`);
+          }
+          ok('zero console errors across the sampled warband windows');
+        }
+      } finally { for (const Wi of W) await Wi.close(); }
     }
   } catch (e) {
     fail(`coop test: ${e.message}`);

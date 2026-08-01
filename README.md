@@ -1,6 +1,6 @@
 # UNDERVAULT
 
-A co-op dungeon-crawl arena roguelite for 1–4 players, in the browser, with no
+A co-op dungeon-crawl arena roguelite for 1–8 players, in the browser, with no
 server to run. Pick one of **32 characters** and descend through a 4-floor
 Gauntlet: each floor is a **branching node map** (a decision screen, not
 corridors) of big scrolling battle arenas, and every floor ends in a
@@ -22,12 +22,15 @@ co-op networking.
   12 enemy types · 4 two-phase bosses · elites with 4 modifiers · 5 arena
   templates with spike & lava hazards · 4 bespoke siege arenas · Trader /
   Reliquary / Champion stops on every floor's map.
-- **Co-op**: host-authoritative P2P via PeerJS room codes. The host runs the
-  whole simulation; clients send inputs (~30/s) and interpolate snapshots
-  (~15/s) with local prediction for their own character. Every client's camera
-  follows its **own** character. Downed friends are revived by standing next
-  to them for 3 s; fight clears auto-revive at 50% HP; during a Siege, every
-  mutation revives the fallen at 25% (the mercy rule).
+- **Co-op**: host-authoritative P2P via PeerJS room codes, up to **8 players**.
+  The host runs the whole simulation; clients send inputs (~30/s) and
+  interpolate binary-packed snapshots (15/s, 12/s at 6+ players) with local
+  prediction for their own character. Every client's camera follows its
+  **own** character. Downed friends are revived by standing next to them for
+  3 s; fight clears auto-revive at 50% HP; during a Siege, every mutation
+  revives the fallen at 25% (the mercy rule). Difficulty scales linearly to
+  4 players and along a softened curve to 8 (see Decisions); 5+ parties
+  fight in ~25% larger arenas.
 
 ## The run: node map → arenas → the Siege
 
@@ -189,6 +192,30 @@ That's it — no build step, no npm install.
 
 Send them both the URL *and* the code. Lobby-only joining — no mid-run joins.
 Hosting alone is simply a solo run (works fully offline from the PeerJS cloud too).
+Rooms hold up to **8 players** (the Warband).
+
+### Hosting a big room (5–8 players) — honest guidance
+
+The host's machine runs the whole simulation and streams snapshots to every
+peer. The Warband netcode packs those snapshots into binary buffers, skips
+enemies nobody can see, and drops the stream to 12/s at 6+ players — a full
+8-player siege crest measures well under **450 KB/s of host upload** — but
+that still means:
+
+- **An 8-player room wants a host on decent wifi or ethernet.** Any normal
+  broadband handles it; a strong phone hotspot usually does too.
+- **Hosting 7 friends from a phone on cellular is not recommended.** Upload
+  on cellular is jittery even when the number looks big, and the game has no
+  host migration — when the host chokes, everyone feels it.
+- **What an overloaded host looks like from the other seats**: enemies and
+  allies start rubber-banding or gliding in straight lines (interpolation
+  starving), hit numbers arrive in bursts, the enemy counter jumps instead
+  of counting down, extraction/vote countdowns stutter — and in the worst
+  case peers hit the 5-second silence watchdog and get dropped back to the
+  title screen one by one. If that's happening, hand hosting to the person
+  with the best connection; if it happens in *every* fight regardless of
+  connection, the host's CPU (old laptop, throttled tab) is the bottleneck
+  instead — the host also renders the game while simulating it.
 
 If the free PeerJS cloud is ever down or blocked on your network, you can point
 the game at your own signaling server with URL parameters:
@@ -331,9 +358,14 @@ never loads them:
   all five templates and survives floor-1 Bastion — plus the Bulwark clause,
   the line-of-sight lab: pillar blocks both sides, lobs arc over, auto-aim
   skips walled-off targets, chains refuse blocked hops, blasts clip; the
-  money rule's fizzle ledger and the siege looting window), a floor-4 siege
-  stress (crest ≥150 alive, tick time, LoS on), snapshot serialization in
-  both phases.
+  money rule's fizzle ledger and the siege looting window), the Warband
+  gates (softened-curve spot-checks at 2/4/6/8, the alive-ceiling firehose
+  with banked-budget refill, wire-codec round-trip + size gates with the
+  8-player upload estimate logged, party traits at 8 — toll/aura/tether/
+  drips, the merged ring with 8 spread players, the airhorn ally cap, and a
+  mixed-8 party clearing floor 1 organically), a floor-4 siege stress
+  (crest ≥150 alive, tick time, LoS on), snapshot serialization in both
+  phases.
 - `node tools/browser_test.mjs [--coop]` — boots real headless Chromium over
   the DevTools protocol: title → lobby → map → arena → results with zero
   console errors, node-map taps, camera-follow checks, extraction, trait
@@ -351,7 +383,12 @@ never loads them:
   both HUDs, post-boss shop on both, extraction countdown, descent),
   simultaneous shopping with parallel rerolls / auto-combine / swaps,
   aura/tether across the network, turret carry/redeploy sync, cross-play
-  desktop + touch.
+  desktop + touch, and the 8-window Warband phase: 8 real browsers in one
+  room through the full flow (join by code → merged-ring fight → shops ×8 →
+  siege with mercy revive, boss, looting window → descent → results ×8),
+  host upload measured with WebRTC getStats at the siege crest, snapshot
+  age/gaps on the 7th peer, crowd HUD/lobby/results sizing on a mobile
+  window.
 - `node tools/balance_probe.mjs <charId> [floors]` — a kiting bot plays the
   real node flow organically (picks nodes, shops on a budget weapons-first,
   dives siege objectives, charges melee stragglers) to flag balance
@@ -366,7 +403,84 @@ never loads them:
 
 ## Decisions (where the brief was silent or conflicted)
 
-### The Friction Patch (patch 9)
+### The Warband (patch 10)
+
+- **Difficulty curves soften at the knee, exactly as briefed.** Enemy count
+  ×(1 + 0.5(n−1)) through 4 players, +0.3 per player beyond; enemy HP
+  ×(1 + 0.35(n−1)) through 4, +0.2 beyond:
+
+  | players | 2 | 4 | 6 | 8 |
+  |---|---|---|---|---|
+  | count | ×1.5 | ×2.5 | ×3.1 | ×3.7 |
+  | HP | ×1.35 | ×2.05 | ×2.45 | ×2.85 |
+
+  Both knees live in config (`COOP_SOFT_AT`, `COOP_*_SOFT`); the ≤4 path is
+  numerically identical to before, which is why the solo/4p gates re-pass
+  untouched.
+- **The alive ceiling is 300 (`ALIVE_CEILING`), one number for all
+  platforms**, sized under the 320 entity pool and the render budget the
+  perf gates measure. When it binds, the spawn accumulator simply stops
+  being spent — it *is* the bank (capped at `SPAWN_BANK_CAP` 45 so a
+  post-ceiling flood is bounded) and flows in as slots free. Champions
+  (elite injections) wait for a slot rather than jumping the queue. Fights
+  at 8 players get longer, never laggier — verified by a firehose test that
+  pins the field at exactly 300 and watches the bank refill the field
+  within 1.5 s of a cull.
+- **Bandwidth work: binary packing + interest culling + 12 Hz at 6+, no
+  delta-ack.** The naive baseline was real (~14.5 KB JSON-shaped snapshots
+  × 15 Hz × 7 peers ≈ 1.5 MB/s). Three orthogonal cuts get under the target
+  with margin: (1) `js/netcodec.js` packs enemies into 9 bytes each (projs
+  13, pickups 4, zones/telegraphs/heavy fx likewise) with a per-snapshot
+  color LUT — the sim's snapshot shape is unchanged and clients decode back
+  into it at ingest, so the interpolation path never learned the wire
+  changed; (2) chaff farther than 1400 u from every player isn't sent at
+  all (elites/bosses/pylons always ship; the radar and edge arrows only
+  track those, so culling is visually lossless — the HUD counter reads the
+  new authoritative `ec` field instead of counting the list); (3) at 6+
+  players the snapshot rate drops 15 → 12/s, which the receive-timestamp
+  interpolation absorbs automatically. Measured: **~2.9 KB per snapshot at
+  a 300-alive 8-player siege crest → ≈246 KB/s estimated host upload**, and
+  the 8-window browser gate measures the real wire via WebRTC `getStats()`
+  (number logged in the suite output each run — measured **285 KB/s real**
+  across 7 peers at a 224-alive crest, with the byte-estimator within 4% of
+  the wire, and snapshot age 14 ms / max gap 223 ms on the 7th peer). Delta-against-last-acked
+  snapshots were considered and rejected: they'd roughly halve the residual
+  cost at the price of per-peer ack state and a desync class we'd have to
+  test for — the simple cuts already beat the target by ~45%.
+- **Arenas scale geometrically at 5+ players** (`ARENA_CROWD_SCALE` 1.25 on
+  both axes, same templates, obstacle/hazard/mutation coordinates scaled
+  with the bounds so siege scripts land where the walls actually are).
+  Below 5 nothing changes, keeping the earlier tuning gates bit-identical.
+- **How the 8-player perf gate is read.** The alive ceiling pins the
+  8-player crest to the same ~300-alive field the patch-8/9 perf gates
+  already measure at 60 fps (desktop) / 60 fps (mobile emulation, DPR
+  capped) on this hardware — that is the point of the ceiling: 8 players
+  can't push the renderer past the measured crest. The Warband phase also
+  measures fps *while 8 headless Chromiums share 4 SwiftShader cores*; those
+  contended numbers are logged with a warning, not gated, because they
+  measure the test rig, not the game. A real host runs one browser.
+- **Four new seat colors** (blue `#6a8dff`, chartreuse `#eef75e`, lavender
+  `#b993ff`, silver `#f0f0f0`) chosen against the enemy reds, the elite
+  purple and the material gold; the two `% 4` color fallbacks in the lobby
+  code were the only 4-player literals in the netcode.
+- **The HP strip condenses at 5+**: your own row keeps full detail (HP,
+  shield, XP, trait meter), the other 7 become two columns of name + bar
+  minis. Edge arrows fade to 30% for alive allies within ~700 u (just
+  off-screen — you know roughly where they are) and stay solid for distant
+  ones; downed allies always render full-strength, pulsing, drawn last so
+  they sit on top of the clutter.
+- **Airhorn at 8**: the global debounce window stays, own horns stay
+  once-per-window, and ally horns cap at `AIRHORN_ALLY_CAP` (2) per window —
+  7 friends hitting an extraction is a celebration, not 7 horns.
+- **The organic-8 gate plays for real** (no kill-cheats, no HP pinning):
+  eight bots kite while spawning flows, hunt stragglers to weapon range at
+  spawn-stop, scoop money mid-fight, rescue downed allies, and walk out via
+  the hatch. A mixed party (tank/casters/supports/economy) clears floor 1 —
+  fights, elite, siege, boss — in ~9 minutes of game time with 8/8 standing.
+  The first bot draft only fled and never closed range; wave-end mop-up
+  deadlocked exactly the way a too-passive party would. The fix (hunt when
+  the counter goes exact) is the same lesson the enemy counter teaches
+  humans, which reads as design working.
 
 - **Profile recipes.** Each Combat/Champion node rolls one profile at map
   generation; the non-Bastion keys cycle through a shuffled per-floor deck so
