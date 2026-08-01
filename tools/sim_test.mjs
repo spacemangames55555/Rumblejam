@@ -159,10 +159,18 @@ function clearArena(sim, buyStuff) {
     // the harness stands still at center (no kiting), so keep it alive — flow
     // tests verify structure/triggers; survivability is the balance probe's job
     for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
+    // money doesn't wait (patch 9): sweep pickups DURING the fight the way a
+    // player does — the end-of-fight vacuum is gone and uncollected fizzles
+    if (!sim.cleared && sim.pickups.length && ticks % 3 === 0) {
+      const m = sim.pickups[0];
+      p.x = m.x; p.y = m.y;
+    }
     if (ticks % 240 === 0) nuke(sim, p);
     if (sim.boss) sim.damageEnemy(sim.boss, 200, { owner: p });
     for (const q of sim.players) drain(sim, q, buyStuff);
     if (sim.cleared && sim.hatch) for (const q of sim.livePlayers()) { q.x = sim.hatch.x; q.y = sim.hatch.y; }
+    // the siege looting window: hop the field while the countdown runs
+    if (sim.cleared && !sim.hatch && sim.pickups.length) { const m = sim.pickups[0]; p.x = m.x; p.y = m.y; }
   }
   return ticks;
 }
@@ -830,6 +838,184 @@ try {
   if (audioStats.blips === b0 + 1) ok('missing asset falls back to the synth blip — level-ups never depend on the file');
   else fail(`fallback blips: ${audioStats.blips - b0}`);
 } catch (err) { fail('airhorn tests crashed', err); }
+
+// ---- 9g. the Friction Patch: statue tests, LoS, money rule, counter ----
+try {
+  const { PROFILES, COMBAT_PROFILE_KEYS, TEMPLATE_KEYS: TK9 } = await import('../js/arenas.js');
+  const { CONFIG: C9 } = await import('../js/config.js');
+
+  // profile coverage: bastion ~1/4 of combat nodes across seeds; deck varies
+  {
+    let bastion = 0, fightsN = 0;
+    const seen = new Set();
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = new Sim({ seed: seed * 13, party: [{ idx: 0, key: 'k', name: 'P', charId: 'bulwark', color: '#fff' }] });
+      for (const n of s.floor.nodes) {
+        if (n.kind === 'combat') { fightsN++; if (n.profile === 'bastion') bastion++; }
+        if (n.profile) seen.add(n.profile);
+        if (n.kind === 'elite' && n.profile === 'bastion') fail(`seed ${seed * 13}: elite rolled bastion`);
+      }
+    }
+    const share = bastion / fightsN;
+    if (share > 0.15 && share < 0.35) ok(`Bastion rolls ~1 in 4 combat nodes (${(share * 100).toFixed(0)}% across 40 seeds)`);
+    else fail(`bastion share ${(share * 100).toFixed(0)}%`);
+    if (COMBAT_PROFILE_KEYS.every(k => seen.has(k))) ok('every pressure profile appears across seeds');
+    else fail(`profiles seen: ${[...seen]}`);
+  }
+
+  // the Statue Test, symmetric — a never-moving probe must DIE in every
+  // non-Bastion profile (all templates) on floor 1, and SURVIVE Bastion
+  const statueRun = (charId, profileKey, template, maxS = 240) => {
+    const s = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'ST', charId, color: '#fff' }] });
+    const node = s.floor.nodes.find(n => n.kind === 'combat');
+    node.profile = profileKey; node.template = template;
+    s._travelTo(node.id);
+    let t = 0;
+    while (!s.over && s.phase === 'arena' && t < maxS * 60) {
+      s.tick(); t++;
+      const q = s.players[0];
+      let g = 0;
+      while (q.pendingOffer && g++ < 30) s.uiAction(0, { kind: 'levelup', id: q.pendingOffer[0].id });
+      if (q.boonOffer) s.uiAction(0, { kind: 'boon', id: q.boonOffer[0].id });
+    }
+    return { died: s.over, secs: t / 60, cleared: s.cleared || s.phase === 'map' };
+  };
+  {
+    let bad = 0;
+    const deaths = [];
+    for (const prof of COMBAT_PROFILE_KEYS) {
+      for (const tmpl of TK9) {
+        const r = statueRun('cindermage', prof, tmpl);
+        if (!r.died) { bad++; fail(`statue SURVIVED ${prof}/${tmpl} (median char must die outside Bastion)`); }
+        else deaths.push(r.secs);
+      }
+    }
+    if (!bad) ok(`the Statue Test: a median statue dies in every non-Bastion profile × template (median death ${deaths.sort((a, b) => a - b)[Math.floor(deaths.length / 2)].toFixed(0)}s)`);
+    // survive side: the CAMPER archetype (Bulwark — melee hold + contact tank).
+    // A spread-pellet caster is not a hold-your-ground build and its fan
+    // geometrically whiffs single approaching targets at range; the sanction
+    // is for players built for the fight, and the median still dies here too
+    // outside Bastion (asserted above).
+    let bok = 0;
+    for (const tmpl of TK9) {
+      const r = statueRun('bulwark', 'bastion', tmpl, 300);
+      if (!r.died) bok++;
+      else fail(`camper statue DIED in Bastion/${tmpl} at ${r.secs.toFixed(0)}s — camping must work where sanctioned`);
+    }
+    if (bok === TK9.length) ok('the Bastion camper statue survives in every template — camping has a sanctioned home');
+    // the Bulwark clause: paid-for identity, but not immortal
+    const med = statueRun('cindermage', 'mixed', 'open_expanse');
+    const bul = statueRun('bulwark', 'mixed', 'open_expanse', 400);
+    if (bul.died && bul.secs > med.secs * 1.5) ok(`the Bulwark clause: outlasts the median statue ${med.secs.toFixed(0)}s → ${bul.secs.toFixed(0)}s, still dies`);
+    else fail(`Bulwark clause: median ${med.secs.toFixed(0)}s bulwark ${bul.secs.toFixed(0)}s died=${bul.died}`);
+  }
+
+  // ---- line of sight: a wall in a lab arena ----
+  {
+    const s = new Sim({ seed: 5150, party: [{ idx: 0, key: 'k', name: 'L', charId: 'bulwark', color: '#fff' }] });
+    const node = s.floor.nodes.find(n => n.kind === 'combat');
+    node.profile = 'bastion'; node.template = 'open_expanse';
+    s._travelTo(node.id);
+    s.wave.done = true; s.spawnQueue.length = 0;
+    for (const e of [...s.enemyPool]) s.enemyPool.release(e);
+    const p = s.players[0];
+    p.x = 600; p.y = 1000; p.stillT = 0;
+    s.obstacles = [{ x: 800, y: 900, w: 60, h: 200 }]; // one pillar between 600 and 1100
+    if (s.losBlocked(600, 1000, 1100, 1000) && !s.losBlocked(600, 1000, 600, 400)) ok('losBlocked: the pillar blocks the crossing sight line only');
+    else fail('losBlocked geometry wrong');
+    // auto-aim skips the walled-off enemy for the visible one
+    // (spd 0: these are LoS dummies — live movers would rush out of the geometry)
+    const eHid = s.spawnEnemyById('slabjaw', 1000, 1000, {});   // behind the pillar (nearer)
+    const eVis = s.spawnEnemyById('slabjaw', 600, 480, {});     // clear line (farther)
+    eHid.spd = 0; eVis.spd = 0;
+    if (s._nearestVisibleEnemy(p.x, p.y, 900) === eVis) ok('auto-aim targets the nearest VISIBLE enemy, skipping cover');
+    else fail('auto-aim picked a walled-off target');
+    // a player shot into the wall is absorbed
+    const hp0 = eHid.hp;
+    const w0 = p.weapons[0];
+    s._fireWeapon(p, { ...w0, id: 'pebbleshot', tier: 1, cd: 0 }, 0, { target: eHid });
+    for (let i = 0; i < 60; i++) s.tick();
+    if (eHid.hp === hp0) ok('a straight player shot is absorbed by the wall'); else fail(`walled enemy took ${hp0 - eHid.hp}`);
+    // an enemy shot into the wall never reaches the player
+    const php = p.hp;
+    p.invuln = 0; p.stats.reflex = 0;
+    s.spawnEnemyProj(1000, 1000, Math.PI, 320, 50, 6, '#fff'); // flying straight at the player, pillar between
+    for (let i = 0; i < 120; i++) s.tick();
+    if (p.hp === php) ok('an enemy shot is absorbed by the wall (cover is symmetric)');
+    else fail(`player hit through wall for ${php - p.hp}`);
+    // a lobbed arc passes over — and its blast still respects walls
+    const hpLob = eHid.hp;
+    s._fireWeapon(p, { id: 'kegbomb', tier: 1, cd: 0, uid: 999, invested: 0 }, 1, { target: eHid });
+    for (let i = 0; i < 90; i++) s.tick();
+    if (eHid.hp < hpLob) ok('a lobbed shell arcs over the wall and lands (its identity)');
+    else fail('lob failed to arc over');
+    // chains refuse to cross a wall: pin the geometry (ticks move live enemies)
+    const eA = s.spawnEnemyById('slabjaw', 700, 980, {});
+    eA.spd = 0;
+    eHid.x = 1000; eHid.y = 1000; eVis.x = 600; eVis.y = 480;
+    const hpHid2 = eHid.hp;
+    // from (700,980) the nearest-except is eHid at (1000,1000) — the segment
+    // crosses the pillar at x≈800–860, y≈967–977, inside its 900–1100 span
+    s._chainLightning(eA, { owner: p, baseDmg: 50, weaponDef: null }, { count: 1, range: 400, factor: 1 });
+    if (eHid.hp === hpHid2) ok('chain lightning refuses to hop through the wall');
+    else fail('chain crossed a wall');
+    // a blast centered across the wall does not damage through it
+    const eNear = s.spawnEnemyById('slabjaw', 700, 1000, {}); // player side of the pillar
+    eNear.spd = 0;
+    const hpNear = eNear.hp;
+    s._areaDamageEnemies(1050, 1000, 500, 60, p);
+    if (eNear.hp === hpNear) ok('a blast does not damage through the wall');
+    else fail(`blast crossed the wall for ${hpNear - eNear.hp}`);
+  }
+
+  // ---- money rule + counter + the siege looting window ----
+  {
+    const s = new Sim({ seed: 61, party: [{ idx: 0, key: 'k', name: 'M', charId: 'bulwark', color: '#fff' }] });
+    s._travelTo(s.floor.nodes.find(n => n.kind === 'combat').id);
+    s.god = true;
+    if (s.getSnapshot().inc === 1) ok('counter: "incoming" while the spawn budget flows');
+    for (let i = 0; i < 60 * 12; i++) s.tick();
+    s.wave.done = true; s.spawnQueue.length = 0;
+    s.tick();
+    const snapMid = s.getSnapshot();
+    if (snapMid.inc === 0 && snapMid.enemies.length > 0) ok(`counter: spawn-stop switches to the exact alive count (${snapMid.enemies.length})`);
+    else fail(`counter state: inc=${snapMid.inc} n=${snapMid.enemies.length}`);
+    // leave drops on the ground, kill everything → they fizzle with a report
+    for (const e of [...s.enemyPool]) s._killEnemy(e, null);
+    for (const e of [...s.enemyPool]) s._killEnemy(e, null);
+    for (const e of [...s.enemyPool]) s._killEnemy(e, null);
+    const ground = s.pickups.reduce((a, m) => a + m.v, 0);
+    const fl0 = s.fightLoot;
+    for (let i = 0; i < 30 && !s.cleared; i++) s.tick();
+    const rc = s.events.filter(e => e.k === 'roomClear').pop();
+    // in-flight magnet pickups still land before the fizzle — the ledger must balance
+    const scooped = s.fightLoot - fl0;
+    if (rc && ground > 0 && rc.lost === Math.round(ground - scooped) && s.pickups.length === 0)
+      ok(`uncollected materials fizzle at the last kill, loss reported (lost ${rc.lost}, scooped in flight ${scooped})`);
+    else fail(`fizzle: ground=${ground} scooped=${scooped} event=${JSON.stringify(rc)}`);
+
+    // siege looting window: boss death → countdown → THEN fizzle + hatch + shop
+    const g = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: 'bulwark', color: '#fff' }] });
+    g.god = true;
+    g._travelTo(g.floor.siegeId);
+    g.siegeT = g.bossAt; g.tick();
+    let b = 0;
+    while (g.boss && b++ < 3000) g.damageEnemy(g.boss, 400, { owner: g.players[0] });
+    for (let i = 0; i < 10; i++) g.tick();
+    if (g.cleared && g.lootT > 0 && !g.hatch && g.getSnapshot().loot !== null)
+      ok(`siege looting window opens at boss death (${C9.SIEGE_LOOT_WINDOW_S}s, synced in snapshots, no hatch yet)`);
+    else fail(`loot window: lootT=${g.lootT} hatch=${!!g.hatch}`);
+    const gp = g.players[0];
+    const before = gp.materials;
+    if (g.pickups.length) { gp.x = g.pickups[0].x; gp.y = g.pickups[0].y; } // sweep one drop
+    for (let i = 0; i < 60 * (C9.SIEGE_LOOT_WINDOW_S + 1); i++) g.tick();
+    const lo = g.events.filter(e => e.k === 'lootOver').pop();
+    if (g.lootT === null && g.hatch && gp.shop && /boss/.test(gp.shop.key) && lo)
+      ok(`looting window closes: fizzle reported (lost ${lo.lost}), hatch + post-boss shop open`);
+    else fail(`loot close: hatch=${!!g.hatch} shop=${gp.shop && gp.shop.key} event=${!!lo}`);
+    if (gp.materials > before) ok('sweeping during the window still collects');
+  }
+} catch (err) { fail('friction gates crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {

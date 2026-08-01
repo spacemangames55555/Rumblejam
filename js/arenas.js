@@ -111,6 +111,36 @@ export const ARENA_TEMPLATES = {
 };
 export const TEMPLATE_KEYS = Object.keys(ARENA_TEMPLATES);
 
+// ---------------- pressure profiles (patch 9) ----------------
+// A profile is the fight's recipe: spawn geometry, enemy-role mix, and lever
+// intensities. Levers: ring (spawns assemble around the players vs streaming
+// from arena-edge fronts), artillery (chance a spawn is a mortar Lobber),
+// puddle (chance chaff leaves an acid puddle on death), flankers (share of
+// spawns replaced by Gyres/Lancerfish). No profile maxes every lever;
+// Bastion is the sanctioned camping fight and rolls ~1 in 4 combat nodes.
+export const PROFILES = {
+  // Bastion streams from ONE front at a gentler rate: a stream is a queue,
+  // which is exactly what a hold-your-ground build's auto-aim can handle.
+  // Bombers are banned from its mix — a telegraphed blast at your feet is
+  // the definitional stillness-punisher, and this fight sanctions stillness.
+  // Bastion's stream is MELEE-ONLY: everything walks into your kill zone,
+  // which is the whole hold-your-ground fantasy. Banned: bombers (telegraphed
+  // blasts at your feet), lobbers/deadeyes (outrange a standing kit and plink
+  // it from beyond answer), nests (force you to leave your spot), and the
+  // flanker pair. Camping pays in safety, not money — fewer levers, less loot.
+  bastion:   { ring: false, artillery: 0,    puddle: 0,    flankers: 0,    rateMult: 0.65,
+    ban: ['fusehead', 'lobber', 'deadeye', 'wombden', 'lancerfish', 'gyre'] },
+  artillery: { ring: true,  artillery: 0.28, puddle: 0.05, flankers: 0.08, rateMult: 1 },
+  flanker:   { ring: true,  artillery: 0.05, puddle: 0.05, flankers: 0.32, rateMult: 1 },
+  puddle:    { ring: true,  artillery: 0.05, puddle: 0.35, flankers: 0.08, rateMult: 1 },
+  swarm:     { ring: true,  artillery: 0.04, puddle: 0.08, flankers: 0.08, rateMult: 1.18 },
+  mixed:     { ring: true,  artillery: 0.14, puddle: 0.14, flankers: 0.16, rateMult: 1 },
+  // the climax never lets you sit down — but it's already a boss gauntlet
+  // with mutations, so its levers sit below the dedicated profiles'
+  siege:     { ring: true,  artillery: 0.10, puddle: 0.08, flankers: 0.12, rateMult: 1 },
+};
+export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', 'mixed'];
+
 // ---------------- the wave budget curve ----------------
 // Fights are continuous escalating sieges in miniature: a spawn-rate ramp for
 // dur seconds, then silence; the fight ends when the field is cleared.

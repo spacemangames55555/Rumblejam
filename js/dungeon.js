@@ -6,7 +6,7 @@
 // Deterministic from the run seed via a per-floor sub-stream.
 
 import { subRng } from './rng.js';
-import { TEMPLATE_KEYS } from './arenas.js';
+import { TEMPLATE_KEYS, COMBAT_PROFILE_KEYS } from './arenas.js';
 
 export function generateFloorMap(seed, floorNum) {
   const rng = subRng(seed, 'map', floorNum);
@@ -66,6 +66,17 @@ function tryMap(rng, floorNum) {
   const deck = rng.shuffle([...TEMPLATE_KEYS]);
   fights.forEach((n, i) => { n.template = deck[i % deck.length]; });
 
+  // pressure profiles: Bastion (the sanctioned camping fight) rolls ~1 in 4
+  // combat nodes; everything else deals from a shuffled recipe deck so
+  // consecutive fights differ and every role shows up across the floor.
+  // Elites never roll Bastion — a champion fight is never a campfire.
+  const pdeck = rng.shuffle([...COMBAT_PROFILE_KEYS]);
+  let pi = 0;
+  for (const n of fights) {
+    if (n.kind === 'combat' && rng.chance(0.25)) n.profile = 'bastion';
+    else { n.profile = pdeck[pi % pdeck.length]; pi++; }
+  }
+
   return {
     floorNum, nodes,
     siegeId: siege.id,
@@ -95,6 +106,6 @@ export function serializeMap(map) {
     floorNum: map.floorNum,
     siegeId: map.siegeId,
     startIds: map.startIds,
-    nodes: map.nodes.map(n => ({ id: n.id, col: n.col, row: n.row, kind: n.kind, template: n.template, edges: n.edges })),
+    nodes: map.nodes.map(n => ({ id: n.id, col: n.col, row: n.row, kind: n.kind, template: n.template, profile: n.profile || null, edges: n.edges })),
   };
 }

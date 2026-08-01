@@ -120,11 +120,23 @@ function botInput() {
     const d = Math.hypot(c.x - p.x, c.y - p.y) || 1;
     vx += (c.x - p.x) / d * 1.2; vy += (c.y - p.y) / d * 1.2;
   }
-  // grab pickups when safe
-  if (count === 0 && sim.pickups.length) {
-    const m = sim.pickups[0];
-    const d = Math.hypot(m.x - p.x, m.y - p.y) || 1;
-    vx += (m.x - p.x) / d; vy += (m.y - p.y) / d;
+  // money doesn't wait (patch 9): the counter's lesson — once spawning stops
+  // and only stragglers remain, run the field for the money BEFORE the last
+  // kill fizzles it; mid-fight, scoop drops that are already close
+  if (sim.pickups.length) {
+    let nd2 = Infinity, mx = 0, my = 0;
+    for (const m of sim.pickups) {
+      const d2 = (m.x - p.x) * (m.x - p.x) + (m.y - p.y) * (m.y - p.y);
+      if (d2 < nd2) { nd2 = d2; mx = m.x; my = m.y; }
+    }
+    const sweep = sim.wave && sim.wave.done && sim.enemyPool.count <= 8;
+    if (sweep) {
+      const d = Math.sqrt(nd2) || 1;
+      vx += (mx - p.x) / d * 3; vy += (my - p.y) / d * 3;
+    } else if (nd2 < 300 * 300) {
+      const d = Math.sqrt(nd2) || 1;
+      vx += (mx - p.x) / d * 0.8; vy += (my - p.y) / d * 0.8;
+    }
   }
   const len = Math.hypot(vx, vy) || 1;
   sim.setInput(0, { mx: vx / len, my: vy / len });
@@ -206,7 +218,11 @@ while (!sim.over && sim.floorNum <= maxFloor && !stuck) {
   const extractCap = cap + 60 * 45;
   while (sim.phase === 'arena' && !sim.over && ticks++ < (sim.cleared ? extractCap : cap)) {
     if (!sim.cleared) botInput();
-    else if (sim.hatch) steerTo(sim.hatch.x, sim.hatch.y);
+    else if (!sim.hatch && sim.pickups.length) { // the siege looting window: sweep!
+      let best = null, bd = Infinity;
+      for (const m of sim.pickups) { const d2 = (m.x - p.x) ** 2 + (m.y - p.y) ** 2; if (d2 < bd) { bd = d2; best = m; } }
+      steerTo(best.x, best.y);
+    } else if (sim.hatch) steerTo(sim.hatch.x, sim.hatch.y);
     sim.tick();
     peak = Math.max(peak, sim.enemyPool.count);
     if (ticks % 30 === 0) resolveUi();

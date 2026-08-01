@@ -497,7 +497,10 @@ function handleEvent(ev) {
       sfx.roar();
       break;
     case 'roomClear':
-      banner('FIELD CLEAR', 'gather the spoils — extraction is open', 1600);
+      banner('FIELD CLEAR', `◆ ${ev.collected || 0} collected${ev.lost ? ` · <b style="color:var(--danger)">◆ ${ev.lost} lost to the dark</b>` : ' · nothing wasted'}`, 2200);
+      break;
+    case 'lootOver':
+      banner('THE SPOILS SETTLE', `◆ ${ev.collected || 0} collected${ev.lost ? ` · ◆ ${ev.lost} lost` : ''} — shop, then descend`, 2400);
       break;
     case 'levelUp':
       levelupHorn(ev.idx === app.myIdx); // own = loud, ally = quiet, debounced
@@ -525,7 +528,7 @@ function handleEvent(ev) {
     case 'left': toast(`${ev.name} left the run`); break;
     case 'bossSpawn': app.bossInfo = { name: ev.name }; banner(ev.name, 'FLOOR BOSS', 2600); sfx.roar(); break;
     case 'bossPhase': banner('ENRAGED', '', 1200); sfx.roar(); break;
-    case 'bossDown': banner('BOSS DEFEATED', app.floorNum >= 4 ? '' : 'shop, then descend via the hatch', 2600); break;
+    case 'bossDown': banner('BOSS DEFEATED', 'sweep the field — the spoils fizzle when the count hits zero', 2600); break;
     case 'end': {
       app.mode = 'results';
       showHud(false);
@@ -641,6 +644,8 @@ function viewFromSim(sim) {
     cleared: sim.cleared, locked: !sim.cleared,
     shake: sim.shake,
     extract: sim.extract ? sim.extract.t : null,
+    inc: sim.phase === 'arena' && sim.wave && !sim.wave.done ? 1 : 0,
+    loot: sim.lootT !== null && sim.lootT !== undefined ? sim.lootT : null,
     hold: sim.holdCircle ? [sim.holdCircle.x, sim.holdCircle.y, sim.holdCircle.r, sim.holdCircle.held ? 1 : 0] : null,
     hatch: sim.hatch ? [sim.hatch.x, sim.hatch.y] : null,
     players: sim.players.map(p => ({
@@ -745,6 +750,8 @@ function viewFromSnaps(dtFrame) {
     cleared: !!s1.cleared, locked: !s1.cleared,
     shake: s1.shake,
     extract: s1.extract !== undefined ? s1.extract : null,
+    inc: s1.inc || 0,
+    loot: s1.loot !== undefined ? s1.loot : null,
     hold: s1.hold || null,
     hatch: s1.hatch,
     players, enemies, projs,

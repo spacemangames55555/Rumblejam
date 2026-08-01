@@ -68,6 +68,7 @@ function renderMap(state) {
       return `<button class="${cls}" data-node="${n.id}" ${reachable.has(n.id) ? '' : 'disabled'}>
         <span class="mn-sym">${meta.sym}</span>
         <span class="mn-name">${meta.name}</span>
+        ${n.profile === 'bastion' ? '<span class="mn-bastion" title="Bastion — hold-your-ground fight">⛊</span>' : ''}
         ${state.vote && state.vote.nodeId === n.id ? `<span class="mn-count">${Math.ceil(state.vote.t)}</span>` : ''}
       </button>`;
     }).join('')}</div>`).join('');
@@ -87,6 +88,7 @@ function renderMap(state) {
         <svg class="map-edges" id="map-edges"></svg>
         ${colHtml}
       </div>
+      <div class="map-legend">⚔ Skirmish · ☠ Champion · ◆ Trader · ★ Reliquary · ⛨ Siege · <span class="mn-bastion-inline">⛊</span> Bastion: hold-your-ground</div>
     </div>`;
   el.querySelectorAll('.map-node').forEach(btn => {
     btn.onclick = () => { sfx.click(); A.pickNode(parseInt(btn.dataset.node, 10)); };

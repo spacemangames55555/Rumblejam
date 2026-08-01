@@ -12,7 +12,8 @@ export const ENEMIES = [
     shape: 'square',   color: '#b03a3a', w: 1.4 },                                  // slow tank
   { id: 'lobber',    name: 'Lobber',    behavior: 'spitter',  hp: 9,  spd: 92,  dmg: 3,  radius: 14, mats: 2,
     shape: 'pentagon', color: '#a86ae8', w: 1.8,
-    proj: { dmg: 6, speed: 320, radius: 6 }, keepDist: 260, fireCd: 2.2 },          // ranged spitter
+    proj: { dmg: 6, speed: 320, radius: 6 }, keepDist: 260, fireCd: 2.2,            // ranged spitter
+    mortar: { cd: 3.4, dmg: 8, radius: 62, windup: 1.35, range: 950 } },            // artillery variant (profiles)
   { id: 'gyre',      name: 'Gyre',      behavior: 'orbiter',  hp: 8,  spd: 160, dmg: 5,  radius: 12, mats: 2,
     shape: 'diamond',  color: '#ff7ad9', w: 1.8, orbitR: 190, diveCd: 2.6 },        // circles then dives
   { id: 'gemmite',   name: 'Gemmite',   behavior: 'splitter', hp: 14, spd: 100, dmg: 5,  radius: 18, mats: 2,

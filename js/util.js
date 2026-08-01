@@ -76,3 +76,23 @@ export function formatStatLine(key, val, STAT_NAME, STAT_IS_PCT) {
   const pct = STAT_IS_PCT[key] ? '%' : '';
   return `${sign}${val}${pct} ${STAT_NAME[key]}`;
 }
+
+// ---------------- segment vs axis-aligned rect (line of sight) ----------------
+// Liang-Barsky clip. Returns the entry parameter t in [0,1] along the segment,
+// or -1 when the segment misses the rect entirely.
+export function segRectEntryT(x0, y0, x1, y1, rx, ry, rw, rh) {
+  const dx = x1 - x0, dy = y1 - y0;
+  let t0 = 0, t1 = 1;
+  const p = [-dx, dx, -dy, dy];
+  const q = [x0 - rx, rx + rw - x0, y0 - ry, ry + rh - y0];
+  for (let i = 0; i < 4; i++) {
+    if (p[i] === 0) { if (q[i] < 0) return -1; continue; }
+    const r = q[i] / p[i];
+    if (p[i] < 0) { if (r > t1) return -1; if (r > t0) t0 = r; }
+    else { if (r < t0) return -1; if (r < t1) t1 = r; }
+  }
+  return t0;
+}
+export function segHitsRect(x0, y0, x1, y1, rx, ry, rw, rh) {
+  return segRectEntryT(x0, y0, x1, y1, rx, ry, rw, rh) >= 0;
+}

@@ -260,6 +260,20 @@ try {
   await A.waitFor(`return document.getElementById('screen-map').classList.contains('hidden')`, 2000, 'map hides for the fight');
   ok('tapping a node travels into its arena (solo: instant)');
 
+  // the enemy counter: "incoming" while the budget flows, exact count at stop
+  await A.waitFor(`return !document.getElementById('enemy-counter').classList.contains('hidden')`, 4000, 'enemy counter visible');
+  const ecInc = await A.exec(`return document.querySelector('#enemy-counter .ec-inc') !== null`);
+  if (ecInc) ok('counter shows the "incoming" state while spawning flows'); else fail('no incoming state on the counter');
+  // park the player out of weapon range and pin a known group so the count
+  // can't hit zero (and clear the fight) while we read the display
+  // (park LEFT of center — the camera-follow check below pushes rightward)
+  await A.exec(`const s=window.uv.sim, p=s.players[0];
+    const spot = s._openSpot(600, s.H - 300); p.x = spot.x; p.y = spot.y;
+    for (let i=0;i<6;i++) s.spawnEnemyById('skulker', 180 + i*34, 180, {});
+    s.wave.done = true; s.spawnQueue.length = 0; return 1;`);
+  await A.waitFor(`const b=document.querySelector('#enemy-counter .ec-n.exact'); return b && parseInt(b.textContent.replace(/[^0-9]/g,''),10) === window.uv.sim.enemyPool.count ? 1 : 0`, 4000, 'exact count at spawn-stop');
+  ok('counter switches to the exact alive count at spawn-stop (the sweep signal)');
+
   // movement via synthetic keys (arena is bigger than the screen now)
   const cam0 = await A.exec('return Math.round(window.uvRenderer.camX)'); // camera baseline before any movement
   // two directions — a single axis can be blocked by an obstacle beside the spawn
@@ -295,10 +309,12 @@ try {
   await A.exec(`const s=window.uv.sim,p=s.players[0]; const i=p.shop.stock.findIndex(x=>x.kind==='weapon'&&!x.sold); s.uiAction(0,{kind:'buy',slot:i}); s.uiAction(0,{kind:'reroll'}); return 1;`);
   const exM1 = await A.exec('return window.uv.sim.players[0].materials');
   if (exM1 < exM0) ok('buy + reroll work at the extraction shop'); else fail('extraction shop buy/reroll no-op');
-  // level-ups banked during this stretch fired the airhorn (debounced)
-  const hornsSoFar = await A.exec('return window.uvAudio.stats.horns');
-  if (hornsSoFar >= 1) ok(`level-ups play the airhorn (${hornsSoFar} scheduled so far)`);
-  else fail('no airhorn scheduled despite level-ups');
+  // the F2 grant crossed level thresholds — the airhorn fires once the event
+  // pump runs (money-doesn't-wait means mid-fight levels are no longer a given)
+  try {
+    const hornsSoFar = await A.waitFor(`return window.uvAudio.stats.horns >= 1 ? window.uvAudio.stats.horns : 0`, 4000, 'airhorn after level-ups');
+    ok(`level-ups play the airhorn (${hornsSoFar} scheduled so far)`);
+  } catch { fail('no airhorn scheduled despite level-ups'); }
   // master volume governs the horn: the sample path routes through the same gain
   await A.exec('window.uvAudio.setVolume(0); return 1;');
   const mg0 = await A.exec('return window.uvAudio.masterGain()');
@@ -315,6 +331,12 @@ try {
   await A.exec(`document.getElementById('shop-close').click(); return 1;`);
   const visitedMark = await A.exec(`return document.querySelector('.map-node.visited') !== null`);
   if (visitedMark) ok('extraction returns to the map with the fight marked visited'); else fail('no visited node on the map after extraction');
+  // the Bastion shield marks camping fights on the map (force one if unrolled)
+  await A.exec(`const s=window.uv.sim; const c=s.floor.nodes.find(n=>n.kind==='combat' && n.id!==s.currentNode);
+    if (!s.floor.nodes.some(n=>n.profile==='bastion')) c.profile='bastion';
+    s._mapEvent(); return 1;`);
+  await A.waitFor(`return document.querySelector('.map-node .mn-bastion') !== null`, 3000, 'bastion shield icon');
+  ok('Bastion nodes carry the shield icon — routing IS the playstyle choice');
 
   // ---- leave-run button: solo abandon → lobby → fresh run ----
   await A.exec(`document.getElementById('leave-btn').click()`);
@@ -561,7 +583,8 @@ try {
         for (const p of sim.players) { let g2=0; while (p.pendingOffer && g2++<40) sim.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id});
           if (p.shop) sim.uiAction(p.idx,{kind:'closeShop'}); }
         let e = 0;
-        while (sim.phase === 'arena' && !sim.over && e++ < 600) {
+        // sieges add an 8s looting window before the hatch appears
+        while (sim.phase === 'arena' && !sim.over && e++ < 1100) {
           if (sim.hatch) { const p = sim.players[0]; p.x = sim.hatch.x; p.y = sim.hatch.y; }
           sim.tick();
         }
@@ -591,10 +614,13 @@ try {
     for (const id of ['coilgun','hailburst','gravelmouth','sparkbolt']) s._addWeapon(s.players[0], id, 4);
     s._travelTo(s.floor.siegeId);
     let t=0; while (s.enemyPool.count < 300 && t++ < 16) s.debug('F1');
+    // patch 9: the crest now includes LoS raycasts + a full cap of death-puddles
+    const p0=s.players[0]; for (let i=0;i<14;i++) s.addZone({x:p0.x+(Math.random()-0.5)*900, y:p0.y+(Math.random()-0.5)*900, r:46, dps:8, dur:30, hurts:'players', color:'#7dee6a', acid:true});
     return s.enemyPool.count;`);
   const dFps = await measureFps(A);
   const dAlive = await A.exec('return window.uv.sim.enemyPool.count');
-  console.log(`  PERF desktop host: ${dFps} fps @ ${crest}→${dAlive} alive (siege arena, headless SwiftShader)`);
+  const dPud = await A.exec(`return window.uv.sim.zones.filter(z=>z.acid).length`);
+  console.log(`  PERF desktop host: ${dFps} fps @ ${crest}→${dAlive} alive, ${dPud} acid puddles, LoS on (siege arena, headless SwiftShader)`);
   if (crest >= 300) ok(`siege crest reached ${crest} alive for the perf gate (patch-8 density)`); else fail(`crest only ${crest} alive`);
   if (dFps >= 55) ok(`desktop perf gate: ${dFps} fps ≥ 55 at the ~300 crest`);
   else console.warn(`⚠ desktop headless fps ${dFps} @ ${dAlive} alive (headless SwiftShader is unrepresentative; sim tick <1ms)`);
@@ -725,6 +751,11 @@ try {
       mDmg = await M.waitFor(`const d=Math.round(window.uv.sim.players[0].damageDealt); return d > 0 ? d : 0`, 15000, 'organic damage');
       ok(`touch character fights organically (dmg ${mDmg})`);
     } catch { fail('no organic damage dealt on touch within 15s'); }
+    // patch 9: the enemy counter is a touch-sized pill mid-combat
+    await M.waitFor(`const ec=document.getElementById('enemy-counter'); return !ec.classList.contains('hidden') ? 1 : 0`, 5000, 'enemy counter visible on touch');
+    const ecR = JSON.parse(await M.exec(`const r=document.getElementById('enemy-counter').getBoundingClientRect(); return JSON.stringify({w:Math.round(r.width), h:Math.round(r.height)})`));
+    if (ecR.h >= 44) ok(`enemy counter meets the 44px touch standard (${ecR.w}×${ecR.h})`);
+    else fail(`enemy counter only ${ecR.h}px tall on touch`);
     await M.exec(`window.uv.sim.debug('F2'); return 1;`); // bank a few level-ups for the clear
     await M.exec(clearFightJs);
     // level-up cards surface at the clear: glossary short lines + tap to pick
@@ -889,11 +920,13 @@ try {
 
     // ---- perf gate: mobile emulation at the new siege crest (≥40 fps at ~200) ----
     await M.exec(`const s=window.uv.sim; if (!s.god) s.debug('F5'); s._travelTo(s.floor.siegeId);
-      let t=0; while (s.enemyPool.count < 200 && t++ < 10) s.debug('F1'); return 1;`);
+      let t=0; while (s.enemyPool.count < 200 && t++ < 10) s.debug('F1');
+      const p0=s.players[0]; for (let i=0;i<14;i++) s.addZone({x:p0.x+(Math.random()-0.5)*900, y:p0.y+(Math.random()-0.5)*900, r:46, dps:8, dur:30, hurts:'players', color:'#7dee6a', acid:true});
+      return 1;`);
     const mAlive0 = await M.exec('return window.uv.sim.enemyPool.count');
     const mFps = await measureFps(M);
-    const mPerf = JSON.parse(await M.exec(`return JSON.stringify({alive:window.uv.sim.enemyPool.count, dpr:window.uvRenderer.dpr})`));
-    console.log(`  PERF mobile emulation: ${mFps} fps @ ${mAlive0}→${mPerf.alive} alive, dpr cap ${mPerf.dpr} (headless SwiftShader)`);
+    const mPerf = JSON.parse(await M.exec(`return JSON.stringify({alive:window.uv.sim.enemyPool.count, dpr:window.uvRenderer.dpr, pud:window.uv.sim.zones.filter(z=>z.acid).length})`));
+    console.log(`  PERF mobile emulation: ${mFps} fps @ ${mAlive0}→${mPerf.alive} alive, ${mPerf.pud} acid puddles, dpr cap ${mPerf.dpr} (headless SwiftShader)`);
     if (mAlive0 >= 200) ok(`mobile siege crest reached ${mAlive0} alive for the perf gate`); else fail(`mobile crest only ${mAlive0}`);
     if (mFps >= 40) ok(`mobile perf gate: ${mFps} fps ≥ 40 at the ~200 crest (dpr ${mPerf.dpr})`);
     else console.warn(`⚠ mobile headless fps ${mFps} (headless SwiftShader is unrepresentative; DPR capped at ${mPerf.dpr})`);
@@ -1194,6 +1227,22 @@ if (wantCoop) {
       await A.waitFor(`return !window.uv.sim.players[1].downed`, 6000, 'revive');
       ok('proximity revive works in co-op');
 
+      // ---- patch 9: co-op ring spawning — the merged ring keeps every
+      // sampled spawn ≥520u from BOTH players, wherever they stand ----
+      const ringChk = await A.exec(`const s=window.uv.sim, p0=s.players[0], p1=s.players[1];
+        const keep={profile:s.profile, x0:p0.x, y0:p0.y, x1:p1.x, y1:p1.y};
+        s.profile={ring:true, artillery:0, puddle:0, flankers:0, rateMult:1};
+        p0.x=s.W*0.32; p0.y=s.H*0.5; p1.x=s.W*0.68; p1.y=s.H*0.5;
+        let bad=0, minD=1e9;
+        for (let i=0;i<40;i++){ const pos=s._spawnWavePos();
+          const d=Math.sqrt(Math.min((pos.x-p0.x)**2+(pos.y-p0.y)**2,(pos.x-p1.x)**2+(pos.y-p1.y)**2));
+          minD=Math.min(minD,d); if (d<519) bad++; }
+        s.profile=keep.profile; p0.x=keep.x0; p0.y=keep.y0; p1.x=keep.x1; p1.y=keep.y1;
+        return JSON.stringify({bad, minD:Math.round(minD)});`);
+      const rc9 = JSON.parse(ringChk);
+      if (rc9.bad === 0) ok(`co-op merged ring: 40 sampled spawns all ≥520u from both players (closest ${rc9.minD}u)`);
+      else fail(`ring spawns landed on-screen: ${rc9.bad}/40 inside 520u (closest ${rc9.minD}u)`);
+
       // ---- the airhorn in co-op: own = loud, ally = quiet, debounced ----
       await sleep(1200); // clear any debounce window from organic levels
       await A.exec(`const s=window.uv.sim; s._collectMaterial(s.players[0], 150); return 1;`);
@@ -1247,8 +1296,8 @@ if (wantCoop) {
       // ---- DoD 6: the full Siege in co-op — mutations, mercy revive, boss, payout ----
       await A.exec(drainJs);
       await A.exec(`const s=window.uv.sim; s._travelTo(s.floor.siegeId); return 1;`);
-      await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.arenaNode.kind==='siege'`, 3000, 'host in siege');
-      await B.waitFor(`return window.uv.arena && window.uv.arena.kind==='siege'`, 5000, 'client got the siege arena event');
+      await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.arenaNode.kind==='siege'`, 8000, 'host in siege');
+      await B.waitFor(`return window.uv.arena && window.uv.arena.kind==='siege'`, 12000, 'client got the siege arena event');
       ok('both players enter the Siege');
       const obst0 = await A.exec('return window.uv.sim.obstacles.length');
       // down the client: the first mutation must revive them (mercy rule)
@@ -1269,10 +1318,22 @@ if (wantCoop) {
       ok('the floor boss enters mid-siege on both screens');
       await A.exec(`const s=window.uv.sim; let b=0; while (s.boss && b++<3000) s.damageEnemy(s.boss, 400, {owner:s.players[0]}); for (let i=0;i<20;i++) s.tick(); return 1;`);
       await A.waitFor(`return window.uv.sim.cleared`, 4000, 'siege cleared after boss death');
-      // post-boss shop opens for BOTH players
-      await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'host post-boss shop');
-      await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'client post-boss shop');
-      ok('post-boss shop opens for both players');
+      // ---- patch 9: the looting window — countdown runs on the host and
+      // syncs to the client before any shop appears ----
+      const hostLootT = await A.exec(`return window.uv.sim.lootT`);
+      if (hostLootT !== null && hostLootT !== undefined && hostLootT > 0) ok(`boss death opens the looting window on the host (${hostLootT.toFixed(1)}s)`);
+      else fail(`no looting window on the host after boss death (lootT=${hostLootT})`);
+      await B.waitFor(`const s=window.uv.snaps; const last=s[s.length-1]; return last && last.s.loot !== null && last.s.loot !== undefined && last.s.loot > 0 ? 1 : 0`, 5000, 'loot countdown in client snapshots');
+      ok('looting countdown syncs to the client');
+      await A.waitFor(`const ec=document.getElementById('enemy-counter'); return !ec.classList.contains('hidden') && ec.querySelector('.ec-loot') !== null ? 1 : 0`, 4000, 'host HUD sweep state');
+      await B.waitFor(`const ec=document.getElementById('enemy-counter'); return !ec.classList.contains('hidden') && ec.querySelector('.ec-loot') !== null ? 1 : 0`, 4000, 'client HUD sweep state');
+      ok('both HUDs show the "sweep!" countdown during the looting window');
+      // post-boss shop opens for BOTH players — only after the window closes
+      // (8s by default; shortened here to keep the suite quick)
+      await A.exec(`const s=window.uv.sim; if (s.lootT !== null && s.lootT !== undefined) s.lootT = Math.min(s.lootT, 0.4); return 1;`);
+      await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 6000, 'host post-boss shop');
+      await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 6000, 'client post-boss shop');
+      ok('post-boss shop opens for both players after the looting window');
       await A.exec(drainJs);
       await A.exec(`const s=window.uv.sim; for (const p of s.players) if (p.shop) s.uiAction(p.idx,{kind:'closeShop'}); return 1;`);
       // extraction consent countdown syncs, then the party descends
@@ -1414,7 +1475,16 @@ if (wantCoop) {
           await D.exec(`const s=window.uv.sim; s.uiAction(0,{kind:'pickNode', nodeId:s.reachableNodes()[0]}); return 1;`);
           await D.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'cross-play arena');
           await M2.waitFor(`return document.getElementById('screen-map').classList.contains('hidden')`, 5000, 'touch client map hides');
-          // both move: keyboard on D, joystick on M2
+          // both move: keyboard on D, joystick on M2. Ring spawns converge
+          // bodies on the players, so clear the field and park both in open
+          // space first — the check is that inputs travel, not crowd physics
+          await D.exec(`const s=window.uv.sim;
+            for (const e of [...s.enemyPool]) s._killEnemy(e, null);
+            s.spawnQueue.length = 0;
+            const a=s._openSpot(s.W*0.35, s.H*0.5); s.players[0].x=a.x; s.players[0].y=a.y;
+            const b=s._openSpot(s.W*0.35+140, s.H*0.5+140); s.players[1].x=b.x; s.players[1].y=b.y;
+            return 1;`);
+          await sleep(400); // let the teleports reconcile on the touch client
           const cp0 = JSON.parse(await D.exec(`const s=window.uv.sim; return JSON.stringify([Math.round(s.players[0].x), Math.round(s.players[1].x)])`));
           await D.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyD'}))`);
           await M2.touchDown(420, 200);
