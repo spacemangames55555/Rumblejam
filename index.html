@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <title>UNDERVAULT — co-op dungeon arena roguelite</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- PWA: added to a home screen, the game launches fullscreen (see manifest.json) -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="css/style.css">
 <!-- PeerJS is the only external dependency (networking). Game runs solo without it. -->
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
