@@ -38,13 +38,6 @@ export const OBJECTIVE_META = {
   payload:     { sym: '⛏', name: 'Payload',      hint: 'escort the drill to the gate' },
 };
 
-// Arena shape overrides — Breach wants a corridor, Storm/Zone want space.
-export function arenaShapeFor(kind, w, h) {
-  if (kind === 'breach') return { w: Math.round(w * 1.7), h: Math.round(h * 0.62) };
-  if (kind === 'storm' || kind === 'zone') return { w: Math.round(w * 1.1), h: Math.round(h * 1.1) };
-  return { w, h };
-}
-
 // ---------------------------------------------------------------- helpers
 
 function rnd(sim) { return sim.waveRng.float(); }
@@ -97,7 +90,13 @@ export function initObjective(sim, node) {
       break;
     }
     case 'elite_arena': {
-      o.spawned = false; o.total = 0;
+      // 10–15 champions across the match, arriving in waves of 3–5. The old
+      // single drop of 5–8 cleared in 20–30s; this targets 2–3 minutes.
+      const players = Math.max(1, sim.livePlayers().length);
+      o.total = clamp(Math.round(10 + sim.floorNum + 0.7 * (players - 1)), 10, 15);
+      o.spawnedCount = 0; o.killed = 0;
+      o.waveSize = 3 + Math.min(2, Math.floor((players - 1) / 3));  // 3–5
+      o.waveT = 0.8;
       break;
     }
     case 'nest': {
@@ -110,11 +109,31 @@ export function initObjective(sim, node) {
       break;
     }
     case 'breach': {
-      // the collapse eats the corridor from the entry edge at a steady crawl
-      o.wallX = WALL - 40;
-      o.speed = 26 + sim.floorNum * 3;
-      o.gateX = sim.W - WALL - 140;
-      o.gate = spot(sim, sim.W - WALL - 140, sim.H / 2, 70);
+      // A corridor cut into 3–4 segments by sealed doors. Each door opens on
+      // a kill quota inside the CURRENT segment, so the level is fight-
+      // forward-under-pressure: the collapse never stops advancing while you
+      // earn the next door. Reaching the gate past the last segment clears it.
+      const players = Math.max(1, sim.livePlayers().length);
+      o.segs = 3 + (sim.floorNum >= 3 ? 1 : 0);
+      o.seg = 0;
+      // quota per door: a competent group should open it with the wall
+      // closing but not on top of them (~20–25s of killing per segment)
+      o.need = Math.round((10 + 4 * sim.floorNum) * (1 + 0.55 * (players - 1)));
+      o.kills = 0;
+      o.doors = [];
+      const usable = sim.W - 2 * WALL - 260;             // leave room for the gate
+      for (let i = 1; i <= o.segs; i++) {
+        o.doors.push(Math.round(WALL + 130 + (usable * i) / (o.segs + 1)));
+      }
+      o.wallX = WALL - 30;
+      // Paced against the corridor, not a flat number: the collapse should
+      // cross the whole map in roughly the time a competent group needs to
+      // earn every door plus the final sprint. Too slow and it is scenery
+      // (the first cut crossed 20% of the map in a full clear); too fast and
+      // the level is unwinnable while a door holds you in place.
+      o.speed = (sim.W - WALL * 2) / (o.segs * 24 + 34);
+      o.dps = 55;
+      o.gate = spot(sim, sim.W - WALL - 120, sim.H / 2, 70);
       break;
     }
     case 'relic': {
@@ -217,34 +236,55 @@ function tickZone(sim, o, dt) {
 
 // --- b. ELITE ARENA ----------------------------------------------------
 // Four fixed variants, few of them, all slow and enormous: pure kiting.
+// HP multipliers are on the BASE enemy's hp, so they look large: a Charger is
+// a Lancerfish with 55× the health. Sized so a geared party spends ~10–15s per
+// champion and the match runs 2–3 minutes rather than the 20–30s the first
+// numbers produced.
 const ELITE_ARENA_VARIANTS = [
-  { key: 'charger', id: 'lancerfish', hp: 16, spd: 0.75, label: 'Charger' },
-  { key: 'lobber',  id: 'lobber',     hp: 13, spd: 0.55, label: 'Lobber' },
-  { key: 'splitter', id: 'gemmite',   hp: 12, spd: 0.7,  label: 'Splitter' },
-  { key: 'enrager', id: 'slabjaw',    hp: 15, spd: 0.6,  label: 'Enrager' },
+  { key: 'charger', id: 'lancerfish', hp: 82, spd: 0.75, label: 'Charger' },
+  { key: 'lobber',  id: 'lobber',     hp: 70, spd: 0.55, label: 'Lobber' },
+  { key: 'splitter', id: 'gemmite',   hp: 62, spd: 0.7,  label: 'Splitter' },
+  { key: 'enrager', id: 'slabjaw',    hp: 33, spd: 0.6,  label: 'Enrager' },
 ];
 
 function tickEliteArena(sim, o, dt) {
-  if (!o.spawned) {
-    o.spawned = true;
-    const count = 4 + Math.min(4, sim.floorNum); // 5–8, one of each variant at least
-    for (let i = 0; i < count; i++) {
-      const v = ELITE_ARENA_VARIANTS[i % ELITE_ARENA_VARIANTS.length];
-      const a = (i / count) * Math.PI * 2;
-      const p = spot(sim, sim.W / 2 + Math.cos(a) * sim.W * 0.32,
-        sim.H / 2 + Math.sin(a) * sim.H * 0.32, 40);
-      const e = sim.spawnEnemyById(v.id, p.x, p.y, { hpMult: v.hp, spdMult: v.spd });
-      if (!e) continue;
-      e.arenaVariant = v.key;
-      e.radius *= 1.7;
-      e.mats = Math.round(e.mats * 6);        // few enemies, so each pays like many
-      e.dmg *= 1.25;
-      if (v.key === 'enrager') { e.enrageRate = 0.055; e.baseSpd = e.spd; }
-      o.total++;
+  // waves arrive as the field thins: the next batch lands once the current
+  // one is nearly dead, so the arena stays a kiting puzzle rather than a
+  // single overwhelming blob
+  if (o.spawnedCount < o.total) {
+    o.waveT -= dt;
+    const thin = sim.enemyPool.count <= 1;
+    if (o.waveT <= 0 || thin) {
+      const n = Math.min(o.waveSize, o.total - o.spawnedCount);
+      // every wave mixes variants — rotate the start so waves differ
+      const off = o.spawnedCount;
+      for (let i = 0; i < n; i++) {
+        const v = ELITE_ARENA_VARIANTS[(off + i) % ELITE_ARENA_VARIANTS.length];
+        const a = ((off + i) / Math.max(3, n)) * Math.PI * 2 + off;
+        const p = spot(sim, sim.W / 2 + Math.cos(a) * sim.W * 0.32,
+          sim.H / 2 + Math.sin(a) * sim.H * 0.32, 40);
+        // champions also harden with the floor: player builds grow faster than
+        // the base floor multiplier, and a deep-floor party was shredding a
+        // full roster of them in under half a minute
+        const floorHarden = 1 + 0.5 * (sim.floorNum - 1);
+        const e = sim.spawnEnemyById(v.id, p.x, p.y, { hpMult: v.hp * floorHarden, spdMult: v.spd });
+        if (!e) continue;
+        e.arenaVariant = v.key;
+        e.radius *= 1.7;
+        e.mats = Math.round(e.mats * 6);      // few enemies, so each pays like many
+        e.dmg *= 1.25;
+        if (v.key === 'enrager') { e.enrageRate = 0.055; e.baseSpd = e.spd; }
+        sim.addTelegraph({ shape: 'circle', x: p.x, y: p.y, r: 60, dur: 0.8, spawnMark: true });
+        o.spawnedCount++;
+      }
+      o.waveT = 14;                            // pacing floor between waves
+      if (o.spawnedCount < o.total) {
+        sim.pushEvent({ k: 'toast', idx: -1, text: `Champions: ${o.spawnedCount}/${o.total}` });
+      }
     }
   }
-  // kill them all
-  if (sim.enemyPool.count === 0 && sim.spawnQueue.length === 0) o.done = true;
+  // every champion spawned and every one dead
+  if (o.spawnedCount >= o.total && sim.enemyPool.count === 0 && sim.spawnQueue.length === 0) o.done = true;
 }
 
 // --- c. NEST PURGE -----------------------------------------------------
@@ -323,20 +363,55 @@ function tickBounty(sim, o, dt) {
 }
 
 // --- e. BREACH ---------------------------------------------------------
-// A lethal wall crawls in from the entry edge. Everything left of it dies;
-// reaching the gate at the far end clears the level.
+// A lethal wall crawls in from the entry edge and NEVER stops. Ahead of the
+// party, sealed doors gate each segment: kill the quota inside the current
+// segment and the door opens. The pressure is the point — you cannot outrun
+// the collapse, you have to earn ground.
 function tickBreach(sim, o, dt) {
-  o.wallX += o.speed * dt;
+  o.wallX += o.speed * dt;                     // the collapse, always moving
+  const doorX = o.seg < o.doors.length ? o.doors[o.seg] : null;
+  // the sealed door is a hard barrier until its quota is paid
   for (const p of sim.livePlayers()) {
     if (p.downed) continue;
-    if (p.x < o.wallX) sim.hurtPlayer(p, 45 * dt, null, { trueDamage: true });
-    if (dist2(p.x, p.y, o.gate.x, o.gate.y) < 90 * 90) { o.done = true; return; }
+    if (doorX !== null && p.x > doorX - 26) { p.x = doorX - 26; }
+    if (p.x < o.wallX) sim.hurtPlayer(p, o.dps * dt, null, { trueDamage: true });
+    if (doorX === null && dist2(p.x, p.y, o.gate.x, o.gate.y) < 100 * 100) { o.done = true; return; }
   }
-  // enemies caught by the collapse die with it
+  // enemies swallowed by the collapse die with it, and nothing lives past the
+  // sealed door either (spawns are constrained to the active segment)
   for (const e of [...sim.enemyPool]) {
     if (e.x < o.wallX - 30) sim._killEnemy(e, null);
+    else if (doorX !== null && e.x > doorX - 20) e.x = doorX - 20;
   }
   if (o.wallX > sim.W) o.wallX = sim.W;
+}
+
+// Breach kill bookkeeping: every kill inside the active segment pays down the
+// current door's quota. Called from the sim's kill path.
+export function objectiveOnKill(sim) {
+  const o = sim.obj;
+  if (!o || o.done || o.type !== 'breach') return;
+  if (o.seg >= o.doors.length) return;
+  o.kills++;
+  if (o.kills < o.need) return;
+  o.kills = 0;
+  o.seg++;
+  sim.pushEvent({ k: 'sfx', s: 'door' });
+  sim.pushEvent({
+    k: 'toast', idx: -1,
+    text: o.seg >= o.doors.length ? 'THE LAST DOOR OPENS — RUN FOR THE GATE' : `DOOR ${o.seg}/${o.doors.length} OPEN — PUSH ON`,
+  });
+}
+
+// Breach spawns belong to the ACTIVE segment: behind the sealed door and
+// ahead of the collapse, so the fight always happens where the party is.
+export function objectiveSpawnBand(sim) {
+  const o = sim.obj;
+  if (!o || o.type !== 'breach' || o.done) return null;
+  const doorX = o.seg < o.doors.length ? o.doors[o.seg] : sim.W - WALL - 60;
+  const lo = Math.max(WALL + 60, o.wallX + 90);
+  const hi = Math.max(lo + 120, doorX - 60);
+  return [lo, hi];
 }
 
 // --- f. RELIC RUN ------------------------------------------------------
@@ -508,18 +583,28 @@ export function serializeObjective(sim) {
         prog: (o.captured + o.meter / o.fillNeed) / o.need,
         sub: o.meter > 0 ? `holding ${Math.ceil(o.fillNeed - o.meter)}s` : 'stand in the zone',
         zone: [r(o.zone.x), r(o.zone.y), r(o.zone.r), o.meter / o.fillNeed] };
-    case 'elite_arena':
-      return { ...base, text: `${sim.enemyPool.count} left`, prog: o.total ? 1 - sim.enemyPool.count / o.total : 0 };
+    case 'elite_arena': {
+      const done = Math.max(0, o.spawnedCount - sim.enemyPool.count);
+      return { ...base, text: `${done}/${o.total} champions down`,
+        prog: o.total ? done / o.total : 0,
+        sub: `${sim.enemyPool.count} on the field` };
+    }
     case 'nest':
       return { ...base, text: `${o.alive}/${o.total} nests standing`, prog: o.total ? 1 - o.alive / o.total : 0,
         sub: 'destroy the spawners', nests: o.at || [] };
     case 'bounty':
       return { ...base, text: `${o.killed}/${o.need} bounties`, prog: o.killed / o.need,
         mark: o.markId !== null ? [o.markX, o.markY, +(o.markHp || 1).toFixed(2)] : null };
-    case 'breach':
-      return { ...base, text: 'reach the gate', prog: clamp((o.gate.x - (sim.W - o.gateX)) / Math.max(1, o.gate.x), 0, 1),
-        sub: 'the collapse is behind you',
-        wall: r(o.wallX), gate: [r(o.gate.x), r(o.gate.y)] };
+    case 'breach': {
+      const last = o.seg >= o.doors.length;
+      return { ...base,
+        text: last ? 'reach the gate' : `door ${o.seg + 1}/${o.doors.length} — ${o.kills}/${o.need} kills`,
+        prog: (o.seg + (last ? 0 : o.kills / o.need)) / (o.doors.length + 1),
+        sub: last ? 'the way is open — GO' : 'kill to open the door · the collapse is coming',
+        wall: r(o.wallX), gate: [r(o.gate.x), r(o.gate.y)],
+        doors: o.doors.slice(o.seg).map(d => r(d)),
+        need: o.need, kills: o.kills };
+    }
     case 'relic':
       return { ...base, text: `${o.banked}/${o.need} banked`, prog: o.banked / o.need,
         altar: [r(o.altar.x), r(o.altar.y)],

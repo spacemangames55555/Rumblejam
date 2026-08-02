@@ -95,7 +95,7 @@ objective bar on screen showing exactly what it wants.
 | ☠ | **Elite Arena** | A handful of enormous, slow monsters — Chargers, Lobbers, Splitters and Enragers (which pick up speed the longer they live). Kill them all. Pure kiting. |
 | ⁂ | **Nest Purge** | 6–8 destructible spawners feed the room; every one you destroy throttles the global inflow. Destroy them all. |
 | ✦ | **Bounty Hunt** | Five marked champions, one at a time, each with an escort pack and a ping on your screen. Killing one marks the next. |
-| ⇥ | **Breach** | An elongated corridor with a lethal collapse crawling in behind you. Fight forward, reach the gate. |
+| ⇥ | **Breach** | An elongated corridor cut into 3–4 segments by sealed doors, with a lethal collapse crawling in from the entry the whole time. Each door opens on a kill quota inside the current segment (scaling with party size and floor), so you fight forward under pressure rather than racing. Past the last segment, reach the gate. |
 | ⚱ | **Relic Run** | Relics scattered around the map; carrying one costs 20% move speed and pulls aggro onto you; drop it if you go down. Bank five at the central altar. |
 | ❄ | **Storm Survival** | A safe circle shrinks over ~20 s, then relocates at full size. Outside it you burn 5% of max HP per second. Survive 90 s. |
 | ⛏ | **Payload** | The extraction gate starts sealed. A drill crawls a fixed lane toward it, but only while someone is inside its escort radius. Enemies stall it (they can't destroy it) and it patches itself up while you're close. |
@@ -357,7 +357,8 @@ clean play). They act on the **host's** simulation:
 - **F1** — spawn 50 enemies (stress test; arenas only)
 - **F2** — +200 materials for every player
 - **F3** — kill everything, end the fight's spawning, and satisfy the current
-  objective (the one key that ends any level)
+  objective (the one key that ends any level; also runs the completion
+  cleanup, so the room goes inert exactly as it does on a real clear)
 - **F4** — skip to the next floor
 - **F5** — god mode toggle
 - **F6** — show hitboxes + FPS/entity counter
@@ -433,6 +434,70 @@ never loads them:
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### Playtest pass 2 (patch 12)
+
+- **The Breach bugs shared one root cause.** The corridor was reshaped by
+  scaling the room's *bounds* after the arena was built, leaving the
+  template's architecture hanging outside the room. `_pushOut` then ejected
+  players along the shortest exit from a block — straight through the map
+  edge. The fix moves the reshape into `buildArena`, where per-axis scaling
+  reaches obstacles, hazards and siege mutations too, and re-clamps players
+  to the room *after* the push. The minimap was never Breach-specific: it
+  scales to the arena aspect correctly, it simply had nothing to draw, so it
+  now marks the collapse, the sealed doors, the gate and every other
+  objective marker.
+- **The wall "never advanced" because it never mattered.** It did move — but
+  the party spawned at the arena's centre and the gate sat at the far edge,
+  so a 9-second walk ended the level before the collapse was relevant. The
+  party now drops in at the mouth of the corridor, and the collapse is paced
+  against the map (`(W − 2·WALL) / (segs·24 + 34)`) rather than a flat
+  number, so it crosses the whole corridor in about the time a competent
+  group needs to earn every door. Measured with the doors in: solo keeps
+  ~160 u of daylight, a 4-player group briefly gets caught (−221 u) and
+  takes the hit. That is the intended feel.
+- **Door quotas scale on both axes**: `(10 + 4·floor) × (1 + 0.55·(players−1))`
+  — 14 kills solo on floor 1, 37 for a four-player group, and the enemies to
+  pay it spawn *inside the active segment* (behind the door, ahead of the
+  collapse) so the fight always happens where the party is.
+- **Defeat keeps the session, not just the code.** A loss lands on the
+  results screen, where the host gets "NEW RUN (same room)" and everyone else
+  is told to wait. Taking it rebuilds the lobby in place: the PeerJS room,
+  every peer connection and the host role all persist, and character picks
+  are cleared so the party re-drafts. Mid-run *abandon* reuses the same path
+  but keeps your picks — abandoning is a do-over, losing is a fresh draft.
+  A player who drops during the transition is filtered out by checking the
+  live connection map, so the lobby never shows a ghost.
+- **Elite Arena numbers.** 10–15 champions (`10 + floor + 0.7·(players−1)`,
+  clamped) in waves of 3–5, each wave mixing variants, the next arriving
+  when the field thins or 14 s pass. Champion HP needed a floor ramp on top
+  of the base scaling — player builds outgrow the floor multiplier, and a
+  deep-floor party was clearing a full roster in 24 s. Measured in the
+  harness now: **58–114 s of uninterrupted DPS** across 1/4/8 players and
+  floors 1–4. That harness bot is god-moded, HP-pinned and never
+  repositions, so real play lands in the 2–3 minute target; the honest
+  number is the one above.
+- **Completion cleanup is a single choke point.** `_sanitizeArena()` runs at
+  the top of `_clearFight` and at the siege's boss-down, *before* any offer,
+  shop or level-up is pushed: every enemy dies, both sides' projectiles are
+  released, spawning stops, and telegraphs, zones, vortexes, hazards, the
+  hold-circle and cursed artillery all go quiet. A `safe` flag records it so
+  the suites can assert the guarantee rather than infer it. It applies to
+  standard arenas exactly as it does to the eight objective types.
+- **The item audit is value-matched, not just signed.** Handing an item
+  "+2 Grit / −9% Reflex" reads as a tradeoff but is a nerf, so each stat
+  carries a rough value-per-point (Grit 6, Ingenuity 5, Greed 3, Ferocity
+  and Tempo 2.5, Reflex and Attunement 2, Recovery 1.2, Vitality 1, Reach
+  0.6) and the buff that pays for a subtraction is sized in those units.
+  Across the 69 reworked items the mean net stat value moved by **0.05
+  points** — sharper, not weaker. Commons stayed clean, 51% of eligible
+  uncommons took a small subtraction, and **every** non-cursed rare and
+  legendary took a meaningful one. Cursed items were left alone; they
+  already trade a curse for their stats. Mechanical items that had no stat
+  line gained one in their own lane, so the subtraction has something to
+  oppose. The dead-stat gate now counts **positive** coverage only — after
+  this pass a stat could otherwise look supported while only ever appearing
+  as somebody's penalty.
 
 ### Objectives, Pulsar and cursed goods (patch 11)
 

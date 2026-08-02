@@ -432,6 +432,19 @@ export class Renderer {
       ctx.lineWidth = 8;
       ctx.beginPath(); ctx.moveTo(w, 0); ctx.lineTo(w, view.ah || 2000); ctx.stroke();
     }
+    for (const dx of o.doors || []) { // breach: the sealed doors ahead
+      ctx.fillStyle = 'rgba(255,171,79,0.22)';
+      ctx.fillRect(dx - 10, 0, 20, view.ah || 2000);
+      ctx.strokeStyle = '#ffab4f';
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(dx, 0); ctx.lineTo(dx, view.ah || 2000); ctx.stroke();
+      ctx.fillStyle = '#ffab4f';
+      ctx.font = 'bold 22px sans-serif';
+      const me = (view.players || []).find(q => q.idx === view.myIdx);
+      const ly = me ? clamp(me.y, 80, (view.ah || 2000) - 40) : (view.ah || 2000) / 2;
+      if (dx === o.doors[0]) ctx.fillText(`SEALED · ${o.kills}/${o.need}`, dx - 90, ly - 60);
+      break; // only the next door is worth labelling
+    }
     if (o.gate) { // breach/payload exit
       const [gx, gy] = o.gate;
       const open = o.t === 'breach' || (o.prog >= 1);

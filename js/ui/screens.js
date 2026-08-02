@@ -155,7 +155,10 @@ function statSummary(stats) {
 
 // ---------------- results ----------------
 
-export function showResults(result, myIdx) {
+// canLobby: this client can drive the party back to character select (host or
+// solo). Everyone else is told the host is doing it — the room, the code and
+// every peer connection survive a defeat.
+export function showResults(result, myIdx, canLobby = true) {
   hideScreens();
   const el = $('screen-results');
   el.classList.remove('hidden');
@@ -177,10 +180,17 @@ export function showResults(result, myIdx) {
       </div>
       <div class="row spread">
         <div class="seed-line">run seed: <b>${result.seed >>> 0}</b></div>
-        <button class="primary" id="btn-title">Return to Title</button>
+        <div class="row">
+          ${canLobby
+    ? '<button class="primary big" id="btn-lobby" style="width:auto;">▶ NEW RUN (same room)</button>'
+    : '<span class="dim small">waiting for the host to start a new run…</span>'}
+          <button id="btn-title">Leave</button>
+        </div>
       </div>
     </div>`;
   $('btn-title').onclick = () => { sfx.click(); A.leave(); };
+  const lb = $('btn-lobby');
+  if (lb) lb.onclick = () => { sfx.click(); A.backToLobby(); };
 }
 
 function summarizeItems(ids) {

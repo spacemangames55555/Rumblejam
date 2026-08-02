@@ -8,8 +8,9 @@ import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEnt
 import { generateFloorMap, serializeMap } from './dungeon.js';
 import { buildArena, waveConfig, PROFILES } from './arenas.js';
 import {
-  IS_OBJECTIVE, OBJECTIVE_KINDS, arenaShapeFor, initObjective, tickObjective,
+  IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
+  objectiveOnKill, objectiveSpawnBand,
 } from './objectives.js';
 import { CHAR_BY_ID } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
@@ -460,10 +461,6 @@ export class Sim {
     const arena = buildArena(this.seed, this.floorNum, node, this.players.length);
     this.phase = 'arena';
     this.arenaNode = node;
-    // some objectives want a different room shape than the template gives
-    // (Breach is a corridor; Zone/Storm want room to run)
-    const shaped = arenaShapeFor(node.kind, arena.w, arena.h);
-    arena.w = shaped.w; arena.h = shaped.h;
     this.W = arena.w; this.H = arena.h;
     this.obstacles = arena.obstacles;
     this.hazards = arena.hazards.map(h => ({ ...h }));
@@ -494,6 +491,7 @@ export class Sim {
     this.fronts = [this.waveRng.int(0, 3)];
     this.fightLoot = 0;  // materials actually picked up this fight
     this.lootT = null;   // the siege's post-boss looting countdown
+    this.safe = false;   // the room is live again
     this._armCurses();   // last round's curses expire; this round's bite
     // siege script
     if (node.kind === 'siege') {
@@ -513,8 +511,11 @@ export class Sim {
       this.bossT = 0;
     }
     // drop the party in at the arena center — nudged off any obstacle that
-    // covers it (cramped layouts can run walls through the exact midpoint)
-    const [cx, cy] = this._clearSpot(arena.w / 2, arena.h / 2, 40);
+    // covers it (cramped layouts can run walls through the exact midpoint).
+    // Breach is the exception: you start at the mouth of the corridor with
+    // the collapse behind you, or the level is a footrace you've already won.
+    const dropX = node.kind === 'breach' ? WALL + 190 : arena.w / 2;
+    const [cx, cy] = this._clearSpot(dropX, arena.h / 2, 40);
     this.players.forEach((p, i) => {
       if (p.gone) return;
       const [sx, sy] = this._clearSpot(
@@ -523,6 +524,7 @@ export class Sim {
       p.x = sx; p.y = sy;
       p.firstHitUsed = false;
       p.pullX = p.pullY = 0;
+      p.hp = p.stats.vitality;   // every room starts at full health
       // per-FIGHT trait state (the old per-room triggers)
       p.roomVitGain = 0;        // Vesper's overheal→Vitality cap
       p.roomFirstKillT = -10;
@@ -616,6 +618,8 @@ export class Sim {
       if (cap && this._aliveOfType(id) >= cap) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
       if (prof.puddle && (id === 'skulker' || id === 'flit') && this.waveRng.chance(prof.puddle)) puddle = true;
       const pos = this._spawnWavePos();
+      const band = objectiveSpawnBand(this); // Breach: inside the live segment
+      if (band) pos.x = band[0] + this.waveRng.float() * (band[1] - band[0]);
       this.spawnQueue.push({ t: 0.7, id, x: pos.x, y: pos.y, mortar, puddle });
       this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 26, dur: 0.7, spawnMark: true });
     }
@@ -689,8 +693,32 @@ export class Sim {
     this._clearFight();
   }
 
+  // The instant a fight's win condition is met — before ANY popup appears —
+  // the room becomes inert. Nothing may damage a player who is reading a
+  // level-up card: no enemies, no projectiles in flight, no spawning, and no
+  // level mechanic (storm burn, the Breach collapse, cursed artillery, death
+  // puddles, zone damage, spikes, lava, telegraphed impacts).
+  _sanitizeArena() {
+    for (const e of [...this.enemyPool]) { e.mats = 0; this._killEnemy(e, null); }
+    this.enemyPool.clear();
+    this.projPool.clear();            // both sides' projectiles
+    this.spawnQueue.length = 0;
+    if (this.wave) this.wave.done = true;
+    this.telegraphs.length = 0;       // nothing lands after the fight ends
+    this.zones.length = 0;            // acid puddles, lava fields, zone damage
+    this.vortexes.length = 0;
+    this.activeBeams.length = 0;
+    this.hazards = [];                // spike strips and lava pockets go quiet
+    this.holdCircle = null;
+    this.barrageT = Infinity;         // no cursed salvo lands on a shop screen
+    this.curseBarrage = 0;
+    this.decoys.length = 0;
+    this.safe = true;                 // asserted by the suites
+  }
+
   _clearFight() {
     this.cleared = true;
+    this._sanitizeArena();   // safety first, popups second
     // money doesn't wait: no end-of-fight vacuum — whatever wasn't collected
     // during the fight fizzles the moment the last enemy dies, and the banner
     // reports both numbers so the rule teaches itself
@@ -1111,6 +1139,11 @@ export class Sim {
     p.x = clamp(p.x, WALL + p.radius, this.W - WALL - p.radius);
     p.y = clamp(p.y, WALL + p.radius, this.H - WALL - p.radius);
     this._pushOut(p, p.radius);
+    // _pushOut ejects along the shortest exit from an obstacle, which can
+    // land OUTSIDE the room when architecture touches the boundary. The room
+    // bounds win: re-clamp after the push, every frame, on every map.
+    p.x = clamp(p.x, WALL + p.radius, this.W - WALL - p.radius);
+    p.y = clamp(p.y, WALL + p.radius, this.H - WALL - p.radius);
 
     // Onrush: moving fills the meter; fill rate scales with Tempo
     if (t.key === 'momentum_meter') {
@@ -1811,6 +1844,7 @@ export class Sim {
       this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
     }
     // drops
+    objectiveOnKill(this);   // Breach door quotas count kills in the segment
     let mats = objectiveKillPays(this) ? e.mats * this.greedMats : 0;
     if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && Math.random() < killer.hookAgg.doubleMaterials) mats *= 2;
     for (let i = 0; i < mats; i++) this._dropMaterial(x + (Math.random() * 30 - 15), y + (Math.random() * 30 - 15));
@@ -2405,6 +2439,7 @@ export class Sim {
     const bossName = e.bossDef.name;
     this.boss = null;
     this.cleared = true;
+    this._sanitizeArena();   // the field is inert before any payout screen
     if (this.wave) this.wave.done = true;
     this.shake = 8;
     this.holdCircle = null;
@@ -2780,6 +2815,9 @@ export class Sim {
       }
       // just recalled: packed up and bolting itself back down (inert, ~0.5s)
       if (s.deployT > 0) { s.deployT -= dt; continue; }
+      // structures obey the room bounds too — nothing lives outside the map
+      s.x = clamp(s.x, WALL + 12, this.W - WALL - 12);
+      s.y = clamp(s.y, WALL + 12, this.H - WALL - 12);
       // positioning
       if (s.type === 'drone' || s.type === 'mirror') {
         s.orbitA += dt * 1.6;

@@ -157,6 +157,41 @@ function drawRadar(view) {
     ctx.strokeStyle = view.hold[3] ? '#ffd45e' : '#ff5d6c';
     ctx.beginPath(); ctx.arc(ox + view.hold[0] * sc, oy + view.hold[1] * sc, Math.max(3, view.hold[2] * sc), 0, Math.PI * 2); ctx.stroke();
   }
+  // objective markers on the radar — on an elongated map (Breach) the radar
+  // is the only way to read where the collapse and the next door are
+  const ob = view.obj;
+  if (ob) {
+    if (ob.wall !== undefined) {                       // the collapse, filled in
+      ctx.fillStyle = 'rgba(255,93,108,0.35)';
+      ctx.fillRect(ox, oy, Math.max(0, ob.wall * sc), h);
+      ctx.strokeStyle = '#ff5d6c';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ox + ob.wall * sc, oy); ctx.lineTo(ox + ob.wall * sc, oy + h); ctx.stroke();
+    }
+    for (const dx of ob.doors || []) {                 // sealed doors ahead
+      ctx.strokeStyle = '#ffab4f';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(ox + dx * sc, oy); ctx.lineTo(ox + dx * sc, oy + h); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (ob.gate) dot(ob.gate[0], ob.gate[1], 4, PALETTE.doorOpen);
+    if (ob.zone) {
+      ctx.strokeStyle = '#5ee0a8'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(ox + ob.zone[0] * sc, oy + ob.zone[1] * sc, Math.max(3, ob.zone[2] * sc), 0, Math.PI * 2); ctx.stroke();
+    }
+    if (ob.circle) {
+      ctx.strokeStyle = '#5ea8ff'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(ox + ob.circle[0] * sc, oy + ob.circle[1] * sc, Math.max(3, ob.circle[2] * sc), 0, Math.PI * 2); ctx.stroke();
+    }
+    if (ob.altar) dot(ob.altar[0], ob.altar[1], 3.5, '#ffd45e');
+    for (const [rx, ry, carrier] of ob.relics || []) if (carrier < 0) dot(rx, ry, 2.5, '#ffd45e');
+    for (const [nx, ny] of ob.nests || []) dot(nx, ny, 3, '#c98b4f');
+    if (ob.drill) dot(ob.drill[0], ob.drill[1], 4, '#c98b4f');
+    if (ob.mark) dot(ob.mark[0], ob.mark[1], 4, '#ff7ad9');
+  }
   if (view.hatch) dot(view.hatch[0], view.hatch[1], 4, PALETTE.doorOpen);
   for (const e of view.enemies || []) {
     if (e.boss) dot(e.x, e.y, 4.5, '#ff5d6c');

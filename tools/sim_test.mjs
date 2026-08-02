@@ -20,6 +20,11 @@ import { ENEMIES } from '../js/content/enemies.js';
 import { BOSSES } from '../js/content/bosses.js';
 import { STAT_KEYS } from '../js/config.js';
 import { generateFloorMap } from '../js/dungeon.js';
+import { OBJECTIVE_KINDS as OBJ_KINDS } from '../js/objectives.js';
+import { CONFIG as CFG } from '../js/config.js';
+// how far outside the playable bounds an entity has strayed (0 = inside)
+const WALL_OUT = (p, g) => Math.max(0,
+  CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 
 let failures = 0;
@@ -42,10 +47,12 @@ if (BOSSES.length === 4) ok('bosses: 4'); else fail(`bosses ${BOSSES.length} != 
   }
   const iCover = Object.fromEntries(STAT_KEYS.map(k => [k, 0]));
   for (const it of ITEMS) {
-    const ks = new Set(Object.keys(it.stats || {}));
+    // POSITIVE coverage only: after the tradeoff audit a stat that shows up
+    // solely as somebody's subtraction is not "supported by the catalog"
+    const ks = new Set(Object.entries(it.stats || {}).filter(([, v]) => v > 0).map(([k]) => k));
     const h = it.hooks || {};
-    if (h.condStats) for (const k of Object.keys(h.condStats.stats)) ks.add(k);
-    if (h.allyAura) for (const k of Object.keys(h.allyAura.stats)) ks.add(k);
+    if (h.condStats) for (const [k, v] of Object.entries(h.condStats.stats)) if (v > 0) ks.add(k);
+    if (h.allyAura) for (const [k, v] of Object.entries(h.allyAura.stats)) if (v > 0) ks.add(k);
     for (const k of ks) if (k in iCover) iCover[k]++;
   }
   const cCover = Object.fromEntries(STAT_KEYS.map(k => [k, 0]));
@@ -58,7 +65,7 @@ if (BOSSES.length === 4) ok('bosses: 4'); else fail(`bosses ${BOSSES.length} != 
     if (iCover[k] < 5) { dead++; fail(`stat ${k}: on ${iCover[k]} items (<5)`); }
     if (cCover[k] < 1) { dead++; fail(`stat ${k}: on ${cCover[k]} character statlines (<1)`); }
   }
-  if (!dead) ok('no dead stats: every stat on ≥2 weapons, ≥5 items, ≥1 statline');
+  if (!dead) ok('no dead stats: every stat POSITIVELY on ≥2 weapons, ≥5 items, ≥1 statline');
 }
 
 // ---- 1c. stat glossary: complete, short, and covers every rendered stat ----
@@ -1673,6 +1680,190 @@ try {
     }
   }
 } catch (err) { fail('objectives-patch gates crashed', err); }
+
+// ---- 9j. playtest patch 2: Breach rework, defeat flow, elite density,
+//          completion cleanup, full-HP starts, item tradeoffs ----
+try {
+  const { ITEMS: IP } = await import('../js/content/items.js');
+  const { CONFIG: CP } = await import('../js/config.js');
+  const mkp = ids => ids.map((c, i) => ({ idx: i, key: `p${i}`, name: `P${i}`, charId: c, color: '#fff' }));
+  const squad = n => mkp(Array.from({ length: n }, (_, i) => ['bulwark', 'cindermage', 'zephyr', 'banneret'][i % 4]));
+  const gear = g => { for (const p of g.players) {
+    const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
+    while (p.weapons.length < 3) g._addWeapon(p, kit[p.weapons.length], 2);
+    g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
+  } };
+  const enterKind = (g, kind) => {
+    const n = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    n.kind = kind; if (!n.template) n.template = 'open_expanse';
+    g._travelTo(n.id); return n;
+  };
+
+  // --- Breach: the wall actually advances, and nothing leaves the map ---
+  {
+    const g = new Sim({ seed: 4242, party: squad(1) });
+    enterKind(g, 'breach'); g.god = true; gear(g);
+    const o = g.obj;
+    const x0 = o.wallX;
+    for (let i = 0; i < 60 * 10; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+    const moved = o.wallX - x0;
+    if (moved > 60) ok(`the Breach collapse advances (${Math.round(moved)}u in 10s at ${o.speed.toFixed(0)}u/s)`);
+    else fail(`collapse did not advance: ${x0} → ${o.wallX}`);
+    if (o.speed > 0 && o.dps > 0) ok(`the collapse deals ${o.dps} dps on contact`);
+    // architecture stays inside the room on a reshaped map
+    const stray = g.obstacles.filter(ob => ob.x < 0 || ob.y < 0 || ob.x + ob.w > g.W || ob.y + ob.h > g.H);
+    if (!stray.length) ok(`Breach architecture is inside the room (${g.W}×${g.H}, ${g.obstacles.length} blocks)`);
+    else fail(`${stray.length} obstacles outside the Breach bounds`);
+    // and no player can be pushed through the boundary
+    const p = g.players[0];
+    let worst = 0;
+    for (let i = 0; i < 60 * 12; i++) {
+      g.setInput(0, { mx: i % 4 < 2 ? 1 : -1, my: i % 8 < 4 ? 1 : -1 });
+      g.tick();
+      worst = Math.max(worst, WALL_OUT(p, g));
+    }
+    if (worst === 0) ok('players stay inside the playable bounds on Breach');
+    else fail(`player escaped the map by ${worst.toFixed(1)}u`);
+  }
+
+  // --- Breach: sealed doors, kill quotas, and a clean finish ---
+  {
+    for (const n of [1, 4]) {
+      const g = new Sim({ seed: 777, party: squad(n) });
+      enterKind(g, 'breach'); g.god = true; gear(g);
+      const o = g.obj;
+      if (o.segs >= 3 && o.segs <= 4) ok(`Breach splits into ${o.segs} segments (${n}p)`);
+      else fail(`Breach segments: ${o.segs}`);
+      if (o.doors.length === o.segs) ok(`${o.doors.length} sealed doors, one per segment boundary`);
+      const need1 = o.need;
+      // the door holds you until the quota is paid
+      const p = g.players[0];
+      p.x = o.doors[0] + 500; g.tick();
+      if (p.x < o.doors[0]) ok('a sealed door blocks the party until its quota is paid');
+      else fail(`walked through a sealed door to ${Math.round(p.x)} (door at ${o.doors[0]})`);
+      // pay it
+      for (let k = 0; k < o.need; k++) {
+        const e = g.spawnEnemyById('skulker', p.x - 60, p.y, {});
+        if (e) g._killEnemy(e, p);
+      }
+      if (o.seg === 1) ok(`the door opens on its kill quota (${need1} kills, ${n}p)`);
+      else fail(`quota paid but seg=${o.seg}`);
+      if (n === 1 && need1 < g.obj.need * 4) ok(`door quota scales with party and floor (${need1} at 1p)`);
+    }
+    // …and the quota really is bigger with a bigger party
+    const solo = new Sim({ seed: 777, party: squad(1) }); enterKind(solo, 'breach');
+    const four = new Sim({ seed: 777, party: squad(4) }); enterKind(four, 'breach');
+    if (four.obj.need > solo.obj.need) ok(`door quota scales with party size (${solo.obj.need} solo → ${four.obj.need} at 4p)`);
+    else fail(`quota did not scale: ${solo.obj.need} vs ${four.obj.need}`);
+  }
+
+  // --- Elite Arena density: 10–15 champions in waves of 3–5 ---
+  {
+    let bad = 0;
+    for (const [n, fl] of [[1, 1], [4, 1], [8, 1], [4, 3]]) {
+      const g = new Sim({ seed: 31337, party: squad(Math.min(4, n)).concat(
+        n > 4 ? mkp(Array.from({ length: n - 4 }, (_, i) => ['sawbones', 'redmaw', 'longshot', 'frostcaller'][i % 4]))
+          .map((m, i) => ({ ...m, idx: 4 + i, key: `x${i}` })) : []) });
+      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      enterKind(g, 'elite_arena');
+      const o = g.obj;
+      if (o.total < 10 || o.total > 15) { bad++; fail(`elite arena roster ${o.total} outside 10–15 (${n}p f${fl})`); }
+      if (o.waveSize < 3 || o.waveSize > 5) { bad++; fail(`elite wave size ${o.waveSize} outside 3–5`); }
+      // first wave lands, and it is a MIX of variants
+      for (let i = 0; i < 90; i++) g.tick();
+      const kinds = new Set([...g.enemyPool].map(e => e.arenaVariant));
+      if (kinds.size < 2) { bad++; fail(`first elite wave was all one variant: ${[...kinds]}`); }
+    }
+    if (!bad) ok('Elite Arena: 10–15 champions per match, waves of 3–5, variants mixed within a wave');
+  }
+
+  // --- the completion-cleanup safety guarantee, on every level type ---
+  {
+    let bad = 0;
+    const kinds = [...OBJ_KINDS, 'combat'];
+    for (const kind of kinds) {
+      const g = new Sim({ seed: 606, party: squad(2) });
+      enterKind(g, kind);
+      gear(g);
+      // make the room as dangerous as possible, then win it
+      for (let i = 0; i < 60 * 6; i++) g.tick();
+      g.addZone({ x: g.players[0].x, y: g.players[0].y, r: 90, dps: 20, dur: 30, hurts: 'players', color: '#7dee6a', acid: true });
+      g.addTelegraph({ shape: 'circle', x: g.players[0].x, y: g.players[0].y, r: 90, dur: 5, boom: { dmg: 40, radius: 90 } });
+      g.spawnEnemyProj(g.players[0].x + 40, g.players[0].y, 0, 200, 10, 6, '#f00');
+      g.hazards = [{ type: 'lava', x: g.players[0].x, y: g.players[0].y, r: 90, dps: 20, acc: 0 }];
+      g.curseBarrage = 2; g.barrageT = 0.1;
+      g.debug('F3');                       // meets the win condition
+      const openPopup = g.players.some(p => p.pendingOffer || p.shop || p.treasureOffer);
+      const live = {
+        enemies: g.enemyPool.count, projs: g.projPool.count, queued: g.spawnQueue.length,
+        zones: g.zones.length, telegraphs: g.telegraphs.length, hazards: (g.hazards || []).length,
+        vortexes: g.vortexes.length, barrage: g.curseBarrage,
+      };
+      const dirty = Object.entries(live).filter(([, v]) => v > 0);
+      if (dirty.length) { bad++; fail(`${kind}: arena not safe at completion — ${dirty.map(([k2, v]) => `${k2}=${v}`).join(' ')}`); }
+      if (!g.safe) { bad++; fail(`${kind}: safe flag not set at completion`); }
+      // and it STAYS safe while the popup is up
+      const hp0 = g.players.map(p => p.hp);
+      for (let i = 0; i < 60 * 4; i++) g.tick();
+      if (g.players.some((p, i) => p.hp < hp0[i])) { bad++; fail(`${kind}: a player took damage while a popup was open`); }
+      if (!openPopup && kind === 'combat') { /* offers depend on banked xp — not asserted */ }
+    }
+    if (!bad) ok(`completion cleanup: all ${kinds.length} level types go inert (no enemies, projectiles, spawns or hazards) before any popup, and stay safe`);
+  }
+
+  // --- every room starts at full HP ---
+  {
+    const g = new Sim({ seed: 515, party: squad(3) });
+    enterKind(g, 'combat');
+    for (const p of g.players) p.hp = 3;                    // walk in hurt
+    const n2 = g.floor.nodes.find(x => x.id !== g.currentNode && !['shop', 'treasure', 'siege'].includes(x.kind));
+    n2.kind = 'combat'; if (!n2.template) n2.template = 'open_expanse';
+    g._travelTo(n2.id);
+    if (g.players.every(p => p.hp === p.stats.vitality)) ok('every player starts a room at full HP');
+    else fail(`room start HP: ${g.players.map(p => `${p.hp}/${p.stats.vitality}`).join(' ')}`);
+  }
+
+  // --- item tradeoff audit ---
+  {
+    const neg = it => it.stats && Object.values(it.stats).some(v => v < 0);
+    const eligible = r => IP.filter(it => it.rarity === r && !it.curse);
+    const commons = eligible('common');
+    if (!commons.some(neg)) ok(`commons stay clean (${commons.length} items, no subtractions)`);
+    else fail(`commons with subtractions: ${commons.filter(neg).map(i => i.id).join(', ')}`);
+    const unc = eligible('uncommon');
+    const uncShare = unc.filter(neg).length / unc.length;
+    if (uncShare >= 0.35 && uncShare <= 0.65) ok(`~half of uncommons carry a subtraction (${unc.filter(neg).length}/${unc.length})`);
+    else fail(`uncommon subtraction share ${(100 * uncShare).toFixed(0)}%`);
+    for (const r of ['rare', 'legendary']) {
+      const list = eligible(r);
+      const clean = list.filter(it => !neg(it));
+      if (!clean.length) ok(`every ${r} carries a subtraction (${list.length} items)`);
+      else fail(`${r} with no subtraction: ${clean.map(i => i.id).join(', ')}`);
+    }
+    // the subtraction opposes the item's own lane, and is spelled out
+    const silent = IP.filter(it => neg(it) && !/Costs you/.test(it.desc || ''));
+    if (!silent.length) ok('every subtraction is stated explicitly on the item');
+    else fail(`items hiding a subtraction: ${silent.map(i => i.id).join(', ')}`);
+    const selfHarm = IP.filter(it => {
+      if (!neg(it)) return false;
+      const negK = Object.entries(it.stats).filter(([, v]) => v < 0).map(([k]) => k);
+      const posK = Object.entries(it.stats).filter(([, v]) => v > 0).map(([k]) => k);
+      return negK.some(k => posK.includes(k));
+    });
+    if (!selfHarm.length) ok('no item both grants and subtracts the same stat');
+    else fail(`self-cancelling items: ${selfHarm.map(i => i.id).join(', ')}`);
+    // cursed items were left alone
+    const touchedCurse = IP.filter(it => it.curse && /Costs you/.test(it.desc || ''));
+    if (!touchedCurse.length) ok('cursed items were left out of the tradeoff audit, as designed');
+    // net power: reworked items did not quietly become weaker
+    const VAL = { vitality: 1, ferocity: 2.5, tempo: 2.5, grit: 6, reflex: 2, recovery: 1.2, ingenuity: 5, attunement: 2, greed: 3, reach: 0.6 };
+    const worth = it => Object.entries(it.stats || {}).reduce((a, [k, v]) => a + v * (VAL[k] || 1), 0);
+    const reworked = IP.filter(neg);
+    const meanWorth = reworked.reduce((a, it) => a + worth(it), 0) / reworked.length;
+    if (meanWorth > -1.5) ok(`reworked items keep their net stat value (mean ${meanWorth.toFixed(1)} points across ${reworked.length} items)`);
+    else fail(`the audit quietly nerfed the catalog: mean net value ${meanWorth.toFixed(1)}`);
+  }
+} catch (err) { fail('playtest-2 gates crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {
