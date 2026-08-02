@@ -77,6 +77,18 @@ export function updateHud(meta, view, hctx) {
       ec.innerHTML = `<b class="ec-n exact">⚔ ${n}</b>`;
     }
   } else ec.classList.add('hidden');
+  // objective banner: what this level actually wants from you, plus a bar.
+  // Same markup on host and client — it reads from the synced objective blob.
+  const ob = $('objective-hud');
+  if (view.mode === 'arena' && view.obj) {
+    const o = view.obj;
+    ob.classList.remove('hidden');
+    const pct = Math.round(100 * Math.max(0, Math.min(1, o.prog || 0)));
+    ob.innerHTML = `<div class="obj-line"><b>${escapeHtml(o.label || '')}</b>
+        <span class="obj-text">${escapeHtml(o.text || '')}</span></div>
+      <div class="obj-bar"><i style="width:${pct}%"></i></div>
+      ${o.sub ? `<div class="obj-sub">${escapeHtml(o.sub)}</div>` : ''}`;
+  } else ob.classList.add('hidden');
   // weapons
   if (meta) {
     const slots = [];

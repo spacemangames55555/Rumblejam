@@ -140,6 +140,7 @@ export class Renderer {
       ctx.fillText(held ? 'HELD — SPAWNS CHOKED' : 'HOLD THE SIGIL', hx, hy - hr - 12);
     }
     if (view.hatch) this._drawHatch(ctx, view.hatch[0], view.hatch[1], view.afterSiege);
+    if (view.obj) this._drawObjective(ctx, view);
     this._drawAuras(ctx, view);
     this._drawTethers(ctx, view);
     this._drawTelegraphs(ctx, view, inView);
@@ -212,6 +213,20 @@ export class Renderer {
     }
     if (view.hatch) targets.push({ x: view.hatch[0], y: view.hatch[1], color: PALETTE.doorOpen, label: '➤' });
     if (view.hold) targets.push({ x: view.hold[0], y: view.hold[1], color: '#ffd45e', label: '◎' });
+    // objective markers get arrows too — the whole level is about reaching them
+    const ob = view.obj;
+    if (ob) {
+      if (ob.zone) targets.push({ x: ob.zone[0], y: ob.zone[1], color: '#5ee0a8', label: '◎' });
+      if (ob.altar) targets.push({ x: ob.altar[0], y: ob.altar[1], color: '#ffd45e', label: '⚱' });
+      if (ob.gate) targets.push({ x: ob.gate[0], y: ob.gate[1], color: '#ffab4f', label: '⇥' });
+      if (ob.drill) targets.push({ x: ob.drill[0], y: ob.drill[1], color: '#c98b4f', label: '⛏', big: true });
+      if (ob.mark) targets.push({ x: ob.mark[0], y: ob.mark[1], color: '#ff7ad9', label: '✦', big: true });
+      if (ob.circle) targets.push({ x: ob.circle[0], y: ob.circle[1], color: '#5ea8ff', label: '❄' });
+      for (const [rx, ry, carrier] of ob.relics || []) {
+        if (carrier < 0) targets.push({ x: rx, y: ry, color: '#ffd45e', label: '⚱' });
+      }
+      for (const [nx, ny] of ob.nests || []) targets.push({ x: nx, y: ny, color: '#c98b4f', label: '⁂' });
+    }
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const cwCss = s.cw / this.dpr, chCss = s.ch / this.dpr;
     for (const tg of targets) {
@@ -368,6 +383,130 @@ export class Renderer {
       ctx.lineWidth = 3;
       ctx.strokeRect(o[0], o[1], o[2], o[3]);
     }
+  }
+
+  // Objective world markers. Everything here is drawn from the synced
+  // objective blob, so the host and every client see the same thing.
+  _drawObjective(ctx, view) {
+    const o = view.obj;
+    ctx.save();
+    ctx.textAlign = 'center';
+    if (o.zone) {
+      const [zx, zy, zr, fill] = o.zone;
+      ctx.fillStyle = `rgba(94,224,168,${0.06 + 0.1 * fill})`;
+      circle(ctx, zx, zy, zr); ctx.fill();
+      ctx.strokeStyle = '#5ee0a8';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([18, 12]);
+      ctx.lineDashOffset = -this.t * 22;
+      circle(ctx, zx, zy, zr); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      // capture arc
+      ctx.strokeStyle = '#ffd45e';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(zx, zy, zr - 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, fill));
+      ctx.stroke();
+    }
+    if (o.circle) { // storm: the safe ring, everything outside burns
+      const [cx, cy, cr] = o.circle;
+      ctx.strokeStyle = '#5ea8ff';
+      ctx.lineWidth = 6;
+      ctx.globalAlpha = 0.9;
+      circle(ctx, cx, cy, cr); ctx.stroke();
+      ctx.globalAlpha = 0.10;
+      ctx.fillStyle = '#5ea8ff';
+      circle(ctx, cx, cy, cr); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    if (o.wall !== undefined) { // breach: the collapse eating the corridor
+      const w = o.wall;
+      const g = ctx.createLinearGradient(w - 420, 0, w, 0);
+      g.addColorStop(0, 'rgba(255,93,108,0)');
+      g.addColorStop(1, 'rgba(255,93,108,0.55)');
+      ctx.fillStyle = g;
+      ctx.fillRect(w - 420, 0, 420, view.ah || 2000);
+      ctx.fillStyle = '#2b2f45';
+      ctx.fillRect(0, 0, w, view.ah || 2000);
+      ctx.strokeStyle = '#ff5d6c';
+      ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.moveTo(w, 0); ctx.lineTo(w, view.ah || 2000); ctx.stroke();
+    }
+    if (o.gate) { // breach/payload exit
+      const [gx, gy] = o.gate;
+      const open = o.t === 'breach' || (o.prog >= 1);
+      ctx.strokeStyle = open ? PALETTE.doorOpen : '#ffab4f';
+      ctx.lineWidth = 5;
+      ctx.setLineDash([10, 7]);
+      circle(ctx, gx, gy, 74 + Math.sin(this.t * 3) * 4); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = open ? PALETTE.doorOpen : '#ffab4f';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText(open ? 'GATE' : 'SEALED GATE', gx, gy - 88);
+    }
+    if (o.altar) { // relic run
+      const [ax, ay] = o.altar;
+      ctx.strokeStyle = '#ffd45e';
+      ctx.lineWidth = 5;
+      circle(ctx, ax, ay, 84); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,212,94,0.10)';
+      circle(ctx, ax, ay, 84); ctx.fill();
+      ctx.fillStyle = '#ffd45e';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText('ALTAR', ax, ay - 96);
+      for (const [rx, ry, carrier] of o.relics || []) {
+        ctx.fillStyle = carrier >= 0 ? '#c9a6ff' : '#ffd45e';
+        ctx.strokeStyle = PALETTE.outline;
+        ctx.lineWidth = 3;
+        const bob = Math.sin(this.t * 4 + rx * 0.1) * 3;
+        diamond(ctx, rx, ry - 26 + bob, 11);
+        ctx.fill(); ctx.stroke();
+      }
+    }
+    if (o.drill) { // payload
+      const [dx, dy, hpFrac, escorted, stalled] = o.drill;
+      ctx.strokeStyle = escorted ? PALETTE.doorOpen : '#9aa0bd';
+      ctx.globalAlpha = 0.4;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([12, 10]);
+      circle(ctx, dx, dy, o.escortR || 260); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = stalled ? '#ff5d6c' : '#c98b4f';
+      ctx.strokeStyle = PALETTE.outline;
+      ctx.lineWidth = 3;
+      rect(ctx, dx - 26, dy - 20, 52, 40, 6); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#12141f';
+      rect(ctx, dx - 22, dy + 22, 44, 7, 3); ctx.fill();
+      ctx.fillStyle = hpFrac > 0.35 ? PALETTE.doorOpen : '#ff5d6c';
+      rect(ctx, dx - 22, dy + 22, 44 * Math.max(0, hpFrac), 7, 3); ctx.fill();
+      ctx.fillStyle = stalled ? '#ff5d6c' : (escorted ? PALETTE.doorOpen : '#9aa0bd');
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText(stalled ? 'STALLED' : (escorted ? 'DRILLING' : 'ESCORT ME'), dx, dy - 32);
+    }
+    for (const [nx, ny, hpf] of o.nests || []) { // nest purge: mark every spawner
+      ctx.strokeStyle = '#c98b4f';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 6]);
+      ctx.lineDashOffset = -this.t * 14;
+      circle(ctx, nx, ny, 46 + Math.sin(this.t * 3 + nx * 0.05) * 3); ctx.stroke();
+      ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      ctx.fillStyle = '#12141f';
+      rect(ctx, nx - 24, ny - 44, 48, 6, 3); ctx.fill();
+      ctx.fillStyle = '#c98b4f';
+      rect(ctx, nx - 24, ny - 44, 48 * Math.max(0, hpf), 6, 3); ctx.fill();
+    }
+    if (o.mark) { // bounty: a ping on the current champion
+      const [mx, my] = o.mark;
+      ctx.strokeStyle = '#ff7ad9';
+      ctx.lineWidth = 4;
+      const pr = 60 + Math.sin(this.t * 4) * 10;
+      circle(ctx, mx, my, pr); ctx.stroke();
+      ctx.fillStyle = '#ff7ad9';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText('BOUNTY', mx, my - pr - 10);
+    }
+    ctx.restore();
   }
 
   _drawHazards(ctx, view, inView) {
@@ -577,6 +716,19 @@ export class Renderer {
         ctx.font = 'bold 14px sans-serif';
         ctx.fillText('⌖', 0, -r - 20);
       }
+      // structure-recall channel: a ring closing around you while you hold
+      // still with structures off your screen (breaks on movement or a hit)
+      if (p.reloc > 0) {
+        ctx.strokeStyle = '#4fd8eb';
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 4;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 13, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, p.reloc));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
     }
     ctx.fillStyle = p.idx === view.myIdx ? '#fff' : '#c8cde8';
     ctx.font = 'bold 12px sans-serif';
@@ -593,6 +745,8 @@ export class Renderer {
     const col = owner ? owner.color : '#4fd8eb';
     ctx.strokeStyle = PALETTE.outline;
     ctx.lineWidth = 2.5;
+    // just recalled: bolting itself back down, inert and translucent
+    if (s.packed) { ctx.globalAlpha = 0.45; ctx.scale(0.8, 0.8); }
     if (s.type === 'turret') {
       ctx.fillStyle = '#2b2f45';
       rect(ctx, -11, -11, 22, 22, 4); ctx.fill(); ctx.stroke();

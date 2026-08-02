@@ -7,6 +7,10 @@ import { Rng, subRng } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
 import { buildArena, waveConfig, PROFILES } from './arenas.js';
+import {
+  IS_OBJECTIVE, OBJECTIVE_KINDS, arenaShapeFor, initObjective, tickObjective,
+  serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
+} from './objectives.js';
 import { CHAR_BY_ID } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
@@ -63,6 +67,15 @@ export class Sim {
     this.greedMats = this.players.some(p => p.char.trait.key === 'toll_road') ? 2 : 1;
     this.coopHp = coopCurve(this.players.length, CONFIG.COOP_HP_SCALE, CONFIG.COOP_HP_SOFT);
     this.coopSpawn = coopCurve(this.players.length, CONFIG.COOP_SPAWN_SCALE, CONFIG.COOP_SPAWN_SOFT);
+    // solo bite: one player gets +15% count and +15% enemy HP on top of the
+    // co-op curve (which is ×1 at n=1), so playing alone isn't the easy mode
+    if (this.players.length === 1) {
+      this.coopSpawn *= CONFIG.SOLO_SPAWN_MULT;
+      this.coopHp *= CONFIG.SOLO_HP_MULT;
+    }
+    // round curses (cursed shop items) — enemy-side effects are shared by the
+    // whole party for one round; player-side effects live on the buyer
+    this.curseEnemyHp = 1; this.curseEnemySpd = 1; this.curseBarrage = 0;
 
     this.floorNum = 0;
     this.pendingEnd = 0;
@@ -125,12 +138,16 @@ export class Sim {
       boonCounts: {}, boonOffer: null, boonTemp: null,
       roomVitGain: 0,      // Vesper per-room overheal→Vitality cap tracker
       carrying: null, channelT: 0, // Overseer turret carry/redeploy
+      novaT: 0, heat: 0, heatDropT: 0, novaDamage: 0, // Pulsar's nova core
+      relocT: 0,           // structure-recall channel (stand still to call them in)
+      curses: [], pendingCurses: [], // cursed-item effects: next round, then gone
       metaDirty: true,
     };
     const t = char.trait;
     if (t.key === 'insider') { p.weaponSlots = t.slots; p.rerollFlat = true; }
     if (t.key === 'structures_fast') p.weaponSlots = t.slotCap;
     if (t.key === 'overseer') p.weaponSlots = t.mounts;
+    if (t.key === 'nova_core') p.weaponSlots = t.slots;
     if (t.key === 'reflex_master') p.reflexCap = t.cap;
     if (t.key === 'executioner') p.critMult = 3;
     this._recomputeItems(p);
@@ -284,6 +301,11 @@ export class Sim {
         }
       }
     }
+    // cursed round: the player-side curses ride the sheet like any modifier
+    if (p.curses && p.curses.length) {
+      s.tempo += this._curse(p, 'tempo');
+      s.reflex += this._curse(p, 'reflex');
+    }
     // temporary/situational
     if (t.key === 'berserk_missing') s.ferocity += Math.round((1 - hpFrac) * 100) * t.perMissing;
     for (const f of p.frenzy) s.tempo += f.tempo;                      // killTempo stacks + pickup surges
@@ -419,7 +441,7 @@ export class Sim {
     this.currentNode = nodeId;
     this.visited.add(nodeId);
     this.nodeVote = null;
-    if (node.kind === 'combat' || node.kind === 'elite' || node.kind === 'siege') {
+    if (node.kind === 'combat' || node.kind === 'elite' || node.kind === 'siege' || IS_OBJECTIVE[node.kind]) {
       this._enterArena(node);
       return;
     }
@@ -438,6 +460,10 @@ export class Sim {
     const arena = buildArena(this.seed, this.floorNum, node, this.players.length);
     this.phase = 'arena';
     this.arenaNode = node;
+    // some objectives want a different room shape than the template gives
+    // (Breach is a corridor; Zone/Storm want room to run)
+    const shaped = arenaShapeFor(node.kind, arena.w, arena.h);
+    arena.w = shaped.w; arena.h = shaped.h;
     this.W = arena.w; this.H = arena.h;
     this.obstacles = arena.obstacles;
     this.hazards = arena.hazards.map(h => ({ ...h }));
@@ -458,11 +484,17 @@ export class Sim {
     // the fight's pressure profile: sieges are always high-friction; stops
     // have none; combat/elite carry the recipe rolled at map generation
     this.profile = node.kind === 'siege' ? PROFILES.siege : (PROFILES[node.profile] || PROFILES.mixed);
+    // objective state (null on a plain horde arena) — set up before the first
+    // tick so its scripted spawns and spawn-rate multiplier apply from t=0
+    this.nestChoke = 1;
+    initObjective(this, node);
+    if (this.obj && objectiveEndless(node.kind)) this.wave.dur = Infinity;
     // Bastion streams from ONE arena edge (0=n 1=e 2=s 3=w) — a single front
     // is a queue, and holding ground against a queue is the sanctioned play
     this.fronts = [this.waveRng.int(0, 3)];
     this.fightLoot = 0;  // materials actually picked up this fight
     this.lootT = null;   // the siege's post-boss looting countdown
+    this._armCurses();   // last round's curses expire; this round's bite
     // siege script
     if (node.kind === 'siege') {
       this.mutations = arena.mutations;
@@ -498,11 +530,16 @@ export class Sim {
       p.boonOffer = null;
       if (p.char.trait.key === 'prism' && !p.downed) this._offerBoon(p);
     });
-    // teleport summons along; structures rebuild between fights
+    // every structure rides along on a room change: revived, unpacked, and
+    // scattered around its owner so a stack of turrets doesn't fuse into one
     for (const s of this.summons) {
-      const owner = this.players[s.owner];
-      s.x = owner.x + (Math.random() * 80 - 40); s.y = owner.y + (Math.random() * 80 - 40);
       if (s.dead) { s.dead = false; s.hp = s.maxHp; }
+      s.deployT = 0; s.carried = false;
+    }
+    for (const p of this.players) {
+      if (p.gone) continue;
+      p.relocT = 0; p.carrying = null;
+      this.relocateStructures(p, { all: true, instant: true });
     }
     this.pushEvent({
       k: 'arena', nodeId: node.id, kind: node.kind, template: node.template,
@@ -526,7 +563,8 @@ export class Sim {
     w.t += dt;
     if (w.t >= w.dur) { w.done = true; return; }
     let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult
-      * ((this.profile && this.profile.rateMult) || 1);
+      * ((this.profile && this.profile.rateMult) || 1)
+      * objectiveSpawnMult(this);
     if (this.boss) {
       // "reduced add spawns" while the boss is up — and tapering to silence,
       // so a siege is never an unwinnable DPS race against infinite inflow:
@@ -645,6 +683,8 @@ export class Sim {
   _checkFightClear() {
     if (this.phase !== 'arena' || this.cleared || this.over) return;
     if (this.arenaNode.kind === 'siege') return; // sieges end on the boss, not on empty
+    // objective levels clear on their own win condition, not on an empty field
+    if (this.obj) { if (this.obj.done) this._clearFight(); return; }
     if (!this.wave.done || this.spawnQueue.length > 0 || this.enemyPool.count > 0) return;
     this._clearFight();
   }
@@ -658,7 +698,7 @@ export class Sim {
     this.pushEvent({ k: 'roomClear', collected: this.fightLoot, lost });
     this.pushEvent({ k: 'sfx', s: 'door' });
     for (const p of this.livePlayers()) this._clearRewards(p);
-    if (this.arenaNode.kind === 'elite') {
+    if (this.arenaNode.kind === 'elite' || this.arenaNode.kind === 'elite_arena' || this.arenaNode.kind === 'bounty') {
       for (const p of this.livePlayers()) this._offerTreasure(p, 'elite');
     }
     // the valley after every peak: extraction includes a shop browse
@@ -865,7 +905,7 @@ export class Sim {
     const cands = [];
     for (const e of this.enemyPool) {
       const d = dist2(x, y, e.x, e.y);
-      if (d < range * range) cands.push({ d, e });
+      if (d < range * range) cands.push({ d: d * this._aimWeight(e), e });
     }
     cands.sort((a, b) => a.d - b.d);
     for (const c of cands) if (!this.losBlocked(x, y, c.e.x, c.e.y)) return c.e;
@@ -918,13 +958,15 @@ export class Sim {
     const fl = Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1);
     const dmgScale = Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1);
     let hp = def.hp * fl * this.coopHp * this.greedHp * CONFIG.enemyHpMult * (opts.elite ? CONFIG.ELITE_HP_MULT : 1);
+    hp *= this.curseEnemyHp;                       // cursed round: tougher enemies
+    if (opts.hpMult) hp *= opts.hpMult;            // objective variants (elite arena, bounties)
     if (opts.mini) hp *= 0.35;
     Object.assign(e, {
       id: ++this.spawnCounter, def, typeIdx: ENEMY_INDEX[id], boss: false, bossDef: null,
       x: clamp(x, WALL + 20, this.W - WALL - 20), y: clamp(y, WALL + 20, this.H - WALL - 20),
       hp: Math.round(hp), maxHp: Math.round(hp),
       radius: def.radius * (opts.elite ? 1.45 : 1) * (opts.mini ? 0.6 : 1),
-      spd: def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1),
+      spd: def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * (opts.spdMult || 1),
       dmg: def.dmg * dmgScale, dmgScale,
       mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
@@ -939,6 +981,8 @@ export class Sim {
     });
     return e;
   }
+
+  eliteMods() { return ELITE_MODS; }
 
   enemyById(id) {
     for (const e of this.enemyPool) if (e.id === id) return e;
@@ -1024,6 +1068,8 @@ export class Sim {
     this._tickDecoys(dt);
     // revives
     this._tickRevive(dt);
+    this._tickCurseBarrage(dt);
+    tickObjective(this, dt);
     // fight clear + the siege looting window + extraction portal countdown
     this._checkFightClear();
     this._tickLoot(dt);
@@ -1057,6 +1103,7 @@ export class Sim {
     const t = p.char.trait;
     let spd = CONFIG.BASE_SPEED * (1 + p.stats.tempo / 100);
     spd = Math.max(60, spd);
+    if (this.carryingRelic(p)) spd *= 0.8; // a relic is heavy: −20% move speed
     const pullResist = t.key === 'immovable' ? 0 : CONFIG.ARMOR_K / (CONFIG.ARMOR_K + Math.max(0, p.stats.grit));
     p.x += (p.mx * spd + p.pullX * pullResist) * dt;
     p.y += (p.my * spd + p.pullY * pullResist) * dt;
@@ -1090,6 +1137,12 @@ export class Sim {
 
     // weapons
     this._tickWeapons(p, dt);
+
+    // Pulsar's nova core
+    if (t.key === 'nova_core') this._tickNova(p, t, dt);
+
+    // structures: stand still to call the ones you can't see back to you
+    this._tickStructureRecall(p, dt);
 
     // Overseer: redeploy channel completes
     if (p.channelT > 0) {
@@ -1136,6 +1189,158 @@ export class Sim {
     return false;
   }
 
+  // ---------------- cursed goods ----------------
+  // Taking a cursed item queues its curse for the NEXT round. Curses activate
+  // when that arena starts and are gone when the next one does — a cursed
+  // buy is a loan against exactly one fight.
+  _grantItem(p, id) {
+    p.items.push(id);
+    const it = ITEM_BY_ID[id];
+    if (it) {
+      for (const c of [it.curse, it.curse2]) {
+        if (c) p.pendingCurses.push({ ...c, from: it.name });
+      }
+    }
+    this._recomputeItems(p);
+    this._recomputeStats(p);
+  }
+
+  // sum of one curse key across a player's ACTIVE curses (they stack)
+  _curse(p, key) {
+    let v = 0;
+    for (const c of p.curses) if (c.key === key) v += c.value;
+    return v;
+  }
+
+  // called at every arena entry: last round's curses expire, this round's
+  // activate, and the enemy-side ones fold into shared round multipliers
+  _armCurses() {
+    this.curseEnemyHp = 1; this.curseEnemySpd = 1; this.curseBarrage = 0;
+    const named = [];
+    for (const p of this.players) {
+      if (p.gone) { p.curses = []; continue; }
+      p.curses = p.pendingCurses;
+      p.pendingCurses = [];
+      for (const c of p.curses) {
+        if (c.scope !== 'enemy') continue;
+        // enemy-side curses are the party's problem, however bought them
+        if (c.key === 'enemyHp') this.curseEnemyHp += c.value;
+        else if (c.key === 'enemySpd') this.curseEnemySpd += c.value;
+        else if (c.key === 'barrage') this.curseBarrage += c.value;
+      }
+      if (p.curses.length) named.push(p.name);
+      this._recomputeStats(p);
+    }
+    this.barrageT = this.curseBarrage > 0 ? 12 : Infinity; // first cursed shell
+    if (named.length) {
+      this.pushEvent({ k: 'toast', idx: -1, text: `The vault collects: ${named.join(', ')} carry a curse this round` });
+    }
+  }
+
+  // the 'barrage' curse: extra artillery walks across the party's positions
+  _tickCurseBarrage(dt) {
+    if (!(this.barrageT < Infinity) || this.cleared || this.over) return;
+    this.barrageT -= dt;
+    if (this.barrageT > 0) return;
+    this.barrageT = 26; // one salvo per stack, then a long reload
+    const live = this.livePlayers().filter(q => !q.downed);
+    if (!live.length) return;
+    const shells = 3 * this.curseBarrage;
+    for (let i = 0; i < shells; i++) {
+      const t = live[i % live.length];
+      const x = clamp(t.x + (Math.random() - 0.5) * 320, WALL + 40, this.W - WALL - 40);
+      const y = clamp(t.y + (Math.random() - 0.5) * 320, WALL + 40, this.H - WALL - 40);
+      this.addTelegraph({
+        shape: 'circle', x, y, r: 74, dur: 1.5 + i * 0.12,
+        boom: { dmg: Math.round(12 * Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1)), radius: 74 },
+      });
+    }
+    this.pushEvent({ k: 'toast', idx: -1, text: 'CURSED BARRAGE INCOMING' });
+  }
+
+  // ---------------- Pulsar: the nova core ----------------
+  // A fixed-radius pulse centred on him. The radius is deliberately immune to
+  // Reach and every other range modifier — it is the character's leash, not a
+  // stat. Damage is attuned (Attunement) and scaled by Ferocity like any
+  // other hit, then multiplied by the Overheat stack.
+  _tickNova(p, t, dt) {
+    if (p.heatDropT > 0) {
+      p.heatDropT -= dt;
+      if (p.heatDropT <= 0) { p.heat = 0; p.heatDropT = 0; } // the whole stack falls off at once
+    }
+    p.novaT -= dt;
+    if (p.novaT > 0) return;
+    p.novaT = t.cd;
+    // "while ≥1 enemy is within 120" — no target, no pulse, and the stack
+    // starts its 2s decay
+    if (!this._nearestEnemy(p.x, p.y, t.radius)) {
+      if (p.heat > 0 && p.heatDropT <= 0) p.heatDropT = t.heatDecay;
+      return;
+    }
+    const dmg = Math.max(1, Math.round(
+      this._attuned(p, t.base) * (1 + p.stats.ferocity / 100) * (1 + p.heat)));
+    const hits = this._areaDamageEnemies(p.x, p.y, t.radius, dmg, p);
+    this.fx.booms.push({ x: Math.round(p.x), y: Math.round(p.y), r: t.radius });
+    this.pushEvent({ k: 'sfx', s: 'boom' });
+    if (hits > 0) {
+      p.novaDamage += dmg * hits;              // nova-share bookkeeping (tuning)
+      this._heal(p, hits * t.healPer);         // 1 HP per enemy struck, Recovery applies
+      p.heat = Math.min(t.heatMax, p.heat + t.heatPer);
+      p.heatDropT = 0;
+      p.metaDirty = true;
+    } else if (p.heat > 0 && p.heatDropT <= 0) {
+      p.heatDropT = t.heatDecay;               // in radius but all shots walled off
+    }
+  }
+
+  // ---------------- structures follow their owner ----------------
+  // Turrets and drones you can SEE are yours to place and leave. The ones off
+  // your screen are dead weight, so standing still recalls them: a 3s channel
+  // (cancelled by moving or taking a hit, paused in menus/downed), then each
+  // off-screen structure packs up and redeploys near you half a second later.
+  _structOffscreen(p, s) {
+    return Math.abs(s.x - p.x) > CONFIG.STRUCT_OFFSCREEN_W / 2
+      || Math.abs(s.y - p.y) > CONFIG.STRUCT_OFFSCREEN_H / 2;
+  }
+
+  _ownedStructures(p) {
+    return this.summons.filter(s => s.owner === p.idx && !s.dead && !s.carried);
+  }
+
+  // instant, no channel: every structure rides along to the next room
+  relocateStructures(p, opts = {}) {
+    const mine = this._ownedStructures(p).filter(s => opts.all || this._structOffscreen(p, s));
+    mine.forEach((s, i) => {
+      const a = (i / Math.max(1, mine.length)) * Math.PI * 2 + (this.tickNum % 17) * 0.37;
+      const [sx, sy] = this._clearSpot(
+        p.x + Math.cos(a) * CONFIG.STRUCT_SCATTER,
+        p.y + Math.sin(a) * CONFIG.STRUCT_SCATTER, 18);
+      s.x = sx; s.y = sy;
+      if (!opts.instant) { s.deployT = CONFIG.STRUCT_REDEPLOY_S; s.cd = Math.max(s.cd || 0, CONFIG.STRUCT_REDEPLOY_S); }
+    });
+    return mine.length;
+  }
+
+  _tickStructureRecall(p, dt) {
+    // paused, not cancelled, while an overlay owns the player's attention
+    const busy = p.downed || p.shop || p.pendingOffer || p.treasureOffer || p.boonOffer;
+    const offscreen = this._ownedStructures(p).some(s => this._structOffscreen(p, s));
+    if (busy || !offscreen || p.moving) {
+      // moving cancels outright; busy/nothing-to-recall just holds the ring
+      if (p.moving || !offscreen) p.relocT = 0;
+      return;
+    }
+    p.relocT += dt;
+    if (p.relocT >= CONFIG.STRUCT_CHANNEL_S) {
+      p.relocT = 0;
+      const n = this.relocateStructures(p);
+      if (n > 0) {
+        this.pushEvent({ k: 'sfx', s: 'door' });
+        this.pushEvent({ k: 'toast', idx: p.idx, text: n > 1 ? `${n} structures recalled` : 'Structure recalled' });
+      }
+    }
+  }
+
   // All healing funnels through here. Recovery amplifies every source; the
   // fractional remainder accumulates so small heals aren't lost. Overheal is
   // routed by trait (shield / permanent Vitality / ally drip / self-shield).
@@ -1143,6 +1348,7 @@ export class Sim {
     if (p.downed || amount <= 0 || p.gone) return;
     const t = p.char.trait;
     let amt = amount * (1 + Math.max(-80, p.stats.recovery) / 100);
+    if (this._curse(p, 'healHalf') > 0) amt *= 0.5; // cursed round: halved healing
     p.healAcc += amt;
     amt = Math.floor(p.healAcc);
     p.healAcc -= amt;
@@ -1225,6 +1431,9 @@ export class Sim {
     let r = Math.max(40, def.range + p.stats.reach * (melee ? 0.3 : 1));
     // Overwatch: the charged shot also reaches further
     if (this._overwatchCharged(p, def)) r *= 1 + p.char.trait.reachPct / 100;
+    // Pulsar fights inside his own blast radius: the cap lands AFTER every
+    // range modifier, so nothing (Reach, Overwatch, items) reaches past it
+    if (p.char.trait.key === 'nova_core') r = Math.min(r, p.char.trait.radius);
     return r;
   }
 
@@ -1497,11 +1706,18 @@ export class Sim {
     e.slowT = Math.max(e.slowT || 0, dur);
   }
 
+  // Auto-aim weight. A Bounty Hunt mark is the thing the level is asking you
+  // to kill, and a champion whose escort soaks every shot is just a wall — so
+  // a mark inside range reads as much closer than it is and wins the lock.
+  _aimWeight(e) { return e.bounty ? 0.3 : 1; }
+
   _nearestEnemy(x, y, range) {
     let best = null, bd = range * range;
     for (const e of this.enemyPool) {
       const d = dist2(x, y, e.x, e.y);
-      if (d < bd) { bd = d; best = e; }
+      if (d > range * range) continue;
+      const w = d * this._aimWeight(e);
+      if (w < bd) { bd = w; best = e; }
     }
     return best;
   }
@@ -1530,7 +1746,25 @@ export class Sim {
       const dd = dist2(x, y, d.x, d.y);
       if (dd < d.tauntR * d.tauntR && dd < bd) { bd = dd; best = d; }
     }
-    return best || this.nearestLivingPlayer(x, y);
+    if (best) return best;
+    // Relic Run: a relic carrier is loud — enemies weigh them as if they
+    // stood much closer, so carrying really does pull the room onto you
+    if (this.obj && this.obj.type === 'relic') {
+      let pick = null, pd = Infinity;
+      for (const p of this.livePlayers()) {
+        if (p.downed) continue;
+        const w = this.carryingRelic(p) ? 0.35 : 1; // 0.35 ≈ "three times as loud"
+        const d = dist2(x, y, p.x, p.y) * w;
+        if (d < pd) { pd = d; pick = p; }
+      }
+      if (pick) return pick;
+    }
+    return this.nearestLivingPlayer(x, y);
+  }
+
+  carryingRelic(p) {
+    return !!(this.obj && this.obj.type === 'relic'
+      && this.obj.relics.some(r => r.carrier === p.idx));
   }
 
   // ---------------- damage plumbing ----------------
@@ -1577,7 +1811,7 @@ export class Sim {
       this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
     }
     // drops
-    let mats = e.mats * this.greedMats;
+    let mats = objectiveKillPays(this) ? e.mats * this.greedMats : 0;
     if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && Math.random() < killer.hookAgg.doubleMaterials) mats *= 2;
     for (let i = 0; i < mats; i++) this._dropMaterial(x + (Math.random() * 30 - 15), y + (Math.random() * 30 - 15));
     // killer hooks & traits
@@ -1651,20 +1885,36 @@ export class Sim {
     this._killEnemy(e, null);
   }
 
+  // returns how many enemies the blast actually reached (Pulsar's nova heals
+  // per enemy struck, so the count has to come back out of here)
   _areaDamageEnemies(x, y, radius, dmg, owner, opts = {}) {
     const seen = new Set();
+    let hits = 0;
     this.grid.query(x, y, radius + 40, e => {
       if (!e.active || seen.has(e.id) || e === opts.exclude) return;
       seen.add(e.id);
       if (dist2(x, y, e.x, e.y) <= (radius + e.radius) * (radius + e.radius)) {
         if (this.losBlocked(x, y, e.x, e.y)) return; // blasts are clipped by walls
         this.damageEnemy(e, dmg, { owner, silent: opts.silent, crit: false });
+        hits++;
       }
     });
+    return hits;
   }
 
   hurtPlayer(p, raw, src, opts = {}) {
-    if (this.over || p.gone || p.downed || p.invuln > 0 || this.god) return;
+    if (this.over || p.gone || p.downed || this.god) return;
+    // Objective hazards (the storm's burn, the Breach collapse) are the LEVEL,
+    // not an attacker: no i-frames, no dodge, no Grit, no shields. They tick
+    // continuously, so anything else would make standing in them survivable.
+    if (opts.trueDamage) {
+      p.relocT = 0;
+      p.hp -= raw;
+      if (p.hp <= 0) this._downPlayer(p);
+      return;
+    }
+    if (p.invuln > 0) return;
+    p.relocT = 0; // taking a hit breaks the structure-recall channel
     raw *= this.enemyBuff; // the siege's ward pylon empowers everything
     const t = p.char.trait;
     // Reflex: dodge chance (capped in recompute); every on-dodge effect keys off this
@@ -2457,7 +2707,7 @@ export class Sim {
     const def = weaponId ? WEAPON_BY_ID[weaponId] : null;
     const sd = def ? def.summon : { hp: 25, dmg: 0, cd: 1, range: 0 };
     this.summons.push({
-      owner: p.idx, weaponId, weaponUid, tier, type: forceType || (sd.type || 'turret'),
+      owner: p.idx, weaponId, weaponUid, tier, deployT: 0, type: forceType || (sd.type || 'turret'),
       x: p.x + (Math.random() * 60 - 30), y: p.y + (Math.random() * 60 - 30),
       hp: 1, maxHp: 1, cd: 0, orbitA: Math.random() * 6.28, dead: false, aimA: 0,
     });
@@ -2528,6 +2778,8 @@ export class Sim {
         s.x = p.x; s.y = p.y - 26;
         continue;
       }
+      // just recalled: packed up and bolting itself back down (inert, ~0.5s)
+      if (s.deployT > 0) { s.deployT -= dt; continue; }
       // positioning
       if (s.type === 'drone' || s.type === 'mirror') {
         s.orbitA += dt * 1.6;
@@ -2647,9 +2899,7 @@ export class Sim {
       case 'treasure': {
         if (!p.treasureOffer) return;
         if (msg.id && p.treasureOffer.picks.includes(msg.id)) {
-          p.items.push(msg.id);
-          this._recomputeItems(p);
-          this._recomputeStats(p);
+          this._grantItem(p, msg.id);
           this.pushEvent({ k: 'toast', idx, text: `Took ${ITEM_BY_ID[msg.id].name}` });
         }
         p.treasureOffer = null;
@@ -2682,9 +2932,7 @@ export class Sim {
             if (!ok) return this._buyResult(p, msg.slot, false, 'weapons full — sell or combine');
           }
         } else {
-          p.items.push(s.id);
-          this._recomputeItems(p);
-          this._recomputeStats(p);
+          this._grantItem(p, s.id);
         }
         p.materials -= s.price;
         s.sold = true;
@@ -2822,6 +3070,9 @@ export class Sim {
         for (const e of [...this.enemyPool]) this._killEnemy(e, null);
         this.spawnQueue.length = 0;
         if (this.wave) this.wave.done = true;
+        // objective levels don't end on an empty field — F3 means "end this
+        // fight", so it satisfies the objective too (dev key + test harnesses)
+        if (this.obj) this.obj.done = true;
         this._checkFightClear();
         break;
       }
@@ -2847,11 +3098,13 @@ export class Sim {
       // ec is the AUTHORITATIVE alive count — with interest culling below,
       // enemies.length on the wire can be smaller than the real field
       ec: this.enemyPool.count,
+      obj: serializeObjective(this),
       inc: this.phase === 'arena' && this.wave && !this.wave.done ? 1 : 0,
       loot: this.lootT !== null && this.lootT !== undefined ? +this.lootT.toFixed(2) : null,
       hatch: this.hatch ? [r(this.hatch.x), r(this.hatch.y)] : null,
       hold: this.holdCircle ? [r(this.holdCircle.x), r(this.holdCircle.y), r(this.holdCircle.r), this.holdCircle.held ? 1 : 0] : null,
-      players: this.players.map(p => [p.idx, r(p.x), r(p.y), r(p.hp), p.stats.vitality, p.downed ? 1 : 0, +p.reviveP.toFixed(2), r(p.shield), p.gone ? 1 : 0, +p.aimA.toFixed(2), +this._displayMeter(p).toFixed(2), p.carrying ? 1 : 0]),
+      players: this.players.map(p => [p.idx, r(p.x), r(p.y), r(p.hp), p.stats.vitality, p.downed ? 1 : 0, +p.reviveP.toFixed(2), r(p.shield), p.gone ? 1 : 0, +p.aimA.toFixed(2), +this._displayMeter(p).toFixed(2), p.carrying ? 1 : 0,
+        +Math.min(1, p.relocT / CONFIG.STRUCT_CHANNEL_S).toFixed(2)]),
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
       beams: this.activeBeams,
       boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp } : null,
@@ -2885,7 +3138,7 @@ export class Sim {
     let np = 0;
     for (const m of this.pickups) { if (np++ > 130) break; snap.pickups.push([r(m.x), r(m.y)]); }
     for (const s of this.summons) {
-      if (!s.dead) snap.summons.push([s.owner, s.type, r(s.x), r(s.y), s.weaponId, +s.aimA.toFixed(2)]);
+      if (!s.dead) snap.summons.push([s.owner, s.type, r(s.x), r(s.y), s.weaponId, +s.aimA.toFixed(2), s.deployT > 0 ? 1 : 0]);
     }
     for (const tg of this.telegraphs) {
       if (tg.shape === 'circle') snap.tele.push(['c', r(tg.x), r(tg.y), r(tg.r), +(tg.t / tg.dur).toFixed(2), tg.spawnMark ? 1 : 0]);
@@ -2908,6 +3161,7 @@ export class Sim {
       return Math.min(1, (this.time - p.lastFireT) / (t.idle + cdMax));
     }
     if (t.key === 'crit_ramp') return Math.min(1, p.jesterOdds / t.max);
+    if (t.key === 'nova_core') return Math.min(1, p.heat / t.heatMax); // Overheat stack
     return -1;
   }
 

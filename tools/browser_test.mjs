@@ -181,6 +181,8 @@ const drainJs = `const s=window.uv.sim; for (const p of s.players) { if (p.gone)
   if (p.treasureOffer) s.uiAction(p.idx,{kind:'treasure',id:p.treasureOffer.picks[0]});
   if (p.boonOffer) s.uiAction(p.idx,{kind:'boon',id:p.boonOffer[0].id}); } return 1;`;
 // F3-clear the current fight (multi-pass for splitters/spawn queue)
+// F3 clears the field AND satisfies the current objective, so this works on
+// horde arenas and on all eight objective levels alike
 const clearFightJs = `const s=window.uv.sim; let g=0;
   while (!s.cleared && s.phase==='arena' && g++<60) { s.debug('F3'); for (let i=0;i<10;i++) s.tick(); }
   return s.cleared ? 1 : 0;`;
@@ -249,7 +251,7 @@ try {
   const mapInfo = JSON.parse(await A.exec(`const btns=[...document.querySelectorAll('.map-node')];
     return JSON.stringify({ n: btns.length, reach: btns.filter(b=>b.classList.contains('reachable')).length,
       disabled: btns.filter(b=>b.disabled).length, header: document.querySelector('#screen-map .ov-title').textContent })`));
-  if (mapInfo.n >= 8 && mapInfo.n <= 10) ok(`map screen renders the floor's nodes (${mapInfo.n})`); else fail(`map node count: ${mapInfo.n}`);
+  if (mapInfo.n === 15) ok(`map screen renders the floor's nodes (${mapInfo.n}: 12 combat + shop + reliquary + siege)`); else fail(`map node count: ${mapInfo.n}`);
   if (mapInfo.reach >= 2 && mapInfo.reach <= 3 && mapInfo.disabled === mapInfo.n - mapInfo.reach) ok(`${mapInfo.reach} reachable choices enabled, the rest disabled`);
   else fail(`map reachability: ${JSON.stringify(mapInfo)}`);
   if (/FLOOR 1/.test(mapInfo.header)) ok('map header shows the floor'); else fail(`map header: ${mapInfo.header}`);
@@ -259,6 +261,22 @@ try {
   await A.waitFor(`return window.uv.sim.phase==='arena'`, 3000, 'arena after node tap');
   await A.waitFor(`return document.getElementById('screen-map').classList.contains('hidden')`, 2000, 'map hides for the fight');
   ok('tapping a node travels into its arena (solo: instant)');
+
+  // ---- objective levels: node-map icons + the on-screen objective HUD ----
+  const objMap = JSON.parse(await A.exec(`
+    const kinds = window.uv.map.layout.nodes.map(n => n.kind);
+    const OBJ = ['zone','elite_arena','nest','bounty','breach','relic','storm','payload'];
+    const present = OBJ.filter(k => kinds.includes(k));
+    const icons = OBJ.filter(k => document.querySelector('.map-node.mn-' + k) !== null);
+    return JSON.stringify({ present, icons, combat: kinds.filter(k=>k==='combat').length,
+      legend: !!document.querySelector('.map-legend .legend-obj') });`));
+  if (objMap.present.length >= 5) ok(`floor 1 map carries ${objMap.present.length} objective types (${objMap.present.join(', ')})`);
+  else fail(`objective types on the map: ${JSON.stringify(objMap.present)}`);
+  if (objMap.icons.length === objMap.present.length) ok('every objective node renders its own icon class on the map');
+  else fail(`icon classes: ${objMap.icons.join(',')} vs kinds ${objMap.present.join(',')}`);
+  if (objMap.combat >= 4 && objMap.combat <= 6) ok(`the horde-arena invariant holds on screen (${objMap.combat} plain arenas)`);
+  else fail(`horde arenas on the map: ${objMap.combat}`);
+  if (objMap.legend) ok('the node-map legend lists the objective icons'); else fail('objective legend missing');
 
   // the enemy counter: "incoming" while the budget flows, exact count at stop
   await A.waitFor(`return !document.getElementById('enemy-counter').classList.contains('hidden')`, 4000, 'enemy counter visible');
@@ -273,6 +291,48 @@ try {
     s.wave.done = true; s.spawnQueue.length = 0; return 1;`);
   await A.waitFor(`const b=document.querySelector('#enemy-counter .ec-n.exact'); return b && parseInt(b.textContent.replace(/[^0-9]/g,''),10) === window.uv.sim.enemyPool.count ? 1 : 0`, 4000, 'exact count at spawn-stop');
   ok('counter switches to the exact alive count at spawn-stop (the sweep signal)');
+
+  // ---- an objective level end to end in the real DOM ----
+  // Force the next reachable node to a Zone Control, walk in, and confirm the
+  // objective HUD tracks it (label, progress bar, world marker in the view).
+  await A.exec(clearFightJs);
+  await A.exec(drainJs);
+  await extractToMap(A, 'to the objective node');
+  await A.exec(`const s=window.uv.sim;
+    // a reachable FIGHT node — shop/reliquary stops carry no arena template
+    const id = s.reachableNodes().find(i => s.floor.nodes[i].template) ?? s.reachableNodes()[0];
+    const n = s.floor.nodes[id];
+    n.kind='zone'; if (!n.template) n.template='open_expanse';
+    window.__objNode = id; s._mapEvent(); return 1;`);
+  await A.waitFor(`return document.querySelector('.map-node.mn-zone') !== null`, 4000, 'zone node on the map');
+  await A.exec(`const s=window.uv.sim; s.uiAction(0,{kind:'pickNode',nodeId:window.__objNode}); return 1;`);
+  await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.obj && window.uv.sim.obj.type==='zone'`, 6000, 'inside Zone Control');
+  await A.waitFor(`return !document.getElementById('objective-hud').classList.contains('hidden')`, 4000, 'objective HUD visible');
+  const objHud = JSON.parse(await A.exec(`const h=document.getElementById('objective-hud');
+    return JSON.stringify({ label: h.querySelector('.obj-line b').textContent,
+      text: h.querySelector('.obj-text').textContent,
+      bar: !!h.querySelector('.obj-bar i'),
+      h: Math.round(h.getBoundingClientRect().height) })`));
+  if (/Zone Control/.test(objHud.label) && /captured/.test(objHud.text) && objHud.bar)
+    ok(`objective HUD tracks the level ("${objHud.label} — ${objHud.text}")`);
+  else fail(`objective HUD: ${JSON.stringify(objHud)}`);
+  // capture progress moves when a player stands in the zone
+  const capMoved = await A.exec(`const s=window.uv.sim, p=s.players[0];
+    p.x=s.obj.zone.x; p.y=s.obj.zone.y;
+    const m0=s.obj.meter; for (let i=0;i<120;i++){ p.x=s.obj.zone.x; p.y=s.obj.zone.y; s.tick(); }
+    return s.obj.meter > m0 + 1 ? 1 : 0;`);
+  if (capMoved) ok('standing in the zone fills the shared capture meter'); else fail('capture meter did not move');
+  await A.exec(clearFightJs);
+  await A.exec(drainJs);
+  await A.waitFor(`return document.getElementById('objective-hud').classList.contains('hidden') || window.uv.sim.cleared`, 4000, 'objective resolved');
+  ok('an objective level clears and hands back to the extraction flow');
+  await extractToMap(A, 'objective extraction');
+  await A.exec(`const s=window.uv.sim;
+    const id = s.reachableNodes().find(i => s.floor.nodes[i].template) ?? s.reachableNodes()[0];
+    const n = s.floor.nodes[id];
+    n.kind='combat'; if (!n.template) n.template='open_expanse';
+    s.uiAction(0,{kind:'pickNode',nodeId:id}); return 1;`);
+  await A.waitFor(`return window.uv.sim.phase==='arena'`, 6000, 'back into a horde arena');
 
   // movement via synthetic keys (arena is bigger than the screen now)
   const cam0 = await A.exec('return Math.round(window.uvRenderer.camX)'); // camera baseline before any movement
@@ -1063,7 +1123,11 @@ if (wantCoop) {
       await A.waitFor(`return window.uv.sim.nodeVote && window.uv.sim.nodeVote.nodeId===${firstPick}`, 3000, 'vote started');
       ok(`host tap starts the consent countdown (node ${firstPick})`);
       await B.waitFor(`const s=window.uv.snaps; const last=s[s.length-1]; return last && last.s.vote && last.s.vote.nodeId===${firstPick} ? 1 : 0`, 4000, 'vote visible on client');
-      const badge = await B.exec(`return document.querySelector('.map-node .mn-count') !== null`);
+      let badge = false;
+      try {
+        await B.waitFor(`return document.querySelector('.map-node .mn-count') !== null`, 3000, 'client countdown badge');
+        badge = true;
+      } catch { /* reported below */ }
       if (badge) ok('client map shows the live countdown badge'); else fail('no countdown badge on client map');
       // the client redirects to a different node — allowed exactly once
       const redirectPick = await B.exec(`const v=window.uv.snaps[window.uv.snaps.length-1].s.vote;
@@ -1689,7 +1753,8 @@ if (wantCoop) {
           ok('post-boss shops open for all 8');
           await W0.exec(drainJs);
           await W0.exec(`const s=window.uv.sim; for (const p of s.players) if (p.shop) s.uiAction(p.idx,{kind:'closeShop'}); return 1;`);
-          await W0.exec(`const s=window.uv.sim; for (const p of s.players) if (!p.gone) { p.x=s.hatch.x; p.y=s.hatch.y; } return 1;`);
+          await W0.waitFor(`return !!window.uv.sim.hatch`, 8000, 'descent hatch after the looting window');
+          await W0.exec(`const s=window.uv.sim; if (!s.hatch) return 0; for (const p of s.players) if (!p.gone) { p.x=s.hatch.x; p.y=s.hatch.y; } return 1;`);
           await W0.waitFor(`return window.uv.sim.floorNum===2`, 15000, 'warband descent');
           await W[7].waitFor(`return window.uv.floorNum===2`, 10000, 'mobile client on floor 2');
           ok('the warband descends to floor 2 together');

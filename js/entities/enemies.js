@@ -44,6 +44,13 @@ export function updateEnemy(sim, e, dt) {
     }
   }
   let spd = e.spd;
+  // Elite Arena's Enrager: the longer it lives, the faster it comes. Ramps
+  // off its own base so slows still bite, and caps at 2.6x so a long fight
+  // stays kiteable rather than becoming a coin flip.
+  if (e.enrageRate) {
+    e.enrage = Math.min(1.6, (e.enrage || 0) + e.enrageRate * dt);
+    spd = e.spd * (1 + e.enrage);
+  }
   if (e.slowT > 0) { e.slowT -= dt; spd *= e.slowMult; }
   if (e.hitFlash > 0) e.hitFlash -= dt;
   // elite mod ticks
@@ -222,7 +229,7 @@ export function updateEnemy(sim, e, dt) {
       e.spawnT = (e.spawnT ?? t.spawnCd * 0.5) - dt;
       e.brood = e.brood || [];
       e.brood = e.brood.filter(id => sim.enemyById(id));
-      if (e.spawnT <= 0 && e.brood.length < t.maxBrood && sim.enemyPool.count < 300) {
+      if (e.spawnT <= 0 && e.brood.length < (e.maxBroodCap || t.maxBrood) && sim.enemyPool.count < 300) {
         e.spawnT = t.spawnCd;
         const child = sim.spawnEnemyById(t.broodId, e.x + (Math.random() * 40 - 20), e.y + (Math.random() * 40 - 20), { noMats: true });
         if (child) e.brood.push(child.id);

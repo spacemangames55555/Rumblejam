@@ -26,6 +26,22 @@ export const CONFIG = {
   CONTACT_COOLDOWN: 0.8,   // s between contact hits from one enemy
   INVULN_AFTER_HIT: 0.35,  // brief player i-frames after any hit
 
+  // ---- structure relocation (turrets/drones follow their owner) ----
+  // "Off the owner's screen" is judged against a box GENEROUSLY larger than
+  // any real viewport (the renderer shows ROOM_W×ROOM_H of world at the
+  // narrow axis and more on wide monitors, up to ~21:9). Erring large means
+  // a structure the owner can actually see never packs itself up.
+  STRUCT_OFFSCREEN_W: 2100,
+  STRUCT_OFFSCREEN_H: 1180,
+  STRUCT_CHANNEL_S: 3,      // stand still this long to recall off-screen structures
+  STRUCT_REDEPLOY_S: 0.5,   // packed → back online near the owner
+  STRUCT_SCATTER: 46,       // ring radius so multiple structures don't stack
+
+  // solo difficulty: a lone player faces +15% count and +15% enemy HP on top
+  // of every other scaling knob (co-op curves, floor, patch multipliers)
+  SOLO_SPAWN_MULT: 1.15,
+  SOLO_HP_MULT: 1.15,
+
   REVIVE_TIME: 3,
   REVIVE_RADIUS: 70,
   REVIVE_HP: 0.5,          // revived at 50% max HP
