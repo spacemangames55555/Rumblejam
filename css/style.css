@@ -133,6 +133,17 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
   min-width:96px; min-height:30px; padding:4px 14px; text-align:center;
   background:#12141fd9; border:1px solid var(--line); border-radius:16px;
   font-size:16px; pointer-events:none; z-index:5;}
+/* objective HUD: the level's win condition, always on screen while it runs */
+#objective-hud{margin:6px auto 0; max-width:min(92vw,420px); background:#12141fe0;
+  border:1px solid var(--line); border-radius:8px; padding:5px 12px; pointer-events:none;}
+#objective-hud .obj-line{display:flex; gap:10px; justify-content:center; align-items:baseline; font-size:14px;}
+#objective-hud .obj-line b{color:var(--gold); letter-spacing:1px;}
+#objective-hud .obj-text{color:var(--ink);}
+#objective-hud .obj-bar{height:6px; background:#26192a; border-radius:3px; margin-top:4px; overflow:hidden;}
+#objective-hud .obj-bar i{display:block; height:100%; background:var(--xp); border-radius:3px; transition:width .2s;}
+#objective-hud .obj-sub{font-size:11px; color:var(--dim); text-align:center; margin-top:2px;}
+body.touch-on #objective-hud{min-height:44px; font-size:15px; padding:7px 14px;}
+body.touch-on #objective-hud .obj-line{font-size:15px;}
 #enemy-counter .ec-inc{color:#8fa3c8; letter-spacing:1px;}
 #enemy-counter .ec-n{margin-left:8px; color:var(--ink);}
 #enemy-counter .ec-n.exact{color:var(--gold); font-size:18px;}
@@ -140,6 +151,13 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 body.touch-on #enemy-counter{min-height:44px; min-width:120px; font-size:18px; padding:8px 18px; top:6px;}
 .map-legend{margin-top:14px; text-align:center; color:var(--dim); font-size:13px; letter-spacing:0.5px;}
 .map-legend .mn-bastion-inline{color:#8fa3c8;}
+.map-legend .legend-obj{margin-top:3px; color:#8fa3c8; font-size:12px;}
+/* objective nodes read as their own class of stop, not another skirmish */
+.map-node.mn-zone,.map-node.mn-elite_arena,.map-node.mn-nest,.map-node.mn-bounty,
+.map-node.mn-breach,.map-node.mn-relic,.map-node.mn-storm,.map-node.mn-payload{border-style:dashed;}
+.map-node.mn-zone.reachable,.map-node.mn-elite_arena.reachable,.map-node.mn-nest.reachable,
+.map-node.mn-bounty.reachable,.map-node.mn-breach.reachable,.map-node.mn-relic.reachable,
+.map-node.mn-storm.reachable,.map-node.mn-payload.reachable{border-color:#8be8c8;}
 .map-node .mn-count{position:absolute; top:-12px; right:-10px; background:#5ee0a8; color:#0b0c12;
   font-weight:bold; font-size:15px; min-width:26px; min-height:26px; border-radius:13px;
   display:flex; align-items:center; justify-content:center;}

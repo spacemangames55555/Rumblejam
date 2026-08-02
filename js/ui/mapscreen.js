@@ -5,6 +5,7 @@
 
 import { escapeHtml } from './screens.js';
 import { sfx } from '../audio.js';
+import { OBJECTIVE_META } from '../objectives.js';
 
 const $ = id => document.getElementById(id);
 let A = null;
@@ -15,6 +16,8 @@ const KIND_META = {
   shop: { sym: '◆', name: 'Trader' },
   treasure: { sym: '★', name: 'Reliquary' },
   siege: { sym: '⛨', name: 'SIEGE' },
+  // the eight objective levels carry their own icon + name on the map
+  ...Object.fromEntries(Object.entries(OBJECTIVE_META).map(([k, v]) => [k, { sym: v.sym, name: v.name, hint: v.hint }])),
 };
 
 export function initMapScreen(actions) { A = actions; }
@@ -65,7 +68,7 @@ function renderMap(state) {
         reachable.has(n.id) ? 'reachable' : '',
         state.vote && state.vote.nodeId === n.id ? 'voted' : '',
       ].join(' ');
-      return `<button class="${cls}" data-node="${n.id}" ${reachable.has(n.id) ? '' : 'disabled'}>
+      return `<button class="${cls}" data-node="${n.id}" ${reachable.has(n.id) ? '' : 'disabled'} title="${escapeHtml(meta.hint || meta.name)}">
         <span class="mn-sym">${meta.sym}</span>
         <span class="mn-name">${meta.name}</span>
         ${n.profile === 'bastion' ? '<span class="mn-bastion" title="Bastion — hold-your-ground fight">⛊</span>' : ''}
@@ -88,7 +91,10 @@ function renderMap(state) {
         <svg class="map-edges" id="map-edges"></svg>
         ${colHtml}
       </div>
-      <div class="map-legend">⚔ Skirmish · ☠ Champion · ◆ Trader · ★ Reliquary · ⛨ Siege · <span class="mn-bastion-inline">⛊</span> Bastion: hold-your-ground</div>
+      <div class="map-legend">
+        <div>⚔ Skirmish · ◆ Trader · ★ Reliquary · ⛨ Siege · <span class="mn-bastion-inline">⛊</span> Bastion: hold-your-ground</div>
+        <div class="legend-obj">${Object.values(OBJECTIVE_META).map(o => `${o.sym} ${o.name}`).join(' · ')}</div>
+      </div>
     </div>`;
   el.querySelectorAll('.map-node').forEach(btn => {
     btn.onclick = () => { sfx.click(); A.pickNode(parseInt(btn.dataset.node, 10)); };

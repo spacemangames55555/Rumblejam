@@ -7,6 +7,8 @@ import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
 import { HostTransport, ClientTransport } from './net.js';
 import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
+import { serializeObjective } from './objectives.js';
+import { OBJECTIVE_META } from './objectives.js';
 import { Renderer } from './render.js';
 import { initInput, sampleInput, takeDebugKey, pressInteract } from './input.js';
 import { initTouch, joy, touchEnabled } from './touch.js';
@@ -29,7 +31,7 @@ const { WALL } = CONFIG;
 
 console.log(`%cUNDERVAULT%c content loaded — characters: ${CHARACTERS.length}, items: ${ITEMS.length}, weapons: ${WEAPONS.length}, enemy types: ${ENEMIES.length}, bosses: ${BOSSES.length}`,
   'color:#ffd45e;font-weight:bold;font-size:16px', 'color:inherit');
-console.assert(CHARACTERS.length === 32, 'need exactly 32 characters');
+console.assert(CHARACTERS.length === 33, 'need exactly 33 characters');
 console.assert(ITEMS.length >= 100, 'need ≥100 items');
 console.assert(WEAPONS.length === 26, 'need exactly 26 weapons');
 console.assert(ENEMIES.length === 12 && BOSSES.length === 4, 'need 12 enemy types + 4 bosses');
@@ -484,6 +486,7 @@ function handleEvent(ev) {
       app.bossInfo = null;
       hideMapScreen();
       if (ev.kind === 'siege') banner(ev.name || 'THE SIEGE', 'survive the shifting vault', 2600);
+      else if (OBJECTIVE_META[ev.kind]) banner(OBJECTIVE_META[ev.kind].name.toUpperCase(), OBJECTIVE_META[ev.kind].hint, 2600);
       else if (ev.kind === 'elite') banner(ev.name || '', 'CHAMPION HUNT', 1600);
       break;
     case 'nodeVote': {
@@ -668,6 +671,7 @@ function viewFromSim(sim) {
     shake: sim.shake,
     extract: sim.extract ? sim.extract.t : null,
     ec: sim.enemyPool.count,
+    obj: sim.obj ? serializeObjective(sim) : null,
     inc: sim.phase === 'arena' && sim.wave && !sim.wave.done ? 1 : 0,
     loot: sim.lootT !== null && sim.lootT !== undefined ? sim.lootT : null,
     hold: sim.holdCircle ? [sim.holdCircle.x, sim.holdCircle.y, sim.holdCircle.r, sim.holdCircle.held ? 1 : 0] : null,
@@ -677,6 +681,7 @@ function viewFromSim(sim) {
       x: p.x, y: p.y, hp: Math.ceil(p.hp), maxHp: p.stats.vitality, shield: Math.round(p.shield),
       downed: p.downed, reviveP: p.reviveP, gone: p.gone, radius: p.radius, aimA: p.aimA,
       meter: sim._displayMeter(p), carrying: !!p.carrying,
+      reloc: Math.min(1, p.relocT / CONFIG.STRUCT_CHANNEL_S),
     })),
     auras: sim._snapAuras().map(a => ({ idx: a[0], r: a[1] })),
     tethers: sim._snapTethers().map(t => ({ x1: t[0], y1: t[1], x2: t[2], y2: t[3] })),
@@ -688,7 +693,7 @@ function viewFromSim(sim) {
     })),
     projs: [...sim.projPool].map(pr => ({ x: pr.x, y: pr.y, radius: pr.radius, color: pr.color, friendly: pr.friendly })),
     pickups: sim.pickups,
-    summons: sim.summons.filter(s => !s.dead).map(s => ({ owner: s.owner, type: s.type, x: s.x, y: s.y, aimA: s.aimA })),
+    summons: sim.summons.filter(s => !s.dead).map(s => ({ owner: s.owner, type: s.type, x: s.x, y: s.y, aimA: s.aimA, packed: s.deployT > 0 })),
     tele: sim.telegraphs.map(tg => tg.shape === 'circle'
       ? { shape: 'c', x: tg.x, y: tg.y, r: tg.r, prog: tg.t / tg.dur, spawnMark: !!tg.spawnMark }
       : { shape: 'b', x: tg.x, y: tg.y, a: tg.angle, w: tg.w, len: tg.len, prog: tg.t / tg.dur }),
@@ -754,7 +759,7 @@ function viewFromSnaps(dtFrame) {
     }
     players.push({
       idx, x, y, hp: n[3], maxHp: n[4], downed: !!n[5], reviveP: n[6], shield: n[7], gone: !!n[8], aimA: n[9],
-      meter: n[10] !== undefined ? n[10] : -1, carrying: !!n[11],
+      meter: n[10] !== undefined ? n[10] : -1, carrying: !!n[11], reloc: n[12] || 0,
       name: member ? member.name : '?', color: member ? member.color : '#fff', charId: member ? member.charId : null,
       sym: chr ? chr.sym : '●', radius: chr && chr.trait.key === 'immovable' ? 16 * chr.trait.hitbox : 16,
     });
@@ -775,13 +780,14 @@ function viewFromSnaps(dtFrame) {
     shake: s1.shake,
     extract: s1.extract !== undefined ? s1.extract : null,
     ec: s1.ec !== undefined ? s1.ec : null,
+    obj: s1.obj || null,
     inc: s1.inc || 0,
     loot: s1.loot !== undefined ? s1.loot : null,
     hold: s1.hold || null,
     hatch: s1.hatch,
     players, enemies, projs,
     pickups: s1.pickups.map(m => ({ x: m[0], y: m[1] })),
-    summons: s1.summons.map(sm => ({ owner: sm[0], type: sm[1], x: sm[2], y: sm[3], aimA: sm[5] })),
+    summons: s1.summons.map(sm => ({ owner: sm[0], type: sm[1], x: sm[2], y: sm[3], aimA: sm[5], packed: !!sm[6] })),
     tele: s1.tele.map(tg => tg[0] === 'c'
       ? { shape: 'c', x: tg[1], y: tg[2], r: tg[3], prog: tg[4], spawnMark: !!tg[5] }
       : { shape: 'b', x: tg[1], y: tg[2], a: tg[3], w: tg[4], len: tg[5], prog: tg[6] }),

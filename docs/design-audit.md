@@ -2,7 +2,7 @@
 
 > Generated from the live content data by `node tools/gen_design_audit.mjs` —
 > regenerate after any content change; do not hand-edit the computed tables.
-> Counts verified against boot log: **32 characters / 136 items / 26 weapons**.
+> Counts verified against boot log: **33 characters / 146 items / 26 weapons**.
 > The generator enforces the dead-stat gate: every stat on ≥2 weapons, ≥5 items, ≥1 statline.
 
 ## 1. Stat glossary (the ten-stat sheet)
@@ -14,16 +14,16 @@ critical hits exist only as granted effects (default ×2).
 
 | Stat | What it does | Formula (as implemented) | Chars | Items | Weapons |
 |---|---|---|---:|---:|---:|
-| **Vitality** | Your hit point pool. Downed at 0. | Base 80 + modifiers (min 1). Gaining Vitality also grants the difference as current HP. Scaling rate: 1% weapon damage per 4 points. | 7 | 14 | 2 |
-| **Ferocity** | The universal damage multiplier. | Hit = weapon base × tier mult × `(1 + Ferocity%/100)` × `(1 + scaling-tag bonus/100)`. Crits are granted-only, ×2 (×3 Duskblade). | 6 | 24 | 5 |
-| **Tempo** | One stat for all speed. | Attack cooldown = `base / max(0.25, 1 + Tempo%/100)`; move speed = `300 × (1 + Tempo%/100)`, floored at 60. | 5 | 16 | 5 |
-| **Grit** | Mitigation and stubbornness. | Damage taken = `raw × 15 / (15 + Grit)` (negative capped at +50% extra); pulls/knockback resisted by the same ratio. Scaling rate: 1%/point. | 3 | 14 | 2 |
-| **Reflex** | Chance to ignore a hit entirely. | Percent roll per hit, capped at 60 (Wisp raises to 90). Every on-dodge effect (Slipstream, Afterimage, items) keys off this. | 4 | 8 | 2 |
-| **Recovery** | Amplifies ALL healing received. | Every healing source (regen, lifesteal, kill-heals, fight-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`. | 2 | 12 | 2 |
+| **Vitality** | Your hit point pool. Downed at 0. | Base 80 + modifiers (min 1). Gaining Vitality also grants the difference as current HP. Scaling rate: 1% weapon damage per 4 points. | 7 | 18 | 2 |
+| **Ferocity** | The universal damage multiplier. | Hit = weapon base × tier mult × `(1 + Ferocity%/100)` × `(1 + scaling-tag bonus/100)`. Crits are granted-only, ×2 (×3 Duskblade). | 6 | 30 | 5 |
+| **Tempo** | One stat for all speed. | Attack cooldown = `base / max(0.25, 1 + Tempo%/100)`; move speed = `300 × (1 + Tempo%/100)`, floored at 60. | 5 | 19 | 5 |
+| **Grit** | Mitigation and stubbornness. | Damage taken = `raw × 15 / (15 + Grit)` (negative capped at +50% extra); pulls/knockback resisted by the same ratio. Scaling rate: 1%/point. | 4 | 16 | 2 |
+| **Reflex** | Chance to ignore a hit entirely. | Percent roll per hit, capped at 60 (Wisp raises to 90). Every on-dodge effect (Slipstream, Afterimage, items) keys off this. | 4 | 9 | 2 |
+| **Recovery** | Amplifies ALL healing received. | Every healing source (regen, lifesteal, kill-heals, fight-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`. | 2 | 13 | 2 |
 | **Ingenuity** | Power source for summons/structures. | Summon damage AND HP `×(1 + 0.1 × Ingenuity)`. Scaling rate: 1%/point on summon-tagged weapons. | 4 | 7 | 4 |
-| **Attunement** | Elemental/status amplifier. | Burns, chills (strength and duration), chains, novas, blasts and echoes all scale `×(1 + Attunement%/100)`. | 3 | 10 | 10 |
-| **Greed** | Fortune unified. | Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every fight clear. No self-growth. Scaling rate: 1%/point. | 5 | 13 | 3 |
-| **Reach** | Weapon reach and magnetism. | Ranged/lobbed weapons +100% of Reach, melee +30% (floor 40); pickup radius = `60 + Reach × 0.5`. Scaling rate: 1% per 12 points. | 3 | 7 | 2 |
+| **Attunement** | Elemental/status amplifier. | Burns, chills (strength and duration), chains, novas, blasts and echoes all scale `×(1 + Attunement%/100)`. | 4 | 12 | 10 |
+| **Greed** | Fortune unified. | Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every fight clear. No self-growth. Scaling rate: 1%/point. | 5 | 14 | 3 |
+| **Reach** | Weapon reach and magnetism. | Ranged/lobbed weapons +100% of Reach, melee +30% (floor 40); pickup radius = `60 + Reach × 0.5`. Scaling rate: 1% per 12 points. | 3 | 8 | 2 |
 
 ## 2. Full character roster
 
@@ -39,7 +39,7 @@ Pick appeal is an honest pre-playtest guess (H/M/L). Verdict and Notes are for t
 | 6 | **Rampart** | +6 grit, +20 vitality | Pikefang | Living Fortress: +1 permanent Grit per fight cleared, and +1% Ferocity per point of bonus Grit. | **M** — Ever-growing Grit that feeds damage back | | |
 | 7 | **Onrush** | +25% tempo, -10 vitality | Threadneedle | Momentum: moving fills a meter (~2s, faster with Tempo); your next attack consumes it for up to +60% damage. | **H** — A visible meter you charge by playing well | | |
 | 8 | **Vesper** | +8% recovery | Serpent Awl | Red Tithe: kills heal 1 HP (Recovery applies); healing beyond full HP becomes permanent Vitality, up to +3 per fight. | **M** — Overheal into permanent HP rewards sustain builds | | |
-| 9 | **The Broker** | +10 greed | Pebbleshot | Insider Trading: shop prices −25% and reroll cost never compounds, but only 5 weapon slots. | **M** — Cheap shopping with a slot squeeze | | |
+| 9 | **The Broker** | +10 greed | Pebbleshot | Insider Trading: shop prices −25%, reroll cost never compounds, and 7 weapon slots. | **M** — Cheap shopping with a slot squeeze | | |
 | 10 | **Resonant** | +5% ferocity | Rustcleaver | Resonance: attacks build a charge ring (9 hits); when full, your next hit releases an attuned shockwave for 200% weapon damage. | **M** — The charge-ring shockwave is readable and rhythmic | | |
 | 11 | **Facet** | +5 greed | Fanblade | Prism: entering each fight, pick 1 of 3 boons for that battle (quality scales with Greed). Any boon chosen 3 times becomes permanent. | **H** — A draft pick at every door; collection subgame | | |
 | 12 | **Stillness** | +10% ferocity, +40 reach | Longbarrel | Overwatch: after 1.5s without attacking (moving is fine), your next attack is charged — ×2 damage and +50% Reach on that hit. | **M** — Hold-fire charge shots reward deliberate play | | |
@@ -63,6 +63,7 @@ Pick appeal is an honest pre-playtest guess (H/M/L). Verdict and Notes are for t
 | 30 | **Threader** | +24 reach | Coilgun | All projectiles pierce +1 enemy. | **M** — Universal pierce is quietly excellent | | |
 | 31 | **Tinker** | +6 ingenuity | Bolt Turret | Structures attack 25% faster, but you have only 4 weapon slots. | **M** — Faster turrets with a tight slot puzzle | | |
 | 32 | **Hivewright** | +4 ingenuity, +10 vitality | Guard Drone | Gains a free Guard Drone at the start of every floor. | **M** — Free drone per floor compounds nicely | | |
+| 33 | **Pulsar** | +15% attunement, +6 grit, -30 reach | Rustcleaver | Nova Core: while an enemy stands within 120, you pulse every 1.2s for attuned damage to everything in that fixed radius (Reach never changes it) and heal 1 HP per enemy struck. Each pulse that connects stacks +15% nova damage up to +150%; the stacks all fall off 2s after a pulse hits nothing. Only 3 weapon slots, and every weapon you hold is range-capped to 120. | **H** — Melee-range elementalist: half his damage is a fixed 120u nova | | |
 
 ## 3. Roster analysis
 
@@ -70,13 +71,13 @@ Pick appeal is an honest pre-playtest guess (H/M/L). Verdict and Notes are for t
 
 | Axis | Count | Characters |
 |---|---:|---|
-| melee | 5 | Bulwark, Duskblade, Onrush, Resonant, Redmaw |
+| melee | 6 | Bulwark, Duskblade, Onrush, Resonant, Redmaw, Pulsar |
 | ranged | 3 | Stillness, Longshot, Threader |
 | tank | 3 | Bulwark, Rampart, Lodestone |
 | dodge | 4 | Zephyr, Mirage, Wisp, Glasswing |
 | speed | 3 | Zephyr, Onrush, Glasswing |
 | crit | 2 | Duskblade, Jester |
-| status | 6 | Resonant, Powderkeg, Mirage, Voltaic, Cindermage, Frostcaller |
+| status | 7 | Resonant, Powderkeg, Mirage, Voltaic, Cindermage, Frostcaller, Pulsar |
 | summons | 4 | Cogsmith, Twinsoul, Tinker, Hivewright |
 | sustain | 3 | Vesper, Sawbones, Hemomancer |
 | support | 3 | Banneret, Sawbones, Lodestone |

@@ -62,6 +62,47 @@ function botInput() {
     vx = (nearest.x - p.x) / d * 4;
     vy = (nearest.y - p.y) / d * 4;
   }
+  // objective pull: the levels that don't end by killing need the bot to go
+  // somewhere specific. Weighted alongside kiting rather than overriding it,
+  // so the probe still reports honest survivability while making progress.
+  const obj = sim.obj;
+  if (obj && !obj.done) {
+    let gx = null, gy = null, weight = 2.6;
+    if (obj.type === 'zone') { gx = obj.zone.x; gy = obj.zone.y; }
+    else if (obj.type === 'storm') { gx = obj.c.x; gy = obj.c.y; weight = 4.5; }
+    else if (obj.type === 'breach') { gx = obj.gate.x; gy = obj.gate.y; weight = 4; }
+    else if (obj.type === 'payload') { gx = obj.x; gy = obj.y; }
+    else if (obj.type === 'relic') {
+      const mine = obj.relics.find(r => r.carrier === 0);
+      if (mine) { gx = obj.altar.x; gy = obj.altar.y; weight = 4; }
+      else {
+        let best = null, bd = Infinity;
+        for (const r of obj.relics) {
+          if (r.carrier >= 0) continue;
+          const d2 = dist2(p.x, p.y, r.x, r.y);
+          if (d2 < bd) { bd = d2; best = r; }
+        }
+        if (best) { gx = best.x; gy = best.y; weight = 3.2; }
+      }
+    } else if (obj.type === 'nest') {
+      let best = null, bd = Infinity;
+      for (const id of obj.nests) {
+        const e = sim.enemyById(id); if (!e) continue;
+        const d2 = dist2(p.x, p.y, e.x, e.y);
+        if (d2 < bd) { bd = d2; best = e; }
+      }
+      if (best) { gx = best.x; gy = best.y; weight = 2.2; }
+    } else if (obj.type === 'bounty' && obj.markId !== null) {
+      const e = sim.enemyById(obj.markId);
+      if (e) { gx = e.x; gy = e.y; weight = 2.2; }
+    }
+    if (gx !== null) {
+      const d = Math.hypot(gx - p.x, gy - p.y) || 1;
+      const inPlace = (obj.type === 'zone' && d < obj.zone.r * 0.6)
+        || (obj.type === 'storm' && d < obj.r * 0.6);
+      if (!inPlace) { vx += (gx - p.x) / d * weight; vy += (gy - p.y) / d * weight; }
+    }
+  }
   // wall avoidance: strong pull toward center when near arena edges
   const cx = sim.W / 2 - p.x, cy = sim.H / 2 - p.y;
   const edge = Math.min(p.x, sim.W - p.x, p.y, sim.H - p.y);
@@ -214,7 +255,10 @@ while (!sim.over && sim.floorNum <= maxFloor && !stuck) {
   // low-DPS economy characters legitimately take ~2.5min on their first fight;
   // a CLEARED fight gets extra time for the extraction walk — only the fight
   // itself counts against the cap
-  const cap = 60 * (isSiege ? 360 : 200);
+  // objective levels run long by design (Zone Control is ~6×20s of holding
+  // plus travel), so they get a bigger budget than a horde arena
+  const isObj = sim.obj !== null && sim.obj !== undefined;
+  const cap = 60 * (isSiege ? 360 : isObj ? 320 : 200);
   const extractCap = cap + 60 * 45;
   while (sim.phase === 'arena' && !sim.over && ticks++ < (sim.cleared ? extractCap : cap)) {
     if (!sim.cleared) botInput();

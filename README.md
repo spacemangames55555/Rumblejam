@@ -1,7 +1,7 @@
 # UNDERVAULT
 
 A co-op dungeon-crawl arena roguelite for 1–8 players, in the browser, with no
-server to run. Pick one of **32 characters** and descend through a 4-floor
+server to run. Pick one of **33 characters** and descend through a 4-floor
 Gauntlet: each floor is a **branching node map** (a decision screen, not
 corridors) of big scrolling battle arenas, and every floor ends in a
 **Siege** — a continuous, mutating last stand capped by the floor boss. Clear
@@ -18,10 +18,10 @@ back to synthesis if a file is missing. The only external dependency is the
 PeerJS client, loaded from a CDN `<script>` tag, used for the peer-to-peer
 co-op networking.
 
-- **Content**: 32 characters · 136 items · 26 weapons across 6 classes ·
+- **Content**: 33 characters · 146 items (10 of them cursed) · 26 weapons across 6 classes ·
   12 enemy types · 4 two-phase bosses · elites with 4 modifiers · 5 arena
   templates with spike & lava hazards · 4 bespoke siege arenas · Trader /
-  Reliquary / Champion stops on every floor's map.
+  Reliquary stops and eight objective level types on every floor's map.
 - **Co-op**: host-authoritative P2P via PeerJS room codes, up to **8 players**.
   The host runs the whole simulation; clients send inputs (~30/s) and
   interpolate binary-packed snapshots (15/s, 12/s at 6+ players) with local
@@ -81,6 +81,36 @@ co-op networking.
   mutation the **floor boss** enters with reduced add spawns (tapering to
   silence, so a siege is never an unwinnable inflow race). Boss down → full
   payout, post-boss shop, and the descent portal.
+
+## Objective levels: twelve fights, eight of them not a horde
+
+Every floor's map holds **12 combat nodes** (shops, reliquaries and the Siege
+are extra). Most of them are no longer "kill what spawns" — each objective
+level has its own win condition, its own icon on the node map, and a live
+objective bar on screen showing exactly what it wants.
+
+| | level | what clears it |
+|---|---|---|
+| ◎ | **Zone Control** | A capture zone (10–25% of the arena) fills only while someone stands in it — ~20 s of *occupied* time, paused (never reset) when it empties. Capture it and it moves. Six captures. Spawns never stop and there's no timer, so it's a farm — with a leash: after 150 kills in one zone segment, kills stop paying until the next zone. |
+| ☠ | **Elite Arena** | A handful of enormous, slow monsters — Chargers, Lobbers, Splitters and Enragers (which pick up speed the longer they live). Kill them all. Pure kiting. |
+| ⁂ | **Nest Purge** | 6–8 destructible spawners feed the room; every one you destroy throttles the global inflow. Destroy them all. |
+| ✦ | **Bounty Hunt** | Five marked champions, one at a time, each with an escort pack and a ping on your screen. Killing one marks the next. |
+| ⇥ | **Breach** | An elongated corridor with a lethal collapse crawling in behind you. Fight forward, reach the gate. |
+| ⚱ | **Relic Run** | Relics scattered around the map; carrying one costs 20% move speed and pulls aggro onto you; drop it if you go down. Bank five at the central altar. |
+| ❄ | **Storm Survival** | A safe circle shrinks over ~20 s, then relocates at full size. Outside it you burn 5% of max HP per second. Survive 90 s. |
+| ⛏ | **Payload** | The extraction gate starts sealed. A drill crawls a fixed lane toward it, but only while someone is inside its escort radius. Enemies stall it (they can't destroy it) and it patches itself up while you're close. |
+
+**Every floor gets**: 1 Nest Purge, 1 Bounty Hunt, 1 Breach, 1–2 Zone
+Control, 1–2 Elite Arena, plus **Relic Run + Storm Survival on odd floors**
+and **Payload on even floors**. Whatever's left is a standard horde arena —
+and the generator guarantees **4–6 of those** on every floor, dropping a
+duplicate Zone/Elite node if a roll would leave fewer. The floor's **entry
+column is always plain arenas**, so a run never opens on a 90-second
+survival with a starting kit.
+
+A floor is a much bigger commitment than it used to be: 12 combat nodes
+instead of 7, and the objective levels run 30 s (Breach) to 125 s (Zone
+Control). Expect a floor to take two to three times as long as it did.
 
 ## Pressure profiles: standing still is a choice
 
@@ -326,7 +356,8 @@ clean play). They act on the **host's** simulation:
 
 - **F1** — spawn 50 enemies (stress test; arenas only)
 - **F2** — +200 materials for every player
-- **F3** — kill everything and end the fight's spawning
+- **F3** — kill everything, end the fight's spawning, and satisfy the current
+  objective (the one key that ends any level)
 - **F4** — skip to the next floor
 - **F5** — god mode toggle
 - **F6** — show hitboxes + FPS/entity counter
@@ -402,6 +433,91 @@ never loads them:
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### Objectives, Pulsar and cursed goods (patch 11)
+
+- **The 12-node floor needed a bigger map.** The old floor was 9–10 nodes
+  *including* the shop, reliquary and Siege. "12 combat nodes excluding
+  shops/boss/event nodes" means the map is now 15: six fight columns holding
+  14 nodes (12 combat + the shop + the reliquary) plus the Siege. The
+  composition is rolled before layout so the count is exact rather than
+  emergent, and the horde-arena invariant is enforced by dropping duplicate
+  Zone/Elite nodes — verified over 960 generated floors.
+- **Elite Arena inherited the Champion node's job.** The brief's 12-node
+  list has no room for the old `elite` Champion stop, and Elite Arena is
+  the same fantasy, so Elite Arenas now carry the Champion's guarantees:
+  they pay the elite treasure pick on clear, and at least one per floor must
+  be avoidable (some path from an entry to the Siege skips it). The `elite`
+  kind still exists in the engine so nothing that references it breaks.
+- **Bounty HP ramps on the early floors — a deliberate deviation, flagged.**
+  The brief prices each mark at ~60–70% of post-patch (doubled) boss HP.
+  Five of those is over three bosses' worth of HP in a single level, which
+  floor 1 cannot pay: in the harness, a solo player with a *good* floor-1
+  build (four weapons at tier II, +60 Ferocity) killed 2 of 5 in eight
+  minutes and was on pace for roughly twenty. So the fraction ramps by floor
+  — ×0.70 on floor 1 up to the full briefed band by floor 4 — while the
+  anchor (the real floor boss's spawn HP), the count (5) and the sequencing
+  are exactly as specified. Measured after the ramp: 47–54 s solo and 4p on
+  floor 1, 28–37 s on floor 2+. If playtesting wants the full 60–70% from
+  floor 1, `bountyFraction` in `js/objectives.js` is the one-line knob.
+- **Objective hazards are true damage.** The storm's burn and the Breach
+  collapse ignore Grit, shields, dodge and i-frames. They tick continuously,
+  so routing them through the normal mitigation path would have made
+  standing in a lethal wall a viable build choice.
+- **Nest Purge needed its ambient pressure cut.** At the first numbers
+  (8 spawners at ×3.2 HP, each holding 3 brood, on top of a full wave) a
+  solo player never got through it: auto-aim locks the nearest target, so
+  standing on a nest just feeds you brood. Spawners are now ×2.2 HP with a
+  brood cap of 2, the ambient wave runs at 15–65% (scaling with nests left
+  alive), and every live nest is marked in the world and on the edge arrows.
+  Solo clear went from "never" to 18 s.
+- **The zone anti-farm counts kills, not time.** 150 kills per zone segment,
+  reset on capture — so a party that parks in an endless-spawn level stops
+  earning but can still finish the objective. The cap is generous enough
+  that normal play never notices it.
+- **Structures: "off-screen" is judged generously.** The recall checks a
+  2100×1180 box around the owner — larger than any real viewport (the
+  renderer shows 1280×720 of world on the narrow axis and more on wide
+  monitors). Erring large means a structure you can actually see never packs
+  itself up, which is the rule the brief cared about. The channel pauses
+  (rather than cancels) in menus and while downed, and breaks outright on
+  movement or damage. In co-op the check runs against each owner's own
+  position, so one player's camera never recalls another's turrets.
+- **Pulsar's nova radius is not a stat.** The 120 cap lands *after* every
+  range modifier — Reach, Overwatch, items — and his weapons are capped to
+  the same number, so the character can never buy his way out of his own
+  blast radius. Measured nova share in the harness: **~50% of his total
+  damage**, which is the tuning target the brief set; the sim suite prints
+  the number each run so a future rebalance can check it instead of guessing.
+- **Cursed items are a loan against exactly one fight.** Buying one queues
+  its curse; entering the next arena activates it; entering the arena after
+  that clears it. Enemy-side curses (+HP, +speed, extra barrage) fold into
+  shared round multipliers so they hit the whole party — that is the point
+  of buying one in co-op — while player-side curses (−Tempo, −Reflex, halved
+  healing) only ever touch the buyer. Same-key curses stack additively.
+  Stats sit ~30–40% above a clean item at the same price.
+- **Solo's +15% stacks on top of everything**, including the co-op curve
+  (which is ×1 at one player), so the knob is a clean multiplier and the
+  2–8 player numbers are untouched.
+- **Endless levels take the square root of the co-op spawn multiplier.** A
+  horde arena spends a finite budget, so party scaling just makes the same
+  fight denser. Zone Control, Relic Run and friends have no budget to spend,
+  so the flat ×3.7 at eight players meant fighting that inflow for as long as
+  the objective took — minutes. The sqrt keeps a full party's level clearly
+  heavier without turning it into an unwinnable war of attrition.
+- **Bounty marks win your auto-aim.** Weighting a marked champion at ×0.3
+  distance was the difference between "kill the champion" and "kill the
+  escort forever while the champion watches" — auto-aim locks the nearest
+  body, and a bounty always travels with a pack.
+- **Known soft spot, flagged not hidden**: the harness's 8-player *organic*
+  floor-1 walk no longer reliably finishes. That bot is a ~50-line kiter; the
+  new floor 1 asks for navigation and role coordination (someone carries the
+  relic, everyone else covers) that it doesn't have, and its outcome swings
+  on global RNG — one run wipes on the opening arena, the next walks three
+  nodes. It is reported as a loud warning in the suite rather than quietly
+  relaxed. What *is* gated: every objective level driven to completion solo
+  and 4-player, and an 8-player Relic Run clearing in 16 s under direct
+  steering. An 8-player floor-1 run is the thing to watch in playtesting.
 
 ### The Warband (patch 10)
 

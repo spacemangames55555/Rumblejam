@@ -1,4 +1,4 @@
-// Character roster — 32 characters (the Great Rebalance). Each is a stat
+// Character roster — 33 characters (the Great Rebalance + Pulsar). Each is a stat
 // spread + starting weapon + one signature trait (engine-implemented via
 // trait.key in game.js). Base player stats before modifiers: 80 Vitality,
 // everything else 0. Percent stats (ferocity/tempo/reflex/recovery/attunement)
@@ -40,8 +40,8 @@ export const CHARACTERS = [
     desc: 'Red Tithe: kills heal 1 HP (Recovery applies); healing beyond full HP becomes permanent Vitality, up to +3 per fight.' },
   { id: 'broker', name: 'The Broker', sym: '⛃', roles: ['economy'],
     stats: { greed: 10 }, weapon: 'pebbleshot',
-    trait: { key: 'insider', discount: 25, slots: 5 },
-    desc: 'Insider Trading: shop prices −25% and reroll cost never compounds, but only 5 weapon slots.' },
+    trait: { key: 'insider', discount: 25, slots: 7 },
+    desc: 'Insider Trading: shop prices −25%, reroll cost never compounds, and 7 weapon slots.' },
   { id: 'resonant', name: 'Resonant', sym: '〜', roles: ['melee', 'status'],
     stats: { ferocity: 5 }, weapon: 'rustcleaver',
     trait: { key: 'resonance', hits: 9, factor: 2.0, radius: 130 },
@@ -136,6 +136,19 @@ export const CHARACTERS = [
     stats: { ingenuity: 4, vitality: 10 }, weapon: 'guard_drone',
     trait: { key: 'free_drone_floor' },
     desc: 'Gains a free Guard Drone at the start of every floor.' },
+  // ---- the melee-range elementalist (objectives patch) ----
+  // TUNING TARGET: ~50% of Pulsar's total damage should come from the nova.
+  // The knobs are base/cd/heatPer here; sim_test prints his nova share so a
+  // future rebalance can check it instead of guessing. Everything about him
+  // pushes toward the 120u band: negative Reach, weapons hard-capped to the
+  // nova radius, and only 3 slots — the nova is meant to be half his output.
+  { id: 'pulsar', name: 'Pulsar', sym: '◎', roles: ['status', 'melee'],
+    stats: { attunement: 15, grit: 6, reach: -30 }, weapon: 'rustcleaver',
+    trait: {
+      key: 'nova_core', radius: 120, cd: 1.2, base: 10, slots: 3,
+      heatPer: 0.15, heatMax: 1.5, heatDecay: 2, healPer: 1,
+    },
+    desc: 'Nova Core: while an enemy stands within 120, you pulse every 1.2s for attuned damage to everything in that fixed radius (Reach never changes it) and heal 1 HP per enemy struck. Each pulse that connects stacks +15% nova damage up to +150%; the stacks all fall off 2s after a pulse hits nothing. Only 3 weapon slots, and every weapon you hold is range-capped to 120.' },
 ];
 
 export const CHAR_BY_ID = Object.fromEntries(CHARACTERS.map(c => [c.id, c]));

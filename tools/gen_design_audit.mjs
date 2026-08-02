@@ -1,5 +1,5 @@
 // Dev tool: generate docs/design-audit.md from the live content data
-// (Great Rebalance edition — ten stats, weapon scaling tags, 32 characters).
+// (Great Rebalance edition — ten stats, weapon scaling tags, 33 characters).
 // Every roster row, stat census, and axis count is computed from the actual
 // data modules — if the doc would disagree with the data, the data wins by
 // construction. Judgment columns (pick appeal) live in an explicit map keyed
@@ -15,7 +15,7 @@ import { WEAPONS, WEAPON_BY_ID } from '../js/content/weapons.js';
 import { STATS, STAT_IS_PCT } from '../js/config.js';
 
 // ---------- verification against the boot-log counts ----------
-if (CHARACTERS.length !== 32) throw new Error(`characters ${CHARACTERS.length} != 32`);
+if (CHARACTERS.length !== 33) throw new Error(`characters ${CHARACTERS.length} != 33`);
 if (ITEMS.length < 100) throw new Error(`items ${ITEMS.length} < 100`);
 if (WEAPONS.length !== 26) throw new Error(`weapons ${WEAPONS.length} != 26`);
 {
@@ -98,6 +98,7 @@ const APPEAL = {
   threader: ['M', 'Universal pierce is quietly excellent'],
   tinker: ['M', 'Faster turrets with a tight slot puzzle'],
   hivewright: ['M', 'Free drone per floor compounds nicely'],
+  pulsar: ['H', 'Melee-range elementalist: half his damage is a fixed 120u nova'],
 };
 
 {

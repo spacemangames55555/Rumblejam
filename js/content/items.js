@@ -388,6 +388,57 @@ export const ITEMS = [
   { id: 'banner_of_the_last_stand', name: 'Banner of the Last Stand', rarity: 'legendary', price: 98,
     hooks: { allyAura: { radius: 180, stats: { ferocity: 10, recovery: 15 } } },
     desc: 'Allies within 180u gain +10% Ferocity and +15% Recovery.' },
+
+  // ============ cursed goods ============
+  // Deliberately overstatted for their price (~30–40% above a clean item) and
+  // paid for with a curse that lands on the NEXT round only, then expires.
+  // `curse.scope`: 'enemy' curses hit the shared round (co-op: everyone's
+  // problem); 'self' curses only ever touch the buyer. Curses of the same
+  // key stack additively when several are bought. The curse text is spelled
+  // out in `desc` because a curse the card doesn't name is just a bug.
+  { id: 'gravebound_locket', name: 'Gravebound Locket', rarity: 'uncommon', price: 30,
+    stats: { vitality: 16, recovery: 10 },
+    curse: { key: 'enemyHp', value: 0.05, scope: 'enemy' },
+    desc: 'CURSED — next round only: every enemy has +5% HP (the whole party\'s round).' },
+  { id: 'whipcrack_spur', name: 'Whipcrack Spur', rarity: 'uncommon', price: 31,
+    stats: { tempo: 11, ferocity: 6 },
+    curse: { key: 'enemySpd', value: 0.10, scope: 'enemy' },
+    desc: 'CURSED — next round only: every enemy moves 10% faster (the whole party\'s round).' },
+  { id: 'leadfoot_ballast', name: 'Leadfoot Ballast', rarity: 'uncommon', price: 29,
+    stats: { grit: 5, vitality: 12 },
+    curse: { key: 'tempo', value: -5, scope: 'self' },
+    desc: 'CURSED — next round only: you have −5% Tempo.' },
+  { id: 'blindfold_of_certainty', name: 'Blindfold of Certainty', rarity: 'uncommon', price: 32,
+    stats: { ferocity: 12, attunement: 8 },
+    curse: { key: 'reflex', value: -10, scope: 'self' },
+    desc: 'CURSED — next round only: you have −10% Reflex.' },
+  { id: 'scab_stitched_charm', name: 'Scab-Stitched Charm', rarity: 'rare', price: 52,
+    stats: { vitality: 24, grit: 4 },
+    hooks: { killHeal: { amount: 2 } },
+    curse: { key: 'healHalf', value: 1, scope: 'self' },
+    desc: 'Kills heal 2 HP. CURSED — next round only: all healing you receive is halved.' },
+  { id: 'siege_bell', name: 'Siege Bell', rarity: 'rare', price: 55,
+    stats: { ferocity: 16, reach: 18 },
+    curse: { key: 'barrage', value: 1, scope: 'enemy' },
+    desc: 'CURSED — next round only: one extra artillery barrage falls on the party.' },
+  { id: 'hollow_kings_signet', name: "Hollow King's Signet", rarity: 'rare', price: 54,
+    stats: { greed: 9, ferocity: 10 },
+    curse: { key: 'enemyHp', value: 0.05, scope: 'enemy' },
+    desc: 'CURSED — next round only: every enemy has +5% HP (the whole party\'s round).' },
+  { id: 'quicksilver_vial', name: 'Quicksilver Vial', rarity: 'rare', price: 53,
+    stats: { tempo: 15, reflex: 10 },
+    curse: { key: 'healHalf', value: 1, scope: 'self' },
+    desc: 'CURSED — next round only: all healing you receive is halved.' },
+  { id: 'apostates_reliquary', name: "Apostate's Reliquary", rarity: 'legendary', price: 92,
+    stats: { attunement: 30, ferocity: 12 },
+    hooks: { statusBoost: { pct: 12 } },
+    curse: { key: 'enemySpd', value: 0.10, scope: 'enemy' },
+    desc: 'Your burns, chills, chains and blasts are 12% stronger. CURSED — next round only: every enemy moves 10% faster (the whole party\'s round).' },
+  { id: 'the_bad_bargain', name: 'The Bad Bargain', rarity: 'legendary', price: 95,
+    stats: { ferocity: 22, tempo: 12, vitality: 18 },
+    curse: { key: 'barrage', value: 1, scope: 'enemy' },
+    desc: 'CURSED — next round only: one extra artillery barrage falls on the party, and you take −5% Tempo with it.',
+    curse2: { key: 'tempo', value: -5, scope: 'self' } },
 ];
 
 export const ITEM_BY_ID = Object.fromEntries(ITEMS.map(it => [it.id, it]));
