@@ -334,6 +334,83 @@ try {
     s.uiAction(0,{kind:'pickNode',nodeId:id}); return 1;`);
   await A.waitFor(`return window.uv.sim.phase==='arena'`, 6000, 'back into a horde arena');
 
+  // ---- Breach in the real client: advancing wall, doors, bounds, radar ----
+  await A.exec(clearFightJs);
+  await A.exec(drainJs);
+  await extractToMap(A, 'to the breach node');
+  await A.exec(`const s=window.uv.sim;
+    const id = s.reachableNodes().find(i => s.floor.nodes[i].template) ?? s.reachableNodes()[0];
+    const n = s.floor.nodes[id];
+    n.kind='breach'; if (!n.template) n.template='long_hall';
+    window.__brNode = id; s._mapEvent(); return 1;`);
+  await A.exec(`const s=window.uv.sim; s.uiAction(0,{kind:'pickNode',nodeId:window.__brNode}); return 1;`);
+  await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.obj && window.uv.sim.obj.type==='breach'`, 8000, 'inside Breach');
+  const br0 = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj;
+    return JSON.stringify({ wall:o.wallX, segs:o.segs, doors:o.doors.length, need:o.need,
+      w:s.W, h:s.H, px:Math.round(s.players[0].x),
+      stray: s.obstacles.filter(ob=>ob.x<0||ob.y<0||ob.x+ob.w>s.W||ob.y+ob.h>s.H).length })`));
+  if (br0.segs >= 3 && br0.doors === br0.segs) ok(`Breach: ${br0.segs} segments behind ${br0.doors} sealed doors (${br0.need} kills each)`);
+  else fail(`breach segments: ${JSON.stringify(br0)}`);
+  if (br0.stray === 0) ok(`Breach architecture stays inside the reshaped room (${br0.w}×${br0.h})`);
+  else fail(`${br0.stray} obstacles outside the Breach bounds`);
+  if (br0.px < br0.w * 0.25) ok(`the party starts at the mouth of the corridor (x=${br0.px} of ${br0.w})`);
+  else fail(`breach drop-in at x=${br0.px}`);
+  await sleep(2200);
+  const br1 = await A.exec(`return window.uv.sim.obj.wallX`);
+  if (br1 > br0.wall + 25) ok(`the collapse advances in the live client (${Math.round(br0.wall)} → ${Math.round(br1)})`);
+  else fail(`collapse stalled: ${br0.wall} → ${br1}`);
+  // the sealed door holds, and nothing walks out of the map
+  const brBounds = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj,p=s.players[0];
+    p.x=o.doors[0]+600; p.y=-500; s.tick();
+    const past = p.x > o.doors[0];
+    let out=0;
+    for (let i=0;i<120;i++){ s.setInput(0,{mx:(i%4<2?1:-1),my:(i%8<4?1:-1)}); s.tick();
+      out=Math.max(out, Math.max(0,36-p.x,36-p.y,p.x-(s.W-36),p.y-(s.H-36))); }
+    return JSON.stringify({past, out:Math.round(out)});`));
+  if (!brBounds.past) ok('the sealed door blocks the party until its kill quota is paid');
+  else fail('walked straight through a sealed Breach door');
+  if (brBounds.out === 0) ok('players cannot leave the playable bounds on Breach');
+  else fail(`player escaped the Breach map by ${brBounds.out}u`);
+  const brHud = JSON.parse(await A.exec(`const h=document.getElementById('objective-hud');
+    return JSON.stringify({ text:h.querySelector('.obj-text').textContent, vis:!h.classList.contains('hidden') })`));
+  if (brHud.vis && /door 1\//.test(brHud.text)) ok(`the Breach HUD shows the door counter ("${brHud.text}")`);
+  else fail(`breach HUD: ${JSON.stringify(brHud)}`);
+  // the radar draws something for the elongated map (wall + gate + doors)
+  const radarInk = await A.exec(`const c=document.getElementById('minimap');
+    const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    let n=0; for (let i=3;i<d.length;i+=4) if (d[i]>8) n++; return n;`);
+  if (radarInk > 400) ok(`the minimap renders the elongated Breach layout (${radarInk} lit pixels)`);
+  else fail(`minimap looks empty on Breach (${radarInk} lit pixels)`);
+
+  // ---- completion cleanup: the arena is inert before any popup ----
+  await A.exec(`const s=window.uv.sim, p=s.players[0];
+    s.addZone({x:p.x,y:p.y,r:90,dps:20,dur:30,hurts:'players',color:'#7dee6a',acid:true});
+    s.addTelegraph({shape:'circle',x:p.x,y:p.y,r:90,dur:5,boom:{dmg:40,radius:90}});
+    s.spawnEnemyProj(p.x+40,p.y,0,200,10,6,'#f00');
+    s.debug('F1'); return 1;`);
+  await A.exec(clearFightJs);
+  const inert = JSON.parse(await A.exec(`const s=window.uv.sim; return JSON.stringify({
+    safe:!!s.safe, enemies:s.enemyPool.count, projs:s.projPool.count, queued:s.spawnQueue.length,
+    zones:s.zones.length, tele:s.telegraphs.length, hazards:(s.hazards||[]).length })`));
+  const dirty = Object.entries(inert).filter(([k, v]) => k !== 'safe' && v > 0);
+  if (inert.safe && !dirty.length) ok('completion cleanup: the arena is inert the moment the objective is met');
+  else fail(`arena not safe at completion: ${JSON.stringify(inert)}`);
+  const hpHeld = await A.exec(`const s=window.uv.sim,p=s.players[0]; const h0=p.hp;
+    for (let i=0;i<180;i++) s.tick(); return p.hp >= h0 ? 1 : 0;`);
+  if (hpHeld) ok('no damage lands while the post-clear popups are open');
+  else fail('a player took damage after the fight was won');
+
+  // ---- every room starts at full HP ----
+  await A.exec(drainJs);
+  await extractToMap(A, 'out of the breach');
+  await A.exec(`const s=window.uv.sim; s.players[0].hp = 3;
+    const id = s.reachableNodes().find(i => s.floor.nodes[i].template) ?? s.reachableNodes()[0];
+    const n = s.floor.nodes[id]; n.kind='combat'; if (!n.template) n.template='open_expanse';
+    s.uiAction(0,{kind:'pickNode',nodeId:id}); return 1;`);
+  await A.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'next room after breach');
+  const fullHp = await A.exec(`const p=window.uv.sim.players[0]; return p.hp === p.stats.vitality ? 1 : 0;`);
+  if (fullHp) ok('walking into a room heals you to full'); else fail('room start did not restore full HP');
+
   // movement via synthetic keys (arena is bigger than the screen now)
   const cam0 = await A.exec('return Math.round(window.uvRenderer.camX)'); // camera baseline before any movement
   // two directions — a single axis can be blocked by an obstacle beside the spawn
@@ -348,11 +425,17 @@ try {
   if (moved > 60) ok(`player moves with keys (${Math.round(moved)}u travelled)`); else fail(`player did not move (${Math.round(moved)}u)`);
 
   // ---- the camera follows the player across the arena ----
-  await A.exec(`const s=window.uv.sim, p=s.players[0]; p.x = Math.min(s.W - 800, p.x + 600); return 1;`);
+  // park left-of-centre first so "push right" always has room to move the
+  // camera right, wherever the preceding sections left the player
+  await A.exec(`const s=window.uv.sim, p=s.players[0];
+    const spot = s._openSpot(Math.max(200, s.W * 0.22), s.H / 2); p.x = spot.x; p.y = spot.y; return 1;`);
+  await sleep(900);
+  const camBase = await A.exec('return Math.round(window.uvRenderer.camX)');
+  await A.exec(`const s=window.uv.sim, p=s.players[0]; p.x = Math.min(s.W - 400, p.x + 900); return 1;`);
   await sleep(1000); // smooth-follow converges well under a second
   const camInfo = JSON.parse(await A.exec(`return JSON.stringify({ cam: Math.round(window.uvRenderer.camX), px: Math.round(window.uv.sim.players[0].x), aw: window.uv.sim.W })`));
-  if (Math.abs(camInfo.cam - camInfo.px) < 80 && camInfo.cam > cam0 + 250) ok(`camera follows the player (cam ${cam0}→${camInfo.cam}, player at ${camInfo.px}, arena ${camInfo.aw}w)`);
-  else fail(`camera follow: cam ${cam0}→${camInfo.cam}, player ${camInfo.px}`);
+  if (Math.abs(camInfo.cam - camInfo.px) < 80 && camInfo.cam > camBase + 250) ok(`camera follows the player (cam ${camBase}→${camInfo.cam}, player at ${camInfo.px}, arena ${camInfo.aw}w)`);
+  else fail(`camera follow: cam ${camBase}→${camInfo.cam}, player ${camInfo.px}`);
 
   // ---- clear the fight: the shop opens right at extraction (patch 8) ----
   if (!await A.exec(clearFightJs)) fail('first fight never cleared under F3');
@@ -1414,6 +1497,55 @@ if (wantCoop) {
       await A.waitFor(`return window.uv.mode==='results'`, 5000, 'host results');
       await B.waitFor(`return window.uv.mode==='results'`, 5000, 'client results');
       ok('wipe → results on both host and client');
+
+      // ---- defeat flow: back to THIS room's character select, no rehosting ----
+      const codeBefore = await A.exec(`return window.uv.hostT.code`);
+      const peersBefore = await A.exec(`return window.uv.hostT.conns.size`);
+      const hostHasBtn = await A.exec(`return document.getElementById('btn-lobby') !== null`);
+      const clientWaits = await B.exec(`return document.getElementById('btn-lobby') === null`);
+      if (hostHasBtn && clientWaits) ok('results: the host drives the new run, the client is told to wait');
+      else fail(`new-run button: host=${hostHasBtn} clientHidden=${clientWaits}`);
+
+      // a player dropping DURING the transition must leave a clean lobby
+      await B.exec(`document.getElementById('btn-title').click(); return 1;`);
+      await B.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 5000, 'client left during results');
+      await sleep(600);
+      await A.exec(`document.getElementById('btn-lobby').click(); return 1;`);
+      await A.waitFor(`return window.uv.mode==='lobby'`, 5000, 'host back in the lobby');
+      const afterDrop = JSON.parse(await A.exec(`return JSON.stringify({
+        code: window.uv.hostT.code, n: window.uv.lobby.players.length,
+        host: window.uv.lobby.players.filter(p=>p.isHost).length,
+        chars: window.uv.lobby.players.map(p=>p.charId) })`));
+      if (afterDrop.code === codeBefore) ok(`defeat keeps the room code (${afterDrop.code}) — nothing to re-share`);
+      else fail(`code changed on defeat: ${codeBefore} → ${afterDrop.code}`);
+      if (afterDrop.n === 1 && afterDrop.host === 1)
+        ok('a player leaving during the defeat transition leaves a clean, still-hosted lobby');
+      else fail(`lobby after mid-transition drop: ${JSON.stringify(afterDrop)}`);
+      if (afterDrop.chars.every(c => c === null)) ok('everyone re-picks: character choices cleared on defeat');
+      else fail(`characters not cleared: ${JSON.stringify(afterDrop.chars)}`);
+
+      // the SAME room is still live: the client rejoins with the same code
+      await B.exec(`document.getElementById('name-input').value='FRIEND'; document.getElementById('join-code').value='${codeBefore}'; document.getElementById('btn-join').click(); return 1;`);
+      await B.waitFor(`return window.uv.mode==='lobby'`, 15000, 'client rejoins the same room after a defeat');
+      await A.waitFor(`return window.uv.lobby.players.length===2`, 6000, 'host sees the rejoin');
+      if (await A.exec(`return window.uv.hostT.conns.size >= 1`)) ok(`peer connections work on the same room code after a defeat (${peersBefore} before)`);
+      // …and a new run starts straight from here
+      await A.exec(`document.querySelector('.char-card[data-char="rampart"]').click(); return 1;`);
+      await B.waitFor(`return document.querySelector('.char-card[data-char="vesper"]')!==null`, 5000, 'client char grid again');
+      await B.exec(`document.querySelector('.char-card[data-char="vesper"]').click(); return 1;`);
+      await sleep(300);
+      await B.exec(`document.getElementById('btn-ready').click(); return 1;`);
+      await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready && window.uv.lobby.players[1].charId`, 8000, 'client ready for run 2');
+      await A.exec(`document.getElementById('btn-start').click(); return 1;`);
+      await A.waitFor(`return window.uv.mode==='run'`, 6000, 'run 2 on host');
+      await B.waitFor(`return window.uv.mode==='run'`, 8000, 'run 2 on client');
+      ok('defeat → same-session character select → new run, without rehosting');
+
+      // wipe run 2 so the original post-run checks below still have a defeat
+      await A.exec(`const s=window.uv.sim; for (const p of s.players){let g=0; while(!p.downed&&!s.over&&g++<90){p.invuln=0;p.stats.reflex=0;p.hp=1;s.hurtPlayer(p,9999,null);}} return 1;`);
+      await A.waitFor(`return window.uv.mode==='results'`, 8000, 'results after run 2');
+      await B.waitFor(`return window.uv.mode==='results'`, 8000, 'client results after run 2');
+
       // host closes while client reads results → client keeps the results screen
       await A.close();
       await sleep(2500);

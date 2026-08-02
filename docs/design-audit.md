@@ -14,15 +14,15 @@ critical hits exist only as granted effects (default ×2).
 
 | Stat | What it does | Formula (as implemented) | Chars | Items | Weapons |
 |---|---|---|---:|---:|---:|
-| **Vitality** | Your hit point pool. Downed at 0. | Base 80 + modifiers (min 1). Gaining Vitality also grants the difference as current HP. Scaling rate: 1% weapon damage per 4 points. | 7 | 18 | 2 |
-| **Ferocity** | The universal damage multiplier. | Hit = weapon base × tier mult × `(1 + Ferocity%/100)` × `(1 + scaling-tag bonus/100)`. Crits are granted-only, ×2 (×3 Duskblade). | 6 | 30 | 5 |
-| **Tempo** | One stat for all speed. | Attack cooldown = `base / max(0.25, 1 + Tempo%/100)`; move speed = `300 × (1 + Tempo%/100)`, floored at 60. | 5 | 19 | 5 |
-| **Grit** | Mitigation and stubbornness. | Damage taken = `raw × 15 / (15 + Grit)` (negative capped at +50% extra); pulls/knockback resisted by the same ratio. Scaling rate: 1%/point. | 4 | 16 | 2 |
-| **Reflex** | Chance to ignore a hit entirely. | Percent roll per hit, capped at 60 (Wisp raises to 90). Every on-dodge effect (Slipstream, Afterimage, items) keys off this. | 4 | 9 | 2 |
-| **Recovery** | Amplifies ALL healing received. | Every healing source (regen, lifesteal, kill-heals, fight-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`. | 2 | 13 | 2 |
-| **Ingenuity** | Power source for summons/structures. | Summon damage AND HP `×(1 + 0.1 × Ingenuity)`. Scaling rate: 1%/point on summon-tagged weapons. | 4 | 7 | 4 |
-| **Attunement** | Elemental/status amplifier. | Burns, chills (strength and duration), chains, novas, blasts and echoes all scale `×(1 + Attunement%/100)`. | 4 | 12 | 10 |
-| **Greed** | Fortune unified. | Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every fight clear. No self-growth. Scaling rate: 1%/point. | 5 | 14 | 3 |
+| **Vitality** | Your hit point pool. Downed at 0. | Base 80 + modifiers (min 1). Gaining Vitality also grants the difference as current HP. Scaling rate: 1% weapon damage per 4 points. | 7 | 24 | 2 |
+| **Ferocity** | The universal damage multiplier. | Hit = weapon base × tier mult × `(1 + Ferocity%/100)` × `(1 + scaling-tag bonus/100)`. Crits are granted-only, ×2 (×3 Duskblade). | 6 | 64 | 5 |
+| **Tempo** | One stat for all speed. | Attack cooldown = `base / max(0.25, 1 + Tempo%/100)`; move speed = `300 × (1 + Tempo%/100)`, floored at 60. | 5 | 54 | 5 |
+| **Grit** | Mitigation and stubbornness. | Damage taken = `raw × 15 / (15 + Grit)` (negative capped at +50% extra); pulls/knockback resisted by the same ratio. Scaling rate: 1%/point. | 4 | 26 | 2 |
+| **Reflex** | Chance to ignore a hit entirely. | Percent roll per hit, capped at 60 (Wisp raises to 90). Every on-dodge effect (Slipstream, Afterimage, items) keys off this. | 4 | 15 | 2 |
+| **Recovery** | Amplifies ALL healing received. | Every healing source (regen, lifesteal, kill-heals, fight-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`. | 2 | 15 | 2 |
+| **Ingenuity** | Power source for summons/structures. | Summon damage AND HP `×(1 + 0.1 × Ingenuity)`. Scaling rate: 1%/point on summon-tagged weapons. | 4 | 8 | 4 |
+| **Attunement** | Elemental/status amplifier. | Burns, chills (strength and duration), chains, novas, blasts and echoes all scale `×(1 + Attunement%/100)`. | 4 | 15 | 10 |
+| **Greed** | Fortune unified. | Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every fight clear. No self-growth. Scaling rate: 1%/point. | 5 | 18 | 3 |
 | **Reach** | Weapon reach and magnetism. | Ranged/lobbed weapons +100% of Reach, melee +30% (floor 40); pickup radius = `60 + Reach × 0.5`. Scaling rate: 1% per 12 points. | 3 | 8 | 2 |
 
 ## 2. Full character roster

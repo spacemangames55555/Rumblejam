@@ -254,44 +254,59 @@ export const SIEGES = [
 // Parties of ARENA_CROWD_AT+ fight in the same templates scaled up
 // ~25% in bounds — 8 spread players need somewhere to spread to.
 export function buildArena(seed, floorNum, node, playerCount = 1) {
-  const k = playerCount >= CONFIG.ARENA_CROWD_AT ? CONFIG.ARENA_CROWD_SCALE : 1;
+  const crowd = playerCount >= CONFIG.ARENA_CROWD_AT ? CONFIG.ARENA_CROWD_SCALE : 1;
+  // Objective levels can reshape the room (Breach is a corridor). That scale
+  // has to reach the obstacles and hazards too, NOT just the bounds — scaling
+  // only the bounds leaves template architecture hanging outside the room,
+  // and _pushOut then shoves players through the wall to escape it.
+  const shape = objectiveShape(node.kind);
+  const kx = crowd * shape.x, ky = crowd * shape.y;
   if (node.kind === 'siege') {
     const s = SIEGES[floorNum - 1];
     return {
-      w: Math.round(s.w * k), h: Math.round(s.h * k), name: s.name,
-      obstacles: s.obstacles.map(o => scaleRect(o, k)),
-      hazards: s.hazards.map(h => scaleHazard(h, k)),
-      mutations: k === 1 ? s.mutations : s.mutations.map(m => scaleMutation(m, k)),
+      w: Math.round(s.w * kx), h: Math.round(s.h * ky), name: s.name,
+      obstacles: s.obstacles.map(o => scaleRect(o, kx, ky)),
+      hazards: s.hazards.map(h => scaleHazard(h, kx, ky)),
+      mutations: (kx === 1 && ky === 1) ? s.mutations : s.mutations.map(m => scaleMutation(m, kx, ky)),
       bossDelay: s.bossDelay, addRate: s.addRate,
     };
   }
   const t = ARENA_TEMPLATES[node.template];
   const rng = subRng(seed, 'arena', floorNum, node.id);
   return {
-    w: Math.round(t.w * k), h: Math.round(t.h * k), name: t.name,
-    obstacles: t.obstacles(rng).map(o => scaleRect(o, k)),
-    hazards: t.hazards(rng).map(h => scaleHazard(h, k)),
+    w: Math.round(t.w * kx), h: Math.round(t.h * ky), name: t.name,
+    obstacles: t.obstacles(rng).map(o => scaleRect(o, kx, ky)),
+    hazards: t.hazards(rng).map(h => scaleHazard(h, kx, ky)),
     mutations: null,
   };
 }
 
-// geometric scale-up: positions and extents alike, so layouts keep their shape
-function scaleRect(o, k) {
-  if (k === 1) return { ...o };
-  return { ...o, x: Math.round(o.x * k), y: Math.round(o.y * k), w: Math.round(o.w * k), h: Math.round(o.h * k) };
+// Per-axis room reshaping by objective. Breach wants a long corridor;
+// Storm and Zone Control want room to run.
+export function objectiveShape(kind) {
+  if (kind === 'breach') return { x: 1.7, y: 0.62 };
+  if (kind === 'storm' || kind === 'zone') return { x: 1.1, y: 1.1 };
+  return { x: 1, y: 1 };
 }
-function scaleHazard(h, k) {
-  if (k === 1) return { ...h };
-  const out = { ...h, x: Math.round(h.x * k), y: Math.round(h.y * k) };
-  if (h.w !== undefined) { out.w = Math.round(h.w * k); out.h = Math.round(h.h * k); }
-  if (h.r !== undefined) out.r = Math.round(h.r * k);
+
+// geometric scaling: positions and extents alike, per axis, so a reshaped
+// room keeps its architecture inside its own bounds
+function scaleRect(o, kx, ky = kx) {
+  if (kx === 1 && ky === 1) return { ...o };
+  return { ...o, x: Math.round(o.x * kx), y: Math.round(o.y * ky), w: Math.round(o.w * kx), h: Math.round(o.h * ky) };
+}
+function scaleHazard(h, kx, ky = kx) {
+  if (kx === 1 && ky === 1) return { ...h };
+  const out = { ...h, x: Math.round(h.x * kx), y: Math.round(h.y * ky) };
+  if (h.w !== undefined) { out.w = Math.round(h.w * kx); out.h = Math.round(h.h * ky); }
+  if (h.r !== undefined) out.r = Math.round(h.r * Math.min(kx, ky)); // circles stay circles
   return out;
 }
-function scaleMutation(m, k) {
+function scaleMutation(m, kx, ky = kx) {
   const out = { ...m };
-  if (m.x !== undefined) { out.x = Math.round(m.x * k); out.y = Math.round(m.y * k); }
-  if (m.r !== undefined) out.r = Math.round(m.r * k);
-  if (m.from) out.from = { x: Math.round(m.from.x * k), y: Math.round(m.from.y * k) };
-  if (m.to) out.to = { x: Math.round(m.to.x * k), y: Math.round(m.to.y * k) };
+  if (m.x !== undefined) { out.x = Math.round(m.x * kx); out.y = Math.round(m.y * ky); }
+  if (m.r !== undefined) out.r = Math.round(m.r * Math.min(kx, ky));
+  if (m.from) out.from = { x: Math.round(m.from.x * kx), y: Math.round(m.from.y * ky) };
+  if (m.to) out.to = { x: Math.round(m.to.x * kx), y: Math.round(m.to.y * ky) };
   return out;
 }

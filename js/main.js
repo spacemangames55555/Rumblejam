@@ -69,6 +69,7 @@ const actions = {
   host: hostGame,
   join: joinGame,
   leave: leaveToTitle,
+  backToLobby: hostReturnToLobby,
   pickChar: charId => sendUi({ kind: 'pick', charId }),
   toggleReady: () => sendUi({ kind: 'ready' }),
   startGame: hostStartRun,
@@ -156,11 +157,41 @@ function initLeaveButton() {
 // lobby — connections and room code intact, ready for a fresh run/seed.
 function hostAbandonRun() {
   if (app.role !== 'host' || !app.sim) return;
-  const players = app.party
-    .filter(m => { const sp = app.sim.players[m.idx]; return sp && !sp.gone; })
-    .map(m => ({ key: m.key, name: m.name, color: m.color, charId: m.charId, ready: m.key === '_local', isHost: m.key === '_local' }));
+  hostReturnToLobby(false); // abandoning keeps your picks; a defeat clears them
+}
+
+// A run ending is not the end of the session. The whole party goes back to
+// character select in the SAME room: code, peer connections and host role all
+// persist, everyone re-picks, the host starts the next run. Used by the
+// results screen and by the mid-run abandon button alike.
+function hostReturnToLobby(clearChars = true) {
+  if (app.role !== 'host') return;
+  const seen = new Set();
+  const players = [];
+  // rebuild from the party that started the run, minus anyone who left, then
+  // add any peer that joined/reconnected since (belt and braces for a
+  // disconnect landing exactly on this transition)
+  for (const mem of app.party || []) {
+    const sp = app.sim && app.sim.players[mem.idx];
+    if (sp && sp.gone) continue;
+    if (mem.key !== '_local' && app.hostT && !app.hostT.conns.has(mem.key)) continue; // dropped
+    if (seen.has(mem.key)) continue;
+    seen.add(mem.key);
+    players.push({
+      key: mem.key, name: mem.name, color: mem.color,
+      charId: clearChars ? null : mem.charId,
+      ready: mem.key === '_local', isHost: mem.key === '_local',
+    });
+  }
+  if (!players.some(p => p.isHost)) {
+    players.unshift({ key: '_local', name: currentName(), color: PALETTE.players[0], charId: null, ready: true, isHost: true });
+  }
   app.sim = null;
   app.mode = 'lobby';
+  app.party = null;
+  app.snaps = [];
+  app.meta = null;
+  app.predicted = null;
   app.lobby = { code: app.hostT ? app.hostT.code : null, codePending: false, players };
   showHud(false);
   closeAllOverlays();
@@ -539,7 +570,7 @@ function handleEvent(ev) {
       showHud(false);
       closeAllOverlays();
       hideMapScreen();
-      showResults(ev.result, app.myIdx);
+      showResults(ev.result, app.myIdx, app.role !== 'client');
       break;
     }
   }
