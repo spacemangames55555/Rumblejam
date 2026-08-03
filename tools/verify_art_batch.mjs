@@ -14,6 +14,12 @@
 //      file and the expected size
 //   3. it has real transparency, not a baked matte
 //   4. no cell is entirely empty (a blank row is how a mis-assembled grid hides)
+//   5. the value bands: contrast, accent spread, body saturation
+//   6. facing separation, for 8-direction sheets
+//
+// THE GATE REJECTS; IT NEVER RANKS. Nothing here produces a score, and no batch
+// should ever be selected by pushing one of these numbers up. See the value-gate
+// block below for why that is stated this emphatically.
 //
 // And across the run: which ids in the namespace still have no art, so "batch
 // 1 is done" is a number rather than a feeling.
@@ -40,40 +46,76 @@ if (!ids.length) { console.error(`✗ nothing matches ${selectors.join(' ')}`); 
 
 // ---------------- the value gate ----------------
 //
-// Two of the four anchor candidates failed review for the same reason: the body
-// sat too close in value to the arena floor, so at 36 css px they were dark
-// blobs. One of them had a brilliant accent, which is precisely how a sprite
-// passes a naive brightness check and still vanishes in play — the accent
-// carries the average and the body carries none of it.
+// THIS GATE REJECTS. IT NEVER RANKS.
 //
-// So the brightest pixels are EXCLUDED before the body is measured. What is
-// left has to clear the floor colour by a margin.
+// There is no score here, no total, nothing to maximise, and nothing that gets
+// better by going up. Each axis is a band a sprite is either inside or outside.
+// That is deliberate and it is the whole design: an earlier version exposed a
+// single body-luminance number, an anchor was regenerated to push that number
+// from 83 to 109, and the result optimised the metric while destroying the
+// thing the metric was a proxy for. A sprite that scores "higher" is not a
+// better sprite. Never select a batch by any figure this file prints.
+//
+// Three axes, all calibrated against candidate B — the reviewed, approved
+// reference — which sits comfortably INSIDE every band rather than at an edge.
+// Each catches a different way of being unreadable at 35-72 device px on a
+// near-black floor:
+//
+//   contrast   the body must clear the floor colour. Catches a dark sprite.
+//              (A measured 16, C measured 28.)
+//   spread     the accent must stand off the body. Catches a sprite with no
+//              accent at all — a flat silhouette. (A measured 75.)
+//   bodySat    the body must stay saturated. Catches a washed-out sprite whose
+//              body was made pale to lift its luminance, which is exactly the
+//              109 failure: it passed contrast AND spread, and lost the accent
+//              structure the silhouette vocabulary depends on. (109 measured
+//              0.41 on its front view against B's 0.62.)
+//
+// The accent-exclusion is retained throughout: the brightest quarter is removed
+// before the body is measured on every axis, because a brilliant accent over a
+// dark or desaturated body is precisely the case that fools a naive average.
 const FLOOR_RGB = [0x14, 0x16, 0x1f];             // PALETTE.bg, the arena floor
 const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
-export const FLOOR_LUMA = luma(...FLOOR_RGB);      // ~21
+const satOf = (r, g, b) => { const mx = Math.max(r, g, b); return mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx; };
+export const FLOOR_LUMA = luma(...FLOOR_RGB);      // ~22
 const ACCENT_FRACTION = 0.25;                      // brightest quarter is "accent"
-// Calibrated on candidate B, the known-good reference: its non-accent body
-// measures ~96, about 75 above the floor. The threshold sits well below that so
-// a darker-but-still-readable design is not rejected, and comfortably above the
-// candidates that failed review (A ~38, C ~46).
-const MIN_CONTRAST = 45;
+
+// Measured on the reference and its neighbours, front view and whole sheet:
+//
+//   asset                     contrast   spread   bodySat
+//   B  (approved reference)       93.6    109.2     0.623
+//   83 anchor  front view         83.0    115.0     0.650
+//   83 anchor  whole sheet        65.6    131.6     0.676
+//   109 anchor front view        109.0    117.4     0.405   <- rejected here
+//   109 anchor whole sheet        92.2    136.7     0.540   <- rejected here
+//   A  too dark                   15.5     74.8     0.566   <- rejected here
+//   C  dark under a bright accent 27.6    116.2     0.286   <- rejected here
+//
+// Bands are set below the reference band with headroom, so a legitimately
+// darker or cooler design is not refused, while every reviewed failure is.
+const MIN_CONTRAST = 45;      // B 94, restored anchor 66-83
+const MIN_SPREAD = 90;        // B 109, restored anchor 115-132; A fails at 75
+const MIN_BODY_SAT = 0.58;    // B 0.62, restored anchor 0.65-0.68; 109 fails at 0.41-0.54
 const MIN_BODY_LUMA = FLOOR_LUMA + MIN_CONTRAST;
 const MIN_FACING_RATIO = 0.85;
 
-function bodyValue(img, spec) {
-  const lums = [];
+function bodyValue(img) {
+  const px = [];
   for (let i = 0; i < img.data.length; i += 4) {
     if (img.data[i + 3] < 128) continue;
-    lums.push(luma(img.data[i], img.data[i + 1], img.data[i + 2]));
+    px.push({ l: luma(img.data[i], img.data[i + 1], img.data[i + 2]), s: satOf(img.data[i], img.data[i + 1], img.data[i + 2]) });
   }
-  if (!lums.length) return { bodyLuma: 0, bodyPx: 0, accentFrac: 0 };
-  lums.sort((a, b) => a - b);
-  const keep = Math.max(1, Math.floor(lums.length * (1 - ACCENT_FRACTION)));
-  const body = lums.slice(0, keep);
+  if (!px.length) return { bodyLuma: 0, bodyPx: 0, spread: 0, bodySat: 0 };
+  px.sort((a, b) => a.l - b.l);
+  const keep = Math.max(1, Math.floor(px.length * (1 - ACCENT_FRACTION)));
+  const body = px.slice(0, keep), accent = px.slice(keep);
+  const mean = (a, k) => a.reduce((s, v) => s + v[k], 0) / a.length;
+  const bodyLuma = mean(body, 'l');
   return {
-    bodyLuma: body.reduce((s, v) => s + v, 0) / body.length,
+    bodyLuma,
     bodyPx: body.length,
-    accentFrac: ACCENT_FRACTION,
+    spread: (accent.length ? mean(accent, 'l') : bodyLuma) - bodyLuma,
+    bodySat: mean(body, 's'),
   };
 }
 
@@ -144,14 +186,24 @@ for (const id of ids) {
   }
   if (blank.length) fail(`${id}: ${blank.length} empty cell(s) (${blank.slice(0, 6).join(' ')}) — a mis-assembled grid usually shows up as a blank row`);
 
-  // ---- value gate ----
-  const v = bodyValue(img, spec);
+  // ---- value gate: three bands, pass/fail, never a score ----
+  const v = bodyValue(img);
   if (v.bodyPx < 8) fail(`${id}: only ${v.bodyPx} non-accent body pixel(s) — nothing to read as a shape`);
-  else if (v.bodyLuma < MIN_BODY_LUMA) {
-    fail(`${id}: body luminance ${v.bodyLuma.toFixed(0)} vs floor ${FLOOR_LUMA.toFixed(0)} — needs ${MIN_BODY_LUMA.toFixed(0)} `
-      + `(contrast ${(v.bodyLuma - FLOOR_LUMA).toFixed(0)}, need ${MIN_CONTRAST}). `
-      + `The brightest ${(v.accentFrac * 100).toFixed(0)}% was excluded as accent: a bright accent must not mask a dark body, `
-      + 'which is exactly how a sprite passes review and disappears in play.');
+  else {
+    const contrast = v.bodyLuma - FLOOR_LUMA;
+    if (contrast < MIN_CONTRAST) {
+      fail(`${id}: contrast ${contrast.toFixed(0)} (body luminance ${v.bodyLuma.toFixed(0)} over floor ${FLOOR_LUMA.toFixed(0)}), band is >=${MIN_CONTRAST} — `
+        + 'the body sinks into the arena floor. The brightest quarter was excluded first, so a bright accent cannot mask a dark body.');
+    }
+    if (v.spread < MIN_SPREAD) {
+      fail(`${id}: accent spread ${v.spread.toFixed(0)}, band is >=${MIN_SPREAD} — `
+        + 'the brightest quarter barely stands off the rest of the body, so there is no accent to read. A flat sprite fails here.');
+    }
+    if (v.bodySat < MIN_BODY_SAT) {
+      fail(`${id}: body saturation ${v.bodySat.toFixed(2)}, band is >=${MIN_BODY_SAT} — `
+        + 'the body is washed out. Lifting a body\'s luminance by making it pale passes the contrast band and still loses the '
+        + 'accent structure the silhouette vocabulary needs; this band is what refuses it.');
+    }
   }
 
   // ---- facing separation ----

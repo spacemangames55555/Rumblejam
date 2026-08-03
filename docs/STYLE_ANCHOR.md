@@ -11,14 +11,24 @@ thing in the roster.
 
 ## Status
 
-**Candidate B selected; rotation gate passed on the second method.** Awaiting
-final approval of the assembled 8-direction sheet before batch 1 opens.
+**Anchor is the 83 sheet, restored.** `assets/sprites/char/pulsar.png`,
+assembled from the chained rotation in
+[`art-review/batch0/sources/03-B-chained-rotation/`](art-review/batch0/sources/03-B-chained-rotation/)
+and preserved verbatim at
+[`art-review/anchor-94/00-previous-anchor-83.png`](art-review/anchor-94/00-previous-anchor-83.png).
+Awaiting final sign-off.
 
-Four candidates were generated at 32×32 and reviewed at true in-game size
-(36 css px) on the arena floor. A and C failed on body value; D's flame ate the
-figure. B was selected, with the flame pulled off the crown so the helmet
-silhouette stays clean — head shape carries most of the identification at this
-size.
+A regeneration that scored 109 on body contrast was generated, committed, and
+then **reverted**. It hit the number by making the body pale, which drifted the
+palette off the approved reference and left it with no accent structure at all —
+and accent hue is the third discriminating axis for all 60 units in
+`SILHOUETTE-VOCABULARY.md`. The evidence is in
+[`art-review/anchor-94/`](art-review/anchor-94/).
+
+**The 94 figure was never a target.** It was candidate B's incidental score.
+Treating it as a goal is what produced the 109. The value gate now expresses a
+*region* on three axes instead of a single number, and it rejects rather than
+ranks — see `tools/verify_art_batch.mjs`.
 
 ## The clause
 
@@ -30,11 +40,41 @@ drift, and it is invisible until forty sprites disagree.
 plain smooth rounded helmet, vivid saturated arcade palette, crisp readable shapes, body mid-to-light in value so it never sinks into a near-black floor, one bright accent only, bright colours that pop against a near-black floor
 <!-- STYLE-CLAUSE-END -->
 
-The value phrase is not decoration. Two of the four candidates failed review
-because the body sat too close in luminance to the arena floor, and one of those
-carried a brilliant accent that made it look fine on a naive check. The model is
-now told the floor up front, and `tools/verify_art_batch.mjs` measures it
-afterwards with the accent excluded.
+The value phrase is not decoration, and neither is "one bright accent only".
+Two of the four candidates failed review because the body sat too close in
+luminance to the arena floor, and one of those carried a brilliant accent that
+made it look fine on a naive check. `tools/verify_art_batch.mjs` measures all of
+it afterwards, with the accent excluded, on three bands.
+
+## The value region
+
+The gate is a **region, not a scoreboard**. It rejects; it never ranks. Nothing
+it prints should be maximised, and no batch should ever be selected by pushing
+one of these numbers up — doing exactly that is what produced the reverted 109.
+
+| axis | band | what it catches |
+|---|---|---|
+| contrast | ≥ 45 | body sinks into the arena floor |
+| accent spread | ≥ 90 | no accent at all — a flat silhouette |
+| body saturation | ≥ 0.58 | body washed out to lift its luminance |
+
+The brightest quarter is excluded before the body is measured on every axis, so
+a brilliant accent can never mask a dark or desaturated body.
+
+Measured, front view and whole sheet:
+
+| asset | contrast | spread | bodySat | |
+|---|---|---|---|---|
+| **B** — approved reference | 93.6 | 109.2 | 0.623 | inside all three |
+| **83 anchor** — front view | 83.0 | 115.0 | 0.650 | inside all three |
+| **83 anchor** — whole sheet | 65.6 | 131.6 | 0.676 | inside all three |
+| **109 anchor** — front view | 109.0 | 117.4 | **0.405** | rejected: saturation |
+| **109 anchor** — whole sheet | 92.2 | 136.7 | **0.540** | rejected: saturation |
+| A — too dark | **15.5** | **74.8** | 0.566 | rejected: contrast, spread |
+| C — dark under a bright accent | **27.6** | 116.2 | **0.286** | rejected: contrast, saturation |
+
+The 109 is the instructive row: it cleared contrast *and* spread and is still
+wrong. Only saturation sees it.
 
 ## Record
 

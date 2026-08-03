@@ -3167,7 +3167,9 @@ try {
           for (let x = 0; x < 32; x++) {
             if (x < 6 + off || x > 25 || y < 5 || y > 27) continue;
             const o = ((d * 32 + y) * 32 + x) * 4;
-            const acc = accentRGB && y > 14 && y < 19 && x > 14 && x < 19;
+            // the accent block is deliberately ~30% of the body, so the gate's
+            // brightest-quarter split lands wholly inside it
+            const acc = accentRGB && y > 9 && y < 22 && x > 9 && x < 22;
             const c = acc ? accentRGB : bodyRGB;
             g.data[o] = c[0]; g.data[o + 1] = c[1]; g.data[o + 2] = c[2]; g.data[o + 3] = 255;
           }
@@ -3175,23 +3177,42 @@ try {
       }
       return PK.encodePng(g);
     };
+    // A saturated mid-value body under a bright accent — the shape of the
+    // approved reference, and the only combination that clears all three bands.
+    const GOOD_BODY = [40, 110, 200], GOOD_ACCENT = [255, 240, 160];
     try {
       mkdirSync(dir, { recursive: true });
-      // candidate C's failure: body barely above the floor, blazing accent
+      // the reference shape passes all three bands
+      writeFileSync(file, sheet(GOOD_BODY, GOOD_ACCENT, true));
+      const good = run('verify_art_batch.mjs', ['enemy.skulker']);
+      if (/ART BATCH OK/.test(good)) ok('the value bands pass a saturated mid-value body under a bright accent — the shape of the approved reference');
+      else fail(`value bands rejected the reference shape: ${good.slice(0, 220)}`);
+
+      // AXIS 1, contrast. Candidate C's failure: body barely above the floor,
+      // blazing accent.
       writeFileSync(file, sheet([30, 34, 44], [60, 255, 255], true));
       const dark = runFails('verify_art_batch.mjs', ['enemy.skulker']);
-      if (dark && /body luminance/.test(dark) && /excluded as accent/.test(dark)) {
-        ok('the value gate refuses a dark body carrying a brilliant accent — the accent cannot mask the body, which is how a sprite passes review and vanishes in play');
-      } else fail(`value gate on a dark body: ${String(dark).slice(0, 160)}`);
+      if (dark && /contrast \d+/.test(dark) && /sinks into the arena floor/.test(dark)) {
+        ok('contrast band: refuses a dark body carrying a brilliant accent — the accent cannot mask the body, which is how a sprite passes review and vanishes in play');
+      } else fail(`contrast band: ${String(dark).slice(0, 160)}`);
 
-      // the same body, bright enough: passes
-      writeFileSync(file, sheet([150, 140, 130], [255, 240, 120], true));
-      const bright = run('verify_art_batch.mjs', ['enemy.skulker']);
-      if (/ART BATCH OK/.test(bright)) ok('and it passes a body that clears the arena floor by the calibrated margin');
-      else fail(`value gate rejected a bright body: ${bright.slice(0, 200)}`);
+      // AXIS 2, spread. A flat sprite: bright, saturated, and no accent at all.
+      writeFileSync(file, sheet(GOOD_BODY, null, true));
+      const noAccent = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (noAccent && /accent spread/.test(noAccent)) {
+        ok('spread band: refuses a flat sprite with no accent to read, however bright and saturated its body');
+      } else fail(`spread band: ${String(noAccent).slice(0, 160)}`);
+
+      // AXIS 3, saturation. THE 109 FAILURE: a pale body lifted to a high
+      // luminance. Clears contrast and clears spread, and is still wrong.
+      writeFileSync(file, sheet([120, 115, 110], [255, 250, 240], true));
+      const washed = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (washed && /body saturation/.test(washed) && !/contrast \d+/.test(washed) && !/accent spread/.test(washed)) {
+        ok('saturation band: refuses a washed-out body that passed contrast — the exact regression that made an anchor score 109 and lose its accent structure');
+      } else fail(`saturation band: ${String(washed).slice(0, 200)}`);
 
       // opposites identical: a collapsed rotation
-      writeFileSync(file, sheet([150, 140, 130], [255, 240, 120], false));
+      writeFileSync(file, sheet(GOOD_BODY, GOOD_ACCENT, false));
       const flat = runFails('verify_art_batch.mjs', ['enemy.skulker']);
       if (flat && /opposite facings differ/.test(flat)) {
         ok('the facing gate refuses a sheet whose front and back are duplicates — eight rows that are not eight drawings');
