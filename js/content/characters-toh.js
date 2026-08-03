@@ -131,3 +131,6 @@ export const CHARACTERS_TOH = [
 ];
 
 export const TOH_BY_ID = Object.fromEntries(CHARACTERS_TOH.map(c => [c.id, c]));
+
+// Sprite ids — see characters-classic.js. Cosmetic, never networked.
+for (const c of CHARACTERS_TOH) c.spriteId = `char.${c.id}`;

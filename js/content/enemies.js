@@ -54,3 +54,8 @@ export const FLOOR_TABLES = [
   ['skulker', 'flit', 'slabjaw', 'gyre', 'gemmite', 'aegimand', 'wombden', 'lancerfish'],
   ['flit', 'slabjaw', 'lobber', 'gyre', 'aegimand', 'stitcher', 'wombden', 'lancerfish', 'deadeye'],
 ];
+
+// Sprite ids. Cosmetic only — the wire still carries a type index and the
+// renderer resolves the sprite from it locally, exactly as it already resolves
+// `shape` and `color`.
+for (const e of ENEMIES) e.spriteId = `enemy.${e.id}`;

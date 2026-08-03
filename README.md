@@ -352,6 +352,53 @@ at boot, debounced to one horn per resolution moment
 (`CONFIG.AIRHORN_DEBOUNCE_S`), own level-ups at `CONFIG.AIRHORN_VOL_OWN`,
 allies' at `CONFIG.AIRHORN_VOL_ALLY`.
 
+## Adding art (sprites)
+
+Every entity keeps its Canvas-primitive draw as a fallback, so the game runs
+and looks exactly as it does today with `assets/sprites/` empty — which is the
+state it ships in. Art lands one file at a time:
+
+1. Find the id in `assets/assets.json` (the manifest **is** the art inventory
+   — 298 ids, every one the game can ever ask for).
+2. Draw a PNG at the size the manifest states.
+3. Save it at `assets/sprites/<file>`. Reload. Done — no build step, no code.
+
+Canonical sizes: players and enemies 48x48, bosses 96x96, projectiles /
+pickups / FX 16x16, item icons 24x24, props 64x64, UI 32x32.
+
+**Units are directional.** Characters, enemies and bosses are drawn from a
+per-angle view rather than by rotating one image: their sheet is a grid, rows =
+facings in the order `E SE S SW W NW N NE`, columns = animation frames. An
+8-direction 48x48 character with one frame is a 48x384 PNG. Everything else —
+projectiles, props, icons, UI — is a single row and is rotated as before,
+because a bolt genuinely points along its velocity.
+
+Facing is worked out by the renderer from motion and aim, is stored render-side
+keyed by entity id, and never touches an entity, a snapshot or the wire.
+
+`?sprites=off` forces every fallback; `?sprites=debug` names what is missing,
+outlines a magenta box where art was expected, and prints the resolved
+direction row on every directional sprite.
+
+The manifest is generated — `node tools/gen_assets_manifest.mjs` — so a new
+item or character gets an inventory entry automatically.
+
+**Full guide: [docs/SPRITES.md](docs/SPRITES.md).**
+
+## Drawing the art
+
+The manifest is the art inventory and it is empty: 298 ids, zero files. Art
+lands one PNG at a time and the game runs the whole way through without any of
+it. The plan, the batches and the review gates are in
+[docs/ART-GENERATION.md](docs/ART-GENERATION.md); the technical contract for a
+sprite is [docs/SPRITES.md](docs/SPRITES.md).
+
+**No image generator is connected to this environment**, so no batch has run.
+The tooling that does not depend on which generator gets chosen is built and
+gated: grid assembly, batch acceptance, the contact sheet, the prompt system
+with its 64 hand-written silhouette notes, and a style anchor that mechanically
+refuses to let generation start before it is approved.
+
 ## Debug keys
 
 Enabled by the `DEV` flag in `js/config.js` (shipped `true`; set `false` for
@@ -433,10 +480,168 @@ never loads them:
   validator (hook schemas, price bands, category minimums, stat coverage).
 - `node tools/gen_design_audit.mjs` — regenerates `docs/design-audit.md` from
   the live content data and enforces the dead-stat gate.
+- `node tools/gen_assets_manifest.mjs [--check]` — regenerates
+  `assets/assets.json`, the sprite manifest / art inventory, from the live
+  content tables. `--check` fails if the committed file is stale (the sim
+  suite runs it).
+- `node tools/process_sprite.mjs <spriteId> <inputDir>` — turns a generator's
+  per-direction output into the grid the renderer wants: assembles rows in the
+  fixed `E SE S SW W NW N NE` order, verifies the dimensions the loader will
+  demand, trims and re-centres per direction, refuses a baked matte, and
+  records the frame count. Never hand-assemble a grid.
+- `node tools/verify_art_batch.mjs [namespace|id …] [--require-all]
+  [--diff-base=main]` — the per-batch art acceptance gate: every file decodes,
+  every grid is exactly the size the manifest declares, no baked mattes, no
+  empty cells, plus coverage counts and on-disk/decoded size.
+- `node tools/gen_contact_sheet.mjs [namespace …]` — writes
+  `tools/contact_sheet.html`: every sprite at the size it is actually drawn in
+  play, on the arena's background over the arena's grid, S row by default with
+  buttons to cycle facings. 1:1 is the default and the zoom is opt-in on
+  purpose.
+- `node tools/gen_prompts.mjs [--check]` — assembles `docs/prompts.json` from
+  `docs/silhouettes.json` and the style clause in `docs/STYLE_ANCHOR.md`.
+  Refuses to emit while the anchor is `PENDING`.
+- `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### Art generation phase (patch 17)
+
+- **No generator is connected, so no art was generated.** The phase's own first
+  action — introspect the live MCP tool schemas rather than trust the README —
+  returns nothing: this session has Gmail, Google Calendar and Google Drive, and
+  no image tool of any kind. Outbound HTTPS is blocked by the environment's
+  network policy too (the proxy answers 403 to CONNECT for every external host,
+  google.com included), so the API cannot be reached directly and the pricing
+  page cannot be read. Batches 0–8 and the budget question in §9 are both
+  blocked on that, not on a decision.
+- **Everything generator-independent was built instead**, because all of it is
+  needed the moment a generator exists and none of it depends on which one:
+  `pngkit.mjs`, `process_sprite.mjs`, `verify_art_batch.mjs`,
+  `gen_contact_sheet.mjs`, `gen_prompts.mjs`, the 64 silhouette notes, and the
+  anchor record. Nineteen gates in the sim suite build synthetic sheets, run
+  them through the real tools and assert the results.
+- **Re-centring defaults to per-direction-row, not per-cell.** The brief said
+  trim and re-centre per cell. Per-cell re-centring flattens an animation's own
+  vertical motion — a walk cycle legitimately bobs, and normalising every frame
+  independently removes exactly that. The padding inconsistency the trim exists
+  to fix comes from directions being *generated separately*, so normalising per
+  row fixes it without destroying the animation. `--recenter=cell` gives the
+  literal behaviour, and a gate asserts row preserves a 6px bob where cell
+  flattens it to 0.
+- **The style clause is pasted by a tool, not by a person.** "Never paraphrase
+  the style clause" is a rule someone forgets on sprite 90.
+  `tools/gen_prompts.mjs` reads it out of `STYLE_ANCHOR.md` between two markers
+  and pastes it byte for byte, and refuses to emit anything at all while the
+  clause reads `PENDING` — so "generate the anchor first" is a gate rather than
+  a discipline.
+- **Per-sprite manifest overrides live in `assets/sprite-overrides.json`.**
+  `assets.json` is generated and would lose a hand-edited frame count on the
+  next regeneration, so `process_sprite.mjs` writes the deviation to a side file
+  that the generator merges. An override naming an unknown id is a hard error.
+- **`--out` no longer touches the manifest.** Rendering a sprite somewhere else
+  is a comparison, not the shipped asset; recording it in the manifest was wrong
+  and leaked a stray frame count into a committed file during testing.
+- **Counts in the brief were stale.** It budgeted ~8 bosses and ~35 regular
+  enemies; the live catalog has 4 bosses and 13 enemy sheets (12 types plus the
+  Ward Pylon). Total units is **64**, not ~90 — batch 3 is a quarter the size it
+  was planned for, and the projected texture cost is proportionally smaller.
+- **The iOS Safari PWA measurement in §7 cannot be done from here.** It needs a
+  real device; the desktop numbers the tooling reports are not a substitute and
+  are labelled as such.
+
+### Directional sprites (patch 16)
+
+- **`facing` was added alongside `rot`, rather than overloading `rot` alone.**
+  The brief specified that `drawSprite(ctx, id, x, y, { rot: e.angle })` keeps
+  working in both modes, and it does — `rot` selects a row on a directional
+  sheet. But our enemies never passed `rot` at all, so making them start
+  passing it would have rotated a `directions: 1` enemy sheet that previously
+  did not rotate, breaking the brief's own test 5. Units now pass `facing`,
+  which is used for row selection and ignored entirely on a single-direction
+  sheet; projectiles still pass `rot`. Both spellings work on a directional
+  entry.
+- **Strict grid validation applies to `directions > 1` only.** The brief asks
+  for exact `w x frames` by `h x directions` validation with rejection on
+  mismatch, and separately asks that a `directions: 1` entry behave exactly as
+  before. Those conflict for a wrong-sized flat sprite, which previously had
+  its frame count clamped rather than being rejected. Grids are rejected;
+  flat strips keep the lenient clamp they shipped with. Say the word and the
+  rule can be made uniform.
+- **Player facing prefers a fresh shot over movement, for 0.6s.** `p.aimA` in
+  this engine is an auto-aim angle that only moves when a weapon actually
+  fires, and it sits at `0` for a player who has never fired — precisely the
+  snap-everything-east hazard the brief warns about. So a shot wins for a
+  moment (backing away while shooting should look like shooting), movement wins
+  otherwise, and a unit that has done neither faces south.
+- **Motion threshold is 0.5 world units per frame** (30 u/s): under the slowest
+  thing that walks, the Deadeye at 62 u/s, and over client interpolation
+  jitter.
+- **Facing is cleared on arena change** rather than aged out, since entity ids
+  do not carry across arenas. Otherwise stale rows are swept every 256 frames
+  with a 600-frame window, which is long enough that a unit culled off-screen
+  keeps its facing when it comes back.
+- **8 directions for every unit, for now.** The brief said not to decide 4-vs-8
+  yet; `UNIT_DIRECTIONS` in `js/content/sprites.js` is one constant and the
+  renderer handles any value, so this is a manifest regeneration whenever you
+  want it. 64 unit sheets at 8x1 frames is ~4.7 MB decoded; at 8x4 it is
+  ~19 MB. Nothing to measure until art exists.
+- **The generation spec was not updated because it is not in this repository.**
+  `patch-art-generation.md` does not exist here (`docs/` holds `SPRITES.md`,
+  `COMPENDIUM.md` and `design-audit.md`). `docs/SPRITES.md` now carries the
+  canonical row order, grid dimensions and validation rules for the generation
+  spec to point at — see **Directional units**. Add the file, or say where it
+  lives, and it can be revised.
+
+### The sprite pipeline (patch 15)
+
+- **`src/assets.js` became `js/assets.js`.** The brief named a `src/`
+  directory; this repository has never had one — all client JS lives in `js/`.
+  Placed to match the project.
+- **The manifest is generated, not hand-typed.** The brief asked for it "fully
+  populated" with an explicit count of item icons; the live catalog holds 146
+  items (plus 26 weapons sharing the `item.` namespace) and 47 characters
+  across two rosters, not the numbers in the brief. `tools/gen_assets_manifest.mjs`
+  reads the real tables, so the inventory cannot drift from the content — and
+  a test fails if the committed JSON is stale.
+- **Projectile sprites are resolved from colour and size class, not a type.**
+  A snapshot carries a projectile's position, velocity, radius, colour and
+  allegiance and nothing else; a type byte would have been a netcode change,
+  which the patch was forbidden to make. Colour + size class is exactly what
+  the renderer already used to tell projectiles apart, so the sprite layer
+  differentiates precisely as much as the primitives it replaces, and host and
+  client resolve the same id from the same bytes. All 16 projectile-firing
+  weapons stay distinguishable.
+- **Hostile bolts are named for their colour, not their shooter.** The Lobber
+  and the Choir of Eyes fire the same violet at the same radius and are
+  genuinely identical on the wire — they share arenas on floor 2, so this is
+  not hypothetical. Four hostile bolts cover the whole game and the sharing is
+  an explicit table with a test asserting it, rather than whichever content
+  file happened to be iterated last.
+- **`spriteId` is stamped by a loop at the bottom of each content module**
+  rather than typed onto 235 definitions by hand. The field exists the moment
+  the table does (no import-order hazard), the diff stays readable, and it
+  cannot drift from the ids.
+- **Item icons are inventoried but not yet wired.** Item and weapon icons
+  render in DOM shop cards, not on the canvas, so `drawSprite` does not reach
+  them. All 172 are in the manifest — the art can be drawn now — but the shop
+  UI wiring is a separate, DOM-side change and is deliberately not in this
+  patch.
+- **Downed players stay primitive.** A downed player is a distinct visual (a
+  slate disc with a red cross); giving it a sprite would double the character
+  art bill for no gameplay gain. Alive players use sprites, downed ones do not.
+- **Frames default to 1 everywhere in the shipped manifest.** A manifest that
+  promised 4 frames would make a static PNG draw nothing for three frames out
+  of four. Animation is opted into per category in the generator. The loader
+  also self-heals a mismatch: it clamps `frames` to what the strip actually
+  holds and warns once.
+- **UI chrome is 32x32.** The brief's canonical size table did not cover the
+  `ui.` namespace.
+- **Walls, barricades, breach doors and spike strips tile their sprite**
+  rather than stretching one image across an arbitrary-sized rect, which would
+  smear it. `_tileSprite` in `js/render.js`.
 
 ### Playtest pass 3 (patch 13)
 

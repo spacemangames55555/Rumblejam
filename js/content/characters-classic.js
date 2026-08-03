@@ -156,3 +156,9 @@ export const CHARACTERS_CLASSIC = [
 ];
 
 export const CLASSIC_BY_ID = Object.fromEntries(CHARACTERS_CLASSIC.map(c => [c.id, c]));
+
+// Sprite ids, one per character, stamped here so the field exists the moment
+// the table does. Cosmetic only: `spriteId` never reaches the simulation, an
+// entity, or the wire — the renderer looks it up and falls back to the
+// primitive silhouette whenever there is no art for it yet.
+for (const c of CHARACTERS_CLASSIC) c.spriteId = `char.${c.id}`;

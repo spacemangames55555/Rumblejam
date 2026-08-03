@@ -26,6 +26,9 @@ import { CONFIG as CFG } from '../js/config.js';
 const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
+import { readFileSync } from 'node:fs';
+import { ALL_CHARS as _ALL_CHARS } from '../js/content/characters.js';
+const ALL_CHARS_N = _ALL_CHARS.length;
 
 let failures = 0;
 const fail = (msg, err) => { failures++; console.error(`✗ ${msg}`, err ? (err.stack || err) : ''); };
@@ -2759,6 +2762,441 @@ try {
   // Leaving the roster switched turned one crash here into four failures below.
   (await import('../js/content/characters.js')).setRoster('classic');
 }
+
+// ---- 9M. the sprite pipeline: ids, manifest, and the wall between art and
+//          simulation. This whole section is cosmetic plumbing — its most
+//          important assertion is the one proving the plumbing never reaches
+//          the wire. ----
+try {
+  const { ALL_CHARS: SPR_CHARS } = await import('../js/content/characters.js');
+  const S = await import('../js/content/sprites.js');
+  const { execFileSync } = await import('node:child_process');
+
+  const NS = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui'];
+  const NS_RE = new RegExp(`^(${NS.join('|')})\\.[a-z0-9_]+$`);
+  const manifest = JSON.parse(readFileSync(new URL('../assets/assets.json', import.meta.url), 'utf8'));
+  const man = manifest.sprites;
+
+  // -- every definition table carries a well-formed spriteId --
+  const tagged = [
+    ...SPR_CHARS.map(c => [`char ${c.id}`, c.spriteId]),
+    ...ENEMIES.map(e => [`enemy ${e.id}`, e.spriteId]),
+    ...BOSSES.map(b => [`boss ${b.id}`, b.spriteId]),
+    ...WEAPONS.map(w => [`weapon ${w.id}`, w.spriteId]),
+    ...ITEMS.map(i => [`item ${i.id}`, i.spriteId]),
+  ];
+  const badId = tagged.filter(([, id]) => !id || !NS_RE.test(id));
+  if (badId.length) fail(`spriteId missing or malformed on ${badId.length}: ${badId.slice(0, 4).map(x => x[0]).join(', ')}`);
+  else ok(`spriteId on every def: ${SPR_CHARS.length} characters (both rosters), ${ENEMIES.length} enemies, ${BOSSES.length} bosses, ${WEAPONS.length} weapons, ${ITEMS.length} items`);
+
+  // -- the manifest is the art inventory: everything askable is listed --
+  const askable = new Set([
+    ...tagged.map(([, id]) => id),
+    S.PYLON_SPRITE,
+    ...S.allProjSpriteIds(),
+    ...Object.values(S.PROP), ...Object.values(S.FX), ...Object.values(S.UI),
+  ]);
+  const unlisted = [...askable].filter(id => !man[id]);
+  if (unlisted.length) fail(`${unlisted.length} id(s) the game can ask for are not in the manifest: ${unlisted.slice(0, 6).join(', ')}`);
+  else ok(`manifest covers every askable id — ${Object.keys(man).length} entries, ${askable.size} reachable from the tables`);
+
+  // -- and nothing is listed that nothing can ask for --
+  const orphan = Object.keys(man).filter(id => !askable.has(id));
+  if (orphan.length) fail(`${orphan.length} manifest entr(ies) nothing can ask for: ${orphan.slice(0, 6).join(', ')}`);
+  else ok('no orphan manifest entries — the inventory and the code agree exactly');
+
+  // -- direction bucketing. The row index has to fall out of atan2 with no
+  //    offset term, for any winding and either sign, or units face subtly
+  //    wrong in a way that survives a playtest. --
+  const AS = await import('../js/assets.js');
+  const TAU2 = Math.PI * 2;
+  const CASES = {
+    8: [['E', 0, 0], ['SE', TAU2 / 8, 1], ['S', TAU2 / 4, 2], ['SW', 3 * TAU2 / 8, 3],
+      ['W', TAU2 / 2, 4], ['NW', -3 * TAU2 / 8, 5], ['N', -TAU2 / 4, 6], ['NE', -TAU2 / 8, 7]],
+    4: [['E', 0, 0], ['S', TAU2 / 4, 1], ['W', TAU2 / 2, 2], ['N', -TAU2 / 4, 3]],
+  };
+  const dirBad = [];
+  for (const [dirsStr, cases] of Object.entries(CASES)) {
+    const dirs = Number(dirsStr);
+    for (const [name, angle, row] of cases) {
+      // the canonical angle, both windings, and a nudge either side of it that
+      // must not tip into a neighbouring bucket
+      const step = TAU2 / dirs;
+      for (const a of [angle, angle + TAU2, angle - TAU2, angle + 3 * TAU2, angle - 4 * TAU2,
+        angle + step * 0.45, angle - step * 0.45]) {
+        const got = AS.dirIndex(a, dirs);
+        if (got !== row) dirBad.push(`${dirs}-way ${name}: ${a.toFixed(3)} -> row ${got}, want ${row}`);
+      }
+    }
+  }
+  // the west seam: +pi and -pi are the same direction and must agree
+  for (const dirs of [4, 8]) {
+    if (AS.dirIndex(Math.PI, dirs) !== AS.dirIndex(-Math.PI, dirs)) dirBad.push(`${dirs}-way: +pi and -pi disagree`);
+  }
+  // south is the default facing, and a single-direction sheet has one row
+  if (AS.dirIndex(AS.DEFAULT_FACING, 8) !== 2) dirBad.push('DEFAULT_FACING is not the S row at 8');
+  if (AS.dirIndex(AS.DEFAULT_FACING, 4) !== 1) dirBad.push('DEFAULT_FACING is not the S row at 4');
+  for (const a of [0, 1, -1, 99, -99, NaN, Infinity]) {
+    if (AS.dirIndex(a, 1) !== 0) dirBad.push(`directions:1 returned a non-zero row for ${a}`);
+  }
+  if (AS.dirIndex(NaN, 8) !== 2 || AS.dirIndex(Infinity, 8) !== 2) dirBad.push('a non-finite angle did not fall back to S');
+  if (AS.DIRECTION_ROWS_8.join(' ') !== 'E SE S SW W NW N NE') dirBad.push(`row names: ${AS.DIRECTION_ROWS_8}`);
+  if (AS.DIRECTION_ROWS_4.join(' ') !== 'E S W N') dirBad.push(`4-way row names: ${AS.DIRECTION_ROWS_4}`);
+  if (dirBad.length) fail(`direction bucketing: ${dirBad.slice(0, 5).join(' | ')}`);
+  else ok('direction rows: E SE S SW W NW N NE at 8 and E S W N at 4, stable across ±4 windings, sign, the ±pi seam and junk angles');
+
+  // -- units are directional, everything else is not --
+  const dirWrong = [];
+  for (const [id, spec] of Object.entries(man)) {
+    const ns = id.slice(0, id.indexOf('.'));
+    const want = S.DIRECTIONAL_NAMESPACES.has(ns) ? S.UNIT_DIRECTIONS : undefined;
+    if ((spec.directions || undefined) !== want) dirWrong.push(`${id}: directions ${spec.directions}, want ${want || 'none'}`);
+  }
+  if (dirWrong.length) fail(`manifest directions: ${dirWrong.slice(0, 5).join(' | ')}`);
+  else {
+    const n = Object.values(man).filter(s => s.directions > 1).length;
+    ok(`${n} unit sheets are ${S.UNIT_DIRECTIONS}-directional grids; projectiles, props, icons and UI stay single-direction and rotated`);
+  }
+
+  // -- manifest hygiene: namespaces, canonical sizes, GitHub Pages paths --
+  let hyg = [];
+  if (/^\//.test(manifest.basePath)) hyg.push(`basePath "${manifest.basePath}" starts with a slash`);
+  for (const [id, spec] of Object.entries(man)) {
+    const ns = id.slice(0, id.indexOf('.'));
+    if (!NS_RE.test(id)) { hyg.push(`${id}: bad namespace`); continue; }
+    const [w, h] = S.SPRITE_SIZE[ns];
+    if (spec.w !== w || spec.h !== h) hyg.push(`${id}: ${spec.w}x${spec.h}, canonical is ${w}x${h}`);
+    if (/^\//.test(spec.file)) hyg.push(`${id}: leading slash in "${spec.file}"`);
+    if (spec.file.includes('..')) hyg.push(`${id}: "${spec.file}" escapes the asset root`);
+    if (spec.anchor !== undefined && spec.anchor !== 'center' && spec.anchor !== 'bottom') hyg.push(`${id}: anchor "${spec.anchor}"`);
+  }
+  if (hyg.length) fail(`${hyg.length} manifest problem(s): ${hyg.slice(0, 5).join(' | ')}`);
+  else ok('manifest hygiene: canonical sizes per namespace, every path relative, no leading slashes (Pages serves from /Rumblejam/)');
+
+  // -- the generator is the source of truth; a hand-edit must not survive --
+  try {
+    execFileSync(process.execPath, [new URL('./gen_assets_manifest.mjs', import.meta.url).pathname, '--check'], { stdio: 'pipe' });
+    ok('assets/assets.json is exactly what gen_assets_manifest.mjs produces');
+  } catch { fail('assets/assets.json is stale — run: node tools/gen_assets_manifest.mjs'); }
+
+  // -- projectile resolution: total, and never collapses two weapons into one --
+  let projBad = [];
+  const seenKey = new Map();
+  for (const w of WEAPONS) {
+    if (!w.projSpriteId) continue;
+    const cls = w.summon ? 'summon' : (w.aoe ? 'lob' : 'shot');
+    const key = `${w.color.toLowerCase()}|${cls}`;
+    if (seenKey.has(key)) projBad.push(`${w.id} and ${seenKey.get(key)} are indistinguishable on the wire (${key})`);
+    seenKey.set(key, w.id);
+    const r = cls === 'summon' ? S.PROJ_R_SUMMON : cls === 'lob' ? S.PROJ_R_LOB : S.PROJ_R_SHOT;
+    const got = S.projSpriteFor(w.color, true, r);
+    if (got !== w.projSpriteId) projBad.push(`${w.id}: resolved ${got}, expected ${w.projSpriteId}`);
+  }
+  // Hostile bolts are named for their colour, not their shooter, because the
+  // wire only carries the colour — the Lobber and the Choir of Eyes really are
+  // the same violet at the same radius. Assert that sharing is the DECISION in
+  // sprites.js and not whichever table happened to be iterated last.
+  for (const [shooter, id] of Object.entries(S.HOSTILE_PROJ_SHOOTERS)) {
+    const def = ENEMIES.find(e => e.id === shooter) || BOSSES.find(b => b.id === shooter);
+    const got = S.projSpriteFor(def.color, false, def.proj ? def.proj.radius : 7);
+    if (got !== id) projBad.push(`${shooter}: resolved ${got}, table says ${id}`);
+  }
+  if (S.HOSTILE_PROJ_SHOOTERS.lobber !== S.HOSTILE_PROJ_SHOOTERS.choir_of_eyes) {
+    projBad.push('Lobber and Choir of Eyes are the same colour at the same radius but claim different sprites');
+  }
+  if (projBad.length) fail(`projectile sprite resolution: ${projBad.slice(0, 4).join(' | ')}`);
+  else ok(`projectile sprites resolve from colour+size alone — ${seenKey.size} weapons each distinguishable, `
+    + `${new Set(Object.values(S.HOSTILE_PROJ_SHOOTERS)).size} hostile bolts for ${Object.keys(S.HOSTILE_PROJ_SHOOTERS).length} shooters, no netcode change needed`);
+
+  // -- resolution is TOTAL: any colour, any radius, any allegiance, always a
+  //    listed id. A projectile that resolves to nothing would be an invisible
+  //    projectile the moment art lands. --
+  let total = true;
+  for (const color of ['#ffffff', '#000', 'rgb(1,2,3)', '', 'nonsense', '#FF5D6C']) {
+    for (const r of [0, 4, 5, 6, 7, 40]) {
+      for (const f of [true, false]) {
+        const id = S.projSpriteFor(color, f, r);
+        if (!id || !man[id]) { total = false; projBad.push(`${color}/${r}/${f} -> ${id}`); }
+      }
+    }
+  }
+  if (total) ok('projSpriteFor is total: every colour/radius/allegiance lands on a manifest id, junk input included');
+  else fail(`projSpriteFor returned an unlisted id: ${projBad.slice(0, 3).join(' | ')}`);
+
+  // -- the radius constants the resolver keys on are STILL the engine's. If a
+  //    balance patch changes a spawn radius this is what catches it. --
+  const radSim = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'PROJ', charId: 'longshot', color: '#fff' }] });
+  radSim.god = true;
+  const rfight = radSim.floor.nodes.find(n => n.kind === 'combat');
+  rfight.template = 'open_expanse';
+  radSim._travelTo(rfight.id);
+  radSim.wave.done = true; radSim.spawnQueue.length = 0;
+  for (const e of [...radSim.enemyPool]) radSim.enemyPool.release(e);
+  const rp = radSim.players[0];
+  rp.x = radSim.W / 2; rp.y = radSim.H / 2;
+  const dummy = radSim.spawnEnemyById('slabjaw', rp.x + 120, rp.y, { noMats: true });
+  dummy.hp = 1e9; dummy.maxHp = 2e9; dummy.spd = 0; dummy.dmg = 0;
+  const observed = { shot: new Set(), lob: new Set(), summon: new Set() };
+  for (const [wid, bucket] of [['pebbleshot', 'shot'], ['kegbomb', 'lob'], ['bolt_turret', 'summon']]) {
+    rp.weapons.length = 0;
+    for (const s of radSim.summons) s.dead = true;
+    radSim._addWeapon(rp, wid, 1, 0);
+    for (const w of rp.weapons) w.cd = 0;
+    for (let t = 0; t < 180; t++) {
+      rp.x = radSim.W / 2; rp.y = radSim.H / 2;
+      dummy.x = rp.x + 120; dummy.y = rp.y; dummy.hp = 1e9; dummy.knockX = dummy.knockY = 0;
+      radSim.tick();
+      for (const pr of radSim.projPool) if (pr.friendly) observed[bucket].add(pr.radius);
+    }
+  }
+  const radMismatch = [];
+  if (!observed.shot.has(S.PROJ_R_SHOT)) radMismatch.push(`shot: saw [${[...observed.shot]}], constant is ${S.PROJ_R_SHOT}`);
+  if (!observed.lob.has(S.PROJ_R_LOB)) radMismatch.push(`lob: saw [${[...observed.lob]}], constant is ${S.PROJ_R_LOB}`);
+  if (!observed.summon.has(S.PROJ_R_SUMMON)) radMismatch.push(`summon: saw [${[...observed.summon]}], constant is ${S.PROJ_R_SUMMON}`);
+  if (radMismatch.length) fail(`sprites.js projectile radii no longer match the engine — ${radMismatch.join(' | ')}`);
+  else ok(`projectile size classes still match the engine: summon ${S.PROJ_R_SUMMON}, shot ${S.PROJ_R_SHOT}, lob ${S.PROJ_R_LOB}`);
+
+  // -- THE WALL. spriteId is cosmetic: it must not be on a simulation entity,
+  //    in a snapshot, or anywhere near the wire. --
+  const wallSim = new Sim({ seed: 77, party: [
+    { idx: 0, key: 'a', name: 'A', charId: 'banneret', color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: 'tinker', color: '#fff' }] });
+  for (let i = 0; i < 60 * 5 && wallSim.phase === 'map'; i++) wallSim.tick();
+  wallSim.debug('F1');
+  for (let i = 0; i < 200; i++) wallSim.tick();
+  const snapJson = JSON.stringify(wallSim.getSnapshot());
+  const leaks = [];
+  if (snapJson.includes('spriteId') || snapJson.includes('sprite')) leaks.push('snapshot mentions a sprite');
+  for (const e of wallSim.enemyPool) if ('spriteId' in e) { leaks.push(`enemy ${e.id} carries spriteId`); break; }
+  for (const pr of wallSim.projPool) if ('spriteId' in pr) { leaks.push('a projectile carries spriteId'); break; }
+  for (const p of wallSim.players) if ('spriteId' in p) { leaks.push(`player ${p.idx} carries spriteId`); break; }
+  if (leaks.length) fail(`sprite data leaked into the simulation: ${leaks.join(' | ')}`);
+  else ok(`the wall holds: ${snapJson.length}-byte snapshot with ${wallSim.enemyPool.count} enemies mentions no sprite, and no live entity carries one`);
+} catch (err) { fail('sprite pipeline section crashed', err); }
+
+// ---- 9N. the art pipeline: PNG kit, grid assembly, batch acceptance.
+//          None of this ships in the game — it is the tooling that turns a
+//          generator's per-direction output into a grid the renderer accepts,
+//          and refuses anything subtly wrong. Gated because a silent break here
+//          produces art that looks almost right. ----
+try {
+  const PK = await import('./pngkit.mjs');
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync: rf, existsSync: ex } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const nodePath = await import('node:path');
+  const TOOLS = new URL('.', import.meta.url).pathname;
+  const REPO = nodePath.join(TOOLS, '..');
+
+  const run = (script, argv) => execFileSync(process.execPath, [nodePath.join(TOOLS, script), ...argv], { cwd: REPO, encoding: 'utf8', stdio: 'pipe' });
+  const runFails = (script, argv) => {
+    try { run(script, argv); return null; } catch (e) { return String(e.stderr || e.stdout || e.message); }
+  };
+
+  // -- PNG round trip, and every colour type a generator might hand back --
+  {
+    const img = PK.blankImage(7, 5);   // odd sizes catch stride mistakes
+    for (let i = 0; i < 7 * 5; i++) {
+      img.data[i * 4] = (i * 37) & 255; img.data[i * 4 + 1] = (i * 11) & 255;
+      img.data[i * 4 + 2] = (i * 91) & 255; img.data[i * 4 + 3] = i % 3 ? 255 : 0;
+    }
+    const back = PK.decodePng(PK.encodePng(img));
+    const same = back.width === 7 && back.height === 5 && back.data.every((v, i) => v === img.data[i]);
+    if (same) ok('pngkit round-trips RGBA exactly (odd dimensions, mixed alpha)');
+    else fail('pngkit round trip lost data');
+    // a 16-bit or interlaced file is a generator problem, and must say so
+    const bad = Buffer.from(PK.encodePng(PK.blankImage(2, 2)));
+    bad[24] = 16;   // IHDR bit depth
+    let msg = '';
+    try { PK.decodePng(bad); } catch (e) { msg = e.message; }
+    if (/bit depth 16/.test(msg)) ok('pngkit rejects 16-bit PNGs by name rather than decoding garbage');
+    else fail(`16-bit rejection said: ${msg || '(nothing)'}`);
+  }
+
+  // -- the assembly step, on synthetic generator output --
+  // Each direction is padded DIFFERENTLY, which is the real-world defect the
+  // trim/re-centre step exists to fix, and each is a distinct colour so the
+  // row order is readable straight out of the assembled grid.
+  const tmp = mkdtempSync(nodePath.join(tmpdir(), 'uvart-'));
+  try {
+    const NAMES = ['east', 'south_east', 'south', 'south_west', 'west', 'north_west', 'north', 'north_east'];
+    const src = nodePath.join(tmp, 'pulsar');
+    mkdirSync(src, { recursive: true });
+    for (let d = 0; d < 8; d++) {
+      const img = PK.blankImage(32, 32);
+      const ox = 1 + d * 2, oy = 18 - d * 2;   // deliberately all over the place
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          const i = ((oy + y) * 32 + (ox + x)) * 4;
+          img.data[i] = 20 + d * 30; img.data[i + 1] = 200; img.data[i + 2] = 40; img.data[i + 3] = 255;
+        }
+      }
+      writeFileSync(nodePath.join(src, `${NAMES[d]}.png`), PK.encodePng(img));
+    }
+    const outPng = nodePath.join(tmp, 'grid.png');
+    const log = run('process_sprite.mjs', ['char.pulsar', src, `--out=${outPng}`]);
+    const grid = PK.decodePng(rf(outPng));
+    const problems = [];
+    if (grid.width !== 32 || grid.height !== 256) problems.push(`grid is ${grid.width}x${grid.height}, want 32x256`);
+    for (let d = 0; d < 8; d++) {
+      const bb = PK.opaqueBounds(grid, 0, d * 32, 32, 32);
+      if (!bb) { problems.push(`row ${d} is empty`); continue; }
+      const i = (bb.y * grid.width + bb.x) * 4;
+      const saysRow = Math.round((grid.data[i] - 20) / 30);
+      if (saysRow !== d) problems.push(`row ${d} holds the direction generated as ${saysRow}`);
+      const cx = bb.x + bb.w / 2, cy = (bb.y - d * 32) + bb.h / 2;
+      if (Math.abs(cx - 16) > 0.5 || Math.abs(cy - 16) > 0.5) problems.push(`row ${d} centred at ${cx},${cy}`);
+    }
+    if (problems.length) fail(`grid assembly: ${problems.slice(0, 4).join(' | ')}`);
+    else ok('process_sprite assembles 8 differently-padded directions into a 32x256 grid, in E SE S SW W NW N NE order, every row re-centred');
+    if (/row 0 E .*east\.png/.test(log)) ok('and it reports which naming convention each row matched');
+    else fail('process_sprite did not report its row sources');
+
+    // -- an animation's own motion must survive re-centring --
+    // Two frames per direction where the body deliberately rises: per-row
+    // re-centring must keep the rise, per-cell must flatten it. If `row` ever
+    // silently becomes `cell`, this is what notices.
+    const src2 = nodePath.join(tmp, 'walk');
+    for (let d = 0; d < 8; d++) {
+      const dir = nodePath.join(src2, NAMES[d]);
+      mkdirSync(dir, { recursive: true });
+      for (let f = 0; f < 2; f++) {
+        const img = PK.blankImage(32, 32);
+        const oy = 16 - f * 6;   // frame 1 sits 6px higher: the bob
+        for (let y = 0; y < 8; y++) {
+          for (let x = 0; x < 8; x++) {
+            const i = ((oy + y) * 32 + (12 + x)) * 4;
+            img.data[i] = 200; img.data[i + 1] = 90; img.data[i + 2] = 40; img.data[i + 3] = 255;
+          }
+        }
+        writeFileSync(nodePath.join(dir, `f${f}.png`), PK.encodePng(img));
+      }
+    }
+    const rise = mode => {
+      const p = nodePath.join(tmp, `walk-${mode}.png`);
+      run('process_sprite.mjs', ['char.pulsar', src2, `--out=${p}`, `--recenter=${mode}`]);
+      const g = PK.decodePng(rf(p));
+      const a = PK.opaqueBounds(g, 0, 0, 32, 32), b = PK.opaqueBounds(g, 32, 0, 32, 32);
+      return a.y - b.y;   // how much higher frame 1 sits
+    };
+    const rowRise = rise('row'), cellRise = rise('cell');
+    if (rowRise === 6 && cellRise === 0) {
+      ok(`re-centring per row keeps an animation's own motion (${rowRise}px bob preserved) where per-cell flattens it (${cellRise}px) — the reason row is the default`);
+    } else fail(`bob preservation: row=${rowRise} (want 6), cell=${cellRise} (want 0)`);
+
+    // -- the checks that must REFUSE --
+    const badDir = nodePath.join(tmp, 'bad');
+    mkdirSync(badDir, { recursive: true });
+    for (let d = 0; d < 8; d++) {
+      // fully opaque: a baked matte, invisible in review on a dark floor
+      const img = PK.blankImage(32, 32);
+      for (let i = 0; i < 32 * 32; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
+      writeFileSync(nodePath.join(badDir, `${NAMES[d]}.png`), PK.encodePng(img));
+    }
+    const matteErr = runFails('process_sprite.mjs', ['char.pulsar', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    if (matteErr && /transparent pixel/.test(matteErr)) ok('a fully opaque sheet is refused — a baked matte never reaches the repo');
+    else fail(`matte check did not fire: ${String(matteErr).slice(0, 120)}`);
+
+    rmSync(nodePath.join(badDir, 'north.png'));
+    const missErr = runFails('process_sprite.mjs', ['char.pulsar', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    if (missErr && /row 6 \(N\)/.test(missErr)) ok('a missing direction is refused by name, not silently padded');
+    else fail(`missing-direction check said: ${String(missErr).slice(0, 120)}`);
+
+    const oversizeDir = nodePath.join(tmp, 'big');
+    mkdirSync(oversizeDir, { recursive: true });
+    // 48 is not a multiple of the 32px cell, so it cannot be mistaken for a
+    // 2-frame strip — this is unambiguously one oversized source.
+    for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(48, 48)));
+    const bigErr = runFails('process_sprite.mjs', ['char.pulsar', oversizeDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    if (bigErr && /48x48 source but the cell is 32x32/.test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
+    else fail(`oversize check said: ${String(bigErr).slice(0, 140)}`);
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+
+  // -- the batch gate catches what the loader would only fall back on --
+  {
+    const spriteRoot = nodePath.join(REPO, 'assets', 'sprites', 'enemy');
+    const file = nodePath.join(spriteRoot, 'skulker.png');
+    try {
+      mkdirSync(spriteRoot, { recursive: true });
+      // right id, wrong shape: 48x48 where the manifest wants 48x384
+      writeFileSync(file, PK.encodePng(PK.blankImage(32, 32)));
+      const err = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (err && /32x32, manifest wants 32x256/.test(err)) ok('verify_art_batch names a wrong-sized grid and the size it should have been');
+      else fail(`batch verify on a bad grid said: ${String(err).slice(0, 140)}`);
+
+      // right shape, but every cell empty — how a mis-assembled grid hides
+      writeFileSync(file, PK.encodePng(PK.blankImage(32, 256)));
+      const err2 = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (err2 && /empty cell/.test(err2)) ok('and it catches an all-empty grid, which passes every dimension check');
+      else fail(`empty-cell check said: ${String(err2).slice(0, 140)}`);
+    } finally { rmSync(nodePath.join(REPO, 'assets', 'sprites'), { recursive: true, force: true }); }
+
+    const clean = run('verify_art_batch.mjs', []);
+    if (/298 still to draw/.test(clean)) ok('with no art at all the batch gate passes and reports 0/298 drawn — an empty repo is a valid state');
+    else fail(`clean batch verify said: ${clean.slice(0, 160)}`);
+    const reqErr = runFails('verify_art_batch.mjs', ['char', '--require-all']);
+    if (reqErr && /have no art/.test(reqErr)) ok('--require-all is what makes "batch 1 is done" a number rather than a feeling');
+    else fail('--require-all did not fail on an undrawn batch');
+  }
+
+  // -- the anchor gate, and prompt coverage --
+  {
+    const anchorErr = runFails('gen_prompts.mjs', []);
+    if (anchorErr && /still PENDING/.test(anchorErr)) ok('gen_prompts refuses to emit while the style anchor is PENDING — batch 0 is a gate, not a suggestion');
+    else fail('the style-anchor gate did not fire');
+    run('gen_prompts.mjs', ['--allow-pending']);
+    run('gen_prompts.mjs', ['--check', '--allow-pending']);
+    const prompts = JSON.parse(rf(nodePath.join(REPO, 'docs', 'prompts.json'), 'utf8'));
+    const units = Object.keys(prompts.prompts);
+    const sil = JSON.parse(rf(nodePath.join(REPO, 'docs', 'silhouettes.json'), 'utf8'));
+    const noSil = units.filter(id => !sil[id]);
+    const expect = ALL_CHARS_N + ENEMIES.length + 1 + BOSSES.length;
+    if (units.length === expect && !noSil.length) ok(`every one of the ${units.length} unit ids has a hand-written silhouette note — the whole readability budget at small size`);
+    else fail(`prompts: ${units.length} of ${expect} units, ${noSil.length} without a silhouette`);
+    const texts = units.map(id => sil[id].toLowerCase().replace(/[^a-z ]/g, ''));
+    if (new Set(texts).size === texts.length) ok('and no two units are described the same way — identical descriptions draw identical sprites');
+    else fail('duplicate silhouette notes');
+    if (prompts.styleClause === 'PENDING' && prompts.prompts['char.pulsar'].batch === 0) ok('Pulsar is batch 0, alone, and the clause it would carry is still unset');
+    else fail(`anchor wiring: clause=${prompts.styleClause}, pulsar batch=${prompts.prompts['char.pulsar'].batch}`);
+  }
+
+  // -- per-sprite manifest overrides survive a regeneration --
+  {
+    const OV = nodePath.join(REPO, 'assets', 'sprite-overrides.json');
+    const before = rf(OV, 'utf8');
+    try {
+      writeFileSync(OV, JSON.stringify({ 'enemy.skulker': { frames: 4, fps: 12 } }, null, 2) + '\n');
+      run('gen_assets_manifest.mjs', []);
+      const m2 = JSON.parse(rf(nodePath.join(REPO, 'assets', 'assets.json'), 'utf8'));
+      const s = m2.sprites['enemy.skulker'];
+      if (s.frames === 4 && s.fps === 12 && s.directions === 8) ok('sprite-overrides.json survives a manifest regeneration — a unit\'s real frame count is not lost to the generator');
+      else fail(`override merge: ${JSON.stringify(s)}`);
+      writeFileSync(OV, JSON.stringify({ 'enemy.nope': { frames: 2 } }, null, 2) + '\n');
+      let bad = null;
+      try { run('gen_assets_manifest.mjs', []); } catch (e) { bad = String(e.stderr || e.message); }
+      if (bad && /not a sprite id/.test(bad)) ok('and an override naming an id that does not exist is a hard error, not a silent no-op');
+      else fail('bad override id was accepted');
+    } finally {
+      writeFileSync(OV, before);
+      run('gen_assets_manifest.mjs', []);
+    }
+  }
+
+  // -- the review artefact --
+  {
+    run('gen_contact_sheet.mjs', []);
+    const sheet = rf(nodePath.join(REPO, 'tools', 'contact_sheet.html'), 'utf8');
+    const bits = [
+      [/#14161f/, 'the arena background colour, not white'],
+      [/--zoom:1/, '1:1 by default, zoom opt-in'],
+      [/--row:2/, 'the S row by default'],
+      [/image-rendering:pixelated/, 'no smoothing'],
+    ];
+    const miss = bits.filter(([re]) => !re.test(sheet));
+    if (!miss.length) ok(`contact sheet generates with ${sheet.length} bytes: ${bits.map(b => b[1]).join(', ')}`);
+    else fail(`contact sheet missing: ${miss.map(b => b[1]).join(', ')}`);
+  }
+} catch (err) { fail('art pipeline section crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {

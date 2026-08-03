@@ -508,3 +508,7 @@ export const ITEMS = [
 ];
 
 export const ITEM_BY_ID = Object.fromEntries(ITEMS.map(it => [it.id, it]));
+
+// Sprite ids — one icon per item, 24x24. Stamped rather than typed 146 times
+// so the catalog and its art inventory cannot drift apart. Cosmetic only.
+for (const it of ITEMS) it.spriteId = `item.${it.id}`;

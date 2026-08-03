@@ -7,6 +7,8 @@
 
 import { spawn } from 'child_process';
 import { mkdtempSync } from 'fs';
+import fs from 'node:fs';
+import zlib from 'node:zlib';
 import { tmpdir } from 'os';
 import path from 'path';
 
@@ -32,6 +34,7 @@ class Browser {
     this.msgId = 0;
     this.pending = new Map();
     const profile = mkdtempSync(path.join(tmpdir(), 'uvchrome-'));
+    this.profile = profile;
     this.proc = spawn(CHROME, [
       '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
       `--remote-debugging-port=${this.port}`, `--user-data-dir=${profile}`,
@@ -161,6 +164,11 @@ class Browser {
     try { this.ws && this.ws.close(); } catch { /* ignore */ }
     try { this.proc && this.proc.kill(); } catch { /* ignore */ }
     await sleep(200);
+    // Bin the profile directory. A full run opens a dozen browsers and the
+    // co-op phase opens eight at once; left behind, these accumulate into
+    // gigabytes across runs and eventually starve the multi-browser tests into
+    // timing out — which reads as a co-op regression and is not one.
+    try { if (this.profile) fs.rmSync(this.profile, { recursive: true, force: true }); } catch { /* ignore */ }
   }
 }
 
@@ -1016,6 +1024,360 @@ try {
   } catch (e) {
     fail(`fallback test crashed: ${e.message}`);
   } finally { await F.close(); }
+}
+
+// ---------- the sprite pipeline: zero art, partial art, and the off switch ----------
+// The whole point of this layer is that it can be absent. These tests cover
+// the three states it actually ships in — no manifest, a manifest with no
+// files, and a manifest with SOME files — plus the ?sprites=off escape hatch
+// that has to reproduce the pre-sprite renderer exactly.
+//
+// Units are DIRECTIONAL: their sheet is a grid, rows = facings in the order
+// E SE S SW W NW N NE, columns = animation frames. The generated test grid
+// paints each row a different colour, so a single sampled pixel says which row
+// the renderer picked — which is the only way to catch an off-by-one or a
+// mirrored row order, both of which look almost right in motion.
+{
+  const spriteRoot = path.join(process.cwd(), 'assets', 'sprites');
+  const enemyDir = path.join(spriteRoot, 'enemy');
+  const fxDir = path.join(spriteRoot, 'fx');
+  const gridFile = path.join(enemyDir, 'skulker.png');
+  const badGridFile = path.join(enemyDir, 'flit.png');
+  const flatFile = path.join(fxDir, 'material.png');
+  // row d -> rgb(20 + d*30, 200, 40); decode with round((r - 20) / 30)
+  const ROW_RGB = d => [20 + d * 30, 200, 40];
+  const rowOf = rgb => Math.round((rgb[0] - 20) / 30);
+  const ROWS = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+
+  const CRC_TABLE = (() => {
+    const t = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c;
+    }
+    return t;
+  })();
+  const crc32 = buf => {
+    let c = -1;
+    for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ -1) >>> 0;
+  };
+  const pngChunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  // px(x, y) -> [r, g, b]. Everything here is opaque.
+  const png = (w, h, px) => {
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+    ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;   // 8-bit RGBA
+    const raw = Buffer.alloc(h * (1 + w * 4));
+    for (let y = 0; y < h; y++) {
+      const row = y * (1 + w * 4);
+      raw[row] = 0;   // filter: none
+      for (let x = 0; x < w; x++) {
+        const [r, g, b] = px(x, y);
+        const o = row + 1 + x * 4;
+        raw[o] = r; raw[o + 1] = g; raw[o + 2] = b; raw[o + 3] = 255;
+      }
+    }
+    return Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      pngChunk('IHDR', ihdr),
+      pngChunk('IDAT', zlib.deflateSync(raw)),
+      pngChunk('IEND', Buffer.alloc(0)),
+    ]);
+  };
+  // a valid 8-direction grid: 48 wide (1 frame) x 384 tall (8 rows)
+  const directionGrid = () => png(32, 32 * 8, (x, y) => ROW_RGB(Math.floor(y / 32)));
+  // left half red, right half blue — asymmetric, so rotation is visible
+  const flatAsymmetric = () => png(32, 32, x => (x < 16 ? [255, 60, 60] : [60, 60, 255]));
+
+  const installArt = () => {
+    fs.mkdirSync(enemyDir, { recursive: true });
+    fs.mkdirSync(fxDir, { recursive: true });
+    fs.writeFileSync(gridFile, directionGrid());
+    fs.writeFileSync(flatFile, flatAsymmetric());
+    fs.writeFileSync(badGridFile, png(32, 32, () => [255, 0, 255]));   // deliberately not a grid
+  };
+  const removeArt = () => fs.rmSync(spriteRoot, { recursive: true, force: true });
+
+  // Drop a player into an open arena with one pinned, motionless enemy.
+  const probeSetupJs = `
+    const s = window.uv.sim;
+    s.god = true;
+    s.wave.done = true; s.spawnQueue.length = 0;
+    for (const e of [...s.enemyPool]) s.enemyPool.release(e);
+    const p = s.players[0];
+    p.x = s.W / 2; p.y = s.H / 2;
+    const e = s.spawnEnemyById('skulker', p.x + 150, p.y, { noMats: true });
+    e.hp = 1e9; e.maxHp = 2e9; e.spd = 0; e.dmg = 0; e.hitFlash = 0;
+    window._probe = { ex: e.x, ey: e.y, id: e.id };
+    return 1;`;
+  // hold still (or drift) for n animation frames, then let the last frame settle
+  const moveJs = (dx, dy, n) => `
+    return new Promise(res => {
+      const s = window.uv.sim, pr = window._probe;
+      const e = s.enemyById(pr.id);
+      let i = 0;
+      (function step() {
+        const p = s.players[0]; p.x = s.W / 2; p.y = s.H / 2;
+        e.x += ${dx}; e.y += ${dy}; e.hitFlash = 0;
+        pr.ex = e.x; pr.ey = e.y;
+        if (++i < ${n}) requestAnimationFrame(step); else res(1);
+      })();
+    });`;
+  const readJs = `
+    const r = window.uvRenderer, pr = window._probe;
+    if (!r._screen) return 'no frame drawn';
+    const sx = Math.round((pr.ex - r.camX) * r._screen.scale + r._screen.cw / 2);
+    const sy = Math.round((pr.ey - r.camY) * r._screen.scale + r._screen.ch / 2);
+    const d = r.ctx.getImageData(sx, sy, 1, 1).data;
+    return JSON.stringify([d[0], d[1], d[2]]);`;
+
+  const near = (got, want, tol = 40) => got.every((v, i) => Math.abs(v - want[i]) <= tol);
+
+  async function intoArena(br, url) {
+    await br.goto(url);
+    await br.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title');
+    await br.exec(`document.getElementById('btn-host').click()`);
+    await br.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby');
+    await br.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
+    await sleep(250);
+    await br.exec(`document.getElementById('btn-start').click()`);
+    await br.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run');
+    await br.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
+    await br.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena');
+  }
+
+  // ---- 1. no manifest at all: the state before this patch, and any deploy
+  //         where assets/ was never uploaded ----
+  {
+    const S1 = new Browser();
+    try {
+      await S1.open('S1', { failPattern: 'assets.json' });
+      await S1.goto(URL);
+      await S1.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title (no manifest)');
+      await sleep(800);
+      const st = JSON.parse(await S1.exec(`const A=window.uvAssets; return JSON.stringify({ready:A.ready, size:A.size(), missing:A.missing.size})`));
+      if (st.ready && st.size === 0) ok(`manifest 404: loader resolves with an empty registry (ready=${st.ready}, ${st.size} ids) — never rejects`);
+      else fail(`manifest 404 state: ${JSON.stringify(st)}`);
+      const errs = await S1.errors();
+      if (errs.length) fail(`console errors with no manifest: ${errs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors with no manifest — a missing asset is a normal state, not an error path');
+      await intoArena(S1, URL);
+      const fps = await measureFps(S1);
+      if (fps >= 30) ok(`the game plays with assets/ effectively deleted (${fps} fps in an arena)`);
+      else fail(`fps with no manifest: ${fps}`);
+    } catch (e) { fail(`no-manifest test: ${e.message}`); } finally { await S1.close(); }
+  }
+
+  // ---- 2. manifest present, not one file on disk: what this patch ships ----
+  let baseline = null;
+  {
+    const S2 = new Browser();
+    try {
+      await S2.open('S2');
+      await intoArena(S2, URL);
+      await S2.waitFor(`return window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled');
+      const st = JSON.parse(await S2.exec(`const A=window.uvAssets; return JSON.stringify({size:A.size(), missing:A.missing.size, hit:A.get('enemy.skulker')?1:0})`));
+      if (st.size > 250 && st.missing === st.size && !st.hit) ok(`manifest with zero files: all ${st.size} ids registered, all ${st.missing} missing, get() returns null`);
+      else fail(`zero-file state: ${JSON.stringify(st)}`);
+      const errs = await S2.errors();
+      if (errs.length) fail(`console errors with zero sprite files: ${errs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors with every sprite file absent');
+      const allFalse = await S2.exec(`const A=window.uvAssets, D=window.uvDrawSprite;
+        const c=document.createElement('canvas').getContext('2d');
+        let drew=0; for (const id of A.ids()) if (D(c,id,0,0)) drew++;
+        return drew;`);
+      if (allFalse === 0) ok('drawSprite returns false for all of them — every entity falls back to its primitive');
+      else fail(`${allFalse} id(s) claimed to draw with no files present`);
+      await S2.exec(probeSetupJs);
+      await S2.exec(moveJs(0, 0, 12));
+      await sleep(200);
+      baseline = JSON.parse(await S2.exec(readJs));
+      ok(`primitive skulker paints rgb(${baseline.join(',')}) at its centre — the pre-sprite renderer, unchanged`);
+    } catch (e) { fail(`zero-file test: ${e.message}`); } finally { await S2.close(); }
+  }
+
+  // ---- 3. ?sprites=off, WITH real files on disk: the escape hatch has to
+  //         reproduce the primitive exactly, art present or not ----
+  // ---- 4. directional grids, on a live entity and cell by cell ----
+  // ---- 5. a directions:1 entry still rotates, exactly as before ----
+  {
+    installArt();
+    const S3 = new Browser(), S4 = new Browser();
+    try {
+      // 3: forced off
+      await S3.open('S3');
+      await intoArena(S3, `${URL}?sprites=off`);
+      const offState = JSON.parse(await S3.exec(`const A=window.uvAssets; return JSON.stringify({mode:window.uvSpriteMode, ready:A.ready, size:A.size(), hit:A.get('enemy.skulker')?1:0})`));
+      if (offState.mode === 'off' && offState.ready && offState.size === 0 && !offState.hit) {
+        ok('?sprites=off short-circuits the loader entirely — nothing fetched, get() always null');
+      } else fail(`sprites=off state: ${JSON.stringify(offState)}`);
+      await S3.exec(probeSetupJs);
+      await S3.exec(moveJs(0, 0, 12));
+      await sleep(200);
+      const offPx = JSON.parse(await S3.exec(readJs));
+      if (baseline && near(offPx, baseline, 12)) ok(`?sprites=off with art installed paints rgb(${offPx.join(',')}) — identical to the no-art primitive`);
+      else fail(`sprites=off pixel ${JSON.stringify(offPx)} != baseline ${JSON.stringify(baseline)}`);
+
+      // 4 + 5: the real thing
+      await S4.open('S4');
+      await intoArena(S4, URL);
+      await S4.waitFor(`return window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled (partial)');
+      const part = JSON.parse(await S4.exec(`const A=window.uvAssets;
+        const g=A.get('enemy.skulker'), f=A.get('fx.material');
+        return JSON.stringify({size:A.size(), missing:A.missing.size,
+          gridDirs:g?g.directions:0, gridW:g?g.w:0, gridH:g?g.h:0,
+          flatDirs:f?f.directions:0,
+          badRejected:A.missing.has('enemy.flit')?1:0, badNull:A.get('enemy.flit')?0:1,
+          other:A.get('enemy.gyre')?1:0});`));
+      if (part.gridDirs === 8 && part.gridW === 32 && part.gridH === 32 && part.flatDirs === 1 && !part.other) {
+        ok(`partial manifest: an 8-direction 32x32 grid and a 1-direction 32x32 icon load, the other ${part.missing} ids stay null`);
+      } else fail(`partial state: ${JSON.stringify(part)}`);
+      // grid validation: wrong dimensions is no sprite, not a wrong sprite
+      if (part.badRejected && part.badNull) ok('a 32x32 file for an 8-row grid is rejected and marked missing — it falls back rather than drawing a wrong facing');
+      else fail(`bad grid was not rejected: ${JSON.stringify(part)}`);
+
+      // every row, addressed by angle, off screen and exhaustively
+      const bucket = JSON.parse(await S4.exec(`
+        const D = window.uvDrawSprite;
+        const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+        const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+        const TAU = Math.PI * 2;
+        const rowAt = opts => { g.clearRect(0,0,128,128); D(g,'enemy.skulker',64,64,opts);
+          const d = g.getImageData(64,64,1,1).data; return Math.round((d[0]-20)/30); };
+        const out = { viaFacing: [], viaRot: [], wound: [], negative: [], idle: null, rotated: null };
+        for (let i = 0; i < 8; i++) {
+          const a = i * TAU / 8;
+          out.viaFacing.push(rowAt({ facing: a }));
+          out.viaRot.push(rowAt({ rot: a }));
+          out.wound.push(rowAt({ facing: a + TAU * 3 }));
+          out.negative.push(rowAt({ facing: a - TAU * 2 }));
+        }
+        out.idle = rowAt({});
+        // a directional sprite must NEVER rotate: row 0 drawn with a facing of
+        // 0 and with an extra rot of 0 is the same image, and the grid rows are
+        // solid, so any rotation would smear the row colours together
+        g.clearRect(0,0,128,128); D(g,'enemy.skulker',64,64,{ facing: 0 });
+        const top = g.getImageData(64, 64-20, 1, 1).data, bot = g.getImageData(64, 64+20, 1, 1).data;
+        out.rotated = (Math.round((top[0]-20)/30) === 0 && Math.round((bot[0]-20)/30) === 0) ? 0 : 1;
+        return JSON.stringify(out);`));
+      const want = [0, 1, 2, 3, 4, 5, 6, 7];
+      const eq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+      if (eq(bucket.viaFacing, want)) ok(`direction rows resolve E SE S SW W NW N NE from angle — ${bucket.viaFacing.join('')}`);
+      else fail(`row order via facing: got ${bucket.viaFacing.join(',')} want ${want.join(',')}`);
+      if (eq(bucket.viaRot, want)) ok('the documented { rot: angle } call selects the same rows — callers need not change');
+      else fail(`row order via rot: got ${bucket.viaRot.join(',')}`);
+      if (eq(bucket.wound, want) && eq(bucket.negative, want)) ok('angles wound past ±τ and negative angles land on the same rows');
+      else fail(`winding: +3τ ${bucket.wound.join(',')} / -2τ ${bucket.negative.join(',')}`);
+      if (bucket.idle === 2) ok('a sprite drawn with no facing at all defaults to row 2 (S) — an idle arena never snaps east');
+      else fail(`idle default row ${bucket.idle}, want 2 (S)`);
+      if (bucket.rotated === 0) ok('a directional sprite is never rotated — the row is the facing, and the cell is drawn square');
+      else fail('directional sprite came out rotated');
+
+      // 5: a directions:1 entry still rotates and still mirrors
+      const flat = JSON.parse(await S4.exec(`
+        const D = window.uvDrawSprite;
+        const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+        const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+        const at = (opts, dx) => { g.clearRect(0,0,64,64); D(g,'fx.material',32,32,opts);
+          const d = g.getImageData(32+dx,32,1,1).data; return [d[0],d[1],d[2]]; };
+        return JSON.stringify({ plain: at({}, -4), turned: at({rot: Math.PI}, -4), mirrored: at({flipX: true}, -4) });`));
+      const RED = [255, 60, 60], BLUE = [60, 60, 255];
+      if (near(flat.plain, RED, 30) && near(flat.turned, BLUE, 30) && near(flat.mirrored, BLUE, 30)) {
+        ok('a directions:1 entry is untouched by this patch — still rotated by rot, still mirrored by flipX');
+      } else fail(`flat sprite: plain ${flat.plain} turned ${flat.turned} mirrored ${flat.mirrored}`);
+
+      // the facing memory, on a real entity moving through a real arena
+      await S4.exec(probeSetupJs);
+      await S4.exec(moveJs(0, 0, 14));
+      await sleep(200);
+      const stillPx = JSON.parse(await S4.exec(readJs));
+      if (rowOf(stillPx) === 2) ok(`a spawned, motionless enemy faces the camera — row ${rowOf(stillPx)} (${ROWS[rowOf(stillPx)]})`);
+      else fail(`idle enemy row ${rowOf(stillPx)} from rgb(${stillPx.join(',')}), want 2 (S)`);
+      await S4.exec(moveJs(8, 0, 14));
+      await sleep(200);
+      const eastPx = JSON.parse(await S4.exec(readJs));
+      if (rowOf(eastPx) === 0) ok(`walking east turns it to row ${rowOf(eastPx)} (${ROWS[rowOf(eastPx)]}) — facing is derived from motion, never networked`);
+      else fail(`east-walking enemy row ${rowOf(eastPx)}, want 0 (E)`);
+      await S4.exec(moveJs(0, -8, 14));
+      await sleep(200);
+      const northPx = JSON.parse(await S4.exec(readJs));
+      if (rowOf(northPx) === 6) ok(`walking north (canvas -y) turns it to row ${rowOf(northPx)} (${ROWS[rowOf(northPx)]})`);
+      else fail(`north-walking enemy row ${rowOf(northPx)}, want 6 (N)`);
+      await S4.exec(moveJs(0, 0, 20));
+      await sleep(200);
+      const heldPx = JSON.parse(await S4.exec(readJs));
+      if (rowOf(heldPx) === 6) ok('and it keeps that facing once it stops — a stopped unit holds its last real heading');
+      else fail(`stopped enemy row ${rowOf(heldPx)}, want 6 (N) held`);
+
+      // facing lives in the renderer, not on anything the sim owns
+      const wall = JSON.parse(await S4.exec(`const s=window.uv.sim, r=window.uvRenderer;
+        let onEntity=0; for (const e of s.enemyPool) if ('facing' in e || 'dir' in e || '_faceA' in e) onEntity++;
+        for (const p of s.players) if ('facing' in p || 'dir' in p) onEntity++;
+        return JSON.stringify({onEntity, mapSize:r._facing.size, snap: JSON.stringify(s.getSnapshot()).indexOf('facing')});`));
+      if (!wall.onEntity && wall.mapSize > 0 && wall.snap === -1) {
+        ok(`facing is render-local: ${wall.mapSize} entries in the renderer's map, none on any entity, none in the snapshot`);
+      } else fail(`facing leaked: ${JSON.stringify(wall)}`);
+
+      const perrs = await S4.errors();
+      if (perrs.length) fail(`console errors with a partial manifest: ${perrs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors with sprites, rejected grids and primitives on screen together');
+      const pfps = await measureFps(S4);
+      if (pfps >= 30) ok(`mixed sprites and primitives render at ${pfps} fps`);
+      else fail(`partial-manifest fps: ${pfps}`);
+
+      const smooth = JSON.parse(await S4.exec(`const r=window.uvRenderer;
+        const before = r.ctx.imageSmoothingEnabled;
+        r._resize();
+        return JSON.stringify({before, after: r.ctx.imageSmoothingEnabled});`));
+      if (smooth.before === false && smooth.after === false) ok('imageSmoothingEnabled stays false across a resize (a resize resets context state)');
+      else fail(`imageSmoothing: ${JSON.stringify(smooth)}`);
+    } catch (e) { fail(`sprite-art test: ${e.message}`); } finally {
+      await S3.close(); await S4.close();
+    }
+  }
+
+  // ---- 6. ?sprites=debug names what is missing and what row it picked ----
+  {
+    const S5 = new Browser();
+    try {
+      await S5.open('S5');
+      await S5.goto(`${URL}?sprites=debug`);
+      await S5.waitFor(`return window.uvAssets && window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled (debug)');
+      await sleep(400);
+      const logs = await S5.logs();
+      const list = logs.find(l => /\[sprites\] missing:/.test(l));
+      if (list && /enemy\.gyre/.test(list)) ok(`?sprites=debug lists every missing id once at load (${list.length} chars)`);
+      else fail('sprites=debug did not log the missing list');
+      const rejected = logs.find(l => /enemy\.flit.*grid must be exactly 32x256/.test(l));
+      if (rejected) ok('the rejected grid says exactly what size it should have been');
+      else fail('no diagnostic for the wrong-sized grid');
+      // the direction readout: ink above the sprite in debug mode, none without it
+      const overlay = JSON.parse(await S5.exec(`
+        const D = window.uvDrawSprite;
+        const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+        const g = c.getContext('2d');
+        g.clearRect(0,0,128,128); D(g,'enemy.skulker',64,80,{facing:0});
+        // band strictly above the 48px cell (top edge at 80-24=56)
+        const band = g.getImageData(0, 28, 128, 14).data;
+        let ink = 0; for (let i=3;i<band.length;i+=4) if (band[i] > 0) ink++;
+        return JSON.stringify({ink});`));
+      if (overlay.ink > 0) ok(`?sprites=debug overlays the resolved direction index on directional sprites (${overlay.ink} px of readout)`);
+      else fail('no direction readout drawn in debug mode');
+      const derrs = await S5.errors();
+      if (derrs.length) fail(`console errors in debug mode: ${derrs.join(' | ').slice(0, 300)}`);
+      else ok('debug mode logs, it does not error');
+    } catch (e) { fail(`sprites=debug test: ${e.message}`); } finally {
+      await S5.close();
+      removeArt();
+    }
+  }
 }
 
 // ---------- mobile / touch emulation (Pixel-ish viewport, real touch events) ----------

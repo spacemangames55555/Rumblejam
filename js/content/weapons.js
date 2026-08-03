@@ -149,3 +149,14 @@ export function estimateDps(def, tier, stats) {
   const cd = def.cd / Math.max(0.25, 1 + (s.tempo || 0) / 100);
   return dmg * (def.count || 1) / Math.max(0.05, cd);
 }
+
+// ---------------- sprite ids (cosmetic; patch: sprite pipeline) ----------------
+// `spriteId` is the weapon's shop/inventory icon; `projSpriteId` is the bolt it
+// puts in the air, and only exists for weapons that actually spawn one.
+// Neither ever reaches the simulation or the wire — see js/content/sprites.js
+// for how a projectile on a snapshot is matched back to its art.
+for (const w of WEAPONS) {
+  w.spriteId = `item.${w.id}`;
+  const firesProj = w.projSpeed !== undefined || (w.summon && w.summon.projSpeed !== undefined);
+  if (firesProj) w.projSpriteId = `proj.${w.id}`;
+}
