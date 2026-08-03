@@ -1,7 +1,6 @@
 {
   "char.toh_druid": {
     "w": 128,
-    "h": 128,
-    "directions": 4
+    "h": 128
   }
 }

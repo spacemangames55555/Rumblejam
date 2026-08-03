@@ -416,13 +416,13 @@
       "batch": 1,
       "subject": "Druid, a economy summons dungeon adventurer",
       "silhouette": "antlered, shoulders shrouded in a heavy leaf mantle",
-      "directions": 4,
+      "directions": 8,
       "frames": 1,
       "size": [
         128,
         128
       ],
-      "prompt": "Druid, a economy summons dungeon adventurer, antlered, shoulders shrouded in a heavy leaf mantle, plain smooth rounded helmet, vivid saturated arcade palette, crisp readable shapes, body mid-to-light in value so it never sinks into a near-black floor, one bright accent only, bright colours that pop against a near-black floor, 4-directional, 128px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Druid, a economy summons dungeon adventurer, antlered, shoulders shrouded in a heavy leaf mantle, plain smooth rounded helmet, vivid saturated arcade palette, crisp readable shapes, body mid-to-light in value so it never sinks into a near-black floor, one bright accent only, bright colours that pop against a near-black floor, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "char.toh_hunter": {
       "batch": 1,

@@ -210,7 +210,7 @@
       "file": "char/toh_druid.png",
       "w": 128,
       "h": 128,
-      "directions": 4
+      "directions": 8
     },
     "char.toh_hunter": {
       "file": "char/toh_hunter.png",
