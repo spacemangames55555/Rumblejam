@@ -7,6 +7,7 @@
 //   --frames=N                       override the detected frame count
 //   --fps=N                          animation rate to record in the manifest
 //   --out=<path>                     default: the manifest's own file path
+//   --autocrop                       crop away transparent padding first (hand-supplied art)
 //   --dry-run                        report, write nothing
 //   --allow-matte                    downgrade the opaque-background check to a warning
 //
@@ -26,7 +27,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, statSync, mkdirSy
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { decodePng, encodePng, blankImage, blit, opaqueBounds } from './pngkit.mjs';
+import { decodePng, encodePng, blankImage, blit, subImage, opaqueBounds } from './pngkit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MANIFEST = join(ROOT, 'assets', 'assets.json');
@@ -68,8 +69,14 @@ if (!['row', 'cell', 'sheet', 'none'].includes(recenter)) die(`--recenter=${rece
 
 const listPngs = d => readdirSync(d).filter(f => /\.png$/i.test(f)).sort();
 
+// Row index -> compass index. The 8 compass points are fixed, but a sheet with
+// fewer directions samples them evenly: directions:4 is rows E S W N, which is
+// compass 0, 2, 4, 6 — NOT 0, 1, 2, 3. Getting this wrong files a south view
+// into the south-east row and the error is invisible until something walks.
+const compassFor = rowIdx => rowIdx * (8 / directions);
+
 function loadFramesFor(rowIdx) {
-  const names = DIR_NAMES[rowIdx] || [String(rowIdx)];
+  const names = DIR_NAMES[compassFor(rowIdx)] || [String(rowIdx)];
   // a folder per direction
   for (const n of names) {
     const sub = join(inputDir, n);
@@ -106,15 +113,15 @@ const rows = [];
 for (let d = 0; d < directions; d++) {
   const got = loadFramesFor(d);
   if (!got) {
-    const tried = (DIR_NAMES[d] || []).join(', ');
-    die(`no source found for row ${d} (${ROW_LABEL[d] || d}) — looked for: ${tried}`);
+    const tried = (DIR_NAMES[compassFor(d)] || []).join(', ');
+    die(`no source found for row ${d} (${ROW_LABEL[compassFor(d)] || d}) — looked for: ${tried}`);
   }
   rows.push(got);
 }
 
 const frameCounts = [...new Set(rows.map(r => r.images.length))];
 if (frameCounts.length > 1) {
-  die(`directions disagree on frame count (${rows.map((r, i) => `${ROW_LABEL[i] || i}:${r.images.length}`).join(' ')}) — every direction must animate over the same number of frames`);
+  die(`directions disagree on frame count (${rows.map((r, i) => `${ROW_LABEL[compassFor(i)] || i}:${r.images.length}`).join(' ')}) — every direction must animate over the same number of frames`);
 }
 const frames = flags.frames ? Number(flags.frames) : frameCounts[0];
 if (!(frames > 0)) die(`bad frame count ${frames}`);
@@ -123,12 +130,35 @@ if (flags.frames && Number(flags.frames) !== frameCounts[0]) {
 }
 
 console.log(`${spriteId}: ${directions} direction(s) x ${frames} frame(s), cell ${cellW}x${cellH}, anchor ${anchor}`);
-for (let d = 0; d < directions; d++) console.log(`    row ${d} ${(ROW_LABEL[d] || '').padEnd(2)} <- ${rows[d].how}`);
+for (let d = 0; d < directions; d++) console.log(`    row ${d} ${(ROW_LABEL[compassFor(d)] || '').padEnd(2)} <- ${rows[d].how}`);
+
+// --autocrop. The renderer scales the whole SHEET to twice the entity radius,
+// so transparent padding is not free: a figure occupying a third of its canvas
+// renders at a third the size of everything else. Cropping to the union of all
+// content, before anything else, makes a hand-supplied canvas behave like a
+// generated one. The union is used rather than a per-image box so the figures
+// stay in register with each other.
+if (flags.autocrop) {
+  let u = null;
+  for (const r of rows) {
+    for (const img of r.images) {
+      const b = opaqueBounds(img);
+      if (!b) continue;
+      if (!u) { u = { ...b }; continue; }
+      const x2 = Math.max(u.x + u.w, b.x + b.w), y2 = Math.max(u.y + u.h, b.y + b.h);
+      u.x = Math.min(u.x, b.x); u.y = Math.min(u.y, b.y); u.w = x2 - u.x; u.h = y2 - u.y;
+    }
+  }
+  if (!u) die('--autocrop: every source is fully transparent');
+  const before = `${rows[0].images[0].width}x${rows[0].images[0].height}`;
+  for (const r of rows) r.images = r.images.map(img => subImage(img, u.x, u.y, u.w, u.h));
+  console.log(`  autocrop: ${before} -> ${u.w}x${u.h} (union of all content)`);
+}
 
 for (let d = 0; d < directions; d++) {
   for (const img of rows[d].images) {
     if (img.width > cellW || img.height > cellH) {
-      die(`row ${ROW_LABEL[d] || d} has a ${img.width}x${img.height} source but the cell is ${cellW}x${cellH} — regenerate at the cell size rather than letting content be clipped`);
+      die(`row ${ROW_LABEL[compassFor(d)] || d} has a ${img.width}x${img.height} source but the cell is ${cellW}x${cellH} — regenerate at the cell size, or pass --autocrop if it is mostly transparent padding`);
     }
   }
 }
@@ -217,7 +247,7 @@ for (let d = 0; d < directions; d++) {
     }
     if (ringOpaque / ring > 0.9) {
       const [color] = [...colors.entries()].sort((a, b) => b[1] - a[1])[0] || ['?'];
-      matted.push(`${ROW_LABEL[d] || d}/f${f} rgb(${color})`);
+      matted.push(`${ROW_LABEL[compassFor(d)] || d}/f${f} rgb(${color})`);
     }
   }
 }
@@ -255,10 +285,14 @@ if (flags.out) {
 // next regeneration. Per-sprite deviations from the category default live in
 // this side file, which the generator merges.
 const over = existsSync(OVERRIDES) ? JSON.parse(readFileSync(OVERRIDES, 'utf8')) : {};
-const entry = {};
-if (frames > 1) entry.frames = frames;
-if (flags.fps) entry.fps = Number(flags.fps);
-if (Object.keys(entry).length) over[spriteId] = { ...(over[spriteId] || {}), ...entry };
+// Only touch the keys this tool OWNS. It used to delete the whole entry when it
+// had nothing of its own to record, which silently destroyed a hand-set w/h or
+// directions override and dropped the sprite back to its category defaults —
+// where the loader then rejected the file for being the wrong size.
+const mine = { ...(over[spriteId] || {}) };
+if (frames > 1) mine.frames = frames; else delete mine.frames;
+if (flags.fps) mine.fps = Number(flags.fps);
+if (Object.keys(mine).length) over[spriteId] = mine;
 else delete over[spriteId];
 writeFileSync(OVERRIDES, JSON.stringify(Object.fromEntries(Object.keys(over).sort().map(k => [k, over[k]])), null, 2) + '\n');
 

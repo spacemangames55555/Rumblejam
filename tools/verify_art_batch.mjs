@@ -32,6 +32,11 @@ import { decodePng, opaqueBounds } from './pngkit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(ROOT, 'assets', 'assets.json'), 'utf8'));
+// Sprites knowingly installed outside the value bands. Only the bands and the
+// facing ratio can be waived — never a structural failure.
+const EXC_PATH = join(ROOT, 'assets', 'gate-exceptions.json');
+const exceptions = existsSync(EXC_PATH) ? JSON.parse(readFileSync(EXC_PATH, 'utf8')) : {};
+const excepted = id => id !== '_' && typeof exceptions[id] === 'string';
 
 const args = process.argv.slice(2);
 const flags = Object.fromEntries(args.filter(a => a.startsWith('--'))
@@ -147,9 +152,15 @@ function facingSeparation(img, spec) {
   return { opposite, adjacent, ratio: adjacent ? opposite / adjacent : 0 };
 }
 
-let failures = 0, present = 0, bytes = 0, decoded = 0;
+let failures = 0, present = 0, bytes = 0, decoded = 0, waived = 0;
 const fail = m => { failures++; console.error(`✗ ${m}`); };
 const missing = [];
+// A judgement failure on an id listed in gate-exceptions.json is reported in
+// full, with its numbers, and does not fail the run.
+const judge = (id, m) => {
+  if (excepted(id)) { waived++; console.warn(`! ${m}`); }
+  else fail(m);
+};
 
 for (const id of ids) {
   const spec = manifest.sprites[id];
@@ -192,15 +203,15 @@ for (const id of ids) {
   else {
     const contrast = v.bodyLuma - FLOOR_LUMA;
     if (contrast < MIN_CONTRAST) {
-      fail(`${id}: contrast ${contrast.toFixed(0)} (body luminance ${v.bodyLuma.toFixed(0)} over floor ${FLOOR_LUMA.toFixed(0)}), band is >=${MIN_CONTRAST} — `
+      judge(id, `${id}: contrast ${contrast.toFixed(0)} (body luminance ${v.bodyLuma.toFixed(0)} over floor ${FLOOR_LUMA.toFixed(0)}), band is >=${MIN_CONTRAST} — `
         + 'the body sinks into the arena floor. The brightest quarter was excluded first, so a bright accent cannot mask a dark body.');
     }
     if (v.spread < MIN_SPREAD) {
-      fail(`${id}: accent spread ${v.spread.toFixed(0)}, band is >=${MIN_SPREAD} — `
+      judge(id, `${id}: accent spread ${v.spread.toFixed(0)}, band is >=${MIN_SPREAD} — `
         + 'the brightest quarter barely stands off the rest of the body, so there is no accent to read. A flat sprite fails here.');
     }
     if (v.bodySat < MIN_BODY_SAT) {
-      fail(`${id}: body saturation ${v.bodySat.toFixed(2)}, band is >=${MIN_BODY_SAT} — `
+      judge(id, `${id}: body saturation ${v.bodySat.toFixed(2)}, band is >=${MIN_BODY_SAT} — `
         + 'the body is washed out. Lifting a body\'s luminance by making it pale passes the contrast band and still loses the '
         + 'accent structure the silhouette vocabulary needs; this band is what refuses it.');
     }
@@ -213,7 +224,7 @@ for (const id of ids) {
   if (directions === 8 && frames >= 1) {
     const sep = facingSeparation(img, spec);
     if (sep.ratio < MIN_FACING_RATIO) {
-      fail(`${id}: opposite facings differ by ${sep.opposite.toFixed(0)} but neighbours by ${sep.adjacent.toFixed(0)} `
+      judge(id, `${id}: opposite facings differ by ${sep.opposite.toFixed(0)} but neighbours by ${sep.adjacent.toFixed(0)} `
         + `(ratio ${sep.ratio.toFixed(2)}, need ${MIN_FACING_RATIO}) — front and back are near-duplicates, so this is not really eight facings. `
         + 'Rotate in 45-degree hops rather than one turn from the base view.');
     }
@@ -254,5 +265,6 @@ if (flags['diff-base']) {
   }
 }
 
+if (waived) console.log(`\n${waived} band failure(s) waived by assets/gate-exceptions.json — reported above, not enforced`);
 console.log(failures ? `\n${failures} PROBLEM(S)` : '\nART BATCH OK');
 process.exit(failures ? 1 : 0);

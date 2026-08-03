@@ -208,9 +208,9 @@
     },
     "char.toh_druid": {
       "file": "char/toh_druid.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 4
     },
     "char.toh_hunter": {
       "file": "char/toh_hunter.png",

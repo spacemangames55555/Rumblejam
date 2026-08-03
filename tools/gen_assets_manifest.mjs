@@ -78,7 +78,10 @@ for (const id of Object.values(FX)) add(id);
 for (const id of Object.values(UI)) add(id);
 
 // ---- per-sprite overrides, applied last ----
-const OVERRIDABLE = new Set(['frames', 'fps', 'directions', 'anchor']);
+// `w`/`h` are overridable because hand-supplied art does not always arrive at
+// the category's canonical canvas, and the manifest must describe what is
+// actually on disk or the loader refuses the file.
+const OVERRIDABLE = new Set(['frames', 'fps', 'directions', 'anchor', 'w', 'h']);
 let overrides = {};
 if (existsSync(OVERRIDES)) {
   overrides = JSON.parse(readFileSync(OVERRIDES, 'utf8'));

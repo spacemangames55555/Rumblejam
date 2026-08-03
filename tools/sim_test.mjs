@@ -2846,11 +2846,18 @@ try {
   else ok('direction rows: E SE S SW W NW N NE at 8 and E S W N at 4, stable across ±4 windings, sign, the ±pi seam and junk angles');
 
   // -- units are directional, everything else is not --
+  // A deviation from the category default is legal ONLY if
+  // assets/sprite-overrides.json declares it — that is the difference between a
+  // documented exception and accidental drift.
+  const overrides = JSON.parse(readFileSync(new URL('../assets/sprite-overrides.json', import.meta.url), 'utf8'));
+  const declares = (id, key) => overrides[id] && overrides[id][key] !== undefined;
   const dirWrong = [];
   for (const [id, spec] of Object.entries(man)) {
     const ns = id.slice(0, id.indexOf('.'));
     const want = S.DIRECTIONAL_NAMESPACES.has(ns) ? S.UNIT_DIRECTIONS : undefined;
-    if ((spec.directions || undefined) !== want) dirWrong.push(`${id}: directions ${spec.directions}, want ${want || 'none'}`);
+    if ((spec.directions || undefined) !== want && !declares(id, 'directions')) {
+      dirWrong.push(`${id}: directions ${spec.directions}, want ${want || 'none'} and no override declares it`);
+    }
   }
   if (dirWrong.length) fail(`manifest directions: ${dirWrong.slice(0, 5).join(' | ')}`);
   else {
@@ -2865,7 +2872,9 @@ try {
     const ns = id.slice(0, id.indexOf('.'));
     if (!NS_RE.test(id)) { hyg.push(`${id}: bad namespace`); continue; }
     const [w, h] = S.SPRITE_SIZE[ns];
-    if (spec.w !== w || spec.h !== h) hyg.push(`${id}: ${spec.w}x${spec.h}, canonical is ${w}x${h}`);
+    if ((spec.w !== w || spec.h !== h) && !(declares(id, 'w') || declares(id, 'h'))) {
+      hyg.push(`${id}: ${spec.w}x${spec.h}, canonical is ${w}x${h} and no override declares it`);
+    }
     if (/^\//.test(spec.file)) hyg.push(`${id}: leading slash in "${spec.file}"`);
     if (spec.file.includes('..')) hyg.push(`${id}: "${spec.file}" escapes the asset root`);
     if (spec.anchor !== undefined && spec.anchor !== 'center' && spec.anchor !== 'bottom') hyg.push(`${id}: anchor "${spec.anchor}"`);
@@ -3140,6 +3149,20 @@ try {
     // Whatever art happens to be committed, the gate must pass and must report
     // coverage as a number. Not pinned to a count, so landing a batch does not
     // break the suite.
+    // Every waiver must still be earned. A stale exception is a silent
+    // loosening of the gate, so an id that no longer fails anything must be
+    // removed from the list.
+    const exc = JSON.parse(rf(nodePath.join(REPO, 'assets', 'gate-exceptions.json'), 'utf8'));
+    const listed = Object.keys(exc).filter(k => k !== '_');
+    const stale = [];
+    for (const id of listed) {
+      const out = run('verify_art_batch.mjs', [id]);
+      if (!/band failure\(s\) waived/.test(out)) stale.push(id);
+    }
+    if (!listed.length) ok('gate-exceptions.json is empty — nothing is being waived');
+    else if (stale.length) fail(`gate-exceptions.json lists ${stale.join(', ')}, which no longer fail anything — a stale waiver silently loosens the gate`);
+    else ok(`every one of the ${listed.length} gate exception(s) still earns its waiver, and structural failures are never waivable`);
+
     const clean = run('verify_art_batch.mjs', []);
     const m = clean.match(/checked (\d+) id\(s\): (\d+) with art, (\d+) still to draw/);
     if (m && Number(m[2]) + Number(m[3]) === Number(m[1])) {
