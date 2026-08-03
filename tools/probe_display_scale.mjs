@@ -11,7 +11,9 @@ import { spawn } from 'child_process';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
-const PORT = 8911, DBG = 9511;
+// Per-process ports, so two runs (or a leftover from a previous one still
+// shutting down) cannot collide on a fixed port and look like a tool failure.
+const PORT = 8900 + (process.pid % 89), DBG = 9500 + (process.pid % 89);
 const httpd = spawn('python3', ['-m', 'http.server', String(PORT)], { cwd: process.cwd(), stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await sleep(900);
@@ -58,4 +60,4 @@ for (const [w,h,dpr] of [[1440,900,2],[1920,1080,1],[851,393,2.6],[1280,800,2]])
   console.log(`${String(w)+'x'+h} @dpr${dpr}  ${out}`);
 }
 ws.close(); proc.kill(); httpd.kill(); rmSync(profile,{recursive:true,force:true});
-process.exit(0);   // killing the browser and server leaves a non-zero status otherwise
+process.exit(0);   // do not wait on the killed browser/server handles
