@@ -59,5 +59,10 @@ for (const [w,h,dpr] of [[1440,900,2],[1920,1080,1],[851,393,2.6],[1280,800,2]])
     });`);
   console.log(`${String(w)+'x'+h} @dpr${dpr}  ${out}`);
 }
-ws.close(); proc.kill(); httpd.kill(); rmSync(profile,{recursive:true,force:true});
+ws.close(); proc.kill(); httpd.kill();
+// The browser is still flushing its profile when we ask to remove it, so the
+// rmdir races and throws ENOTEMPTY. Give it a moment, and never let cleanup
+// fail a run whose measurements already succeeded.
+await sleep(400);
+try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* a temp dir, not a result */ }
 process.exit(0);   // do not wait on the killed browser/server handles
