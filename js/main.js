@@ -25,13 +25,15 @@ import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
 import { ENEMIES } from './content/enemies.js';
 import { BOSSES } from './content/bosses.js';
+import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
+import { projSpriteFor, PYLON_SPRITE } from './content/sprites.js';
 import { clamp } from './util.js';
 
 const { WALL } = CONFIG;
 
 // ---------------- boot ----------------
 
-console.log(`%cUNDERVAULT%c content loaded — characters: ${CHARACTERS.length}, items: ${ITEMS.length}, weapons: ${WEAPONS.length}, enemy types: ${ENEMIES.length}, bosses: ${BOSSES.length}`,
+console.log(`%cUNDERVAULT%c content loaded — characters: ${CHARACTERS.length}, items: ${ITEMS.length}, weapons: ${WEAPONS.length}, enemy types: ${ENEMIES.length}, bosses: ${BOSSES.length}, sprites: ${SPRITE_MODE}`,
   'color:#ffd45e;font-weight:bold;font-size:16px', 'color:inherit');
 console.assert(CHARACTERS.length === 33, 'need exactly 33 characters');
 console.assert(ITEMS.length >= 100, 'need ≥100 items');
@@ -77,6 +79,13 @@ const actions = {
   startGame: hostStartRun,
   pickRoster: hostPickRoster,
 };
+// Sprites start loading NOW, at page load, while the player is still reading
+// the title and picking a character — not at game start, where a stall would
+// be a stall in the run. Nothing waits on this: with no art on disk every
+// request 404s in milliseconds and the game draws its primitives, which is the
+// state the project ships in today.
+Assets.load('assets/assets.json');
+
 // Roster first: every screen that lists characters reads the active roster,
 // so this has to settle before the first render.
 resolveInitialRoster();
@@ -106,6 +115,9 @@ window.addEventListener('touchstart', ensureAudio, { once: false }); // iOS Safa
 window.uv = app; // debug/testing handle (read-only use)
 window.uvContent = { ITEMS, WEAPONS, CHARACTERS }; // content tables for debug/tests
 window.uvAudio = { stats: audioStats, ctxState: getCtxState, masterGain: getMasterGainValue, setVolume, getVolume }; // audio introspection for tests
+window.uvAssets = Assets;            // sprite registry introspection for tests
+window.uvDrawSprite = drawSprite;    // so a test can prove every id falls back
+window.uvSpriteMode = SPRITE_MODE;
 preloadAirhorn(); // fire-and-forget: a missing asset falls back to the synth blip
 initLeaveButton();
 document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
@@ -335,13 +347,35 @@ function refreshLobby() {
 function hostStartRun() {
   const l = app.lobby;
   if (!l.players.every(p => p.charId && (p.ready || p.isHost))) return;
-  const seed = randomRunSeed();
-  app.party = l.players.map((p, i) => ({ idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color }));
-  app.myIdx = 0;
-  if (app.hostT) app.hostT.broadcast({ t: 'start', seed, roster: ROSTER_ID, party: app.party });
-  startRunCommon();
-  app.sim = new Sim({ seed, party: app.party });
-  drainSimOutputs(true); // deliver initial floor/room events
+  gateOnAssets(() => {
+    if (app.mode !== 'lobby' || !app.lobby) return;   // left the lobby while we waited
+    const seed = randomRunSeed();
+    app.party = app.lobby.players.map((p, i) => ({ idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color }));
+    app.myIdx = 0;
+    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, roster: ROSTER_ID, party: app.party });
+    startRunCommon();
+    app.sim = new Sim({ seed, party: app.party });
+    drainSimOutputs(true); // deliver initial floor/room events
+  });
+}
+
+// Starting a run waits for the sprite load to settle so art does not pop in
+// mid-fight — but only for so long. A hung image request is not a reason to
+// keep anyone out of the game, so after ASSET_GATE_MS we go anyway and the
+// sprites appear whenever they appear. Missing art is never an error path.
+const ASSET_GATE_MS = 10000;
+function gateOnAssets(then) {
+  if (Assets.ready) { then(); return; }
+  setNetStatus('Loading assets…');
+  let done = false;
+  const go = () => {
+    if (done) return;
+    done = true;
+    setNetStatus('');
+    then();
+  };
+  Assets.load().then(go);
+  setTimeout(go, ASSET_GATE_MS);
 }
 
 function startRunCommon() {
@@ -453,8 +487,11 @@ function clientOnMessage(msg) {
       }
       app.party = party;
       app.myIdx = me.idx;
-      startRunCommon();
-      app.predicted = null;
+      gateOnAssets(() => {
+        if (app.role !== 'client') return;   // dropped while we waited
+        startRunCommon();
+        app.predicted = null;
+      });
       break;
     }
     case 'snap': {
@@ -744,6 +781,7 @@ function viewFromSim(sim) {
       reloc: Math.min(1, p.relocT / CONFIG.STRUCT_CHANNEL_S),
       ts: tohState(sim, p),
       trait: p.char.trait.key,
+      spriteId: p.char.spriteId,   // cosmetic; resolved from the def, never networked
     })),
     // Thrones of Heaven world layer (null/empty on the classic roster)
     toh: tohSnapshot(sim),
@@ -758,8 +796,14 @@ function viewFromSim(sim) {
       id: e.id, x: e.x, y: e.y, radius: e.radius, shape: e.shape, color: e.color,
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
       flash: e.hitFlash > 0, fusing: e.fusing, pylon: e.typeIdx === -2,
+      // sprite id from the definition table, exactly as shape/color are — the
+      // client resolves the same id from the type index on the wire
+      spriteId: e.boss ? e.bossDef.spriteId : (e.typeIdx === -2 ? PYLON_SPRITE : (e.def && e.def.spriteId)),
     })),
-    projs: [...sim.projPool].map(pr => ({ x: pr.x, y: pr.y, radius: pr.radius, color: pr.color, friendly: pr.friendly })),
+    projs: [...sim.projPool].map(pr => ({
+      x: pr.x, y: pr.y, vx: pr.vx, vy: pr.vy, radius: pr.radius, color: pr.color, friendly: pr.friendly,
+      spriteId: projSpriteFor(pr.color, pr.friendly, pr.radius),
+    })),
     pickups: sim.pickups,
     summons: sim.summons.filter(s => !s.dead).map(s => ({ owner: s.owner, type: s.type, x: s.x, y: s.y, aimA: s.aimA, packed: s.deployT > 0 })),
     tele: sim.telegraphs.map(tg => tg.shape === 'circle'
@@ -796,19 +840,20 @@ function viewFromSnaps(dtFrame) {
     const n = emap.get(e[0]) || e;
     const flags = n[5];
     const pylon = !!(flags & 32);
-    let shape, color, radius;
-    if (flags & 2) { const bd = BOSSES[app.floorNum - 1]; shape = bd.shape; color = bd.color; radius = bd.radius; }
-    else if (pylon) { shape = 'square'; color = '#c05eff'; radius = 26; }
+    let shape, color, radius, spriteId;
+    if (flags & 2) { const bd = BOSSES[app.floorNum - 1]; shape = bd.shape; color = bd.color; radius = bd.radius; spriteId = bd.spriteId; }
+    else if (pylon) { shape = 'square'; color = '#c05eff'; radius = 26; spriteId = PYLON_SPRITE; }
     else {
       const def = ENEMIES[n[1]];
       shape = def ? def.shape : 'circle'; color = def ? def.color : '#e2504c';
+      spriteId = def ? def.spriteId : null;   // same derivation as shape/color
       // radius derived, not sent: base × elite/mini scaling
       radius = (def ? def.radius : 14) * ((flags & 1) ? 1.45 : 1) * ((flags & 4) ? 0.6 : 1);
     }
     enemies.push({
       id: e[0], x: L(e[2], n[2]), y: L(e[3], n[3]), hpFrac: L(e[4], n[4]), radius,
       elite: !!(flags & 1), boss: !!(flags & 2), mini: !!(flags & 4), flash: !!(flags & 8), fusing: !!(flags & 16),
-      pylon, shape, color,
+      pylon, shape, color, spriteId,
     });
   }
   const pmap = new Map();
@@ -832,12 +877,17 @@ function viewFromSnaps(dtFrame) {
       trait: chr ? chr.trait.key : null,
       name: member ? member.name : '?', color: member ? member.color : '#fff', charId: member ? member.charId : null,
       sym: chr ? chr.sym : '●',
+      spriteId: chr ? chr.spriteId : null,   // cosmetic; from the def, never on the wire
       radius: chr && (chr.trait.key === 'immovable' || chr.trait.key === 'crystal_infusion') ? 16 * chr.trait.hitbox : 16,
     });
   }
   // projectiles ride the same delayed timeline as enemies (bounded extrapolation)
   const projDt = clamp((targetRt - b.rt) / 1000, -0.2, 0.15);
-  const projs = s1.projs.map(pr => ({ x: pr[1] + pr[3] * projDt, y: pr[2] + pr[4] * projDt, friendly: !!pr[5], radius: pr[6], color: pr[7] }));
+  const projs = s1.projs.map(pr => ({
+    x: pr[1] + pr[3] * projDt, y: pr[2] + pr[4] * projDt, vx: pr[3], vy: pr[4],
+    friendly: !!pr[5], radius: pr[6], color: pr[7],
+    spriteId: projSpriteFor(pr[7], !!pr[5], pr[6]),
+  }));
   return {
     myIdx: app.myIdx,
     mode: s1.mode === 0 ? 'map' : 'arena',

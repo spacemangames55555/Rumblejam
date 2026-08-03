@@ -7,6 +7,8 @@
 
 import { spawn } from 'child_process';
 import { mkdtempSync } from 'fs';
+import fs from 'node:fs';
+import zlib from 'node:zlib';
 import { tmpdir } from 'os';
 import path from 'path';
 
@@ -1016,6 +1018,228 @@ try {
   } catch (e) {
     fail(`fallback test crashed: ${e.message}`);
   } finally { await F.close(); }
+}
+
+// ---------- the sprite pipeline: zero art, partial art, and the off switch ----------
+// The whole point of this layer is that it can be absent. These tests cover
+// the three states it actually ships in — no manifest, a manifest with no
+// files, and a manifest with SOME files — plus the ?sprites=off escape hatch
+// that has to reproduce the pre-sprite renderer exactly.
+{
+  // A real 48x48 PNG, written from scratch (zlib is built in; no npm). One
+  // file on disk is enough to prove art reaches the canvas through the
+  // manifest, the loader, drawSprite and the view builder.
+  const TEST_RGB = [0, 255, 136];   // nothing else on screen is this colour
+  const spriteDir = path.join(process.cwd(), 'assets', 'sprites', 'enemy');
+  const spriteFile = path.join(spriteDir, 'skulker.png');
+
+  const CRC_TABLE = (() => {
+    const t = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      t[n] = c;
+    }
+    return t;
+  })();
+  const crc32 = buf => {
+    let c = -1;
+    for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ -1) >>> 0;
+  };
+  const pngChunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const solidPng = (w, h, [r, g, b]) => {
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+    ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;   // 8-bit RGBA
+    const raw = Buffer.alloc(h * (1 + w * 4));
+    for (let y = 0; y < h; y++) {
+      const row = y * (1 + w * 4);
+      raw[row] = 0;   // filter: none
+      for (let x = 0; x < w; x++) {
+        const o = row + 1 + x * 4;
+        raw[o] = r; raw[o + 1] = g; raw[o + 2] = b; raw[o + 3] = 255;
+      }
+    }
+    return Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      pngChunk('IHDR', ihdr),
+      pngChunk('IDAT', zlib.deflateSync(raw)),
+      pngChunk('IEND', Buffer.alloc(0)),
+    ]);
+  };
+
+  // Drop a player into an open arena with one pinned, motionless enemy, then
+  // read the pixel at that enemy's centre. Primitive or sprite is a single
+  // colour comparison.
+  const probeEnemyPixelJs = `
+    const s = window.uv.sim, r = window.uvRenderer;
+    s.god = true;
+    s.wave.done = true; s.spawnQueue.length = 0;
+    for (const e of [...s.enemyPool]) s.enemyPool.release(e);
+    const p = s.players[0];
+    p.x = s.W / 2; p.y = s.H / 2;
+    const e = s.spawnEnemyById('skulker', p.x + 150, p.y, { noMats: true });
+    e.hp = 1e9; e.maxHp = 2e9; e.spd = 0; e.dmg = 0; e.hitFlash = 0;
+    window._probe = { ex: e.x, ey: e.y, id: e.id };
+    return 1;`;
+  const readEnemyPixelJs = `
+    const s = window.uv.sim, r = window.uvRenderer, pr = window._probe;
+    const e = s.enemyById(pr.id);
+    if (e) { e.x = pr.ex; e.y = pr.ey; e.hitFlash = 0; }
+    const p = s.players[0]; p.x = s.W / 2; p.y = s.H / 2;
+    if (!r._screen) return 'no frame drawn';
+    const sx = Math.round((pr.ex - r.camX) * r._screen.scale + r._screen.cw / 2);
+    const sy = Math.round((pr.ey - r.camY) * r._screen.scale + r._screen.ch / 2);
+    const d = r.ctx.getImageData(sx, sy, 1, 1).data;
+    return JSON.stringify([d[0], d[1], d[2]]);`;
+
+  const near = (got, want, tol = 40) => got.every((v, i) => Math.abs(v - want[i]) <= tol);
+
+  // walk a fresh page from title to a live arena
+  async function intoArena(br, url) {
+    await br.goto(url);
+    await br.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title');
+    await br.exec(`document.getElementById('btn-host').click()`);
+    await br.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby');
+    await br.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
+    await sleep(250);
+    await br.exec(`document.getElementById('btn-start').click()`);
+    await br.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run');
+    await br.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
+    await br.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena');
+  }
+
+  // ---- 1. no manifest at all: the state before this patch, and any deploy
+  //         where assets/ was never uploaded ----
+  {
+    const S1 = new Browser();
+    try {
+      await S1.open('S1', { failPattern: 'assets.json' });
+      await S1.goto(URL);
+      await S1.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title (no manifest)');
+      await sleep(800);
+      const st = JSON.parse(await S1.exec(`const A=window.uvAssets; return JSON.stringify({ready:A.ready, size:A.size(), missing:A.missing.size})`));
+      if (st.ready && st.size === 0) ok(`manifest 404: loader resolves with an empty registry (ready=${st.ready}, ${st.size} ids) — never rejects`);
+      else fail(`manifest 404 state: ${JSON.stringify(st)}`);
+      const errs = await S1.errors();
+      if (errs.length) fail(`console errors with no manifest: ${errs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors with no manifest — a missing asset is a normal state, not an error path');
+      await intoArena(S1, URL);
+      const fps = await measureFps(S1);
+      if (fps >= 30) ok(`the game plays with assets/ effectively deleted (${fps} fps in an arena)`);
+      else fail(`fps with no manifest: ${fps}`);
+    } catch (e) { fail(`no-manifest test: ${e.message}`); } finally { await S1.close(); }
+  }
+
+  // ---- 2. manifest present, not one file on disk: what this patch ships ----
+  let baseline = null;
+  {
+    const S2 = new Browser();
+    try {
+      await S2.open('S2');
+      await intoArena(S2, URL);
+      await S2.waitFor(`return window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled');
+      const st = JSON.parse(await S2.exec(`const A=window.uvAssets; return JSON.stringify({size:A.size(), missing:A.missing.size, hit:A.get('enemy.skulker')?1:0})`));
+      if (st.size > 250 && st.missing === st.size && !st.hit) ok(`manifest with zero files: all ${st.size} ids registered, all ${st.missing} missing, get() returns null`);
+      else fail(`zero-file state: ${JSON.stringify(st)}`);
+      const errs = await S2.errors();
+      if (errs.length) fail(`console errors with zero sprite files: ${errs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors with every sprite file absent');
+      // every draw site takes its primitive branch
+      const allFalse = await S2.exec(`const A=window.uvAssets, D=window.uvDrawSprite;
+        const c=document.createElement('canvas').getContext('2d');
+        let drew=0; for (const id of A.ids()) if (D(c,id,0,0)) drew++;
+        return drew;`);
+      if (allFalse === 0) ok('drawSprite returns false for all of them — every entity falls back to its primitive');
+      else fail(`${allFalse} id(s) claimed to draw with no files present`);
+      await S2.exec(probeEnemyPixelJs);
+      await sleep(700);
+      baseline = JSON.parse(await S2.exec(readEnemyPixelJs));
+      ok(`primitive skulker paints rgb(${baseline.join(',')}) at its centre — the pre-sprite renderer, unchanged`);
+    } catch (e) { fail(`zero-file test: ${e.message}`); } finally { await S2.close(); }
+  }
+
+  // ---- 3. ?sprites=off, WITH a real file on disk: the escape hatch has to
+  //         reproduce the primitive exactly, art present or not ----
+  // ---- 4. and the same page without the flag has to actually show the art ----
+  {
+    fs.mkdirSync(spriteDir, { recursive: true });
+    fs.writeFileSync(spriteFile, solidPng(48, 48, TEST_RGB));
+    const S3 = new Browser(), S4 = new Browser();
+    try {
+      // 3: forced off
+      await S3.open('S3');
+      await intoArena(S3, `${URL}?sprites=off`);
+      const offState = JSON.parse(await S3.exec(`const A=window.uvAssets; return JSON.stringify({mode:window.uvSpriteMode, ready:A.ready, size:A.size(), hit:A.get('enemy.skulker')?1:0})`));
+      if (offState.mode === 'off' && offState.ready && offState.size === 0 && !offState.hit) {
+        ok('?sprites=off short-circuits the loader entirely — nothing fetched, get() always null');
+      } else fail(`sprites=off state: ${JSON.stringify(offState)}`);
+      await S3.exec(probeEnemyPixelJs);
+      await sleep(700);
+      const offPx = JSON.parse(await S3.exec(readEnemyPixelJs));
+      if (baseline && near(offPx, baseline, 12)) ok(`?sprites=off with art installed paints rgb(${offPx.join(',')}) — identical to the no-art primitive`);
+      else fail(`sprites=off pixel ${JSON.stringify(offPx)} != baseline ${JSON.stringify(baseline)}`);
+      if (!near(offPx, TEST_RGB, 60)) ok('and it is emphatically not the sprite — the flag really does force the fallback');
+      else fail('?sprites=off drew the sprite anyway');
+
+      // 4: partial manifest — one file present, 297 absent
+      await S4.open('S4');
+      await intoArena(S4, URL);
+      await S4.waitFor(`return window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled (partial)');
+      const part = JSON.parse(await S4.exec(`const A=window.uvAssets; return JSON.stringify({size:A.size(), missing:A.missing.size, hit:A.get('enemy.skulker')?1:0, other:A.get('enemy.flit')?1:0})`));
+      if (part.hit && !part.other && part.missing === part.size - 1) {
+        ok(`partial manifest: 1 of ${part.size} files present — that one resolves, the other ${part.missing} stay null`);
+      } else fail(`partial state: ${JSON.stringify(part)}`);
+      await S4.exec(probeEnemyPixelJs);
+      await sleep(700);
+      const onPx = JSON.parse(await S4.exec(readEnemyPixelJs));
+      if (near(onPx, TEST_RGB)) ok(`the skulker sprite reaches the canvas — rgb(${onPx.join(',')}) at its centre, through manifest → loader → view → drawSprite`);
+      else fail(`sprite pixel ${JSON.stringify(onPx)} is not the test colour ${JSON.stringify(TEST_RGB)}`);
+      const perrs = await S4.errors();
+      if (perrs.length) fail(`console errors with a partial manifest: ${perrs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors with sprites and primitives on screen together');
+      const pfps = await measureFps(S4);
+      if (pfps >= 30) ok(`mixed sprites and primitives render at ${pfps} fps`);
+      else fail(`partial-manifest fps: ${pfps}`);
+
+      // pixel art must not be smoothed — and a resize wipes the flag, so the
+      // renderer has to put it back
+      const smooth = JSON.parse(await S4.exec(`const r=window.uvRenderer;
+        const before = r.ctx.imageSmoothingEnabled;
+        r._resize();
+        return JSON.stringify({before, after: r.ctx.imageSmoothingEnabled});`));
+      if (smooth.before === false && smooth.after === false) ok('imageSmoothingEnabled stays false across a resize (a resize resets context state)');
+      else fail(`imageSmoothing: ${JSON.stringify(smooth)}`);
+    } catch (e) { fail(`sprite-art test: ${e.message}`); } finally {
+      await S3.close(); await S4.close();
+      fs.rmSync(spriteFile, { force: true });
+      fs.rmSync(spriteDir, { recursive: true, force: true });
+    }
+  }
+
+  // ---- 5. ?sprites=debug names what is missing ----
+  {
+    const S5 = new Browser();
+    try {
+      await S5.open('S5');
+      await S5.goto(`${URL}?sprites=debug`);
+      await S5.waitFor(`return window.uvAssets && window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled (debug)');
+      await sleep(400);
+      const logs = await S5.logs();
+      const list = logs.find(l => /\[sprites\] missing:/.test(l));
+      if (list && /enemy\.skulker/.test(list)) ok(`?sprites=debug lists every missing id once at load (${list.length} chars)`);
+      else fail('sprites=debug did not log the missing list');
+      const derrs = await S5.errors();
+      if (derrs.length) fail(`console errors in debug mode: ${derrs.join(' | ').slice(0, 300)}`);
+      else ok('debug mode logs, it does not error');
+    } catch (e) { fail(`sprites=debug test: ${e.message}`); } finally { await S5.close(); }
+  }
 }
 
 // ---------- mobile / touch emulation (Pixel-ish viewport, real touch events) ----------

@@ -26,6 +26,7 @@ import { CONFIG as CFG } from '../js/config.js';
 const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
+import { readFileSync } from 'node:fs';
 
 let failures = 0;
 const fail = (msg, err) => { failures++; console.error(`✗ ${msg}`, err ? (err.stack || err) : ''); };
@@ -2759,6 +2760,164 @@ try {
   // Leaving the roster switched turned one crash here into four failures below.
   (await import('../js/content/characters.js')).setRoster('classic');
 }
+
+// ---- 9M. the sprite pipeline: ids, manifest, and the wall between art and
+//          simulation. This whole section is cosmetic plumbing — its most
+//          important assertion is the one proving the plumbing never reaches
+//          the wire. ----
+try {
+  const { ALL_CHARS: SPR_CHARS } = await import('../js/content/characters.js');
+  const S = await import('../js/content/sprites.js');
+  const { execFileSync } = await import('node:child_process');
+
+  const NS = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui'];
+  const NS_RE = new RegExp(`^(${NS.join('|')})\\.[a-z0-9_]+$`);
+  const manifest = JSON.parse(readFileSync(new URL('../assets/assets.json', import.meta.url), 'utf8'));
+  const man = manifest.sprites;
+
+  // -- every definition table carries a well-formed spriteId --
+  const tagged = [
+    ...SPR_CHARS.map(c => [`char ${c.id}`, c.spriteId]),
+    ...ENEMIES.map(e => [`enemy ${e.id}`, e.spriteId]),
+    ...BOSSES.map(b => [`boss ${b.id}`, b.spriteId]),
+    ...WEAPONS.map(w => [`weapon ${w.id}`, w.spriteId]),
+    ...ITEMS.map(i => [`item ${i.id}`, i.spriteId]),
+  ];
+  const badId = tagged.filter(([, id]) => !id || !NS_RE.test(id));
+  if (badId.length) fail(`spriteId missing or malformed on ${badId.length}: ${badId.slice(0, 4).map(x => x[0]).join(', ')}`);
+  else ok(`spriteId on every def: ${SPR_CHARS.length} characters (both rosters), ${ENEMIES.length} enemies, ${BOSSES.length} bosses, ${WEAPONS.length} weapons, ${ITEMS.length} items`);
+
+  // -- the manifest is the art inventory: everything askable is listed --
+  const askable = new Set([
+    ...tagged.map(([, id]) => id),
+    S.PYLON_SPRITE,
+    ...S.allProjSpriteIds(),
+    ...Object.values(S.PROP), ...Object.values(S.FX), ...Object.values(S.UI),
+  ]);
+  const unlisted = [...askable].filter(id => !man[id]);
+  if (unlisted.length) fail(`${unlisted.length} id(s) the game can ask for are not in the manifest: ${unlisted.slice(0, 6).join(', ')}`);
+  else ok(`manifest covers every askable id — ${Object.keys(man).length} entries, ${askable.size} reachable from the tables`);
+
+  // -- and nothing is listed that nothing can ask for --
+  const orphan = Object.keys(man).filter(id => !askable.has(id));
+  if (orphan.length) fail(`${orphan.length} manifest entr(ies) nothing can ask for: ${orphan.slice(0, 6).join(', ')}`);
+  else ok('no orphan manifest entries — the inventory and the code agree exactly');
+
+  // -- manifest hygiene: namespaces, canonical sizes, GitHub Pages paths --
+  let hyg = [];
+  if (/^\//.test(manifest.basePath)) hyg.push(`basePath "${manifest.basePath}" starts with a slash`);
+  for (const [id, spec] of Object.entries(man)) {
+    const ns = id.slice(0, id.indexOf('.'));
+    if (!NS_RE.test(id)) { hyg.push(`${id}: bad namespace`); continue; }
+    const [w, h] = S.SPRITE_SIZE[ns];
+    if (spec.w !== w || spec.h !== h) hyg.push(`${id}: ${spec.w}x${spec.h}, canonical is ${w}x${h}`);
+    if (/^\//.test(spec.file)) hyg.push(`${id}: leading slash in "${spec.file}"`);
+    if (spec.file.includes('..')) hyg.push(`${id}: "${spec.file}" escapes the asset root`);
+    if (spec.anchor !== undefined && spec.anchor !== 'center' && spec.anchor !== 'bottom') hyg.push(`${id}: anchor "${spec.anchor}"`);
+  }
+  if (hyg.length) fail(`${hyg.length} manifest problem(s): ${hyg.slice(0, 5).join(' | ')}`);
+  else ok('manifest hygiene: canonical sizes per namespace, every path relative, no leading slashes (Pages serves from /Rumblejam/)');
+
+  // -- the generator is the source of truth; a hand-edit must not survive --
+  try {
+    execFileSync(process.execPath, [new URL('./gen_assets_manifest.mjs', import.meta.url).pathname, '--check'], { stdio: 'pipe' });
+    ok('assets/assets.json is exactly what gen_assets_manifest.mjs produces');
+  } catch { fail('assets/assets.json is stale — run: node tools/gen_assets_manifest.mjs'); }
+
+  // -- projectile resolution: total, and never collapses two weapons into one --
+  let projBad = [];
+  const seenKey = new Map();
+  for (const w of WEAPONS) {
+    if (!w.projSpriteId) continue;
+    const cls = w.summon ? 'summon' : (w.aoe ? 'lob' : 'shot');
+    const key = `${w.color.toLowerCase()}|${cls}`;
+    if (seenKey.has(key)) projBad.push(`${w.id} and ${seenKey.get(key)} are indistinguishable on the wire (${key})`);
+    seenKey.set(key, w.id);
+    const r = cls === 'summon' ? S.PROJ_R_SUMMON : cls === 'lob' ? S.PROJ_R_LOB : S.PROJ_R_SHOT;
+    const got = S.projSpriteFor(w.color, true, r);
+    if (got !== w.projSpriteId) projBad.push(`${w.id}: resolved ${got}, expected ${w.projSpriteId}`);
+  }
+  // Hostile bolts are named for their colour, not their shooter, because the
+  // wire only carries the colour — the Lobber and the Choir of Eyes really are
+  // the same violet at the same radius. Assert that sharing is the DECISION in
+  // sprites.js and not whichever table happened to be iterated last.
+  for (const [shooter, id] of Object.entries(S.HOSTILE_PROJ_SHOOTERS)) {
+    const def = ENEMIES.find(e => e.id === shooter) || BOSSES.find(b => b.id === shooter);
+    const got = S.projSpriteFor(def.color, false, def.proj ? def.proj.radius : 7);
+    if (got !== id) projBad.push(`${shooter}: resolved ${got}, table says ${id}`);
+  }
+  if (S.HOSTILE_PROJ_SHOOTERS.lobber !== S.HOSTILE_PROJ_SHOOTERS.choir_of_eyes) {
+    projBad.push('Lobber and Choir of Eyes are the same colour at the same radius but claim different sprites');
+  }
+  if (projBad.length) fail(`projectile sprite resolution: ${projBad.slice(0, 4).join(' | ')}`);
+  else ok(`projectile sprites resolve from colour+size alone — ${seenKey.size} weapons each distinguishable, `
+    + `${new Set(Object.values(S.HOSTILE_PROJ_SHOOTERS)).size} hostile bolts for ${Object.keys(S.HOSTILE_PROJ_SHOOTERS).length} shooters, no netcode change needed`);
+
+  // -- resolution is TOTAL: any colour, any radius, any allegiance, always a
+  //    listed id. A projectile that resolves to nothing would be an invisible
+  //    projectile the moment art lands. --
+  let total = true;
+  for (const color of ['#ffffff', '#000', 'rgb(1,2,3)', '', 'nonsense', '#FF5D6C']) {
+    for (const r of [0, 4, 5, 6, 7, 40]) {
+      for (const f of [true, false]) {
+        const id = S.projSpriteFor(color, f, r);
+        if (!id || !man[id]) { total = false; projBad.push(`${color}/${r}/${f} -> ${id}`); }
+      }
+    }
+  }
+  if (total) ok('projSpriteFor is total: every colour/radius/allegiance lands on a manifest id, junk input included');
+  else fail(`projSpriteFor returned an unlisted id: ${projBad.slice(0, 3).join(' | ')}`);
+
+  // -- the radius constants the resolver keys on are STILL the engine's. If a
+  //    balance patch changes a spawn radius this is what catches it. --
+  const radSim = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'PROJ', charId: 'longshot', color: '#fff' }] });
+  radSim.god = true;
+  const rfight = radSim.floor.nodes.find(n => n.kind === 'combat');
+  rfight.template = 'open_expanse';
+  radSim._travelTo(rfight.id);
+  radSim.wave.done = true; radSim.spawnQueue.length = 0;
+  for (const e of [...radSim.enemyPool]) radSim.enemyPool.release(e);
+  const rp = radSim.players[0];
+  rp.x = radSim.W / 2; rp.y = radSim.H / 2;
+  const dummy = radSim.spawnEnemyById('slabjaw', rp.x + 120, rp.y, { noMats: true });
+  dummy.hp = 1e9; dummy.maxHp = 2e9; dummy.spd = 0; dummy.dmg = 0;
+  const observed = { shot: new Set(), lob: new Set(), summon: new Set() };
+  for (const [wid, bucket] of [['pebbleshot', 'shot'], ['kegbomb', 'lob'], ['bolt_turret', 'summon']]) {
+    rp.weapons.length = 0;
+    for (const s of radSim.summons) s.dead = true;
+    radSim._addWeapon(rp, wid, 1, 0);
+    for (const w of rp.weapons) w.cd = 0;
+    for (let t = 0; t < 180; t++) {
+      rp.x = radSim.W / 2; rp.y = radSim.H / 2;
+      dummy.x = rp.x + 120; dummy.y = rp.y; dummy.hp = 1e9; dummy.knockX = dummy.knockY = 0;
+      radSim.tick();
+      for (const pr of radSim.projPool) if (pr.friendly) observed[bucket].add(pr.radius);
+    }
+  }
+  const radMismatch = [];
+  if (!observed.shot.has(S.PROJ_R_SHOT)) radMismatch.push(`shot: saw [${[...observed.shot]}], constant is ${S.PROJ_R_SHOT}`);
+  if (!observed.lob.has(S.PROJ_R_LOB)) radMismatch.push(`lob: saw [${[...observed.lob]}], constant is ${S.PROJ_R_LOB}`);
+  if (!observed.summon.has(S.PROJ_R_SUMMON)) radMismatch.push(`summon: saw [${[...observed.summon]}], constant is ${S.PROJ_R_SUMMON}`);
+  if (radMismatch.length) fail(`sprites.js projectile radii no longer match the engine — ${radMismatch.join(' | ')}`);
+  else ok(`projectile size classes still match the engine: summon ${S.PROJ_R_SUMMON}, shot ${S.PROJ_R_SHOT}, lob ${S.PROJ_R_LOB}`);
+
+  // -- THE WALL. spriteId is cosmetic: it must not be on a simulation entity,
+  //    in a snapshot, or anywhere near the wire. --
+  const wallSim = new Sim({ seed: 77, party: [
+    { idx: 0, key: 'a', name: 'A', charId: 'banneret', color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: 'tinker', color: '#fff' }] });
+  for (let i = 0; i < 60 * 5 && wallSim.phase === 'map'; i++) wallSim.tick();
+  wallSim.debug('F1');
+  for (let i = 0; i < 200; i++) wallSim.tick();
+  const snapJson = JSON.stringify(wallSim.getSnapshot());
+  const leaks = [];
+  if (snapJson.includes('spriteId') || snapJson.includes('sprite')) leaks.push('snapshot mentions a sprite');
+  for (const e of wallSim.enemyPool) if ('spriteId' in e) { leaks.push(`enemy ${e.id} carries spriteId`); break; }
+  for (const pr of wallSim.projPool) if ('spriteId' in pr) { leaks.push('a projectile carries spriteId'); break; }
+  for (const p of wallSim.players) if ('spriteId' in p) { leaks.push(`player ${p.idx} carries spriteId`); break; }
+  if (leaks.length) fail(`sprite data leaked into the simulation: ${leaks.join(' | ')}`);
+  else ok(`the wall holds: ${snapJson.length}-byte snapshot with ${wallSim.enemyPool.count} enemies mentions no sprite, and no live entity carries one`);
+} catch (err) { fail('sprite pipeline section crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {

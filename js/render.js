@@ -1,9 +1,16 @@
 // Canvas renderer. Consumes a plain "view" object (built by main.js from the
 // live Sim on the host, or from interpolated snapshots on clients) so the same
-// draw code serves both. All art is primitives; no assets.
+// draw code serves both.
+//
+// Every entity draws in two layers: a sprite if there is art for it, and the
+// Canvas primitive it has always had if there is not. The primitives are the
+// game — they are never removed, and with an empty assets/ directory this file
+// behaves exactly as it did before the sprite pipeline landed. See js/assets.js.
 
 import { CONFIG, PALETTE } from './config.js';
 import { WEAPON_BY_ID } from './content/weapons.js';
+import { Assets, drawSprite, spriteScaleFor } from './assets.js';
+import { PROP, FX } from './content/sprites.js';
 import { clamp } from './util.js';
 
 // The camera viewport is one "screen" of world units (the old room size);
@@ -31,6 +38,30 @@ export class Renderer {
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.canvas.width = window.innerWidth * this.dpr;
     this.canvas.height = window.innerHeight * this.dpr;
+    // Resizing a canvas resets EVERY piece of context state, this flag
+    // included. It has to be re-applied here, after every resize, or pixel art
+    // comes back blurry the first time someone rotates a phone.
+    if (this.ctx) this.ctx.imageSmoothingEnabled = false;
+  }
+
+  // Fill an arbitrary rect by repeating a sprite, clipped to the rect. Walls,
+  // barricades and spike strips are authored at whatever size the level wants
+  // them, so stretching one image across them would smear it — tiling keeps
+  // the texel density constant however long the wall is. Returns false (and
+  // draws nothing) when there is no art, exactly like drawSprite.
+  _tileSprite(ctx, id, x, y, w, h, alpha = 1) {
+    const s = Assets.get(id);
+    if (!s) { drawSprite(ctx, id, x + w / 2, y + h / 2); return false; }  // debug outline, if enabled
+    ctx.save();
+    if (alpha !== 1) ctx.globalAlpha *= alpha;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    for (let ty = y; ty < y + h; ty += s.h) {
+      for (let tx = x; tx < x + w; tx += s.w) ctx.drawImage(s.img, 0, 0, s.w, s.h, tx, ty, s.w, s.h);
+    }
+    ctx.restore();
+    return true;
   }
 
   // fx from one sim tick / snapshot → visual effects (idempotent per call)
@@ -152,6 +183,7 @@ export class Renderer {
     for (const m of view.pickups || []) {
       if (!inView(m.x, m.y)) continue;
       const bob = Math.sin(this.t * 5 + m.x * 0.13) * 2;
+      if (drawSprite(ctx, FX.material, m.x, m.y + bob, { scale: spriteScaleFor(FX.material, 16) })) continue;
       diamond(ctx, m.x, m.y + bob, 7);
       ctx.fill(); ctx.stroke();
     }
@@ -162,6 +194,12 @@ export class Renderer {
     // projectiles
     for (const pr of view.projs || []) {
       if (!inView(pr.x, pr.y)) continue;
+      // point the art the way the shot is travelling; a bolt is the one thing
+      // that always has a heading worth honouring
+      if (drawSprite(ctx, pr.spriteId, pr.x, pr.y, {
+        scale: spriteScaleFor(pr.spriteId, (pr.radius || 5) * 3),
+        rot: pr.vx !== undefined ? Math.atan2(pr.vy, pr.vx) : 0,
+      })) continue;
       ctx.fillStyle = pr.color || (pr.friendly ? '#fff' : '#ff5d6c');
       ctx.strokeStyle = PALETTE.outline;
       ctx.lineWidth = 1.5;
@@ -322,9 +360,14 @@ export class Renderer {
   _drawDecoy(ctx, d, view) {
     const member = (view.players || []).find(q => q.idx === d.owner);
     const color = member ? member.color : '#c8cde8';
-    ctx.globalAlpha = 0.25 + 0.35 * d.frac;
-    ctx.fillStyle = color;
-    circle(ctx, d.x, d.y, 16); ctx.fill();
+    // the ghost wears the owner's sprite when there is one — that is the whole
+    // point of an afterimage — and its own silhouette otherwise
+    const ghostId = (member && member.spriteId) || PROP.decoy;
+    if (!drawSprite(ctx, ghostId, d.x, d.y, { scale: spriteScaleFor(ghostId, 32), alpha: 0.25 + 0.35 * d.frac })) {
+      ctx.globalAlpha = 0.25 + 0.35 * d.frac;
+      ctx.fillStyle = color;
+      circle(ctx, d.x, d.y, 16); ctx.fill();
+    }
     ctx.globalAlpha = 0.8;
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
@@ -382,6 +425,7 @@ export class Renderer {
     for (const o of view.obstacles || []) {
       if (o[0] + o[2] < cl || o[0] > cr || o[1] + o[3] < ct || o[1] > cb) continue;
       if (o[4]) {   // a destructible barricade, drawn intact; the objective layer
+        if (this._tileSprite(ctx, PROP.barricade, o[0], o[1], o[2], o[3])) continue;
         ctx.fillStyle = 'rgba(120,96,72,0.85)';   // repaints the damaged ones on top
         ctx.fillRect(o[0], o[1], o[2], o[3]);
         ctx.strokeStyle = '#a8794e';
@@ -389,6 +433,7 @@ export class Renderer {
         ctx.strokeRect(o[0], o[1], o[2], o[3]);
         continue;
       }
+      if (this._tileSprite(ctx, PROP.wallTile, o[0], o[1], o[2], o[3])) continue;
       ctx.fillStyle = PALETTE.wall;
       ctx.fillRect(o[0], o[1], o[2], o[3]);
       ctx.strokeStyle = PALETTE.wallEdge;
@@ -404,6 +449,7 @@ export class Renderer {
     const t = view.toh;
     if (t) {
       for (const [x, y, r, frac] of t.coral || []) {
+        if (drawSprite(ctx, PROP.coralNode, x, y, { scale: spriteScaleFor(PROP.coralNode, r * 2), alpha: 0.35 + 0.65 * frac })) continue;
         ctx.strokeStyle = '#5ee0a8';
         ctx.lineWidth = 3;
         ctx.globalAlpha = 0.35 + 0.45 * frac;
@@ -423,6 +469,7 @@ export class Renderer {
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       }
       for (const [x, y, r, frac] of t.sing || []) {
+        if (drawSprite(ctx, PROP.singularity, x, y, { scale: spriteScaleFor(PROP.singularity, r * 2), rot: this.t * 2 })) continue;
         ctx.strokeStyle = '#b993ff';
         ctx.lineWidth = 4;
         circle(ctx, x, y, r * (0.25 + 0.75 * frac)); ctx.stroke();
@@ -433,6 +480,7 @@ export class Renderer {
       }
     }
     for (const [x, y, frac, idx] of view.spirits || []) {   // Monk astral copy
+      if (drawSprite(ctx, PROP.spirit, x, y, { scale: spriteScaleFor(PROP.spirit, 34), alpha: 0.35 + 0.5 * frac })) continue;
       ctx.globalAlpha = 0.25 + 0.4 * frac;
       ctx.fillStyle = (view.colors && view.colors[idx]) || PALETTE.players[idx % PALETTE.players.length];
       circle(ctx, x, y, 13); ctx.fill();
@@ -518,11 +566,13 @@ export class Renderer {
       ctx.beginPath(); ctx.moveTo(w, 0); ctx.lineTo(w, view.ah || 2000); ctx.stroke();
     }
     for (const dx of o.doors || []) { // breach: the sealed doors ahead
-      ctx.fillStyle = 'rgba(255,171,79,0.22)';
-      ctx.fillRect(dx - 10, 0, 20, view.ah || 2000);
-      ctx.strokeStyle = '#ffab4f';
-      ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.moveTo(dx, 0); ctx.lineTo(dx, view.ah || 2000); ctx.stroke();
+      if (!this._tileSprite(ctx, PROP.breachDoor, dx - 10, 0, 20, view.ah || 2000)) {
+        ctx.fillStyle = 'rgba(255,171,79,0.22)';
+        ctx.fillRect(dx - 10, 0, 20, view.ah || 2000);
+        ctx.strokeStyle = '#ffab4f';
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(dx, 0); ctx.lineTo(dx, view.ah || 2000); ctx.stroke();
+      }
       ctx.fillStyle = '#ffab4f';
       ctx.font = 'bold 22px sans-serif';
       const me = (view.players || []).find(q => q.idx === view.myIdx);
@@ -533,11 +583,14 @@ export class Renderer {
     if (o.gate) { // breach/payload exit
       const [gx, gy] = o.gate;
       const open = o.t === 'breach' || (o.prog >= 1);
-      ctx.strokeStyle = open ? PALETTE.doorOpen : '#ffab4f';
-      ctx.lineWidth = 5;
-      ctx.setLineDash([10, 7]);
-      circle(ctx, gx, gy, 74 + Math.sin(this.t * 3) * 4); ctx.stroke();
-      ctx.setLineDash([]);
+      const gateId = open ? PROP.gateOpen : PROP.gateSealed;
+      if (!drawSprite(ctx, gateId, gx, gy, { scale: spriteScaleFor(gateId, 148) })) {
+        ctx.strokeStyle = open ? PALETTE.doorOpen : '#ffab4f';
+        ctx.lineWidth = 5;
+        ctx.setLineDash([10, 7]);
+        circle(ctx, gx, gy, 74 + Math.sin(this.t * 3) * 4); ctx.stroke();
+        ctx.setLineDash([]);
+      }
       ctx.fillStyle = open ? PALETTE.doorOpen : '#ffab4f';
       ctx.font = 'bold 15px sans-serif';
       ctx.fillText(open ? 'GATE' : 'SEALED GATE', gx, gy - 88);
@@ -546,11 +599,13 @@ export class Renderer {
       // Two rings per nest, and they visibly lose the argument: the fill fades
       // and the crack line grows as the barricade comes apart, so "how much
       // more of this wall" reads at a glance without a health bar per segment.
-      ctx.fillStyle = `rgba(120,96,72,${0.35 + 0.5 * frac})`;
-      ctx.fillRect(wx, wy, ww, wh);
-      ctx.strokeStyle = frac > 0.5 ? '#a8794e' : '#ff9d5c';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(wx, wy, ww, wh);
+      if (!this._tileSprite(ctx, PROP.barricade, wx, wy, ww, wh, 0.45 + 0.55 * frac)) {
+        ctx.fillStyle = `rgba(120,96,72,${0.35 + 0.5 * frac})`;
+        ctx.fillRect(wx, wy, ww, wh);
+        ctx.strokeStyle = frac > 0.5 ? '#a8794e' : '#ff9d5c';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(wx, wy, ww, wh);
+      }
       if (frac < 0.85) {
         ctx.strokeStyle = `rgba(255,120,90,${0.9 - frac * 0.6})`;
         ctx.lineWidth = 2;
@@ -564,19 +619,22 @@ export class Renderer {
     }
     if (o.altar) { // relic run
       const [ax, ay] = o.altar;
-      ctx.strokeStyle = '#ffd45e';
-      ctx.lineWidth = 5;
-      circle(ctx, ax, ay, 84); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,212,94,0.10)';
-      circle(ctx, ax, ay, 84); ctx.fill();
+      if (!drawSprite(ctx, PROP.altar, ax, ay, { scale: spriteScaleFor(PROP.altar, 168) })) {
+        ctx.strokeStyle = '#ffd45e';
+        ctx.lineWidth = 5;
+        circle(ctx, ax, ay, 84); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,212,94,0.10)';
+        circle(ctx, ax, ay, 84); ctx.fill();
+      }
       ctx.fillStyle = '#ffd45e';
       ctx.font = 'bold 15px sans-serif';
       ctx.fillText('ALTAR', ax, ay - 96);
       for (const [rx, ry, carrier] of o.relics || []) {
+        const bob = Math.sin(this.t * 4 + rx * 0.1) * 3;
+        if (drawSprite(ctx, PROP.relic, rx, ry - 26 + bob, { scale: spriteScaleFor(PROP.relic, 26) })) continue;
         ctx.fillStyle = carrier >= 0 ? '#c9a6ff' : '#ffd45e';
         ctx.strokeStyle = PALETTE.outline;
         ctx.lineWidth = 3;
-        const bob = Math.sin(this.t * 4 + rx * 0.1) * 3;
         diamond(ctx, rx, ry - 26 + bob, 11);
         ctx.fill(); ctx.stroke();
       }
@@ -590,10 +648,12 @@ export class Renderer {
       circle(ctx, dx, dy, o.escortR || 260); ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 1;
-      ctx.fillStyle = stalled ? '#ff5d6c' : '#c98b4f';
-      ctx.strokeStyle = PALETTE.outline;
-      ctx.lineWidth = 3;
-      rect(ctx, dx - 26, dy - 20, 52, 40, 6); ctx.fill(); ctx.stroke();
+      if (!drawSprite(ctx, PROP.drill, dx, dy + 20, { scale: spriteScaleFor(PROP.drill, 64) })) {
+        ctx.fillStyle = stalled ? '#ff5d6c' : '#c98b4f';
+        ctx.strokeStyle = PALETTE.outline;
+        ctx.lineWidth = 3;
+        rect(ctx, dx - 26, dy - 20, 52, 40, 6); ctx.fill(); ctx.stroke();
+      }
       ctx.fillStyle = '#12141f';
       rect(ctx, dx - 22, dy + 22, 44, 7, 3); ctx.fill();
       ctx.fillStyle = hpFrac > 0.35 ? PALETTE.doorOpen : '#ff5d6c';
@@ -603,6 +663,8 @@ export class Renderer {
       ctx.fillText(stalled ? 'STALLED' : (escorted ? 'DRILLING' : 'ESCORT ME'), dx, dy - 32);
     }
     for (const [nx, ny, hpf, shielded] of o.nests || []) { // nest purge: mark every spawner
+      const nestId = shielded ? PROP.nestWalled : PROP.nest;
+      drawSprite(ctx, nestId, nx, ny + 22, { scale: spriteScaleFor(nestId, 64) });
       if (shielded) {   // walled in: the health bar is not the thing to shoot yet
         ctx.strokeStyle = '#5ea8ff';
         ctx.lineWidth = 3;
@@ -639,6 +701,7 @@ export class Renderer {
     for (const hz of view.hazards || []) {
       if (hz.type === 'lava') {
         if (!inView(hz.x, hz.y, hz.r + 10)) continue;
+        if (drawSprite(ctx, PROP.lava, hz.x, hz.y, { scale: spriteScaleFor(PROP.lava, (hz.r + 4) * 2) })) continue;
         ctx.fillStyle = '#7a2c10';
         circle(ctx, hz.x, hz.y, hz.r + 4); ctx.fill();
         ctx.fillStyle = PALETTE.hazardLava;
@@ -652,6 +715,9 @@ export class Renderer {
       } else if (hz.type === 'spikes') {
         // spike STRIP: a banded rect {x,y,w,h}
         if (!inView(hz.x + hz.w / 2, hz.y + hz.h / 2, Math.max(hz.w, hz.h))) continue;
+        // a strip tiles its sprite along its length rather than stretching one
+        const spikeId = hz.state === 2 ? PROP.spikesArmed : PROP.spikesIdle;
+        if (this._tileSprite(ctx, spikeId, hz.x, hz.y, hz.w, hz.h, hz.state === 1 ? 0.6 : 1)) continue;
         if (hz.state === 0) {
           ctx.fillStyle = 'rgba(200,205,232,0.08)';
           ctx.fillRect(hz.x, hz.y, hz.w, hz.h);
@@ -681,13 +747,16 @@ export class Renderer {
   _drawHatch(ctx, x, y, afterSiege) {
     ctx.save();
     ctx.translate(x, y);
-    ctx.fillStyle = '#0a0b12';
-    ctx.strokeStyle = PALETTE.doorOpen;
-    ctx.lineWidth = 4;
-    circle(ctx, 0, 0, 52); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = '#1e6e4e';
-    ctx.lineWidth = 3;
-    circle(ctx, 0, 0, 34 + 7 * Math.sin(this.t * 3)); ctx.stroke();
+    const hatchId = afterSiege ? PROP.hatchDescend : PROP.hatchExtract;
+    if (!drawSprite(ctx, hatchId, 0, 0, { scale: spriteScaleFor(hatchId, 104) })) {
+      ctx.fillStyle = '#0a0b12';
+      ctx.strokeStyle = PALETTE.doorOpen;
+      ctx.lineWidth = 4;
+      circle(ctx, 0, 0, 52); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#1e6e4e';
+      ctx.lineWidth = 3;
+      circle(ctx, 0, 0, 34 + 7 * Math.sin(this.t * 3)); ctx.stroke();
+    }
     ctx.fillStyle = PALETTE.doorOpen;
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
@@ -740,26 +809,34 @@ export class Renderer {
       ctx.shadowColor = PALETTE.elite;
       ctx.shadowBlur = 14;
     }
-    drawShape(ctx, e.shape, r, this.t + (e.id || 0));
-    ctx.fill();
-    ctx.stroke();
+    // Radius is the truth — it is what the hitbox and the elite/mini scaling
+    // use — so the art is scaled to cover it rather than the other way round.
+    const sc = spriteScaleFor(e.spriteId, r * 2);
+    const drew = drawSprite(ctx, e.spriteId, 0, 0, { scale: sc });
+    if (!drew) {
+      drawShape(ctx, e.shape, r, this.t + (e.id || 0));
+      ctx.fill();
+      ctx.stroke();
+    }
     ctx.shadowBlur = 0;
     if (e.elite) {
       ctx.strokeStyle = PALETTE.elite;
       ctx.lineWidth = 2.5;
       circle(ctx, 0, 0, r + 6); ctx.stroke();
     }
-    if (e.fusing) {
-      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(this.t * 30);
-      ctx.fillStyle = '#fff';
-      drawShape(ctx, e.shape, r, this.t);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    } else if (e.flash) {
-      ctx.globalAlpha = 0.75;
-      ctx.fillStyle = '#fff';
-      drawShape(ctx, e.shape, r, this.t + (e.id || 0));
-      ctx.fill();
+    if (e.fusing || e.flash) {
+      const a = e.fusing ? 0.5 + 0.5 * Math.sin(this.t * 30) : 0.75;
+      ctx.globalAlpha = a;
+      if (drew) {
+        // brighten the sprite rather than blank it out with a white silhouette
+        ctx.globalCompositeOperation = 'lighter';
+        drawSprite(ctx, e.spriteId, 0, 0, { scale: sc });
+        ctx.globalCompositeOperation = 'source-over';
+      } else {
+        ctx.fillStyle = '#fff';
+        drawShape(ctx, e.shape, r, e.fusing ? this.t : this.t + (e.id || 0));
+        ctx.fill();
+      }
       ctx.globalAlpha = 1;
     }
     // small hp bar when damaged
@@ -814,17 +891,25 @@ export class Renderer {
       ctx.fillStyle = p.color;
       ctx.strokeStyle = PALETTE.outline;
       ctx.lineWidth = 3;
-      circle(ctx, 0, 0, r); ctx.fill(); ctx.stroke();
+      // The sprite stands in for the coloured disc AND the character glyph —
+      // both, or neither. A half-replaced player reads as a bug.
+      const drew = drawSprite(ctx, p.spriteId, 0, 0, {
+        scale: spriteScaleFor(p.spriteId, r * 2),
+        flipX: Math.cos(p.aimA) < 0,
+      });
+      if (!drew) { circle(ctx, 0, 0, r); ctx.fill(); ctx.stroke(); }
       if (p.shield > 0) {
         ctx.strokeStyle = '#4fd8eb';
         ctx.lineWidth = 3;
         circle(ctx, 0, 0, r + 5); ctx.stroke();
       }
-      ctx.fillStyle = '#0b0c12';
-      ctx.font = `bold ${Math.round(r * 1.05)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(p.sym || '●', 0, 1);
+      if (!drew) {
+        ctx.fillStyle = '#0b0c12';
+        ctx.font = `bold ${Math.round(r * 1.05)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.sym || '●', 0, 1);
+      }
       // trait charge ring (Onrush/Resonant/Stillness/Jester) — golden when full
       if (p.meter !== undefined && p.meter >= 0) {
         const full = p.meter >= 1;
@@ -873,6 +958,20 @@ export class Renderer {
     ctx.lineWidth = 2.5;
     // just recalled: bolting itself back down, inert and translucent
     if (s.packed) { ctx.globalAlpha = 0.45; ctx.scale(0.8, 0.8); }
+    const propId = s.type === 'turret' ? PROP.turret : s.type === 'ram' ? PROP.ram : PROP.drone;
+    if (drawSprite(ctx, propId, 0, 0, { scale: spriteScaleFor(propId, 26), rot: s.type === 'ram' ? this.t * 9 : 0 })) {
+      // a turret still has to show where it is pointing — the barrel is the
+      // only part of a structure that carries information
+      if (s.type === 'turret') {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(Math.cos(s.aimA) * 14, Math.sin(s.aimA) * 14);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
     if (s.type === 'turret') {
       ctx.fillStyle = '#2b2f45';
       rect(ctx, -11, -11, 22, 22, 4); ctx.fill(); ctx.stroke();

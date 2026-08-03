@@ -352,6 +352,29 @@ at boot, debounced to one horn per resolution moment
 (`CONFIG.AIRHORN_DEBOUNCE_S`), own level-ups at `CONFIG.AIRHORN_VOL_OWN`,
 allies' at `CONFIG.AIRHORN_VOL_ALLY`.
 
+## Adding art (sprites)
+
+Every entity keeps its Canvas-primitive draw as a fallback, so the game runs
+and looks exactly as it does today with `assets/sprites/` empty — which is the
+state it ships in. Art lands one file at a time:
+
+1. Find the id in `assets/assets.json` (the manifest **is** the art inventory
+   — 298 ids, every one the game can ever ask for).
+2. Draw a PNG at the size the manifest states.
+3. Save it at `assets/sprites/<file>`. Reload. Done — no build step, no code.
+
+Canonical sizes: players and enemies 48x48, bosses 96x96, projectiles /
+pickups / FX 16x16, item icons 24x24, props 64x64, UI 32x32. Sheets are single
+horizontal strips (frame *N* at `x = N x w`).
+
+`?sprites=off` forces every fallback; `?sprites=debug` names what is missing
+and outlines a magenta box where art was expected.
+
+The manifest is generated — `node tools/gen_assets_manifest.mjs` — so a new
+item or character gets an inventory entry automatically.
+
+**Full guide: [docs/SPRITES.md](docs/SPRITES.md).**
+
 ## Debug keys
 
 Enabled by the `DEV` flag in `js/config.js` (shipped `true`; set `false` for
@@ -433,10 +456,62 @@ never loads them:
   validator (hook schemas, price bands, category minimums, stat coverage).
 - `node tools/gen_design_audit.mjs` — regenerates `docs/design-audit.md` from
   the live content data and enforces the dead-stat gate.
+- `node tools/gen_assets_manifest.mjs [--check]` — regenerates
+  `assets/assets.json`, the sprite manifest / art inventory, from the live
+  content tables. `--check` fails if the committed file is stale (the sim
+  suite runs it).
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### The sprite pipeline (patch 15)
+
+- **`src/assets.js` became `js/assets.js`.** The brief named a `src/`
+  directory; this repository has never had one — all client JS lives in `js/`.
+  Placed to match the project.
+- **The manifest is generated, not hand-typed.** The brief asked for it "fully
+  populated" with an explicit count of item icons; the live catalog holds 146
+  items (plus 26 weapons sharing the `item.` namespace) and 47 characters
+  across two rosters, not the numbers in the brief. `tools/gen_assets_manifest.mjs`
+  reads the real tables, so the inventory cannot drift from the content — and
+  a test fails if the committed JSON is stale.
+- **Projectile sprites are resolved from colour and size class, not a type.**
+  A snapshot carries a projectile's position, velocity, radius, colour and
+  allegiance and nothing else; a type byte would have been a netcode change,
+  which the patch was forbidden to make. Colour + size class is exactly what
+  the renderer already used to tell projectiles apart, so the sprite layer
+  differentiates precisely as much as the primitives it replaces, and host and
+  client resolve the same id from the same bytes. All 16 projectile-firing
+  weapons stay distinguishable.
+- **Hostile bolts are named for their colour, not their shooter.** The Lobber
+  and the Choir of Eyes fire the same violet at the same radius and are
+  genuinely identical on the wire — they share arenas on floor 2, so this is
+  not hypothetical. Four hostile bolts cover the whole game and the sharing is
+  an explicit table with a test asserting it, rather than whichever content
+  file happened to be iterated last.
+- **`spriteId` is stamped by a loop at the bottom of each content module**
+  rather than typed onto 235 definitions by hand. The field exists the moment
+  the table does (no import-order hazard), the diff stays readable, and it
+  cannot drift from the ids.
+- **Item icons are inventoried but not yet wired.** Item and weapon icons
+  render in DOM shop cards, not on the canvas, so `drawSprite` does not reach
+  them. All 172 are in the manifest — the art can be drawn now — but the shop
+  UI wiring is a separate, DOM-side change and is deliberately not in this
+  patch.
+- **Downed players stay primitive.** A downed player is a distinct visual (a
+  slate disc with a red cross); giving it a sprite would double the character
+  art bill for no gameplay gain. Alive players use sprites, downed ones do not.
+- **Frames default to 1 everywhere in the shipped manifest.** A manifest that
+  promised 4 frames would make a static PNG draw nothing for three frames out
+  of four. Animation is opted into per category in the generator. The loader
+  also self-heals a mismatch: it clamps `frames` to what the strip actually
+  holds and warns once.
+- **UI chrome is 32x32.** The brief's canonical size table did not cover the
+  `ui.` namespace.
+- **Walls, barricades, breach doors and spike strips tile their sprite**
+  rather than stretching one image across an arbitrary-sized rect, which would
+  smear it. `_tileSprite` in `js/render.js`.
 
 ### Playtest pass 3 (patch 13)
 

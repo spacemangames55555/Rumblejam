@@ -41,3 +41,6 @@ export const BOSSES = [
 ];
 
 export const BOSS_BY_FLOOR = Object.fromEntries(BOSSES.map(b => [b.floor, b]));
+
+// Sprite ids. Bosses are authored at 96x96, twice an ordinary enemy.
+for (const b of BOSSES) b.spriteId = `boss.${b.id}`;
