@@ -1,7 +1,7 @@
 // Title, lobby, results and settings screens (DOM). Pure view layer — all
 // state lives in main.js / the sim; this module renders and forwards clicks.
 
-import { CHARACTERS, CHAR_BY_ID } from '../content/characters.js';
+import { CHARACTERS, CHAR_BY_ID, ROSTERS, ROSTER_IDS, ROSTER_ID } from '../content/characters.js';
 import { PALETTE, STAT_IS_PCT } from '../config.js';
 import { ITEM_BY_ID } from '../content/items.js';
 import { WEAPON_BY_ID } from '../content/weapons.js';
@@ -105,6 +105,15 @@ export function showLobby(lobby, isHost, myKey) {
         <div style="font-size:24px; letter-spacing:3px; color:var(--gold);">LOBBY</div>
         <div>${codeHtml}</div>
       </div>
+      <div class="roster-bar">
+        <span class="dim small">roster</span>
+        ${ROSTER_IDS.map(id => `<button class="roster-btn ${id === ROSTER_ID ? 'on' : ''}"
+            data-roster="${id}" ${isHost ? '' : 'disabled'}
+            title="${escapeHtml(ROSTERS[id].blurb)}">${escapeHtml(ROSTERS[id].name)}</button>`).join('')}
+        <span class="dim small">${isHost
+          ? 'switching clears everyone&rsquo;s pick'
+          : 'the host chooses &mdash; everyone plays the same roster'}</span>
+      </div>
       <div class="lobby-players">${lobby.players.map(p => `
         <div class="lobby-player ${p.ready || p.isHost ? 'ready' : ''}">
           <div class="dot" style="background:${p.color}"></div>
@@ -135,6 +144,9 @@ export function showLobby(lobby, isHost, myKey) {
         </div>
       </div>
     </div>`;
+  el.querySelectorAll('.roster-btn').forEach(btn => {
+    btn.onclick = () => { sfx.click(); A.pickRoster(btn.dataset.roster); };
+  });
   el.querySelectorAll('.char-card').forEach(card => {
     card.onclick = () => { sfx.click(); A.pickChar(card.dataset.char); };
   });

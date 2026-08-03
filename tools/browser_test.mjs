@@ -1401,6 +1401,47 @@ if (wantCoop) {
       await B.waitFor(`return window.uv.mode==='lobby'`, 15000, 'client joins lobby');
       ok('client joined by code');
       await A.waitFor(`return window.uv.lobby.players.length===2`, 5000, 'host sees client');
+
+      // ---- the roster is HOST-AUTHORITATIVE, verified across two real clients ----
+      // The client is deliberately put on the WRONG roster first — via its own
+      // localStorage, the way a returning player would arrive — and must end up
+      // on the host's regardless. A mismatch would resolve the host's character
+      // ids in the wrong table and silently desync every trait in the party.
+      {
+        const bBefore = await B.exec(`return window.uvRoster ? window.uvRoster.id() : (window.uv.lobby && window.uv.lobby.roster) || 'classic'`);
+        // host switches to Thrones of Heaven
+        await A.exec(`document.querySelector('.roster-btn[data-roster="toh"]').click(); return 1;`);
+        await A.waitFor(`return document.querySelector('.roster-btn[data-roster="toh"]').classList.contains('on')`, 4000, 'host on toh');
+        const hostGrid = await A.exec(`return document.querySelectorAll('.char-card').length`);
+        if (hostGrid === 14) ok(`host switched roster: the grid is the 14 Thrones of Heaven warriors (was 33)`);
+        else fail(`host grid shows ${hostGrid} characters after switching to toh`);
+        // the client follows, without being asked
+        await B.waitFor(`return document.querySelectorAll('.char-card').length===14`, 6000, 'client follows the host roster');
+        const bGrid = await B.exec(`return JSON.stringify({
+          n: document.querySelectorAll('.char-card').length,
+          first: document.querySelector('.char-card').dataset.char,
+          roster: window.uv.lobby.roster,
+          hostOnly: document.querySelector('.roster-btn').disabled })`);
+        const bg = JSON.parse(bGrid);
+        if (bg.n === 14 && /^toh_/.test(bg.first)) ok(`the client followed the host onto "${bg.roster}" (was "${bBefore}") without being asked`);
+        else fail(`client roster: ${bGrid}`);
+        if (bg.hostOnly) ok('and the client cannot change it — the switch is host-only');
+        else fail('the roster switch was live on a client');
+        // a ToH character actually starts a run across the wire
+        await A.exec(`document.querySelector('.char-card[data-char="toh_samurai"]').click()`);
+        await B.exec(`document.querySelector('.char-card[data-char="toh_bard"]').click()`);
+        await sleep(400);
+        await B.exec(`document.getElementById('btn-ready').click()`);
+        await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].charId==='toh_bard'`, 5000, 'client picked a ToH character');
+        ok('both players pick Thrones of Heaven characters over the network');
+        // ...and back to classic for the rest of the co-op phase
+        await A.exec(`document.querySelector('.roster-btn[data-roster="classic"]').click(); return 1;`);
+        await B.waitFor(`return document.querySelectorAll('.char-card').length===33`, 6000, 'client follows back to classic');
+        const cleared = await A.exec(`return window.uv.lobby.players.every(p=>!p.charId) ? 1 : 0`);
+        if (cleared) ok('switching rosters clears every pick — the old ids do not exist in the new roster');
+        else fail('picks survived a roster switch');
+      }
+
       // the tuning-gate pairing: Banneret (aura) hosts, Lodestone (tether) joins
       await A.exec(`document.querySelector('.char-card[data-char="banneret"]').click()`);
       await B.waitFor(`return document.querySelector('.char-card[data-char="lodestone"]')!==null`, 4000, 'client char grid');

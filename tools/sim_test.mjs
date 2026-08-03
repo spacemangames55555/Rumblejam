@@ -2381,6 +2381,385 @@ try {
   }
 } catch (err) { fail('playtest-3 gates crashed', err); }
 
+// ---- 9L. the roster toggle and the Thrones of Heaven cast ----
+// This section runs LAST among the content sections because it switches the
+// active roster; it switches back before section 10 measures the classic DPS.
+try {
+  const R = await import('../js/content/characters.js');
+  const { applyHostRoster } = await import('../js/roster.js');
+  const { WEAPON_BY_ID: WBI } = await import('../js/content/weapons.js');
+  const { encodeSnap: encT, decodeSnap: decT, wireSize: wsT } = await import('../js/netcodec.js');
+
+  // --- the toggle itself ---
+  {
+    if (R.ROSTER_ID === 'classic' && R.CHARACTERS.length === 33) ok('the default roster is the classic 33');
+    else fail(`default roster is ${R.ROSTER_ID} with ${R.CHARACTERS.length}`);
+    R.setRoster('toh');
+    if (R.ROSTER_ID === 'toh' && R.CHARACTERS.length === 14) ok('setRoster("toh") swaps in the 14 Thrones of Heaven warriors');
+    else fail(`toh roster: ${R.ROSTER_ID} / ${R.CHARACTERS.length}`);
+    if (Object.keys(R.CHAR_BY_ID).length === 14 && R.CHAR_BY_ID.toh_bard) ok('CHAR_BY_ID follows the active roster (live binding — no call site changes)');
+    else fail('CHAR_BY_ID did not follow the switch');
+    if (R.setRoster('nonsense') === 'classic') ok('an unknown roster id falls back to classic rather than emptying the game');
+    else fail('bad roster id was not rejected');
+    R.setRoster('toh');
+  }
+
+  // --- the two rosters cannot collide in the engine ---
+  {
+    const cKeys = new Set(R.ROSTERS.classic.chars.map(c => c.trait.key));
+    const dupeTrait = R.ROSTERS.toh.chars.filter(c => cKeys.has(c.trait.key));
+    if (!dupeTrait.length) ok('no Thrones of Heaven trait key collides with a classic one');
+    else fail(`colliding trait keys: ${dupeTrait.map(c => c.trait.key).join(', ')}`);
+    const cIds = new Set(R.ROSTERS.classic.chars.map(c => c.id));
+    const dupeId = R.ROSTERS.toh.chars.filter(c => cIds.has(c.id));
+    if (!dupeId.length) ok('no character id collides across rosters');
+    else fail(`colliding ids: ${dupeId.map(c => c.id).join(', ')}`);
+    const own = new Set(R.ROSTERS.toh.chars.map(c => c.trait.key));
+    if (own.size === 14) ok('all 14 traits are distinct from each other');
+    else fail(`only ${own.size} distinct traits among 14 characters`);
+    if (Object.keys(R.ALL_CHAR_BY_ID).length === 47) ok('ALL_CHAR_BY_ID spans both rosters (47) for lookups that must never fail');
+    else fail(`ALL_CHAR_BY_ID has ${Object.keys(R.ALL_CHAR_BY_ID).length}`);
+  }
+
+  // --- the co-op guard: a client on the wrong roster is force-corrected ---
+  {
+    R.setRoster('classic');
+    const warns = [];
+    const realWarn = console.warn;
+    console.warn = (...a) => warns.push(a.join(' '));
+    const moved = applyHostRoster('toh', [{ charId: 'toh_bard' }]);
+    console.warn = realWarn;
+    if (moved && R.ROSTER_ID === 'toh') ok('a client on the wrong roster is force-corrected to the host\'s');
+    else fail(`client did not switch: moved=${moved} roster=${R.ROSTER_ID}`);
+    if (warns.length && /host/.test(warns[0])) ok('and it says so loudly — a silent mismatch would desync every trait');
+    else fail('the roster correction was silent');
+    // a host that sends no roster field at all: infer it from the party
+    R.setRoster('classic');
+    applyHostRoster(undefined, [{ charId: 'toh_samurai' }]);
+    if (R.ROSTER_ID === 'toh') ok('a missing roster field is inferred from the party\'s character ids');
+    else fail('could not infer the roster from the party');
+    R.setRoster('toh');
+    if (!applyHostRoster('toh', [])) ok('a client already on the host\'s roster does not churn');
+  }
+
+  // --- every one of the 14 survives a real fight, solo and in co-op ---
+  {
+    const { CHARACTERS_TOH } = await import('../js/content/characters-toh.js');
+    let bad = 0;
+    const notes = [];
+    for (const c of CHARACTERS_TOH) {
+      for (const n of [1, 2]) {
+        const party = Array.from({ length: n }, (_, i) => ({
+          idx: i, key: `t${i}`, name: `T${i}`, color: '#fff',
+          charId: i === 0 ? c.id : CHARACTERS_TOH[(CHARACTERS_TOH.indexOf(c) + 3) % 14].id,
+        }));
+        const g = new Sim({ seed: 9090 + c.id.length, party });
+        const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+        node.kind = 'combat'; if (!node.template) node.template = 'open_expanse';
+        g._travelTo(node.id);
+        g.god = true;
+        try {
+          for (let i = 0; i < 60 * 30; i++) {
+            for (const q of g.players) {
+              g.setInput(q.idx, { mx: Math.sin(i / 37 + q.idx), my: Math.cos(i / 29 + q.idx), interact: i % 240 === 0 });
+              q.hp = Math.max(1, q.stats.vitality - 15);   // keep Karma/Blood live
+            }
+            if (i % 400 === 0) g.uiAction(0, { kind: 'stance' });
+            g.tick();
+          }
+          JSON.parse(JSON.stringify(g.getSnapshot()));
+          g.getMeta(g.players[0]);
+          if (n === 1) notes.push(`${c.name} ${Math.round(g.players[0].damageDealt)}dmg`);
+        } catch (err) { bad++; fail(`${c.id} (${n}p) crashed`, err); }
+      }
+    }
+    if (!bad) ok(`all 14 Thrones of Heaven characters fight solo and in co-op — ${notes.join(' · ')}`);
+  }
+
+  // --- the traits that carry state actually do something ---
+  {
+    const one = id => {
+      const g = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'T', charId: id, color: '#fff' }] });
+      const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+      node.kind = 'combat'; g._travelTo(node.id); g.god = true;
+      return g;
+    };
+    const run = (g, ticks, each) => {
+      for (let i = 0; i < ticks; i++) {
+        g.setInput(0, { mx: 0, my: 0 });
+        if (each) each(g, i);
+        g.tick();
+      }
+    };
+    let bad = 0;
+
+    // Bard: stacks build, and drop when the window lapses
+    {
+      const g = one('toh_bard'); const p = g.players[0];
+      run(g, 60 * 26, () => { p.hp = p.stats.vitality; });
+      const peak = p.rhythm;
+      if (peak > 0 && p.stats.ferocity > 0) ok(`Bard: Rhythm builds to ${peak} stacks (+${Math.round(p.stats.ferocity)}% Fer, +${Math.round(p.stats.tempo)}% Tempo solo)`);
+      else { bad++; fail(`Bard rhythm never built: ${peak}`); }
+      // the runaway watch the brief asked for
+      p.rhythm = p.char.trait.maxStacks; g._recomputeStats(p);
+      console.log(`  BARD max stacks solo: +${Math.round(p.stats.tempo)}% Tempo, +${Math.round(p.stats.ferocity)}% Ferocity (before a single Tempo item)`);
+      if (p.stats.tempo <= 140) ok(`Bard's Tempo at max stacks stays under the runaway line (${Math.round(p.stats.tempo)}%)`);
+      else fail(`Bard Tempo runaway: ${Math.round(p.stats.tempo)}%`);
+      // ...and the window is measured on BASE tempo, so it cannot compound
+      const before = p.rhythmT;
+      p.rhythm = 0; g._recomputeStats(p);
+      run(g, 4, () => {});
+      if (p.rhythmT <= p.char.trait.windowSec + 0.01) ok('the Rhythm window never widens with the Tempo it grants');
+      else { bad++; fail(`rhythm window compounded to ${p.rhythmT}`); }
+    }
+
+    // Monk: Karma banks damage taken and empties into the next hit
+    {
+      const g = one('toh_monk'); const p = g.players[0];
+      g.god = false;
+      p.stats.reflex = 0;          // the Monk's own 12% Reflex would dodge this
+      g.hurtPlayer(p, 30, null);   // one time in eight and bank no Karma at all
+      const banked = p.karma;
+      if (banked > 0) ok(`Monk: Karma banks damage taken (${Math.round(banked)})`);
+      else { bad++; fail('Karma banked nothing'); }
+      const e = g.spawnEnemyById('skulker', p.x + 40, p.y, {});
+      g._hitEnemy(e, 5, { owner: p, crit: false, weaponDef: null, knock: 0, baseDmg: 5 });
+      if (p.karma === 0) ok('and the next attack empties the bank');
+      else { bad++; fail(`Karma still holds ${p.karma}`); }
+      g.god = false;
+      for (let i = 0; i < 12 && !p.spirit; i++) {
+        // i-frames from the previous hit make hurtPlayer a no-op, and this
+        // probe never advances the clock to expire them — clear them by hand,
+        // and re-pin Reflex because any kill in between recomputes the sheet.
+        p.downed = false; p.hp = p.stats.vitality; p.invuln = 0;
+        p.stats.reflex = 100;
+        g.hurtPlayer(p, 6, null);
+      }
+      if (p.spirit) {
+        ok('a dodge leaves an astral spirit behind');
+        p.spirit.t = 0.5;
+        for (let i = 0; i < 12 && p.spirit.t <= 0.5; i++) { p.invuln = 0; p.stats.reflex = 100; g.hurtPlayer(p, 6, null); }
+        if (p.spirit && p.spirit.t > 0.5) ok('and dodging again refreshes it rather than spawning a second');
+        else { bad++; fail('spirit did not refresh'); }
+      } else { bad++; fail('no spirit on dodge'); }
+    }
+
+    // Samurai: three stances, a real cooldown, and Flow resetting on a repeat
+    {
+      const g = one('toh_samurai'); const p = g.players[0];
+      const s0 = p.stance;
+      g.uiAction(0, { kind: 'stance' });
+      if (p.stance !== s0) ok(`Samurai: the stance swaps (${s0} → ${p.stance})`);
+      else { bad++; fail('stance did not swap'); }
+      const s1 = p.stance;
+      g.uiAction(0, { kind: 'stance' });
+      if (p.stance === s1) ok(`and the ${p.char.trait.swapCooldown}s cooldown holds`);
+      else { bad++; fail('stance swapped through its cooldown'); }
+      p.stance = 0; p.stanceCd = 0; g._recomputeStats(p);
+      const ironGrit = p.stats.grit;
+      p.stance = 2; g._recomputeStats(p);
+      if (ironGrit > p.stats.grit) ok(`Iron stance is worth +${ironGrit - p.stats.grit} Grit`);
+      else { bad++; fail('Iron granted no Grit'); }
+      const e1 = g.spawnEnemyById('skulker', p.x + 40, p.y, {});
+      const e2 = g.spawnEnemyById('skulker', p.x + 60, p.y, {});
+      const ctx = { owner: p, crit: false, weaponDef: null, knock: 0, baseDmg: 3 };
+      g._hitEnemy(e1, 3, ctx); g._hitEnemy(e2, 3, ctx);
+      const flow = p.flowStacks;
+      g._hitEnemy(e2, 3, ctx);
+      if (flow >= 2 && p.flowStacks === 0) ok(`Flow builds on new targets (${flow}) and resets on a repeat`);
+      else { bad++; fail(`Flow: built ${flow}, after repeat ${p.flowStacks}`); }
+    }
+
+    // Blacksmith: the post-fight infusion, and the third quartz arming detonation
+    {
+      const g = one('toh_blacksmith'); const p = g.players[0];
+      g.debug('F3');
+      if (p.boonOffer && p.boonOffer.length === 3 && p.boonOffer.every(o => o.crystal)) {
+        ok('Blacksmith: three fixed crystals offered after the fight, not a random roll');
+      } else { bad++; fail(`infusion offer: ${JSON.stringify(p.boonOffer)}`); }
+      const g0 = p.stats.grit;
+      g.uiAction(0, { kind: 'boon', id: 'crystal_pyrite' });
+      if (p.stats.grit > g0 && p.infusions.pyrite === 1) ok(`Iron Pyrite infuses permanently (+${p.stats.grit - g0} Grit)`);
+      else { bad++; fail(`pyrite: grit ${g0} → ${p.stats.grit}`); }
+      for (let i = 0; i < 3; i++) {
+        p.boonOffer = [{ id: 'crystal_quartz', crystal: 'quartz', stat: 'attunement', amount: 4 }];
+        g.uiAction(0, { kind: 'boon', id: 'crystal_quartz' });
+      }
+      if (p.infusions.quartz === 3 && p.detonate) ok('and the third Prism Quartz arms the contact detonation');
+      else { bad++; fail(`quartz ${p.infusions.quartz} detonate ${p.detonate}`); }
+      if (p.radius > 16) ok(`the Blacksmith is a bigger target (radius ${Math.round(p.radius)})`);
+      else { bad++; fail(`hitbox not enlarged: ${p.radius}`); }
+    }
+
+    // Assassin: a mark exists, the crit rules are Duskblade's, kills vanish him
+    {
+      const g = one('toh_assassin'); const p = g.players[0];
+      run(g, 60 * 8, () => { p.hp = p.stats.vitality; });
+      if (p.contractId !== null) ok('Assassin: a contract is marked and tracked');
+      else { bad++; fail('no contract marked'); }
+      if (p.critMult === 3) ok('granted crits deal ×3');
+      else { bad++; fail(`critMult ${p.critMult}`); }
+      const e = g.spawnEnemyById('skulker', p.x + 40, p.y, {});
+      g._killEnemy(e, p);
+      if (p.vanishT > 0) ok(`a kill makes him untargetable for ${p.char.trait.vanishDur}s`);
+      else { bad++; fail('no vanish after a kill'); }
+      // ...and the field still has something to walk at, or a solo fight stalls
+      if (g.nearestLivingPlayer(0, 0)) ok('a vanished solo Assassin is still a destination — the fight cannot stall');
+      else { bad++; fail('the field lost its target while the Assassin was vanished'); }
+    }
+
+    // Sundian: nodes plant, cap, and link into walls
+    {
+      const g = one('toh_sundian'); const p = g.players[0];
+      run(g, 60 * 40, () => { p.hp = p.stats.vitality; });
+      if (g.corals.length > 0) ok(`Sundian: coral nodes plant (${g.corals.length} live)`);
+      else { bad++; fail('no coral planted'); }
+      if (g.corals.length <= p.char.trait.nodeCap) ok(`and never exceed the ${p.char.trait.nodeCap}-node cap (snapshot size)`);
+      else { bad++; fail(`coral cap breached: ${g.corals.length}`); }
+      // force a link
+      g.corals.length = 0; g.coralWalls.length = 0;
+      const mk = x => ({ x, y: 400, owner: 0, t: 8, dur: 8, r: 60, slow: 0.35, dps: 5, link: 100, wallHp: 40 });
+      g.corals.push(mk(400), mk(460));
+      g.tick();
+      if (g.coralWalls.length === 1) ok('two nodes within link range grow a coral wall');
+      else { bad++; fail(`coral walls: ${g.coralWalls.length}`); }
+    }
+
+    // Savage: Heat builds and decays
+    {
+      const g = one('toh_savage'); const p = g.players[0];
+      const ctx = { owner: p, crit: false, weaponDef: null, knock: 0, baseDmg: 2 };
+      for (let i = 0; i < 4; i++) {
+        const e = g.spawnEnemyById('slabjaw', p.x + 40, p.y, { hpMult: 40 });
+        if (e) g._hitEnemy(e, 2, ctx);
+      }
+      const hot = p.bloodHeat;
+      if (hot > 0) ok(`Savage: Heat builds to +${hot}% Ferocity`);
+      else { bad++; fail('no Heat'); }
+      run(g, 60 * 6, () => { p.hp = p.stats.vitality; for (const e of [...g.enemyPool]) g._killEnemy(e, null); });
+      if (p.bloodHeat < hot) ok('and falls off when the hitting stops');
+      else { bad++; fail(`Heat stuck at ${p.bloodHeat}`); }
+    }
+
+    // Priest: Grace spends into a shield, and the shield reflects
+    {
+      const g = one('toh_priest'); const p = g.players[0];
+      const t = p.char.trait;
+      p.hp = 10;
+      for (let i = 0; i < 40; i++) g._heal(p, 3);
+      if (p.shield > 0) ok(`Priest: Grace spends into a ${p.shield}-point shield`);
+      else { bad++; fail(`no shield from ${p.grace} Grace`); }
+      if (p.shieldReflect === t.reflectPct) ok(`and that shield reflects ${Math.round(t.reflectPct * 100)}% of what it absorbs`);
+      else { bad++; fail(`reflect ${p.shieldReflect}`); }
+    }
+
+    // Necromancer + Hunter: the summon-shaped traits
+    {
+      const g = one('toh_necromancer'); const p = g.players[0];
+      if (!p.weapons.length || p.weapons.every(w => WBI[w.id].cls === 'summon')) ok('Necromancer holds only summons');
+      else { bad++; fail(`Necromancer weapons: ${p.weapons.map(w => w.id).join(',')}`); }
+      if (p.weaponSlots === p.char.trait.mounts) ok(`and has exactly ${p.char.trait.mounts} mounts`);
+      else { bad++; fail(`mounts ${p.weaponSlots}`); }
+      const s = g.summons.find(q => q.owner === 0);
+      if (s) {
+        s.hp = 1;
+        const e = g.spawnEnemyById('skulker', p.x + 40, p.y, {});
+        g._killEnemy(e, p);
+        if (s.hp > 1) ok('bone-dust from a nearby kill repairs the most damaged summon');
+        else { bad++; fail('bone-dust repaired nothing'); }
+      }
+      const h = one('toh_hunter');
+      if (h.summons.filter(q => q.owner === 0 && !q.dead).length >= 1) ok('Hunter starts the floor with a beast');
+      else { bad++; fail('Hunter had no beast'); }
+    }
+
+    // Mage + Wizard + Witch Doctor: the three that reach past the weapon
+    {
+      const g = one('toh_mage'); const p = g.players[0];
+      let sawSing = false;
+      run(g, 60 * 30, () => { p.hp = p.stats.vitality; if (g.singularities.length) sawSing = true; });
+      if (sawSing) ok('Mage: singularities collapse on the 9th attack');
+      else { bad++; fail('no singularity in 30s'); }
+
+      const w = one('toh_wizard'); const wp = w.players[0];
+      const before = wp.decreeIsCalamity;
+      run(w, 60 * 9, () => { wp.hp = wp.stats.vitality; });
+      if (wp.decreeIsCalamity !== before) ok('Wizard: the Decree fires and alternates');
+      else { bad++; fail('the Decree never fired'); }
+
+      const v = one('toh_witch_doctor'); const vp = v.players[0];
+      run(v, 60 * 6, () => { vp.hp = vp.stats.vitality; });
+      if (vp.voodooId !== null) ok('Witch Doctor: an enemy is bound to the doll');
+      else { bad++; fail('nothing bound'); }
+      const bound = v.enemyById(vp.voodooId);
+      const other = [...v.enemyPool].find(q => q !== bound);
+      if (bound && other) {
+        bound.hp = bound.maxHp = 500;   // the doll must survive to show the mirror
+        const hp0 = bound.hp;
+        v._hitEnemy(other, 20, { owner: vp, crit: false, weaponDef: null, knock: 0, baseDmg: 20 });
+        if (bound.hp < hp0) ok('and damage dealt elsewhere mirrors onto it, through walls and range');
+        else { bad++; fail('the doll took nothing'); }
+      }
+    }
+
+    // Druid: a fusion is also Greed
+    {
+      const g = one('toh_druid'); const p = g.players[0];
+      g.debug('F3');
+      if (p.boonOffer && p.boonOffer.length === 3) ok('Druid: three splices offered on the fight');
+      else { bad++; fail(`splice offer: ${JSON.stringify(p.boonOffer)}`); }
+      const greed0 = p.stats.greed;
+      const id = p.boonOffer[0].id;
+      p.boonCounts[id] = 2;
+      g.uiAction(0, { kind: 'boon', id });
+      if (p.stats.greed > greed0) ok(`and a permanent fusion also pays +${p.stats.greed - greed0} Greed`);
+      else { bad++; fail(`greed ${greed0} → ${p.stats.greed}`); }
+    }
+
+    if (!bad) ok('every stateful Thrones of Heaven trait is live in the sim');
+  }
+
+  // --- the new per-player state and world entities ride the wire ---
+  {
+    const g = new Sim({ seed: 77, party: [
+      { idx: 0, key: 'a', name: 'A', charId: 'toh_samurai', color: '#fff' },
+      { idx: 1, key: 'b', name: 'B', charId: 'toh_sundian', color: '#fff' }] });
+    const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    node.kind = 'combat'; g._travelTo(node.id); g.god = true;
+    for (let i = 0; i < 60 * 25; i++) {
+      for (const q of g.players) { g.setInput(q.idx, { mx: 0, my: 0 }); q.hp = q.stats.vitality; }
+      g.tick();
+    }
+    g.uiAction(0, { kind: 'stance' });
+    const snap = g.getSnapshot();
+    const row = snap.players[0];
+    if (row.length >= 14 && row[13] === g.players[0].stance) ok(`per-player trait state rides the player row (stance ${row[13]})`);
+    else fail(`trait state not in the snapshot: len ${row.length}`);
+    if (snap.toh && Array.isArray(snap.toh.coral)) ok(`coral nodes ride the snapshot (${snap.toh.coral.length})`);
+    else fail(`toh blob: ${JSON.stringify(snap.toh)}`);
+    JSON.parse(JSON.stringify(snap));
+    const enc = encT(snap);
+    const dec = decT(enc);
+    if (dec) ok('the Thrones of Heaven snapshot survives the binary codec round-trip');
+    else fail('codec round-trip failed on a ToH snapshot');
+    const meta = g.getMeta(g.players[0]);
+    JSON.parse(JSON.stringify(meta));
+    ok(`the ToH snapshot stays small (${(wsT(enc) / 1024).toFixed(1)} KB with coral and two players)`);
+  }
+
+  // --- and the classic roster is exactly what it was ---
+  R.setRoster('classic');
+  if (R.CHARACTERS.length === 33 && R.CHAR_BY_ID.bulwark && !R.CHAR_BY_ID.toh_bard) {
+    ok('switching back restores the classic 33 untouched');
+  } else fail('the classic roster did not come back clean');
+} catch (err) {
+  fail('roster/ToH gates crashed', err);
+} finally {
+  // Whatever happened above, everything downstream measures the CLASSIC cast.
+  // Leaving the roster switched turned one crash here into four failures below.
+  (await import('../js/content/characters.js')).setRoster('classic');
+}
+
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {
   const sim = new Sim({ seed: 9999, party: [{ idx: 0, key: 'k', name: 'DPS', charId, color: '#fff' }] });

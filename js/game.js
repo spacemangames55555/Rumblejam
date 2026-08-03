@@ -19,6 +19,12 @@ import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES } from './c
 import { BOSS_BY_FLOOR } from './content/bosses.js';
 import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
+import {
+  tohInitPlayer, tohStartingGear, tohStartFight, tohStats, tohTick, tohOnFire,
+  tohHitDamage, tohOnHit, tohOnHurt, tohOnDodge, tohOnHeal, tohOnKill, tohEnemyDied,
+  tohClearFight, tohTakeBoon, tohBoonPermanent, tohSnapshot, tohMarks, tohMeter,
+  tohState, tohSwapStance, coralBlocks,
+} from './traits-toh.js';
 
 const { WALL, DT } = CONFIG;
 // Alive-at-once caps. Ranged and special types are capped so long sieges can't
@@ -89,6 +95,10 @@ export class Sim {
     this.wave = null;         // budget-curve spawn state
     this.cleared = false;     // arena fight finished (portal up)
     this.obstacles = [];      // axis-aligned rects
+    // Thrones of Heaven world entities (empty on the classic roster)
+    this.corals = [];         // Sundian nodes
+    this.coralWalls = [];     // links between them — stop enemies, never allies
+    this.singularities = [];  // Mage collapses
     this.walls = [];          // DESTRUCTIBLE rects (Nest Purge rings) — a
                               // subset of obstacles, so movement/LoS/cover
                               // all work on them for free
@@ -140,6 +150,7 @@ export class Sim {
       lastKillT: -10, roomFirstKillT: -10,
       critCounter: 0, critArmed: false, jesterOdds: 0,
       boonCounts: {}, boonOffer: null, boonTemp: null,
+      // ToH per-player state is stamped on by tohInitPlayer below
       roomVitGain: 0,      // Vesper per-room overheal→Vitality cap tracker
       carrying: null, channelT: 0, // Overseer turret carry/redeploy
       novaT: 0, heat: 0, heatDropT: 0, novaDamage: 0, // Pulsar's nova core
@@ -153,16 +164,18 @@ export class Sim {
     if (t.key === 'overseer') p.weaponSlots = t.mounts;
     if (t.key === 'nova_core') p.weaponSlots = t.slots;
     if (t.key === 'reflex_master') p.reflexCap = t.cap;
-    if (t.key === 'executioner') p.critMult = 3;
+    if (t.key === 'executioner' || t.key === 'contract') p.critMult = t.openerCritMult || 3;
     this._recomputeItems(p);
     this._recomputeStats(p);
     p.hp = p.stats.vitality;
+    tohInitPlayer(this, p);
     return p;
   }
 
   _initStartingGear(p) {
     const t = p.char.trait;
-    if (t.key === 'overseer') {
+    if (tohStartingGear(this, p)) { /* Necromancer: mounts, no weapons */ }
+    else if (t.key === 'overseer') {
       // turrets ARE weapons for the Overseer: combinable, sellable, four mounts.
       // One to start — full inheritance makes each mount count.
       this._addWeapon(p, 'bolt_turret', 1);
@@ -171,6 +184,7 @@ export class Sim {
     }
     if (t.key === 'mirror_drone') this._spawnSummon(p, null, 1, 'mirror');
     if (t.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
+    if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1);   // the first beast
   }
 
   _recomputeItems(p) {
@@ -351,6 +365,7 @@ export class Sim {
     if (t.key === 'living_fortress') {
       s.ferocity += Math.max(0, s.grit - (p.char.stats.grit || 0)); // +1% Ferocity per bonus Grit
     }
+    tohStats(this, p, s);   // the Thrones of Heaven sheet layer (no-op on classic)
     s.reflex = clamp(s.reflex, 0, p.reflexCap);
     s.vitality = Math.max(1, Math.round(s.vitality));
     const oldMax = p.stats ? p.stats.vitality : s.vitality;
@@ -391,6 +406,11 @@ export class Sim {
         this._heal(p, Math.ceil((p.stats.vitality - p.hp) * 0.5));
         for (const fs of p.hookAgg.floorStats) this._applyPerm(p, fs.stats);
         if (p.char.trait.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
+        if (p.char.trait.key === 'pack_tactics') {
+          const t2 = p.char.trait;
+          const alive = this.summons.filter(sm => sm.owner === p.idx && !sm.dead).length;
+          if (alive < t2.maxBeasts) this._spawnSummon(p, 'guard_drone', 1);
+        }
       }
     }
     this._mapEvent();
@@ -472,6 +492,7 @@ export class Sim {
     this.afterSiege = node.kind === 'siege';
     this.telegraphs.length = 0; this.zones.length = 0; this.vortexes.length = 0;
     this.activeBeams.length = 0;
+    this.corals.length = 0; this.coralWalls.length = 0; this.singularities.length = 0;
     this.enemyPool.clear();
     this.projPool.clear();
     this.pickups.length = 0;
@@ -537,7 +558,9 @@ export class Sim {
       p.roomFirstKillT = -10;
       p.boonTemp = null;        // Facet's boon expires with the fight
       p.boonOffer = null;
+      tohStartFight(this, p);
       if (p.char.trait.key === 'prism' && !p.downed) this._offerBoon(p);
+      if (p.char.trait.key === 'wildshape' && !p.downed) this._offerBoon(p);
     });
     // every structure rides along on a room change: revived, unpacked, and
     // scattered around its owner so a stack of turrets doesn't fuse into one
@@ -737,6 +760,7 @@ export class Sim {
       for (const p of this.livePlayers()) this._offerTreasure(p, 'elite');
     }
     // the valley after every peak: extraction includes a shop browse
+    for (const p of this.livePlayers()) tohClearFight(this, p);   // Blacksmith: infuse a crystal
     for (const p of this.livePlayers()) this._openShop(p, 'clear');
     // The extraction portal — leave via the same consent countdown. Breach is
     // the exception: its far gate IS the portal, so there is no mid-map hatch
@@ -1249,6 +1273,7 @@ export class Sim {
     this._tickProjectiles(dt);
     // telegraphs / zones / vortexes
     this._tickAreas(dt);
+    tohTick(this, dt);   // Thrones of Heaven world entities + per-player meters
     // contact damage + hazards
     this._tickContact(dt);
     this._tickHazards(dt);
@@ -1294,7 +1319,7 @@ export class Sim {
     let spd = CONFIG.BASE_SPEED * (1 + p.stats.tempo / 100);
     spd = Math.max(60, spd);
     if (this.carryingRelic(p)) spd *= 0.8; // a relic is heavy: −20% move speed
-    const pullResist = t.key === 'immovable' ? 0 : CONFIG.ARMOR_K / (CONFIG.ARMOR_K + Math.max(0, p.stats.grit));
+    const pullResist = (t.key === 'immovable' || t.key === 'crystal_infusion') ? 0 : CONFIG.ARMOR_K / (CONFIG.ARMOR_K + Math.max(0, p.stats.grit));
     p.x += (p.mx * spd + p.pullX * pullResist) * dt;
     p.y += (p.my * spd + p.pullY * pullResist) * dt;
     p.pullX = p.pullY = 0;
@@ -1567,6 +1592,9 @@ export class Sim {
     if (amt <= 0) return;
     const before = p.hp;
     p.hp = Math.min(p.stats.vitality, p.hp + amt);
+    // Grace counts healing the PRIEST caused, wherever it landed
+    if (opts.by && opts.by !== p) tohOnHeal(this, opts.by, amt);
+    else if (t.key === 'grace_and_judgment') tohOnHeal(this, p, amt);
     const overflow = amt - (p.hp - before);
     if (overflow > 0) {
       if (t.key === 'overheal_shield') {
@@ -1586,7 +1614,7 @@ export class Sim {
           const d = dist2(p.x, p.y, q.x, q.y);
           if (d < bd) { bd = d; ally = q; }
         }
-        if (ally) this._heal(ally, overflow, { noDrip: true, noShare: true });
+        if (ally) this._heal(ally, overflow, { noDrip: true, noShare: true, by: p });
         else p.shield = Math.min(t.shieldCap, p.shield + overflow);
       }
     }
@@ -1599,7 +1627,7 @@ export class Sim {
     for (const q of this.livePlayers()) {
       if (q === p || q.char.trait.key !== 'soulbond' || opts.noShare) continue;
       const b = this._bondTarget(q);
-      if (b && b.player === p) this._heal(q, amt * q.char.trait.healShare, { noShare: true });
+      if (b && b.player === p) this._heal(q, amt * q.char.trait.healShare, { noShare: true, by: p });
     }
   }
 
@@ -1692,6 +1720,7 @@ export class Sim {
     if (!target) return;
     const a = angleTo(p.x, p.y, target.x, target.y);
     p.aimA = a;
+    tohOnFire(this, p, { def, a, tx: target.x, ty: target.y });
     const t = p.char.trait;
     const agg = p.hookAgg;
 
@@ -1721,12 +1750,14 @@ export class Sim {
     }
     if (agg.critVsChilled && target.slowT > 0) crit = true;
     if (agg.critVsBurning && target.burnT > 0) crit = true;
-    if ((agg.critVsFullHp || t.key === 'executioner') && target.hp >= target.maxHp) crit = true;
+    if ((agg.critVsFullHp || t.key === 'executioner' || t.key === 'contract') && target.hp >= target.maxHp) crit = true;
     // Jester: trait-internal odds that ramp per attack and reset when a crit lands
     if (t.key === 'crit_ramp') {
       if (!crit && Math.random() * 100 < p.jesterOdds) crit = true;
       p.jesterOdds = crit ? 0 : Math.min(t.max, p.jesterOdds + t.per);
     }
+    // Blood Dance rewards committing to a slow weapon
+    if (t.key === 'blood_dance' && def.cd >= t.heavyCd) dmg *= 1 + t.heavyBonus;
     if (crit) dmg *= p.critMult;
     dmg = Math.round(dmg);
     p.lastFireT = this.time;
@@ -1814,6 +1845,13 @@ export class Sim {
     if (!pr) return;
     let pierce = (def.pierce || 0) + p.hookAgg.extraPierce;
     if (p.char.trait.key === 'pierce_innate') pierce += p.char.trait.add;
+    // Marksman: nothing of yours nearby means a cleaner, harder shot
+    if (p.char.trait.key === 'pack_tactics' && p.packMode === 2) {
+      const t2 = p.char.trait;
+      const beasts = this.summons.filter(sm => sm.owner === p.idx && !sm.dead && !sm.carried).length;
+      pierce += t2.marksmanPierce;
+      dmg = Math.round(dmg * (1 + beasts * t2.marksmanDmgPerBeast / 100));
+    }
     Object.assign(pr, {
       // spawn at the muzzle's base (6u), NOT 18u out: an enemy standing on the
       // player's center must be hittable — Bastion sanctions standing still
@@ -1833,6 +1871,7 @@ export class Sim {
     if ((e.elite || e.boss) && p.hookAgg.eliteBossDamage) finalDmg = Math.round(finalDmg * (1 + p.hookAgg.eliteBossDamage / 100));
     const t = p.char.trait;
     if (t.key === 'far_bonus' && dist(p.x, p.y, e.x, e.y) > t.dist) finalDmg = Math.round(finalDmg * (1 + t.bonus / 100));
+    finalDmg = tohHitDamage(this, p, e, finalDmg);   // Karma release, Iron bank, singularity vuln
     // knockback
     if (ctx.knock && !e.boss) {
       const ka = angle ?? angleTo(p.x, p.y, e.x, e.y);
@@ -1845,6 +1884,10 @@ export class Sim {
     this._soulbondEcho(p, e, finalDmg, stampKey);
     this.damageEnemy(e, finalDmg, { crit: ctx.crit, owner: p });
     if (e.hitStamps) e.hitStamps[stampKey] = this.time;
+    // BEFORE the dead-enemy bail: a killing blow is still a hit, and the traits
+    // that key off dealing damage (the Voodoo mirror, the Savage's Heat and
+    // leech) would silently skip every finisher if this sat below the guard.
+    tohOnHit(this, p, e, finalDmg, ctx);
     if (!e.active) return;
     // status payloads from the weapon — all attuned
     if (def) {
@@ -1944,6 +1987,10 @@ export class Sim {
   // were a third as far away — chaff right on top of you still wins.
   _aimWeight(e) { return e.bounty ? 0.12 : 1; }
 
+  // Contract: a kill makes the Assassin untargetable for a beat. Enemies pick
+  // someone else; solo, they simply have nothing to chase.
+  targetable(p) { return !p.gone && !p.downed && !(p.vanishT > 0); }
+
   _nearestEnemy(x, y, range) {
     let best = null, bd = range * range;
     for (const e of this.enemyPool) {
@@ -1965,6 +2012,15 @@ export class Sim {
   }
   nearestLivingPlayer(x, y) {
     let best = null, bd = Infinity;
+    for (const p of this.players) {
+      if (p.gone || p.downed) continue;
+      if (p.vanishT > 0) continue;   // Contract: the Assassin just vanished
+      const d = dist2(x, y, p.x, p.y);
+      if (d < bd) { bd = d; best = p; }
+    }
+    // Solo, an untargetable player must still be SOMETHING to walk toward, or
+    // the whole field stands still and the fight cannot be finished.
+    if (best) return best;
     for (const p of this.players) {
       if (p.gone || p.downed) continue;
       const d = dist2(x, y, p.x, p.y);
@@ -2048,6 +2104,8 @@ export class Sim {
       this.pushEvent({ k: 'toast', idx: -1, text: 'The ward pylon shatters — the empowerment ends' });
       this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
     }
+    tohEnemyDied(this, e);              // Necromancer bone-dust — any kill, anywhere
+    if (killer && killer.stats) tohOnKill(this, killer, e);
     // drops
     let mats = objectiveKillPays(this, e) ? e.mats * this.greedMats : 0;
     if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && Math.random() < killer.hookAgg.doubleMaterials) mats *= 2;
@@ -2164,6 +2222,7 @@ export class Sim {
         this.decoys.push({ x: p.x, y: p.y, t: t.dur, dur: t.dur, tauntR: t.tauntR, owner: p.idx, burst: t.burst, radius: t.radius });
       }
       if (p.hookAgg.nextAttackAfterDodge > 0) { p.dmgBuffT = 3; p.dmgBuffAmt = p.hookAgg.nextAttackAfterDodge; }
+      tohOnDodge(this, p);   // Monk: leave a spirit behind
       return;
     }
     // auto-block shield item
@@ -2182,10 +2241,16 @@ export class Sim {
     let dmg = Math.max(1, Math.round(raw * mult));
     // Soulbond: 30% of post-mitigation damage flows across the tether
     if (!opts.shared) dmg = this._soulbondShare(p, dmg);
+    tohOnHurt(this, p, raw, dmg);   // Karma bank, Iron stance refund
     // overheal shield absorbs first
     if (p.shield > 0) {
       const absorbed = Math.min(p.shield, dmg);
       p.shield -= absorbed; dmg -= absorbed;
+      // Grace shields throw a share of what they eat back at the attacker
+      if (p.shieldReflect > 0 && src && src.active) {
+        this.damageEnemy(src, Math.max(1, Math.round(absorbed * p.shieldReflect)), { owner: p, noLifesteal: true });
+      }
+      if (p.shield <= 0) p.shieldReflect = 0;
     }
     p.hp -= dmg;
     p.invuln = CONFIG.INVULN_AFTER_HIT;
@@ -2297,6 +2362,12 @@ export class Sim {
       } else {
         // enemy shots are absorbed by walls too — cover is symmetric and real
         if (this.obstacles.length && this._inObstacle(pr.x, pr.y, 0)) { this.projPool.release(pr); continue; }
+        // ...and by coral, which is the one wall that is NOT symmetric: it
+        // stops enemy fire and lets the party shoot straight through it.
+        if (this.coralWalls.length) {
+          const wl = coralBlocks(this, pr.x - pr.vx * DT, pr.y - pr.vy * DT, pr.x, pr.y);
+          if (wl) { wl.hp -= 4; this.projPool.release(pr); continue; }
+        }
         if (expired || oob) { this.projPool.release(pr); continue; }
         for (const p of this.livePlayers()) {
           if (p.downed) continue;
@@ -2438,13 +2509,22 @@ export class Sim {
         if (dist2(e.x, e.y, p.x, p.y) > rr * rr) continue;
         // Immovable: whatever touches the Bulwark regrets it (own cadence,
         // fires even during the player's i-frames)
-        if (p.char.trait.key === 'immovable' && e.bulwarkCd <= 0) {
+        const pt = p.char.trait;
+        const contact = pt.key === 'immovable' || pt.key === 'crystal_infusion';
+        if (contact && e.bulwarkCd <= 0) {
           e.bulwarkCd = CONFIG.CONTACT_COOLDOWN;
-          const cd = Math.max(1, Math.round(p.char.trait.base + 0.25 * Math.max(0, p.stats.grit) + 0.05 * p.stats.vitality));
+          const base = pt.contactBase ?? pt.base;
+          const gp = pt.gritPct ?? 0.25, vp = pt.vitPct ?? 0.05;
+          const cd = Math.max(1, Math.round(base + gp * Math.max(0, p.stats.grit) + vp * p.stats.vitality));
           this.damageEnemy(e, cd, { owner: p });
+          // every third Prism Quartz turns the touch into a blast
+          if (p.detonate) {
+            this._areaDamageEnemies(e.x, e.y, pt.detonateRadius, Math.max(1, Math.round(this._attuned(p, cd))), p, { exclude: e });
+            this.fx.booms.push({ x: Math.round(e.x), y: Math.round(e.y), r: pt.detonateRadius });
+          }
           if (!e.active) break;
         }
-        if (e.contactCd <= 0 && p.invuln <= 0) {
+        if (e.contactCd <= 0 && p.invuln <= 0 && !(p.vanishT > 0)) {
           e.contactCd = CONFIG.CONTACT_COOLDOWN;
           this.hurtPlayer(p, e.dmg, e);
         }
@@ -2588,7 +2668,9 @@ export class Sim {
       for (const q of this.livePlayers()) {
         if (q.downed || q === p) continue;
         if (dist2(p.x, p.y, q.x, q.y) < CONFIG.REVIVE_RADIUS * CONFIG.REVIVE_RADIUS) {
-          const rate = 1 + q.hookAgg.reviveSpeed + (q.char.trait.key === 'field_rites' ? q.char.trait.reviveBoost : 0);
+          const qt = q.char.trait;
+          const traitBoost = (qt.key === 'field_rites' || qt.key === 'grace_and_judgment') ? qt.reviveBoost : 0;
+          const rate = 1 + q.hookAgg.reviveSpeed + traitBoost;
           if (rate > bestRate) { bestRate = rate; reviver = q; }
         }
       }
@@ -2609,9 +2691,11 @@ export class Sim {
     this.pushEvent({ k: 'revived', idx: p.idx });
     this.pushEvent({ k: 'sfx', s: 'revive' });
     // Sawbones: every revive he performs toughens the whole party
-    if (reviver && reviver.char.trait.key === 'field_rites') {
-      for (const q of this.livePlayers()) this._applyPerm(q, { vitality: reviver.char.trait.partyVit });
-      this.pushEvent({ k: 'toast', idx: reviver.idx, text: `Field Rites: party +${reviver.char.trait.partyVit} Vitality` });
+    const rt = reviver && reviver.char.trait;
+    if (rt && (rt.key === 'field_rites' || rt.key === 'grace_and_judgment')) {
+      const amt = rt.partyVit ?? rt.partyVitPerRevive;
+      for (const q of this.livePlayers()) this._applyPerm(q, { vitality: amt });
+      this.pushEvent({ k: 'toast', idx: reviver.idx, text: `party +${amt} Vitality` });
     }
   }
 
@@ -3121,6 +3205,10 @@ export class Sim {
         this._pickNode(idx, msg.nodeId);
         break;
       }
+      case 'stance': {   // Samurai: Q on a keyboard, the stance button on touch
+        tohSwapStance(this, p);
+        break;
+      }
       case 'reopenShop': {
         // back into a shop stop from the node map
         if (this.phase !== 'map' || this.currentNode === null) return;
@@ -3132,10 +3220,12 @@ export class Sim {
         if (!p.boonOffer) return;
         const pick = p.boonOffer.find(o => o.id === msg.id) || p.boonOffer[0];
         p.boonOffer = null;
+        if (tohTakeBoon(this, p, pick)) return;   // Blacksmith infusion, not a boon
         p.boonCounts[pick.id] = (p.boonCounts[pick.id] || 0) + 1;
         if (p.boonCounts[pick.id] === 3) {
           this._applyPerm(p, { [pick.stat]: pick.amount });
-          this.pushEvent({ k: 'toast', idx, text: `Prism: the ${pick.stat} boon is now PERMANENT` });
+          tohBoonPermanent(this, p);   // Druid: every fusion is also +1 Greed
+          this.pushEvent({ k: 'toast', idx, text: `${p.char.trait.key === 'wildshape' ? 'The shape' : 'Prism'}: the ${pick.stat} boon is now PERMANENT` });
         } else {
           p.boonTemp = { [pick.stat]: pick.amount };
           if (p.boonCounts[pick.id] > 3) this.pushEvent({ k: 'toast', idx, text: 'Boon taken (already permanent — stacks this room)' });
@@ -3352,7 +3442,10 @@ export class Sim {
       hatch: this.hatch ? [r(this.hatch.x), r(this.hatch.y)] : null,
       hold: this.holdCircle ? [r(this.holdCircle.x), r(this.holdCircle.y), r(this.holdCircle.r), this.holdCircle.held ? 1 : 0] : null,
       players: this.players.map(p => [p.idx, r(p.x), r(p.y), r(p.hp), p.stats.vitality, p.downed ? 1 : 0, +p.reviveP.toFixed(2), r(p.shield), p.gone ? 1 : 0, +p.aimA.toFixed(2), +this._displayMeter(p).toFixed(2), p.carrying ? 1 : 0,
-        +Math.min(1, p.relocT / CONFIG.STRUCT_CHANNEL_S).toFixed(2)]),
+        +Math.min(1, p.relocT / CONFIG.STRUCT_CHANNEL_S).toFixed(2),
+        // one small int of trait state — Samurai stance, Bard/Flow stacks,
+        // contracts closed, Hunter pack mode, Blacksmith infusions
+        tohState(this, p)]),
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
       beams: this.activeBeams,
       boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp } : null,
@@ -3364,6 +3457,11 @@ export class Sim {
       auras: this._snapAuras(),
       tethers: this._snapTethers(),
       decoys: this.decoys.map(d => [r(d.x), r(d.y), +(d.t / d.dur).toFixed(2), d.owner]),
+      // Thrones of Heaven world entities and per-player marks (null on classic)
+      toh: tohSnapshot(this),
+      tohMarks: tohMarks(this),
+      spirits: this.players.filter(q => !q.gone && q.spirit)
+        .map(q => [r(q.spirit.x), r(q.spirit.y), +(q.spirit.t / q.spirit.dur).toFixed(2), q.idx]),
     };
     // radius is derived client-side from type + elite/mini flags — not sent.
     // Interest culling: chaff farther than SNAP_CULL_R from EVERY live player
@@ -3401,6 +3499,8 @@ export class Sim {
   // The HUD meter each trait exposes (−1 = no meter for this character)
   _displayMeter(p) {
     const t = p.char.trait;
+    const toh = tohMeter(this, p);
+    if (toh >= 0) return Math.min(1, toh);
     if (t.key === 'momentum_meter') return p.meter;
     if (t.key === 'resonance') return Math.min(1, p.resonCharge / t.hits);
     if (t.key === 'overwatch') {
@@ -3447,15 +3547,25 @@ export class Sim {
       weapons: p.weapons.map(w => ({ id: w.id, tier: w.tier, invested: w.invested })),
       items: [...p.items],
       stats: { ...p.stats }, weaponSlots: p.weaponSlots,
-      boonCounts: p.char.trait.key === 'prism' ? { ...p.boonCounts } : undefined,
+      boonCounts: ['prism', 'wildshape'].includes(p.char.trait.key) ? { ...p.boonCounts } : undefined,
+      // run-long, changes a few times a floor — the meta channel, not the 15Hz snapshot
+      infusions: p.char.trait.key === 'crystal_infusion' ? { ...p.infusions, detonate: p.detonate } : undefined,
     };
   }
 
   // sim helpers used by behaviors
   walk(e, tx, ty, spd, dt) { this.walkAngle(e, angleTo(e.x, e.y, tx, ty), spd, dt); }
   walkAngle(e, a, spd, dt) {
+    const x0 = e.x, y0 = e.y;
     e.x += Math.cos(a) * spd * dt;
     e.y += Math.sin(a) * spd * dt;
+    // Sundian coral: a wall the party can walk straight through and enemies
+    // cannot. Deliberately NOT an obstacle — `_inObstacle` is shared by
+    // players, sight and every projectile and cannot express "enemies only".
+    if (this.coralWalls.length) {
+      const wl = coralBlocks(this, x0, y0, e.x, e.y);
+      if (wl) { e.x = x0; e.y = y0; wl.hp -= spd * dt * 0.05; }
+    }
     this.clampToRoom(e);
   }
   clampToRoom(e) {

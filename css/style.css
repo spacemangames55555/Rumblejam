@@ -49,6 +49,13 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 #screen-lobby .panel{width:min(94vw,1060px);}
 .lobby-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; flex-wrap:wrap; gap:8px;}
 .room-code{font-size:26px; letter-spacing:6px; color:var(--gold); background:#12141f; border:2px dashed var(--line); border-radius:8px; padding:4px 16px;}
+/* Roster switch — host-only, and a 44px tap target like every other control */
+.roster-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
+.roster-btn{min-height:44px; padding:6px 14px; background:var(--panel2); border:2px solid var(--line); border-radius:8px; color:var(--ink); font:inherit;}
+.roster-btn.on{border-color:var(--gold); color:var(--gold);}
+.roster-btn[disabled]{opacity:0.55;}
+.roster-btn[disabled].on{opacity:1;}
+
 /* 8 seats wrap into a grid — readable on a phone without scrolling the panel away */
 .lobby-players{display:grid; grid-template-columns:repeat(auto-fill, minmax(168px, 1fr)); gap:8px; margin-bottom:14px;}
 .lobby-player{display:flex; gap:8px; align-items:center; background:var(--panel2); border:2px solid var(--line); border-radius:8px; padding:6px 10px; min-height:44px; min-width:0;}
@@ -321,3 +328,14 @@ body.touch-on .char-card{min-height:120px;}
 .seed-line{color:var(--dim); font-size:13px; letter-spacing:1px;}
 .result-title-win{color:var(--xp);} .result-title-loss{color:var(--danger);}
 h2.rt{font-size:38px; letter-spacing:4px; text-align:center; margin-bottom:4px;}
+
+/* Samurai stance swap: a 44px target near the joystick, mirroring interact-btn */
+#stance-btn{position:fixed; right:16px; bottom:116px; min-height:52px; min-width:112px; z-index:40;
+  background:var(--panel2); border:2px solid var(--gold); color:var(--gold); border-radius:10px;
+  font-size:14px; letter-spacing:2px; font-weight:bold;}
+
+/* ToH mode badges — a word, not a bar: stance and pack mode change the plan */
+.toh-badge{display:inline-block; margin-top:3px; padding:2px 8px; border-radius:6px; font-size:11px; letter-spacing:1px; font-weight:bold; background:#12141f; border:1px solid var(--line); color:var(--ink);}
+.toh-badge.s0{color:#5ea8ff; border-color:#5ea8ff;}
+.toh-badge.s1{color:#ffd45e; border-color:#ffd45e;}
+.toh-badge.s2{color:#5ee0a8; border-color:#5ee0a8;}

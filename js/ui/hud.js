@@ -49,6 +49,7 @@ export function updateHud(meta, view, hctx) {
         <div class="bar"><i style="width:${Math.round(100 * p.hp / Math.max(1, p.maxHp))}%"></i></div>
         ${mine && meta ? `<div class="xpbar"><i style="width:${Math.round(100 * meta.xp / meta.xpNext)}%"></i></div>` : ''}
         ${mine && p.meter >= 0 ? `<div class="meterbar ${p.meter >= 1 ? 'full' : ''}"><i style="width:${Math.round(100 * Math.min(1, p.meter))}%"></i></div>` : ''}
+        ${mine ? tohBadge(p) : ''}
       </div>`);
   }
   wrap.innerHTML = rows.join('');
@@ -107,6 +108,19 @@ export function updateHud(meta, view, hctx) {
 function bossBar(boss) {
   const pct = Math.round(100 * boss.hp / boss.max);
   return `<span style="display:inline-block; width:140px; height:10px; background:#26192a; border-radius:3px; vertical-align:middle; margin-left:6px;"><span style="display:block; height:100%; width:${pct}%; background:var(--danger); border-radius:3px;"></span></span>`;
+}
+
+// Thrones of Heaven states that are a MODE, not a meter: the Samurai's stance
+// and the Hunter's pack mode change how you play and have to be readable at a
+// glance, so they get a word rather than a bar.
+const STANCES = ['IRON', 'PRECISION', 'FLOW'];
+const PACK = ['', 'ALPHA', 'MARKSMAN'];
+function tohBadge(p) {
+  if (p.trait === 'three_stances') return `<div class="toh-badge s${p.ts}">${STANCES[p.ts] || ''}</div>`;
+  if (p.trait === 'pack_tactics' && p.ts) return `<div class="toh-badge s${p.ts}">${PACK[p.ts]}</div>`;
+  if (p.trait === 'contract' && p.ts) return `<div class="toh-badge s1">${p.ts} CLOSED</div>`;
+  if (p.trait === 'crystal_infusion' && p.ts) return `<div class="toh-badge s0">${p.ts % 100} INFUSED${p.ts >= 100 ? ' \u2726' : ''}</div>`;
+  return '';
 }
 
 export function toast(text) {

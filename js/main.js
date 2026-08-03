@@ -10,7 +10,7 @@ import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
 import { serializeObjective } from './objectives.js';
 import { OBJECTIVE_META } from './objectives.js';
 import { Renderer } from './render.js';
-import { initInput, sampleInput, takeDebugKey, pressInteract } from './input.js';
+import { initInput, sampleInput, takeDebugKey, pressInteract, pressStance } from './input.js';
 import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx, preloadAirhorn, levelupHorn, audioStats, getCtxState, getMasterGainValue, setVolume, getVolume } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
@@ -18,7 +18,9 @@ import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon } from './ui/overlays.js';
-import { CHARACTERS, CHAR_BY_ID } from './content/characters.js';
+import { CHARACTERS, CHAR_BY_ID, ROSTER_ID, ROSTERS, ROSTER_IDS } from './content/characters.js';
+import { resolveInitialRoster, chooseRoster, applyHostRoster } from './roster.js';
+import { tohSnapshot, tohMarks, tohState, TOH_STANCE_NAMES } from './traits-toh.js';
 import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
 import { ENEMIES } from './content/enemies.js';
@@ -73,7 +75,11 @@ const actions = {
   pickChar: charId => sendUi({ kind: 'pick', charId }),
   toggleReady: () => sendUi({ kind: 'ready' }),
   startGame: hostStartRun,
+  pickRoster: hostPickRoster,
 };
+// Roster first: every screen that lists characters reads the active roster,
+// so this has to settle before the first render.
+resolveInitialRoster();
 initScreens(actions);
 initGloss(); // stat-glossary popover + document-level term handling
 initMapScreen({
@@ -103,6 +109,7 @@ window.uvAudio = { stats: audioStats, ctxState: getCtxState, masterGain: getMast
 preloadAirhorn(); // fire-and-forget: a missing asset falls back to the synth blip
 initLeaveButton();
 document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
+document.getElementById('stance-btn').onclick = () => { sfx.click(); pressStance(); };
 document.getElementById('sheet-btn').onclick = () => { sfx.click(); toggleSheet(); };
 window.addEventListener('keydown', e => {
   if (e.code === 'KeyC' && app.mode === 'run' && document.activeElement.tagName !== 'INPUT') toggleSheet();
@@ -304,7 +311,22 @@ function broadcastLobby() {
   if (app.hostT) app.hostT.broadcast({ t: 'lobby', lobby: publicLobby() });
 }
 function publicLobby() {
-  return { code: app.lobby.code, codePending: app.lobby.codePending, players: app.lobby.players.map(p => ({ ...p })) };
+  // `roster` is host-authoritative: it rides every lobby broadcast so a client
+  // is on the host's roster before it ever renders a character grid.
+  return {
+    code: app.lobby.code, codePending: app.lobby.codePending, roster: ROSTER_ID,
+    players: app.lobby.players.map(p => ({ ...p })),
+  };
+}
+
+// Host-only. Switching rosters clears everyone's character pick, because the
+// ids in the old roster do not exist in the new one.
+function hostPickRoster(id) {
+  if (app.role === 'client' || !app.lobby || !ROSTERS[id] || id === ROSTER_ID) return;
+  chooseRoster(id);
+  for (const p of app.lobby.players) { p.charId = null; p.ready = false; }
+  if (app.hostT) app.hostT.broadcast({ t: 'lobby', lobby: publicLobby() });
+  refreshLobby();
 }
 function refreshLobby() {
   if (app.mode === 'lobby') showLobby(app.lobby, app.role === 'host', app.myKey);
@@ -316,7 +338,7 @@ function hostStartRun() {
   const seed = randomRunSeed();
   app.party = l.players.map((p, i) => ({ idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color }));
   app.myIdx = 0;
-  if (app.hostT) app.hostT.broadcast({ t: 'start', seed, party: app.party });
+  if (app.hostT) app.hostT.broadcast({ t: 'start', seed, roster: ROSTER_ID, party: app.party });
   startRunCommon();
   app.sim = new Sim({ seed, party: app.party });
   drainSimOutputs(true); // deliver initial floor/room events
@@ -373,6 +395,7 @@ function clientPump() {
   if (app.mode === 'run') {
     const inp = sampleInput();
     app.clientT.send({ t: 'in', seq: ++app.seqNo, mx: +inp.mx.toFixed(3), my: +inp.my.toFixed(3), e: inp.interact ? 1 : 0 });
+    if (inp.stance) sendUi({ kind: 'stance' });   // Samurai: Q, host-authoritative like every other action
     if (app.lastSnapAt && performance.now() - app.lastSnapAt > CONFIG.DISCONNECT_TIMEOUT * 1000) clientLostHost();
   } else {
     app.clientT.send({ t: 'ping' });
@@ -391,10 +414,11 @@ function sanitizeMember(p, i) {
   };
 }
 function sanitizeLobby(lobby) {
-  if (!lobby || !Array.isArray(lobby.players)) return { code: null, codePending: false, players: [] };
+  if (!lobby || !Array.isArray(lobby.players)) return { code: null, codePending: false, roster: ROSTER_ID, players: [] };
   return {
     code: /^[A-Z2-9]{5}$/.test(String(lobby.code)) ? lobby.code : null,
     codePending: !!lobby.codePending,
+    roster: ROSTER_IDS.includes(lobby.roster) ? lobby.roster : ROSTER_ID,
     players: lobby.players.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember),
   };
 }
@@ -403,6 +427,8 @@ function clientOnMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
   switch (msg.t) {
     case 'lobby':
+      // the host's roster wins, always — before sanitizeLobby resolves charIds
+      applyHostRoster(msg.lobby && msg.lobby.roster, msg.lobby && msg.lobby.players);
       app.lobby = sanitizeLobby(msg.lobby);
       if (app.mode === 'lobby') showLobby(app.lobby, false, app.myKey);
       break;
@@ -416,6 +442,7 @@ function clientOnMessage(msg) {
       break;
     case 'start': {
       if (!Array.isArray(msg.party)) break;
+      applyHostRoster(msg.roster, msg.party);   // again: sanitizeMember drops unknown charIds
       const party = msg.party.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember);
       const me = party.find(p => p.key === app.myKey);
       if (!me || !me.charId) { // raced the host's START before our hello landed — bail cleanly
@@ -441,6 +468,7 @@ function clientOnMessage(msg) {
     case 'ev': for (const ev of msg.list) handleEvent(ev); break;
     case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); updateSheetMeta(app.meta); } break;
     case 'abandon': // host ended the run for everyone — back to the lobby together
+      applyHostRoster(msg.lobby && msg.lobby.roster, msg.lobby && msg.lobby.players);
       app.lobby = sanitizeLobby(msg.lobby);
       app.mode = 'lobby';
       app.snaps = [];
@@ -639,6 +667,7 @@ function hostTick() {
   const sim = app.sim;
   const inp = sampleInput();
   sim.setInput(0, { mx: inp.mx, my: inp.my, interact: inp.interact });
+  if (inp.stance) sim.uiAction(0, { kind: 'stance' });   // Samurai: Q
   sim.tick();
   renderer.ingestFx(sim.fx);
   drainSimOutputs();
@@ -713,7 +742,15 @@ function viewFromSim(sim) {
       downed: p.downed, reviveP: p.reviveP, gone: p.gone, radius: p.radius, aimA: p.aimA,
       meter: sim._displayMeter(p), carrying: !!p.carrying,
       reloc: Math.min(1, p.relocT / CONFIG.STRUCT_CHANNEL_S),
+      ts: tohState(sim, p),
+      trait: p.char.trait.key,
     })),
+    // Thrones of Heaven world layer (null/empty on the classic roster)
+    toh: tohSnapshot(sim),
+    tohMarks: tohMarks(sim),
+    spirits: sim.players.filter(q => !q.gone && q.spirit)
+      .map(q => [Math.round(q.spirit.x), Math.round(q.spirit.y), q.spirit.t / q.spirit.dur, q.idx]),
+    colors: Object.fromEntries(sim.players.map(q => [q.idx, q.color])),
     auras: sim._snapAuras().map(a => ({ idx: a[0], r: a[1] })),
     tethers: sim._snapTethers().map(t => ({ x1: t[0], y1: t[1], x2: t[2], y2: t[3] })),
     decoys: sim.decoys.map(d => ({ x: d.x, y: d.y, frac: d.t / d.dur, owner: d.owner })),
@@ -791,8 +828,11 @@ function viewFromSnaps(dtFrame) {
     players.push({
       idx, x, y, hp: n[3], maxHp: n[4], downed: !!n[5], reviveP: n[6], shield: n[7], gone: !!n[8], aimA: n[9],
       meter: n[10] !== undefined ? n[10] : -1, carrying: !!n[11], reloc: n[12] || 0,
+      ts: n[13] || 0,   // ToH trait state: stance / stacks / contracts / pack mode
+      trait: chr ? chr.trait.key : null,
       name: member ? member.name : '?', color: member ? member.color : '#fff', charId: member ? member.charId : null,
-      sym: chr ? chr.sym : '●', radius: chr && chr.trait.key === 'immovable' ? 16 * chr.trait.hitbox : 16,
+      sym: chr ? chr.sym : '●',
+      radius: chr && (chr.trait.key === 'immovable' || chr.trait.key === 'crystal_infusion') ? 16 * chr.trait.hitbox : 16,
     });
   }
   // projectiles ride the same delayed timeline as enemies (bounded extrapolation)
@@ -831,11 +871,19 @@ function viewFromSnaps(dtFrame) {
     auras: (s1.auras || []).map(a => ({ idx: a[0], r: a[1] })),
     tethers: (s1.tethers || []).map(t => ({ x1: t[0], y1: t[1], x2: t[2], y2: t[3] })),
     decoys: (s1.decoys || []).map(d => ({ x: d[0], y: d[1], frac: d[2], owner: d[3] })),
+    // Thrones of Heaven: coral, singularities, spirits and the two marks whose
+    // traits are invisible without them. Taken from the newest snapshot rather
+    // than interpolated — they are slow, and a stale tether is worse than a
+    // one-frame-late one.
+    toh: s1.toh || null,
+    tohMarks: s1.tohMarks || [],
+    spirits: s1.spirits || [],
+    colors: Object.fromEntries((app.party || []).map(m => [m.idx, m.color])),
   };
 }
 
 function predictSelf(dtFrame, serverP, chr) {
-  const radius = chr && chr.trait.key === 'immovable' ? 16 * chr.trait.hitbox : 16;
+  const radius = chr && (chr.trait.key === 'immovable' || chr.trait.key === 'crystal_infusion') ? 16 * chr.trait.hitbox : 16;
   if (!app.predicted) app.predicted = { x: serverP[1], y: serverP[2] };
   const pr = app.predicted;
   const tempo = app.meta ? app.meta.stats.tempo : 0;
@@ -911,6 +959,9 @@ function frame(now) {
     const wantInteract = touchEnabled() && !isShopOpen() && view.mode === 'arena'
       && (isOverseer || (view.afterSiege && view.cleared && !!view.hatch));
     document.getElementById('interact-btn').classList.toggle('hidden', !wantInteract);
+    const meNow = (view.players || []).find(q => q.idx === app.myIdx);
+    document.getElementById('stance-btn').classList.toggle('hidden', !(meNow && meNow.trait === 'three_stances'));
+    if (meNow && meNow.trait === 'three_stances') document.getElementById('stance-btn').textContent = TOH_STANCE_NAMES[meNow.ts] || 'STANCE';
   }
 }
 requestAnimationFrame(frame);

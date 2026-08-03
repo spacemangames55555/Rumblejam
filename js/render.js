@@ -141,6 +141,7 @@ export class Renderer {
     }
     if (view.hatch) this._drawHatch(ctx, view.hatch[0], view.hatch[1], view.afterSiege);
     if (view.obj) this._drawObjective(ctx, view);
+    this._drawToh(ctx, view);
     this._drawAuras(ctx, view);
     this._drawTethers(ctx, view);
     this._drawTelegraphs(ctx, view, inView);
@@ -226,6 +227,9 @@ export class Renderer {
         if (carrier < 0) targets.push({ x: rx, y: ry, color: '#ffd45e', label: '⚱' });
       }
       for (const [nx, ny] of ob.nests || []) targets.push({ x: nx, y: ny, color: '#c98b4f', label: '⁂' });
+    }
+    for (const [mi, mx2, my2, doll] of view.tohMarks || []) {   // Assassin's contract
+      if (!doll && mi === view.myIdx) targets.push({ x: mx2, y: my2, color: '#ff7ad9', label: '✦' });
     }
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const cwCss = s.cw / this.dpr, chCss = s.ch / this.dpr;
@@ -390,6 +394,79 @@ export class Renderer {
       ctx.strokeStyle = PALETTE.wallEdge;
       ctx.lineWidth = 3;
       ctx.strokeRect(o[0], o[1], o[2], o[3]);
+    }
+  }
+
+  // Thrones of Heaven world layer: coral nodes and the walls they grow, Mage
+  // singularities, Monk spirits, and the two markers whose traits are invisible
+  // without them — the Assassin's contract and the Witch Doctor's doll tether.
+  _drawToh(ctx, view) {
+    const t = view.toh;
+    if (t) {
+      for (const [x, y, r, frac] of t.coral || []) {
+        ctx.strokeStyle = '#5ee0a8';
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.35 + 0.45 * frac;
+        circle(ctx, x, y, r); ctx.stroke();
+        ctx.fillStyle = 'rgba(94,224,168,0.12)';
+        circle(ctx, x, y, r); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#5ee0a8';
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2 + this.t * 0.6;
+          circle(ctx, x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55, 4); ctx.fill();
+        }
+      }
+      for (const [x1, y1, x2, y2, hp] of t.walls || []) {
+        ctx.strokeStyle = hp > 0.5 ? '#5ee0a8' : '#ffab4f';
+        ctx.lineWidth = 8 * Math.max(0.25, hp);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      for (const [x, y, r, frac] of t.sing || []) {
+        ctx.strokeStyle = '#b993ff';
+        ctx.lineWidth = 4;
+        circle(ctx, x, y, r * (0.25 + 0.75 * frac)); ctx.stroke();
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = '#b993ff';
+        circle(ctx, x, y, r); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+    for (const [x, y, frac, idx] of view.spirits || []) {   // Monk astral copy
+      ctx.globalAlpha = 0.25 + 0.4 * frac;
+      ctx.fillStyle = (view.colors && view.colors[idx]) || PALETTE.players[idx % PALETTE.players.length];
+      circle(ctx, x, y, 13); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#b993ff'; ctx.lineWidth = 2;
+      circle(ctx, x, y, 17); ctx.stroke();
+    }
+    for (const m of view.tohMarks || []) {
+      const [idx, x, y, doll] = m;
+      const me = (view.players || []).find(q => q.idx === idx);
+      if (doll) {   // Witch Doctor: the link IS the trait, so it has to be visible
+        if (!me) continue;
+        ctx.strokeStyle = 'rgba(125,238,106,0.65)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([9, 7]);
+        ctx.lineDashOffset = -this.t * 22;
+        ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(x, y); ctx.stroke();
+        ctx.setLineDash([]); ctx.lineDashOffset = 0;
+        ctx.fillStyle = '#7dee6a';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('BOUND', x, y - 34);
+      } else {      // Assassin: the mark, and an edge arrow when it is off screen
+        ctx.strokeStyle = '#ff7ad9';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 6]);
+        ctx.lineDashOffset = this.t * 18;
+        circle(ctx, x, y, 34 + Math.sin(this.t * 4) * 4); ctx.stroke();
+        ctx.setLineDash([]); ctx.lineDashOffset = 0;
+        ctx.fillStyle = '#ff7ad9';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CONTRACT', x, y - 44);
+      }
     }
   }
 

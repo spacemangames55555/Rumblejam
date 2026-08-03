@@ -7,6 +7,7 @@ import { getTouchMove, touchEnabled } from './touch.js';
 
 const keys = new Set();
 let interactLatch = false;
+let stanceLatch = false;   // Samurai: Q, or the on-screen stance button
 const debugPressed = new Set(); // F1-F6 single-fire
 
 export function initInput() {
@@ -14,6 +15,7 @@ export function initInput() {
     if (e.repeat) return;
     keys.add(e.code);
     if (e.code === 'KeyE') interactLatch = true;
+    if (e.code === 'KeyQ') stanceLatch = true;
     if (/^F[1-6]$/.test(e.code)) { debugPressed.add(e.code); e.preventDefault(); }
   });
   window.addEventListener('keyup', e => keys.delete(e.code));
@@ -30,12 +32,14 @@ export function sampleInput() {
   const joy = getTouchMove();
   if (joy.active && touchEnabled()) { mx = joy.mx; my = joy.my; }
   const interact = interactLatch;
-  interactLatch = false;
-  return { mx, my, interact };
+  const stance = stanceLatch;
+  interactLatch = false; stanceLatch = false;
+  return { mx, my, interact, stance };
 }
 
 // on-screen contextual button → same latch as the E key
 export function pressInteract() { interactLatch = true; }
+export function pressStance() { stanceLatch = true; }
 
 export function takeDebugKey() {
   for (const k of debugPressed) { debugPressed.delete(k); return k; }
