@@ -164,6 +164,15 @@ export function waveConfig(floorNum, depth, kind) {
   };
 }
 
+// How many enemies a STANDARD horde arena spends over its whole life, for a
+// given party size and floor. The wave is a linear ramp r0→r1 over dur, so
+// the integral is the mean rate × duration × the party/patch multipliers.
+// Elite Arena prices its roster against this.
+export function hordeTotalSpawns(floorNum, depth, coopSpawn) {
+  const w = waveConfig(floorNum, depth, 'combat');
+  return ((w.r0 + w.r1) / 2) * w.dur * coopSpawn * CONFIG.spawnBudgetMult;
+}
+
 // ---------------- per-floor siege arenas (bespoke) ----------------
 // Each mutation: { at: seconds, kind, ...params, text } — telegraphed with
 // the existing danger-zone language, and every mutation revives downed

@@ -226,11 +226,14 @@ export function updateEnemy(sim, e, dt) {
       break;
     }
     case 'nest': {
-      e.spawnT = (e.spawnT ?? t.spawnCd * 0.5) - dt;
+      // spawnCdMult lets an objective retune a nest's output (Nest Purge runs
+      // its walled nests at 3x rate); the cooldown is the per-nest spawn rate.
+      const cd = t.spawnCd * (e.spawnCdMult || 1);
+      e.spawnT = (e.spawnT ?? cd * 0.5) - dt;
       e.brood = e.brood || [];
       e.brood = e.brood.filter(id => sim.enemyById(id));
       if (e.spawnT <= 0 && e.brood.length < (e.maxBroodCap || t.maxBrood) && sim.enemyPool.count < 300) {
-        e.spawnT = t.spawnCd;
+        e.spawnT = cd;
         const child = sim.spawnEnemyById(t.broodId, e.x + (Math.random() * 40 - 20), e.y + (Math.random() * 40 - 20), { noMats: true });
         if (child) e.brood.push(child.id);
       }

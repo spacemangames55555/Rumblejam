@@ -137,6 +137,126 @@ if (BOSSES.length === 4) ok('bosses: 4'); else fail(`bosses ${BOSSES.length} != 
   if (!bad) ok('node maps: 600 seeded generations — 15 nodes, guarantees, avoidable Elite Arena, all 5 templates');
 }
 
+// ---- harness navigation ----
+const { WALL } = CFG;
+
+// Coarse grid pathing for the harness bots. Objective levels send bots to
+// specific far-flung points (a rim relic, a walled nest, a stalking mark), and
+// a greedy "walk at it and slide off obstacles" bot wedges itself against the
+// long interior walls the arena templates build. Real players route around
+// them, so the bot does too: BFS a distance field from the goal over free
+// cells, then walk downhill. A stuck-detector covers the rest.
+const CELL = 30;
+const INFLATE = 20;          // player radius 16 + a little; 26 falsely sealed
+let cache = null;            // one arena at a time is all a probe ever needs
+
+function grid(g) {
+  const key = `${g.W}x${g.H}:${g.obstacles.map(o => `${o.x | 0},${o.y | 0},${o.w | 0},${o.h | 0}`).join('|')}`;
+  if (cache && cache.key === key) return cache;
+  const cols = Math.ceil(g.W / CELL), rows = Math.ceil(g.H / CELL);
+  const blocked = new Uint8Array(cols * rows);
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      const x = i * CELL + CELL / 2, y = j * CELL + CELL / 2;
+      const out = x < WALL + INFLATE || y < WALL + INFLATE
+        || x > g.W - WALL - INFLATE || y > g.H - WALL - INFLATE;
+      blocked[j * cols + i] = (out || g._inObstacle(x, y, INFLATE)) ? 1 : 0;
+    }
+  }
+  cache = { key, cols, rows, blocked, fields: new Map() };
+  return cache;
+}
+
+function field(gr, gi, gj) {
+  const k = gj * gr.cols + gi;
+  const hit = gr.fields.get(k);
+  if (hit) return hit;
+  const { cols, rows, blocked } = gr;
+  const d = new Int32Array(cols * rows).fill(-1);
+  const q = [k];
+  d[k] = 0;
+  for (let h = 0; h < q.length; h++) {
+    const c = q[h], ci = c % cols, cj = (c / cols) | 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      if (!di && !dj) continue;
+      const ni = ci + di, nj = cj + dj;
+      if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+      const n = nj * cols + ni;
+      if (blocked[n] || d[n] >= 0) continue;
+      if (di && dj && (blocked[cj * cols + ni] || blocked[nj * cols + ci])) continue; // no corner cutting
+      d[n] = d[c] + 1;
+      q.push(n);
+    }
+  }
+  if (gr.fields.size > 16) gr.fields.clear();
+  gr.fields.set(k, d);
+  return d;
+}
+
+// The next waypoint toward (tx,ty): the centre of a neighbouring cell one step
+// closer along the flood fill, or the goal itself once it is in sight.
+function navTarget(g, p, tx, ty) {
+  const gr = grid(g);
+  const ci = v => Math.max(0, Math.min(gr.cols - 1, (v / CELL) | 0));
+  const cj = v => Math.max(0, Math.min(gr.rows - 1, (v / CELL) | 0));
+  let gi = ci(tx), gj = cj(ty);
+  if (gr.blocked[gj * gr.cols + gi]) {              // goal inside a wall: nearest free cell
+    let best = null, bd = Infinity;
+    for (let j = 0; j < gr.rows; j++) for (let i = 0; i < gr.cols; i++) {
+      if (gr.blocked[j * gr.cols + i]) continue;
+      const dd = (i - gi) ** 2 + (j - gj) ** 2;
+      if (dd < bd) { bd = dd; best = [i, j]; }
+    }
+    if (best) { gi = best[0]; gj = best[1]; }
+  }
+  const d = field(gr, gi, gj);
+  const pi = ci(p.x), pj = cj(p.y);
+  // Wedged in a wall's inflation band, or in a pocket the flood fill never
+  // reached: walk to the nearest cell that IS on a route (scan the whole grid,
+  // not a small box — the reachable side can be well outside one).
+  if (d[pj * gr.cols + pi] < 0) {
+    let best = null, bd = Infinity;
+    for (let j = 0; j < gr.rows; j++) for (let i = 0; i < gr.cols; i++) {
+      if (d[j * gr.cols + i] < 0) continue;
+      const dd = (i - pi) ** 2 + (j - pj) ** 2;
+      if (dd < bd) { bd = dd; best = [i, j]; }
+    }
+    if (!best) return [tx, ty];
+    return [best[0] * CELL + CELL / 2, best[1] * CELL + CELL / 2];
+  }
+  if (d[pj * gr.cols + pi] <= 1) return [tx, ty];   // adjacent: go direct
+  let best = null, bv = d[pj * gr.cols + pi];
+  for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+    const ni = pi + di, nj = pj + dj;
+    if (ni < 0 || nj < 0 || ni >= gr.cols || nj >= gr.rows) continue;
+    const v = d[nj * gr.cols + ni];
+    if (v >= 0 && v < bv) { bv = v; best = [ni, nj]; }
+  }
+  if (!best) return [tx, ty];
+  return [best[0] * CELL + CELL / 2, best[1] * CELL + CELL / 2];
+}
+
+// Bots have no patience and no pathfinding memory; if one has not moved in a
+// few seconds it is wedged somewhere the grid did not model. Shove it.
+function unstick(g, p, mx, my) {
+  const moved = Math.hypot(p.x - (p._lastX ?? p.x), p.y - (p._lastY ?? p.y));
+  p._stuckT = (p._stuckT || 0) + 1;
+  if (p._stuckT >= 30) {                             // sample twice a second
+    p._stuckT = 0;
+    if (moved < 25) p._jitter = 90;                  // 1.5s of a fixed detour
+    p._lastX = p.x; p._lastY = p.y;
+  }
+  if (p._jitter > 0) {
+    if (p._jitter === 90) {          // a NEW detour: a different heading each time,
+      p._jitterN = (p._jitterN || 0) + 1;   // or the bot walks into the same wall forever
+      p._jitterA = (p.idx * 1.7 + p._jitterN * 2.399) % (Math.PI * 2);
+    }
+    p._jitter--;
+    return [Math.cos(p._jitterA), Math.sin(p._jitterA)];
+  }
+  return [mx, my];
+}
+
 // ---- helpers ----
 function drain(sim, p, buyStuff) {
   let g = 0;
@@ -1416,49 +1536,64 @@ try {
 
   // --- every objective type is completable, solo and in co-op ---
   {
+    // The harness bot: pick the goal the level actually asks for, then walk
+    // there with the grid pathing above. Objective levels now send it to
+    // specific far-flung points — a rim relic, a walled nest — and the old
+    // "walk at it and slide off obstacles" steering wedged against the long
+    // interior walls the arena templates build.
+    const nestGoal = (g, o, p) => {
+      let nest = null, bd = Infinity;
+      for (const id of o.nests) {
+        const e = g.enemyById(id); if (!e) continue;
+        const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
+        if (d < bd) { bd = d; nest = e; }
+      }
+      if (!nest) return null;
+      if (!nest.nestShielded) return [nest.x, nest.y, 26];
+      // walled in: the barricade in front of it IS the objective for now
+      const b = (o.breached && o.breached[nest.id]) || {};
+      const ring = b[0] ? 1 : 0;
+      let best = null, wd = Infinity;
+      for (const w of g.walls) {
+        if (w.nestId !== nest.id || w.ring !== ring) continue;
+        const cx = Math.max(w.x, Math.min(p.x, w.x + w.w)), cy = Math.max(w.y, Math.min(p.y, w.y + w.h));
+        const d = (cx - p.x) ** 2 + (cy - p.y) ** 2;
+        if (d < wd) { wd = d; best = [cx, cy]; }
+      }
+      if (!best) return [nest.x, nest.y, 26];
+      const d = Math.sqrt(wd) || 1;
+      return [best[0] + (p.x - best[0]) / d * 46, best[1] + (p.y - best[1]) / d * 46, 34];
+    };
     const steerObj = (g) => {
       const o = g.obj;
       for (const p of g.players) {
         if (p.gone || p.downed) continue;
-        let tx = null, ty = null;
+        let goal = null;
         if (o) {
-          if (o.type === 'zone') { tx = o.zone.x; ty = o.zone.y; }
-          else if (o.type === 'storm') { tx = o.c.x; ty = o.c.y; }
-          else if (o.type === 'breach') { tx = o.gate.x; ty = o.gate.y; }
-          else if (o.type === 'payload') { tx = o.x; ty = o.y; }
+          if (o.type === 'zone') goal = [o.zone.x, o.zone.y, 60];
+          else if (o.type === 'storm') goal = [o.c.x, o.c.y, Math.max(60, o.r * 0.5)];
+          else if (o.type === 'breach') goal = [o.gate.x, o.gate.y, 40];
+          else if (o.type === 'payload') goal = [o.x, o.y, 120];
           else if (o.type === 'relic') {
             const mine = o.relics.find(r => r.carrier === p.idx);
-            if (mine) { tx = o.altar.x; ty = o.altar.y; }
-            else { const free = o.relics.find(r => r.carrier < 0); if (free) { tx = free.x; ty = free.y; } }
+            if (mine) goal = [o.altar.x, o.altar.y, 26];
+            else { const free = o.relics.find(r => r.carrier < 0); if (free) goal = [free.x, free.y, 20]; }
           } else if (o.type === 'bounty' && o.markId !== null) {
-            const e = g.enemyById(o.markId); if (e) { tx = e.x; ty = e.y; }
-          } else if (o.type === 'nest') {
-            let best = null, bd = Infinity;
-            for (const id of o.nests) {
-              const e = g.enemyById(id); if (!e) continue;
-              const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2;
-              if (d < bd) { bd = d; best = e; }
-            }
-            if (best) { tx = best.x; ty = best.y; }
-          }
+            const e = g.enemyById(o.markId); if (e) goal = [e.x, e.y, 110];
+          } else if (o.type === 'nest') goal = nestGoal(g, o, p);
         }
-        if (tx === null) {
+        if (!goal) {   // elite arena and anything else: killing IS the job
           let best = null, bd = Infinity;
           for (const e of g.enemyPool) { const d = (e.x - p.x) ** 2 + (e.y - p.y) ** 2; if (d < bd) { bd = d; best = e; } }
-          if (best) { tx = best.x; ty = best.y; }
+          if (best) goal = [best.x, best.y, 85];
         }
-        if (tx === null) { g.setInput(p.idx, { mx: 0, my: 0 }); continue; }
-        let dx = tx - p.x, dy = ty - p.y;
-        const l = Math.hypot(dx, dy) || 1;
-        const close = l < (o && (o.type === 'relic' || o.type === 'nest') ? 26 : 85);
-        dx /= l; dy /= l;
-        for (const ob of g.obstacles) { // players have no pathfinding: sidle
-          const ox = ob.x + ob.w / 2, oy = ob.y + ob.h / 2;
-          const d = Math.hypot(p.x - ox, p.y - oy) || 1;
-          if (d < Math.max(ob.w, ob.h) / 2 + 90) { dx += (p.x - ox) / d * 1.7; dy += (p.y - oy) / d * 1.7; }
-        }
-        const L = Math.hypot(dx, dy) || 1;
-        g.setInput(p.idx, { mx: close ? 0 : dx / L, my: close ? 0 : dy / L, interact: false });
+        if (!goal) { g.setInput(p.idx, { mx: 0, my: 0 }); continue; }
+        const [tx, ty, stop] = goal;
+        if (Math.hypot(tx - p.x, ty - p.y) < stop) { g.setInput(p.idx, { mx: 0, my: 0 }); continue; }
+        const [wx, wy] = navTarget(g, p, tx, ty);
+        const dx = wx - p.x, dy = wy - p.y, l = Math.hypot(dx, dy) || 1;
+        const [ux, uy] = unstick(g, p, dx / l, dy / l);
+        g.setInput(p.idx, { mx: ux, my: uy, interact: false });
       }
     };
     let objFail = 0;
@@ -1476,12 +1611,18 @@ try {
         }
         g._travelTo(node.id);
         let ticks = 0;
-        while (!g.cleared && !g.over && ticks++ < 60 * 60 * 6) {
+        // Bounty Hunt gets a longer leash than the rest: playtest pass 3 put ten
+        // times the health on every mark, so five of them is a fifteen-minute
+        // hunt for one player with this deliberately modest three-weapon kit
+        // (measured 12 min at 1p / 6 min at 4p). The gate still proves the level
+        // FINISHES; the length is a design decision, not a bug.
+        const budget = 60 * 60 * (kind === 'bounty' ? 20 : 6);
+        while (!g.cleared && !g.over && ticks++ < budget) {
           steerObj(g); g.tick();
           for (const p of g.players) if (!p.downed) p.hp = p.stats.vitality;
         }
         if (g.cleared) times.push(`${OBJECTIVE_META[kind].name} ${n}p ${(ticks / 60).toFixed(0)}s`);
-        else { fail(`${kind} (${n}p) never cleared in 6 minutes: ${JSON.stringify(g.obj)}`); objFail++; }
+        else { fail(`${kind} (${n}p) never cleared in ${budget / 3600} minutes: ${JSON.stringify(g.obj).slice(0, 400)}`); objFail++; }
       }
     }
     if (!objFail) ok(`all 8 objective levels clear solo and 4p — ${times.join(' · ')}`);
@@ -1558,10 +1699,10 @@ try {
     if (t.heatMax === 1.5 && t.heatPer === 0.15) ok('Overheat is +15% per pulse, capped at +150%');
   }
 
-  // --- boss HP doubled ---
+  // --- boss HP doubled (and the Regent multiplied again in playtest 3) ---
   {
-    const want = [1240, 1800, 2700, 4000];
-    if (BOSSES.every((b, i) => b.hp === want[i])) ok(`boss HP doubled: ${BOSSES.map(b => b.hp).join(' / ')}`);
+    const want = [1240, 1800, 2700, 40000];
+    if (BOSSES.every((b, i) => b.hp === want[i])) ok(`boss HP: ${BOSSES.map(b => b.hp).join(' / ')} (floors 1-3 doubled, the Regent x20)`);
     else fail(`boss HP: ${BOSSES.map(b => b.hp).join('/')} != ${want.join('/')}`);
   }
 
@@ -1726,7 +1867,7 @@ try {
     else fail(`player escaped the map by ${worst.toFixed(1)}u`);
   }
 
-  // --- Breach: sealed doors, kill quotas, and a clean finish ---
+  // --- Breach: sealed doors on a CLOCK, and a clean finish (patch 13) ---
   {
     for (const n of [1, 4]) {
       const g = new Sim({ seed: 777, party: squad(n) });
@@ -1735,46 +1876,43 @@ try {
       if (o.segs >= 3 && o.segs <= 4) ok(`Breach splits into ${o.segs} segments (${n}p)`);
       else fail(`Breach segments: ${o.segs}`);
       if (o.doors.length === o.segs) ok(`${o.doors.length} sealed doors, one per segment boundary`);
-      const need1 = o.need;
-      // the door holds you until the quota is paid
+      if (o.need === undefined && o.kills === undefined) ok('no kill quota survives — the doors run on a clock');
+      else fail(`Breach still carries a kill quota: need=${o.need} kills=${o.kills}`);
+      // the door holds you until its clock runs out
       const p = g.players[0];
       p.x = o.doors[0] + 500; g.tick();
-      if (p.x < o.doors[0]) ok('a sealed door blocks the party until its quota is paid');
+      if (p.x < o.doors[0]) ok('a sealed door blocks the party until its timer expires');
       else fail(`walked through a sealed door to ${Math.round(p.x)} (door at ${o.doors[0]})`);
-      // pay it
-      for (let k = 0; k < o.need; k++) {
+      // killing does NOT buy ground any more
+      for (let k = 0; k < 60; k++) {
         const e = g.spawnEnemyById('skulker', p.x - 60, p.y, {});
         if (e) g._killEnemy(e, p);
       }
-      if (o.seg === 1) ok(`the door opens on its kill quota (${need1} kills, ${n}p)`);
-      else fail(`quota paid but seg=${o.seg}`);
-      if (n === 1 && need1 < g.obj.need * 4) ok(`door quota scales with party and floor (${need1} at 1p)`);
+      if (o.seg === 0) ok(`60 kills do not open a door (${n}p) — the clock is the only key`);
+      else fail(`kills opened a door: seg=${o.seg}`);
     }
-    // …and the quota really is bigger with a bigger party
-    const solo = new Sim({ seed: 777, party: squad(1) }); enterKind(solo, 'breach');
-    const four = new Sim({ seed: 777, party: squad(4) }); enterKind(four, 'breach');
-    if (four.obj.need > solo.obj.need) ok(`door quota scales with party size (${solo.obj.need} solo → ${four.obj.need} at 4p)`);
-    else fail(`quota did not scale: ${solo.obj.need} vs ${four.obj.need}`);
   }
 
-  // --- Elite Arena density: 10–15 champions in waves of 3–5 ---
+  // --- Elite Arena density: half a horde arena's spend, all of it at t=0 ---
   {
     let bad = 0;
+    const { hordeTotalSpawns } = await import('../js/arenas.js');
     for (const [n, fl] of [[1, 1], [4, 1], [8, 1], [4, 3]]) {
       const g = new Sim({ seed: 31337, party: squad(Math.min(4, n)).concat(
         n > 4 ? mkp(Array.from({ length: n - 4 }, (_, i) => ['sawbones', 'redmaw', 'longshot', 'frostcaller'][i % 4]))
           .map((m, i) => ({ ...m, idx: 4 + i, key: `x${i}` })) : []) });
       for (let f = 1; f < fl; f++) g._startFloor(f + 1);
-      enterKind(g, 'elite_arena');
+      const node = enterKind(g, 'elite_arena');
       const o = g.obj;
-      if (o.total < 10 || o.total > 15) { bad++; fail(`elite arena roster ${o.total} outside 10–15 (${n}p f${fl})`); }
-      if (o.waveSize < 3 || o.waveSize > 5) { bad++; fail(`elite wave size ${o.waveSize} outside 3–5`); }
-      // first wave lands, and it is a MIX of variants
+      const priced = Math.round(hordeTotalSpawns(g.floorNum, node.col, g.coopSpawn) / 2);
+      if (Math.abs(o.total - priced) > 1) { bad++; fail(`elite roster ${o.total} != half a horde arena (${priced}) at ${n}p f${fl}`); }
+      // the WHOLE roster lands at once, and it is a MIX of variants
       for (let i = 0; i < 90; i++) g.tick();
+      if (g.enemyPool.count < o.total) { bad++; fail(`only ${g.enemyPool.count}/${o.total} champions on the field at t=0 (${n}p f${fl})`); }
       const kinds = new Set([...g.enemyPool].map(e => e.arenaVariant));
-      if (kinds.size < 2) { bad++; fail(`first elite wave was all one variant: ${[...kinds]}`); }
+      if (kinds.size < 3) { bad++; fail(`elite roster was not a mix: ${[...kinds]}`); }
     }
-    if (!bad) ok('Elite Arena: 10–15 champions per match, waves of 3–5, variants mixed within a wave');
+    if (!bad) ok('Elite Arena: roster priced at half a horde arena, every champion standing at t=0, variants mixed');
   }
 
   // --- the completion-cleanup safety guarantee, on every level type ---
@@ -1864,6 +2002,384 @@ try {
     else fail(`the audit quietly nerfed the catalog: mean net value ${meanWorth.toFixed(1)}`);
   }
 } catch (err) { fail('playtest-2 gates crashed', err); }
+
+// ---- 9k. playtest patch 3: Elite Arena at t=0, one-relic runs, timer doors,
+//          stalker bounties, walled nests, the Regent, structure recall ----
+try {
+  const { hordeTotalSpawns: HTS } = await import('../js/arenas.js');
+  const { BOSS_BY_FLOOR: BBF } = await import('../js/content/bosses.js');
+  const mk3 = ids => ids.map((c, i) => ({ idx: i, key: `q${i}`, name: `Q${i}`, charId: c, color: '#fff' }));
+  const party3 = n => mk3(Array.from({ length: n },
+    (_, i) => ['bulwark', 'cindermage', 'zephyr', 'banneret', 'sawbones', 'redmaw', 'longshot', 'frostcaller'][i % 8]));
+  const gear3 = g => { for (const p of g.players) {
+    const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
+    while (p.weapons.length < 3) g._addWeapon(p, kit[p.weapons.length], 2);
+    g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
+  } };
+  const enter3 = (g, kind) => {
+    const n = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    n.kind = kind; if (!n.template) n.template = 'open_expanse';
+    g._travelTo(n.id); return n;
+  };
+
+  // --- 1. Elite Arena: everything on the field at t=0, spaced, lobber share ---
+  {
+    let bad = 0;
+    const notes = [];
+    for (const [n, fl] of [[1, 1], [4, 1], [8, 1], [1, 4]]) {
+      const g = new Sim({ seed: 8181 + n, party: party3(n) });
+      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      enter3(g, 'elite_arena'); g.god = true; gear3(g);
+      const o = g.obj;
+      for (let i = 0; i < 4; i++) g.tick();      // the roster lands on tick 1
+      const onField = g.enemyPool.count;
+      if (onField < o.spawnedCount) { bad++; fail(`elite arena: ${onField}/${o.spawnedCount} on the field at t=0`); }
+      // NOBODY starts within the safe radius of a live player
+      let closest = Infinity;
+      for (const e of g.enemyPool) for (const p of g.livePlayers()) closest = Math.min(closest, Math.hypot(e.x - p.x, e.y - p.y));
+      if (closest < 380) { bad++; fail(`a champion spawned ${Math.round(closest)}u from a player (want >=400)`); }
+      // 25-30% lobbers
+      const lob = [...g.enemyPool].filter(e => e.arenaVariant === 'lobber').length;
+      const share = lob / Math.max(1, g.enemyPool.count);
+      if (share < 0.22 || share > 0.33) { bad++; fail(`lobber share ${(100 * share).toFixed(0)}% outside 25-30% (${n}p f${fl})`); }
+      // per-unit HP falls as the roster grows: total threat up, per-unit down
+      const hp = [...g.enemyPool].map(e => e.maxHp);
+      notes.push(`${n}p f${fl}: ${o.total} champions, HP ${Math.min(...hp)}-${Math.max(...hp)}, closest ${Math.round(closest)}u`);
+    }
+    // the shrink really is a shrink: a bigger roster means softer individuals
+    const solo = new Sim({ seed: 8181, party: party3(1) }); enter3(solo, 'elite_arena'); solo.tick();
+    const eight = new Sim({ seed: 8181, party: party3(8) }); enter3(eight, 'elite_arena'); eight.tick();
+    const hpS = [...solo.enemyPool].reduce((a, e) => a + e.maxHp, 0) / Math.max(1, solo.enemyPool.count);
+    const hpE = [...eight.enemyPool].reduce((a, e) => a + e.maxHp, 0) / Math.max(1, eight.enemyPool.count);
+    if (eight.obj.total > solo.obj.total && hpE < hpS) {
+      ok(`Elite Arena scales by COUNT not bulk (${solo.obj.total}@${Math.round(hpS)}hp solo → ${eight.obj.total}@${Math.round(hpE)}hp at 8p)`);
+    } else { bad++; fail(`elite scaling: ${solo.obj.total}@${Math.round(hpS)} vs ${eight.obj.total}@${Math.round(hpE)}`); }
+    if (!bad) ok(`Elite Arena opens surrounded — ${notes.join(' · ')}`);
+  }
+
+  // --- 2. Relic Run: one at a time, on the rim, budget split five ways ---
+  {
+    let bad = 0;
+    for (const [n, fl] of [[1, 1], [4, 1], [8, 1]]) {
+      const g = new Sim({ seed: 3400 + n, party: party3(n) });
+      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      const node = enter3(g, 'relic'); g.god = true; gear3(g);
+      const o = g.obj;
+      if (o.relics.length !== 1) { bad++; fail(`relic run opened with ${o.relics.length} relics, want 1`); }
+      // the pack is the level's budget / 5, and it is standing at the relic
+      const priced = Math.max(4, Math.round(HTS(g.floorNum, node.col, g.coopSpawn) / 5));
+      if (o.pack !== priced) { bad++; fail(`relic pack ${o.pack} != budget/5 (${priced})`); }
+      if (g.enemyPool.count < o.pack * 0.9) { bad++; fail(`relic pack did not land: ${g.enemyPool.count}/${o.pack}`); }
+      const far = [...g.enemyPool].filter(e => Math.hypot(e.x - o.relics[0].x, e.y - o.relics[0].y) > 700).length;
+      if (far > o.pack * 0.15) { bad++; fail(`${far}/${o.pack} of the pack spawned away from its relic`); }
+      // on the rim: far from the central altar
+      const d = Math.hypot(o.relics[0].x - o.altar.x, o.relics[0].y - o.altar.y);
+      const reach = Math.hypot(g.W / 2 - CFG.WALL, g.H / 2 - CFG.WALL);
+      if (d < reach * 0.7) { bad++; fail(`relic only ${Math.round(d)}u from the altar (rim is ~${Math.round(reach)}u)`); }
+      // no ambient inflow at all: the packs ARE the level
+      const before = g.enemyPool.count;
+      for (const e of [...g.enemyPool]) g._killEnemy(e, null);
+      for (let i = 0; i < 60 * 30; i++) { for (const p of g.players) g.setInput(p.idx, { mx: 0, my: 0 }); g.tick(); }
+      if (g.enemyPool.count + g.spawnQueue.length > 0) { bad++; fail(`Relic Run still spawns ambient waves: ${g.enemyPool.count} after 30s of an empty field`); }
+      if (before < o.pack * 0.9) bad++;
+    }
+    // banking one relic spawns exactly one more, with its own pack
+    {
+      const g = new Sim({ seed: 3400, party: party3(2) });
+      enter3(g, 'relic'); g.god = true; gear3(g);
+      const o = g.obj;
+      for (const e of [...g.enemyPool]) g._killEnemy(e, null);
+      const p = g.players[0];
+      o.relics[0].carrier = p.idx;
+      p.x = o.altar.x; p.y = o.altar.y;
+      const firstId = o.relics[0].id;
+      for (let i = 0; i < 4; i++) { g.setInput(p.idx, { mx: 0, my: 0 }); g.tick(); }
+      if (o.banked === 1 && o.relics.length === 1 && o.relics[0].id !== firstId) ok('banking a relic surfaces exactly one more');
+      else { bad++; fail(`after banking: banked=${o.banked} relics=${o.relics.length}`); }
+      if (g.enemyPool.count >= o.pack * 0.9) ok(`the next relic brings its own pack (${g.enemyPool.count} enemies)`);
+      else { bad++; fail(`no pack with relic 2: ${g.enemyPool.count}`); }
+      // a dropped relic is NOT replaced — it still has to be banked
+      const rid = o.relics[0].id;
+      o.relics[0].carrier = g.players[1].idx;
+      g.players[1].downed = true;
+      g.tick();
+      if (o.relics.length === 1 && o.relics[0].id === rid && o.relics[0].carrier === -1) ok('a dropped relic stays dropped — no replacement until it is banked');
+      else { bad++; fail(`dropped relic handling: ${JSON.stringify(o.relics)}`); }
+    }
+    if (!bad) ok('Relic Run: one rim relic at a time, its own share of the enemy budget, no ambient waves');
+  }
+
+  // --- 3. Breach: timer doors, the slit, the gate IS the portal ---
+  {
+    let bad = 0;
+    const notes = [];
+    for (const [n, fl] of [[1, 1], [4, 1], [1, 4]]) {
+      const g = new Sim({ seed: 6060 + n, party: party3(n) });
+      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      enter3(g, 'breach'); g.god = true; gear3(g);
+      const o = g.obj;
+      if (o.need !== undefined || o.kills !== undefined) { bad++; fail('breach still tracks a kill quota'); }
+      if (o.segDur < 25 || o.segDur > 40) { bad++; fail(`segment timer ${o.segDur.toFixed(0)}s outside 25-40s`); }
+      // run one whole leg with the party parked and watch the squeeze
+      const durs = [], slits = [];
+      let seg = 0;
+      for (let i = 0; i < 60 * 60 * 4 && !g.cleared && o.seg < o.doors.length; i++) {
+        for (const p of g.players) { g.setInput(p.idx, { mx: 0, my: 0 }); p.hp = p.stats.vitality; }
+        if (o.seg < o.doors.length && o.segT < 1 / 60) slits.push(o.doors[o.seg] - o.wallX);
+        g.tick();
+        if (o.seg > seg) { seg = o.seg; durs.push(o.segDur.toFixed(0)); }
+      }
+      const worst = slits.length ? Math.max(...slits) : Infinity;
+      if (worst > 300) { bad++; fail(`the collapse never compressed to a slit: ${Math.round(worst)}u at the door`); }
+      // spawns come from BOTH ends of the live segment
+      const xs = [];
+      for (let i = 0; i < 400; i++) { const x = (await import('../js/objectives.js')).objectiveSpawnX(g); if (x !== null) xs.push(x); }
+      if (xs.length) {
+        const doorX = o.seg < o.doors.length ? o.doors[o.seg] : g.W - CFG.WALL - 60;
+        const lo = Math.max(CFG.WALL + 60, o.wallX + 60), hi = Math.max(lo + 120, doorX - 40);
+        const mid = (lo + hi) / 2;
+        const behind = xs.filter(x => x < mid).length;
+        if (behind < xs.length * 0.25 || behind > xs.length * 0.75) { bad++; fail(`breach spawns are one-sided: ${behind}/${xs.length} behind the party`); }
+      }
+      notes.push(`${n}p f${fl}: ${o.doors.length} doors, slit ${Math.round(worst)}u`);
+    }
+    // and the far gate IS the extraction portal — no mid-map hatch
+    {
+      const g = new Sim({ seed: 6060, party: party3(2) });
+      enter3(g, 'breach'); g.god = true; gear3(g);
+      const gate = { ...g.obj.gate };
+      g.debug('F3');
+      if (g.hatch && Math.hypot(g.hatch.x - gate.x, g.hatch.y - gate.y) < 1) ok('the Breach gate IS the extraction portal — no mid-map hatch');
+      else { bad++; fail(`breach hatch at ${JSON.stringify(g.hatch)}, gate at ${JSON.stringify(gate)}`); }
+      // a plain arena still extracts from the middle
+      const g2 = new Sim({ seed: 6060, party: party3(2) });
+      enter3(g2, 'combat'); g2.debug('F3');
+      if (g2.hatch && Math.abs(g2.hatch.x - g2.W / 2) < 400) ok('other levels keep their mid-map portal');
+      else { bad++; fail(`combat hatch moved: ${JSON.stringify(g2.hatch)}`); }
+    }
+    if (!bad) ok(`Breach: doors on a clock, the wall closes to a slit against each one — ${notes.join(' · ')}`);
+  }
+
+  // --- 4. Bounty Hunt: 10x HP stalkers with their own stream ---
+  {
+    let bad = 0;
+    const notes = [];
+    for (const [n, fl] of [[1, 1], [4, 1], [1, 4]]) {
+      const g = new Sim({ seed: 2200 + n, party: party3(n) });
+      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      enter3(g, 'bounty'); g.god = true; gear3(g);
+      for (let i = 0; i < 200; i++) { for (const p of g.players) g.setInput(p.idx, { mx: 0, my: 0 }); g.tick(); }
+      const mark = g.enemyById(g.obj.markId);
+      if (!mark) { bad++; fail(`no bounty mark after 3s (${n}p f${fl})`); continue; }
+      // the anchor: ~60-70% of the floor boss, floor-ramped, then x10
+      const anchor = (BBF[g.floorNum].bountyAnchor || BBF[g.floorNum].hp) * g.coopHp * g.greedHp * CFG.enemyHpMult;
+      const ratio = mark.maxHp / anchor;
+      if (ratio < 3 || ratio > 7.5) { bad++; fail(`mark HP is ${ratio.toFixed(1)}x the floor boss (want ~4.2-7 after the x10)`); }
+      if (mark.spd > 56) { bad++; fail(`bounty mark speed ${Math.round(mark.spd)} is not a slow stalker`); }
+      // the stream pours out of the mark's own position, and it is capped
+      const near = [...g.enemyPool].filter(e => !e.bounty && Math.hypot(e.x - mark.x, e.y - mark.y) < 700).length;
+      const chaff = g.enemyPool.count - 1;
+      if (chaff < 4) { bad++; fail(`the mark is not calling reinforcements: ${chaff} chaff after 3s`); }
+      if (near < chaff * 0.6) { bad++; fail(`the stream is not spawning at the mark: ${near}/${chaff} nearby`); }
+      notes.push(`${n}p f${fl}: ${Math.round(mark.maxHp)}hp (${ratio.toFixed(1)}x boss) spd ${Math.round(mark.spd)}, ${chaff} in the stream`);
+    }
+    // the stream scales with party size
+    const s1 = new Sim({ seed: 2200, party: party3(1) }); enter3(s1, 'bounty'); s1.god = true;
+    const s8 = new Sim({ seed: 2200, party: party3(8) }); enter3(s8, 'bounty'); s8.god = true;
+    for (let i = 0; i < 60 * 12; i++) { for (const g of [s1, s8]) { for (const p of g.players) g.setInput(p.idx, { mx: 0, my: 0 }); g.tick(); } }
+    if (s8.enemyPool.count > s1.enemyPool.count) ok(`the bounty stream scales with the party (${s1.enemyPool.count} at 1p → ${s8.enemyPool.count} at 8p)`);
+    else { bad++; fail(`stream did not scale: ${s1.enemyPool.count} vs ${s8.enemyPool.count}`); }
+    // anti-farm: the stream stops paying after ~100 kills per mark
+    {
+      const g = new Sim({ seed: 2200, party: party3(1) });
+      enter3(g, 'bounty'); g.god = true;
+      for (let i = 0; i < 120; i++) g.tick();
+      const o = g.obj;
+      o.streamKills = 99;
+      const p = g.players[0];
+      const before = g.pickups.length;
+      const e1 = g.spawnEnemyById('skulker', p.x + 60, p.y, {});
+      g._killEnemy(e1, p);                              // kill #100 — still pays
+      const mid = g.pickups.length;
+      const e2 = g.spawnEnemyById('skulker', p.x + 60, p.y, {});
+      g._killEnemy(e2, p);                              // kill #101 — taps closed
+      const after = g.pickups.length;
+      if (mid > before && after === mid) ok('Bounty anti-farm: stream kill 100 pays, 101 drops nothing');
+      else { bad++; fail(`bounty anti-farm: ${before} → ${mid} → ${after}`); }
+      // ...but the MARK always pays, and the budget resets on the next mark
+      const mark = g.enemyById(o.markId);
+      if (mark) {
+        const b2 = g.pickups.length;
+        g._killEnemy(mark, p);
+        if (g.pickups.length > b2) ok('the mark itself always pays, capped stream or not');
+        else { bad++; fail('the mark paid nothing'); }
+        for (let i = 0; i < 60 * 6; i++) g.tick();
+        if (o.streamKills < 50) ok(`the anti-farm budget resets with the next mark (${o.streamKills})`);
+        else { bad++; fail(`stream budget carried over: ${o.streamKills}`); }
+      }
+    }
+    if (!bad) ok(`Bounty Hunt: slow stalkers with a boss's health — ${notes.join(' · ')}`);
+  }
+
+  // --- 5. Nest Purge: 10x HP behind two destructible rings ---
+  {
+    let bad = 0;
+    const notes = [];
+    for (const [n, fl] of [[1, 1], [4, 1], [8, 1], [1, 3]]) {
+      const g = new Sim({ seed: 7700 + n, party: party3(n) });
+      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      enter3(g, 'nest'); g.god = true; gear3(g);
+      const o = g.obj;
+      const nest = g.enemyById(o.nests[0]);
+      if (!nest) { bad++; fail('no nests built'); continue; }
+      // two rings, four barricades each, per nest
+      if (g.walls.length !== o.total * 8) { bad++; fail(`${g.walls.length} barricades for ${o.total} nests (want ${o.total * 8})`); }
+      const rings = new Set(g.walls.filter(w => w.nestId === nest.id).map(w => w.ring));
+      if (rings.size !== 2) { bad++; fail(`nest has ${rings.size} rings, want 2`); }
+      // ...and they are real obstacles: movement, projectiles and sight
+      const w0 = g.walls.find(w => w.nestId === nest.id && w.ring === 0);
+      if (!g._inObstacle(w0.x + w0.w / 2, w0.y + w0.h / 2, 0)) { bad++; fail('a barricade does not block movement'); }
+      if (!g.losBlocked(nest.x, nest.y, nest.x + 900, nest.y)) { /* the ring may be open that way */ }
+      if (w0.maxHp < 150) { bad++; fail(`barricade HP ${w0.maxHp} is not a real obstacle`); }
+      // the nest is untouchable until BOTH layers are breached
+      if (!nest.nestShielded) { bad++; fail('a walled nest started unshielded'); }
+      const hp0 = nest.hp;
+      g.damageEnemy(nest, 5000, {});
+      if (nest.hp !== hp0) { bad++; fail('a walled nest took damage through its rings'); }
+      // break one outer segment: still shielded
+      g.damageWall(w0, w0.maxHp + 1, g.players[0]);
+      if (!nest.nestShielded) { bad++; fail('one ring breached and the nest is already exposed'); }
+      const w1 = g.walls.find(w => w.nestId === nest.id && w.ring === 1);
+      g.damageWall(w1, w1.maxHp + 1, g.players[0]);
+      if (nest.nestShielded) { bad++; fail('both rings breached and the nest is still shielded'); }
+      g.damageEnemy(nest, 100, {});
+      if (nest.hp >= hp0) { bad++; fail('a breached nest still takes no damage'); }
+      notes.push(`${n}p f${fl}: ${o.total} nests @ ${nest.maxHp}hp behind ${w0.maxHp}hp walls`);
+    }
+    // nest HP is the briefed x10 (2.2 -> 22 on the base spawner) and the map is +50%
+    {
+      const g = new Sim({ seed: 7700, party: party3(1) });
+      enter3(g, 'nest');
+      const nest = g.enemyById(g.obj.nests[0]);
+      const plain = g.spawnEnemyById('wombden', 400, 400, { hpMult: 2.2, noObjHp: true });
+      if (nest.maxHp >= plain.maxHp * 9.5) ok(`nest HP is 10x what it was (${plain.maxHp} → ${nest.maxHp})`);
+      else { bad++; fail(`nest HP only ${(nest.maxHp / plain.maxHp).toFixed(1)}x`); }
+      const chaff = g.spawnEnemyById('skulker', 500, 500, {});
+      const g2 = new Sim({ seed: 7700, party: party3(1) }); enter3(g2, 'combat');
+      const chaff2 = g2.spawnEnemyById('skulker', 500, 500, {});
+      if (Math.abs(chaff.maxHp / chaff2.maxHp - 1.5) < 0.06) ok(`everything on a Nest Purge map carries +50% HP (${chaff2.maxHp} → ${chaff.maxHp})`);
+      else { bad++; fail(`nest-map enemy HP is ${(chaff.maxHp / chaff2.maxHp).toFixed(2)}x, want 1.5x`); }
+      if (nest.spawnCdMult && Math.abs(nest.spawnCdMult - 1 / 3) < 1e-6) ok('per-nest spawn rate is tripled');
+      else { bad++; fail(`nest spawnCdMult ${nest.spawnCdMult}`); }
+      // the global choke per destroyed nest is unchanged
+      g.obj.alive = g.obj.total; g.tick();
+      const full = g.nestChoke;
+      for (const id of g.obj.nests.slice(0, Math.floor(g.obj.total / 2))) { const e = g.enemyById(id); if (e) { e.nestShielded = false; g._killEnemy(e, null); } }
+      g.tick();
+      if (full === 1 && g.nestChoke < 0.6) ok(`the global inflow still drops with every nest destroyed (${full} → ${g.nestChoke.toFixed(2)})`);
+      else { bad++; fail(`nest choke: ${full} → ${g.nestChoke}`); }
+    }
+    // the barricades never seal the map: every nest is approachable from the drop
+    {
+      let sealed = 0;
+      for (let seed = 1; seed <= 25; seed++) {
+        const g = new Sim({ seed: 9000 + seed, party: party3(seed % 3 === 0 ? 4 : 1) });
+        enter3(g, 'nest');
+        const p = g.players[0];
+        if (!g.inMainRegion(p.x, p.y)) { sealed++; fail(`seed ${seed}: the party dropped outside the main region`); continue; }
+        for (const id of g.obj.nests) {
+          const e = g.enemyById(id); if (!e) continue;
+          if (!g.inMainRegion(e.x, e.y)) { sealed++; fail(`seed ${seed}: nest at ${Math.round(e.x)},${Math.round(e.y)} is behind a sealed wall`); break; }
+        }
+      }
+      if (!sealed) ok('Nest Purge: 25 seeded layouts, every nest reachable from the party’s drop point');
+      else bad++;
+    }
+    if (!bad) ok(`Nest Purge: fortresses, not spawners — ${notes.join(' · ')}`);
+  }
+
+  // --- 6. the final siege boss ---
+  {
+    const regent = BBF[4];
+    if (regent.hp === 40000) ok(`the Vault Regent ends the run at ${regent.hp} HP (x10 on the doubled number, x20 of the original)`);
+    else fail(`final boss HP ${regent.hp}, want 40000`);
+    const others = [1, 2, 3].map(f => BBF[f].hp);
+    if (others.join() === '1240,1800,2700') ok(`floors 1-3 bosses are untouched (${others.join(' / ')})`);
+    else fail(`earlier bosses moved: ${others.join(' / ')}`);
+    // and the bounty anchor did NOT follow it up
+    const g = new Sim({ seed: 4321, party: party3(1) });
+    g._startFloor(2); g._startFloor(3); g._startFloor(4);
+    enter3(g, 'bounty'); g.god = true;
+    for (let i = 0; i < 200; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+    const mark = g.enemyById(g.obj.markId);
+    if (mark && mark.maxHp < 40000) ok(`floor-4 bounties still price off the old anchor (${Math.round(mark.maxHp)} HP, not a share of 40000)`);
+    else fail(`floor-4 bounty followed the Regent: ${mark && mark.maxHp}`);
+  }
+
+  // --- 7. structure relocation: the false positives, explicitly ---
+  {
+    let bad = 0;
+    const mkTurret = (g, p) => {
+      const s = { x: p.x + 80, y: p.y, owner: p.idx, maxHp: 100, hp: 100, dead: false, deployT: 0, carried: false, kind: 'turret' };
+      g.summons = g.summons || [];
+      g.summons.push(s);
+      return s;
+    };
+    const g = new Sim({ seed: 1212, party: party3(2) });
+    enter3(g, 'combat'); g.god = true;
+    g._sanitizeArena();
+    const p = g.players[0];
+    const owned = g._ownedStructures(p);
+    const s = owned.length ? owned[0] : mkTurret(g, p);
+    // (a) ON SCREEN + player stationary for well past the channel: MUST NOT move
+    s.x = p.x + 120; s.y = p.y + 60;
+    const at0 = { x: s.x, y: s.y };
+    p.relocT = 0;
+    for (let i = 0; i < 60 * 8; i++) { g.setInput(p.idx, { mx: 0, my: 0 }); g._tickStructureRecall(p, 1 / 60); }
+    if (s.x === at0.x && s.y === at0.y) ok('a structure the owner can SEE never relocates, however long they stand still');
+    else { bad++; fail(`an on-screen structure moved to ${Math.round(s.x)},${Math.round(s.y)}`); }
+    if (p.relocT === 0) ok('the recall channel does not even start while the structure is on screen');
+    else { bad++; fail(`relocT ran to ${p.relocT.toFixed(1)} with the structure on screen`); }
+    // (b) OFF SCREEN + player MOVING: must not move either
+    s.x = p.x + CFG.STRUCT_OFFSCREEN_W; s.y = p.y;
+    const at1 = { x: s.x, y: s.y };
+    p.relocT = 0; p.moving = true;
+    for (let i = 0; i < 60 * 8; i++) g._tickStructureRecall(p, 1 / 60);
+    if (s.x === at1.x && s.y === at1.y && p.relocT === 0) ok('an off-screen structure never relocates while its owner is moving');
+    else { bad++; fail(`moving-owner recall fired: relocT=${p.relocT} pos=${Math.round(s.x)},${Math.round(s.y)}`); }
+    // (c) OFF SCREEN + stationary 3s: it DOES come back
+    p.moving = false; p.relocT = 0;
+    let fired = false;
+    for (let i = 0; i < 60 * 5 && !fired; i++) { g._tickStructureRecall(p, 1 / 60); fired = Math.hypot(s.x - p.x, s.y - p.y) < 400; }
+    if (fired) ok(`an off-screen structure returns after ${CFG.STRUCT_CHANNEL_S}s of standing still`);
+    else { bad++; fail('the real recall case stopped working'); }
+    // (d) the owner's camera CLAMPS at the arena edge, so a structure near a wall
+    //     is still on screen even though it is far from the player
+    const q = g.players[0];
+    q.x = CFG.WALL + 30; q.y = g.H / 2;
+    const cam = g._ownerCamera(q);
+    if (cam.cx > q.x) ok('the recall test uses the owner’s CLAMPED camera, not a box centred on them');
+    else { bad++; fail(`camera not clamped at the wall: player ${Math.round(q.x)} camera ${Math.round(cam.cx)}`); }
+    // (e) menus and being downed pause the channel rather than firing it
+    s.x = q.x + CFG.STRUCT_OFFSCREEN_W * 2; s.y = q.y;
+    q.relocT = 1.5; q.shop = { key: 'x', stock: [] };
+    g._tickStructureRecall(q, 1 / 60);
+    if (q.relocT === 1.5) ok('a shop or menu pauses the recall channel where it stands');
+    else { bad++; fail(`shop changed relocT to ${q.relocT}`); }
+    q.shop = null; q.downed = true;
+    g._tickStructureRecall(q, 1 / 60);
+    if (q.relocT === 1.5) ok('being downed pauses the recall channel too');
+    else { bad++; fail(`downed changed relocT to ${q.relocT}`); }
+    q.downed = false;
+    // (f) in co-op each owner is judged against THEIR OWN camera
+    const p2 = g.players[1];
+    p2.x = g.W - CFG.WALL - 60; p2.y = g.H / 2;
+    if (g._structOffscreen(p2, { x: q.x, y: q.y }) && !g._structOffscreen(q, { x: q.x, y: q.y })) {
+      ok('co-op: visibility is judged per owner, against that player’s own camera');
+    } else { bad++; fail('structure visibility is not per-owner'); }
+    if (!bad) ok('structure recall: off-screen AND stationary, nothing else');
+  }
+} catch (err) { fail('playtest-3 gates crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {

@@ -377,6 +377,14 @@ export class Renderer {
     // obstacles (pillars / internal walls)
     for (const o of view.obstacles || []) {
       if (o[0] + o[2] < cl || o[0] > cr || o[1] + o[3] < ct || o[1] > cb) continue;
+      if (o[4]) {   // a destructible barricade, drawn intact; the objective layer
+        ctx.fillStyle = 'rgba(120,96,72,0.85)';   // repaints the damaged ones on top
+        ctx.fillRect(o[0], o[1], o[2], o[3]);
+        ctx.strokeStyle = '#a8794e';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(o[0], o[1], o[2], o[3]);
+        continue;
+      }
       ctx.fillStyle = PALETTE.wall;
       ctx.fillRect(o[0], o[1], o[2], o[3]);
       ctx.strokeStyle = PALETTE.wallEdge;
@@ -442,7 +450,7 @@ export class Renderer {
       ctx.font = 'bold 22px sans-serif';
       const me = (view.players || []).find(q => q.idx === view.myIdx);
       const ly = me ? clamp(me.y, 80, (view.ah || 2000) - 40) : (view.ah || 2000) / 2;
-      if (dx === o.doors[0]) ctx.fillText(`SEALED · ${o.kills}/${o.need}`, dx - 90, ly - 60);
+      if (dx === o.doors[0]) ctx.fillText(`SEALED · ${o.timer}s`, dx - 70, ly - 60);
       break; // only the next door is worth labelling
     }
     if (o.gate) { // breach/payload exit
@@ -456,6 +464,26 @@ export class Renderer {
       ctx.fillStyle = open ? PALETTE.doorOpen : '#ffab4f';
       ctx.font = 'bold 15px sans-serif';
       ctx.fillText(open ? 'GATE' : 'SEALED GATE', gx, gy - 88);
+    }
+    for (const [wx, wy, ww, wh, frac] of o.walls || []) { // nest barricades
+      // Two rings per nest, and they visibly lose the argument: the fill fades
+      // and the crack line grows as the barricade comes apart, so "how much
+      // more of this wall" reads at a glance without a health bar per segment.
+      ctx.fillStyle = `rgba(120,96,72,${0.35 + 0.5 * frac})`;
+      ctx.fillRect(wx, wy, ww, wh);
+      ctx.strokeStyle = frac > 0.5 ? '#a8794e' : '#ff9d5c';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(wx, wy, ww, wh);
+      if (frac < 0.85) {
+        ctx.strokeStyle = `rgba(255,120,90,${0.9 - frac * 0.6})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const hz = ww > wh;
+        const len = (hz ? ww : wh) * (1 - frac);
+        if (hz) { ctx.moveTo(wx + ww / 2 - len / 2, wy + wh / 2); ctx.lineTo(wx + ww / 2 + len / 2, wy + wh / 2); }
+        else { ctx.moveTo(wx + ww / 2, wy + wh / 2 - len / 2); ctx.lineTo(wx + ww / 2, wy + wh / 2 + len / 2); }
+        ctx.stroke();
+      }
     }
     if (o.altar) { // relic run
       const [ax, ay] = o.altar;
@@ -497,7 +525,15 @@ export class Renderer {
       ctx.font = 'bold 14px sans-serif';
       ctx.fillText(stalled ? 'STALLED' : (escorted ? 'DRILLING' : 'ESCORT ME'), dx, dy - 32);
     }
-    for (const [nx, ny, hpf] of o.nests || []) { // nest purge: mark every spawner
+    for (const [nx, ny, hpf, shielded] of o.nests || []) { // nest purge: mark every spawner
+      if (shielded) {   // walled in: the health bar is not the thing to shoot yet
+        ctx.strokeStyle = '#5ea8ff';
+        ctx.lineWidth = 3;
+        circle(ctx, nx, ny, 58 + Math.sin(this.t * 2.6) * 4); ctx.stroke();
+        ctx.fillStyle = '#5ea8ff';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText('WALLED IN', nx, ny - 66);
+      }
       ctx.strokeStyle = '#c98b4f';
       ctx.lineWidth = 3;
       ctx.setLineDash([8, 6]);

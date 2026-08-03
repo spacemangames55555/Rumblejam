@@ -92,11 +92,11 @@ objective bar on screen showing exactly what it wants.
 | | level | what clears it |
 |---|---|---|
 | ◎ | **Zone Control** | A capture zone (10–25% of the arena) fills only while someone stands in it — ~20 s of *occupied* time, paused (never reset) when it empties. Capture it and it moves. Six captures. Spawns never stop and there's no timer, so it's a farm — with a leash: after 150 kills in one zone segment, kills stop paying until the next zone. |
-| ☠ | **Elite Arena** | A handful of enormous, slow monsters — Chargers, Lobbers, Splitters and Enragers (which pick up speed the longer they live). Kill them all. Pure kiting. |
-| ⁂ | **Nest Purge** | 6–8 destructible spawners feed the room; every one you destroy throttles the global inflow. Destroy them all. |
-| ✦ | **Bounty Hunt** | Five marked champions, one at a time, each with an escort pack and a ping on your screen. Killing one marks the next. |
-| ⇥ | **Breach** | An elongated corridor cut into 3–4 segments by sealed doors, with a lethal collapse crawling in from the entry the whole time. Each door opens on a kill quota inside the current segment (scaling with party size and floor), so you fight forward under pressure rather than racing. Past the last segment, reach the gate. |
-| ⚱ | **Relic Run** | Relics scattered around the map; carrying one costs 20% move speed and pulls aggro onto you; drop it if you go down. Bank five at the central altar. |
+| ☠ | **Elite Arena** | Half of what a standard horde arena would spend, priced in champions — Chargers, Lobbers (25–30% of the roster), Splitters and Enragers — and **every one of them is already on the field when the doors open**, scattered, never within 400 units of anyone. Total threat goes up; per-unit health comes down as the roster grows. You start surrounded and carve lanes. |
+| ⁂ | **Nest Purge** | Destructible spawners with **ten times** the health, pumping brood at **three times** the rate, each one walled in by **two concentric rings of destructible barricades** that stop movement, projectiles and line of sight. Break one segment out of each ring before the nest can be hurt at all — and everything on this map carries **+50% health**. Every nest you destroy still throttles the global inflow. |
+| ✦ | **Bounty Hunt** | Five marked champions, one at a time. Each carries **ten times** the health it used to (on top of the existing floor ramp) and moves slower than anything else on the floor — a stalker you can always walk away from — and it never stops calling reinforcements to its own position for as long as it lives. The stream scales with party size and stops paying materials after ~100 kills per mark; the mark itself always pays. |
+| ⇥ | **Breach** | An elongated corridor cut into 3–4 segments by sealed doors, with a lethal collapse crawling in from the entry the whole time. Each door opens on a **clock** (25–40 s, tuned to that segment's length) — killing faster buys you nothing. The collapse is paced against that clock, so by the time a door opens the wall has squeezed you into a **240-unit slit** right against it. The door opens, the map releases, and it starts again. Enemies pour into the live segment from **both ends**. The far gate **is** the extraction portal — there is no mid-map hatch. |
+| ⚱ | **Relic Run** | **One** relic at a time, on the rim of the map, as far from the central altar as the room allows. Carrying it costs 20% move speed and pulls aggro; drop it if you go down, and a dropped relic still has to be banked before the next surfaces. There is **no ambient wave at all** — the level's entire enemy budget is split five ways and each share lands around its relic the moment that relic appears. Quiet walk out, war zone at the far end, quiet walk home. Bank five. |
 | ❄ | **Storm Survival** | A safe circle shrinks over ~20 s, then relocates at full size. Outside it you burn 5% of max HP per second. Survive 90 s. |
 | ⛏ | **Payload** | The extraction gate starts sealed. A drill crawls a fixed lane toward it, but only while someone is inside its escort radius. Enemies stall it (they can't destroy it) and it patches itself up while you're close. |
 
@@ -109,8 +109,11 @@ column is always plain arenas**, so a run never opens on a 90-second
 survival with a starting kit.
 
 A floor is a much bigger commitment than it used to be: 12 combat nodes
-instead of 7, and the objective levels run 30 s (Breach) to 125 s (Zone
-Control). Expect a floor to take two to three times as long as it did.
+instead of 7. After playtest pass 3 the objective levels run roughly 40 s
+(Relic Run, Nest Purge) to 125–160 s (Breach, which is now exactly as long as
+the sum of its door timers), with Bounty Hunt the outlier — five champions at
+ten times their old health is a 6–12 minute hunt depending on party size.
+Expect a floor to take two to three times as long as it did.
 
 ## Pressure profiles: standing still is a choice
 
@@ -435,6 +438,141 @@ never loads them:
 
 ## Decisions (where the brief was silent or conflicted)
 
+### Playtest pass 3 (patch 13)
+
+- **Elite Arena stopped being a queue.** The old shape — 10–15 champions fed
+  in waves of 3–5 — meant the party always fought the front of a line. The
+  roster is now priced off the horde arena the node replaces
+  (`hordeTotalSpawns(floor, depth, coopSpawn) / 2`, a new export in
+  `arenas.js`) and **all of it lands at t=0**, scattered, never within 400
+  units of a live player. Per-unit health falls as the roster grows
+  (`shrink = clamp(13 * 1.6 / total, 0.07, 1)`), so total threat rises while
+  every individual gets softer — the brief's "total threat up, per-unit HP
+  down". Measured with an optimal harness bot: 40 champions at 422–663 HP
+  solo on floor 1 (73 s), 128 at 327–514 at 8 players (41 s), 118 at
+  880–1383 solo on floor 4 (95 s). The bot is god-moded, HP-pinned and never
+  repositions, which historically maps to roughly the 2–3 minutes of real
+  play the brief asks for.
+
+- **Relic Run's quiet is the level.** One relic at a time, placed by walking a
+  ray from the altar out to the rim so it lands at the greatest distance the
+  room allows in that direction (consecutive relics come from quadrants ≥90°
+  apart, so the level never asks for the same walk twice). Ambient spawning is
+  gone entirely — `objectiveBaseMult` returns **0** — and the level's whole
+  budget is divided by five, each share spawning around its relic the moment
+  that relic appears. Without that the trip home was just another wave; with
+  it, the shape is *quiet walk out, war zone at the far end, fight home*.
+
+- **Breach: the slit is computed, not hoped for.** Doors are on a clock now
+  (25–40 s, scaled to each segment's length), and the collapse speed for each
+  leg is *derived* from that clock:
+  `speed = (segmentLength - 240) / segmentDuration`. So the wall arrives
+  exactly one 240-unit slit short of the door as the timer hits zero, every
+  leg, every party size — measured at 240 u on the nose across 1p/4p/8p and
+  floors 1–4. Kill counters are gone (killing faster used to buy ground,
+  which is what made the level play as "race around and collect money"), the
+  spawn rate is up sharply, spawns arrive at **both ends** of the live
+  segment, and the far gate is now the extraction portal — `_clearFight`
+  places the hatch on it instead of at mid-map.
+
+  The spawn multiplier **tapers by floor** (`2.6 − 0.4 × (floor − 1)`) because
+  the underlying wave rate does not. A flat 2.6 pinned floors 3–4 against the
+  300-alive ceiling for the whole back half of the level, which is neither a
+  fight nor legible on a phone. Tapered, every floor gets the same felt
+  escalation.
+
+- **Bounty marks are stalkers, and the stream needed a ceiling.** ×10 health
+  on top of the existing floor ramp, speed capped at 55 u/s (slower than any
+  enemy on any floor), and a continuous stream from the mark's own position,
+  party-scaled, until it dies. Two things the brief did not specify had to be
+  decided:
+
+  - **Where the stream spawns.** At arm's length it was literal armour:
+    projectiles stop at the first body, so 89% of a solo player's damage went
+    into chaff and the mark barely moved. Spawning it in a 260–420 unit ring
+    turns it back into pressure that walks in.
+  - **How much of it can be alive at once.** A mark now lives for minutes, so
+    an uncapped stream is not pressure, it is an accumulating wall — at 4
+    players it pinned the 300-alive ceiling and the level became unwinnable.
+    The stream holds a live population (`14 + 7 × (players − 1)`) instead, so
+    it keeps coming forever without ever burying the fight.
+
+  Auto-aim's preference for a mark also had to go from 0.3 to 0.12 on squared
+  distance: at 0.3 the stream soaked so many shots that a solo player never
+  finished a single mark. The 100-kill anti-farm cap is per mark and resets
+  with the next one; the mark itself always pays.
+
+- **Nest Purge needed a destructible-obstacle primitive.** `sim.walls` holds
+  rects that are *also* in `sim.obstacles`, so movement, projectiles, line of
+  sight and cover all work on them with no new code — the only difference is
+  that they can be taken apart. Projectiles that would have died on a wall now
+  damage it; melee arcs sweep them; every splash and nova chews them. They
+  ship to clients as `[x, y, w, h, destructible]` in the obstacle payload (so
+  prediction collides and the renderer draws a barricade as a barricade), and
+  the objective blob carries the damage state of the **damaged** ones only —
+  shipping all 56 rects 12 times a second cost a kilobyte per snapshot for
+  geometry that never moves.
+
+  Three decisions inside that:
+
+  - **Four segments per ring, not a mosaic.** Each ring is a closed box of
+    four barricades, so taking one down opens a whole face. That reads at a
+    glance on a phone and keeps `_inObstacle`/`losBlocked` — both hot, both
+    O(obstacles) — from growing by 200 rects with eight nests on the field.
+  - **Auto-aim has to see them.** This game aims for you, so a wall nothing
+    ever targets is a wall nobody can break. A barricade competes as a target
+    at 0.25 × squared distance: chaff in your face still wins, but standing at
+    a barricade means chewing it.
+  - **"Per-nest spawn rate ×3" is the nest's own output**, not the arena's
+    ambient wave — `spawnCdMult = 1/3` with the brood cap raised to 6. Tripling
+    both turned the level into an inflow no party can out-kill (4 players
+    finished one nest in ten minutes). The ambient term actually came *down*
+    slightly, because a nest with ten times the health holds `nestChoke` near
+    1.0 ten times longer; the global reduction per destroyed nest is untouched.
+
+- **Two bugs the rings exposed, both older than this patch.**
+
+  - **Arena templates can seal a chamber.** One measured floor-1 layout walled
+    off a 708×730 pocket and dropped the party straight into it — six of seven
+    nests unreachable, and to a player that reads as "the level is broken".
+    `_buildRegion()` now flood-fills the arena's largest open region once per
+    room; the drop point and every piece of objective furniture is placed
+    inside it. 25 seeded nest layouts are asserted reachable in the suite.
+  - **The enemy pool recycles, and objective flags were riding along.**
+    `spawnEnemyById` did not clear `nestShielded`, so a nest's invulnerability
+    leaked onto ordinary chaff in a later room and left six unkillable enemies
+    standing in a horde arena that could never end. All objective-owned flags
+    are reset on spawn now.
+
+- **The Vault Regent, and only the Vault Regent, is ×10.** 4000 → 40000, twenty
+  times its original number. Bounty Hunt prices its champions off the floor
+  boss, so the Regent carries a `bountyAnchor: 4000` — the endurance dial for
+  the run's last fight is not a new yardstick for floor-4 bounties.
+
+- **Structure relocation: the false positive was the camera.** The sim judged
+  visibility from a box centred on the player, but `render.js` *clamps* the
+  camera at the arena edges — so near a wall the player sits off-centre and the
+  visible world extends further to one side. Structures the owner was looking
+  straight at were "off-screen" and got recalled. `_ownerCamera(p)` now mirrors
+  the renderer's clamp, and in co-op each owner is judged against their own
+  camera. The rule is enforced exactly as written: relocate only when the
+  structure is outside the **owner's** viewport **and** that owner has stood
+  still for 3 continuous seconds; movement or damage cancels; shops, menus and
+  being downed pause the channel; room transitions still snap. Both suites
+  carry explicit **false-positive** regressions — structure on screen with the
+  player motionless for 8 s must not move, structure off screen with the player
+  moving must not move — alongside the true-positive case.
+
+- **The harness bots learned to walk.** Objective levels now send bots to
+  specific far-flung points (a rim relic, a nest behind two barricades), and
+  the old "walk at it and slide off obstacles" steering wedged against the long
+  interior walls the templates build — which looked exactly like a broken
+  level. `tools/sim_test.mjs` now carries a coarse grid path-finder (BFS a
+  distance field from the goal, walk downhill, plus a stuck-detector) and the
+  Nest Purge bot targets the barricade in front of a walled nest, as a player
+  would. Several "unwinnable level" findings in this patch turned out to be
+  this, which is why it is worth having.
+
 ### Playtest pass 2 (patch 12)
 
 - **The Breach bugs shared one root cause.** The corridor was reshaped by
@@ -541,13 +679,14 @@ never loads them:
   earning but can still finish the objective. The cap is generous enough
   that normal play never notices it.
 - **Structures: "off-screen" is judged generously.** The recall checks a
-  2100×1180 box around the owner — larger than any real viewport (the
-  renderer shows 1280×720 of world on the narrow axis and more on wide
-  monitors). Erring large means a structure you can actually see never packs
-  itself up, which is the rule the brief cared about. The channel pauses
-  (rather than cancels) in menus and while downed, and breaks outright on
-  movement or damage. In co-op the check runs against each owner's own
-  position, so one player's camera never recalls another's turrets.
+  2100×1180 box — larger than any real viewport (the renderer shows 1280×720
+  of world on the narrow axis and more on wide monitors). Erring large means a
+  structure you can actually see never packs itself up, which is the rule the
+  brief cared about. The channel pauses (rather than cancels) in menus and
+  while downed, and breaks outright on movement or damage. In co-op the check
+  runs against each owner's own camera, so one player never recalls another's
+  turrets. *(Playtest pass 3 corrected the box's anchor: it is centred on the
+  owner's **clamped** camera, not on the owner — see that section below.)*
 - **Pulsar's nova radius is not a stat.** The 120 cap lands *after* every
   range modifier — Reach, Overwatch, items — and his weapons are capped to
   the same number, so the character can never buy his way out of his own
