@@ -43,8 +43,8 @@ character gets an inventory entry automatically and cannot be forgotten.
   "version": 1,
   "basePath": "assets/sprites/",
   "sprites": {
-    "enemy.skulker": { "file": "enemy/skulker.png", "w": 48, "h": 48, "directions": 8 },
-    "proj.pebbleshot": { "file": "proj/pebbleshot.png", "w": 16, "h": 16 },
+    "enemy.skulker": { "file": "enemy/skulker.png", "w": 64, "h": 64, "directions": 8 },
+    "proj.pebbleshot": { "file": "proj/pebbleshot.png", "w": 32, "h": 32 },
     "prop.altar":    { "file": "prop/altar.png", "w": 64, "h": 64, "anchor": "bottom" }
   }
 }
@@ -62,7 +62,7 @@ character gets an inventory entry automatically and cannot be forgotten.
 **Sheets are strips; unit sheets are grids.** Columns are animation frames,
 rows are facings. The cell for (frame, direction) sits at
 `(frame × w, direction × h)`. A non-directional sprite is a single row: a
-4-frame 16×16 bolt is a 64×16 PNG. See **Directional units** below for the
+4-frame 32×32 bolt is a 128×32 PNG. See **Directional units** below for the
 rest.
 
 For any sprite with `directions > 1`, the image must be **exactly**
