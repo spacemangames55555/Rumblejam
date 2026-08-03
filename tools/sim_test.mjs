@@ -3023,11 +3023,11 @@ try {
     const src = nodePath.join(tmp, 'pulsar');
     mkdirSync(src, { recursive: true });
     for (let d = 0; d < 8; d++) {
-      const img = PK.blankImage(48, 48);
-      const ox = 1 + d * 4, oy = 32 - d * 3;   // deliberately all over the place
+      const img = PK.blankImage(64, 64);
+      const ox = 1 + d * 4, oy = 44 - d * 3;   // deliberately all over the place
       for (let y = 0; y < 12; y++) {
         for (let x = 0; x < 12; x++) {
-          const i = ((oy + y) * 48 + (ox + x)) * 4;
+          const i = ((oy + y) * 64 + (ox + x)) * 4;
           img.data[i] = 20 + d * 30; img.data[i + 1] = 200; img.data[i + 2] = 40; img.data[i + 3] = 255;
         }
       }
@@ -3037,18 +3037,18 @@ try {
     const log = run('process_sprite.mjs', ['char.pulsar', src, `--out=${outPng}`]);
     const grid = PK.decodePng(rf(outPng));
     const problems = [];
-    if (grid.width !== 48 || grid.height !== 384) problems.push(`grid is ${grid.width}x${grid.height}, want 48x384`);
+    if (grid.width !== 64 || grid.height !== 512) problems.push(`grid is ${grid.width}x${grid.height}, want 64x512`);
     for (let d = 0; d < 8; d++) {
-      const bb = PK.opaqueBounds(grid, 0, d * 48, 48, 48);
+      const bb = PK.opaqueBounds(grid, 0, d * 64, 64, 64);
       if (!bb) { problems.push(`row ${d} is empty`); continue; }
       const i = (bb.y * grid.width + bb.x) * 4;
       const saysRow = Math.round((grid.data[i] - 20) / 30);
       if (saysRow !== d) problems.push(`row ${d} holds the direction generated as ${saysRow}`);
-      const cx = bb.x + bb.w / 2, cy = (bb.y - d * 48) + bb.h / 2;
-      if (Math.abs(cx - 24) > 0.5 || Math.abs(cy - 24) > 0.5) problems.push(`row ${d} centred at ${cx},${cy}`);
+      const cx = bb.x + bb.w / 2, cy = (bb.y - d * 64) + bb.h / 2;
+      if (Math.abs(cx - 32) > 0.5 || Math.abs(cy - 32) > 0.5) problems.push(`row ${d} centred at ${cx},${cy}`);
     }
     if (problems.length) fail(`grid assembly: ${problems.slice(0, 4).join(' | ')}`);
-    else ok('process_sprite assembles 8 differently-padded directions into a 48x384 grid, in E SE S SW W NW N NE order, every row re-centred');
+    else ok('process_sprite assembles 8 differently-padded directions into a 64x512 grid, in E SE S SW W NW N NE order, every row re-centred');
     if (/row 0 E .*east\.png/.test(log)) ok('and it reports which naming convention each row matched');
     else fail('process_sprite did not report its row sources');
 
@@ -3061,11 +3061,11 @@ try {
       const dir = nodePath.join(src2, NAMES[d]);
       mkdirSync(dir, { recursive: true });
       for (let f = 0; f < 2; f++) {
-        const img = PK.blankImage(48, 48);
-        const oy = 20 - f * 6;   // frame 1 sits 6px higher: the bob
+        const img = PK.blankImage(64, 64);
+        const oy = 28 - f * 6;   // frame 1 sits 6px higher: the bob
         for (let y = 0; y < 10; y++) {
           for (let x = 0; x < 10; x++) {
-            const i = ((oy + y) * 48 + (19 + x)) * 4;
+            const i = ((oy + y) * 64 + (27 + x)) * 4;
             img.data[i] = 200; img.data[i + 1] = 90; img.data[i + 2] = 40; img.data[i + 3] = 255;
           }
         }
@@ -3076,7 +3076,7 @@ try {
       const p = nodePath.join(tmp, `walk-${mode}.png`);
       run('process_sprite.mjs', ['char.pulsar', src2, `--out=${p}`, `--recenter=${mode}`]);
       const g = PK.decodePng(rf(p));
-      const a = PK.opaqueBounds(g, 0, 0, 48, 48), b = PK.opaqueBounds(g, 48, 0, 48, 48);
+      const a = PK.opaqueBounds(g, 0, 0, 64, 64), b = PK.opaqueBounds(g, 64, 0, 64, 64);
       return a.y - b.y;   // how much higher frame 1 sits
     };
     const rowRise = rise('row'), cellRise = rise('cell');
@@ -3089,8 +3089,8 @@ try {
     mkdirSync(badDir, { recursive: true });
     for (let d = 0; d < 8; d++) {
       // fully opaque: a baked matte, invisible in review on a dark floor
-      const img = PK.blankImage(48, 48);
-      for (let i = 0; i < 48 * 48; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
+      const img = PK.blankImage(64, 64);
+      for (let i = 0; i < 64 * 64; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
       writeFileSync(nodePath.join(badDir, `${NAMES[d]}.png`), PK.encodePng(img));
     }
     const matteErr = runFails('process_sprite.mjs', ['char.pulsar', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
@@ -3104,9 +3104,9 @@ try {
 
     const oversizeDir = nodePath.join(tmp, 'big');
     mkdirSync(oversizeDir, { recursive: true });
-    for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(64, 64)));
+    for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(96, 96)));
     const bigErr = runFails('process_sprite.mjs', ['char.pulsar', oversizeDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
-    if (bigErr && /64x64 source but the cell is 48x48/.test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
+    if (bigErr && /96x96 source but the cell is 64x64/.test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
     else fail(`oversize check said: ${String(bigErr).slice(0, 140)}`);
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 
@@ -3117,13 +3117,13 @@ try {
     try {
       mkdirSync(spriteRoot, { recursive: true });
       // right id, wrong shape: 48x48 where the manifest wants 48x384
-      writeFileSync(file, PK.encodePng(PK.blankImage(48, 48)));
+      writeFileSync(file, PK.encodePng(PK.blankImage(64, 64)));
       const err = runFails('verify_art_batch.mjs', ['enemy.skulker']);
-      if (err && /48x48, manifest wants 48x384/.test(err)) ok('verify_art_batch names a wrong-sized grid and the size it should have been');
+      if (err && /64x64, manifest wants 64x512/.test(err)) ok('verify_art_batch names a wrong-sized grid and the size it should have been');
       else fail(`batch verify on a bad grid said: ${String(err).slice(0, 140)}`);
 
       // right shape, but every cell empty — how a mis-assembled grid hides
-      writeFileSync(file, PK.encodePng(PK.blankImage(48, 384)));
+      writeFileSync(file, PK.encodePng(PK.blankImage(64, 512)));
       const err2 = runFails('verify_art_batch.mjs', ['enemy.skulker']);
       if (err2 && /empty cell/.test(err2)) ok('and it catches an all-empty grid, which passes every dimension check');
       else fail(`empty-cell check said: ${String(err2).slice(0, 140)}`);
@@ -3149,7 +3149,7 @@ try {
     const sil = JSON.parse(rf(nodePath.join(REPO, 'docs', 'silhouettes.json'), 'utf8'));
     const noSil = units.filter(id => !sil[id]);
     const expect = ALL_CHARS_N + ENEMIES.length + 1 + BOSSES.length;
-    if (units.length === expect && !noSil.length) ok(`every one of the ${units.length} unit ids has a hand-written silhouette note — the whole readability budget at 48px`);
+    if (units.length === expect && !noSil.length) ok(`every one of the ${units.length} unit ids has a hand-written silhouette note — the whole readability budget at small size`);
     else fail(`prompts: ${units.length} of ${expect} units, ${noSil.length} without a silhouette`);
     const texts = units.map(id => sil[id].toLowerCase().replace(/[^a-z ]/g, ''));
     if (new Set(texts).size === texts.length) ok('and no two units are described the same way — identical descriptions draw identical sprites');

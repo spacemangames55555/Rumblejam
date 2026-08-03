@@ -4,1397 +4,1397 @@
   "sprites": {
     "boss.broodmother_viv": {
       "file": "boss/broodmother_viv.png",
-      "w": 96,
-      "h": 96,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "boss.choir_of_eyes": {
       "file": "boss/choir_of_eyes.png",
-      "w": 96,
-      "h": 96,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "boss.ossuary_hulk": {
       "file": "boss/ossuary_hulk.png",
-      "w": 96,
-      "h": 96,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "boss.vault_regent": {
       "file": "boss/vault_regent.png",
-      "w": 96,
-      "h": 96,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "char.banneret": {
       "file": "char/banneret.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.broker": {
       "file": "char/broker.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.bulwark": {
       "file": "char/bulwark.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.cindermage": {
       "file": "char/cindermage.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.cogsmith": {
       "file": "char/cogsmith.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.duskblade": {
       "file": "char/duskblade.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.facet": {
       "file": "char/facet.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.frostcaller": {
       "file": "char/frostcaller.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.gilded_one": {
       "file": "char/gilded_one.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.glasswing": {
       "file": "char/glasswing.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.hemomancer": {
       "file": "char/hemomancer.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.hivewright": {
       "file": "char/hivewright.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.jester": {
       "file": "char/jester.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.lodestone": {
       "file": "char/lodestone.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.longshot": {
       "file": "char/longshot.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.mirage": {
       "file": "char/mirage.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.onrush": {
       "file": "char/onrush.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.powderkeg": {
       "file": "char/powderkeg.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.pulsar": {
       "file": "char/pulsar.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.quartermaster": {
       "file": "char/quartermaster.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.rampart": {
       "file": "char/rampart.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.redmaw": {
       "file": "char/redmaw.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.resonant": {
       "file": "char/resonant.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.sawbones": {
       "file": "char/sawbones.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.stillness": {
       "file": "char/stillness.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.threader": {
       "file": "char/threader.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.tinker": {
       "file": "char/tinker.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_assassin": {
       "file": "char/toh_assassin.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_bard": {
       "file": "char/toh_bard.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_blacksmith": {
       "file": "char/toh_blacksmith.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_druid": {
       "file": "char/toh_druid.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_hunter": {
       "file": "char/toh_hunter.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_mage": {
       "file": "char/toh_mage.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_monk": {
       "file": "char/toh_monk.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_necromancer": {
       "file": "char/toh_necromancer.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_priest": {
       "file": "char/toh_priest.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_samurai": {
       "file": "char/toh_samurai.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_savage": {
       "file": "char/toh_savage.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_sundian": {
       "file": "char/toh_sundian.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_witch_doctor": {
       "file": "char/toh_witch_doctor.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.toh_wizard": {
       "file": "char/toh_wizard.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.tollkeeper": {
       "file": "char/tollkeeper.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.twinsoul": {
       "file": "char/twinsoul.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.vesper": {
       "file": "char/vesper.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.voltaic": {
       "file": "char/voltaic.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.wisp": {
       "file": "char/wisp.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.zephyr": {
       "file": "char/zephyr.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.aegimand": {
       "file": "enemy/aegimand.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.deadeye": {
       "file": "enemy/deadeye.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.flit": {
       "file": "enemy/flit.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.fusehead": {
       "file": "enemy/fusehead.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.gemmite": {
       "file": "enemy/gemmite.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.gyre": {
       "file": "enemy/gyre.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.lancerfish": {
       "file": "enemy/lancerfish.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.lobber": {
       "file": "enemy/lobber.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.skulker": {
       "file": "enemy/skulker.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.slabjaw": {
       "file": "enemy/slabjaw.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.stitcher": {
       "file": "enemy/stitcher.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.ward_pylon": {
       "file": "enemy/ward_pylon.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "enemy.wombden": {
       "file": "enemy/wombden.png",
-      "w": 48,
-      "h": 48,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "fx.block": {
       "file": "fx/block.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "fx.blood": {
       "file": "fx/blood.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "fx.bonedust": {
       "file": "fx/bonedust.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "fx.boom": {
       "file": "fx/boom.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "fx.heal": {
       "file": "fx/heal.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "fx.material": {
       "file": "fx/material.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "fx.smoke": {
       "file": "fx/smoke.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "fx.spark": {
       "file": "fx/spark.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "fx.telegraph_mark": {
       "file": "fx/telegraph_mark.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "item.adamant_aegis": {
       "file": "item/adamant_aegis.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.adrenal_gland": {
       "file": "item/adrenal_gland.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.aegis_coil": {
       "file": "item/aegis_coil.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.apostates_reliquary": {
       "file": "item/apostates_reliquary.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.architects_omnitool": {
       "file": "item/architects_omnitool.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.archivists_folio": {
       "file": "item/archivists_folio.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.ashen_grimoire": {
       "file": "item/ashen_grimoire.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.assassins_primer": {
       "file": "item/assassins_primer.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.assemblers_manual": {
       "file": "item/assemblers_manual.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.bandolier_of_salves": {
       "file": "item/bandolier_of_salves.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.banner_of_the_last_stand": {
       "file": "item/banner_of_the_last_stand.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.blindfold_of_certainty": {
       "file": "item/blindfold_of_certainty.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.bloodgroove_blade": {
       "file": "item/bloodgroove_blade.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.bloodscent_locket": {
       "file": "item/bloodscent_locket.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.bogflask": {
       "file": "item/bogflask.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.bolt_turret": {
       "file": "item/bolt_turret.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.boneset_splint": {
       "file": "item/boneset_splint.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.brawlers_knuckle": {
       "file": "item/brawlers_knuckle.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.bulette_plating": {
       "file": "item/bulette_plating.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.bulwark_pauldron": {
       "file": "item/bulwark_pauldron.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.butchers_bill": {
       "file": "item/butchers_bill.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.caravan_flag": {
       "file": "item/caravan_flag.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.cavemoss_poultice": {
       "file": "item/cavemoss_poultice.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.cavemoss_salve": {
       "file": "item/cavemoss_salve.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.chillbottle": {
       "file": "item/chillbottle.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.chirurgeons_censer": {
       "file": "item/chirurgeons_censer.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.chronomancers_gear": {
       "file": "item/chronomancers_gear.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.cinder_cloak": {
       "file": "item/cinder_cloak.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.cinderspray": {
       "file": "item/cinderspray.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.clean_bill": {
       "file": "item/clean_bill.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.coilgun": {
       "file": "item/coilgun.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.coin_of_return": {
       "file": "item/coin_of_return.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.copper_band": {
       "file": "item/copper_band.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.cornered_rat": {
       "file": "item/cornered_rat.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.crit_salve": {
       "file": "item/crit_salve.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.deadline_chronometer": {
       "file": "item/deadline_chronometer.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.deepmoss_compress": {
       "file": "item/deepmoss_compress.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.deepvault_compact": {
       "file": "item/deepvault_compact.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.detonation_tithe": {
       "file": "item/detonation_tithe.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.doorbreaker_charm": {
       "file": "item/doorbreaker_charm.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.doublestrike_ledger": {
       "file": "item/doublestrike_ledger.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.dragons_bed": {
       "file": "item/dragons_bed.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.drillbit_rounds": {
       "file": "item/drillbit_rounds.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.drillmasters_whistle": {
       "file": "item/drillmasters_whistle.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.duelists_veil": {
       "file": "item/duelists_veil.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.ember_turret": {
       "file": "item/ember_turret.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.embercoal_lump": {
       "file": "item/embercoal_lump.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.emberfang": {
       "file": "item/emberfang.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.emberstoked_bellows": {
       "file": "item/emberstoked_bellows.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.executioners_hood": {
       "file": "item/executioners_hood.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.fanblade": {
       "file": "item/fanblade.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.first_blood_pennant": {
       "file": "item/first_blood_pennant.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.fletchers_kit": {
       "file": "item/fletchers_kit.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.flintspark_shard": {
       "file": "item/flintspark_shard.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.flywheel_gauntlet": {
       "file": "item/flywheel_gauntlet.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.foremans_manual": {
       "file": "item/foremans_manual.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.foundry_heart": {
       "file": "item/foundry_heart.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.fresh_legs": {
       "file": "item/fresh_legs.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.frostbite_ring": {
       "file": "item/frostbite_ring.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.frostjar": {
       "file": "item/frostjar.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.frostscythe": {
       "file": "item/frostscythe.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.galvanic_coil": {
       "file": "item/galvanic_coil.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.ghostweave_cloak": {
       "file": "item/ghostweave_cloak.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.giantsbane_bolt": {
       "file": "item/giantsbane_bolt.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.glacier_salt": {
       "file": "item/glacier_salt.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.grave_snack": {
       "file": "item/grave_snack.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.gravebound_locket": {
       "file": "item/gravebound_locket.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.gravediggers_pact": {
       "file": "item/gravediggers_pact.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.gravelmouth": {
       "file": "item/gravelmouth.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.gravemaul": {
       "file": "item/gravemaul.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.greedwind_charm": {
       "file": "item/greedwind_charm.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.grindstone_chip": {
       "file": "item/grindstone_chip.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.growth_chart": {
       "file": "item/growth_chart.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.guard_drone": {
       "file": "item/guard_drone.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.hagglers_tongue": {
       "file": "item/hagglers_tongue.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.hailburst": {
       "file": "item/hailburst.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.hardtack_ration": {
       "file": "item/hardtack_ration.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.headsmans_memento": {
       "file": "item/headsmans_memento.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.heartstone_core": {
       "file": "item/heartstone_core.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.hermit_wrap": {
       "file": "item/hermit_wrap.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.hollow_kings_signet": {
       "file": "item/hollow_kings_signet.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.horizon_glass": {
       "file": "item/horizon_glass.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.iron_rivet_plate": {
       "file": "item/iron_rivet_plate.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.ironblood_draught": {
       "file": "item/ironblood_draught.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.jesters_own_deck": {
       "file": "item/jesters_own_deck.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.kegbomb": {
       "file": "item/kegbomb.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.kindlers_manual": {
       "file": "item/kindlers_manual.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.leadfoot_ballast": {
       "file": "item/leadfoot_ballast.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.leech_locket": {
       "file": "item/leech_locket.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.loadbearer_straps": {
       "file": "item/loadbearer_straps.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.lodemothers_chime": {
       "file": "item/lodemothers_chime.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.longbarrel": {
       "file": "item/longbarrel.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.longwatch_lens": {
       "file": "item/longwatch_lens.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.loose_change": {
       "file": "item/loose_change.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.magmalob": {
       "file": "item/magmalob.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.magnates_ledgerstone": {
       "file": "item/magnates_ledgerstone.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.magpies_eye": {
       "file": "item/magpies_eye.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.matadors_cape": {
       "file": "item/matadors_cape.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.medics_satchel": {
       "file": "item/medics_satchel.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.miners_mitts": {
       "file": "item/miners_mitts.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.nervous_fingers": {
       "file": "item/nervous_fingers.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.openers_oath": {
       "file": "item/openers_oath.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.overcharged_core": {
       "file": "item/overcharged_core.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.overclock_governor": {
       "file": "item/overclock_governor.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.oxblood_tonic": {
       "file": "item/oxblood_tonic.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.padded_jerkin": {
       "file": "item/padded_jerkin.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.panoply_of_the_deep": {
       "file": "item/panoply_of_the_deep.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.payload_harness": {
       "file": "item/payload_harness.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.pebbleshot": {
       "file": "item/pebbleshot.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.phalanx_badge": {
       "file": "item/phalanx_badge.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.pikefang": {
       "file": "item/pikefang.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.pitchfire_vial": {
       "file": "item/pitchfire_vial.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.planted_heels": {
       "file": "item/planted_heels.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.powder_charges": {
       "file": "item/powder_charges.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.prism_lens_array": {
       "file": "item/prism_lens_array.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.pyre_sight": {
       "file": "item/pyre_sight.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.quick_study": {
       "file": "item/quick_study.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.quicksilver_soles": {
       "file": "item/quicksilver_soles.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.quicksilver_vial": {
       "file": "item/quicksilver_vial.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.quickstep_laces": {
       "file": "item/quickstep_laces.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.rallying_horn": {
       "file": "item/rallying_horn.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.rambounce_pads": {
       "file": "item/rambounce_pads.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.ratcatchers_elixir": {
       "file": "item/ratcatchers_elixir.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.regicide_edge": {
       "file": "item/regicide_edge.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.reroll_chit": {
       "file": "item/reroll_chit.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.rimeheart_prism": {
       "file": "item/rimeheart_prism.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.rustbitten_charm": {
       "file": "item/rustbitten_charm.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.rustcleaver": {
       "file": "item/rustcleaver.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.saints_reliquary": {
       "file": "item/saints_reliquary.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.sawsprite": {
       "file": "item/sawsprite.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.scab_stitched_charm": {
       "file": "item/scab_stitched_charm.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.scavengers_instinct": {
       "file": "item/scavengers_instinct.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.second_wind_whistle": {
       "file": "item/second_wind_whistle.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.serpent_awl": {
       "file": "item/serpent_awl.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.servo_winder": {
       "file": "item/servo_winder.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.siege_bell": {
       "file": "item/siege_bell.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.sistered_plates": {
       "file": "item/sistered_plates.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.skirmish_garb": {
       "file": "item/skirmish_garb.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.slaughter_rhythm": {
       "file": "item/slaughter_rhythm.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.snipers_discipline": {
       "file": "item/snipers_discipline.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.softsole_boots": {
       "file": "item/softsole_boots.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.sparkbolt": {
       "file": "item/sparkbolt.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.sparkdust_pouch": {
       "file": "item/sparkdust_pouch.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.splitting_chamber": {
       "file": "item/splitting_chamber.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.springwound_cog": {
       "file": "item/springwound_cog.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.standard_of_the_vault": {
       "file": "item/standard_of_the_vault.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.stormbinder_loop": {
       "file": "item/stormbinder_loop.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.stormheart_metronome": {
       "file": "item/stormheart_metronome.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.stormlance": {
       "file": "item/stormlance.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.sugarrock_shard": {
       "file": "item/sugarrock_shard.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.surveyors_array": {
       "file": "item/surveyors_array.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.tempest_codex": {
       "file": "item/tempest_codex.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.tenth_strike_tally": {
       "file": "item/tenth_strike_tally.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.the_bad_bargain": {
       "file": "item/the_bad_bargain.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.thorncoat": {
       "file": "item/thorncoat.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.threadneedle": {
       "file": "item/threadneedle.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.tin_lantern": {
       "file": "item/tin_lantern.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.tinkers_pliers": {
       "file": "item/tinkers_pliers.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.triage_tabard": {
       "file": "item/triage_tabard.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.twinlash": {
       "file": "item/twinlash.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.vault_compass": {
       "file": "item/vault_compass.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.vault_servo_core": {
       "file": "item/vault_servo_core.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.vault_sovereigns_crown": {
       "file": "item/vault_sovereigns_crown.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.vaultspike": {
       "file": "item/vaultspike.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.vaultwatch_spyglass": {
       "file": "item/vaultwatch_spyglass.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.wanderers_soles": {
       "file": "item/wanderers_soles.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.warcamp_standard": {
       "file": "item/warcamp_standard.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.warcasters_sigil": {
       "file": "item/warcasters_sigil.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.whetstone_wheel": {
       "file": "item/whetstone_wheel.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.whipcrack_spur": {
       "file": "item/whipcrack_spur.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.wick_and_tallow": {
       "file": "item/wick_and_tallow.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "item.worldbreaker_sledge": {
       "file": "item/worldbreaker_sledge.png",
-      "w": 24,
-      "h": 24
+      "w": 32,
+      "h": 32
     },
     "proj.bogflask": {
       "file": "proj/bogflask.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.bolt": {
       "file": "proj/bolt.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.bolt_turret": {
       "file": "proj/bolt_turret.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.cinderspray": {
       "file": "proj/cinderspray.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.coilgun": {
       "file": "proj/coilgun.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.ember_turret": {
       "file": "proj/ember_turret.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.enemy_shot": {
       "file": "proj/enemy_shot.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.fanblade": {
       "file": "proj/fanblade.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.frostjar": {
       "file": "proj/frostjar.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.gravelmouth": {
       "file": "proj/gravelmouth.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.guard_drone": {
       "file": "proj/guard_drone.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.hailburst": {
       "file": "proj/hailburst.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.hostile_gold": {
       "file": "proj/hostile_gold.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.hostile_rose": {
       "file": "proj/hostile_rose.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.hostile_violet": {
       "file": "proj/hostile_violet.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.kegbomb": {
       "file": "proj/kegbomb.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.longbarrel": {
       "file": "proj/longbarrel.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.magmalob": {
       "file": "proj/magmalob.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.pebbleshot": {
       "file": "proj/pebbleshot.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.sparkbolt": {
       "file": "proj/sparkbolt.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "proj.threadneedle": {
       "file": "proj/threadneedle.png",
-      "w": 16,
-      "h": 16
+      "w": 32,
+      "h": 32
     },
     "prop.altar": {
       "file": "prop/altar.png",

@@ -29,13 +29,23 @@ import { BOSSES } from './bosses.js';
 export const UNIT_DIRECTIONS = 8;
 export const DIRECTIONAL_NAMESPACES = new Set(['char', 'enemy', 'boss']);
 
+// Authored sizes. Every one is a power of two, and that is not aesthetics: the
+// generator's /rotate endpoint — the only way to produce a per-angle view —
+// accepts a canvas of exactly 16, 32, 64 or 128 square and nothing else, and
+// its text-to-image endpoints reject anything under 32x32 in area. 48x48 units
+// and 24x24 icons, the sizes this pipeline first shipped with, are simply not
+// generatable. Downscaling 64 to 48 would smear a pixel grid that exists to be
+// crisp, so the sheets moved to the sizes the tools can actually make.
+//
+// Nothing in the engine depends on these: art is scaled to the entity's radius
+// at draw time, so a sheet size is a detail budget, not a hitbox.
 export const SPRITE_SIZE = {
-  char: [48, 48],
-  enemy: [48, 48],
-  boss: [96, 96],
-  proj: [16, 16],
-  fx: [16, 16],
-  item: [24, 24],
+  char: [64, 64],
+  enemy: [64, 64],
+  boss: [128, 128],
+  proj: [32, 32],
+  fx: [32, 32],
+  item: [32, 32],
   prop: [64, 64],
   ui: [32, 32],
 };

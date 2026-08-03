@@ -107,8 +107,8 @@ const dir  = ((Math.round(angle / step) % directions) + directions) % directions
 
 For `directions: 4` the same rule gives `E, S, W, N`.
 
-An 8-direction character with 1 frame is a **48×384** PNG: one 48-px column,
-eight 48-px rows, top to bottom in that order.
+An 8-direction character with 1 frame is a **64×512** PNG: one 64-px column,
+eight 64-px rows, top to bottom in that order.
 
 ### Four directions instead of eight
 
@@ -148,8 +148,8 @@ qualifies for the renderer's no-`save`/`restore` fast path.
 
 ### Texture cost
 
-An 8-direction, 1-frame 48×48 sheet decodes to ~74 KB in memory; 64 unit
-sheets is ~4.7 MB. At 4 animation frames that becomes ~294 KB each and ~19 MB
+An 8-direction, 1-frame 64×64 sheet decodes to ~131 KB in memory; 64 unit
+sheets is ~8.4 MB. At 4 animation frames that becomes ~524 KB each and ~34 MB
 total. That is fine on desktop and worth measuring on a phone once the first
 batch of art exists. If it bites, the levers are fewer animation frames or
 fewer directions on low-value units — not a texture atlas.
@@ -160,13 +160,20 @@ One number per category, so nobody has to ask:
 
 | category | size | namespace |
 |---|---|---|
-| players | 48×48 | `char.` |
-| enemies | 48×48 | `enemy.` |
-| bosses | 96×96 | `boss.` |
-| projectiles, pickups, FX | 16×16 | `proj.` `fx.` |
-| item and weapon icons | 24×24 | `item.` |
+| players | 64×64 | `char.` |
+| enemies | 64×64 | `enemy.` |
+| bosses | 128×128 | `boss.` |
+| projectiles, pickups, FX | 32×32 | `proj.` `fx.` |
+| item and weapon icons | 32×32 | `item.` |
 | props and structures | 64×64 | `prop.` |
 | UI chrome | 32×32 | `ui.` |
+
+Every one is a power of two, and that is a hard external constraint rather than
+a preference: the generator's rotation endpoint — the only way to produce a
+per-angle view — accepts a canvas of exactly 16, 32, 64 or 128 square and
+nothing else, and its text-to-image endpoints reject anything under 32×32 in
+area. The 48×48 units and 24×24 icons this pipeline first shipped with are not
+generatable at all.
 
 Those eight namespaces are the whole vocabulary. An id outside them is a typo
 and the loader drops it loudly.
