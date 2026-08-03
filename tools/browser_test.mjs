@@ -346,11 +346,13 @@ try {
   await A.exec(`const s=window.uv.sim; s.uiAction(0,{kind:'pickNode',nodeId:window.__brNode}); return 1;`);
   await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.obj && window.uv.sim.obj.type==='breach'`, 8000, 'inside Breach');
   const br0 = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj;
-    return JSON.stringify({ wall:o.wallX, segs:o.segs, doors:o.doors.length, need:o.need,
+    return JSON.stringify({ wall:o.wallX, segs:o.segs, doors:o.doors.length, need:o.need, segDur:o.segDur,
       w:s.W, h:s.H, px:Math.round(s.players[0].x),
       stray: s.obstacles.filter(ob=>ob.x<0||ob.y<0||ob.x+ob.w>s.W||ob.y+ob.h>s.H).length })`));
-  if (br0.segs >= 3 && br0.doors === br0.segs) ok(`Breach: ${br0.segs} segments behind ${br0.doors} sealed doors (${br0.need} kills each)`);
+  if (br0.segs >= 3 && br0.doors === br0.segs) ok(`Breach: ${br0.segs} segments behind ${br0.doors} sealed doors (${Math.round(br0.segDur)}s each)`);
   else fail(`breach segments: ${JSON.stringify(br0)}`);
+  if (br0.need === undefined && br0.segDur >= 25 && br0.segDur <= 40) ok('the doors run on a clock, not a kill quota');
+  else fail(`breach door timing: need=${br0.need} segDur=${br0.segDur}`);
   if (br0.stray === 0) ok(`Breach architecture stays inside the reshaped room (${br0.w}×${br0.h})`);
   else fail(`${br0.stray} obstacles outside the Breach bounds`);
   if (br0.px < br0.w * 0.25) ok(`the party starts at the mouth of the corridor (x=${br0.px} of ${br0.w})`);
@@ -367,13 +369,26 @@ try {
     for (let i=0;i<120;i++){ s.setInput(0,{mx:(i%4<2?1:-1),my:(i%8<4?1:-1)}); s.tick();
       out=Math.max(out, Math.max(0,36-p.x,36-p.y,p.x-(s.W-36),p.y-(s.H-36))); }
     return JSON.stringify({past, out:Math.round(out)});`));
-  if (!brBounds.past) ok('the sealed door blocks the party until its kill quota is paid');
+  if (!brBounds.past) ok('the sealed door blocks the party until its timer expires');
   else fail('walked straight through a sealed Breach door');
+  // killing does NOT buy ground any more
+  const brKills = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj,p=s.players[0];
+    const seg0=o.seg;
+    for (let k=0;k<60;k++){ const e=s.spawnEnemyById('skulker',p.x-60,p.y,{}); if(e) s._killEnemy(e,p); }
+    return JSON.stringify({seg0, seg:o.seg, timer:Math.ceil(o.segT)});`));
+  if (brKills.seg === brKills.seg0) ok(`60 kills leave the door sealed — only the clock opens it (${brKills.timer}s left)`);
+  else fail(`kills opened a Breach door: ${brKills.seg0} → ${brKills.seg}`);
+  // the collapse squeezes the party into a slit against the closed door
+  const brSlit = await A.exec(`const s=window.uv.sim,o=s.obj;
+    let guard=0; while (o.seg===0 && o.segT>0.02 && guard++<60*90){ for(const p of s.livePlayers()) p.hp=p.stats.vitality; s.tick(); }
+    return Math.round((o.seg>0 ? 0 : o.doors[0]-o.wallX));`);
+  if (brSlit <= 300) ok(`the collapse compresses the party into a ${brSlit}u slit before the door opens`);
+  else fail(`no slit phase: ${brSlit}u of corridor left when the door opened`);
   if (brBounds.out === 0) ok('players cannot leave the playable bounds on Breach');
   else fail(`player escaped the Breach map by ${brBounds.out}u`);
   const brHud = JSON.parse(await A.exec(`const h=document.getElementById('objective-hud');
     return JSON.stringify({ text:h.querySelector('.obj-text').textContent, vis:!h.classList.contains('hidden') })`));
-  if (brHud.vis && /door 1\//.test(brHud.text)) ok(`the Breach HUD shows the door counter ("${brHud.text}")`);
+  if (brHud.vis && /door \d\/\d+ — \d+s|reach the gate/.test(brHud.text)) ok(`the Breach HUD counts the door down ("${brHud.text}")`);
   else fail(`breach HUD: ${JSON.stringify(brHud)}`);
   // the radar draws something for the elongated map (wall + gate + doors)
   const radarInk = await A.exec(`const c=document.getElementById('minimap');
@@ -381,6 +396,206 @@ try {
     let n=0; for (let i=3;i<d.length;i+=4) if (d[i]>8) n++; return n;`);
   if (radarInk > 400) ok(`the minimap renders the elongated Breach layout (${radarInk} lit pixels)`);
   else fail(`minimap looks empty on Breach (${radarInk} lit pixels)`);
+
+  // ---- playtest 3: the gate IS the portal, and the client agrees ----
+  {
+    const gateOut = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj;
+      const gate={x:o.gate.x,y:o.gate.y};
+      s.debug('F3');
+      return JSON.stringify({ gate, hatch: s.hatch ? {x:s.hatch.x,y:s.hatch.y} : null, w:s.W });`));
+    if (gateOut.hatch && Math.hypot(gateOut.hatch.x - gateOut.gate.x, gateOut.hatch.y - gateOut.gate.y) < 1) {
+      ok('Breach extraction opens AT the far gate — there is no mid-map hatch to walk back to');
+    } else fail(`breach hatch ${JSON.stringify(gateOut.hatch)} vs gate ${JSON.stringify(gateOut.gate)}`);
+  }
+  await A.exec(drainJs);
+  await extractToMap(A, 'out of the Breach');
+
+  // ---- playtest 3: Relic Run — one rim relic, its own pack, no ambient ----
+  {
+    // Enter the level DIRECTLY rather than walking the node map: these are
+    // four extra rooms, and consuming four forward nodes would leave the
+    // shop and camera checks below on a different floor than they expect.
+    await A.exec(`const s=window.uv.sim;
+      s.phase='map';
+      s._enterArena({ id: s.currentNode, kind: 'relic', col: 3, template: 'open_expanse', profile: 'mixed' });
+      return 1;`);
+    await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.obj && window.uv.sim.obj.type==='relic'`, 8000, 'inside Relic Run');
+    const rl = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj;
+      const d=Math.hypot(o.relics[0].x-o.altar.x, o.relics[0].y-o.altar.y);
+      const reach=Math.hypot(s.W/2-40, s.H/2-40);
+      const near=[...s.enemyPool].filter(e=>Math.hypot(e.x-o.relics[0].x,e.y-o.relics[0].y)<700).length;
+      return JSON.stringify({ n:o.relics.length, pack:o.pack, field:s.enemyPool.count, near, frac:+(d/reach).toFixed(2) });`));
+    if (rl.n === 1) ok('Relic Run puts exactly ONE relic in the world at a time');
+    else fail(`relics in play: ${rl.n}`);
+    if (rl.frac > 0.7) ok(`the relic sits on the rim (${Math.round(100 * rl.frac)}% of the way to the corner from the altar)`);
+    else fail(`relic only ${Math.round(100 * rl.frac)}% out from the altar`);
+    if (rl.near >= rl.pack * 0.85) ok(`its share of the level's enemy budget lands with it (${rl.near}/${rl.pack} around the relic)`);
+    else fail(`relic pack: ${rl.near} of ${rl.pack} near the relic, ${rl.field} on the field`);
+    await sleep(600);
+    const objHudR = JSON.parse(await A.exec(`const h=document.getElementById('objective-hud');
+      return JSON.stringify({ text:h.querySelector('.obj-text').textContent, vis:!h.classList.contains('hidden') })`));
+    if (objHudR.vis && /0\/5 banked/.test(objHudR.text)) ok(`the Relic HUD reads "${objHudR.text}"`);
+    else fail(`relic HUD: ${JSON.stringify(objHudR)}`);
+    await A.exec(`const s=window.uv.sim; s._sanitizeArena(); return 1;`);
+    await A.exec(drainJs);
+  }
+
+  // ---- playtest 3: Nest Purge — walled fortresses the client can see ----
+  {
+    // Enter the level DIRECTLY rather than walking the node map: these are
+    // four extra rooms, and consuming four forward nodes would leave the
+    // shop and camera checks below on a different floor than they expect.
+    await A.exec(`const s=window.uv.sim;
+      s.phase='map';
+      s._enterArena({ id: s.currentNode, kind: 'nest', col: 3, template: 'open_expanse', profile: 'mixed' });
+      return 1;`);
+    await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.obj && window.uv.sim.obj.type==='nest'`, 8000, 'inside Nest Purge');
+    const ns = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj;
+      const nest=s.enemyById(o.nests[0]);
+      const mine=s.walls.filter(w=>w.nestId===nest.id);
+      return JSON.stringify({ nests:o.total, walls:s.walls.length, perNest:mine.length,
+        rings:[...new Set(mine.map(w=>w.ring))].length, wallHp:mine[0].maxHp, nestHp:nest.maxHp,
+        shielded:!!nest.nestShielded, reach:s.inMainRegion(nest.x,nest.y) });`));
+    if (ns.perNest === 8 && ns.rings === 2) ok(`each nest sits behind 2 rings of 4 barricades (${ns.walls} in total, ${ns.wallHp} HP apiece)`);
+    else fail(`nest rings: ${JSON.stringify(ns)}`);
+    if (ns.shielded) ok(`a walled nest is untouchable until both rings are breached (${ns.nestHp} HP behind them)`);
+    else fail('a nest started unshielded');
+    if (ns.reach) ok('every nest is placed in the arena’s main open region — never behind a sealed wall');
+    else fail('a nest was placed outside the reachable region');
+    // the walls ship to the client as destructible obstacles AND objective furniture
+    const nsWire = JSON.parse(await A.exec(`const s=window.uv.sim;
+      const snapObs = s._snapObstacles();
+      const intact = (s.getSnapshot().obj||{}).walls || [];
+      // chew one barricade a little: only DAMAGED walls ride the snapshot
+      const w = s.walls[0];
+      s.damageWall(w, Math.round(w.maxHp * 0.4), s.players[0]);
+      const hurt = (s.getSnapshot().obj||{}).walls || [];
+      return JSON.stringify({ destructible: snapObs.filter(o=>o[4]).length,
+        intact: intact.length, hurt: hurt.length, frac: hurt.length ? hurt[0][4] : null });`));
+    if (nsWire.destructible === ns.walls) ok(`the barricades ride the obstacle payload as destructible rects (${nsWire.destructible})`);
+    else fail(`obstacle payload: ${nsWire.destructible} destructible of ${ns.walls} walls`);
+    if (nsWire.intact === 0 && nsWire.hurt === 1 && nsWire.frac < 1) {
+      ok(`only damaged barricades ride the snapshot (0 intact → 1 at ${Math.round(100 * nsWire.frac)}% after a hit)`);
+    } else fail(`objective blob walls: intact=${nsWire.intact} hurt=${nsWire.hurt} frac=${nsWire.frac}`);
+    // breaking a barricade re-syncs the obstacle list
+    const nsBreak = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj;
+      const nest=s.enemyById(o.nests[0]);
+      const w0=s.walls.find(w=>w.nestId===nest.id&&w.ring===0);
+      const before=s.obstacles.length;
+      s.damageWall(w0, w0.maxHp+1, s.players[0]);
+      const mid=!!nest.nestShielded;
+      const w1=s.walls.find(w=>w.nestId===nest.id&&w.ring===1);
+      s.damageWall(w1, w1.maxHp+1, s.players[0]);
+      return JSON.stringify({ before, after:s.obstacles.length, stillShielded:mid, exposed:!nest.nestShielded });`));
+    if (nsBreak.after === nsBreak.before - 2) ok('a broken barricade leaves the obstacle list (movement and sight open up)');
+    else fail(`obstacles after two breaks: ${nsBreak.before} → ${nsBreak.after}`);
+    if (nsBreak.stillShielded && nsBreak.exposed) ok('one ring down is not enough — the nest exposes only when BOTH are breached');
+    else fail(`breach gating: ${JSON.stringify(nsBreak)}`);
+    // it renders: the canvas draws the barricades in the world
+    await sleep(400);
+    const nsInk = await A.exec(`const s=window.uv.sim, w=s.walls[0];
+      const p=s.players[0]; p.x=w.x+w.w/2; p.y=w.y+w.h/2+140;
+      return 1;`);
+    await sleep(600);
+    const painted = await A.exec(`const c=document.getElementById('game-canvas');
+      const d=c.getContext('2d').getImageData(c.width*0.3,c.height*0.2,Math.floor(c.width*0.4),Math.floor(c.height*0.4)).data;
+      let n=0; for (let i=0;i<d.length;i+=4) if (d[i]>90 && d[i]>d[i+2]+18) n++; return n;`);
+    if (painted > 200) ok(`the barricades are drawn in the world (${painted} lit pixels around one`.concat(')'));
+    else fail(`nest barricades did not render (${painted} lit pixels)`);
+    await A.exec(`const s=window.uv.sim; s._sanitizeArena(); return 1;`);
+    await A.exec(drainJs);
+  }
+
+  // ---- playtest 3: Bounty Hunt — a slow stalker with its own stream ----
+  {
+    // Enter the level DIRECTLY rather than walking the node map: these are
+    // four extra rooms, and consuming four forward nodes would leave the
+    // shop and camera checks below on a different floor than they expect.
+    await A.exec(`const s=window.uv.sim;
+      s.phase='map';
+      s._enterArena({ id: s.currentNode, kind: 'bounty', col: 3, template: 'open_expanse', profile: 'mixed' });
+      return 1;`);
+    await A.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.obj && window.uv.sim.obj.type==='bounty'`, 8000, 'inside Bounty Hunt');
+    await A.waitFor(`return window.uv.sim.obj.markId !== null`, 8000, 'a bounty marked');
+    const bn = JSON.parse(await A.exec(`const s=window.uv.sim,o=s.obj;
+      for (let i=0;i<60*8;i++){ for(const p of s.livePlayers()){ s.setInput(p.idx,{mx:0,my:0}); p.hp=p.stats.vitality; } s.tick(); }
+      const e=s.enemyById(o.markId);
+      const boss=(window.uv.BOSS_HP||0);
+      const chaff=s.enemyPool.count-1;
+      const near=[...s.enemyPool].filter(q=>!q.bounty&&Math.hypot(q.x-e.x,q.y-e.y)<700).length;
+      return JSON.stringify({ hp:e.maxHp, spd:Math.round(e.spd), chaff, near, marked:o.killed });`));
+    if (bn.spd <= 56) ok(`the mark is a slow stalker (${bn.spd} u/s — slower than anything else on the floor)`);
+    else fail(`bounty mark speed ${bn.spd}`);
+    if (bn.chaff >= 4 && bn.near >= bn.chaff * 0.6) ok(`it calls a stream to its own position (${bn.near}/${bn.chaff} within 700u after 8s)`);
+    else fail(`bounty stream: ${bn.near}/${bn.chaff}`);
+    await sleep(600);
+    const bnHud = JSON.parse(await A.exec(`const h=document.getElementById('objective-hud');
+      return JSON.stringify({ text:h.querySelector('.obj-text').textContent, vis:!h.classList.contains('hidden') })`));
+    if (bnHud.vis && /\d\/5 bounties/.test(bnHud.text)) ok(`the Bounty HUD reads "${bnHud.text}"`);
+    else fail(`bounty HUD: ${JSON.stringify(bnHud)}`);
+    await A.exec(`const s=window.uv.sim; s._sanitizeArena(); return 1;`);
+    await A.exec(drainJs);
+  }
+
+  // ---- playtest 3: structure relocation, against the REAL camera ----
+  {
+    // Enter the level DIRECTLY rather than walking the node map: these are
+    // four extra rooms, and consuming four forward nodes would leave the
+    // shop and camera checks below on a different floor than they expect.
+    await A.exec(`const s=window.uv.sim;
+      s.phase='map';
+      s._enterArena({ id: s.currentNode, kind: 'combat', col: 3, template: 'open_expanse', profile: 'mixed' });
+      return 1;`);
+    await A.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'inside a plain arena');
+    const st = JSON.parse(await A.exec(`const s=window.uv.sim,p=s.players[0];
+      s._sanitizeArena();
+      // an open popup PAUSES the channel, so every assertion below would pass
+      // for the wrong reason with a level-up card still on screen
+      p.pendingOffer=null; p.shop=null; p.treasureOffer=null; p.boonOffer=null; p.downed=false;
+      s.summons.length=0;
+      // a REAL turret, not a stub: the host keeps ticking between these calls
+      // and a summon with no weapon behind it is not a thing the sim ever makes
+      s._spawnSummon(p, 'bolt_turret', 1);
+      const t=s.summons[0];
+      // (a) ON SCREEN, owner motionless for twice the channel: it must NOT move
+      p.relocT=0; p.moving=false;
+      t.x = p.x + 140; t.y = p.y + 70;
+      const at0={x:t.x,y:t.y};
+      for (let i=0;i<60*8;i++){ s.setInput(p.idx,{mx:0,my:0}); s._tickStructureRecall(p, 1/60); }
+      const stayed = (t.x===at0.x && t.y===at0.y);
+      const channel = p.relocT;
+      // (b) OFF SCREEN but the owner is MOVING: still must not move
+      t.x = p.x + 2600; t.y = p.y;
+      const at1={x:t.x,y:t.y};
+      p.relocT=0; p.moving=true;
+      for (let i=0;i<60*8;i++) s._tickStructureRecall(p, 1/60);
+      const movedWhileWalking = !(t.x===at1.x && t.y===at1.y) || p.relocT>0;
+      // (c) OFF SCREEN and still: it DOES come home
+      p.moving=false; p.relocT=0;
+      let fired=false;
+      for (let i=0;i<60*5 && !fired;i++){ s._tickStructureRecall(p, 1/60); fired = Math.hypot(t.x-p.x,t.y-p.y) < 400; }
+      return JSON.stringify({ stayed, channel:+channel.toFixed(2), movedWhileWalking, fired });`));
+    if (st.stayed && st.channel === 0) ok('a structure the owner can SEE never relocates, no matter how long they stand still');
+    else fail(`on-screen structure recall fired (stayed=${st.stayed} channel=${st.channel})`);
+    if (!st.movedWhileWalking) ok('an off-screen structure never relocates while its owner is moving');
+    else fail('recall fired for a moving owner');
+    if (st.fired) ok('off-screen AND stationary still brings a structure home');
+    else fail('the real recall case stopped working');
+    // the owner's camera CLAMPS at the arena edge, exactly like the renderer
+    const cam = JSON.parse(await A.exec(`const s=window.uv.sim,p=s.players[0];
+      p.x=60; p.y=s.H/2;
+      const c=s._ownerCamera(p);
+      return JSON.stringify({ px:Math.round(p.x), cx:Math.round(c.cx), hw:c.hw });`));
+    if (cam.cx > cam.px) ok(`recall visibility uses the owner's clamped camera (player at ${cam.px}, camera at ${cam.cx})`);
+    else fail(`camera not clamped: ${JSON.stringify(cam)}`);
+    // hand back a LIVE plain arena: the completion-cleanup and extraction
+    // checks below run in whatever room they find themselves in
+    await A.exec(`const s=window.uv.sim;
+      s.summons.length=0;
+      s._enterArena({ id: s.currentNode, kind: 'combat', col: 3, template: 'open_expanse', profile: 'mixed' });
+      return 1;`);
+    await A.exec(drainJs);
+  }
 
   // ---- completion cleanup: the arena is inert before any popup ----
   await A.exec(`const s=window.uv.sim, p=s.players[0];

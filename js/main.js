@@ -697,7 +697,7 @@ function viewFromSim(sim) {
     arenaKey: `${sim.floorNum}:${sim.currentNode}`,
     kind: sim.arenaNode ? sim.arenaNode.kind : null,
     afterSiege: sim.afterSiege,
-    obstacles: sim.obstacles.map(o => [o.x, o.y, o.w, o.h]),
+    obstacles: sim._snapObstacles(),
     cleared: sim.cleared, locked: !sim.cleared,
     shake: sim.shake,
     extract: sim.extract ? sim.extract.t : null,

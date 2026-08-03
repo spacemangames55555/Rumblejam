@@ -10,7 +10,7 @@ import { buildArena, waveConfig, PROFILES } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
-  objectiveOnKill, objectiveSpawnBand,
+  objectiveSpawnX,
 } from './objectives.js';
 import { CHAR_BY_ID } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
@@ -89,6 +89,9 @@ export class Sim {
     this.wave = null;         // budget-curve spawn state
     this.cleared = false;     // arena fight finished (portal up)
     this.obstacles = [];      // axis-aligned rects
+    this.walls = [];          // DESTRUCTIBLE rects (Nest Purge rings) — a
+                              // subset of obstacles, so movement/LoS/cover
+                              // all work on them for free
     this.hatch = null;        // the extraction portal (fights) / descent (post-siege)
     this.extract = null;      // {t} — countdown while someone stands on the portal
     this.afterSiege = false;  // portal descends instead of returning to the map
@@ -484,6 +487,9 @@ export class Sim {
     // objective state (null on a plain horde arena) — set up before the first
     // tick so its scripted spawns and spawn-rate multiplier apply from t=0
     this.nestChoke = 1;
+    this.walls = [];
+    this.objHpMult = 1;
+    this._buildRegion();
     initObjective(this, node);
     if (this.obj && objectiveEndless(node.kind)) this.wave.dur = Infinity;
     // Bastion streams from ONE arena edge (0=n 1=e 2=s 3=w) — a single front
@@ -515,7 +521,8 @@ export class Sim {
     // Breach is the exception: you start at the mouth of the corridor with
     // the collapse behind you, or the level is a footrace you've already won.
     const dropX = node.kind === 'breach' ? WALL + 190 : arena.w / 2;
-    const [cx, cy] = this._clearSpot(dropX, arena.h / 2, 40);
+    const [rx, ry] = this.mainRegionSpot(dropX, arena.h / 2);
+    const [cx, cy] = this._clearSpot(rx, ry, 40);
     this.players.forEach((p, i) => {
       if (p.gone) return;
       const [sx, sy] = this._clearSpot(
@@ -546,7 +553,7 @@ export class Sim {
     this.pushEvent({
       k: 'arena', nodeId: node.id, kind: node.kind, template: node.template,
       name: arena.name, w: arena.w, h: arena.h,
-      obstacles: this.obstacles.map(o => [o.x, o.y, o.w, o.h]),
+      obstacles: this._snapObstacles(),
       hazards: this._serializeHazardDefs(),
     });
   }
@@ -618,8 +625,8 @@ export class Sim {
       if (cap && this._aliveOfType(id) >= cap) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
       if (prof.puddle && (id === 'skulker' || id === 'flit') && this.waveRng.chance(prof.puddle)) puddle = true;
       const pos = this._spawnWavePos();
-      const band = objectiveSpawnBand(this); // Breach: inside the live segment
-      if (band) pos.x = band[0] + this.waveRng.float() * (band[1] - band[0]);
+      const bx = objectiveSpawnX(this); // Breach: both ends of the live segment
+      if (bx !== null) pos.x = bx;
       this.spawnQueue.push({ t: 0.7, id, x: pos.x, y: pos.y, mortar, puddle });
       this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 26, dur: 0.7, spawnMark: true });
     }
@@ -731,8 +738,13 @@ export class Sim {
     }
     // the valley after every peak: extraction includes a shop browse
     for (const p of this.livePlayers()) this._openShop(p, 'clear');
-    // the extraction portal — leave via the same consent countdown
-    this.hatch = this._openSpot(this.W / 2, this.H / 2);
+    // The extraction portal — leave via the same consent countdown. Breach is
+    // the exception: its far gate IS the portal, so there is no mid-map hatch
+    // to walk back to. You spent the whole corridor earning that door; opening
+    // a second exit behind you would undo the point of the level.
+    this.hatch = this.obj && this.obj.type === 'breach' && this.obj.gate
+      ? { x: this.obj.gate.x, y: this.obj.gate.y }
+      : this._openSpot(this.W / 2, this.H / 2);
   }
 
   _openSpot(x, y) {
@@ -839,7 +851,7 @@ export class Sim {
         if (o.group === m.group) this.fx.booms.push({ x: o.x + o.w / 2, y: o.y + o.h / 2, r: Math.max(o.w, o.h) });
       }
       this.obstacles = this.obstacles.filter(o => o.group !== m.group);
-      this.pushEvent({ k: 'obstacles', obstacles: this.obstacles.map(o => [o.x, o.y, o.w, o.h]) });
+      this.pushEvent({ k: 'obstacles', obstacles: this._snapObstacles() });
     } else if (m.kind === 'hazard_field') {
       this.hazards.push({
         type: 'lava', x: m.from.x, y: m.from.y, r: m.r, dps: m.dps, acc: 0,
@@ -895,6 +907,128 @@ export class Sim {
 
   // ---------------- obstacles ----------------
 
+  // The arena's MAIN open region, flood-filled once per room from the coarse
+  // free grid. Arena templates can wall off a chamber that nothing reaches:
+  // one measured floor-1 layout sealed a 708x730 pocket and dropped the party
+  // straight into it, which reads to a player as "the level is broken". So the
+  // drop point and every piece of objective furniture is placed HERE, and the
+  // sealed corners stay the scenery they were always meant to be.
+  _buildRegion() {
+    const C = 40;
+    const cols = Math.ceil(this.W / C), rows = Math.ceil(this.H / C);
+    const free = new Uint8Array(cols * rows);
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        const x = i * C + C / 2, y = j * C + C / 2;
+        const inside = x > WALL + 22 && y > WALL + 22 && x < this.W - WALL - 22 && y < this.H - WALL - 22;
+        free[j * cols + i] = (inside && !this._inObstacle(x, y, 22)) ? 1 : 0;
+      }
+    }
+    const seen = new Int32Array(cols * rows).fill(-1);
+    let best = -1, bestN = 0;
+    for (let start = 0; start < free.length; start++) {
+      if (!free[start] || seen[start] >= 0) continue;
+      const q = [start];
+      seen[start] = start;
+      for (let h = 0; h < q.length; h++) {
+        const c = q[h], ci = c % cols, cj = (c / cols) | 0;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = ci + di, nj = cj + dj;
+          if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
+          const n = nj * cols + ni;
+          if (!free[n] || seen[n] >= 0) continue;
+          seen[n] = start; q.push(n);
+        }
+      }
+      if (q.length > bestN) { bestN = q.length; best = start; }
+    }
+    const ok = new Uint8Array(cols * rows);
+    for (let i = 0; i < ok.length; i++) ok[i] = seen[i] === best ? 1 : 0;
+    this._reg = { C, cols, rows, ok, count: bestN };
+  }
+
+  inMainRegion(x, y) {
+    const r = this._reg;
+    if (!r || !r.count) return true;
+    const i = clamp((x / r.C) | 0, 0, r.cols - 1), j = clamp((y / r.C) | 0, 0, r.rows - 1);
+    return !!r.ok[j * r.cols + i];
+  }
+
+  // Nearest point inside the main region — used for the party's drop point.
+  mainRegionSpot(x, y) {
+    const r = this._reg;
+    if (!r || !r.count || this.inMainRegion(x, y)) return [x, y];
+    const pi = clamp((x / r.C) | 0, 0, r.cols - 1), pj = clamp((y / r.C) | 0, 0, r.rows - 1);
+    let best = null, bd = Infinity;
+    for (let j = 0; j < r.rows; j++) for (let i = 0; i < r.cols; i++) {
+      if (!r.ok[j * r.cols + i]) continue;
+      const d = (i - pi) ** 2 + (j - pj) ** 2;
+      if (d < bd) { bd = d; best = [i, j]; }
+    }
+    return best ? [best[0] * r.C + r.C / 2, best[1] * r.C + r.C / 2] : [x, y];
+  }
+
+  // The wire form: [x, y, w, h, destructible]. The flag lets the renderer draw
+  // a barricade as a barricade, and this payload is what client-side movement
+  // prediction collides with. Damage state does NOT ride here — it goes in the
+  // objective blob, and only for the barricades that are actually damaged.
+  _snapObstacles() {
+    return this.obstacles.map(o => [o.x, o.y, o.w, o.h, o.destructible ? 1 : 0]);
+  }
+
+  // A destructible barricade. It lives in `obstacles` too, so it blocks
+  // movement, projectiles and line of sight exactly like arena scenery — the
+  // only difference is that it can be taken apart.
+  addWall(x, y, w, h, hp, meta = {}) {
+    const wall = { x, y, w, h, hp, maxHp: hp, destructible: true, ...meta };
+    this.obstacles.push(wall);
+    this.walls.push(wall);
+    return wall;
+  }
+
+  _wallAt(x, y, r = 0) {
+    for (const w of this.walls) {
+      if (x > w.x - r && x < w.x + w.w + r && y > w.y - r && y < w.y + w.h + r) return w;
+    }
+    return null;
+  }
+
+  damageWall(w, dmg, owner) {
+    if (!w || w.hp <= 0) return;
+    w.hp -= dmg;
+    this.fx.hits.push({ x: Math.round(w.x + w.w / 2), y: Math.round(w.y + w.h / 2), a: Math.round(dmg), c: 0 });
+    if (w.hp > 0) return;
+    w.hp = 0;
+    this.walls = this.walls.filter(q => q !== w);
+    this.obstacles = this.obstacles.filter(q => q !== w);
+    this.fx.booms.push({ x: Math.round(w.x + w.w / 2), y: Math.round(w.y + w.h / 2), r: Math.max(w.w, w.h) * 0.7 });
+    this.pushEvent({ k: 'sfx', s: 'boom' });
+    this.pushEvent({ k: 'obstacles', obstacles: this._snapObstacles() });
+    if (w.onBreak) w.onBreak(this, w, owner);
+  }
+
+  // Every splash, nova and blast chews barricades as well as bodies.
+  _areaDamageWalls(x, y, radius, dmg, owner) {
+    if (!this.walls.length) return;
+    for (const w of [...this.walls]) {
+      const cx = clamp(x, w.x, w.x + w.w), cy = clamp(y, w.y, w.y + w.h);
+      if (dist2(x, y, cx, cy) <= radius * radius) this.damageWall(w, dmg, owner);
+    }
+  }
+
+  // Melee reach: the arc/line sweeps sit in the weapon switch, so this only
+  // has to answer "which barricade is under this swing".
+  _sweepWalls(x, y, a, range, arc, dmg, owner) {
+    if (!this.walls.length) return;
+    for (const w of [...this.walls]) {
+      const cx = clamp(x, w.x, w.x + w.w), cy = clamp(y, w.y, w.y + w.h);
+      const d = Math.hypot(cx - x, cy - y);
+      if (d > range + 12) continue;
+      if (arc < Math.PI * 2 && Math.abs(angDiffLocal(a, Math.atan2(cy - y, cx - x))) > arc / 2) continue;
+      this.damageWall(w, dmg, owner);
+    }
+  }
+
   _inObstacle(x, y, r = 0) {
     for (const o of this.obstacles) {
       if (x > o.x - r && x < o.x + o.w + r && y > o.y - r && y < o.y + o.h + r) return true;
@@ -938,6 +1072,24 @@ export class Sim {
     cands.sort((a, b) => a.d - b.d);
     for (const c of cands) if (!this.losBlocked(x, y, c.e.x, c.e.y)) return c.e;
     return null;
+  }
+
+  // The closest point on the closest destructible barricade, if one is in
+  // range and in sight. Aim at the face, not the centre, so the shot lands on
+  // the near side rather than travelling through half the block.
+  _nearestWallPoint(x, y, range) {
+    let best = null;
+    for (const w of this.walls) {
+      const cx = clamp(x, w.x, w.x + w.w), cy = clamp(y, w.y, w.y + w.h);
+      const d2 = dist2(x, y, cx, cy);
+      if (d2 > range * range || (best && d2 >= best.d2)) continue;
+      // sight to just short of the face — the wall itself must not self-block
+      const d = Math.sqrt(d2) || 1;
+      const bx = cx + (x - cx) / d * 6, by = cy + (y - cy) / d * 6;
+      if (this.losBlocked(x, y, bx, by)) continue;
+      best = { x: cx, y: cy, d2, wall: w };
+    }
+    return best;
   }
 
   // deterministic nearest clear point: rings outward from (x, y)
@@ -988,6 +1140,9 @@ export class Sim {
     let hp = def.hp * fl * this.coopHp * this.greedHp * CONFIG.enemyHpMult * (opts.elite ? CONFIG.ELITE_HP_MULT : 1);
     hp *= this.curseEnemyHp;                       // cursed round: tougher enemies
     if (opts.hpMult) hp *= opts.hpMult;            // objective variants (elite arena, bounties)
+    // a level-wide toughness dial the objective owns (Nest Purge: +50%);
+    // the objective's own furniture (nests) opts out with noObjHp
+    if (!opts.noObjHp) hp *= (this.objHpMult || 1);
     if (opts.mini) hp *= 0.35;
     Object.assign(e, {
       id: ++this.spawnCounter, def, typeIdx: ENEMY_INDEX[id], boss: false, bossDef: null,
@@ -1006,6 +1161,13 @@ export class Sim {
       mortar: !!opts.mortar,   // Lobber artillery: telegraphed shells on your position
       puddle: !!opts.puddle,   // chaff that leaves an acid puddle on death
       rushSet: false, rushX: 0, rushY: 0, // wave-end rush overshoot target
+      // Objective-owned flags. The pool RECYCLES enemies, so anything an
+      // objective stamps on one must be cleared here or it rides into the next
+      // room: a nest's invulnerability shield leaking onto ordinary chaff left
+      // six unkillable enemies standing in a later horde arena, and the fight
+      // could never end.
+      isNest: false, nestShielded: false, bounty: false, arenaVariant: null,
+      spawnCdMult: 1, maxBroodCap: 0, enrageRate: 0, baseSpd: 0, payloadCd: 0,
     });
     return e;
   }
@@ -1331,9 +1493,24 @@ export class Sim {
   // your screen are dead weight, so standing still recalls them: a 3s channel
   // (cancelled by moving or taking a hit, paused in menus/downed), then each
   // off-screen structure packs up and redeploys near you half a second later.
+  // The owner's ACTUAL camera, mirroring render.js: it follows the player but
+  // CLAMPS at the arena edges, so near a wall the player sits off-centre and
+  // the visible world extends further to one side. Judging visibility from a
+  // player-centred box (the old way) called those structures "off-screen" and
+  // recalled turrets the owner was looking straight at — the reported bug.
+  // In co-op each owner is judged against their own camera.
+  _ownerCamera(p) {
+    const hw = CONFIG.STRUCT_OFFSCREEN_W / 2, hh = CONFIG.STRUCT_OFFSCREEN_H / 2;
+    return {
+      cx: clamp(p.x, Math.min(hw, this.W / 2), Math.max(this.W - hw, this.W / 2)),
+      cy: clamp(p.y, Math.min(hh, this.H / 2), Math.max(this.H - hh, this.H / 2)),
+      hw, hh,
+    };
+  }
+
   _structOffscreen(p, s) {
-    return Math.abs(s.x - p.x) > CONFIG.STRUCT_OFFSCREEN_W / 2
-      || Math.abs(s.y - p.y) > CONFIG.STRUCT_OFFSCREEN_H / 2;
+    const c = this._ownerCamera(p);
+    return Math.abs(s.x - c.cx) > c.hw || Math.abs(s.y - c.cy) > c.hh;
   }
 
   _ownedStructures(p) {
@@ -1354,15 +1531,17 @@ export class Sim {
     return mine.length;
   }
 
+  // The rule, exactly: a structure relocates ONLY when it is outside its
+  // OWNER'S viewport AND that owner has stood still for 3 continuous seconds.
+  // Movement or damage cancels; menus and being downed pause. A structure the
+  // owner can see NEVER moves on its own.
   _tickStructureRecall(p, dt) {
     // paused, not cancelled, while an overlay owns the player's attention
     const busy = p.downed || p.shop || p.pendingOffer || p.treasureOffer || p.boonOffer;
+    if (busy) return;                       // hold the timer where it is
+    if (p.moving) { p.relocT = 0; return; } // any movement cancels outright
     const offscreen = this._ownedStructures(p).some(s => this._structOffscreen(p, s));
-    if (busy || !offscreen || p.moving) {
-      // moving cancels outright; busy/nothing-to-recall just holds the ring
-      if (p.moving || !offscreen) p.relocT = 0;
-      return;
-    }
+    if (!offscreen) { p.relocT = 0; return; } // nothing to recall: no channel
     p.relocT += dt;
     if (p.relocT >= CONFIG.STRUCT_CHANNEL_S) {
       p.relocT = 0;
@@ -1494,9 +1673,22 @@ export class Sim {
     const range = this._weaponRange(p, def);
     // lobbed weapons arc over walls — that's their identity; everything else
     // targets the nearest VISIBLE enemy
-    const target = opts.target || (def.cls === 'lobbed'
+    let target = opts.target || (def.cls === 'lobbed'
       ? this._nearestEnemy(p.x, p.y, range)
       : this._nearestVisibleEnemy(p.x, p.y, range));
+    // A destructible barricade is a TARGET, not scenery. This game aims for
+    // you, so a wall nothing ever shoots at is a wall nobody can break: walk
+    // up to one and it becomes the nearest thing, exactly as a body would.
+    // Lobbed weapons keep arcing over — that is their whole identity.
+    if (!opts.target && def.cls !== 'lobbed' && this.walls.length) {
+      const wp = this._nearestWallPoint(p.x, p.y, range);
+      // Weighted like a bounty mark, and for the same reason: with a swarm on
+      // top of you a barricade is NEVER the literally-nearest thing, so a
+      // plain distance test meant nobody ever broke one. At 0.25 on squared
+      // distance a wall competes as if half as far — chaff in your face
+      // still wins, but standing at a barricade means chewing it.
+      if (wp && (!target || wp.d2 * 0.25 < dist2(p.x, p.y, target.x, target.y))) target = wp;
+    }
     if (!target) return;
     const a = angleTo(p.x, p.y, target.x, target.y);
     p.aimA = a;
@@ -1569,6 +1761,7 @@ export class Sim {
           this._hitEnemy(e, dmg, hitCtx, a);
           hits++;
         });
+        this._sweepWalls(p.x, p.y, a, range, def.arc, dmg, p);
         if (hits > 0) this.pushEvent({ k: 'sfx', s: crit ? 'crit' : 'hit' });
         else this.pushEvent({ k: 'sfx', s: 'swing' });
         break;
@@ -1584,6 +1777,7 @@ export class Sim {
         hits.sort((e1, e2) => dist2(p.x, p.y, e1.x, e1.y) - dist2(p.x, p.y, e2.x, e2.y));
         const n = def.pierceLine ? hits.length : Math.min(1, hits.length);
         for (let i = 0; i < n; i++) this._hitEnemy(hits[i], dmg, hitCtx, a);
+        this._sweepWalls(p.x, p.y, a, range, 0.5, dmg, p);
         this.pushEvent({ k: 'sfx', s: n > 0 ? (crit ? 'crit' : 'hit') : 'swing' });
         break;
       }
@@ -1742,7 +1936,13 @@ export class Sim {
   // Auto-aim weight. A Bounty Hunt mark is the thing the level is asking you
   // to kill, and a champion whose escort soaks every shot is just a wall — so
   // a mark inside range reads as much closer than it is and wins the lock.
-  _aimWeight(e) { return e.bounty ? 0.3 : 1; }
+  // Auto-aim strongly prefers a bounty mark: it is the only thing on the
+  // level with a health bar worth the name, and its own endless stream is
+  // standing between it and every gun. At 0.3 the stream soaked so many
+  // shots that a solo player never finished a single mark. The weight
+  // multiplies SQUARED distance, so 0.12 means a mark competes as if it
+  // were a third as far away — chaff right on top of you still wins.
+  _aimWeight(e) { return e.bounty ? 0.12 : 1; }
 
   _nearestEnemy(x, y, range) {
     let best = null, bd = range * range;
@@ -1804,6 +2004,11 @@ export class Sim {
 
   damageEnemy(e, amount, opts = {}) {
     if (!e.active) return;
+    // A walled nest cannot be hurt until BOTH of its rings are breached.
+    // Sight and projectiles already stop at the barricades; this makes the
+    // rule absolute, so novas and other line-of-sight-ignoring damage do
+    // not quietly skip the part of the level that IS the level.
+    if (e.nestShielded) { this.fx.blocks.push({ x: e.x, y: e.y }); return; }
     // warden allies shield: 50% reduction if a living warden is nearby (not self)
     if (!e.boss && e.def.behavior !== 'warden') {
       for (const w of this.enemyPool) {
@@ -1844,8 +2049,7 @@ export class Sim {
       this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
     }
     // drops
-    objectiveOnKill(this);   // Breach door quotas count kills in the segment
-    let mats = objectiveKillPays(this) ? e.mats * this.greedMats : 0;
+    let mats = objectiveKillPays(this, e) ? e.mats * this.greedMats : 0;
     if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && Math.random() < killer.hookAgg.doubleMaterials) mats *= 2;
     for (let i = 0; i < mats; i++) this._dropMaterial(x + (Math.random() * 30 - 15), y + (Math.random() * 30 - 15));
     // killer hooks & traits
@@ -1924,6 +2128,7 @@ export class Sim {
   _areaDamageEnemies(x, y, radius, dmg, owner, opts = {}) {
     const seen = new Set();
     let hits = 0;
+    this._areaDamageWalls(x, y, radius, dmg, owner);
     this.grid.query(x, y, radius + 40, e => {
       if (!e.active || seen.has(e.id) || e === opts.exclude) return;
       seen.add(e.id);
@@ -2066,8 +2271,13 @@ export class Sim {
           if (expired || oob) { this._lobExplode(pr); this.projPool.release(pr); }
           continue;
         }
-        // straight shots are absorbed by walls (lobs above arc over)
-        if (this.obstacles.length && this._inObstacle(pr.x, pr.y, 0)) { this.projPool.release(pr); continue; }
+        // straight shots are absorbed by walls (lobs above arc over) — and a
+        // DESTRUCTIBLE wall takes the hit rather than merely eating the shot
+        if (this.obstacles.length && this._inObstacle(pr.x, pr.y, 0)) {
+          const hitWall = this._wallAt(pr.x, pr.y, 0);
+          if (hitWall) this.damageWall(hitWall, pr.dmg, this.players[pr.owner]);
+          this.projPool.release(pr); continue;
+        }
         if (expired || oob) { this.projPool.release(pr); continue; }
         // vs enemies
         let dead = false;

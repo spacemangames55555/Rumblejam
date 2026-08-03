@@ -3,6 +3,10 @@
 // lives in entities/bosses.js keyed by `kit`; numbers live here.
 // Boss HP was doubled in the objectives patch (620/900/1350/2000 → these):
 // bosses are the floor's wall, and Bounty Hunt elites are priced off them.
+// Playtest pass 3 then multiplied the FINAL siege boss — and only that one —
+// by ten more (4000 → 40000, twenty times its original number). The Vault
+// Regent ends the run, so it is meant to be an endurance test rather than one
+// more fight; the other three floors are unchanged.
 
 export const BOSSES = [
   { id: 'ossuary_hulk', name: 'The Ossuary Hulk', kit: 'hulk', floor: 1,
@@ -25,7 +29,11 @@ export const BOSSES = [
     p2: { spawnCd: 3.4, spdMult: 1.25 } },
 
   { id: 'vault_regent', name: 'The Vault Regent', kit: 'regent', floor: 4,
-    hp: 4000, dmg: 15, spd: 78, radius: 48, shape: 'hex', color: '#ffd45e', mats: 60,
+    hp: 40000, dmg: 15, spd: 78, radius: 48, shape: 'hex', color: '#ffd45e', mats: 60,
+    // Bounty Hunt prices its champions off the floor boss. The Regent's ×10
+    // is an endurance dial for the run's last fight, not a new yardstick, so
+    // bounties keep measuring against the number it had before.
+    bountyAnchor: 4000,
     beams: { windup: 1.3, count: 4, dmg: 14, width: 26, spin: 0.55, dur: 3.2, cd: 8 },
     burst: { count: 18, dmg: 10, speed: 300, cd: 3.0 },
     slam:  { windup: 0.9, dmg: 24, radius: 170, cd: 5 },
