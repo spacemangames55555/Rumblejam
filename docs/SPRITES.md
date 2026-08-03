@@ -17,8 +17,10 @@ That is what lets art land one file at a time instead of all at once.
 
 1. Open `assets/assets.json` and find the id you want to draw. Every id the
    game can ever ask for is already in there — the manifest **is** the art
-   inventory. Note its `file` and its `w`/`h`.
-2. Draw a PNG at exactly that size.
+   inventory. Note its `file`, its `w`/`h`, and whether it has `directions`.
+2. Draw the PNG. No `directions` means one image at exactly `w`×`h`.
+   `directions: 8` means a **grid**: `w` wide by `h × 8` tall, one row per
+   facing in the order `E SE S SW W NW N NE` — see **Directional units**.
 3. Save it at `assets/sprites/<file>`.
 4. Reload. That entity is now a sprite; everything else is still primitives.
 
@@ -41,7 +43,8 @@ character gets an inventory entry automatically and cannot be forgotten.
   "version": 1,
   "basePath": "assets/sprites/",
   "sprites": {
-    "enemy.skulker": { "file": "enemy/skulker.png", "w": 48, "h": 48 },
+    "enemy.skulker": { "file": "enemy/skulker.png", "w": 48, "h": 48, "directions": 8 },
+    "proj.pebbleshot": { "file": "proj/pebbleshot.png", "w": 16, "h": 16 },
     "prop.altar":    { "file": "prop/altar.png", "w": 64, "h": 64, "anchor": "bottom" }
   }
 }
@@ -54,15 +57,102 @@ character gets an inventory entry automatically and cannot be forgotten.
 | `frames` | `1` | frames in the strip |
 | `fps` | `8` | playback rate |
 | `anchor` | `"center"` | `"bottom"` puts the art's feet on the entity's position — use it for anything standing on the floor |
+| `directions` | `1` | rows in the grid. `1` (or absent) is the old rotated behaviour |
 
-**Sheets are single horizontal strips.** Frame *N* lives at `x = N × w`, one
-row, no padding. A 4-frame 48×48 walk cycle is a 192×48 PNG.
+**Sheets are strips; unit sheets are grids.** Columns are animation frames,
+rows are facings. The cell for (frame, direction) sits at
+`(frame × w, direction × h)`. A non-directional sprite is a single row: a
+4-frame 16×16 bolt is a 64×16 PNG. See **Directional units** below for the
+rest.
+
+For any sprite with `directions > 1`, the image must be **exactly**
+`w × frames` wide and `h × directions` tall. The loader checks this and, on a
+mismatch, warns with the size it expected and marks the id missing so it falls
+back to its primitive. A silently wrong grid is worse than no sprite: every
+other kind of art bug is visible, but a grid off by one row just makes units
+face subtly wrong, which survives a whole playtest.
 
 To animate an existing static sprite, add `frames` and `fps` to the generator
 (`tools/gen_assets_manifest.mjs`) and regenerate — not to the JSON by hand, or
 the next regeneration will wipe it. If a manifest ever claims more frames than
 the file actually holds, the loader notices, warns once, and uses what is
 really there rather than drawing blank frames.
+
+## Directional units
+
+Units are drawn **from a per-angle view**, not by rotating one image. A
+character walking west is a different drawing, not the east one turned 180°.
+
+`char.`, `enemy.` and `boss.` ship as **8-direction** grids. Everything else —
+projectiles, props, item icons, UI — is single-direction and rotated, because a
+bolt genuinely points along its velocity and a directional bolt would be
+strictly worse.
+
+### Row order
+
+Fixed and non-negotiable, starting at row 0:
+
+```
+0 E    1 SE    2 S    3 SW    4 W    5 NW    6 N    7 NE
+```
+
+Screen-space east, then **clockwise** — canvas Y points down, so clockwise on
+screen is increasing angle, and the row index falls straight out of `atan2`
+with no offset term:
+
+```js
+const step = TAU / directions;
+const dir  = ((Math.round(angle / step) % directions) + directions) % directions;
+```
+
+For `directions: 4` the same rule gives `E, S, W, N`.
+
+An 8-direction character with 1 frame is a **48×384** PNG: one 48-px column,
+eight 48-px rows, top to bottom in that order.
+
+### Four directions instead of eight
+
+The renderer handles any `directions` value, so dropping enemies to 4 later is
+a one-line manifest change per entry with no code behind it — change
+`UNIT_DIRECTIONS` or add a per-namespace rule in
+`tools/gen_assets_manifest.mjs` and regenerate. Eight directions for ~60 units
+is the largest single line item in the art budget; it is worth deciding once
+there is art in play, not before.
+
+### Facing
+
+Nothing on the wire says which way anything is looking, and nothing should — a
+facing byte would be a snapshot change for a purely cosmetic detail. The
+renderer works it out from what it already draws:
+
+- Enemies face the direction they are **moving**.
+- Players face what they are **shooting at** for 0.6s after each shot, and
+  their movement direction otherwise.
+- A unit that is not moving keeps its last real heading. A unit never yet seen
+  faces **south, towards the camera** — an idle arena must never snap east
+  because `atan2(0, 0)` is `0`.
+
+That memory lives in a `Map` in `js/render.js`, keyed by entity id, swept
+periodically and cleared when the arena changes. It is never attached to an
+entity, and a test asserts as much.
+
+### Never rotated, never mirrored
+
+A directional sprite is drawn square: the row *is* the facing. `flipX` is
+ignored on a directional sheet — mirroring a west-facing drawing would produce
+a sprite facing east with its art flipped. Draw all eight; do not draw four and
+mirror.
+
+This also makes the directional path the **cheaper** of the two: it always
+qualifies for the renderer's no-`save`/`restore` fast path.
+
+### Texture cost
+
+An 8-direction, 1-frame 48×48 sheet decodes to ~74 KB in memory; 64 unit
+sheets is ~4.7 MB. At 4 animation frames that becomes ~294 KB each and ~19 MB
+total. That is fine on desktop and worth measuring on a phone once the first
+batch of art exists. If it bites, the levers are fewer animation frames or
+fewer directions on low-value units — not a texture atlas.
 
 ## Canonical sizes
 
@@ -92,9 +182,9 @@ rest. Smoothing is off, so pixel art stays crisp at any scale.
 
 | namespace | count | what |
 |---|---|---|
-| `char.` | 47 | every character in both rosters (33 classic + 14 Thrones of Heaven) |
-| `enemy.` | 13 | the 12 base types plus the siege Ward Pylon |
-| `boss.` | 4 | the four floor bosses |
+| `char.` | 47 | every character in both rosters (33 classic + 14 Thrones of Heaven) — **8-directional** |
+| `enemy.` | 13 | the 12 base types plus the siege Ward Pylon — **8-directional** |
+| `boss.` | 4 | the four floor bosses — **8-directional** |
 | `proj.` | 21 | see below |
 | `item.` | 172 | 146 items + 26 weapons, sharing one icon namespace |
 | `prop.` | 24 | hatches, altars, drills, nests, gates, doors, barricades, wall tiles, turrets, drones, rams, lava, spikes, coral, singularities, spirits, decoys |
@@ -132,7 +222,7 @@ Projectiles are drawn rotated to their heading, so draw them pointing **right**
 | URL | effect |
 |---|---|
 | `?sprites=off` | forces every fallback. The renderer behaves exactly as it did before this layer existed — useful for A/B comparison and as an escape hatch if art regresses something. |
-| `?sprites=debug` | logs every missing id once at load, and outlines a magenta dashed box wherever a sprite was requested but absent — so a half-finished sheet is obvious on screen. |
+| `?sprites=debug` | logs every missing id once at load, outlines a magenta dashed box wherever a sprite was requested but absent, and prints the **resolved direction row** on every directional sprite. Use the readout: an off-by-one and a mirrored row order both look *almost* right in motion and are genuinely hard to spot by eye. |
 
 ## What this layer is not
 
@@ -143,7 +233,10 @@ It is not simulation, and the boundary is enforced by a test.
   never on the wire. The sim suite asserts this on a real snapshot every run.
 - Animation frames come from `performance.now()`, are client-local, and are
   never networked. Two players may be on different frames of the same walk
-  cycle. That is fine.
+  cycle. That is fine. Each entity's phase is offset by a stable hash of its
+  id, so forty grunts do not breathe in lockstep.
+- Facing is render-local too — a `Map` in the render module, keyed by id, not
+  a field on anything the simulation owns.
 - Nothing here can change a hitbox, a damage number, a spawn, or a tick.
 
 ## Loading

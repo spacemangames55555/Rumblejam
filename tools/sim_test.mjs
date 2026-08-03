@@ -2803,6 +2803,59 @@ try {
   if (orphan.length) fail(`${orphan.length} manifest entr(ies) nothing can ask for: ${orphan.slice(0, 6).join(', ')}`);
   else ok('no orphan manifest entries — the inventory and the code agree exactly');
 
+  // -- direction bucketing. The row index has to fall out of atan2 with no
+  //    offset term, for any winding and either sign, or units face subtly
+  //    wrong in a way that survives a playtest. --
+  const AS = await import('../js/assets.js');
+  const TAU2 = Math.PI * 2;
+  const CASES = {
+    8: [['E', 0, 0], ['SE', TAU2 / 8, 1], ['S', TAU2 / 4, 2], ['SW', 3 * TAU2 / 8, 3],
+      ['W', TAU2 / 2, 4], ['NW', -3 * TAU2 / 8, 5], ['N', -TAU2 / 4, 6], ['NE', -TAU2 / 8, 7]],
+    4: [['E', 0, 0], ['S', TAU2 / 4, 1], ['W', TAU2 / 2, 2], ['N', -TAU2 / 4, 3]],
+  };
+  const dirBad = [];
+  for (const [dirsStr, cases] of Object.entries(CASES)) {
+    const dirs = Number(dirsStr);
+    for (const [name, angle, row] of cases) {
+      // the canonical angle, both windings, and a nudge either side of it that
+      // must not tip into a neighbouring bucket
+      const step = TAU2 / dirs;
+      for (const a of [angle, angle + TAU2, angle - TAU2, angle + 3 * TAU2, angle - 4 * TAU2,
+        angle + step * 0.45, angle - step * 0.45]) {
+        const got = AS.dirIndex(a, dirs);
+        if (got !== row) dirBad.push(`${dirs}-way ${name}: ${a.toFixed(3)} -> row ${got}, want ${row}`);
+      }
+    }
+  }
+  // the west seam: +pi and -pi are the same direction and must agree
+  for (const dirs of [4, 8]) {
+    if (AS.dirIndex(Math.PI, dirs) !== AS.dirIndex(-Math.PI, dirs)) dirBad.push(`${dirs}-way: +pi and -pi disagree`);
+  }
+  // south is the default facing, and a single-direction sheet has one row
+  if (AS.dirIndex(AS.DEFAULT_FACING, 8) !== 2) dirBad.push('DEFAULT_FACING is not the S row at 8');
+  if (AS.dirIndex(AS.DEFAULT_FACING, 4) !== 1) dirBad.push('DEFAULT_FACING is not the S row at 4');
+  for (const a of [0, 1, -1, 99, -99, NaN, Infinity]) {
+    if (AS.dirIndex(a, 1) !== 0) dirBad.push(`directions:1 returned a non-zero row for ${a}`);
+  }
+  if (AS.dirIndex(NaN, 8) !== 2 || AS.dirIndex(Infinity, 8) !== 2) dirBad.push('a non-finite angle did not fall back to S');
+  if (AS.DIRECTION_ROWS_8.join(' ') !== 'E SE S SW W NW N NE') dirBad.push(`row names: ${AS.DIRECTION_ROWS_8}`);
+  if (AS.DIRECTION_ROWS_4.join(' ') !== 'E S W N') dirBad.push(`4-way row names: ${AS.DIRECTION_ROWS_4}`);
+  if (dirBad.length) fail(`direction bucketing: ${dirBad.slice(0, 5).join(' | ')}`);
+  else ok('direction rows: E SE S SW W NW N NE at 8 and E S W N at 4, stable across ±4 windings, sign, the ±pi seam and junk angles');
+
+  // -- units are directional, everything else is not --
+  const dirWrong = [];
+  for (const [id, spec] of Object.entries(man)) {
+    const ns = id.slice(0, id.indexOf('.'));
+    const want = S.DIRECTIONAL_NAMESPACES.has(ns) ? S.UNIT_DIRECTIONS : undefined;
+    if ((spec.directions || undefined) !== want) dirWrong.push(`${id}: directions ${spec.directions}, want ${want || 'none'}`);
+  }
+  if (dirWrong.length) fail(`manifest directions: ${dirWrong.slice(0, 5).join(' | ')}`);
+  else {
+    const n = Object.values(man).filter(s => s.directions > 1).length;
+    ok(`${n} unit sheets are ${S.UNIT_DIRECTIONS}-directional grids; projectiles, props, icons and UI stay single-direction and rotated`);
+  }
+
   // -- manifest hygiene: namespaces, canonical sizes, GitHub Pages paths --
   let hyg = [];
   if (/^\//.test(manifest.basePath)) hyg.push(`basePath "${manifest.basePath}" starts with a slash`);

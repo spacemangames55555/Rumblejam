@@ -20,6 +20,7 @@ import { WEAPONS } from '../js/content/weapons.js';
 import { ITEMS } from '../js/content/items.js';
 import {
   SPRITE_SIZE, PROP, PROP_BOTTOM_ANCHORED, FX, UI, PYLON_SPRITE, allProjSpriteIds,
+  UNIT_DIRECTIONS, DIRECTIONAL_NAMESPACES,
 } from '../js/content/sprites.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,14 +30,20 @@ const BASE_PATH = 'assets/sprites/';   // relative, no leading slash — GitHub 
 
 const sprites = {};
 
-// Every entry is a single horizontal strip. `frames` and `fps` are omitted,
-// which means one static frame at 8fps — bump them in this generator when a
-// category actually ships animated, so a plain PNG keeps working until then.
+// `frames` and `fps` are omitted, which means one static frame at 8fps — bump
+// them in this generator when a category actually ships animated, so a plain
+// PNG keeps working until then.
+//
+// Units (char/enemy/boss) carry `directions`, which makes them a GRID: the
+// file must be exactly `w * frames` wide and `h * directions` tall, rows in
+// the order E SE S SW W NW N NE. The loader rejects a grid that is not, rather
+// than drawing a plausible-looking wrong facing.
 function add(id, extra = {}) {
   const ns = id.slice(0, id.indexOf('.'));
   const [w, h] = SPRITE_SIZE[ns];
   if (sprites[id]) throw new Error(`duplicate sprite id: ${id}`);
-  sprites[id] = { file: `${ns}/${id.slice(ns.length + 1)}.png`, w, h, ...extra };
+  const dir = DIRECTIONAL_NAMESPACES.has(ns) ? { directions: UNIT_DIRECTIONS } : {};
+  sprites[id] = { file: `${ns}/${id.slice(ns.length + 1)}.png`, w, h, ...dir, ...extra };
 }
 
 // ---- characters: both rosters, one sheet each ----

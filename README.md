@@ -364,11 +364,21 @@ state it ships in. Art lands one file at a time:
 3. Save it at `assets/sprites/<file>`. Reload. Done — no build step, no code.
 
 Canonical sizes: players and enemies 48x48, bosses 96x96, projectiles /
-pickups / FX 16x16, item icons 24x24, props 64x64, UI 32x32. Sheets are single
-horizontal strips (frame *N* at `x = N x w`).
+pickups / FX 16x16, item icons 24x24, props 64x64, UI 32x32.
 
-`?sprites=off` forces every fallback; `?sprites=debug` names what is missing
-and outlines a magenta box where art was expected.
+**Units are directional.** Characters, enemies and bosses are drawn from a
+per-angle view rather than by rotating one image: their sheet is a grid, rows =
+facings in the order `E SE S SW W NW N NE`, columns = animation frames. An
+8-direction 48x48 character with one frame is a 48x384 PNG. Everything else —
+projectiles, props, icons, UI — is a single row and is rotated as before,
+because a bolt genuinely points along its velocity.
+
+Facing is worked out by the renderer from motion and aim, is stored render-side
+keyed by entity id, and never touches an entity, a snapshot or the wire.
+
+`?sprites=off` forces every fallback; `?sprites=debug` names what is missing,
+outlines a magenta box where art was expected, and prints the resolved
+direction row on every directional sprite.
 
 The manifest is generated — `node tools/gen_assets_manifest.mjs` — so a new
 item or character gets an inventory entry automatically.
@@ -464,6 +474,49 @@ never loads them:
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### Directional sprites (patch 16)
+
+- **`facing` was added alongside `rot`, rather than overloading `rot` alone.**
+  The brief specified that `drawSprite(ctx, id, x, y, { rot: e.angle })` keeps
+  working in both modes, and it does — `rot` selects a row on a directional
+  sheet. But our enemies never passed `rot` at all, so making them start
+  passing it would have rotated a `directions: 1` enemy sheet that previously
+  did not rotate, breaking the brief's own test 5. Units now pass `facing`,
+  which is used for row selection and ignored entirely on a single-direction
+  sheet; projectiles still pass `rot`. Both spellings work on a directional
+  entry.
+- **Strict grid validation applies to `directions > 1` only.** The brief asks
+  for exact `w x frames` by `h x directions` validation with rejection on
+  mismatch, and separately asks that a `directions: 1` entry behave exactly as
+  before. Those conflict for a wrong-sized flat sprite, which previously had
+  its frame count clamped rather than being rejected. Grids are rejected;
+  flat strips keep the lenient clamp they shipped with. Say the word and the
+  rule can be made uniform.
+- **Player facing prefers a fresh shot over movement, for 0.6s.** `p.aimA` in
+  this engine is an auto-aim angle that only moves when a weapon actually
+  fires, and it sits at `0` for a player who has never fired — precisely the
+  snap-everything-east hazard the brief warns about. So a shot wins for a
+  moment (backing away while shooting should look like shooting), movement wins
+  otherwise, and a unit that has done neither faces south.
+- **Motion threshold is 0.5 world units per frame** (30 u/s): under the slowest
+  thing that walks, the Deadeye at 62 u/s, and over client interpolation
+  jitter.
+- **Facing is cleared on arena change** rather than aged out, since entity ids
+  do not carry across arenas. Otherwise stale rows are swept every 256 frames
+  with a 600-frame window, which is long enough that a unit culled off-screen
+  keeps its facing when it comes back.
+- **8 directions for every unit, for now.** The brief said not to decide 4-vs-8
+  yet; `UNIT_DIRECTIONS` in `js/content/sprites.js` is one constant and the
+  renderer handles any value, so this is a manifest regeneration whenever you
+  want it. 64 unit sheets at 8x1 frames is ~4.7 MB decoded; at 8x4 it is
+  ~19 MB. Nothing to measure until art exists.
+- **The generation spec was not updated because it is not in this repository.**
+  `patch-art-generation.md` does not exist here (`docs/` holds `SPRITES.md`,
+  `COMPENDIUM.md` and `design-audit.md`). `docs/SPRITES.md` now carries the
+  canonical row order, grid dimensions and validation rules for the generation
+  spec to point at — see **Directional units**. Add the file, or say where it
+  lives, and it can be revised.
 
 ### The sprite pipeline (patch 15)
 

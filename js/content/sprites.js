@@ -17,6 +17,18 @@ import { WEAPONS } from './weapons.js';
 import { ENEMIES } from './enemies.js';
 import { BOSSES } from './bosses.js';
 
+// Units are drawn from a per-angle view rather than by rotating one image: a
+// character sheet is a grid, rows = facings, columns = animation frames. Only
+// units get this — a projectile genuinely points along its velocity, and a
+// directional bolt would be strictly worse.
+//
+// Eight directions for every unit is the largest single line item in the art
+// budget. The renderer handles ANY `directions` value, so dropping enemies to
+// four later is a per-entry manifest change with no code behind it — worth
+// deciding once there is art in play, not now.
+export const UNIT_DIRECTIONS = 8;
+export const DIRECTIONAL_NAMESPACES = new Set(['char', 'enemy', 'boss']);
+
 export const SPRITE_SIZE = {
   char: [48, 48],
   enemy: [48, 48],

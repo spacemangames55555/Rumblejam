@@ -9,13 +9,20 @@
 
 import { CONFIG, PALETTE } from './config.js';
 import { WEAPON_BY_ID } from './content/weapons.js';
-import { Assets, drawSprite, spriteScaleFor } from './assets.js';
+import { Assets, drawSprite, spriteScaleFor, DEFAULT_FACING } from './assets.js';
 import { PROP, FX } from './content/sprites.js';
 import { clamp } from './util.js';
 
 // The camera viewport is one "screen" of world units (the old room size);
 // arenas are several screens wide and the camera follows your character.
 const { ROOM_W: VIEW_W, ROOM_H: VIEW_H, WALL } = CONFIG;
+
+// Facing thresholds. MOVE_EPS2 is a SQUARED per-frame displacement: 0.5 world
+// units a frame is 30 u/s, comfortably under the slowest thing that walks
+// (the Deadeye, at 62) and comfortably over interpolation jitter on a client.
+// AIM_HOLD is how long a shot keeps a unit looking at what it shot.
+const FACE_MOVE_EPS2 = 0.25;
+const FACE_AIM_HOLD_S = 0.6;
 
 export class Renderer {
   constructor(canvas) {
@@ -29,6 +36,13 @@ export class Renderer {
     this.shakeEnabled = true;
     this.showHitboxes = false;
     this.t = 0;
+    // Which way each unit is facing, for directional sprites. Render-local and
+    // keyed by entity id ON PURPOSE: facing is a client-side presentation
+    // detail, so it must not be attached to a live entity, a snapshot or the
+    // wire — the sim suite asserts exactly that. Swept periodically, and
+    // cleared outright when the arena changes.
+    this._facing = new Map();
+    this._facingGen = 0;
     this._resize();
     window.addEventListener('resize', () => this._resize());
   }
@@ -64,6 +78,47 @@ export class Renderer {
     return true;
   }
 
+  // ---- facing, for directional sprites ----
+  //
+  // Nothing on the wire says which way anything is looking, and nothing should:
+  // a facing byte would be a snapshot change for a purely cosmetic detail. So
+  // the renderer works it out from what it already draws.
+  //
+  // An idle unit has no heading at all, and a naive atan2 of a zero delta
+  // returns 0 — which would snap every stationary thing in the arena to face
+  // east on the same frame. So the last MEANINGFUL heading is remembered and
+  // reused, and a unit never yet seen faces south, towards the camera.
+  //
+  // For players, a fresh auto-aim beats movement for a moment: shooting at
+  // something while backing away should look like shooting at it. `aimA` only
+  // moves when a weapon actually fires, so "fresh" is a real signal here and
+  // not a per-frame flicker.
+  _faceAngle(key, x, y, aim) {
+    let f = this._facing.get(key);
+    if (!f) {
+      f = { x, y, a: DEFAULT_FACING, aim: aim === null || aim === undefined ? null : aim, aimT: -1e9, gen: this._facingGen };
+      // joining mid-run: adopt an aim that has clearly already been used
+      if (f.aim !== null && f.aim !== 0) { f.a = f.aim; f.aimT = this.t; }
+      this._facing.set(key, f);
+      return f.a;
+    }
+    f.gen = this._facingGen;
+    const dx = x - f.x, dy = y - f.y;
+    f.x = x; f.y = y;
+    if (aim !== null && aim !== undefined && aim !== f.aim) { f.aim = aim; f.aimT = this.t; }
+    if (f.aim !== null && this.t - f.aimT < FACE_AIM_HOLD_S) { f.a = f.aim; return f.a; }
+    if (dx * dx + dy * dy >= FACE_MOVE_EPS2) f.a = Math.atan2(dy, dx);
+    return f.a;
+  }
+
+  // Entities die; their ids never come back. Drop stale rows every few hundred
+  // frames rather than growing a map for the length of a run.
+  _sweepFacing() {
+    if ((this._facingGen & 255) !== 0) return;
+    const cutoff = this._facingGen - 600;   // ~10s at 60fps: survives being culled off-screen
+    for (const [k, f] of this._facing) if (f.gen < cutoff) this._facing.delete(k);
+  }
+
   // fx from one sim tick / snapshot → visual effects (idempotent per call)
   ingestFx(fx) {
     if (!fx) return;
@@ -95,6 +150,8 @@ export class Renderer {
 
   draw(view, dtFrame) {
     this.t += dtFrame;
+    this._facingGen++;
+    this._sweepFacing();
     const ctx = this.ctx;
     const cw = this.canvas.width, ch = this.canvas.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -113,6 +170,7 @@ export class Renderer {
       this.camX = me ? me.x : aw / 2; this.camY = me ? me.y : ah / 2;
       this.lookX = 0; this.lookY = 0;
       this._prevMe = null;
+      this._facing.clear();   // new arena, new entities — no facing carries over
     }
     if (me) {
       if (this._prevMe) {
@@ -812,7 +870,10 @@ export class Renderer {
     // Radius is the truth — it is what the hitbox and the elite/mini scaling
     // use — so the art is scaled to cover it rather than the other way round.
     const sc = spriteScaleFor(e.spriteId, r * 2);
-    const drew = drawSprite(ctx, e.spriteId, 0, 0, { scale: sc });
+    // `facing` picks a row on a directional sheet and is ignored on a
+    // single-direction one — an enemy is never rotated either way.
+    const opt = { scale: sc, facing: this._faceAngle(`e${e.id}`, e.x, e.y, null), seed: e.id };
+    const drew = drawSprite(ctx, e.spriteId, 0, 0, opt);
     if (!drew) {
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
@@ -830,7 +891,7 @@ export class Renderer {
       if (drew) {
         // brighten the sprite rather than blank it out with a white silhouette
         ctx.globalCompositeOperation = 'lighter';
-        drawSprite(ctx, e.spriteId, 0, 0, { scale: sc });
+        drawSprite(ctx, e.spriteId, 0, 0, opt);
         ctx.globalCompositeOperation = 'source-over';
       } else {
         ctx.fillStyle = '#fff';
@@ -893,9 +954,13 @@ export class Renderer {
       ctx.lineWidth = 3;
       // The sprite stands in for the coloured disc AND the character glyph —
       // both, or neither. A half-replaced player reads as a bug.
+      // On a directional sheet `facing` picks the row and flipX is ignored;
+      // on a single-direction one flipX still mirrors, as it always did.
       const drew = drawSprite(ctx, p.spriteId, 0, 0, {
         scale: spriteScaleFor(p.spriteId, r * 2),
+        facing: this._faceAngle(`p${p.idx}`, p.x, p.y, p.aimA),
         flipX: Math.cos(p.aimA) < 0,
+        seed: p.idx + 1,
       });
       if (!drew) { circle(ctx, 0, 0, r); ctx.fill(); ctx.stroke(); }
       if (p.shield > 0) {

@@ -50,6 +50,46 @@ const DEFAULT_FPS = 8;
 const DEFAULT_FRAMES = 1;
 const DEFAULT_ANCHOR = 'center';
 
+// ---------------- directions ----------------
+//
+// A sprite with `directions > 1` is a GRID, not a strip: rows are facings,
+// columns are animation frames, and the cell for (frame, dir) sits at
+// (frame * w, dir * h). Row order is fixed and starts at screen-space east,
+// then goes clockwise — canvas Y points down, so clockwise on screen is
+// increasing angle, and the row index falls straight out of atan2 with no
+// offset term:
+//
+//   0 E    1 SE    2 S    3 SW    4 W    5 NW    6 N    7 NE
+//
+// For `directions: 4` the same rule yields E, S, W, N.
+//
+// A directional sprite is NEVER rotated and never mirrored. The row is the
+// facing; rotating it as well would rotate the art's internal up-vector.
+const TAU = Math.PI * 2;
+export const DIRECTION_ROWS_8 = ['E', 'SE', 'S', 'SW', 'W', 'NW', 'N', 'NE'];
+export const DIRECTION_ROWS_4 = ['E', 'S', 'W', 'N'];
+
+// South — facing the camera. What a unit shows before it has ever moved, so
+// an idle arena does not snap east on the first frame.
+export const DEFAULT_FACING = Math.PI / 2;
+
+// The row for an angle. Total: any finite angle, any winding, any sign.
+export function dirIndex(angle, directions) {
+  if (!(directions > 1)) return 0;
+  if (!Number.isFinite(angle)) return dirIndex(DEFAULT_FACING, directions);
+  const step = TAU / directions;
+  return ((Math.round(angle / step) % directions) + directions) % directions;
+}
+
+// Spread animation phase across entities so forty grunts do not breathe in
+// lockstep. A stable integer hash of the entity id — offset only, no state.
+function phaseOf(seed) {
+  if (!seed) return 0;
+  let h = Math.imul(seed | 0, 2654435761) >>> 0;
+  h ^= h >>> 15;
+  return h >>> 0;
+}
+
 // registry: id -> { img, w, h, frames, fps, anchor, file }
 // `img` is null while loading and stays null forever if the file is not there.
 const registry = new Map();
@@ -119,18 +159,35 @@ export const Assets = {
           frames: spec.frames > 0 ? spec.frames | 0 : DEFAULT_FRAMES,
           fps: spec.fps > 0 ? spec.fps : DEFAULT_FPS,
           anchor: spec.anchor === 'bottom' ? 'bottom' : DEFAULT_ANCHOR,
+          directions: spec.directions > 1 ? spec.directions | 0 : 1,
         };
         registry.set(id, entry);
         jobs.push(loadImage(entry.file).then(img => {
           if (!img) { missing.add(id); return; }
-          // Self-heal a manifest that promises more frames than the strip
-          // actually holds: drawing frame 3 of a one-frame sheet reads outside
-          // the image and paints nothing, which looks like a flicker bug
-          // rather than the bookkeeping mistake it is.
-          const have = Math.max(1, Math.floor(img.width / entry.w));
-          if (entry.frames > have) {
-            console.warn(`[sprites] ${id}: manifest says ${entry.frames} frames, ${entry.file} holds ${have} — using ${have}`);
-            entry.frames = have;
+          if (entry.directions > 1) {
+            // A directional grid is validated STRICTLY and rejected on
+            // mismatch. Every other kind of error here shows up as a visible
+            // glitch you can chase; a grid off by one row shows up as units
+            // facing subtly wrong, which reads as "the art is a bit off"
+            // and can survive a whole playtest. A silently wrong grid is
+            // worse than no sprite, so a wrong one is simply no sprite.
+            const wantW = entry.w * entry.frames, wantH = entry.h * entry.directions;
+            if (img.width !== wantW || img.height !== wantH) {
+              console.warn(`[sprites] ${id}: grid must be exactly ${wantW}x${wantH} `
+                + `(${entry.frames} frame(s) across x ${entry.directions} direction(s) down), `
+                + `but ${entry.file} is ${img.width}x${img.height} — falling back to the primitive`);
+              missing.add(id);
+              return;
+            }
+          } else {
+            // Non-directional strips keep the lenient behaviour they shipped
+            // with: clamp to what is really there rather than drawing blank
+            // frames off the end of the image.
+            const have = Math.max(1, Math.floor(img.width / entry.w));
+            if (entry.frames > have) {
+              console.warn(`[sprites] ${id}: manifest says ${entry.frames} frames, ${entry.file} holds ${have} — using ${have}`);
+              entry.frames = have;
+            }
           }
           entry.img = img;
         }));
@@ -169,11 +226,12 @@ export const Assets = {
 
 // ---------------- the draw helper ----------------
 
-// Sprite sheets are single horizontal strips: frame N lives at x = N * w.
-function frameOf(s, frame) {
+// Frame column. A sheet is a horizontal strip of frames; a directional sheet
+// is that strip repeated down the rows, one row per facing.
+function frameOf(s, frame, seed) {
   if (s.frames <= 1) return 0;
   const f = frame === undefined || frame === null
-    ? Math.floor(performance.now() / 1000 * s.fps)
+    ? Math.floor(performance.now() / 1000 * s.fps) + phaseOf(seed)
     : Math.floor(frame);
   return ((f % s.frames) + s.frames) % s.frames;
 }
@@ -181,7 +239,24 @@ function frameOf(s, frame) {
 // Paint `id` at world position (x, y). Returns true if it drew, false if the
 // caller should fall back to its primitive.
 //
-// opts: { rot, scale, flipX, frame, alpha }
+// opts: { rot, facing, scale, flipX, frame, alpha, seed }
+//
+// Two modes, chosen by the manifest, not the caller:
+//
+//   directions <= 1  the sprite is ROTATED by `rot` and mirrored by `flipX`,
+//                    exactly as it always has been. Correct for projectiles,
+//                    which genuinely point along their velocity, and for
+//                    props, which mostly pass rot 0.
+//   directions > 1   the sprite is DIRECTIONAL: `facing` (or `rot`, so the
+//                    documented `{ rot: e.angle }` call works unchanged)
+//                    selects a row, and the sprite is neither rotated nor
+//                    mirrored — the row already encodes the facing, and doing
+//                    both would turn the art's own up-vector.
+//
+// `facing` exists so a unit can hand over its heading without that heading
+// rotating a single-direction sheet: units pass `facing`, projectiles pass
+// `rot`, and a `directions: 1` entry behaves precisely as it did before
+// directional support existed.
 export function drawSprite(ctx, id, x, y, opts) {
   if (SPRITE_MODE === 'off' || !id) return false;
   const s = Assets.get(id);
@@ -189,19 +264,34 @@ export function drawSprite(ctx, id, x, y, opts) {
     if (SPRITE_MODE === 'debug') debugBox(ctx, id, x, y);
     return false;
   }
-  const rot = (opts && opts.rot) || 0;
   const scale = opts && opts.scale !== undefined ? opts.scale : 1;
-  const flipX = !!(opts && opts.flipX);
   const alpha = opts && opts.alpha !== undefined ? opts.alpha : 1;
   const w = s.w, h = s.h;
-  const sx = frameOf(s, opts && opts.frame) * w;
+  const directional = s.directions > 1;
+
+  let rot = 0, flipX = false, row = 0;
+  if (directional) {
+    let face = DEFAULT_FACING;
+    if (opts) {
+      if (opts.facing !== undefined && opts.facing !== null) face = opts.facing;
+      else if (opts.rot !== undefined && opts.rot !== null) face = opts.rot;
+    }
+    row = dirIndex(face, s.directions);
+  } else {
+    rot = (opts && opts.rot) || 0;
+    flipX = !!(opts && opts.flipX);
+  }
+  const sx = frameOf(s, opts && opts.frame, opts && opts.seed) * w;
+  const sy = row * h;
   const ay = s.anchor === 'bottom' ? h : h / 2;
 
-  // Fast path: the overwhelmingly common case is an unrotated, unscaled,
-  // opaque sprite. save()/restore() around every one of a few hundred entities
-  // is real cost for nothing, so skip the whole transform stack.
+  // Fast path: an unrotated, unscaled, opaque sprite. save()/restore() around
+  // every one of a few hundred entities is real cost for nothing. Every
+  // directional sprite qualifies on the rotation half of the test by
+  // construction, so the directional path is the cheaper of the two.
   if (rot === 0 && !flipX && scale === 1 && alpha === 1) {
-    ctx.drawImage(s.img, sx, 0, w, h, x - w / 2, y - ay, w, h);
+    ctx.drawImage(s.img, sx, sy, w, h, x - w / 2, y - ay, w, h);
+    if (directional && SPRITE_MODE === 'debug') debugDir(ctx, row, s, x, y);
     return true;
   }
 
@@ -210,8 +300,9 @@ export function drawSprite(ctx, id, x, y, opts) {
   ctx.translate(x, y);
   if (rot) ctx.rotate(rot);
   if (scale !== 1 || flipX) ctx.scale(scale * (flipX ? -1 : 1), scale);
-  ctx.drawImage(s.img, sx, 0, w, h, -w / 2, -ay, w, h);
+  ctx.drawImage(s.img, sx, sy, w, h, -w / 2, -ay, w, h);
   ctx.restore();
+  if (directional && SPRITE_MODE === 'debug') debugDir(ctx, row, s, x, y);
   return true;
 }
 
@@ -228,6 +319,26 @@ function debugBox(ctx, id, x, y) {
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 3]);
   ctx.strokeRect(x - w / 2, y - ay, w, h);
+  ctx.restore();
+}
+
+// ?sprites=debug — the resolved row, printed on the unit. The two ways a
+// direction grid goes wrong are an off-by-one and a mirrored row order, and
+// both look ALMOST right in motion: units face subtly wrong and nobody can
+// say why. A number on screen turns that into a five-second check.
+function debugDir(ctx, row, s, x, y) {
+  const rows = s.directions === 4 ? DIRECTION_ROWS_4 : DIRECTION_ROWS_8;
+  ctx.save();
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = '#ff00ff';
+  ctx.strokeStyle = '#0b0c12';
+  ctx.lineWidth = 3;
+  const label = `${row}${rows[row] ? ' ' + rows[row] : ''}`;
+  const ty = y - (s.anchor === 'bottom' ? s.h : s.h / 2) - 3;
+  ctx.strokeText(label, x, ty);
+  ctx.fillText(label, x, ty);
   ctx.restore();
 }
 
