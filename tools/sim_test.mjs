@@ -2517,7 +2517,8 @@ try {
     {
       const g = one('toh_monk'); const p = g.players[0];
       g.god = false;
-      g.hurtPlayer(p, 30, null);
+      p.stats.reflex = 0;          // the Monk's own 12% Reflex would dodge this
+      g.hurtPlayer(p, 30, null);   // one time in eight and bank no Karma at all
       const banked = p.karma;
       if (banked > 0) ok(`Monk: Karma banks damage taken (${Math.round(banked)})`);
       else { bad++; fail('Karma banked nothing'); }
@@ -2527,14 +2528,17 @@ try {
       else { bad++; fail(`Karma still holds ${p.karma}`); }
       g.god = false;
       for (let i = 0; i < 12 && !p.spirit; i++) {
-        p.downed = false; p.hp = p.stats.vitality;
-        p.stats.reflex = 100;            // pin it EVERY attempt: any kill in
-        g.hurtPlayer(p, 6, null);        // between recomputes the sheet
+        // i-frames from the previous hit make hurtPlayer a no-op, and this
+        // probe never advances the clock to expire them — clear them by hand,
+        // and re-pin Reflex because any kill in between recomputes the sheet.
+        p.downed = false; p.hp = p.stats.vitality; p.invuln = 0;
+        p.stats.reflex = 100;
+        g.hurtPlayer(p, 6, null);
       }
       if (p.spirit) {
         ok('a dodge leaves an astral spirit behind');
         p.spirit.t = 0.5;
-        for (let i = 0; i < 12 && p.spirit.t <= 0.5; i++) { p.stats.reflex = 100; g.hurtPlayer(p, 6, null); }
+        for (let i = 0; i < 12 && p.spirit.t <= 0.5; i++) { p.invuln = 0; p.stats.reflex = 100; g.hurtPlayer(p, 6, null); }
         if (p.spirit && p.spirit.t > 0.5) ok('and dodging again refreshes it rather than spawning a second');
         else { bad++; fail('spirit did not refresh'); }
       } else { bad++; fail('no spirit on dodge'); }
