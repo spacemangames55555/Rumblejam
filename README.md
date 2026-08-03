@@ -385,6 +385,20 @@ item or character gets an inventory entry automatically.
 
 **Full guide: [docs/SPRITES.md](docs/SPRITES.md).**
 
+## Drawing the art
+
+The manifest is the art inventory and it is empty: 298 ids, zero files. Art
+lands one PNG at a time and the game runs the whole way through without any of
+it. The plan, the batches and the review gates are in
+[docs/ART-GENERATION.md](docs/ART-GENERATION.md); the technical contract for a
+sprite is [docs/SPRITES.md](docs/SPRITES.md).
+
+**No image generator is connected to this environment**, so no batch has run.
+The tooling that does not depend on which generator gets chosen is built and
+gated: grid assembly, batch acceptance, the contact sheet, the prompt system
+with its 64 hand-written silhouette notes, and a style anchor that mechanically
+refuses to let generation start before it is approved.
+
 ## Debug keys
 
 Enabled by the `DEV` flag in `js/config.js` (shipped `true`; set `false` for
@@ -470,10 +484,73 @@ never loads them:
   `assets/assets.json`, the sprite manifest / art inventory, from the live
   content tables. `--check` fails if the committed file is stale (the sim
   suite runs it).
+- `node tools/process_sprite.mjs <spriteId> <inputDir>` — turns a generator's
+  per-direction output into the grid the renderer wants: assembles rows in the
+  fixed `E SE S SW W NW N NE` order, verifies the dimensions the loader will
+  demand, trims and re-centres per direction, refuses a baked matte, and
+  records the frame count. Never hand-assemble a grid.
+- `node tools/verify_art_batch.mjs [namespace|id …] [--require-all]
+  [--diff-base=main]` — the per-batch art acceptance gate: every file decodes,
+  every grid is exactly the size the manifest declares, no baked mattes, no
+  empty cells, plus coverage counts and on-disk/decoded size.
+- `node tools/gen_contact_sheet.mjs [namespace …]` — writes
+  `tools/contact_sheet.html`: every sprite at the size it is actually drawn in
+  play, on the arena's background over the arena's grid, S row by default with
+  buttons to cycle facings. 1:1 is the default and the zoom is opt-in on
+  purpose.
+- `node tools/gen_prompts.mjs [--check]` — assembles `docs/prompts.json` from
+  `docs/silhouettes.json` and the style clause in `docs/STYLE_ANCHOR.md`.
+  Refuses to emit while the anchor is `PENDING`.
+- `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
 
 ## Decisions (where the brief was silent or conflicted)
+
+### Art generation phase (patch 17)
+
+- **No generator is connected, so no art was generated.** The phase's own first
+  action — introspect the live MCP tool schemas rather than trust the README —
+  returns nothing: this session has Gmail, Google Calendar and Google Drive, and
+  no image tool of any kind. Outbound HTTPS is blocked by the environment's
+  network policy too (the proxy answers 403 to CONNECT for every external host,
+  google.com included), so the API cannot be reached directly and the pricing
+  page cannot be read. Batches 0–8 and the budget question in §9 are both
+  blocked on that, not on a decision.
+- **Everything generator-independent was built instead**, because all of it is
+  needed the moment a generator exists and none of it depends on which one:
+  `pngkit.mjs`, `process_sprite.mjs`, `verify_art_batch.mjs`,
+  `gen_contact_sheet.mjs`, `gen_prompts.mjs`, the 64 silhouette notes, and the
+  anchor record. Nineteen gates in the sim suite build synthetic sheets, run
+  them through the real tools and assert the results.
+- **Re-centring defaults to per-direction-row, not per-cell.** The brief said
+  trim and re-centre per cell. Per-cell re-centring flattens an animation's own
+  vertical motion — a walk cycle legitimately bobs, and normalising every frame
+  independently removes exactly that. The padding inconsistency the trim exists
+  to fix comes from directions being *generated separately*, so normalising per
+  row fixes it without destroying the animation. `--recenter=cell` gives the
+  literal behaviour, and a gate asserts row preserves a 6px bob where cell
+  flattens it to 0.
+- **The style clause is pasted by a tool, not by a person.** "Never paraphrase
+  the style clause" is a rule someone forgets on sprite 90.
+  `tools/gen_prompts.mjs` reads it out of `STYLE_ANCHOR.md` between two markers
+  and pastes it byte for byte, and refuses to emit anything at all while the
+  clause reads `PENDING` — so "generate the anchor first" is a gate rather than
+  a discipline.
+- **Per-sprite manifest overrides live in `assets/sprite-overrides.json`.**
+  `assets.json` is generated and would lose a hand-edited frame count on the
+  next regeneration, so `process_sprite.mjs` writes the deviation to a side file
+  that the generator merges. An override naming an unknown id is a hard error.
+- **`--out` no longer touches the manifest.** Rendering a sprite somewhere else
+  is a comparison, not the shipped asset; recording it in the manifest was wrong
+  and leaked a stray frame count into a committed file during testing.
+- **Counts in the brief were stale.** It budgeted ~8 bosses and ~35 regular
+  enemies; the live catalog has 4 bosses and 13 enemy sheets (12 types plus the
+  Ward Pylon). Total units is **64**, not ~90 — batch 3 is a quarter the size it
+  was planned for, and the projected texture cost is proportionally smaller.
+- **The iOS Safari PWA measurement in §7 cannot be done from here.** It needs a
+  real device; the desktop numbers the tooling reports are not a substitute and
+  are labelled as such.
 
 ### Directional sprites (patch 16)
 

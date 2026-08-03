@@ -25,6 +25,11 @@ import {
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'assets', 'assets.json');
+// Per-sprite deviations from the category defaults — a unit that ships with 4
+// animation frames, an enemy dropped to 4 directions. Written by
+// tools/process_sprite.mjs as art lands, and merged here, because assets.json
+// itself is generated and would lose anything hand-edited into it.
+const OVERRIDES = join(ROOT, 'assets', 'sprite-overrides.json');
 const VERSION = 1;
 const BASE_PATH = 'assets/sprites/';   // relative, no leading slash — GitHub Pages serves from /Rumblejam/
 
@@ -71,6 +76,20 @@ for (const id of Object.values(PROP)) {
 // ---- world FX and UI chrome ----
 for (const id of Object.values(FX)) add(id);
 for (const id of Object.values(UI)) add(id);
+
+// ---- per-sprite overrides, applied last ----
+const OVERRIDABLE = new Set(['frames', 'fps', 'directions', 'anchor']);
+let overrides = {};
+if (existsSync(OVERRIDES)) {
+  overrides = JSON.parse(readFileSync(OVERRIDES, 'utf8'));
+  for (const [id, patch] of Object.entries(overrides)) {
+    if (!sprites[id]) throw new Error(`sprite-overrides.json names "${id}", which is not a sprite id`);
+    for (const [k, v] of Object.entries(patch)) {
+      if (!OVERRIDABLE.has(k)) throw new Error(`sprite-overrides.json ${id}: "${k}" is not overridable (${[...OVERRIDABLE].join(', ')})`);
+      sprites[id][k] = v;
+    }
+  }
+}
 
 const manifest = {
   version: VERSION,

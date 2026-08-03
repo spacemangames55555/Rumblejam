@@ -27,6 +27,8 @@ const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 import { readFileSync } from 'node:fs';
+import { ALL_CHARS as _ALL_CHARS } from '../js/content/characters.js';
+const ALL_CHARS_N = _ALL_CHARS.length;
 
 let failures = 0;
 const fail = (msg, err) => { failures++; console.error(`✗ ${msg}`, err ? (err.stack || err) : ''); };
@@ -2971,6 +2973,228 @@ try {
   if (leaks.length) fail(`sprite data leaked into the simulation: ${leaks.join(' | ')}`);
   else ok(`the wall holds: ${snapJson.length}-byte snapshot with ${wallSim.enemyPool.count} enemies mentions no sprite, and no live entity carries one`);
 } catch (err) { fail('sprite pipeline section crashed', err); }
+
+// ---- 9N. the art pipeline: PNG kit, grid assembly, batch acceptance.
+//          None of this ships in the game — it is the tooling that turns a
+//          generator's per-direction output into a grid the renderer accepts,
+//          and refuses anything subtly wrong. Gated because a silent break here
+//          produces art that looks almost right. ----
+try {
+  const PK = await import('./pngkit.mjs');
+  const { execFileSync } = await import('node:child_process');
+  const { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync: rf, existsSync: ex } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const nodePath = await import('node:path');
+  const TOOLS = new URL('.', import.meta.url).pathname;
+  const REPO = nodePath.join(TOOLS, '..');
+
+  const run = (script, argv) => execFileSync(process.execPath, [nodePath.join(TOOLS, script), ...argv], { cwd: REPO, encoding: 'utf8', stdio: 'pipe' });
+  const runFails = (script, argv) => {
+    try { run(script, argv); return null; } catch (e) { return String(e.stderr || e.stdout || e.message); }
+  };
+
+  // -- PNG round trip, and every colour type a generator might hand back --
+  {
+    const img = PK.blankImage(7, 5);   // odd sizes catch stride mistakes
+    for (let i = 0; i < 7 * 5; i++) {
+      img.data[i * 4] = (i * 37) & 255; img.data[i * 4 + 1] = (i * 11) & 255;
+      img.data[i * 4 + 2] = (i * 91) & 255; img.data[i * 4 + 3] = i % 3 ? 255 : 0;
+    }
+    const back = PK.decodePng(PK.encodePng(img));
+    const same = back.width === 7 && back.height === 5 && back.data.every((v, i) => v === img.data[i]);
+    if (same) ok('pngkit round-trips RGBA exactly (odd dimensions, mixed alpha)');
+    else fail('pngkit round trip lost data');
+    // a 16-bit or interlaced file is a generator problem, and must say so
+    const bad = Buffer.from(PK.encodePng(PK.blankImage(2, 2)));
+    bad[24] = 16;   // IHDR bit depth
+    let msg = '';
+    try { PK.decodePng(bad); } catch (e) { msg = e.message; }
+    if (/bit depth 16/.test(msg)) ok('pngkit rejects 16-bit PNGs by name rather than decoding garbage');
+    else fail(`16-bit rejection said: ${msg || '(nothing)'}`);
+  }
+
+  // -- the assembly step, on synthetic generator output --
+  // Each direction is padded DIFFERENTLY, which is the real-world defect the
+  // trim/re-centre step exists to fix, and each is a distinct colour so the
+  // row order is readable straight out of the assembled grid.
+  const tmp = mkdtempSync(nodePath.join(tmpdir(), 'uvart-'));
+  try {
+    const NAMES = ['east', 'south_east', 'south', 'south_west', 'west', 'north_west', 'north', 'north_east'];
+    const src = nodePath.join(tmp, 'pulsar');
+    mkdirSync(src, { recursive: true });
+    for (let d = 0; d < 8; d++) {
+      const img = PK.blankImage(48, 48);
+      const ox = 1 + d * 4, oy = 32 - d * 3;   // deliberately all over the place
+      for (let y = 0; y < 12; y++) {
+        for (let x = 0; x < 12; x++) {
+          const i = ((oy + y) * 48 + (ox + x)) * 4;
+          img.data[i] = 20 + d * 30; img.data[i + 1] = 200; img.data[i + 2] = 40; img.data[i + 3] = 255;
+        }
+      }
+      writeFileSync(nodePath.join(src, `${NAMES[d]}.png`), PK.encodePng(img));
+    }
+    const outPng = nodePath.join(tmp, 'grid.png');
+    const log = run('process_sprite.mjs', ['char.pulsar', src, `--out=${outPng}`]);
+    const grid = PK.decodePng(rf(outPng));
+    const problems = [];
+    if (grid.width !== 48 || grid.height !== 384) problems.push(`grid is ${grid.width}x${grid.height}, want 48x384`);
+    for (let d = 0; d < 8; d++) {
+      const bb = PK.opaqueBounds(grid, 0, d * 48, 48, 48);
+      if (!bb) { problems.push(`row ${d} is empty`); continue; }
+      const i = (bb.y * grid.width + bb.x) * 4;
+      const saysRow = Math.round((grid.data[i] - 20) / 30);
+      if (saysRow !== d) problems.push(`row ${d} holds the direction generated as ${saysRow}`);
+      const cx = bb.x + bb.w / 2, cy = (bb.y - d * 48) + bb.h / 2;
+      if (Math.abs(cx - 24) > 0.5 || Math.abs(cy - 24) > 0.5) problems.push(`row ${d} centred at ${cx},${cy}`);
+    }
+    if (problems.length) fail(`grid assembly: ${problems.slice(0, 4).join(' | ')}`);
+    else ok('process_sprite assembles 8 differently-padded directions into a 48x384 grid, in E SE S SW W NW N NE order, every row re-centred');
+    if (/row 0 E .*east\.png/.test(log)) ok('and it reports which naming convention each row matched');
+    else fail('process_sprite did not report its row sources');
+
+    // -- an animation's own motion must survive re-centring --
+    // Two frames per direction where the body deliberately rises: per-row
+    // re-centring must keep the rise, per-cell must flatten it. If `row` ever
+    // silently becomes `cell`, this is what notices.
+    const src2 = nodePath.join(tmp, 'walk');
+    for (let d = 0; d < 8; d++) {
+      const dir = nodePath.join(src2, NAMES[d]);
+      mkdirSync(dir, { recursive: true });
+      for (let f = 0; f < 2; f++) {
+        const img = PK.blankImage(48, 48);
+        const oy = 20 - f * 6;   // frame 1 sits 6px higher: the bob
+        for (let y = 0; y < 10; y++) {
+          for (let x = 0; x < 10; x++) {
+            const i = ((oy + y) * 48 + (19 + x)) * 4;
+            img.data[i] = 200; img.data[i + 1] = 90; img.data[i + 2] = 40; img.data[i + 3] = 255;
+          }
+        }
+        writeFileSync(nodePath.join(dir, `f${f}.png`), PK.encodePng(img));
+      }
+    }
+    const rise = mode => {
+      const p = nodePath.join(tmp, `walk-${mode}.png`);
+      run('process_sprite.mjs', ['char.pulsar', src2, `--out=${p}`, `--recenter=${mode}`]);
+      const g = PK.decodePng(rf(p));
+      const a = PK.opaqueBounds(g, 0, 0, 48, 48), b = PK.opaqueBounds(g, 48, 0, 48, 48);
+      return a.y - b.y;   // how much higher frame 1 sits
+    };
+    const rowRise = rise('row'), cellRise = rise('cell');
+    if (rowRise === 6 && cellRise === 0) {
+      ok(`re-centring per row keeps an animation's own motion (${rowRise}px bob preserved) where per-cell flattens it (${cellRise}px) — the reason row is the default`);
+    } else fail(`bob preservation: row=${rowRise} (want 6), cell=${cellRise} (want 0)`);
+
+    // -- the checks that must REFUSE --
+    const badDir = nodePath.join(tmp, 'bad');
+    mkdirSync(badDir, { recursive: true });
+    for (let d = 0; d < 8; d++) {
+      // fully opaque: a baked matte, invisible in review on a dark floor
+      const img = PK.blankImage(48, 48);
+      for (let i = 0; i < 48 * 48; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
+      writeFileSync(nodePath.join(badDir, `${NAMES[d]}.png`), PK.encodePng(img));
+    }
+    const matteErr = runFails('process_sprite.mjs', ['char.pulsar', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    if (matteErr && /transparent pixel/.test(matteErr)) ok('a fully opaque sheet is refused — a baked matte never reaches the repo');
+    else fail(`matte check did not fire: ${String(matteErr).slice(0, 120)}`);
+
+    rmSync(nodePath.join(badDir, 'north.png'));
+    const missErr = runFails('process_sprite.mjs', ['char.pulsar', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    if (missErr && /row 6 \(N\)/.test(missErr)) ok('a missing direction is refused by name, not silently padded');
+    else fail(`missing-direction check said: ${String(missErr).slice(0, 120)}`);
+
+    const oversizeDir = nodePath.join(tmp, 'big');
+    mkdirSync(oversizeDir, { recursive: true });
+    for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(64, 64)));
+    const bigErr = runFails('process_sprite.mjs', ['char.pulsar', oversizeDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    if (bigErr && /64x64 source but the cell is 48x48/.test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
+    else fail(`oversize check said: ${String(bigErr).slice(0, 140)}`);
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+
+  // -- the batch gate catches what the loader would only fall back on --
+  {
+    const spriteRoot = nodePath.join(REPO, 'assets', 'sprites', 'enemy');
+    const file = nodePath.join(spriteRoot, 'skulker.png');
+    try {
+      mkdirSync(spriteRoot, { recursive: true });
+      // right id, wrong shape: 48x48 where the manifest wants 48x384
+      writeFileSync(file, PK.encodePng(PK.blankImage(48, 48)));
+      const err = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (err && /48x48, manifest wants 48x384/.test(err)) ok('verify_art_batch names a wrong-sized grid and the size it should have been');
+      else fail(`batch verify on a bad grid said: ${String(err).slice(0, 140)}`);
+
+      // right shape, but every cell empty — how a mis-assembled grid hides
+      writeFileSync(file, PK.encodePng(PK.blankImage(48, 384)));
+      const err2 = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (err2 && /empty cell/.test(err2)) ok('and it catches an all-empty grid, which passes every dimension check');
+      else fail(`empty-cell check said: ${String(err2).slice(0, 140)}`);
+    } finally { rmSync(nodePath.join(REPO, 'assets', 'sprites'), { recursive: true, force: true }); }
+
+    const clean = run('verify_art_batch.mjs', []);
+    if (/298 still to draw/.test(clean)) ok('with no art at all the batch gate passes and reports 0/298 drawn — an empty repo is a valid state');
+    else fail(`clean batch verify said: ${clean.slice(0, 160)}`);
+    const reqErr = runFails('verify_art_batch.mjs', ['char', '--require-all']);
+    if (reqErr && /have no art/.test(reqErr)) ok('--require-all is what makes "batch 1 is done" a number rather than a feeling');
+    else fail('--require-all did not fail on an undrawn batch');
+  }
+
+  // -- the anchor gate, and prompt coverage --
+  {
+    const anchorErr = runFails('gen_prompts.mjs', []);
+    if (anchorErr && /still PENDING/.test(anchorErr)) ok('gen_prompts refuses to emit while the style anchor is PENDING — batch 0 is a gate, not a suggestion');
+    else fail('the style-anchor gate did not fire');
+    run('gen_prompts.mjs', ['--allow-pending']);
+    run('gen_prompts.mjs', ['--check', '--allow-pending']);
+    const prompts = JSON.parse(rf(nodePath.join(REPO, 'docs', 'prompts.json'), 'utf8'));
+    const units = Object.keys(prompts.prompts);
+    const sil = JSON.parse(rf(nodePath.join(REPO, 'docs', 'silhouettes.json'), 'utf8'));
+    const noSil = units.filter(id => !sil[id]);
+    const expect = ALL_CHARS_N + ENEMIES.length + 1 + BOSSES.length;
+    if (units.length === expect && !noSil.length) ok(`every one of the ${units.length} unit ids has a hand-written silhouette note — the whole readability budget at 48px`);
+    else fail(`prompts: ${units.length} of ${expect} units, ${noSil.length} without a silhouette`);
+    const texts = units.map(id => sil[id].toLowerCase().replace(/[^a-z ]/g, ''));
+    if (new Set(texts).size === texts.length) ok('and no two units are described the same way — identical descriptions draw identical sprites');
+    else fail('duplicate silhouette notes');
+    if (prompts.styleClause === 'PENDING' && prompts.prompts['char.pulsar'].batch === 0) ok('Pulsar is batch 0, alone, and the clause it would carry is still unset');
+    else fail(`anchor wiring: clause=${prompts.styleClause}, pulsar batch=${prompts.prompts['char.pulsar'].batch}`);
+  }
+
+  // -- per-sprite manifest overrides survive a regeneration --
+  {
+    const OV = nodePath.join(REPO, 'assets', 'sprite-overrides.json');
+    const before = rf(OV, 'utf8');
+    try {
+      writeFileSync(OV, JSON.stringify({ 'enemy.skulker': { frames: 4, fps: 12 } }, null, 2) + '\n');
+      run('gen_assets_manifest.mjs', []);
+      const m2 = JSON.parse(rf(nodePath.join(REPO, 'assets', 'assets.json'), 'utf8'));
+      const s = m2.sprites['enemy.skulker'];
+      if (s.frames === 4 && s.fps === 12 && s.directions === 8) ok('sprite-overrides.json survives a manifest regeneration — a unit\'s real frame count is not lost to the generator');
+      else fail(`override merge: ${JSON.stringify(s)}`);
+      writeFileSync(OV, JSON.stringify({ 'enemy.nope': { frames: 2 } }, null, 2) + '\n');
+      let bad = null;
+      try { run('gen_assets_manifest.mjs', []); } catch (e) { bad = String(e.stderr || e.message); }
+      if (bad && /not a sprite id/.test(bad)) ok('and an override naming an id that does not exist is a hard error, not a silent no-op');
+      else fail('bad override id was accepted');
+    } finally {
+      writeFileSync(OV, before);
+      run('gen_assets_manifest.mjs', []);
+    }
+  }
+
+  // -- the review artefact --
+  {
+    run('gen_contact_sheet.mjs', []);
+    const sheet = rf(nodePath.join(REPO, 'tools', 'contact_sheet.html'), 'utf8');
+    const bits = [
+      [/#14161f/, 'the arena background colour, not white'],
+      [/--zoom:1/, '1:1 by default, zoom opt-in'],
+      [/--row:2/, 'the S row by default'],
+      [/image-rendering:pixelated/, 'no smoothing'],
+    ];
+    const miss = bits.filter(([re]) => !re.test(sheet));
+    if (!miss.length) ok(`contact sheet generates with ${sheet.length} bytes: ${bits.map(b => b[1]).join(', ')}`);
+    else fail(`contact sheet missing: ${miss.map(b => b[1]).join(', ')}`);
+  }
+} catch (err) { fail('art pipeline section crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {
