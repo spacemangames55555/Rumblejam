@@ -38,6 +38,73 @@ const ids = Object.keys(manifest.sprites).filter(id => {
 });
 if (!ids.length) { console.error(`✗ nothing matches ${selectors.join(' ')}`); process.exit(1); }
 
+// ---------------- the value gate ----------------
+//
+// Two of the four anchor candidates failed review for the same reason: the body
+// sat too close in value to the arena floor, so at 36 css px they were dark
+// blobs. One of them had a brilliant accent, which is precisely how a sprite
+// passes a naive brightness check and still vanishes in play — the accent
+// carries the average and the body carries none of it.
+//
+// So the brightest pixels are EXCLUDED before the body is measured. What is
+// left has to clear the floor colour by a margin.
+const FLOOR_RGB = [0x14, 0x16, 0x1f];             // PALETTE.bg, the arena floor
+const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+export const FLOOR_LUMA = luma(...FLOOR_RGB);      // ~21
+const ACCENT_FRACTION = 0.25;                      // brightest quarter is "accent"
+// Calibrated on candidate B, the known-good reference: its non-accent body
+// measures ~96, about 75 above the floor. The threshold sits well below that so
+// a darker-but-still-readable design is not rejected, and comfortably above the
+// candidates that failed review (A ~38, C ~46).
+const MIN_CONTRAST = 45;
+const MIN_BODY_LUMA = FLOOR_LUMA + MIN_CONTRAST;
+const MIN_FACING_RATIO = 0.85;
+
+function bodyValue(img, spec) {
+  const lums = [];
+  for (let i = 0; i < img.data.length; i += 4) {
+    if (img.data[i + 3] < 128) continue;
+    lums.push(luma(img.data[i], img.data[i + 1], img.data[i + 2]));
+  }
+  if (!lums.length) return { bodyLuma: 0, bodyPx: 0, accentFrac: 0 };
+  lums.sort((a, b) => a - b);
+  const keep = Math.max(1, Math.floor(lums.length * (1 - ACCENT_FRACTION)));
+  const body = lums.slice(0, keep);
+  return {
+    bodyLuma: body.reduce((s, v) => s + v, 0) / body.length,
+    bodyPx: body.length,
+    accentFrac: ACCENT_FRACTION,
+  };
+}
+
+// Mean per-pixel difference between two cells, counting a pixel present in one
+// and absent in the other as maximally different.
+function cellDiff(img, w, h, rowA, rowB) {
+  let n = 0, s = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const a = ((rowA * h + y) * img.width + x) * 4;
+      const b = ((rowB * h + y) * img.width + x) * 4;
+      const oa = img.data[a + 3] > 0, ob = img.data[b + 3] > 0;
+      if (!oa && !ob) continue;
+      n++;
+      if (oa !== ob) { s += 255; continue; }
+      s += (Math.abs(img.data[a] - img.data[b]) + Math.abs(img.data[a + 1] - img.data[b + 1])
+        + Math.abs(img.data[a + 2] - img.data[b + 2])) / 3;
+    }
+  }
+  return n ? s / n : 0;
+}
+
+function facingSeparation(img, spec) {
+  const w = spec.w, h = spec.h;
+  const opp = [[0, 4], [1, 5], [2, 6], [3, 7]];
+  const adj = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 0]];
+  const avg = p => p.reduce((s, [a, b]) => s + cellDiff(img, w, h, a, b), 0) / p.length;
+  const opposite = avg(opp), adjacent = avg(adj);
+  return { opposite, adjacent, ratio: adjacent ? opposite / adjacent : 0 };
+}
+
 let failures = 0, present = 0, bytes = 0, decoded = 0;
 const fail = m => { failures++; console.error(`✗ ${m}`); };
 const missing = [];
@@ -76,6 +143,29 @@ for (const id of ids) {
     }
   }
   if (blank.length) fail(`${id}: ${blank.length} empty cell(s) (${blank.slice(0, 6).join(' ')}) — a mis-assembled grid usually shows up as a blank row`);
+
+  // ---- value gate ----
+  const v = bodyValue(img, spec);
+  if (v.bodyPx < 8) fail(`${id}: only ${v.bodyPx} non-accent body pixel(s) — nothing to read as a shape`);
+  else if (v.bodyLuma < MIN_BODY_LUMA) {
+    fail(`${id}: body luminance ${v.bodyLuma.toFixed(0)} vs floor ${FLOOR_LUMA.toFixed(0)} — needs ${MIN_BODY_LUMA.toFixed(0)} `
+      + `(contrast ${(v.bodyLuma - FLOOR_LUMA).toFixed(0)}, need ${MIN_CONTRAST}). `
+      + `The brightest ${(v.accentFrac * 100).toFixed(0)}% was excluded as accent: a bright accent must not mask a dark body, `
+      + 'which is exactly how a sprite passes review and disappears in play.');
+  }
+
+  // ---- facing separation ----
+  // Eight rows that are not eight distinct drawings is the failure that looks
+  // almost right in motion. Opposite facings (front/back) must differ MORE than
+  // neighbouring ones; when a rotation collapses, they differ less.
+  if (directions === 8 && frames >= 1) {
+    const sep = facingSeparation(img, spec);
+    if (sep.ratio < MIN_FACING_RATIO) {
+      fail(`${id}: opposite facings differ by ${sep.opposite.toFixed(0)} but neighbours by ${sep.adjacent.toFixed(0)} `
+        + `(ratio ${sep.ratio.toFixed(2)}, need ${MIN_FACING_RATIO}) — front and back are near-duplicates, so this is not really eight facings. `
+        + 'Rotate in 45-degree hops rather than one turn from the base view.');
+    }
+  }
 }
 
 // ---- coverage ----

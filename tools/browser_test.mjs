@@ -1103,7 +1103,12 @@ try {
     fs.writeFileSync(flatFile, flatAsymmetric());
     fs.writeFileSync(badGridFile, png(32, 32, () => [255, 0, 255]));   // deliberately not a grid
   };
-  const removeArt = () => fs.rmSync(spriteRoot, { recursive: true, force: true });
+  // Remove ONLY the files this test wrote. A blanket rmSync of assets/sprites
+  // would delete committed art, which is a destructive test, not a cleanup.
+  const removeArt = () => {
+    for (const f of [gridFile, badGridFile, flatFile]) fs.rmSync(f, { force: true });
+    for (const d of [enemyDir, fxDir, spriteRoot]) { try { fs.rmdirSync(d); } catch { /* not empty: real art lives here */ } }
+  };
 
   // Drop a player into an open arena with one pinned, motionless enemy.
   const probeSetupJs = `
@@ -1183,18 +1188,23 @@ try {
       await S2.open('S2');
       await intoArena(S2, URL);
       await S2.waitFor(`return window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled');
+      // Whatever art is committed, every id must register and every id WITHOUT
+      // a file must resolve to null. Not pinned to "zero files", so landing a
+      // batch does not break the suite.
       const st = JSON.parse(await S2.exec(`const A=window.uvAssets; return JSON.stringify({size:A.size(), missing:A.missing.size, hit:A.get('enemy.skulker')?1:0})`));
-      if (st.size > 250 && st.missing === st.size && !st.hit) ok(`manifest with zero files: all ${st.size} ids registered, all ${st.missing} missing, get() returns null`);
-      else fail(`zero-file state: ${JSON.stringify(st)}`);
+      if (st.size > 250 && st.missing > 0 && st.missing <= st.size && !st.hit) {
+        ok(`all ${st.size} ids registered; the ${st.missing} without a file resolve to null (${st.size - st.missing} drawn)`);
+      } else fail(`registry state: ${JSON.stringify(st)}`);
       const errs = await S2.errors();
       if (errs.length) fail(`console errors with zero sprite files: ${errs.join(' | ').slice(0, 300)}`);
       else ok('zero console errors with every sprite file absent');
-      const allFalse = await S2.exec(`const A=window.uvAssets, D=window.uvDrawSprite;
+      const drawCheck = JSON.parse(await S2.exec(`const A=window.uvAssets, D=window.uvDrawSprite;
         const c=document.createElement('canvas').getContext('2d');
         let drew=0; for (const id of A.ids()) if (D(c,id,0,0)) drew++;
-        return drew;`);
-      if (allFalse === 0) ok('drawSprite returns false for all of them — every entity falls back to its primitive');
-      else fail(`${allFalse} id(s) claimed to draw with no files present`);
+        return JSON.stringify({drew, expected: A.size() - A.missing.size});`));
+      if (drawCheck.drew === drawCheck.expected) {
+        ok(`drawSprite draws exactly the ${drawCheck.drew} id(s) with a file and refuses the rest — every other entity falls back to its primitive`);
+      } else fail(`drawSprite drew ${drawCheck.drew}, expected ${drawCheck.expected}`);
       await S2.exec(probeSetupJs);
       await S2.exec(moveJs(0, 0, 12));
       await sleep(200);
@@ -1264,7 +1274,7 @@ try {
         // 0 and with an extra rot of 0 is the same image, and the grid rows are
         // solid, so any rotation would smear the row colours together
         g.clearRect(0,0,128,128); D(g,'enemy.skulker',64,64,{ facing: 0 });
-        const top = g.getImageData(64, 64-20, 1, 1).data, bot = g.getImageData(64, 64+20, 1, 1).data;
+        const top = g.getImageData(64, 64-10, 1, 1).data, bot = g.getImageData(64, 64+10, 1, 1).data;
         out.rotated = (Math.round((top[0]-20)/30) === 0 && Math.round((bot[0]-20)/30) === 0) ? 0 : 1;
         return JSON.stringify(out);`));
       const want = [0, 1, 2, 3, 4, 5, 6, 7];
@@ -1364,8 +1374,8 @@ try {
         const c = document.createElement('canvas'); c.width = 128; c.height = 128;
         const g = c.getContext('2d');
         g.clearRect(0,0,128,128); D(g,'enemy.skulker',64,80,{facing:0});
-        // band strictly above the 48px cell (top edge at 80-24=56)
-        const band = g.getImageData(0, 28, 128, 14).data;
+        // band strictly above the 32px cell, whose top edge is at 80-16=64
+        const band = g.getImageData(0, 50, 128, 14).data;
         let ink = 0; for (let i=3;i<band.length;i+=4) if (band[i] > 0) ink++;
         return JSON.stringify({ink});`));
       if (overlay.ink > 0) ok(`?sprites=debug overlays the resolved direction index on directional sprites (${overlay.ink} px of readout)`);
