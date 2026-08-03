@@ -58,3 +58,4 @@ for (const [w,h,dpr] of [[1440,900,2],[1920,1080,1],[851,393,2.6],[1280,800,2]])
   console.log(`${String(w)+'x'+h} @dpr${dpr}  ${out}`);
 }
 ws.close(); proc.kill(); httpd.kill(); rmSync(profile,{recursive:true,force:true});
+process.exit(0);   // killing the browser and server leaves a non-zero status otherwise
