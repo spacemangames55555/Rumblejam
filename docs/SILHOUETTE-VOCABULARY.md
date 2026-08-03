@@ -1,7 +1,11 @@
-# Silhouette vocabulary — proposal
+# Silhouette vocabulary — proposal (revision 2)
 
 **Not applied.** `docs/silhouettes.json` is unchanged. Pick a vocabulary and the
 rewrite follows from it.
+
+Revision 2 applies two decisions: the `bare` head class is cut and replaced with
+a positive feature, and accents drop from six to four chosen for deuteranopic
+separability.
 
 ## Why the current notes will not survive
 
@@ -10,164 +14,167 @@ carried objects** — "one leg held raised in a stance", "a recurve bow carried
 horizontally across the back", "arms held wide and low". At 32×32, with roughly
 20×26 usable pixels of figure, none of that is resolvable. All four anchor
 candidates ignored the pose clause entirely and converged on a generic
-horned-warrior shape.
+horned-warrior shape. See
+[`art-review/batch0/01-four-candidates.png`](art-review/batch0/01-four-candidates.png).
 
-What actually survives at 36 css px on a dark floor is three things:
-
-1. **Mass** — the overall block the figure occupies.
-2. **Head / crown shape** — the single most identifiable feature, because it
-   sits against empty background on three sides.
-3. **One accent colour** — but accent alone cannot separate 46 characters, and
-   it separates none of them for a colourblind player.
-
-So the proposal is a **combination code**: mass × head, with accent as a third
-axis that is deliberately reused. Two characters may share an accent as long as
-they differ in mass or head; two may share a head as long as they differ in
-mass. The table below is sorted so collisions are visible.
-
----
+What survives at 36 css px on a dark floor is **mass**, **head shape**, and
+**one accent colour** — in that order of reliability.
 
 ## Axis 1 — mass (4 classes)
 
 | code | name | footprint | reads as |
 |---|---|---|---|
-| **W** | Wide | broad shoulders, short legs, fills the cell horizontally | tanks, brutes, anything that should feel immovable |
+| **W** | Wide | broad shoulders, short legs, fills the cell horizontally | tanks, brutes, anything immovable |
 | **T** | Tall | narrow, upright, head near the top of the cell | snipers, casters, poles and staves |
 | **C** | Compact | small and centred, clear gap on all sides | rogues, speedsters, anything nimble |
-| **F** | Floating | no legs; a gap between the figure and the cell bottom | spirits, drones, anything airborne |
+| **F** | Floating | no legs; a visible gap between figure and cell bottom | spirits, drones, anything airborne |
 
-Four is the practical ceiling. A fifth class would not be distinguishable from
-its neighbours at this size.
+## Axis 2 — head archetype (6 shapes)
 
-## Axis 2 — head / crown archetype (6 shapes)
+Every one is a **positive** feature. `bare` is gone: a class defined by the
+absence of a feature reads as a broken or half-drawn sprite at 36 px, not as an
+identity.
 
 | code | name | shape |
 |---|---|---|
 | **h** | helm | smooth rounded dome, no protrusion — *the anchor's own* |
 | **o** | horned | two symmetric points rising from the sides |
-| **d** | hooded | a soft peak that merges into the shoulders, no neck |
+| **d** | hooded | a soft peak merging into the shoulders, no neck |
 | **c** | crowned | a flat wide slab sitting above the head |
 | **a** | antenna | one asymmetric spike, rod or plume, off-centre |
-| **b** | bare | visible hair or skull, narrower than the shoulders |
+| **m** | maned | a soft mass — hair, fur, feathers — visibly **wider than the shoulders** |
 
-Six shapes × four masses = 24 unique combinations before accent is considered.
-With accent as a third axis at 6 usable hues, the space is 144 — comfortably
-more than the 64 units.
+`maned` replaces `bare`. It occupies the same design space (a head that is not
+armoured) but is identified by what is there rather than what is missing, and
+its silhouette signature — head wider than shoulders — is the single most
+legible head cue at this size.
 
-## Axis 3 — accent hue (6, freely reused)
+## Axis 3 — accent hue (4)
 
-`gold` · `crimson` · `cyan` · `violet` · `green` · `white`
-
-Deliberately few, deliberately reused. The accent is the *last* discriminator,
-never the only one — the mass+head pair must already be unique or near-unique
-within a group a player sees together.
-
----
-
-## Draft assignment — the 47 characters
-
-Sorted by mass then head, so a collision is two adjacent rows with the same
-`code`.
-
-| code | accent | id | current note (to be replaced) |
-|---|---|---|---|
-| **W·h** | crimson | `toh_savage` | top-heavy, huge shoulders over short bent legs |
-| **W·h** | white | `rampart` | squat and rectangular, layered plates |
-| **W·o** | gold | `bulwark` | slab-wide, tower shield fused to the forearm |
-| **W·o** | cyan | `toh_blacksmith` | slab-wide, crystal spurs from both shoulders |
-| **W·d** | green | `redmaw` | hunched forward, oversized jaw past the chest |
-| **W·c** | gold | `gilded_one` | draped robe under a broad flat crown |
-| **W·c** | violet | `toh_priest` | squared mantle and a tall standing collar |
-| **W·a** | crimson | `powderkeg` | barrel-bodied, stubby limbs |
-| **W·b** | white | `lodestone` | a heavy orb floating at the shoulder |
-| **T·h** | cyan | `stillness` | braced, one long barrel on a bipod |
-| **T·h** | gold | `longshot` | tallest of the roster, rifle longer than the body |
-| **T·o** | violet | `toh_wizard` | tall pointed hood, no visible feet |
-| **T·o** | green | `toh_druid` | antlered, leaf mantle |
-| **T·d** | crimson | `duskblade` | hooded, cloak cut short, dagger reversed |
-| **T·d** | white | `toh_monk` | bare-armed, sashed, one leg raised |
-| **T·c** | gold | `tollkeeper` | stooped, oversized coin scale |
-| **T·c** | cyan | `broker` | top-heavy, strongbox as a backpack |
-| **T·a** | violet | `banneret` | tall banner pole above the head |
-| **T·a** | green | `toh_hunter` | recurve bow across the back |
-| **T·a** | crimson | `cindermage` | shoulders trailing smoke plumes |
-| **T·b** | white | `hemomancer` | gaunt, ribcage-thin, trailing sleeves |
-| **T·b** | cyan | `threader` | needle-narrow, thinnest in the cast |
-| **C·h** | crimson | **`pulsar`** | **the anchor — compact, smooth helm, ring at the sternum** |
-| **C·h** | cyan | `voltaic` | rod antennae from both shoulders |
-| **C·o** | gold | `jester` | three-pointed cap with bells |
-| **C·o** | green | `toh_sundian` | branching coral fins from the forearms |
-| **C·d** | violet | `mirage` | doubled outline, ghost offset behind |
-| **C·d** | crimson | `toh_assassin` | long forked scarf streaming behind |
-| **C·c** | white | `facet` | head replaced by a faceted crystal |
-| **C·c** | gold | `quartermaster` | six weapon hafts fanned across the back |
-| **C·a** | cyan | `zephyr` | streamlined, twin ribbons from the heels |
-| **C·a** | crimson | `onrush` | leaning forward forty-five degrees |
-| **C·a** | green | `toh_bard` | wide flat drum across the chest |
-| **C·a** | violet | `toh_mage` | dark sphere orbiting one hand |
-| **C·b** | gold | `vesper` | wide flower-petal collar |
-| **C·b** | green | `sawbones` | apron flaring to a wide hem |
-| **C·b** | crimson | `toh_samurai` | flared shoulder plates, conical hat |
-| **C·b** | white | `glasswing` | four narrow blade-wings held high |
-| **F·h** | cyan | `twinsoul` | small mirrored double at the hip |
-| **F·h** | violet | `toh_necromancer` | four bone mounts arced overhead |
-| **F·o** | crimson | `toh_witch_doctor` | feathered mask twice the head's width |
-| **F·d** | white | `wisp` | barely there, thin drifting flame, no legs |
-| **F·c** | gold | `cogsmith` | four folded turret mounts as backpack arms |
-| **F·c** | cyan | `tinker` | tool rack doubling the waist width |
-| **F·a** | green | `hivewright` | hexagonal hive cell on the back |
-| **F·a** | violet | `resonant` | flat ring level with the waist |
-| **F·b** | white | `frostcaller` | ice shards along the spine |
-
-**47 characters, 47 rows. No two share a `code` + accent.** The tightest group is
-`C·a` (four characters) and `C·b` (four) — each separated by accent, which is
-the intended fallback, not the primary read.
-
-## The 13 enemies and 4 bosses
-
-Enemies read against each other in swarms, so mass does most of the work and
-head archetypes are secondary.
-
-| code | accent | id |
+| accent | approximate | why |
 |---|---|---|
-| **C·b** | crimson | `skulker` |
-| **C·a** | gold | `flit` |
-| **W·h** | crimson | `slabjaw` |
-| **W·b** | violet | `lobber` |
-| **F·a** | violet | `gyre` |
-| **C·h** | green | `gemmite` |
-| **C·o** | gold | `fusehead` |
-| **W·c** | cyan | `aegimand` |
-| **T·b** | white | `stitcher` |
-| **W·o** | gold | `wombden` |
-| **T·a** | cyan | `lancerfish` |
-| **T·h** | crimson | `deadeye` |
-| **T·c** | violet | `ward_pylon` |
+| **blue** | `#5ea8ff` | anchors the cool end; safe against amber for every common CVD type |
+| **amber** | `#ffab4f` | the warm counterpart; the classic blue/amber pair survives deuteranopia and protanopia |
+| **magenta** | `#ff7ad9` | sits off the red-green confusion axis entirely, so it stays separable from both blue and amber |
+| **white** | `#e8e9f2` | value-based rather than hue-based, so it works with **no** colour vision at all |
 
-Bosses are 64×64 and drawn at ~92 css px, so they have four times the pixel
-budget and do not need this discipline — silhouette notes for the four can stay
-descriptive.
+Six hues could not be made deuteranopia-safe — green and amber collapse
+together, and cyan and blue are marginal. These four are separable by hue *and*
+by value.
 
----
+**4 mass × 6 heads × 4 accents = 96 slots for 60 units.** Nothing is lost by the
+reduction; the assignment below uses 23 of the 24 mass·head codes and loads each
+accent exactly 15 times.
+
+## Verified assignment — all 60 units
+
+Grouped by `mass·head`, so a collision would appear as two rows sharing both the
+code **and** the accent. There are none: this table is generated from a checked
+data structure, and the check is `60 units, 60 unique ids, no (mass, head,
+accent) repeated`.
+
+The largest groups sharing a mass·head are `T·h`, `C·h` and `C·o` at four each —
+and within each of those, all four accents differ, which is the intended
+fallback.
+
+| code | accent | id | kind |
+|---|---|---|---|
+| **W·h** | blue | `bulwark` | char |
+| **W·h** | white | `rampart` | char |
+| **W·h** | magenta | `slabjaw` | enemy |
+| | | | |
+| **W·o** | magenta | `toh_blacksmith` | char |
+| **W·o** | amber | `redmaw` | char |
+| **W·o** | blue | `wombden` | enemy |
+| | | | |
+| **W·m** | amber | `toh_savage` | char |
+| **W·m** | white | `sawbones` | char |
+| | | | |
+| **W·c** | amber | `gilded_one` | char |
+| **W·c** | white | `toh_priest` | char |
+| **W·c** | blue | `aegimand` | enemy |
+| | | | |
+| **W·a** | amber | `powderkeg` | char |
+| **W·a** | blue | `lobber` | enemy |
+| | | | |
+| **W·d** | white | `lodestone` | char |
+| **W·d** | amber | `tollkeeper` | char |
+| | | | |
+| **T·h** | blue | `stillness` | char |
+| **T·h** | amber | `longshot` | char |
+| **T·h** | white | `threader` | char |
+| **T·h** | magenta | `deadeye` | enemy |
+| | | | |
+| **T·o** | amber | `toh_druid` | char |
+| **T·o** | white | `toh_monk` | char |
+| | | | |
+| **T·d** | magenta | `toh_wizard` | char |
+| **T·d** | blue | `duskblade` | char |
+| | | | |
+| **T·a** | amber | `toh_hunter` | char |
+| **T·a** | magenta | `banneret` | char |
+| **T·a** | white | `lancerfish` | enemy |
+| | | | |
+| **T·m** | amber | `cindermage` | char |
+| **T·m** | magenta | `hemomancer` | char |
+| **T·m** | white | `stitcher` | enemy |
+| | | | |
+| **T·c** | blue | `broker` | char |
+| **T·c** | amber | `quartermaster` | char |
+| **T·c** | magenta | `ward_pylon` | enemy |
+| | | | |
+| **C·h** | amber | `pulsar` | char |
+| **C·h** | blue | `voltaic` | char |
+| **C·h** | white | `glasswing` | char |
+| **C·h** | magenta | `flit` | enemy |
+| | | | |
+| **C·o** | amber | `jester` | char |
+| **C·o** | blue | `toh_sundian` | char |
+| **C·o** | white | `frostcaller` | char |
+| **C·o** | magenta | `fusehead` | enemy |
+| | | | |
+| **C·d** | magenta | `mirage` | char |
+| **C·d** | blue | `toh_assassin` | char |
+| | | | |
+| **C·a** | blue | `zephyr` | char |
+| **C·a** | magenta | `onrush` | char |
+| **C·a** | amber | `toh_bard` | char |
+| **C·a** | white | `toh_mage` | char |
+| | | | |
+| **C·c** | white | `facet` | char |
+| **C·c** | blue | `gemmite` | enemy |
+| | | | |
+| **C·m** | magenta | `toh_samurai` | char |
+| **C·m** | white | `vesper` | char |
+| **C·m** | blue | `skulker` | enemy |
+| | | | |
+| **F·h** | blue | `twinsoul` | char |
+| **F·h** | white | `resonant` | char |
+| | | | |
+| **F·o** | magenta | `toh_witch_doctor` | char |
+| | | | |
+| **F·c** | magenta | `toh_necromancer` | char |
+| **F·c** | amber | `cogsmith` | char |
+| | | | |
+| **F·a** | blue | `tinker` | char |
+| **F·a** | amber | `hivewright` | char |
+| **F·a** | magenta | `gyre` | enemy |
+| | | | |
+| **F·d** | white | `wisp` | char |
 
 ## What changes if you accept
 
-1. `docs/silhouettes.json` gets rewritten from this table: each note becomes
+1. `docs/silhouettes.json` is rewritten from this table: each note becomes
    `<mass phrase>, <head phrase>, <accent> accent` rather than a pose.
-2. `tools/gen_prompts.mjs` gains a uniqueness check on **(mass, head, accent)**
-   rather than on the raw string, so a genuine collision fails the build instead
-   of two differently-worded notes that draw the same thing.
-3. Batch 1 generates against a vocabulary the model can actually act on at
-   32×32.
+2. `tools/gen_prompts.mjs` gains a uniqueness check on the **(mass, head,
+   accent)** triple rather than on the raw note string, so a genuine collision
+   fails the build instead of two differently-worded notes that draw the same
+   thing.
+3. Batch 1 generates against a vocabulary the model can act on at 32×32.
 
-## Open questions for you
+## Remaining open question
 
-- **Four mass classes or three?** Dropping `Floating` and folding those units
-  into `Compact` would simplify, at the cost of the clearest read in the set —
-  a gap under the figure is very legible at this size.
-- **Is `bare` too weak?** It is defined by the absence of a head feature, which
-  is a weaker signal than the other five. It may need to become "long hair" or
-  similar to be positively identifiable.
-- **Accent count.** Six hues is already tight for colourblind separation.
-  Restricting to four high-contrast ones (gold, cyan, crimson, white) would be
-  safer but forces more mass/head pressure.
+**Four mass classes or three?** Dropping `Floating` and folding those ten units
+into `Compact` would simplify, at the cost of the clearest read in the set — a
+gap under the figure is very legible at this size. Kept at four in this
+revision; say the word if you would rather it were three.
