@@ -1092,7 +1092,7 @@ try {
     ]);
   };
   // a valid 8-direction grid: 48 wide (1 frame) x 384 tall (8 rows)
-  const directionGrid = () => png(64, 64 * 8, (x, y) => ROW_RGB(Math.floor(y / 64)));
+  const directionGrid = () => png(32, 32 * 8, (x, y) => ROW_RGB(Math.floor(y / 32)));
   // left half red, right half blue — asymmetric, so rotation is visible
   const flatAsymmetric = () => png(32, 32, x => (x < 16 ? [255, 60, 60] : [60, 60, 255]));
 
@@ -1101,7 +1101,7 @@ try {
     fs.mkdirSync(fxDir, { recursive: true });
     fs.writeFileSync(gridFile, directionGrid());
     fs.writeFileSync(flatFile, flatAsymmetric());
-    fs.writeFileSync(badGridFile, png(64, 64, () => [255, 0, 255]));   // deliberately not a grid
+    fs.writeFileSync(badGridFile, png(32, 32, () => [255, 0, 255]));   // deliberately not a grid
   };
   const removeArt = () => fs.rmSync(spriteRoot, { recursive: true, force: true });
 
@@ -1236,11 +1236,11 @@ try {
           flatDirs:f?f.directions:0,
           badRejected:A.missing.has('enemy.flit')?1:0, badNull:A.get('enemy.flit')?0:1,
           other:A.get('enemy.gyre')?1:0});`));
-      if (part.gridDirs === 8 && part.gridW === 64 && part.gridH === 64 && part.flatDirs === 1 && !part.other) {
-        ok(`partial manifest: an 8-direction 64x64 grid and a 1-direction 32x32 icon load, the other ${part.missing} ids stay null`);
+      if (part.gridDirs === 8 && part.gridW === 32 && part.gridH === 32 && part.flatDirs === 1 && !part.other) {
+        ok(`partial manifest: an 8-direction 32x32 grid and a 1-direction 32x32 icon load, the other ${part.missing} ids stay null`);
       } else fail(`partial state: ${JSON.stringify(part)}`);
       // grid validation: wrong dimensions is no sprite, not a wrong sprite
-      if (part.badRejected && part.badNull) ok('a 64x64 file for an 8-row grid is rejected and marked missing — it falls back rather than drawing a wrong facing');
+      if (part.badRejected && part.badNull) ok('a 32x32 file for an 8-row grid is rejected and marked missing — it falls back rather than drawing a wrong facing');
       else fail(`bad grid was not rejected: ${JSON.stringify(part)}`);
 
       // every row, addressed by angle, off screen and exhaustively
@@ -1355,7 +1355,7 @@ try {
       const list = logs.find(l => /\[sprites\] missing:/.test(l));
       if (list && /enemy\.gyre/.test(list)) ok(`?sprites=debug lists every missing id once at load (${list.length} chars)`);
       else fail('sprites=debug did not log the missing list');
-      const rejected = logs.find(l => /enemy\.flit.*grid must be exactly 64x512/.test(l));
+      const rejected = logs.find(l => /enemy\.flit.*grid must be exactly 32x256/.test(l));
       if (rejected) ok('the rejected grid says exactly what size it should have been');
       else fail('no diagnostic for the wrong-sized grid');
       // the direction readout: ink above the sprite in debug mode, none without it

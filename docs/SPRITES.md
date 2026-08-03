@@ -43,7 +43,7 @@ character gets an inventory entry automatically and cannot be forgotten.
   "version": 1,
   "basePath": "assets/sprites/",
   "sprites": {
-    "enemy.skulker": { "file": "enemy/skulker.png", "w": 64, "h": 64, "directions": 8 },
+    "enemy.skulker": { "file": "enemy/skulker.png", "w": 32, "h": 32, "directions": 8 },
     "proj.pebbleshot": { "file": "proj/pebbleshot.png", "w": 32, "h": 32 },
     "prop.altar":    { "file": "prop/altar.png", "w": 64, "h": 64, "anchor": "bottom" }
   }
@@ -107,8 +107,8 @@ const dir  = ((Math.round(angle / step) % directions) + directions) % directions
 
 For `directions: 4` the same rule gives `E, S, W, N`.
 
-An 8-direction character with 1 frame is a **64×512** PNG: one 64-px column,
-eight 64-px rows, top to bottom in that order.
+An 8-direction character with 1 frame is a **32×256** PNG: one 32-px column,
+eight 32-px rows, top to bottom in that order.
 
 ### Four directions instead of eight
 
@@ -148,8 +148,8 @@ qualifies for the renderer's no-`save`/`restore` fast path.
 
 ### Texture cost
 
-An 8-direction, 1-frame 64×64 sheet decodes to ~131 KB in memory; 64 unit
-sheets is ~8.4 MB. At 4 animation frames that becomes ~524 KB each and ~34 MB
+An 8-direction, 1-frame 32×32 sheet decodes to ~33 KB in memory; 64 unit
+sheets is ~2.1 MB. At 4 animation frames that becomes ~131 KB each and ~8.4 MB
 total. That is fine on desktop and worth measuring on a phone once the first
 batch of art exists. If it bites, the levers are fewer animation frames or
 fewer directions on low-value units — not a texture atlas.
@@ -160,9 +160,9 @@ One number per category, so nobody has to ask:
 
 | category | size | namespace |
 |---|---|---|
-| players | 64×64 | `char.` |
-| enemies | 64×64 | `enemy.` |
-| bosses | 128×128 | `boss.` |
+| players | 32×32 | `char.` |
+| enemies | 32×32 | `enemy.` |
+| bosses | 64×64 | `boss.` |
 | projectiles, pickups, FX | 32×32 | `proj.` `fx.` |
 | item and weapon icons | 32×32 | `item.` |
 | props and structures | 64×64 | `prop.` |
@@ -174,6 +174,12 @@ per-angle view — accepts a canvas of exactly 16, 32, 64 or 128 square and
 nothing else, and its text-to-image endpoints reject anything under 32×32 in
 area. The 48×48 units and 24×24 icons this pipeline first shipped with are not
 generatable at all.
+
+They are also chosen to sit near 1:1 with the size things are actually *drawn*
+at. A character is drawn at twice its radius — 32 world units, about 36 css px
+at the reference viewport — so a 64px sheet would be downscaled 56% and throw
+away more than half the pixels it was authored with. 32px is a hair under the
+draw size and stays crisp.
 
 Those eight namespaces are the whole vocabulary. An id outside them is a typo
 and the loader drops it loudly.

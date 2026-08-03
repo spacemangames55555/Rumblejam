@@ -4,386 +4,386 @@
   "sprites": {
     "boss.broodmother_viv": {
       "file": "boss/broodmother_viv.png",
-      "w": 128,
-      "h": 128,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "boss.choir_of_eyes": {
       "file": "boss/choir_of_eyes.png",
-      "w": 128,
-      "h": 128,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "boss.ossuary_hulk": {
       "file": "boss/ossuary_hulk.png",
-      "w": 128,
-      "h": 128,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "boss.vault_regent": {
       "file": "boss/vault_regent.png",
-      "w": 128,
-      "h": 128,
+      "w": 64,
+      "h": 64,
       "directions": 8
     },
     "char.banneret": {
       "file": "char/banneret.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.broker": {
       "file": "char/broker.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.bulwark": {
       "file": "char/bulwark.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.cindermage": {
       "file": "char/cindermage.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.cogsmith": {
       "file": "char/cogsmith.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.duskblade": {
       "file": "char/duskblade.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.facet": {
       "file": "char/facet.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.frostcaller": {
       "file": "char/frostcaller.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.gilded_one": {
       "file": "char/gilded_one.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.glasswing": {
       "file": "char/glasswing.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.hemomancer": {
       "file": "char/hemomancer.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.hivewright": {
       "file": "char/hivewright.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.jester": {
       "file": "char/jester.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.lodestone": {
       "file": "char/lodestone.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.longshot": {
       "file": "char/longshot.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.mirage": {
       "file": "char/mirage.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.onrush": {
       "file": "char/onrush.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.powderkeg": {
       "file": "char/powderkeg.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.pulsar": {
       "file": "char/pulsar.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.quartermaster": {
       "file": "char/quartermaster.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.rampart": {
       "file": "char/rampart.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.redmaw": {
       "file": "char/redmaw.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.resonant": {
       "file": "char/resonant.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.sawbones": {
       "file": "char/sawbones.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.stillness": {
       "file": "char/stillness.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.threader": {
       "file": "char/threader.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.tinker": {
       "file": "char/tinker.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_assassin": {
       "file": "char/toh_assassin.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_bard": {
       "file": "char/toh_bard.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_blacksmith": {
       "file": "char/toh_blacksmith.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_druid": {
       "file": "char/toh_druid.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_hunter": {
       "file": "char/toh_hunter.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_mage": {
       "file": "char/toh_mage.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_monk": {
       "file": "char/toh_monk.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_necromancer": {
       "file": "char/toh_necromancer.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_priest": {
       "file": "char/toh_priest.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_samurai": {
       "file": "char/toh_samurai.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_savage": {
       "file": "char/toh_savage.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_sundian": {
       "file": "char/toh_sundian.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_witch_doctor": {
       "file": "char/toh_witch_doctor.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.toh_wizard": {
       "file": "char/toh_wizard.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.tollkeeper": {
       "file": "char/tollkeeper.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.twinsoul": {
       "file": "char/twinsoul.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.vesper": {
       "file": "char/vesper.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.voltaic": {
       "file": "char/voltaic.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.wisp": {
       "file": "char/wisp.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "char.zephyr": {
       "file": "char/zephyr.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.aegimand": {
       "file": "enemy/aegimand.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.deadeye": {
       "file": "enemy/deadeye.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.flit": {
       "file": "enemy/flit.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.fusehead": {
       "file": "enemy/fusehead.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.gemmite": {
       "file": "enemy/gemmite.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.gyre": {
       "file": "enemy/gyre.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.lancerfish": {
       "file": "enemy/lancerfish.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.lobber": {
       "file": "enemy/lobber.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.skulker": {
       "file": "enemy/skulker.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.slabjaw": {
       "file": "enemy/slabjaw.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.stitcher": {
       "file": "enemy/stitcher.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.ward_pylon": {
       "file": "enemy/ward_pylon.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "enemy.wombden": {
       "file": "enemy/wombden.png",
-      "w": 64,
-      "h": 64,
+      "w": 32,
+      "h": 32,
       "directions": 8
     },
     "fx.block": {

@@ -39,10 +39,16 @@ export const DIRECTIONAL_NAMESPACES = new Set(['char', 'enemy', 'boss']);
 //
 // Nothing in the engine depends on these: art is scaled to the entity's radius
 // at draw time, so a sheet size is a detail budget, not a hitbox.
+// Sizes are also chosen to sit near 1:1 with the size things are actually
+// DRAWN at. A character is drawn at twice its radius — 32 world units, about
+// 36 css px at the reference viewport — so a 64px sheet would be downscaled
+// 56% and throw away more than half the pixels it was authored with, which is
+// most of why early anchor art read as soft. 32px is a hair under the draw
+// size and stays crisp. Bosses are drawn at ~92 css px, so they take 64.
 export const SPRITE_SIZE = {
-  char: [64, 64],
-  enemy: [64, 64],
-  boss: [128, 128],
+  char: [32, 32],
+  enemy: [32, 32],
+  boss: [64, 64],
   proj: [32, 32],
   fx: [32, 32],
   item: [32, 32],
