@@ -1,154 +1,59 @@
-// Character roster — 33 characters (the Great Rebalance + Pulsar). Each is a stat
-// spread + starting weapon + one signature trait (engine-implemented via
-// trait.key in game.js). Base player stats before modifiers: 80 Vitality,
-// everything else 0. Percent stats (ferocity/tempo/reflex/recovery/attunement)
-// are in %; the rest are flat points.
+// Roster selector. Two rosters ship — the classic 33 and the 14 Thrones of
+// Heaven warriors — and exactly one is active at a time.
+//
+// `CHARACTERS` and `CHAR_BY_ID` are live ES bindings that `setRoster()`
+// reassigns, so every existing import site (game.js, main.js, the UI, the test
+// harnesses) keeps working untouched and simply sees the active roster. Nothing
+// downstream needs to know a second roster exists.
+//
+// This module stays PURE: no `location`, no `localStorage`, no DOM. Resolving
+// which roster a browser session should open with lives in js/roster.js, and
+// the headless test harnesses import this file directly and get `classic`.
+//
+// In co-op the roster is HOST-AUTHORITATIVE: the host's choice rides the lobby
+// and start messages, and a joining client calls setRoster() with the host's id
+// before it touches a single charId. See applyHostRoster() in js/roster.js.
 
-export const CHARACTERS = [
-  // ---- the 18 reworked/merged ----
-  { id: 'bulwark', name: 'Bulwark', sym: '⛨', roles: ['tank', 'melee'],
-    stats: { vitality: 80, grit: 8, tempo: -20 }, weapon: 'gravemaul',
-    trait: { key: 'immovable', hitbox: 1.4, base: 3 },
-    desc: 'Immovable: cannot be pushed, but a far bigger target (hitbox ×1.4). Enemies touching you take 3 + 25% of Grit + 5% of Vitality contact damage.' },
-  { id: 'cogsmith', name: 'Cogsmith', sym: '⚙', roles: ['summons'],
-    stats: { ingenuity: 10 }, weapon: null,
-    trait: { key: 'overseer', mounts: 4 },
-    desc: 'Overseer: no weapons — 4 turret mounts instead. Turrets inherit 100% of your stats on top of Ingenuity, combine in the shop, and can be picked up (E) and redeployed.' },
-  { id: 'zephyr', name: 'Zephyr', sym: '𖤓', roles: ['dodge', 'speed'],
-    stats: { reflex: 20, tempo: 15, vitality: -15 }, weapon: 'twinlash',
-    trait: { key: 'slipstream', tempo: 40, dur: 2 },
-    desc: 'Slipstream: dodging grants +40% Tempo for 2s and your next attack is a guaranteed crit.' },
-  { id: 'tollkeeper', name: 'Tollkeeper', sym: '⚖', roles: ['economy'],
-    stats: { greed: 5 }, weapon: 'pikefang',
-    trait: { key: 'toll_road', matMult: 2, enemyHp: 1.25 },
-    desc: 'Toll Road: enemies drop double materials but gain +25% HP (affects the whole party).' },
-  { id: 'duskblade', name: 'Duskblade', sym: '☽', roles: ['crit', 'melee'],
-    stats: { ferocity: 15, vitality: -25 }, weapon: 'vaultspike',
-    trait: { key: 'executioner' },
-    desc: 'Executioner: attacks never crit randomly; granted crits deal ×3 instead of ×2; your first hit against any full-HP enemy is a guaranteed crit.' },
-  { id: 'rampart', name: 'Rampart', sym: '▣', roles: ['tank'],
-    stats: { grit: 6, vitality: 20 }, weapon: 'pikefang',
-    trait: { key: 'living_fortress', perRoom: 1 },
-    desc: 'Living Fortress: +1 permanent Grit per fight cleared, and +1% Ferocity per point of bonus Grit.' },
-  { id: 'onrush', name: 'Onrush', sym: '➶', roles: ['speed', 'melee'],
-    stats: { tempo: 25, vitality: -10 }, weapon: 'threadneedle',
-    trait: { key: 'momentum_meter', fillSec: 2, bonus: 0.6 },
-    desc: 'Momentum: moving fills a meter (~2s, faster with Tempo); your next attack consumes it for up to +60% damage.' },
-  { id: 'vesper', name: 'Vesper', sym: '❀', roles: ['sustain'],
-    stats: { recovery: 8 }, weapon: 'serpent_awl',
-    trait: { key: 'red_tithe', healPerKill: 1, vitCapPerRoom: 3 },
-    desc: 'Red Tithe: kills heal 1 HP (Recovery applies); healing beyond full HP becomes permanent Vitality, up to +3 per fight.' },
-  { id: 'broker', name: 'The Broker', sym: '⛃', roles: ['economy'],
-    stats: { greed: 10 }, weapon: 'pebbleshot',
-    trait: { key: 'insider', discount: 25, slots: 7 },
-    desc: 'Insider Trading: shop prices −25%, reroll cost never compounds, and 7 weapon slots.' },
-  { id: 'resonant', name: 'Resonant', sym: '〜', roles: ['melee', 'status'],
-    stats: { ferocity: 5 }, weapon: 'rustcleaver',
-    trait: { key: 'resonance', hits: 9, factor: 2.0, radius: 130 },
-    desc: 'Resonance: attacks build a charge ring (9 hits); when full, your next hit releases an attuned shockwave for 200% weapon damage.' },
-  { id: 'facet', name: 'Facet', sym: '◐', roles: ['economy'],
-    stats: { greed: 5 }, weapon: 'fanblade',
-    trait: { key: 'prism', boonMult: 1.5 },
-    desc: 'Prism: entering each fight, pick 1 of 3 boons for that battle (quality scales with Greed). Any boon chosen 3 times becomes permanent.' },
-  { id: 'stillness', name: 'Stillness', sym: '◈', roles: ['ranged'],
-    stats: { ferocity: 10, reach: 40 }, weapon: 'longbarrel',
-    trait: { key: 'overwatch', idle: 1.5, mult: 2, reachPct: 50 },
-    desc: 'Overwatch: after 1.5s without attacking (moving is fine), your next attack is charged — ×2 damage and +50% Reach on that hit.' },
-  { id: 'powderkeg', name: 'Powderkeg', sym: '✸', roles: ['economy', 'status'],
-    stats: { vitality: 10 }, weapon: 'kegbomb',
-    trait: { key: 'volatile_greed', base: 4, radius: 40 },
-    desc: 'Volatile Greed: materials explode on pickup for 4 + 40% of Greed attuned damage; blast radius 40 + 50% of Reach.' },
-  { id: 'quartermaster', name: 'Quartermaster', sym: '⚒', roles: ['economy'],
-    stats: { ferocity: 5 }, weapon: 'gravelmouth',
-    trait: { key: 'arsenal_doctrine' },
-    desc: 'Arsenal Doctrine: cannot buy items; every weapon held also grants you the stats it scales with. Weapons sell for exactly the materials invested in them.' },
-  { id: 'mirage', name: 'Mirage', sym: '≋', roles: ['dodge', 'status'],
-    stats: { reflex: 25 }, weapon: 'frostscythe',
-    trait: { key: 'afterimage', dur: 2, tauntR: 180, burst: 12, radius: 100 },
-    desc: 'Afterimage: dodging leaves a decoy that taunts nearby enemies for 2s, then bursts for attuned damage.' },
-  { id: 'banneret', name: 'Banneret', sym: '⚑', roles: ['support'],
-    stats: { vitality: 10 }, weapon: 'stormlance',
-    trait: { key: 'standard_high', radius: 150, fer: 10, rec: 20 },
-    desc: 'Standard High: a banner aura (radius 150 + 50% of Reach) grants allies and summons +10% Ferocity and +20% Recovery, scaling with your Vitality. You get half.' },
-  { id: 'sawbones', name: 'Sawbones', sym: '✚', roles: ['support', 'sustain'],
-    stats: { recovery: 6 }, weapon: 'bogflask',
-    trait: { key: 'field_rites', reviveBoost: 0.5, partyVit: 3, shieldCap: 15 },
-    desc: 'Field Rites: your overheal drips to the nearest injured ally; you revive allies 50% faster; each revive grants the party +3 permanent Vitality. Solo: overheal becomes a small shield (cap 15).' },
-  { id: 'lodestone', name: 'Lodestone', sym: '⧉', roles: ['support', 'tank'],
-    stats: { vitality: 15, grit: 3 }, weapon: 'gravemaul',
-    trait: { key: 'soulbond', dmgShare: 0.3, healShare: 0.25, window: 1, echoFactor: 0.5 },
-    desc: 'Soulbond: a tether to your nearest ally — you share 30% of incoming damage and 25% of healing both ways; hitting the same enemy within 1s echoes attuned damage. Solo it binds your strongest summon; with none, it lies dormant.' },
+import { CHARACTERS_CLASSIC } from './characters-classic.js';
+import { CHARACTERS_TOH } from './characters-toh.js';
 
-  // ---- the 14 carried over, translated ----
-  { id: 'voltaic', name: 'Voltaic', sym: '⚡', roles: ['status'],
-    stats: { attunement: 12, ferocity: -10 }, weapon: 'sparkbolt',
-    trait: { key: 'chain_attacks', chance: 0.3, factor: 0.6, range: 170 },
-    desc: 'Attacks have a 30% chance to chain lightning to a nearby enemy at 60% damage (chains scale with Attunement).' },
-  { id: 'wisp', name: 'Wisp', sym: '❍', roles: ['dodge'],
-    stats: { reflex: 40, tempo: 10 }, weapon: 'threadneedle',
-    trait: { key: 'reflex_master', cap: 90, hpCap: 30, ferPerReflex: 1 },
-    desc: 'Reflex cap raised to 90% and +1% Ferocity per 1% Reflex, but Vitality is capped at 30.' },
-  { id: 'gilded_one', name: 'Gilded One', sym: '☼', roles: ['economy'],
-    stats: { greed: 15 }, weapon: 'kegbomb',
-    trait: { key: 'legendary_shop', slots: 2 },
-    desc: 'Shops hold only the finest goods — legendary items or the floor\'s top weapon tier — but just 2 of them.' },
-  { id: 'redmaw', name: 'Redmaw', sym: '⽕', roles: ['melee'],
-    stats: { ferocity: 20, vitality: 15 }, weapon: 'emberfang',
-    trait: { key: 'berserk_missing', perMissing: 1 },
-    desc: 'Deals +1% Ferocity for every 1% of HP missing.' },
-  { id: 'glasswing', name: 'Glasswing', sym: '⟡', roles: ['speed', 'dodge'],
-    stats: { tempo: 15, reflex: 10 }, weapon: 'hailburst',
-    trait: { key: 'glass', dealMult: 1.5, takeMult: 1.5 },
-    desc: 'Deals +50% damage — and takes +50% damage.' },
-  { id: 'twinsoul', name: 'Twinsoul', sym: '⧇', roles: ['summons'],
-    stats: { ingenuity: 3 }, weapon: 'pebbleshot',
-    trait: { key: 'mirror_drone', factor: 0.5 },
-    desc: 'A mirror-drone hovers beside you, copying your first weapon at 50% damage.' },
-  { id: 'hemomancer', name: 'Hemomancer', sym: '🩸', roles: ['sustain'],
-    stats: { vitality: -20 }, weapon: 'stormlance',
-    trait: { key: 'overheal_shield', cap: 20, lifesteal: 10 },
-    desc: 'Innately heals 10% of damage dealt (Recovery applies); healing beyond full HP becomes a shield of up to 20.' },
-  { id: 'jester', name: 'Jester', sym: '♦', roles: ['crit', 'economy'],
-    stats: { greed: 10 }, weapon: 'fanblade',
-    trait: { key: 'crit_ramp', per: 5, max: 60 },
-    desc: 'Each attack that fails to crit adds +5% to the Jester’s own crit odds (cap 60%); a crit resets them.' },
-  { id: 'cindermage', name: 'Cindermage', sym: '♨', roles: ['status'],
-    stats: { attunement: 15, ferocity: -10 }, weapon: 'cinderspray',
-    trait: { key: 'burn_attacks', dps: 4, dur: 2 },
-    desc: 'All attacks ignite for 4 damage/s over 2s (burns scale with Attunement).' },
-  { id: 'frostcaller', name: 'Frostcaller', sym: '❅', roles: ['status'],
-    stats: { attunement: 12, tempo: 5 }, weapon: 'frostjar',
-    trait: { key: 'slow_attacks', mult: 0.6, dur: 1.2 },
-    desc: 'All attacks chill, slowing enemies by 40% for 1.2s (chills deepen with Attunement).' },
-  { id: 'longshot', name: 'Longshot', sym: '⌖', roles: ['ranged'],
-    stats: { reach: 60, ferocity: 10 }, weapon: 'longbarrel',
-    trait: { key: 'far_bonus', dist: 250, bonus: 25 },
-    desc: 'Deals +25% damage to enemies further than 250 units away.' },
-  { id: 'threader', name: 'Threader', sym: '☍', roles: ['ranged'],
-    stats: { reach: 24 }, weapon: 'coilgun',
-    trait: { key: 'pierce_innate', add: 1 },
-    desc: 'All projectiles pierce +1 enemy.' },
-  { id: 'tinker', name: 'Tinker', sym: '⚙', roles: ['summons'],
-    stats: { ingenuity: 6 }, weapon: 'bolt_turret',
-    trait: { key: 'structures_fast', rate: 1.25, slotCap: 4 },
-    desc: 'Structures attack 25% faster, but you have only 4 weapon slots.' },
-  { id: 'hivewright', name: 'Hivewright', sym: '⬡', roles: ['summons'],
-    stats: { ingenuity: 4, vitality: 10 }, weapon: 'guard_drone',
-    trait: { key: 'free_drone_floor' },
-    desc: 'Gains a free Guard Drone at the start of every floor.' },
-  // ---- the melee-range elementalist (objectives patch) ----
-  // TUNING TARGET: ~50% of Pulsar's total damage should come from the nova.
-  // The knobs are base/cd/heatPer here; sim_test prints his nova share so a
-  // future rebalance can check it instead of guessing. Everything about him
-  // pushes toward the 120u band: negative Reach, weapons hard-capped to the
-  // nova radius, and only 3 slots — the nova is meant to be half his output.
-  { id: 'pulsar', name: 'Pulsar', sym: '◎', roles: ['status', 'melee'],
-    stats: { attunement: 15, grit: 6, reach: -30 }, weapon: 'rustcleaver',
-    trait: {
-      key: 'nova_core', radius: 120, cd: 1.2, base: 10, slots: 3,
-      heatPer: 0.15, heatMax: 1.5, heatDecay: 2, healPer: 1,
-    },
-    desc: 'Nova Core: while an enemy stands within 120, you pulse every 1.2s for attuned damage to everything in that fixed radius (Reach never changes it) and heal 1 HP per enemy struck. Each pulse that connects stacks +15% nova damage up to +150%; the stacks all fall off 2s after a pulse hits nothing. Only 3 weapon slots, and every weapon you hold is range-capped to 120.' },
-];
+const byId = list => Object.fromEntries(list.map(c => [c.id, c]));
 
-export const CHAR_BY_ID = Object.fromEntries(CHARACTERS.map(c => [c.id, c]));
+export const ROSTERS = {
+  classic: { id: 'classic', name: 'Classic', blurb: 'The original 33.', chars: CHARACTERS_CLASSIC },
+  toh: { id: 'toh', name: 'Thrones of Heaven', blurb: 'The 14 warriors.', chars: CHARACTERS_TOH },
+};
+export const ROSTER_IDS = Object.keys(ROSTERS);
+export const DEFAULT_ROSTER = 'classic';
+
+// Every character from every roster, for lookups that must never fail — a
+// results screen replaying a finished run, or a client that has not switched
+// yet. Character ids are unique across both rosters (ToH ids are `toh_`-
+// prefixed), so this map is unambiguous.
+export const ALL_CHARS = [...CHARACTERS_CLASSIC, ...CHARACTERS_TOH];
+export const ALL_CHAR_BY_ID = byId(ALL_CHARS);
+
+export let ROSTER_ID = DEFAULT_ROSTER;
+export let CHARACTERS = ROSTERS[DEFAULT_ROSTER].chars;
+export let CHAR_BY_ID = byId(CHARACTERS);
+
+// Switch the active roster. Returns the id actually in force, so a caller
+// handed a bad value from the wire still knows what it ended up with.
+export function setRoster(id) {
+  const next = ROSTERS[id] ? id : DEFAULT_ROSTER;
+  if (next !== ROSTER_ID) {
+    ROSTER_ID = next;
+    CHARACTERS = ROSTERS[next].chars;
+    CHAR_BY_ID = byId(CHARACTERS);
+  }
+  return ROSTER_ID;
+}
+
+export function activeRoster() { return ROSTERS[ROSTER_ID]; }
+
+// Which roster a character id belongs to — used by the co-op guard to notice
+// that a client is holding characters the host's roster does not contain.
+export function rosterOf(charId) {
+  for (const r of ROSTER_IDS) if (ROSTERS[r].chars.some(c => c.id === charId)) return r;
+  return null;
+}
