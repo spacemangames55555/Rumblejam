@@ -175,6 +175,40 @@ export function subImage(src, sx, sy, w, h) {
   return out;
 }
 
+// Area-average (box filter) resize, alpha-weighted.
+//
+// Needed because nearest-neighbour is only honest when UPSCALING. A 256px sheet
+// shown at 72 device pixels via nearest-neighbour throws away roughly seven of
+// every eight pixels and picks the survivors arbitrarily, which is aliasing, not
+// downscaling — thin limbs flicker in and out and a rim light can vanish
+// entirely. Colour is averaged weighted by alpha so transparent pixels do not
+// drag the edges toward black.
+export function resizeBox(src, dw, dh) {
+  const out = blankImage(dw, dh);
+  const sx = src.width / dw, sy = src.height / dh;
+  for (let y = 0; y < dh; y++) {
+    const y0 = Math.floor(y * sy), y1 = Math.max(y0 + 1, Math.ceil((y + 1) * sy));
+    for (let x = 0; x < dw; x++) {
+      const x0 = Math.floor(x * sx), x1 = Math.max(x0 + 1, Math.ceil((x + 1) * sx));
+      let r = 0, g = 0, b = 0, a = 0, n = 0;
+      for (let yy = y0; yy < y1 && yy < src.height; yy++) {
+        for (let xx = x0; xx < x1 && xx < src.width; xx++) {
+          const i = (yy * src.width + xx) * 4;
+          const al = src.data[i + 3];
+          r += src.data[i] * al; g += src.data[i + 1] * al; b += src.data[i + 2] * al;
+          a += al; n++;
+        }
+      }
+      const o = (y * dw + x) * 4;
+      if (a > 0) {
+        out.data[o] = Math.round(r / a); out.data[o + 1] = Math.round(g / a); out.data[o + 2] = Math.round(b / a);
+        out.data[o + 3] = Math.round(a / n);
+      }
+    }
+  }
+  return out;
+}
+
 // Bounding box of everything at least `alphaMin` opaque, or null if the region
 // is entirely transparent.
 export function opaqueBounds(img, x0 = 0, y0 = 0, w = img.width, h = img.height, alphaMin = 1) {
