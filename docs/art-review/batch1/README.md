@@ -1,11 +1,12 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **One is in.**
+Thirteen characters to install. **Two are in.**
 
 | | character | id | status |
 |---|---|---|---|
 | ✓ | Hunter | `char.toh_hunter` | installed |
-| | Blacksmith · Wizard · Necromancer · Mage · Bard · Witch Doctor · Samurai · Monk · Assassin · Priest · Savage · Sundian | | awaiting art |
+| ✓ | Witch Doctor | `char.toh_witch_doctor` | installed |
+| | Blacksmith · Wizard · Necromancer · Mage · Bard · Samurai · Monk · Assassin · Priest · Savage · Sundian | | awaiting art (11) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -24,17 +25,35 @@ artifact of padding.
 
 | character | scale | fit | content | cell px | silhouette px | vs Druid |
 |---|---|---|---|---|---|---|
-| Druid | 2.18 | 1.0323 | 90×124 | 162.0 | **157.0** | — |
-| Hunter | 2.18 | 1.0492 | 101×122 | 164.7 | **157.0** | **+0.00%** |
+| Druid (anchor) | 2.18 | 1.0323 | 90×124 | 162.0 | **157.0** | — |
+| Witch Doctor | 2.18 | 1.0240 | 120×125 | 160.7 | **157.0** | **+0.00%** |
+| Hunter | 2.18 | 1.0492 | 101×122 | 164.7 | **157.0** | **−0.00%** |
 
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-The two sheets came from **different source canvases** — the Druid at 248×248,
-the Hunter at 256×256 — and fill different fractions of their cell (96.9% and
-95.3%). Their *cells* differ by 2.7 device px. Their silhouettes are identical.
-That is exactly the case content normalization was built for, and it is the
-first time it has been exercised on art it was not derived from.
+Three sheets, three different content boxes (90×124, 120×125, 101×122), cell
+fills from 95.3% to 97.7%, and two different source canvases — the Druid at
+248×248, the batch-1 pair at 256×256. Their **cells** span 160.7 to 164.7 device
+px, a 4px spread that means nothing. Their **silhouettes are identical to a
+tenth of a pixel.** That is what content normalization is for, and it is now
+holding on two characters it was not derived from.
+
+### Per-facing height spread
+
+Normalization uses the tallest cell, so a sheet with one unusually tall facing
+would render its other seven short. Measured:
+
+| character | per-facing heights (E→NE) | max | min | spread |
+|---|---|---|---|---|
+| Druid | 122 122 118 124 123 121 118 121 | 124 | 118 | 4.8% |
+| Hunter | 118 118 120 122 118 116 116 118 | 122 | 116 | 4.9% |
+| Witch Doctor | 125 122 122 124 122 118 122 125 | 125 | 118 | 5.6% |
+
+All three sit in the same 5% band, so no facing is dragging its character
+smaller. Worth re-checking per character: a raised staff or a leaping pose in
+one facing only would show up here as a spread well outside this range, and the
+fix would be art-side rather than a scale tweak.
 
 ## Gates: structure only
 
@@ -78,6 +97,25 @@ Supplied 2026-08-04, eight 256×256 RGBA PNGs.
 
 Assembled to `assets/sprites/char/toh_hunter.png`, 128×1024, `directions: 8`,
 `content: [101, 122]`, `scale: 2.18`. Autocrop 256×256 → 128×122.
+
+### Witch Doctor
+
+Supplied 2026-08-04, eight 256×256 RGBA PNGs.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `1c39421fd06ac441d0f2cec9a8251bc8` | `witch_doctor/sources/east.png` |
+| SE | `200c92cf1c35c5098ee945c213398493` | `witch_doctor/sources/southeast.png` |
+| S | `53231d21cc8318c1ea80a7ff6734569e` | `witch_doctor/sources/south.png` |
+| SW | `2480a2f16e94c8b43c09cdd23e9f1f5a` | `witch_doctor/sources/southwest.png` |
+| W | `790afc13d1209968868b52dbd3aaed3b` | `witch_doctor/sources/west.png` |
+| NW | `ff59d25da83767ea7414c4e4487a1746` | `witch_doctor/sources/northwest.png` |
+| N | `a41b4145a6c0d43fb3b32bbb90f0f9bf` | `witch_doctor/sources/north.png` |
+| NE | `a639384675c88a82c370cd9d7436224c` | `witch_doctor/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_witch_doctor.png`, 128×1024,
+`directions: 8`, `content: [120, 125]`, `scale: 2.18`. Autocrop 256×256 →
+120×127.
 
 ## A tooling bug this batch found
 
