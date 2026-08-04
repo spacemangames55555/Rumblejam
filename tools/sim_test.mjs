@@ -3307,12 +3307,20 @@ try {
     else fail('--require-all did not fail on an undrawn batch');
   }
 
-  // -- the value gate and the facing-separation gate, on synthetic sheets --
-  // Both encode a failure that actually happened during anchor review, so both
-  // are written as the failing case first.
+  // -- the STRUCTURAL gate, on synthetic sheets --
+  // The aesthetic bands (contrast, accent spread, body saturation) were retired
+  // on 2026-08-04 — see docs/SPRITES.md, "Why there are no aesthetic gates".
+  // What is tested here is what remains: checks with an answer rather than an
+  // opinion. Each is written as the failing case first, because each encodes a
+  // failure that actually happened.
   {
     const dir = nodePath.join(REPO, 'assets', 'sprites', 'enemy');
     const file = nodePath.join(dir, 'skulker.png');
+    const OV = nodePath.join(REPO, 'assets', 'sprite-overrides.json');
+    const MAN = nodePath.join(REPO, 'assets', 'assets.json');
+    const ovBefore = rf(OV, 'utf8'), manBefore = rf(MAN, 'utf8');
+    // body spans x 6+off..25, y 5..27 -> widest row is 20 across, 23 tall
+    const FIX_CONTENT = [20, 23];
     const sheet = (bodyRGB, accentRGB, distinctRows) => {
       const g = PK.blankImage(32, 256);
       for (let d = 0; d < 8; d++) {
@@ -3324,8 +3332,6 @@ try {
           for (let x = 0; x < 32; x++) {
             if (x < 6 + off || x > 25 || y < 5 || y > 27) continue;
             const o = ((d * 32 + y) * 32 + x) * 4;
-            // the accent block is deliberately ~30% of the body, so the gate's
-            // brightest-quarter split lands wholly inside it
             const acc = accentRGB && y > 9 && y < 22 && x > 9 && x < 22;
             const c = acc ? accentRGB : bodyRGB;
             g.data[o] = c[0]; g.data[o + 1] = c[1]; g.data[o + 2] = c[2]; g.data[o + 3] = 255;
@@ -3334,45 +3340,62 @@ try {
       }
       return PK.encodePng(g);
     };
-    // A saturated mid-value body under a bright accent — the shape of the
-    // approved reference, and the only combination that clears all three bands.
-    const GOOD_BODY = [40, 110, 200], GOOD_ACCENT = [255, 240, 160];
+    const setOverride = patch => {
+      const o = JSON.parse(ovBefore);
+      if (patch) o['enemy.skulker'] = patch; else delete o['enemy.skulker'];
+      writeFileSync(OV, JSON.stringify(Object.fromEntries(Object.keys(o).sort().map(k => [k, o[k]])), null, 2) + '\n');
+      run('gen_assets_manifest.mjs', []);
+    };
+    const BODY = [40, 110, 200], ACCENT = [255, 240, 160];
     try {
       mkdirSync(dir, { recursive: true });
-      // the reference shape passes all three bands
-      writeFileSync(file, sheet(GOOD_BODY, GOOD_ACCENT, true));
+
+      // a well-formed sheet with measured content passes, whatever it looks like
+      writeFileSync(file, sheet(BODY, ACCENT, true));
+      setOverride({ content: FIX_CONTENT });
       const good = run('verify_art_batch.mjs', ['enemy.skulker']);
-      if (/ART BATCH OK/.test(good)) ok('the value bands pass a saturated mid-value body under a bright accent — the shape of the approved reference');
-      else fail(`value bands rejected the reference shape: ${good.slice(0, 220)}`);
+      if (/ART BATCH OK/.test(good)) ok('the gate passes a well-formed sheet with measured content — and asks nothing about how it looks');
+      else fail(`structural gate rejected a good sheet: ${good.slice(0, 240)}`);
 
-      // AXIS 1, contrast. Candidate C's failure: body barely above the floor,
-      // blazing accent.
+      // a body barely above the floor under a blazing accent: RETIRED, must pass
       writeFileSync(file, sheet([30, 34, 44], [60, 255, 255], true));
-      const dark = runFails('verify_art_batch.mjs', ['enemy.skulker']);
-      if (dark && /contrast \d+/.test(dark) && /sinks into the arena floor/.test(dark)) {
-        ok('contrast band: refuses a dark body carrying a brilliant accent — the accent cannot mask the body, which is how a sprite passes review and vanishes in play');
-      } else fail(`contrast band: ${String(dark).slice(0, 160)}`);
+      const dark = run('verify_art_batch.mjs', ['enemy.skulker']);
+      if (/ART BATCH OK/.test(dark) && !/contrast/.test(dark)) {
+        ok('and a near-black body under a brilliant accent now passes — the retired contrast band would have refused it, and it was refusing the roster');
+      } else fail(`contrast band still live: ${dark.slice(0, 220)}`);
 
-      // AXIS 2, spread. A flat sprite: bright, saturated, and no accent at all.
-      writeFileSync(file, sheet(GOOD_BODY, null, true));
-      const noAccent = runFails('verify_art_batch.mjs', ['enemy.skulker']);
-      if (noAccent && /accent spread/.test(noAccent)) {
-        ok('spread band: refuses a flat sprite with no accent to read, however bright and saturated its body');
-      } else fail(`spread band: ${String(noAccent).slice(0, 160)}`);
-
-      // AXIS 3, saturation. THE 109 FAILURE: a pale body lifted to a high
-      // luminance. Clears contrast and clears spread, and is still wrong.
+      // a washed-out pale body: RETIRED, must pass
       writeFileSync(file, sheet([120, 115, 110], [255, 250, 240], true));
-      const washed = runFails('verify_art_batch.mjs', ['enemy.skulker']);
-      if (washed && /body saturation/.test(washed) && !/contrast \d+/.test(washed) && !/accent spread/.test(washed)) {
-        ok('saturation band: refuses a washed-out body that passed contrast — the exact regression that made an anchor score 109 and lose its accent structure');
-      } else fail(`saturation band: ${String(washed).slice(0, 200)}`);
+      const washed = run('verify_art_batch.mjs', ['enemy.skulker']);
+      if (/ART BATCH OK/.test(washed) && !/saturation/.test(washed)) {
+        ok('and a washed-out body passes — the saturation band is gone with the rest');
+      } else fail(`saturation band still live: ${washed.slice(0, 220)}`);
 
-      // opposites identical: a collapsed rotation
-      writeFileSync(file, sheet(GOOD_BODY, GOOD_ACCENT, false));
+      // STRUCTURAL 1: content absent. The loader falls back to cell
+      // normalisation and the sprite is silently sized by its padding.
+      writeFileSync(file, sheet(BODY, ACCENT, true));
+      setOverride(null);
+      const noContent = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (noContent && /no "content"/.test(noContent) && /--record-content/.test(noContent)) {
+        ok('content is structural: a sheet without it is refused, and told the command that fixes it');
+      } else fail(`missing-content check: ${String(noContent).slice(0, 200)}`);
+
+      // STRUCTURAL 2: content STALE. The number outlived the art it measured,
+      // which is worse than absent — it looks declared and is wrong.
+      setOverride({ content: [20, 31] });
+      const stale = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (stale && /declares content/.test(stale) && /stale after an art change/.test(stale)) {
+        ok('and stale content is refused too — a declared number that no longer matches the file is worse than a missing one');
+      } else fail(`stale-content check: ${String(stale).slice(0, 200)}`);
+
+      // STRUCTURAL 3: opposites identical — a collapsed rotation. Kept, because
+      // it separates a working generation method from a broken one rather than
+      // expressing a preference about palette.
+      writeFileSync(file, sheet(BODY, ACCENT, false));
+      setOverride({ content: FIX_CONTENT });
       const flat = runFails('verify_art_batch.mjs', ['enemy.skulker']);
       if (flat && /opposite facings differ/.test(flat)) {
-        ok('the facing gate refuses a sheet whose front and back are duplicates — eight rows that are not eight drawings');
+        ok('the facing gate survives the retirement: a sheet whose front and back are duplicates is a broken sheet, not an unattractive one');
       } else fail(`facing gate: ${String(flat).slice(0, 160)}`);
     } finally {
       // Remove ONLY what this fixture wrote. A blanket rmSync of assets/sprites
@@ -3380,6 +3403,8 @@ try {
       rmSync(file, { force: true });
       try { rmSync(dir, { recursive: false }); } catch { /* other art lives here */ }
       try { rmSync(nodePath.join(REPO, 'assets', 'sprites'), { recursive: false }); } catch { /* ditto */ }
+      writeFileSync(OV, ovBefore);
+      writeFileSync(MAN, manBefore);
     }
   }
 

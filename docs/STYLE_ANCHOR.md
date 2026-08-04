@@ -67,36 +67,42 @@ shadow, a broad mid-tone body, and a small bright tail.** Median luma 56 with a
 p95 of 174 is a wide value range anchored low. The old arcade clause asked for
 the opposite — "body mid-to-light in value" — which is exactly why it had to go.
 
-## The value gate no longer describes the anchor
+## The aesthetic gates are retired
 
 The bands in `tools/verify_art_batch.mjs` were calibrated on arcade candidate B.
-Against them the new anchor **fails two of three**:
+Against them the new anchor failed two of three, and the first batch-1 character
+failed all three:
 
-| axis | band | Druid | |
+| axis | band | Druid | Hunter |
 |---|---|---|---|
-| contrast | ≥ 45 | **22.7** | ✗ |
-| accent spread | ≥ 90 | 93.4 | ✓ |
-| body saturation | ≥ 0.58 | **0.387** | ✗ |
+| contrast | ≥ 45 | **22.7** ✗ | **13.3** ✗ |
+| accent spread | ≥ 90 | 93.4 ✓ | **80.9** ✗ |
+| body saturation | ≥ 0.58 | **0.387** ✗ | **0.570** ✗ |
 
-He is waived in `assets/gate-exceptions.json` and ships anyway. Retiring the
-arcade anchor means those two bands are now **orphaned** — they describe art the
-project no longer wants, and every character in the new direction will fail them
-the same way.
+They were **retired on 2026-08-04** rather than recalibrated or waived thirteen
+more times. The full reasoning is in `docs/SPRITES.md`, *"Why there are no
+aesthetic gates"*; the short form is that they were calibrated on an abandoned
+art direction, they disagreed with each other as soon as there were two
+characters to compare (the Hunter is markedly darker *and* markedly more
+saturated than the anchor, so no single recalibration makes both axes right),
+the contrast axis was measurably wrong because it was signed, and it was least
+reliable at exactly the display size where readability matters most.
 
-**The bands have deliberately not been moved.** Two reasons. First, recalibrating
-them on a single sheet would repeat the mistake that produced the reverted 109:
-treating one asset's incidental numbers as a target. Batch 1 gives a spread to
-calibrate against; one sheet does not. Second, the contrast axis is separately
-known to be **wrong** — it computes a signed `bodyLuma − floorLuma`, so it goes
-negative on lighter floors where the Druid is visibly *easier* to read. Fixing
-the axis and recalibrating the band are the same job and should be done once,
-with data.
+`assets/gate-exceptions.json` is now empty. The gate checks structure only —
+dimensions, decodability, empty cells, baked matte, `content` present and
+matching the file — plus facing separation, which is a broken-sheet check rather
+than a taste one and was calibrated on the rotation method, not on any palette.
 
-Until then: measure, report the spread, waive, do not block. The gate still
-rejects structural failures — wrong dimensions, empty cells, baked mattes,
-collapsed rotations — and those are never waivable.
+**Consistency judgement lives in the contact sheet**,
+[`art-review/batch1/00-toh-installed.png`](art-review/batch1/00-toh-installed.png),
+which is where it was actually happening the whole time.
 
-For the record, the bands as calibrated on the retired anchor:
+What is still enforced numerically is **size**, because size has a right answer:
+every sheet renders its silhouette at the same height. `scale: 2.18` is
+confirmed for the roster — the Druid's playtest cleared on 2026-08-04 with the
+silhouette holding, no mirroring, and projectiles reading as coming from him.
+
+For the record, the retired bands as calibrated on the retired anchor:
 
 | asset | contrast | spread | bodySat | |
 |---|---|---|---|---|
@@ -106,9 +112,10 @@ For the record, the bands as calibrated on the retired anchor:
 | A — too dark | **15.5** | **74.8** | 0.566 | rejected: contrast, spread |
 | C — dark under a bright accent | **27.6** | 116.2 | **0.286** | rejected: contrast, saturation |
 
-The 109 row is the one worth remembering: it cleared contrast *and* spread by
-making the body pale, and only saturation caught it. **The gate rejects; it never
-ranks.** No batch is selected by pushing any of these numbers up.
+The 109 row is still worth remembering, because it is the argument *for* having
+had them: it cleared contrast and spread by making the body pale, and only
+saturation caught it. A gate that rejects is worth having. A gate that is waived
+every time is not, and that is what these became.
 
 ## Record
 

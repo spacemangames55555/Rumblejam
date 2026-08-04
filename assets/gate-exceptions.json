@@ -1,16 +1,19 @@
 {
   "_": [
-    "Sprites knowingly installed outside the value bands, with the reason.",
+    "Sheets knowingly installed outside a WAIVABLE gate check, with the reason.",
     "",
-    "STRUCTURAL failures are never excepted \u2014 wrong dimensions, a file that will",
-    "not decode, an empty cell, a baked matte. Those are always errors. Only the",
-    "value bands (contrast, spread, saturation) and facing separation can be",
-    "waived here, because those are review judgements and a band calibrated on",
-    "one art direction does not automatically transfer to another.",
+    "As of 2026-08-04 exactly one check is waivable: facing separation, for a",
+    "sheet whose eight facings are genuinely unusual. Everything else in",
+    "tools/verify_art_batch.mjs is structural — wrong dimensions, a file that",
+    "will not decode, an empty cell, a baked matte, missing or stale content —",
+    "and structural failures are never waivable.",
+    "",
+    "The aesthetic bands this file used to waive (body contrast, accent spread,",
+    "body saturation) were RETIRED, not waived. Waiving the same three checks on",
+    "every character in the roster is not a gate. See docs/SPRITES.md,",
+    "'Why there are no aesthetic gates'.",
     "",
     "A stale entry is a failure: tools/sim_test.mjs asserts every id listed here",
     "genuinely fails something, so an exception cannot outlive the problem."
-  ],
-  "char.toh_druid": "Installed for playtest despite failing contrast and saturation. The bands were calibrated on an arcade-styled character; the Druid is the direction the art may be moving toward, and the contrast axis is additionally known to be wrong for dark-on-light. See docs/art-review/druid/README.md.",
-  "char.toh_hunter": "Batch 1, installed for review despite failing contrast, spread and saturation. The bands were calibrated on the retired arcade anchor; the Druid is the anchor now and fails them the same way. See docs/STYLE_ANCHOR.md \u2014 the bands are orphaned and will be recalibrated against batch 1's spread, not against any single sheet."
+  ]
 }

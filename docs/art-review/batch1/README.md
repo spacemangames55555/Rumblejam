@@ -36,33 +36,24 @@ the Hunter at 256×256 — and fill different fractions of their cell (96.9% and
 That is exactly the case content normalization was built for, and it is the
 first time it has been exercised on art it was not derived from.
 
-## Gate axes — measured, waived, not blocking
+## Gates: structure only
 
-The bands were calibrated on the retired arcade anchor. The Druid fails two of
-three and the Hunter fails all three. Both are waived in
-`assets/gate-exceptions.json`; structural checks are not waived and both pass
-them.
+The aesthetic bands (contrast, accent spread, body saturation) were **retired on
+2026-08-04**, after this batch's first character made the case. Both installed
+characters had failed them and both had been waived; the Druid and the Hunter
+disagreed with each other on which direction they failed in — the Hunter is
+considerably darker *and* considerably more saturated than the anchor — so no
+recalibration could have made both axes right. Reasoning is recorded in
+`docs/SPRITES.md`, *"Why there are no aesthetic gates"*, so it is not re-added.
 
-| character | contrast (≥45) | spread (≥90) | bodySat (≥0.58) | facing ratio (≥0.85) |
-|---|---|---|---|---|
-| Druid | **22.7** ✗ | 93.4 ✓ | **0.387** ✗ | 1.009 ✓ |
-| Hunter | **13.3** ✗ | **80.9** ✗ | **0.570** ✗ | **1.258** ✓ |
+`node tools/verify_art_batch.mjs` now checks that a file decodes, that its
+dimensions are exactly what the loader demands, that it has real transparency
+rather than a baked matte, that no cell is empty, that `content` is declared and
+still matches the file, and that an 8-direction sheet's facings are genuinely
+eight drawings. Every installed sheet passes with nothing waived —
+`assets/gate-exceptions.json` is empty.
 
-Two things in that table are worth watching as the batch fills in.
-
-**The spread between characters is already wider than the bands.** Contrast 22.7
-against 13.3 is a 1.7× difference on the axis that is supposed to gate
-readability, and saturation runs the *other* way — the Hunter is markedly more
-saturated (0.570) than the anchor (0.387) while being considerably darker. So
-the two axes are not measuring one underlying "arcade-ness" that the roster has
-uniformly moved away from; they disagree per character. A recalibration that
-just lowers both bands to fit would paper over that.
-
-**The Hunter's facing ratio is 1.258 against the Druid's 1.009.** Both pass, and
-higher is not better — the band rejects, it does not rank. But 1.258 means his
-opposite facings differ considerably more than his neighbours do, which is what
-a set of eight genuinely separate drawings looks like. Worth noting as a
-reference point, not a target.
+**Consistency is judged on the contact sheet**, not from numbers.
 
 ## Provenance
 
