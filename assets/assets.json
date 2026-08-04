@@ -276,9 +276,14 @@
     },
     "char.toh_witch_doctor": {
       "file": "char/toh_witch_doctor.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        120,
+        125
+      ]
     },
     "char.toh_wizard": {
       "file": "char/toh_wizard.png",

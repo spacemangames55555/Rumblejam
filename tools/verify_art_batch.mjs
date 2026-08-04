@@ -7,19 +7,32 @@
 //   node tools/verify_art_batch.mjs char --require-all   # also fail on ids with no art yet
 //   node tools/verify_art_batch.mjs --diff-base=main    # assert the batch touched art only
 //
-// Checks, per file present on disk:
+// THIS GATE CHECKS STRUCTURE, NOT TASTE. Every check below is a thing that is
+// either true of the file or not, with no judgement in it:
+//
 //   1. it decodes at all
 //   2. its dimensions are EXACTLY w*frames x h*directions — the same rule the
 //      loader applies at runtime, caught here where the message can name the
 //      file and the expected size
 //   3. it has real transparency, not a baked matte
 //   4. no cell is entirely empty (a blank row is how a mis-assembled grid hides)
-//   5. the value bands: contrast, accent spread, body saturation
-//   6. facing separation, for 8-direction sheets
+//   5. it declares measured `content`, without which it is sized by its padding
+//   6. facing separation, for 8-direction sheets — a collapsed rotation is a
+//      broken sheet, not an unattractive one
 //
-// THE GATE REJECTS; IT NEVER RANKS. Nothing here produces a score, and no batch
-// should ever be selected by pushing one of these numbers up. See the value-gate
-// block below for why that is stated this emphatically.
+// The aesthetic bands that used to live here — body contrast, accent spread,
+// body saturation — were RETIRED on 2026-08-04. See docs/SPRITES.md,
+// "Why there are no aesthetic gates". Short version: they were calibrated on an
+// art direction the project abandoned, they disagreed with each other once
+// there was more than one character to compare, the contrast axis was
+// measurably wrong (signed, so it inverted on lighter floors), and they were
+// least reliable at exactly the size the art is actually seen. Thirteen
+// consecutive waivers is not a gate. Do not re-add them without reading that
+// section first.
+//
+// Consistency judgement lives in the contact sheet
+// (docs/art-review/batch1/00-toh-installed.png), which is where it was actually
+// happening the whole time.
 //
 // And across the run: which ids in the namespace still have no art, so "batch
 // 1 is done" is a number rather than a feeling.
@@ -32,8 +45,8 @@ import { decodePng, opaqueBounds } from './pngkit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(join(ROOT, 'assets', 'assets.json'), 'utf8'));
-// Sprites knowingly installed outside the value bands. Only the bands and the
-// facing ratio can be waived — never a structural failure.
+// Sheets knowingly installed with unusual facing separation. That is now the
+// ONLY waivable check — never a structural failure.
 const EXC_PATH = join(ROOT, 'assets', 'gate-exceptions.json');
 const exceptions = existsSync(EXC_PATH) ? JSON.parse(readFileSync(EXC_PATH, 'utf8')) : {};
 const excepted = id => id !== '_' && typeof exceptions[id] === 'string';
@@ -49,80 +62,17 @@ const ids = Object.keys(manifest.sprites).filter(id => {
 });
 if (!ids.length) { console.error(`✗ nothing matches ${selectors.join(' ')}`); process.exit(1); }
 
-// ---------------- the value gate ----------------
+// ---------------- structural helpers ----------------
 //
-// THIS GATE REJECTS. IT NEVER RANKS.
-//
-// There is no score here, no total, nothing to maximise, and nothing that gets
-// better by going up. Each axis is a band a sprite is either inside or outside.
-// That is deliberate and it is the whole design: an earlier version exposed a
-// single body-luminance number, an anchor was regenerated to push that number
-// from 83 to 109, and the result optimised the metric while destroying the
-// thing the metric was a proxy for. A sprite that scores "higher" is not a
-// better sprite. Never select a batch by any figure this file prints.
-//
-// Three axes, all calibrated against candidate B — the reviewed, approved
-// reference — which sits comfortably INSIDE every band rather than at an edge.
-// Each catches a different way of being unreadable at 35-72 device px on a
-// near-black floor:
-//
-//   contrast   the body must clear the floor colour. Catches a dark sprite.
-//              (A measured 16, C measured 28.)
-//   spread     the accent must stand off the body. Catches a sprite with no
-//              accent at all — a flat silhouette. (A measured 75.)
-//   bodySat    the body must stay saturated. Catches a washed-out sprite whose
-//              body was made pale to lift its luminance, which is exactly the
-//              109 failure: it passed contrast AND spread, and lost the accent
-//              structure the silhouette vocabulary depends on. (109 measured
-//              0.41 on its front view against B's 0.62.)
-//
-// The accent-exclusion is retained throughout: the brightest quarter is removed
-// before the body is measured on every axis, because a brilliant accent over a
-// dark or desaturated body is precisely the case that fools a naive average.
-const FLOOR_RGB = [0x14, 0x16, 0x1f];             // PALETTE.bg, the arena floor
-const luma = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
-const satOf = (r, g, b) => { const mx = Math.max(r, g, b); return mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx; };
-export const FLOOR_LUMA = luma(...FLOOR_RGB);      // ~22
-const ACCENT_FRACTION = 0.25;                      // brightest quarter is "accent"
+// No luminance, saturation or contrast maths lives here any more. What remains
+// measures whether the FILE is well formed, which is a question with an answer.
 
-// Measured on the reference and its neighbours, front view and whole sheet:
-//
-//   asset                     contrast   spread   bodySat
-//   B  (approved reference)       93.6    109.2     0.623
-//   83 anchor  front view         83.0    115.0     0.650
-//   83 anchor  whole sheet        65.6    131.6     0.676
-//   109 anchor front view        109.0    117.4     0.405   <- rejected here
-//   109 anchor whole sheet        92.2    136.7     0.540   <- rejected here
-//   A  too dark                   15.5     74.8     0.566   <- rejected here
-//   C  dark under a bright accent 27.6    116.2     0.286   <- rejected here
-//
-// Bands are set below the reference band with headroom, so a legitimately
-// darker or cooler design is not refused, while every reviewed failure is.
-const MIN_CONTRAST = 45;      // B 94, restored anchor 66-83
-const MIN_SPREAD = 90;        // B 109, restored anchor 115-132; A fails at 75
-const MIN_BODY_SAT = 0.58;    // B 0.62, restored anchor 0.65-0.68; 109 fails at 0.41-0.54
-const MIN_BODY_LUMA = FLOOR_LUMA + MIN_CONTRAST;
+// Eight rows that are not eight distinct drawings. Calibrated on the chained-
+// rotation experiment, not on any art direction — a single-hop rotation
+// measured 0.55 and a chained one 1.03, so this band separates a working method
+// from a broken one and does not express a preference about how art looks. It
+// survives the retirement of the aesthetic bands for that reason.
 const MIN_FACING_RATIO = 0.85;
-
-function bodyValue(img) {
-  const px = [];
-  for (let i = 0; i < img.data.length; i += 4) {
-    if (img.data[i + 3] < 128) continue;
-    px.push({ l: luma(img.data[i], img.data[i + 1], img.data[i + 2]), s: satOf(img.data[i], img.data[i + 1], img.data[i + 2]) });
-  }
-  if (!px.length) return { bodyLuma: 0, bodyPx: 0, spread: 0, bodySat: 0 };
-  px.sort((a, b) => a.l - b.l);
-  const keep = Math.max(1, Math.floor(px.length * (1 - ACCENT_FRACTION)));
-  const body = px.slice(0, keep), accent = px.slice(keep);
-  const mean = (a, k) => a.reduce((s, v) => s + v[k], 0) / a.length;
-  const bodyLuma = mean(body, 'l');
-  return {
-    bodyLuma,
-    bodyPx: body.length,
-    spread: (accent.length ? mean(accent, 'l') : bodyLuma) - bodyLuma,
-    bodySat: mean(body, 's'),
-  };
-}
 
 // Mean per-pixel difference between two cells, counting a pixel present in one
 // and absent in the other as maximally different.
@@ -155,8 +105,9 @@ function facingSeparation(img, spec) {
 let failures = 0, present = 0, bytes = 0, decoded = 0, waived = 0;
 const fail = m => { failures++; console.error(`✗ ${m}`); };
 const missing = [];
-// A judgement failure on an id listed in gate-exceptions.json is reported in
-// full, with its numbers, and does not fail the run.
+// The ONE remaining waivable check is facing separation, for a sheet whose
+// eight facings are genuinely unusual. Reported in full, with its numbers, and
+// does not fail the run. Everything else here is structural and never waivable.
 const judge = (id, m) => {
   if (excepted(id)) { waived++; console.warn(`! ${m}`); }
   else fail(m);
@@ -197,23 +148,26 @@ for (const id of ids) {
   }
   if (blank.length) fail(`${id}: ${blank.length} empty cell(s) (${blank.slice(0, 6).join(' ')}) — a mis-assembled grid usually shows up as a blank row`);
 
-  // ---- value gate: three bands, pass/fail, never a score ----
-  const v = bodyValue(img);
-  if (v.bodyPx < 8) fail(`${id}: only ${v.bodyPx} non-accent body pixel(s) — nothing to read as a shape`);
-  else {
-    const contrast = v.bodyLuma - FLOOR_LUMA;
-    if (contrast < MIN_CONTRAST) {
-      judge(id, `${id}: contrast ${contrast.toFixed(0)} (body luminance ${v.bodyLuma.toFixed(0)} over floor ${FLOOR_LUMA.toFixed(0)}), band is >=${MIN_CONTRAST} — `
-        + 'the body sinks into the arena floor. The brightest quarter was excluded first, so a bright accent cannot mask a dark body.');
+  // ---- content must be declared and must match the file ----
+  // Without `content` the loader normalises on the CELL, so the sprite's
+  // apparent size is decided by how its PNG happened to be padded. That is
+  // silent: it looks like a character who is a bit wrong next to the others.
+  if (!Array.isArray(spec.content)) {
+    fail(`${id}: no "content" — the loader will normalise on the cell, so this sprite's size depends on its padding. `
+      + `Run: node tools/process_sprite.mjs --record-content ${id}`);
+  } else {
+    // and it must be the truth about the file, not a number typed once and
+    // left behind when the art was replaced
+    let bw = 0, bh = 0;
+    for (let d = 0; d < directions; d++) {
+      for (let f = 0; f < frames; f++) {
+        const b = opaqueBounds(img, f * spec.w, d * spec.h, spec.w, spec.h);
+        if (b) { bw = Math.max(bw, b.w); bh = Math.max(bh, b.h); }
+      }
     }
-    if (v.spread < MIN_SPREAD) {
-      judge(id, `${id}: accent spread ${v.spread.toFixed(0)}, band is >=${MIN_SPREAD} — `
-        + 'the brightest quarter barely stands off the rest of the body, so there is no accent to read. A flat sprite fails here.');
-    }
-    if (v.bodySat < MIN_BODY_SAT) {
-      judge(id, `${id}: body saturation ${v.bodySat.toFixed(2)}, band is >=${MIN_BODY_SAT} — `
-        + 'the body is washed out. Lifting a body\'s luminance by making it pale passes the contrast band and still loses the '
-        + 'accent structure the silhouette vocabulary needs; this band is what refuses it.');
+    if (bw !== spec.content[0] || bh !== spec.content[1]) {
+      fail(`${id}: declares content [${spec.content}] but the file measures [${bw}, ${bh}] — stale after an art change. `
+        + `Run: node tools/process_sprite.mjs --record-content ${id}`);
     }
   }
 
@@ -265,6 +219,6 @@ if (flags['diff-base']) {
   }
 }
 
-if (waived) console.log(`\n${waived} band failure(s) waived by assets/gate-exceptions.json — reported above, not enforced`);
+if (waived) console.log(`\n${waived} facing-separation failure(s) waived by assets/gate-exceptions.json — reported above, not enforced`);
 console.log(failures ? `\n${failures} PROBLEM(S)` : '\nART BATCH OK');
 process.exit(failures ? 1 : 0);

@@ -134,6 +134,67 @@ noise. Scaling *every* sprite would cost 1.7 ms/frame at 300 — about a tenth o
 the 16.67 ms budget, so even the pathological case is affordable, but there is
 no reason to pay it broadly.
 
+## Why there are no aesthetic gates
+
+`tools/verify_art_batch.mjs` checks **structure only** — that a file decodes,
+that its dimensions are exactly what the loader will demand, that it has real
+transparency rather than a baked matte, that no cell is empty, that it declares
+`content` and that the declared `content` still matches the file. Plus facing
+separation on 8-direction sheets, because a collapsed rotation is a broken sheet
+rather than an unattractive one.
+
+It does **not** judge how the art looks. It used to. Three bands — body
+contrast ≥ 45, accent spread ≥ 90, body saturation ≥ 0.58 — were **retired on
+2026-08-04**. The reasoning is recorded here because a gate that measures taste
+is a tempting thing to re-add, and every one of these problems would come back
+with it.
+
+**They were calibrated on an art direction the project abandoned.** The bands
+came from one arcade-styled character, generated during batch 0. The roster
+moved to a grounded, muted, dark-outlined style; the anchor moved with it. The
+bands stayed where they were, describing art nobody wants any more.
+
+**They disagreed with each other as soon as there were two characters to
+compare.** The Druid measures contrast 22.7 and saturation 0.387. The Hunter
+measures contrast 13.3 and saturation 0.570 — considerably darker *and*
+considerably more saturated. There is no single underlying quantity the two
+axes are both tracking, so no recalibration makes both of them right at once.
+Lowering both bands until the current roster fits would produce numbers that
+pass everything and mean nothing.
+
+**The contrast axis was measurably wrong.** It computed `bodyLuma − floorLuma`,
+a *signed* difference, which assumes a sprite must be lighter than its floor. On
+lighter candidate floors it went to −18.9 while the art became visibly *easier*
+to read, because a dark outline separates from a light ground. Readability needs
+the absolute separation. The axis could not express a dark sprite on a light
+floor at all — a completely ordinary way for a game to look.
+
+**They were least trustworthy at exactly the size the art is seen.** Measured on
+rendered pixels, the axes are stable under magnification and move under
+*minification*: at 35 device px a 128px sheet reduces to ~481 surviving pixels
+and which ones survive is arbitrary. The gate was least reliable precisely where
+readability is hardest and the number would have mattered most.
+
+**And in practice they were waived every time.** Both installed characters
+failed and both were waived. Thirteen consecutive waivers is not a gate, it is a
+ritual — and a waiver list that always grows trains everyone to ignore the
+thing it is attached to.
+
+### Where consistency is judged instead
+
+The contact sheet: [`docs/art-review/batch1/00-toh-installed.png`](art-review/batch1/00-toh-installed.png),
+every installed character side by side at true device size on the arena floor,
+each panel a crop of a real game frame at one fixed viewport. Regenerate it as
+each character lands and look at it.
+
+That is where the judgement was actually happening the whole time. The numbers
+were a proxy for it, and a bad one.
+
+What *is* still enforced numerically is size, because size has a right answer:
+every sheet renders its silhouette at the same height, checked by the browser
+suite against the renderer's own `drawImage` and reported per character in the
+batch review.
+
 ## Directional units
 
 Units are drawn **from a per-angle view**, not by rotating one image. A
