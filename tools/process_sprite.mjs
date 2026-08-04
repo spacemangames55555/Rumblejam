@@ -154,7 +154,15 @@ function loadFramesFor(rowIdx) {
     const f = join(inputDir, `${n}.png`);
     if (existsSync(f)) {
       const img = decodePng(readFileSync(f));
-      if (img.width % cellW === 0 && img.width > cellW) {
+      // A horizontal strip of frames is `n * cellW` wide and EXACTLY `cellH`
+      // tall. The height test is what stops a single square drawing from being
+      // shredded into frames: a 256x256 source against a 128 cell is a 2x
+      // oversized single image, not two 128x256 frames, and width alone cannot
+      // tell them apart. Without this, every square source whose size happens
+      // to be a multiple of the cell silently becomes an animation that flips
+      // between its own left and right halves — which looks like a twitching
+      // sprite, not like a tooling bug.
+      if (img.height === cellH && img.width % cellW === 0 && img.width > cellW) {
         const n2 = img.width / cellW;
         const images = [];
         for (let k = 0; k < n2; k++) {
