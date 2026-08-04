@@ -1,4 +1,4 @@
-# Druid — installed at eight facings, measured, and a floor sweep
+# Druid — eight facings, painted at 1.5×, measured, and a floor sweep
 
 `assets/sprites/char/toh_druid.png` · sources in [`sources/`](sources/)
 
@@ -88,7 +88,74 @@ pairs were 90° apart rather than 45°. With the real eight rows in place it
 clears the band without the band moving. The earlier 0.82 was an artifact of the
 sheet shape, not a property of the art.
 
-## 3. The gate is still wrong in the same specific, fixable way
+## 3. Painted at 1.5× — a manifest key, not a radius
+
+The Druid is drawn through a new cosmetic `scale` multiplier in the sprite
+manifest (`assets/sprite-overrides.json` → `"scale": 1.5`). It multiplies how
+large the sheet is painted and touches nothing else: not the entity radius, not
+the hitbox, not collision, not the wire.
+
+[`04-scale-before-after.png`](04-scale-before-after.png) — before and after at
+the sizes the game really paints him, on the arena floor with its own grid
+lines, drawn through the shipped `drawSprite()` path in the running game.
+
+| viewport | before | after |
+|---|---|---|
+| 1440×900 dpr2 | 72 px | **108 px** |
+| 1920×1080 dpr1 | 48 px | **72 px** |
+| 851×393 dpr2.6 (phone) | 35 px | **53 px** |
+
+### Scale does not move the gate axes — confirmed, not assumed
+
+Measured on the **rendered** pixels rather than the source PNG, since that is
+where a scale could plausibly do something:
+
+| | contrast | spread | bodySat | px measured |
+|---|---|---|---|---|
+| source sheet, S row, 1:1 | 18.0 | 100.8 | 0.334 | 6507 |
+| 72 device px at scale 1.0 | 18.1 | 101.9 | 0.337 | 2066 |
+| **72 device px at scale 1.5** | **18.2** | **100.5** | **0.336** | 4613 |
+| 35 device px at scale 1.0 | 17.5 | 101.1 | 0.336 | 481 |
+| **35 device px at scale 1.5** | **19.4** | **97.9** | **0.341** | 1089 |
+
+At desktop size the axes are flat to within 0.1–1.4, which is what nearest-
+neighbour magnification should do: it replicates pixels, so a mean over them
+does not move.
+
+The phone rows move more (contrast 17.5 → 19.4), and that is **not** the scale
+doing work — it is minification. At 35 device px the 128px sheet is reduced to
+481 surviving pixels and which ones survive is arbitrary; at 53 px, 1089
+survive. The 1.5× figure is the *more* faithful of the two, being closer to the
+source sheet's own 18.0. Worth knowing generally: the gate's axes are least
+trustworthy at exactly the size the art is hardest to read.
+
+### It costs the fast path, and that is fine here
+
+`drawSprite` normally paints with a bare `drawImage` and no `save()`/`restore()`.
+A scale ≠ 1 is a real transform and cannot be expressed that way, so a scaled
+sprite takes the slow path by construction. Measured on a 128px sheet at 72
+device px, 60 frames × 7 interleaved repeats, medians, headless SwiftShader:
+
+| | ms/frame | µs/draw |
+|---|---|---|
+| 200 sprites, none scaled | 2.257 | 11.28 |
+| 200 sprites, 8 scaled (a full party of Druids) | 2.278 | 11.39 |
+| 200 sprites, all 200 scaled | 3.410 | 17.05 |
+| 300 sprites, none scaled | 3.352 | 11.17 |
+| 300 sprites, 8 scaled | 3.340 | 11.13 |
+| 300 sprites, all 300 scaled | 5.062 | 16.87 |
+
+**At horde density the change is unmeasurable**: +0.022 ms at 200 and −0.012 ms
+at 300, both inside the run-to-run spread, because only party members carry a
+scale and there are at most eight of them. The slow path itself costs about
+half again per draw (11.2 → 17.0 µs), covering the transform *and* the 2.25×
+pixels a 1.5 sprite fills. Scaling everything would cost 1.7 ms/frame at 300 —
+a tenth of the 16.67 ms budget, so even the pathological case is affordable.
+
+The in-game gates are unchanged: 60 fps at the ~300 desktop crest, 60 fps at the
+~200 mobile crest.
+
+## 4. The gate is still wrong in the same specific, fixable way
 
 Nothing here changes that finding, and nothing in the gate was touched.
 
@@ -97,6 +164,9 @@ its rows are the same source art, and adding four facings does not alter how the
 figure sits against a floor. Each row is a candidate floor with its own grid
 lines, showing the Druid at 72 device px, at 36 device px, a bright projectile
 (`#ffd45e`), and a telegraph disc (`rgba(255,93,108,0.28)` fill, `#ff5d6c` edge).
+Those were the pre-`scale` sizes; he now paints at 108 and 53. The sweep was not
+re-rendered, because magnifying by 1.5 does not change how a colour sits against
+a floor — §3 measures exactly that and finds the axes flat.
 
 | floor | | Druid contrast | projectile | telegraph edge |
 |---|---|---|---|---|
@@ -127,7 +197,7 @@ playtest decides, not the gate.
 The signed-vs-absolute fix is one line with consequences for every future batch,
 and it should follow the playtest rather than pre-empt it.
 
-## 4. The tradeoff a lighter floor buys
+## 5. The tradeoff a lighter floor buys
 
 Raising the floor helps the Druid and costs the danger layer:
 
