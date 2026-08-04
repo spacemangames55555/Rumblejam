@@ -211,7 +211,7 @@
       "w": 128,
       "h": 128,
       "directions": 8,
-      "scale": 1.5
+      "scale": 2.25
     },
     "char.toh_hunter": {
       "file": "char/toh_hunter.png",

@@ -86,8 +86,19 @@ next to the rest of the roster is a **look** problem. `scale` multiplies how
 large the sprite is painted and changes nothing else:
 
 ```json
-"char.toh_druid": { "file": "char/toh_druid.png", "w": 128, "h": 128, "directions": 8, "scale": 1.5 }
+"char.toh_druid": { "file": "char/toh_druid.png", "w": 128, "h": 128, "directions": 8, "scale": 2.25 }
 ```
+
+> **The Druid ships at 2.25, past the hitbox ceiling. This is deliberate.**
+> Tuned against the floor grid: 2.0 reads slightly small, 2.5 slightly large.
+> At 2.25 his silhouette is 157 device px tall against a 144 px grid square and
+> a 50 px catch radius, so his antlers and boots sit about **29 device px
+> outside the circle that catches enemy shots** (his shoulders about 7 px).
+> Shots will visibly pass near the antlers and the boots without hitting. That
+> is an accepted trade for readability, not an oversight — see
+> `docs/art-review/druid/README.md` §6. If it stops being acceptable, the fix
+> is to grow the hitbox, not to shrink the art, and growing the hitbox is a
+> simulation change.
 
 It is **not** a radius. The tempting fix for art that reads small — nudge the
 entity's radius until it looks right — is a simulation change: radius is
@@ -304,11 +315,33 @@ size and checking the player radius is still 16 with nothing named `scale` in
 the snapshot.
 
 One caveat worth knowing before you settle on a number: the sprite is drawn
-`2 × radius` across, so past about **1.4×** a character's silhouette is wider
-and taller than the hitbox that catches shots, and past about **2×** the gap is
-wide enough to see shots pass through the art. That is a real ceiling, not a
-rendering artifact — beyond it the hitbox has to follow the art. See
+`2 × radius` across, so past about **1.4×** a character's silhouette is taller
+than the hitbox that catches shots, and past about **2×** the gap is wide enough
+to see shots pass through the art. That is a real ceiling, not a rendering
+artifact — beyond it the hitbox has to follow the art, which is a simulation
+change. The Druid ships past it on purpose; see
 `docs/art-review/druid/README.md` for the measured thresholds.
+
+### Known problem: `scale` is doing two jobs
+
+Today `scale` corrects for how much of its cell a sheet's figure happens to
+fill **and** expresses a deliberate size choice, and the two are not separable.
+Measured fill fractions across every sheet on hand:
+
+| sheet | cell | content | fill (height) |
+|---|---|---|---|
+| `char.pulsar` | 32 | 21×27 | 84.4% |
+| `char.toh_druid` | 128 | 90×124 | 96.9% |
+| batch-0 candidate A | 32 | 18×25 | 78.1% |
+| batch-0 candidate B | 32 | 21×26 | 81.3% |
+| batch-0 candidate C | 32 | 20×24 | 75.0% |
+| batch-0 candidate D | 32 | 29×31 | 96.9% |
+
+**75% to 97% — a 1.29× spread in apparent height for the same `scale` value**,
+and A–D came from one generator on one prompt family, so this is not an artifact
+of hand-supplied art. Every unit therefore lands at a different apparent size and
+needs its own hand-calibration. A proposal to normalize on content rather than
+cell is in `docs/art-review/druid/README.md` §7.
 
 ## What this layer is not
 
