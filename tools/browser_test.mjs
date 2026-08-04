@@ -1403,6 +1403,110 @@ try {
     }
   }
 
+  // ---- 5c. the manifest scale ON THE REAL PLAYER RENDER PATH ----
+  //
+  // Every other check in this file calls window.uvDrawSprite directly, on a
+  // scratch canvas. That proves drawSprite's arithmetic and NOTHING about
+  // whether the renderer reaches it: _drawPlayer could stop passing a scale,
+  // could size the sprite itself, could call a different helper, and every one
+  // of those tests would still pass. This one starts a real run through the
+  // real UI, picks a character whose sheet carries a manifest scale, and reads
+  // the size off the drawImage the renderer actually issues, with the live
+  // transform applied. It is the only test here that would fail if the player
+  // path stopped honouring the key.
+  {
+    const S6 = new Browser();
+    try {
+      await S6.open('S6');
+      const SCALED_CHAR = 'toh_druid', SCALED_ID = 'char.toh_druid';
+      await S6.goto(`${URL}?roster=toh`);
+      await S6.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 12000, 'title (scaled char)');
+      await S6.waitFor(`return window.uvAssets && window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled (scaled char)');
+      const decl = JSON.parse(await S6.exec(`
+        const A = window.uvAssets, d = A.declared('${SCALED_ID}');
+        return JSON.stringify({ declared: !!d, scale: d ? d.scale : null, w: d ? d.w : null, loaded: !!A.get('${SCALED_ID}') });`));
+
+      if (!decl.loaded || !(decl.scale > 1)) {
+        // The art or the override can legitimately be absent on a branch that
+        // has not landed them. Say so rather than passing silently.
+        ok(`no scaled character art on disk (${SCALED_ID}: loaded=${decl.loaded} scale=${decl.scale}) — real-path scale check skipped`);
+      } else {
+        await S6.exec(`document.getElementById('btn-host').click()`);
+        await S6.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 8000, 'lobby (scaled char)');
+        await S6.exec(`document.querySelector('.char-card[data-char="${SCALED_CHAR}"]').click()`);
+        await sleep(250);
+        await S6.exec(`document.getElementById('btn-start').click()`);
+        await S6.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run (scaled char)');
+        await S6.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
+        await S6.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena (scaled char)');
+        // a trait that offers boons on the fight covers the arena with its
+        // picker; take the offer so real frames of the arena actually run
+        await S6.exec(`
+          const s=window.uv.sim, p=s.players[0];
+          if (p.boonOffer && p.boonOffer.length) s.uiAction(0, { kind:'boon', id:p.boonOffer[0].id });
+          s.god=true; s.wave.done=true; s.spawnQueue.length=0;
+          for (const e of [...s.enemyPool]) s.enemyPool.release(e);
+          p.x=s.W/2; p.y=s.H/2; return 1;`);
+        await sleep(400);
+
+        // Capture the renderer's own drawImage for this sheet. getTransform()
+        // folds in the world-to-device scale, so onScreen is device pixels.
+        // exec() wraps in a plain function and resolves the returned promise,
+        // so page code that needs await has to hand back its own async IIFE.
+        const measured = JSON.parse(await S6.exec(`return (async () => {
+          const A = window.uvAssets, r = window.uvRenderer, s = window.uv.sim;
+          const entry = A.get('${SCALED_ID}');
+          const proto = CanvasRenderingContext2D.prototype, orig = proto.drawImage;
+          const grab = async mult => {
+            const was = entry.scale; entry.scale = mult;
+            const hits = [];
+            proto.drawImage = function (img, ...a) {
+              if (img === entry.img) { const t = this.getTransform();
+                hits.push(a.length === 8 ? a[6] * t.a : img.width * t.a); }
+              return orig.apply(this, [img, ...a]);
+            };
+            await new Promise(res => { let n=0; (function f(){ if(++n>8) return res(); requestAnimationFrame(f); })(); });
+            proto.drawImage = orig;
+            entry.scale = was;
+            return hits;
+          };
+          const one = await grab(1), scaled = await grab(${decl.scale});
+          const p = s.players[0];
+          return JSON.stringify({
+            at1: one[0] || null, atScale: scaled[0] || null,
+            calls1: one.length, callsScaled: scaled.length,
+            radius: p.radius, worldScale: r._screen.scale, cell: entry.w,
+            declaredScale: A.declared('${SCALED_ID}').scale, liveScale: entry.scale,
+          });
+        })();`));
+
+        if (!measured.calls1 || !measured.callsScaled) {
+          fail(`the renderer never drew ${SCALED_ID} — the real player path is not reaching drawSprite at all (${JSON.stringify(measured)})`);
+        } else {
+          // what the geometry says it must be: 2*radius world units, converted
+          // to device px, times the manifest multiplier. Derived from the live
+          // radius and viewport, not a constant retyped from the manifest.
+          const wantAt1 = measured.radius * 2 * measured.worldScale;
+          const wantScaled = wantAt1 * decl.scale;
+          const close = (a, b) => Math.abs(a - b) < 0.5;
+          if (close(measured.at1, wantAt1) && close(measured.atScale, wantScaled)) {
+            ok(`the real player render path honours the manifest scale — ${SCALED_ID} draws ${measured.at1.toFixed(1)} device px at scale 1 and ${measured.atScale.toFixed(1)} at ${decl.scale}, measured off the renderer's own drawImage`);
+          } else {
+            fail(`player path size: ${measured.at1?.toFixed(2)} (want ${wantAt1.toFixed(2)}) at scale 1, ${measured.atScale?.toFixed(2)} (want ${wantScaled.toFixed(2)}) at ${decl.scale} — ${JSON.stringify(measured)}`);
+          }
+          const ratio = measured.atScale / measured.at1;
+          if (Math.abs(ratio - decl.scale) < 0.01) ok(`and the ratio is exactly the manifest's ${decl.scale}x (${ratio.toFixed(3)}) — nothing between the manifest and the canvas is dropping or double-applying it`);
+          else fail(`on-screen ratio ${ratio.toFixed(3)}, manifest says ${decl.scale}`);
+          if (measured.liveScale === measured.declaredScale) ok(`and the probe left ${SCALED_ID} at its declared scale (${measured.liveScale})`);
+          else fail(`probe leaked: live ${measured.liveScale} vs declared ${measured.declaredScale}`);
+        }
+      }
+      const s6errs = await S6.errors();
+      if (s6errs.length) fail(`console errors in the scaled-character run: ${s6errs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors driving a real run with a scaled character sheet');
+    } catch (e) { fail(`real-path scale test: ${e.message}`); } finally { await S6.close(); }
+  }
+
   // ---- 6. ?sprites=debug names what is missing and what row it picked ----
   {
     const S5 = new Browser();
