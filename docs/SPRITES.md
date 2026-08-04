@@ -59,6 +59,7 @@ character gets an inventory entry automatically and cannot be forgotten.
 | `anchor` | `"center"` | `"bottom"` puts the art's feet on the entity's position — use it for anything standing on the floor |
 | `directions` | `1` | rows in the grid. `1` (or absent) is the old rotated behaviour |
 | `scale` | `1` | cosmetic render-size multiplier — see below |
+| `content` | — | `[w, h]`, the measured opaque bounds of the tallest cell. The loader divides its height out so `scale` means the same thing on every sheet — see below |
 
 **Sheets are strips; unit sheets are grids.** Columns are animation frames,
 rows are facings. The cell for (frame, direction) sits at
@@ -86,8 +87,23 @@ next to the rest of the roster is a **look** problem. `scale` multiplies how
 large the sprite is painted and changes nothing else:
 
 ```json
-"char.toh_druid": { "file": "char/toh_druid.png", "w": 128, "h": 128, "directions": 8, "scale": 1.5 }
+"char.toh_druid": { "file": "char/toh_druid.png", "w": 128, "h": 128, "directions": 8,
+                   "scale": 2.18, "content": [90, 124] }
 ```
+
+> **The Druid ships past the hitbox ceiling. This is deliberate.**
+> Tuned against the floor grid at an effective 2.25×: 2.0 read slightly small,
+> 2.5 slightly large. The manifest says `2.18` because `scale` is now measured
+> against the silhouette rather than the cell, and his art fills 124 of its 128
+> cell: `2.18 × (128/124) = 2.2503`. Same size, stated against content.
+> His silhouette is 157 device px tall against a 144 px grid square and
+> a 50 px catch radius, so his antlers and boots sit about **29 device px
+> outside the circle that catches enemy shots** (his shoulders about 7 px).
+> Shots will visibly pass near the antlers and the boots without hitting. That
+> is an accepted trade for readability, not an oversight — see
+> `docs/art-review/druid/README.md` §6. If it stops being acceptable, the fix
+> is to grow the hitbox, not to shrink the art, and growing the hitbox is a
+> simulation change.
 
 It is **not** a radius. The tempting fix for art that reads small — nudge the
 entity's radius until it looks right — is a simulation change: radius is
@@ -276,6 +292,106 @@ Projectiles are drawn rotated to their heading, so draw them pointing **right**
 |---|---|
 | `?sprites=off` | forces every fallback. The renderer behaves exactly as it did before this layer existed — useful for A/B comparison and as an escape hatch if art regresses something. |
 | `?sprites=debug` | logs every missing id once at load, outlines a magenta dashed box wherever a sprite was requested but absent, and prints the **resolved direction row** on every directional sprite. Use the readout: an off-by-one and a mirrored row order both look *almost* right in motion and are genuinely hard to spot by eye. |
+| `?spritescale=N` | paints **every** sprite N times larger. |
+| `?playerscale=N` | paints **player sprites** N times larger — the `char.` namespace, which is the character sheets of both rosters plus the decoy ghost that borrows one. |
+
+### Finding a size by eye
+
+`?spritescale` and `?playerscale` exist so the right size can be settled in a
+real arena at a real viewport, rather than by arguing about a number in a
+manifest. They **compose**, with each other and with the manifest's own
+`scale`, so:
+
+```
+?playerscale=1.4                    the Druid's shipped 1.5 becomes 2.1
+?spritescale=1.2&playerscale=1.5    players 1.8x, everything else 1.2x
+```
+
+Range is `0 < N ≤ 8`; anything else warns and is ignored. Absent means 1, so a
+URL without them is bit-identical to one from before they existed. When either
+is active the loader says so once in the console, because a screenshot taken at
+3× and filed as "the art looks wrong" costs more to unpick than one log line.
+
+They are **cosmetic, exactly like the manifest key** — no radius, no hitbox, no
+collision, nothing on the wire. Two players on the same host with different
+flags see different sizes and agree completely about where everyone is and what
+they hit. The browser suite asserts this by driving a real run at 3× painted
+size and checking the player radius is still 16 with nothing named `scale` in
+the snapshot.
+
+One caveat worth knowing before you settle on a number: the sprite is drawn
+`2 × radius` across, so past about **1.4×** a character's silhouette is taller
+than the hitbox that catches shots, and past about **2×** the gap is wide enough
+to see shots pass through the art. That is a real ceiling, not a rendering
+artifact — beyond it the hitbox has to follow the art, which is a simulation
+change. The Druid ships past it on purpose; see
+`docs/art-review/druid/README.md` for the measured thresholds.
+
+### `content` — what makes `scale` mean the same thing on every sheet
+
+A sheet's figure fills whatever fraction of its cell the artist or the generator
+happened to leave it. Measured fill fractions across every sheet on hand when
+this was written:
+
+| sheet | cell | content | fill (height) |
+|---|---|---|---|
+| `char.pulsar` | 32 | 21×27 | 84.4% |
+| `char.toh_druid` | 128 | 90×124 | 96.9% |
+| batch-0 candidate A | 32 | 18×25 | 78.1% |
+| batch-0 candidate B | 32 | 21×26 | 81.3% |
+| batch-0 candidate C | 32 | 20×24 | 75.0% |
+| batch-0 candidate D | 32 | 29×31 | 96.9% |
+
+**75% to 97% — a 1.29× spread in apparent height for the same `scale` value**,
+and A–D came from one generator on one prompt family, so this is not an artifact
+of hand-supplied art. Uncorrected, every unit lands at a different apparent size
+and needs its own hand-calibration.
+
+So the manifest records `content: [w, h]` — the opaque bounds of the tallest
+cell — and the loader divides its height out:
+
+```
+fit = h / content[1]           painted size = callerScale × fit × scale × tuning
+```
+
+`content` is **measured, never typed**. `process_sprite.mjs` writes it when it
+assembles a sheet; for art installed before this existed, backfill it with:
+
+```
+node tools/process_sprite.mjs --record-content char.pulsar
+```
+
+A hand-entered content box would itself be a padding correction, and a wrong one
+is invisible.
+
+#### `scale: 1.0` now means something
+
+**The sprite's silhouette is exactly as tall as the entity's diameter.** That is
+art-independent: it holds whether the PNG was cropped tight or exported with
+half a cell of air around it. Any other value is therefore a **deliberate design
+choice about that character** — "this one reads as a big character" — and not a
+correction for how its file happened to be cropped. Two characters with the same
+`scale` are the same height on screen, which is what makes the number worth
+comparing across a roster.
+
+#### Height, not width, and not area
+
+A character's **height** is what reads as its size. Widths legitimately differ —
+a cloaked figure against a spear-carrier — and normalising those to each other
+would flatten a difference the art is making on purpose. Normalising on the
+wrong axis is the same class of mistake as scaling the cell instead of the
+figure, which is precisely what this fixes; picking the axis deliberately is
+half the point.
+
+#### A sheet with no `content` warns
+
+Absent `content` means `fit = 1`, which is the old cell-normalised behaviour
+exactly — and that is how this regresses **silently**, with no symptom beyond a
+character that looks slightly wrong next to the others. Same shape as a stale
+loader meeting a newer manifest: two halves disagreeing, a wrong picture, zero
+diagnostics. So the loader says so at load, naming every id and the command that
+fixes it, and exposes the set as `Assets.missingContent`. The sim suite fails if
+any installed sheet lacks it.
 
 ## What this layer is not
 

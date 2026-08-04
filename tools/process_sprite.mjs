@@ -3,6 +3,11 @@
 //
 //   node tools/process_sprite.mjs <spriteId> <inputDir> [options]
 //
+//   node tools/process_sprite.mjs --record-content <spriteId>
+//     Measure `content` on the sheet ALREADY on disk and record it, without
+//     reassembling. For art installed before content normalisation existed;
+//     assembly records it automatically.
+//
 //   --recenter=row|cell|sheet|none   default: row (see below)
 //   --frames=N                       override the detected frame count
 //   --fps=N                          animation rate to record in the manifest
@@ -52,6 +57,64 @@ const flags = Object.fromEntries(args.filter(a => a.startsWith('--'))
 const [spriteId, inputDir] = args.filter(a => !a.startsWith('--'));
 
 const die = msg => { console.error(`✗ ${msg}`); process.exit(1); };
+
+// The opaque bounds of the TALLEST cell in an assembled grid. This is what the
+// loader divides out, so it is measured here rather than typed anywhere — a
+// hand-entered content box would be a padding correction that is itself wrong.
+// Height drives normalisation; width is recorded because it is free and the
+// review documents want it.
+function measureContent(img, cellW, cellH, frames, directions) {
+  let bw = 0, bh = 0;
+  for (let d = 0; d < directions; d++) {
+    for (let f = 0; f < frames; f++) {
+      const b = opaqueBounds(img, f * cellW, d * cellH, cellW, cellH);
+      if (!b) continue;
+      bw = Math.max(bw, b.w);
+      bh = Math.max(bh, b.h);
+    }
+  }
+  return bh > 0 ? [bw, bh] : null;
+}
+
+// Only touch the keys this tool OWNS, and keep the file sorted.
+function patchOverrides(id, patch) {
+  const over = existsSync(OVERRIDES) ? JSON.parse(readFileSync(OVERRIDES, 'utf8')) : {};
+  const mine = { ...(over[id] || {}), ...patch };
+  for (const [k, v] of Object.entries(patch)) if (v === undefined) delete mine[k];
+  if (Object.keys(mine).length) over[id] = mine; else delete over[id];
+  writeFileSync(OVERRIDES, JSON.stringify(Object.fromEntries(Object.keys(over).sort().map(k => [k, over[k]])), null, 2) + '\n');
+}
+
+const regen = () => {
+  try {
+    execFileSync(process.execPath, [join(ROOT, 'tools', 'gen_assets_manifest.mjs')], { stdio: 'pipe' });
+    console.log('✓ manifest regenerated');
+  } catch (err) { die(`manifest regeneration failed: ${err.message}`); }
+};
+
+// ---- --record-content: measure art that is already installed ----
+if (flags['record-content']) {
+  const id = spriteId;
+  if (!id) die('usage: node tools/process_sprite.mjs --record-content <spriteId>');
+  const man = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  const sp = man.sprites[id];
+  if (!sp) die(`"${id}" is not in assets/assets.json`);
+  const file = join(ROOT, man.basePath, sp.file);
+  if (!existsSync(file)) die(`${sp.file} is not on disk — nothing to measure`);
+  const img = decodePng(readFileSync(file));
+  const fr = sp.frames > 0 ? sp.frames : 1, dr = sp.directions > 1 ? sp.directions : 1;
+  if (img.width !== sp.w * fr || img.height !== sp.h * dr) {
+    die(`${sp.file} is ${img.width}x${img.height}, manifest wants ${sp.w * fr}x${sp.h * dr} — fix the manifest before measuring content from it`);
+  }
+  const content = measureContent(img, sp.w, sp.h, fr, dr);
+  if (!content) die(`${id}: every cell is transparent`);
+  console.log(`${id}: content ${content[0]}x${content[1]} of a ${sp.w}x${sp.h} cell — fills ${(100 * content[1] / sp.h).toFixed(1)}% of cell height`);
+  console.log(`  fit = ${sp.h}/${content[1]} = ${(sp.h / content[1]).toFixed(4)}`);
+  if (flags['dry-run']) { console.log('  --dry-run: nothing written'); process.exit(0); }
+  patchOverrides(id, { content });
+  regen();
+  process.exit(0);
+}
 
 if (!spriteId || !inputDir) die('usage: node tools/process_sprite.mjs <spriteId> <inputDir> [--recenter=row] [--dry-run]');
 
@@ -284,21 +347,20 @@ if (flags.out) {
 // assets.json is GENERATED, so anything hand-written into it is lost on the
 // next regeneration. Per-sprite deviations from the category default live in
 // this side file, which the generator merges.
-const over = existsSync(OVERRIDES) ? JSON.parse(readFileSync(OVERRIDES, 'utf8')) : {};
+// The opaque bounds of the tallest cell, so the loader can divide the padding
+// out and `scale` means the same thing on every sheet. Measured from the grid
+// this run just assembled, which is the only honest source for it.
+const content = measureContent(grid, cellW, cellH, frames, directions);
+if (!content) die(`${spriteId}: every cell is transparent`);
+console.log(`  content ${content[0]}x${content[1]} — fills ${(100 * content[1] / cellH).toFixed(1)}% of cell height, fit ${(cellH / content[1]).toFixed(4)}`);
+
 // Only touch the keys this tool OWNS. It used to delete the whole entry when it
 // had nothing of its own to record, which silently destroyed a hand-set w/h or
 // directions override and dropped the sprite back to its category defaults —
 // where the loader then rejected the file for being the wrong size.
-const mine = { ...(over[spriteId] || {}) };
-if (frames > 1) mine.frames = frames; else delete mine.frames;
-if (flags.fps) mine.fps = Number(flags.fps);
-if (Object.keys(mine).length) over[spriteId] = mine;
-else delete over[spriteId];
-writeFileSync(OVERRIDES, JSON.stringify(Object.fromEntries(Object.keys(over).sort().map(k => [k, over[k]])), null, 2) + '\n');
-
-try {
-  execFileSync(process.execPath, [join(ROOT, 'tools', 'gen_assets_manifest.mjs')], { stdio: 'pipe' });
-  console.log('✓ manifest regenerated');
-} catch (err) {
-  die(`manifest regeneration failed: ${err.message}`);
-}
+patchOverrides(spriteId, {
+  frames: frames > 1 ? frames : undefined,
+  ...(flags.fps ? { fps: Number(flags.fps) } : {}),
+  content,
+});
+regen();

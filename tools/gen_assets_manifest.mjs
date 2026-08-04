@@ -86,7 +86,11 @@ for (const id of Object.values(UI)) add(id);
 // ever an override, never a category default, so a sprite that does not name
 // it here is drawn at exactly 1 — which is also the only way the fast path in
 // drawSprite stays intact for the other 297 ids.
-const OVERRIDABLE = new Set(['frames', 'fps', 'directions', 'anchor', 'w', 'h', 'scale']);
+//
+// `content` is the measured opaque bounds of the tallest cell, written by
+// tools/process_sprite.mjs. The loader divides its height out so `scale` means
+// the same thing on every sheet regardless of how the art was padded.
+const OVERRIDABLE = new Set(['frames', 'fps', 'directions', 'anchor', 'w', 'h', 'scale', 'content']);
 let overrides = {};
 if (existsSync(OVERRIDES)) {
   overrides = JSON.parse(readFileSync(OVERRIDES, 'utf8'));

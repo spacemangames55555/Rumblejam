@@ -138,7 +138,11 @@
       "file": "char/pulsar.png",
       "w": 32,
       "h": 32,
-      "directions": 8
+      "directions": 8,
+      "content": [
+        21,
+        27
+      ]
     },
     "char.quartermaster": {
       "file": "char/quartermaster.png",
@@ -211,7 +215,11 @@
       "w": 128,
       "h": 128,
       "directions": 8,
-      "scale": 1.5
+      "scale": 2.18,
+      "content": [
+        90,
+        124
+      ]
     },
     "char.toh_hunter": {
       "file": "char/toh_hunter.png",
