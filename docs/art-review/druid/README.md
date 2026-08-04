@@ -227,7 +227,93 @@ lost among them; at 2.0 he is the clearest thing on screen; at 2.5 he starts
 hiding the enemies immediately around him, which is the cost nobody notices
 until a shot comes from behind his cloak.
 
-## 5. The gate is still wrong in the same specific, fixable way
+## 5. Where he got smaller — the cell is not the character
+
+Casey saw the Druid shrink between two screenshots with the same crop and the
+same grid, during work that only added facings. [`06-where-he-shrank.png`](06-where-he-shrank.png)
+reproduces it on the current build with a URL flag, no time travel needed.
+
+**The autocrop did not change.** Measured from the committed sheet at every
+commit that touched it:
+
+| commit | UTC | manifest | per-row content | max | cell fill |
+|---|---|---|---|---|---|
+| `ba42f20` | 08-03 23:16 | `128x128 d4` | 53x122 · 88x118 · 54x123 · 90x118 | 90x123 | 96.1% H, 70.3% W |
+| `128540d` | 08-03 23:49 | `128x128 d8` | + 84x122 · 67x124 · 80x121 · 71x121 | 90x124 | 96.9% H, 70.3% W |
+| `e690b36` | 08-04 03:56 | `+ scale 1.5` | unchanged | 90x124 | 96.9% H, 70.3% W |
+
+The four cardinal rows are byte-identical across the 4→8 install. The union grew
+by one pixel of height because the new SW row is 124 tall. **Width fill is
+identical at 70.3%.** Question answered: the eight-facing install did not change
+the cell fill, and `--autocrop` is not the cause.
+
+It could not have been, in fact. `--autocrop` crops the sources to their union
+bbox and then blits that into the cell **without resampling**, so the figure
+occupies the same pixel count whatever the crop box is. A larger union adds
+padding; it does not shrink the figure. The tool refuses a crop larger than the
+cell rather than scaling to fit.
+
+**Rendered size by commit**, measured off the renderer's own `drawImage` in a
+real arena at 1440×900 @dpr2, each commit checked out into its own worktree:
+
+| commit | UTC | on screen | |
+|---|---|---|---|
+| `928b643` … `c66d897` | 08-03 16:26 → 20:28 | 72.0 px | primitive disc, no art on disk |
+| `ba42f20` | 08-03 23:16 | 72.0 px | sprite, cell 128, scale 1 |
+| `128540d` | 08-03 23:49 | 72.0 px | sprite, 8 rows |
+| `e690b36` | 08-04 03:56 | 108.0 px | scale 1.5 |
+| `d706c49` | 08-04 14:00 | 108.0 px | tuning flags, default 1 |
+
+**The cell never shrinks.** It is 72 px from the beginning and only ever goes
+up. Which is the point: the cell is not what a player sees.
+
+### The actual mechanism
+
+The primitive was a **filled disc of diameter `2 × radius`** — 72 px, solid,
+edge to edge. The sprite is drawn into a box of that same 72 px, but the figure
+only fills part of it: the south row is 88×118 of its 128 cell, **68.8% of the
+width**.
+
+| | visible width | visible height |
+|---|---|---|
+| primitive disc | **72.0 px** | 72.0 px |
+| sprite, scale 1.0 | **49.5 px** | 66.4 px |
+| sprite, scale 1.5 | 74.3 px | 99.6 px |
+
+**Installing the art shrank the character by 31% across, with the cell, the
+grid, the camera and the viewport all unchanged.** Every dimension check passed
+the whole way through, because every dimension check is about the cell.
+
+That is exactly the cell-versus-content failure — the renderer scales the sheet,
+not the figure — it just bit at the primitive→sprite transition rather than at
+4→8 facings.
+
+### When it deployed
+
+Two transitions exist in the whole history, and only one is a shrink.
+
+| | deployed (UTC) | effect |
+|---|---|---|
+| primitive → sprite | **2026-08-04T00:49:03Z** (Pages run #19, `55e10bd`) | **−31% visible width** |
+| scale 1.0 → 1.5 | 2026-08-04T11:43:20Z (Pages run #20, `22f11b3`) | +50% |
+
+A 05:00→05:48 local window contains 00:49:03Z for a clock at **UTC+4:30**.
+Worth confirming Casey's offset before treating that as settled, but it is the
+only shrink there is.
+
+### What this means for the target
+
+Size can move without anyone changing a size — but not on its own, and not
+unboundedly. It moves when the *fraction of the cell that is character* changes,
+which happens exactly once per asset: when the art replaces the primitive. Any
+future character lands the same way, and each one has its own fill fraction, so
+"the roster looks inconsistent" is the expected outcome of shipping art, not a
+regression.
+
+The fix is to state the target in terms of the thing being looked at. The grid
+gives that: **2.0× by cell, 2.06× by silhouette.** Not applied here.
+
+## 6. The gate is still wrong in the same specific, fixable way
 
 Nothing here changes that finding, and nothing in the gate was touched.
 
@@ -269,7 +355,7 @@ playtest decides, not the gate.
 The signed-vs-absolute fix is one line with consequences for every future batch,
 and it should follow the playtest rather than pre-empt it.
 
-## 6. The tradeoff a lighter floor buys
+## 7. The tradeoff a lighter floor buys
 
 Raising the floor helps the Druid and costs the danger layer:
 
