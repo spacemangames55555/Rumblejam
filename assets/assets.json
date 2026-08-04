@@ -269,9 +269,14 @@
     },
     "char.toh_savage": {
       "file": "char/toh_savage.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        117,
+        122
+      ]
     },
     "char.toh_sundian": {
       "file": "char/toh_sundian.png",

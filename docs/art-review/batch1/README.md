@@ -1,13 +1,14 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Three are in.**
+Thirteen characters to install. **Four are in.**
 
 | | character | id | status |
 |---|---|---|---|
 | ✓ | Hunter | `char.toh_hunter` | installed |
 | ✓ | Witch Doctor | `char.toh_witch_doctor` | installed |
 | ✓ | Assassin | `char.toh_assassin` | installed |
-| | Blacksmith · Wizard · Necromancer · Mage · Bard · Samurai · Monk · Priest · Savage · Sundian | | awaiting art (10) |
+| ✓ | Savage | `char.toh_savage` | installed |
+| | Blacksmith · Wizard · Necromancer · Mage · Bard · Samurai · Monk · Priest · Sundian | | awaiting art (9) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -29,17 +30,23 @@ artifact of padding.
 | Druid (anchor) | 2.18 | 1.0323 | 90×124 | 162.0 | **157.0** | — |
 | Witch Doctor | 2.18 | 1.0240 | 120×125 | 160.7 | **157.0** | **+0.00%** |
 | Assassin | 2.18 | 1.0492 | 121×122 | 164.7 | **157.0** | **−0.00%** |
+| Savage | 2.18 | 1.0492 | 117×122 | 164.7 | **157.0** | **−0.00%** |
 | Hunter | 2.18 | 1.0492 | 101×122 | 164.7 | **157.0** | **−0.00%** |
 
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Four sheets, four different content boxes, cell fills from 95.3% to 97.7%, and
-**two different source canvases** — the Druid and the Assassin at 248×248, the
-Hunter and Witch Doctor at 256×256. Their **cells** span 160.7 to 164.7 device
-px, a 4px spread that means nothing. Their **silhouettes are identical to a
-tenth of a pixel.** That is what content normalization is for, and it is holding
-on three characters it was not derived from, across two canvas sizes.
+Five sheets, five different content boxes, cell fills from 95.3% to 97.7%, and
+**three different source canvases**: 244×244 (Savage), 248×248 (Druid,
+Assassin), 256×256 (Hunter, Witch Doctor). Their **cells** span 160.7 to 164.7
+device px, a 4px spread that means nothing. Their **silhouettes are identical to
+a tenth of a pixel.**
+
+Three canvas sizes arriving unannounced across five characters is exactly the
+situation content normalization was built for, and it turned up on its own
+rather than as a test case. Before the change this would have produced three
+different apparent sizes and required per-character hand-calibration to hide it.
+The canvas an artist happens to export on is now invisible to the game.
 
 ### Per-facing height spread
 
@@ -52,8 +59,12 @@ would render its other seven short. Measured:
 | Hunter | 118 118 120 122 118 116 116 118 | 122 | 116 | 4.9% |
 | Witch Doctor | 125 122 122 124 122 118 122 125 | 125 | 118 | 5.6% |
 | Assassin | 120 120 119 122 120 115 120 121 | 122 | 115 | 5.7% |
+| Savage | 122 121 121 122 122 120 121 122 | 122 | 120 | **1.6%** |
 
-All four sit in the same ~5% band, so no facing is dragging its character
+Four sit in the same ~5% band and the Savage is notably tighter at 1.6% — his
+pose barely changes height between facings, where the others bob a few pixels.
+Nothing to act on; it just means his eight drawings are unusually consistent
+with each other. All five sit, so no facing is dragging its character
 smaller. Worth re-checking per character: a raised staff or a leaping pose in
 one facing only would show up here as a spread well outside this range, and the
 fix would be art-side rather than a scale tweak.
@@ -140,29 +151,56 @@ four; the sheet was not assembled until all eight were present.
 Assembled to `assets/sprites/char/toh_assassin.png`, 128×1024, `directions: 8`,
 `content: [121, 122]`, `scale: 2.18`. Autocrop 248×248 → 123×124.
 
+### Savage
+
+Supplied 2026-08-04, eight **244×244** RGBA PNGs — a third canvas size, in two
+messages of four; not assembled until all eight were present.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `09e211fc057cd3a47f4e2c750796968d` | `savage/sources/east.png` |
+| SE | `a884b6a175b8bf2b60fe51f0478e99bf` | `savage/sources/southeast.png` |
+| S | `26e3757545c8b39efb13e4b5c6671c3b` | `savage/sources/south.png` |
+| SW | `f0eafe32c2456271e8c2b5e55c9941fb` | `savage/sources/southwest.png` |
+| W | `2227a5806684d4b1623a90cc21dbf714` | `savage/sources/west.png` |
+| NW | `0549baaebe4ebd0028fb62edb7b379c1` | `savage/sources/northwest.png` |
+| N | `67c9b1b7a84dde316d5665df6ae6983e` | `savage/sources/north.png` |
+| NE | `54f0600e2ba49c5c468ead7fd0263313` | `savage/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_savage.png`, 128×1024, `directions: 8`,
+`content: [117, 122]`, `scale: 2.18`. Autocrop 244×244 → 120×122.
+
 ## What the contact sheet shows — look at this, not at numbers
 
-Size is settled and mechanical. What the sheet is for is everything else, and
-with four characters up there is one thing to call:
+Size is settled and mechanical. The sheet is for everything else, and with five
+characters up there is a pattern rather than a one-off.
 
-**The Assassin reads lighter and cooler than the other three.** A white hood and
-a pale blue-grey cloak against the Druid's dark greens, the Hunter's olive and
-leather, and the Witch Doctor's bronze and teal. He is the only one whose
-largest value mass is high rather than low, and on the near-black arena floor
-that makes him the most legible figure of the four by a clear margin.
+**Two characters are pulling away from the style clause, in opposite
+directions.**
 
-Whether that is a problem is a judgement, which is the point of having moved
-this off the gate. Two readings, both defensible:
+- The **Assassin** is pale and cool — white hood, blue-grey cloak. His largest
+  value mass sits high, where the anchor's sits low.
+- The **Savage** is warm and high-chroma — orange, turquoise and brass, with a
+  lot of bright saturated mid-tone.
 
-- **It is characterisation.** An assassin in pale grey is a deliberate contrast
-  against a roster of earth tones, and readability is not a flaw.
-- **It is drift.** The style clause asks for a *"muted earthy palette of greens
-  browns and leather"* and this is neither earthy nor muted. If the next
-  character also arrives pale, the clause is not doing its job — which is the
-  round-trip test `docs/STYLE_ANCHOR.md` says has never been run.
+The clause asks for a *"muted earthy palette of greens browns and leather,
+desaturated next to arcade colour"*. The Druid, Hunter and Witch Doctor all sit
+inside that. These two do not, and they miss it in different directions, so it
+is not a systematic shift the clause could be rewritten to capture.
 
-Worth watching across the next few rather than deciding on one. Nothing has been
-changed on account of it.
+One outlier is characterisation. **Two outliers in opposite directions is the
+clause not constraining much** — which matters, because
+[`../../STYLE_ANCHOR.md`](../../STYLE_ANCHOR.md) records that the clause was
+written *from* the Druid and has **never been round-tripped**. Nobody has
+generated a unit from it and checked the result sits next to him. That test
+being outstanding is now the most likely explanation for the spread, and it gets
+cheaper to act on the sooner it happens.
+
+**Nothing has been changed on account of this.** It is an observation for
+whoever looks at the sheet, which is the point of it being here rather than in a
+gate. If the next two or three arrive inside the clause, this was two characters
+with strong identities and the answer is nothing. If they keep scattering, the
+clause needs the round-trip before the remaining nine are commissioned.
 
 ## A tooling bug this batch found
 

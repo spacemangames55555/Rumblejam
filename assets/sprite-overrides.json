@@ -32,6 +32,15 @@
       122
     ]
   },
+  "char.toh_savage": {
+    "w": 128,
+    "h": 128,
+    "scale": 2.18,
+    "content": [
+      117,
+      122
+    ]
+  },
   "char.toh_witch_doctor": {
     "w": 128,
     "h": 128,
