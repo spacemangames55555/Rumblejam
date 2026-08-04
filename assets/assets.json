@@ -257,9 +257,14 @@
     },
     "char.toh_priest": {
       "file": "char/toh_priest.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        88,
+        119
+      ]
     },
     "char.toh_samurai": {
       "file": "char/toh_samurai.png",

@@ -1,6 +1,6 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Five are in.**
+Thirteen characters to install. **Six are in.**
 
 | | character | id | status |
 |---|---|---|---|
@@ -9,7 +9,8 @@ Thirteen characters to install. **Five are in.**
 | ✓ | Assassin | `char.toh_assassin` | installed |
 | ✓ | Savage | `char.toh_savage` | installed |
 | ✓ | Samurai | `char.toh_samurai` | installed |
-| | Blacksmith · Wizard · Necromancer · Mage · Bard · Monk · Priest · Sundian | | awaiting art (8) |
+| ✓ | Priest | `char.toh_priest` | installed |
+| | Blacksmith · Wizard · Necromancer · Mage · Bard · Monk · Sundian | | awaiting art (7) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -34,13 +35,21 @@ artifact of padding.
 | Assassin | 2.18 | 1.0492 | 121×122 | 164.7 | **157.0** | **−0.00%** |
 | Savage | 2.18 | 1.0492 | 117×122 | 164.7 | **157.0** | **−0.00%** |
 | Hunter | 2.18 | 1.0492 | 101×122 | 164.7 | **157.0** | **−0.00%** |
+| Priest | 2.18 | 1.0756 | 88×119 | **168.8** | **157.0** | **−0.00%** |
 
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Six sheets, six different content boxes, cell fills from 95.3% to 97.7%, and
-**three different source canvases**: 244×244 (Savage), 248×248 (Druid, Assassin,
-Samurai), 256×256 (Hunter, Witch Doctor). Their **cells** span 160.7 to 164.7
+Seven sheets, seven different content boxes, cell fills from **93.0% to 97.7%**,
+and three different source canvases: 244×244 (Savage, Priest), 248×248 (Druid,
+Assassin, Samurai), 256×256 (Hunter, Witch Doctor).
+
+The Priest stretched the range: at 93.0% cell fill his `fit` is 1.0756, the
+largest so far, and his cell renders at **168.8 device px against the Druid's
+162.0** — an 8.1px spread where it was 4.0px a character ago. The silhouettes
+are still identical. Normalization is now visibly doing more work than it was,
+which is the point: the spread it absorbs grows with the roster, and every
+pixel of it would otherwise have been a hand-calibration. Their **cells** span 160.7 to 164.7
 device px, a 4px spread that means nothing. Their **silhouettes are identical to
 a tenth of a pixel.**
 
@@ -63,11 +72,12 @@ would render its other seven short. Measured:
 | Assassin | 120 120 119 122 120 115 120 121 | 122 | 115 | 5.7% |
 | Savage | 122 121 121 122 122 120 121 122 | 122 | 120 | **1.6%** |
 | Samurai | 122 123 122 123 122 121 120 121 | 123 | 120 | **2.4%** |
+| Priest | 118 118 114 115 119 117 113 112 | 119 | 112 | 5.9% |
 
 Four sit in the same ~5% band; the Savage (1.6%) and Samurai (2.4%) are notably
 tighter — their poses barely change height between facings, where the others bob
 a few pixels. Nothing to act on; it just means those eight drawings are unusually
-consistent with each other. All six sit, so no facing is dragging its character
+consistent with each other. All seven sit, so no facing is dragging its character
 smaller. Worth re-checking per character: a raised staff or a leaping pose in
 one facing only would show up here as a spread well outside this range, and the
 fix would be art-side rather than a scale tweak.
@@ -192,47 +202,84 @@ assembled until all eight were present.
 Assembled to `assets/sprites/char/toh_samurai.png`, 128×1024, `directions: 8`,
 `content: [97, 123]`, `scale: 2.18`. Autocrop 248×248 → 116×124.
 
+### Priest
+
+Supplied 2026-08-04, eight **244×244** RGBA PNGs, in two messages of four; not
+assembled until all eight were present.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `cc60192f622b7b2e1f551c9d9e29ebd8` | `priest/sources/east.png` |
+| SE | `7690ef1be1a6b087a6226d0427d41d4d` | `priest/sources/southeast.png` |
+| S | `1f9e3f71043c35c61f203a4eae3637e0` | `priest/sources/south.png` |
+| SW | `eafd35b1670634725c70f448c4002101` | `priest/sources/southwest.png` |
+| W | `c11dd85b8ba7919c7a4367f75a90dd0c` | `priest/sources/west.png` |
+| NW | `bd6bfad7fbd200c0c6baa9d33c3aa32b` | `priest/sources/northwest.png` |
+| N | `a0e685cdf9f92b349ae0b5677097370b` | `priest/sources/north.png` |
+| NE | `5680d126e2f135f0763ccdef8a647110` | `priest/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_priest.png`, 128×1024, `directions: 8`,
+`content: [88, 119]`, `scale: 2.18`. Autocrop 244×244 → 92×122.
+
 ## What the contact sheet shows — look at this, not at numbers
 
-Size is settled and mechanical. The sheet is for everything else.
+Size is settled and mechanical. The sheet is for everything else, and at seven
+characters the palette split has stopped looking like noise.
 
-**Six characters, and the palette splits four to two.**
+**Four inside the style clause** — *"muted earthy palette of greens browns and
+leather"*, dark-dominant with a small bright tail:
 
-Inside the style clause — *"muted earthy palette of greens browns and leather,
-desaturated next to arcade colour"*, dark-dominant with a small bright tail:
+**Druid** (dark greens, leather, antler bone) · **Hunter** (olive, webbing,
+gunmetal) · **Witch Doctor** (bronze and teal over dark cloth) · **Samurai**
+(indigo lacquer, straw kasa, steel)
 
-- **Druid** — dark greens, leather, antler bone
-- **Hunter** — olive, webbing, gunmetal
-- **Witch Doctor** — bronze and teal over dark cloth
-- **Samurai** — indigo lacquer, straw kasa, steel
+**Three outside it** — but not at random:
 
-Outside it, in **opposite directions**:
+| | | |
+|---|---|---|
+| **Assassin** | pale and cool | white hood, blue-grey cloak |
+| **Priest** | pale and cool | seafoam and cream robes, white hood, gold trim |
+| **Savage** | warm, high-chroma | orange, turquoise, brass |
 
-- **Assassin** — pale and cool. White hood, blue-grey cloak; his largest value
-  mass sits high where the other four sit low.
-- **Savage** — warm and high-chroma. Orange, turquoise and brass, a lot of
-  bright saturated mid-tone.
+### The outliers are correlated with silhouette class, not random
 
-### Reading it
+**Both pale outliers are hooded robes.** The Assassin and the Priest are the
+only two characters so far whose primary garment is a large hooded robe or
+cloak, and they are the only two whose value mass sits high. Everyone in the
+agreeing group wears armour, webbing or layered cloth — lots of small shapes
+with dark separations between them.
 
-At four characters this looked like the clause failing to constrain. At six it
-looks more like **two characters with strong identities and four that agree** —
-the Samurai landed squarely in the group without anything being asked of him,
-which is the first positive evidence the clause is doing work rather than being
-ignored.
+That is a mechanism, not a coincidence. The clause asks for *"strong dark
+outline and deep shadow mass"*, which a figure made of many small pieces gets
+for free from the gaps between them. A robe is one large continuous surface with
+nowhere for that shadow mass to live, so it comes back light.
 
-That is a change of read, and it was a prediction before it was an observation:
-the Samurai was called as inside-clause from his source files, and the sheet
-confirmed it. Worth stating because the opposite happened with the Assassin —
-he looked unremarkable in isolation and only stood out once he was next to the
-others at 157 px. **The sheet is the evidence; source files are a guess.**
+**This revises the read for the third time, and this time in a direction that is
+actionable.** At four characters it looked like the clause failing. At six, like
+two strong identities. At seven it looks like **the clause is under-specified
+for one silhouette class** — robed casters — and fine for everyone else. Four of
+the remaining seven (Wizard, Necromancer, Mage, Monk) are plausibly robed.
 
-Still open, and cheaper to answer than to keep speculating about:
-[`../../STYLE_ANCHOR.md`](../../STYLE_ANCHOR.md) records that the clause was
-written *from* the Druid and has **never been round-tripped**. If two of the
-remaining eight also scatter, that test stops being optional.
+The fix, if it is wanted, is not to rewrite the clause for everyone. It is the
+round-trip that [`../../STYLE_ANCHOR.md`](../../STYLE_ANCHOR.md) records as never
+having been run — generate one robed character from the clause and see whether
+it comes back pale. If it does, the clause needs a value instruction that
+survives a large single-colour garment, and that is worth knowing before the
+four robed characters are commissioned rather than after.
 
-**Nothing has been changed on account of any of this.**
+**Nothing has been changed on account of this.** Both pale characters read
+perfectly well on the arena floor; if anything they read better than the anchor.
+The question is whether the roster should look like one game, and that is not a
+call to make from a sheet of seven.
+
+### A note on how these calls have been going
+
+The Priest was predicted as pale from his four source files, before the
+diagonals arrived, and the sheet confirmed it — as with the Samurai. But the
+Assassin went the other way: he looked unremarkable in isolation and only stood
+out once he was beside the others at 157 px. **Source files are a guess; the
+sheet is the evidence.** Predictions are recorded here so they can be checked,
+not so they can be trusted.
 
 ## A tooling bug this batch found
 

@@ -32,6 +32,15 @@
       122
     ]
   },
+  "char.toh_priest": {
+    "w": 128,
+    "h": 128,
+    "scale": 2.18,
+    "content": [
+      88,
+      119
+    ]
+  },
   "char.toh_samurai": {
     "w": 128,
     "h": 128,
