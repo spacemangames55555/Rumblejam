@@ -1,6 +1,6 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Six are in.**
+Thirteen characters to install. **Seven are in.**
 
 | | character | id | status |
 |---|---|---|---|
@@ -10,7 +10,8 @@ Thirteen characters to install. **Six are in.**
 | ✓ | Savage | `char.toh_savage` | installed |
 | ✓ | Samurai | `char.toh_samurai` | installed |
 | ✓ | Priest | `char.toh_priest` | installed |
-| | Blacksmith · Wizard · Necromancer · Mage · Bard · Monk · Sundian | | awaiting art (7) |
+| ✓ | Monk | `char.toh_monk` | installed |
+| | Blacksmith · Wizard · Necromancer · Mage · Bard · Sundian | | awaiting art (6) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -32,6 +33,7 @@ artifact of padding.
 | Druid (anchor) | 2.18 | 1.0323 | 90×124 | 162.0 | **157.0** | — |
 | Witch Doctor | 2.18 | 1.0240 | 120×125 | 160.7 | **157.0** | **+0.00%** |
 | Samurai | 2.18 | 1.0407 | 97×123 | 163.3 | **157.0** | **−0.00%** |
+| Monk | 2.18 | 1.0492 | 96×122 | 164.7 | **157.0** | **−0.00%** |
 | Assassin | 2.18 | 1.0492 | 121×122 | 164.7 | **157.0** | **−0.00%** |
 | Savage | 2.18 | 1.0492 | 117×122 | 164.7 | **157.0** | **−0.00%** |
 | Hunter | 2.18 | 1.0492 | 101×122 | 164.7 | **157.0** | **−0.00%** |
@@ -40,9 +42,9 @@ artifact of padding.
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Seven sheets, seven different content boxes, cell fills from **93.0% to 97.7%**,
-and three different source canvases: 244×244 (Savage, Priest), 248×248 (Druid,
-Assassin, Samurai), 256×256 (Hunter, Witch Doctor).
+Eight sheets, eight content boxes, cell fills from **93.0% to 97.7%**, three
+source canvases: 244×244 (Savage, Priest), 248×248 (Druid, Assassin, Samurai,
+Monk), 256×256 (Hunter, Witch Doctor).
 
 The Priest stretched the range: at 93.0% cell fill his `fit` is 1.0756, the
 largest so far, and his cell renders at **168.8 device px against the Druid's
@@ -73,11 +75,12 @@ would render its other seven short. Measured:
 | Savage | 122 121 121 122 122 120 121 122 | 122 | 120 | **1.6%** |
 | Samurai | 122 123 122 123 122 121 120 121 | 123 | 120 | **2.4%** |
 | Priest | 118 118 114 115 119 117 113 112 | 119 | 112 | 5.9% |
+| Monk | 122 122 120 122 122 120 117 120 | 122 | 117 | 4.1% |
 
 Four sit in the same ~5% band; the Savage (1.6%) and Samurai (2.4%) are notably
 tighter — their poses barely change height between facings, where the others bob
 a few pixels. Nothing to act on; it just means those eight drawings are unusually
-consistent with each other. All seven sit, so no facing is dragging its character
+consistent with each other. All eight sit, so no facing is dragging its character
 smaller. Worth re-checking per character: a raised staff or a leaping pose in
 one facing only would show up here as a spread well outside this range, and the
 fix would be art-side rather than a scale tweak.
@@ -221,65 +224,92 @@ assembled until all eight were present.
 Assembled to `assets/sprites/char/toh_priest.png`, 128×1024, `directions: 8`,
 `content: [88, 119]`, `scale: 2.18`. Autocrop 244×244 → 92×122.
 
+### Monk
+
+Supplied 2026-08-04, eight **248×248** RGBA PNGs, in two messages of four; not
+assembled until all eight were present.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `b7a402967d9d524226b1a099875e8c5d` | `monk/sources/east.png` |
+| SE | `57faf482f2d6c95882ea43e09eec64a8` | `monk/sources/southeast.png` |
+| S | `d8e00dfba4517cbcc76e9eb4f76e1968` | `monk/sources/south.png` |
+| SW | `2f88535b436166b43c8af14c20e64991` | `monk/sources/southwest.png` |
+| W | `7aaaaa7f92cc540e8053c994e7055782` | `monk/sources/west.png` |
+| NW | `24cae4b419dd7eba3e93704708ef4a6c` | `monk/sources/northwest.png` |
+| N | `22a9bef9140f54b41e3dc48afff79137` | `monk/sources/north.png` |
+| NE | `08ab2371cb4c56074090a53367b1fde8` | `monk/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_monk.png`, 128×1024, `directions: 8`,
+`content: [96, 122]`, `scale: 2.18`. Autocrop 248×248 → 111×123.
+
 ## What the contact sheet shows — look at this, not at numbers
 
-Size is settled and mechanical. The sheet is for everything else, and at seven
-characters the palette split has stopped looking like noise.
+Size is settled and mechanical. The sheet is for everything else.
 
-**Four inside the style clause** — *"muted earthy palette of greens browns and
-leather"*, dark-dominant with a small bright tail:
-
-**Druid** (dark greens, leather, antler bone) · **Hunter** (olive, webbing,
-gunmetal) · **Witch Doctor** (bronze and teal over dark cloth) · **Samurai**
-(indigo lacquer, straw kasa, steel)
-
-**Three outside it** — but not at random:
+**Eight characters. Five agree, three do not.**
 
 | | | |
 |---|---|---|
-| **Assassin** | pale and cool | white hood, blue-grey cloak |
-| **Priest** | pale and cool | seafoam and cream robes, white hood, gold trim |
-| **Savage** | warm, high-chroma | orange, turquoise, brass |
+| **Druid** | inside | dark greens, leather, antler bone |
+| **Hunter** | inside | olive, webbing, gunmetal |
+| **Witch Doctor** | inside | bronze and teal over dark cloth |
+| **Samurai** | inside | indigo lacquer, straw kasa, steel |
+| **Monk** | inside | burnt orange over dark brown, bare shoulder, dark sash |
+| **Assassin** | **pale** | white hood, blue-grey cloak |
+| **Priest** | **pale** | seafoam and cream robes, white hood, gold trim |
+| **Savage** | **high-chroma** | orange, turquoise, brass |
 
-### The outliers are correlated with silhouette class, not random
+"Inside" means the style clause: *"muted earthy palette… strong dark outline and
+deep shadow mass"*, value mass sitting low.
 
-**Both pale outliers are hooded robes.** The Assassin and the Priest are the
-only two characters so far whose primary garment is a large hooded robe or
-cloak, and they are the only two whose value mass sits high. Everyone in the
-agreeing group wears armour, webbing or layered cloth — lots of small shapes
-with dark separations between them.
+### The refined hypothesis, and how much to trust it
 
-That is a mechanism, not a coincidence. The clause asks for *"strong dark
-outline and deep shadow mass"*, which a figure made of many small pieces gets
-for free from the gaps between them. A robe is one large continuous surface with
-nowhere for that shadow mass to live, so it comes back light.
+At seven characters the pattern looked like **robes come back pale** — the two
+pale outliers were the only two hooded robes.
 
-**This revises the read for the third time, and this time in a direction that is
-actionable.** At four characters it looked like the clause failing. At six, like
-two strong identities. At seven it looks like **the clause is under-specified
-for one silhouette class** — robed casters — and fine for everyone else. Four of
-the remaining seven (Wizard, Necromancer, Mage, Monk) are plausibly robed.
+The Monk tests that directly and **breaks the simple version**. He is robed, and
+he is not pale. What separates him from the Priest is that his robe is
+*interrupted*: a bare shoulder, a dark sash, exposed skin, a second garment
+underneath. The Priest's and Assassin's garments are single uninterrupted
+surfaces.
 
-The fix, if it is wanted, is not to rewrite the clause for everyone. It is the
-round-trip that [`../../STYLE_ANCHOR.md`](../../STYLE_ANCHOR.md) records as never
-having been run — generate one robed character from the clause and see whether
-it comes back pale. If it does, the clause needs a value instruction that
-survives a large single-colour garment, and that is worth knowing before the
-four robed characters are commissioned rather than after.
+So the sharper claim is **large uninterrupted single-value garments come back
+pale** — the failure is the unbroken surface, not the robe. The clause asks for
+*"deep shadow mass"*, which a figure made of many small pieces gets for free
+from the gaps between them; one continuous surface has nowhere to put it.
 
-**Nothing has been changed on account of this.** Both pale characters read
-perfectly well on the arena floor; if anything they read better than the anchor.
-The question is whether the roster should look like one game, and that is not a
-call to make from a sheet of seven.
+**How much to trust that: not very much yet.** It is one confirming case for a
+hypothesis formed one character earlier, and the Monk was *predicted* to confirm
+it before the sheet was rendered. That is the weakest shape evidence can take.
+Three of the remaining six (Wizard, Necromancer, Mage) are the real test, and
+they are all plausibly robed.
 
-### A note on how these calls have been going
+Note also that the Savage is a **different axis entirely** — his value mass is
+fine; it is chroma that separates him. Two unrelated ways to fall outside one
+clause.
 
-The Priest was predicted as pale from his four source files, before the
-diagonals arrived, and the sheet confirmed it — as with the Samurai. But the
-Assassin went the other way: he looked unremarkable in isolation and only stood
-out once he was beside the others at 157 px. **Source files are a guess; the
-sheet is the evidence.** Predictions are recorded here so they can be checked,
-not so they can be trusted.
+### The prediction record, so far
+
+Kept because it is the only way to know whether reading source files is worth
+anything:
+
+| character | called from sources | sheet said | |
+|---|---|---|---|
+| Assassin | unremarkable | **pale outlier** | ✗ wrong |
+| Samurai | inside clause | inside clause | ✓ |
+| Priest | pale | pale | ✓ |
+| Monk | inside clause | inside clause | ✓ |
+
+Three of four, with the miss in the reassuring direction. **Source files are a
+guess; the sheet is the evidence.**
+
+**Nothing has been changed on account of any of this.** All three outliers read
+well on the arena floor. The open question is whether the roster should look
+like one game, and the cheapest way to answer it is the round-trip that
+[`../../STYLE_ANCHOR.md`](../../STYLE_ANCHOR.md) records as never having been
+run — now with a specific thing to look for: generate a robed caster and see
+whether the garment comes back light.
 
 ## A tooling bug this batch found
 
