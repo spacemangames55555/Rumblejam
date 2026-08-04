@@ -2962,6 +2962,15 @@ try {
     if (scBad.length) fail(`manifest scale validation: ${scBad.join(' | ')}`);
     else if (warns.length !== refused) fail(`${refused} bad scale(s) refused but ${warns.length} warning(s) logged — a rejected value must say so`);
     else ok(`manifest scale accepts 0 < n <= ${AS.MAX_SCALE} and refuses ${refused} junk value(s) out loud, all landing on 1 — never on 0, which would be an invisible sprite with the primitive already skipped`);
+
+    // -- the live tuning flags default to 1 under a harness. There is no
+    //    `location` here, so reading them must not throw and must not leave the
+    //    headless suites painting at some other size than the game would. --
+    const tune = [];
+    if (AS.SPRITE_SCALE !== 1) tune.push(`SPRITE_SCALE is ${AS.SPRITE_SCALE} with no URL to read it from`);
+    if (AS.PLAYER_SCALE !== 1) tune.push(`PLAYER_SCALE is ${AS.PLAYER_SCALE} with no URL to read it from`);
+    if (tune.length) fail(`sprite size tuning: ${tune.join(' | ')}`);
+    else ok('?spritescale / ?playerscale default to 1 outside a browser — the headless suites measure the same sizes the game paints');
   }
 
   // -- the generator is the source of truth; a hand-edit must not survive --

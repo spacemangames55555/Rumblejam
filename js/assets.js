@@ -28,6 +28,8 @@
 //   ?sprites=off     force every fallback — the pre-sprite renderer, exactly
 //   ?sprites=debug   log every missing id once, and outline a magenta box
 //                    wherever a sprite was requested but absent
+//   ?spritescale=N   paint every sprite N times larger (see below)
+//   ?playerscale=N   paint player sprites N times larger
 //
 // Read once, at module load. `off` short-circuits before anything else runs.
 function readMode() {
@@ -38,6 +40,49 @@ function readMode() {
   return 'on';
 }
 export const SPRITE_MODE = readMode();
+
+// ---------------- live size tuning ----------------
+//
+//   ?spritescale=N   multiply EVERY sprite's painted size by N
+//   ?playerscale=N   multiply player sprites only — they compose, so
+//                    ?spritescale=1.2&playerscale=1.5 paints a player at 1.8x
+//                    and everything else at 1.2x
+//
+// This exists so the right size can be found BY EYE, in a real arena, at a real
+// viewport, instead of by argument over a number in a manifest. It is the same
+// cosmetic multiplier the manifest carries and it obeys the same rule: painted
+// size only. No radius, no hitbox, no collision, nothing on the wire. Two
+// clients with different flags disagree about how big a druid looks and agree
+// exactly about where he is and what he hits.
+//
+// Read once, at module load, like SPRITE_MODE. Absent means 1, so a URL with
+// neither flag is bit-identical to one from before they existed.
+//
+// "Player sprites" means the `char.` namespace, which is exactly the character
+// sheets — both rosters, and the decoy ghost that borrows one. Enemies, bosses,
+// props and icons live in their own namespaces and are untouched by
+// ?playerscale.
+const MAX_TUNE = 8;
+function readScaleFlag(name) {
+  let v = null;
+  try { v = new URLSearchParams(location.search).get(name); }
+  catch { return 1; }                       // non-browser (headless harnesses)
+  if (v === null || v === '') return 1;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0 || n > MAX_TUNE) {
+    console.warn(`[sprites] ?${name}=${v} is not a positive number <= ${MAX_TUNE} — ignoring it and painting at 1`);
+    return 1;
+  }
+  return n;
+}
+export const SPRITE_SCALE = readScaleFlag('spritescale');
+export const PLAYER_SCALE = readScaleFlag('playerscale');
+// Folded once, here, rather than two multiplies at every draw site.
+const TUNE_ALL = SPRITE_SCALE;
+const TUNE_PLAYER = SPRITE_SCALE * PLAYER_SCALE;
+if (TUNE_ALL !== 1 || TUNE_PLAYER !== 1) {
+  console.log(`[sprites] size tuning active — all sprites x${TUNE_ALL}, player sprites x${TUNE_PLAYER}. Cosmetic only: hitboxes, collision and the wire are unchanged.`);
+}
 
 // The eight id namespaces. An id outside them is a typo, not a new category —
 // the loader drops it loudly rather than silently registering something no
@@ -194,6 +239,8 @@ export const Assets = {
           anchor: spec.anchor === 'bottom' ? 'bottom' : DEFAULT_ANCHOR,
           directions: spec.directions > 1 ? spec.directions | 0 : 1,
           scale: manifestScale(id, spec.scale),
+          // which tuning flag this id answers to, decided once at load
+          player: id.startsWith('char.'),
         };
         registry.set(id, entry);
         jobs.push(loadImage(entry.file).then(img => {
@@ -293,9 +340,10 @@ function frameOf(s, frame, seed) {
 // directional support existed.
 //
 // `opts.scale` is the caller's sizing — normally spriteScaleFor(), which maps
-// the entity's world size onto the sheet. The manifest's own `scale` is a
-// separate, cosmetic multiplier composed on top of it below; the caller neither
-// knows nor needs to know that a given sprite carries one.
+// the entity's world size onto the sheet. The manifest's own `scale` and the
+// ?spritescale / ?playerscale URL flags are separate cosmetic multipliers
+// composed on top of it below; the caller neither knows nor needs to know that
+// a given sprite carries any of them.
 export function drawSprite(ctx, id, x, y, opts) {
   if (SPRITE_MODE === 'off' || !id) return false;
   const s = Assets.get(id);
@@ -324,13 +372,14 @@ export function drawSprite(ctx, id, x, y, opts) {
   const sy = row * h;
   const ay = s.anchor === 'bottom' ? h : h / 2;
 
-  // The manifest's cosmetic multiplier, composed on top of whatever the caller
-  // asked for — AFTER the row and the frame are chosen, because it changes the
-  // size the cell is painted at and never which cell. Anchoring is unaffected
-  // in kind: a centred sprite still grows about the entity's centre and a
-  // bottom-anchored one still grows upward from its feet, because the scale is
-  // applied around the same origin the draw already used.
-  const scale = callerScale * s.scale;
+  // The manifest's cosmetic multiplier and the URL tuning flags, composed on
+  // top of whatever the caller asked for — AFTER the row and the frame are
+  // chosen, because they change the size the cell is painted at and never which
+  // cell. Anchoring is unaffected in kind: a centred sprite still grows about
+  // the entity's centre and a bottom-anchored one still grows upward from its
+  // feet, because the scale is applied around the same origin the draw already
+  // used. TUNE_* is 1 unless a flag is on the URL, so this is one multiply.
+  const scale = callerScale * s.scale * (s.player ? TUNE_PLAYER : TUNE_ALL);
 
   // Fast path: an unrotated, unscaled, opaque sprite. save()/restore() around
   // every one of a few hundred entities is real cost for nothing. Every

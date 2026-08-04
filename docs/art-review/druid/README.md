@@ -155,7 +155,79 @@ a tenth of the 16.67 ms budget, so even the pathological case is affordable.
 The in-game gates are unchanged: 60 fps at the ~300 desktop crest, 60 fps at the
 ~200 mobile crest.
 
-## 4. The gate is still wrong in the same specific, fixable way
+## 4. Finding the size by eye — `?spritescale` / `?playerscale`
+
+Two URL flags now multiply painted size at render time, so a number can be
+settled in a real arena instead of in a manifest. `?spritescale=N` scales every
+sprite; `?playerscale=N` scales player sprites only (the `char.` namespace).
+They compose with each other and with the manifest's own `scale`. Range
+`0 < N <= 8`; absent means 1. Cosmetic, same rule as the manifest key — no
+radius, no hitbox, no collision, nothing on the wire.
+
+[`05-size-sweep.png`](05-size-sweep.png) — the Druid at 1.0, 1.5, 2.0 and 2.5
+on the real arena floor with the real grid, every cell a crop of an actual game
+frame. Three columns: solo, the same frame with the hitbox rings drawn over it,
+and the same scale at horde density (210 enemies).
+
+**Viewport 1440x900 @dpr2** — a 2880x1800 device-pixel canvas, **2.25 device px
+per world unit**.
+
+| | grid | device px |
+|---|---|---|
+| **grid square** | 64 world units | **144** |
+| hitbox radius | 16 world units | 36 |
+| hitbox + enemy shot (r6) | 22 world units | 50 |
+
+| scale | sheet cell | visible silhouette |
+|---|---|---|
+| 1.0 | 72 px | 70 px |
+| 1.5 (shipped) | 108 px | 105 px |
+| 2.0 | 144 px | **140 px** |
+| 2.5 | 180 px | 174 px |
+
+### One grid square tall
+
+**2.06x** by visible silhouette, **2.00x** by sheet cell. The Druid's art fills
+124 of his 128px cell vertically, so the two answers differ by 3%. At 2.0 he
+measures 140 px against a 144 px grid square — near enough that the grid reads
+as his height, which is the thing Casey was asking for.
+
+### The ceiling: where shots visibly pass through him
+
+The sprite is drawn `2 x radius` across, so the silhouette grows while the
+hitbox does not. Measured from the sheet's own opaque bounds (widest row N at
+90px, tallest row SW at 124px of a 128 cell):
+
+| | exceeds the hitbox (r16) | exceeds hitbox + shot (r22) |
+|---|---|---|
+| **height** (124/128) | **1.03x** | **1.42x** |
+| **width, front/back** (90/128) | 1.42x | **1.96x** |
+| width, profile E/W (53/128) | 2.41x | 3.32x |
+
+Enemy shots are radius 6, so 22 world units is the real catch distance.
+
+- **At the shipped 1.5x** his antlers and boots already sit ~1 world unit past
+  the catch radius. Marginal — about 3 device px — and only vertically.
+- **Past 2.0x** the gap is wide enough to see: at 2.5 his silhouette is 31
+  world units tall against a 22-unit catch radius, so a shot can cross his
+  chest-to-head region and miss by 9 units, ~20 device px. That is the point
+  where it stops reading as a near miss and starts reading as a bug.
+- **The practical ceiling is therefore about 2.0x**, and the binding constraint
+  is height, not width. Beyond it the hitbox has to follow the art.
+
+The middle column of the sweep shows this directly: at 1.0 the dashed gold ring
+contains him completely; at 2.0 his head and feet are outside it; at 2.5 so is
+most of his cloak.
+
+### What size costs at horde density
+
+The third column is the honest tradeoff. Enemies are still primitives (no enemy
+art yet), so they read as flat discs — but the occlusion is real. At 1.0 he is
+lost among them; at 2.0 he is the clearest thing on screen; at 2.5 he starts
+hiding the enemies immediately around him, which is the cost nobody notices
+until a shot comes from behind his cloak.
+
+## 5. The gate is still wrong in the same specific, fixable way
 
 Nothing here changes that finding, and nothing in the gate was touched.
 
@@ -197,7 +269,7 @@ playtest decides, not the gate.
 The signed-vs-absolute fix is one line with consequences for every future batch,
 and it should follow the playtest rather than pre-empt it.
 
-## 5. The tradeoff a lighter floor buys
+## 6. The tradeoff a lighter floor buys
 
 Raising the floor helps the Druid and costs the danger layer:
 

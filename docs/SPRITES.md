@@ -276,6 +276,39 @@ Projectiles are drawn rotated to their heading, so draw them pointing **right**
 |---|---|
 | `?sprites=off` | forces every fallback. The renderer behaves exactly as it did before this layer existed — useful for A/B comparison and as an escape hatch if art regresses something. |
 | `?sprites=debug` | logs every missing id once at load, outlines a magenta dashed box wherever a sprite was requested but absent, and prints the **resolved direction row** on every directional sprite. Use the readout: an off-by-one and a mirrored row order both look *almost* right in motion and are genuinely hard to spot by eye. |
+| `?spritescale=N` | paints **every** sprite N times larger. |
+| `?playerscale=N` | paints **player sprites** N times larger — the `char.` namespace, which is the character sheets of both rosters plus the decoy ghost that borrows one. |
+
+### Finding a size by eye
+
+`?spritescale` and `?playerscale` exist so the right size can be settled in a
+real arena at a real viewport, rather than by arguing about a number in a
+manifest. They **compose**, with each other and with the manifest's own
+`scale`, so:
+
+```
+?playerscale=1.4                    the Druid's shipped 1.5 becomes 2.1
+?spritescale=1.2&playerscale=1.5    players 1.8x, everything else 1.2x
+```
+
+Range is `0 < N ≤ 8`; anything else warns and is ignored. Absent means 1, so a
+URL without them is bit-identical to one from before they existed. When either
+is active the loader says so once in the console, because a screenshot taken at
+3× and filed as "the art looks wrong" costs more to unpick than one log line.
+
+They are **cosmetic, exactly like the manifest key** — no radius, no hitbox, no
+collision, nothing on the wire. Two players on the same host with different
+flags see different sizes and agree completely about where everyone is and what
+they hit. The browser suite asserts this by driving a real run at 3× painted
+size and checking the player radius is still 16 with nothing named `scale` in
+the snapshot.
+
+One caveat worth knowing before you settle on a number: the sprite is drawn
+`2 × radius` across, so past about **1.4×** a character's silhouette is wider
+and taller than the hitbox that catches shots, and past about **2×** the gap is
+wide enough to see shots pass through the art. That is a real ceiling, not a
+rendering artifact — beyond it the hitbox has to follow the art. See
+`docs/art-review/druid/README.md` for the measured thresholds.
 
 ## What this layer is not
 

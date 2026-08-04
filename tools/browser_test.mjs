@@ -1456,6 +1456,12 @@ try {
         const measured = JSON.parse(await S6.exec(`return (async () => {
           const A = window.uvAssets, r = window.uvRenderer, s = window.uv.sim;
           const entry = A.get('${SCALED_ID}');
+          // declared() and get() return the SAME registry object, so the probe
+          // has to remember the starting value; comparing them to each other
+          // afterwards would pass no matter what the probe left behind.
+          const before = entry.scale;
+          const fromManifest = (await (await fetch('assets/assets.json', { cache: 'no-cache' })).json())
+            .sprites['${SCALED_ID}'].scale;
           const proto = CanvasRenderingContext2D.prototype, orig = proto.drawImage;
           const grab = async mult => {
             const was = entry.scale; entry.scale = mult;
@@ -1476,7 +1482,7 @@ try {
             at1: one[0] || null, atScale: scaled[0] || null,
             calls1: one.length, callsScaled: scaled.length,
             radius: p.radius, worldScale: r._screen.scale, cell: entry.w,
-            declaredScale: A.declared('${SCALED_ID}').scale, liveScale: entry.scale,
+            fromManifest, before, liveScale: entry.scale,
           });
         })();`));
 
@@ -1497,14 +1503,112 @@ try {
           const ratio = measured.atScale / measured.at1;
           if (Math.abs(ratio - decl.scale) < 0.01) ok(`and the ratio is exactly the manifest's ${decl.scale}x (${ratio.toFixed(3)}) — nothing between the manifest and the canvas is dropping or double-applying it`);
           else fail(`on-screen ratio ${ratio.toFixed(3)}, manifest says ${decl.scale}`);
-          if (measured.liveScale === measured.declaredScale) ok(`and the probe left ${SCALED_ID} at its declared scale (${measured.liveScale})`);
-          else fail(`probe leaked: live ${measured.liveScale} vs declared ${measured.declaredScale}`);
+          // checked against the manifest as served, not against the same
+          // registry object the probe was mutating
+          if (measured.liveScale === measured.fromManifest && measured.before === measured.fromManifest) {
+            ok(`and the registry still matches the manifest as served (${measured.fromManifest}) — the probe put back what it borrowed`);
+          } else fail(`scale drift: live ${measured.liveScale}, before ${measured.before}, manifest ${measured.fromManifest}`);
         }
       }
       const s6errs = await S6.errors();
       if (s6errs.length) fail(`console errors in the scaled-character run: ${s6errs.join(' | ').slice(0, 300)}`);
       else ok('zero console errors driving a real run with a scaled character sheet');
     } catch (e) { fail(`real-path scale test: ${e.message}`); } finally { await S6.close(); }
+  }
+
+  // ---- 5d. ?spritescale and ?playerscale, on the real render path ----
+  //
+  // The flags exist so a size can be found by eye in a real arena, so the test
+  // that matters is the same one: a real run, real frames, size read off the
+  // renderer's own drawImage. Checked on a PLAYER sprite (which both flags
+  // reach) and an ENEMY sprite (which only ?spritescale reaches), because
+  // getting that separation wrong is the whole way this feature is useless.
+  {
+    const S7 = new Browser();
+    try {
+      await S7.open('S7');
+      // ?spritescale=2 x ?playerscale=1.5 => players 3x, everything else 2x
+      await S7.goto(`${URL}?roster=toh&spritescale=2&playerscale=1.5`);
+      await S7.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 12000, 'title (tuned)');
+      await S7.waitFor(`return window.uvAssets && window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled (tuned)');
+      const flags = JSON.parse(await S7.exec(`return (async () => {
+        const M = await import('./js/assets.js');
+        return JSON.stringify({ sprite: M.SPRITE_SCALE, player: M.PLAYER_SCALE });
+      })();`));
+      if (flags.sprite === 2 && flags.player === 1.5) ok(`?spritescale=2&playerscale=1.5 parse to ${flags.sprite} and ${flags.player}`);
+      else fail(`flag parse: ${JSON.stringify(flags)}`);
+
+      await S7.exec(`document.getElementById('btn-host').click()`);
+      await S7.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 8000, 'lobby (tuned)');
+      await S7.exec(`document.querySelector('.char-card[data-char="toh_druid"]').click()`);
+      await sleep(250);
+      await S7.exec(`document.getElementById('btn-start').click()`);
+      await S7.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run (tuned)');
+      await S7.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
+      await S7.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena (tuned)');
+      await S7.exec(`
+        const s=window.uv.sim, p=s.players[0];
+        if (p.boonOffer && p.boonOffer.length) s.uiAction(0, { kind:'boon', id:p.boonOffer[0].id });
+        s.god=true; s.wave.done=true; s.spawnQueue.length=0;
+        for (const e of [...s.enemyPool]) s.enemyPool.release(e);
+        p.x=s.W/2; p.y=s.H/2;
+        const e = s.spawnEnemyById('skulker', p.x + 120, p.y, { noMats: true });
+        if (e) { e.hp=1e9; e.maxHp=2e9; e.spd=0; e.dmg=0; }
+        return 1;`);
+      await sleep(500);
+
+      const tuned = JSON.parse(await S7.exec(`return (async () => {
+        const A = window.uvAssets, r = window.uvRenderer, s = window.uv.sim;
+        const proto = CanvasRenderingContext2D.prototype, orig = proto.drawImage;
+        const seen = new Map();
+        proto.drawImage = function (img, ...a) {
+          if (a.length === 8) { const t = this.getTransform();
+            for (const id of ['char.toh_druid', 'enemy.skulker']) {
+              const en = A.get(id);
+              if (en && en.img === img && !seen.has(id)) seen.set(id, a[6] * t.a);
+            } }
+          return orig.apply(this, [img, ...a]);
+        };
+        await new Promise(res => { let n=0; (function f(){ if(++n>8) return res(); requestAnimationFrame(f); })(); });
+        proto.drawImage = orig;
+        const p = s.players[0];
+        const en = [...s.enemyPool][0];
+        return JSON.stringify({
+          player: seen.get('char.toh_druid') ?? null,
+          enemy: seen.get('enemy.skulker') ?? null,
+          playerRadius: p.radius, enemyRadius: en ? en.radius : null,
+          worldScale: r._screen.scale,
+          manifestScale: A.declared('char.toh_druid').scale,
+          enemyLoaded: !!A.get('enemy.skulker'),
+        });
+      })();`));
+
+      // Players take manifest x spritescale x playerscale; enemies take
+      // spritescale alone. Both derived from the live radius and viewport.
+      const wantPlayer = tuned.playerRadius * 2 * tuned.worldScale * tuned.manifestScale * 2 * 1.5;
+      if (tuned.player !== null && Math.abs(tuned.player - wantPlayer) < 0.5) {
+        ok(`?spritescale x ?playerscale compose on the real player path — the Druid draws ${tuned.player.toFixed(1)} device px (manifest ${tuned.manifestScale} x 2 x 1.5)`);
+      } else fail(`tuned player size ${tuned.player}, want ${wantPlayer.toFixed(2)} — ${JSON.stringify(tuned)}`);
+
+      if (!tuned.enemyLoaded || tuned.enemy === null) {
+        ok('no enemy sprite on disk — ?playerscale isolation checked on the player alone');
+      } else {
+        const wantEnemy = tuned.enemyRadius * 2 * tuned.worldScale * 2;   // spritescale only
+        if (Math.abs(tuned.enemy - wantEnemy) < 0.5) ok(`and ?playerscale leaves enemies alone — the skulker draws ${tuned.enemy.toFixed(1)} device px, ?spritescale only`);
+        else fail(`enemy took the player flag: ${tuned.enemy.toFixed(2)}, want ${wantEnemy.toFixed(2)} — ${JSON.stringify(tuned)}`);
+      }
+
+      // the flags are cosmetic: the entity they scale is untouched
+      const sim = JSON.parse(await S7.exec(`
+        const s = window.uv.sim, p = s.players[0];
+        return JSON.stringify({ radius: p.radius, snapHasScale: /"(sprite)?[Ss]cale"/.test(JSON.stringify(s.getSnapshot())) });`));
+      if (sim.radius === 16 && !sim.snapHasScale) ok('and at 3x painted size the player radius is still 16 with nothing on the wire — the flags are paint');
+      else fail(`tuning reached the sim: ${JSON.stringify(sim)}`);
+
+      const s7errs = await S7.errors();
+      if (s7errs.length) fail(`console errors with size tuning on: ${s7errs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors with ?spritescale and ?playerscale active');
+    } catch (e) { fail(`size-tuning test: ${e.message}`); } finally { await S7.close(); }
   }
 
   // ---- 6. ?sprites=debug names what is missing and what row it picked ----
