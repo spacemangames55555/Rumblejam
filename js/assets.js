@@ -118,6 +118,47 @@ const DEFAULT_SCALE = 1;
 // sprite" rule the grid validation follows. Exported, with the check itself,
 // so the harnesses can test the real rule instead of a copy of it.
 export const MAX_SCALE = 8;
+
+// ---------------- content normalisation ----------------
+//
+// A sheet's figure fills whatever fraction of its cell the artist or the
+// generator happened to leave it. Measured across the sheets on hand that
+// fraction ran from 75% to 97% of cell height — a 1.29x spread in apparent size
+// for the same `scale` value, from art produced by ONE generator on ONE prompt
+// family. Left uncorrected, every unit needs its own hand-calibration and the
+// number in the manifest means nothing you can compare between characters.
+//
+// So the manifest records `content: [w, h]` — the opaque bounds of the tallest
+// cell, MEASURED at install by tools/process_sprite.mjs, never typed — and the
+// loader divides it out:
+//
+//   fit = h / content[1]
+//
+// HEIGHT, not width, and not area. A character's height is what reads as its
+// size; widths legitimately differ between a cloaked figure and a spear-carrier,
+// and normalising those to each other would squash the difference the art is
+// making on purpose. Normalising on the wrong axis is the same class of mistake
+// as scaling the cell instead of the figure, which is what this fixes.
+//
+// With it, `scale: 1` means one concrete art-independent thing — THIS SPRITE'S
+// SILHOUETTE IS EXACTLY AS TALL AS THE ENTITY'S DIAMETER — and any other value
+// is a deliberate design choice about that character rather than a correction
+// for how its PNG was cropped.
+//
+// Absent means fit 1, which is the old behaviour exactly. That fallback is also
+// the way this regresses silently, so it is announced: see contentWarning().
+// Exported so the harnesses can test the real rule rather than a copy of it,
+// the same reason manifestScale is.
+export function contentFit(id, content, cellH) {
+  if (content === undefined || content === null) return 1;
+  const h = Array.isArray(content) ? Number(content[1]) : NaN;
+  if (!Number.isFinite(h) || h <= 0 || h > cellH) {
+    console.warn(`[sprites] ${id}: content ${JSON.stringify(content)} is not [w, h] with 0 < h <= ${cellH} — normalising on the cell instead, so this sprite's size depends on its padding`);
+    return 1;
+  }
+  return cellH / h;
+}
+
 export function manifestScale(id, v) {
   if (v === undefined || v === null) return DEFAULT_SCALE;
   const n = +v;
@@ -196,9 +237,27 @@ function loadImage(url) {
   return p;
 }
 
+// A sheet that loaded WITHOUT `content` falls back to fit 1 and is sized by its
+// padding again — the exact bug content normalisation exists to remove, back
+// with no symptom except a character that looks a bit off next to the others.
+//
+// That is the same shape as a stale loader meeting a newer manifest: two halves
+// disagreeing, a wrong picture, and zero diagnostics. So it says so. Named ids,
+// once, at load, listing what to run to fix it.
+export const missingContent = new Set();
+function contentWarning() {
+  missingContent.clear();
+  for (const [id, e] of registry) if (e.img && !e.content) missingContent.add(id);
+  if (!missingContent.size) return;
+  const ids = [...missingContent].sort();
+  console.warn(`[sprites] ${ids.length} loaded sheet(s) have no "content" and are normalised on the CELL, so their apparent size depends on how their PNG was padded: `
+    + `${ids.join(' ')} — fix with: node tools/process_sprite.mjs --record-content <id>`);
+}
+
 export const Assets = {
   ready: false,
   missing,
+  missingContent,
   basePath: DEFAULT_BASE,
   version: 0,
 
@@ -239,9 +298,12 @@ export const Assets = {
           anchor: spec.anchor === 'bottom' ? 'bottom' : DEFAULT_ANCHOR,
           directions: spec.directions > 1 ? spec.directions | 0 : 1,
           scale: manifestScale(id, spec.scale),
+          content: Array.isArray(spec.content) ? spec.content : null,
+          fit: 1,                        // set below, once the cell height is known
           // which tuning flag this id answers to, decided once at load
           player: id.startsWith('char.'),
         };
+        entry.fit = contentFit(id, spec.content, entry.h);
         registry.set(id, entry);
         jobs.push(loadImage(entry.file).then(img => {
           if (!img) { missing.add(id); return; }
@@ -284,6 +346,7 @@ export const Assets = {
       } else if (registry.size) {
         console.log(`[sprites] ${registry.size}/${registry.size} loaded`);
       }
+      contentWarning();
     })();
     return loadPromise;
   },
@@ -372,14 +435,18 @@ export function drawSprite(ctx, id, x, y, opts) {
   const sy = row * h;
   const ay = s.anchor === 'bottom' ? h : h / 2;
 
-  // The manifest's cosmetic multiplier and the URL tuning flags, composed on
-  // top of whatever the caller asked for — AFTER the row and the frame are
-  // chosen, because they change the size the cell is painted at and never which
-  // cell. Anchoring is unaffected in kind: a centred sprite still grows about
-  // the entity's centre and a bottom-anchored one still grows upward from its
-  // feet, because the scale is applied around the same origin the draw already
-  // used. TUNE_* is 1 unless a flag is on the URL, so this is one multiply.
-  const scale = callerScale * s.scale * (s.player ? TUNE_PLAYER : TUNE_ALL);
+  // Everything that sizes this sprite, composed on top of what the caller asked
+  // for — AFTER the row and the frame are chosen, because these change the size
+  // the cell is painted at and never which cell. Anchoring is unaffected in
+  // kind: a centred sprite still grows about the entity's centre and a
+  // bottom-anchored one still grows upward from its feet, because the scale is
+  // applied around the same origin the draw already used.
+  //
+  //   s.fit    divides out the sheet's padding so `scale` is comparable
+  //            between characters. 1 when the sheet has no `content`.
+  //   s.scale  the deliberate per-character size choice.
+  //   TUNE_*   the ?spritescale / ?playerscale flags, 1 unless on the URL.
+  const scale = callerScale * s.fit * s.scale * (s.player ? TUNE_PLAYER : TUNE_ALL);
 
   // Fast path: an unrotated, unscaled, opaque sprite. save()/restore() around
   // every one of a few hundred entities is real cost for nothing. Every

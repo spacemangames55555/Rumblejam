@@ -11,6 +11,41 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { tmpdir } from 'os';
 import path from 'path';
+import { execFileSync } from 'node:child_process';
+
+// A minimal RGBA PNG writer at module scope, for fixtures that need real
+// transparency — the sprite-pipeline block has its own opaque variant, and a
+// content-normalisation fixture has to be mostly transparent by construction.
+const PNG_CRC = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c; }
+  return t;
+})();
+function pngRGBA(w, h, px) {
+  const crc = buf => { let c = -1; for (let i = 0; i < buf.length; i++) c = PNG_CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8); return (c ^ -1) >>> 0; };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const c = Buffer.alloc(4); c.writeUInt32BE(crc(body));
+    return Buffer.concat([len, body, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 6;
+  const raw = Buffer.alloc(h * (1 + w * 4));
+  for (let y = 0; y < h; y++) {
+    const row = y * (1 + w * 4);
+    for (let x = 0; x < w; x++) {
+      const [r, g, b, a] = px(x, y);
+      const o = row + 1 + x * 4;
+      raw[o] = r; raw[o + 1] = g; raw[o + 2] = b; raw[o + 3] = a;
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 // per-process ports so overlapping/stale runs can't steal each other's servers
 const PORT = 8700 + (process.pid % 199);
@@ -1481,7 +1516,7 @@ try {
           return JSON.stringify({
             at1: one[0] || null, atScale: scaled[0] || null,
             calls1: one.length, callsScaled: scaled.length,
-            radius: p.radius, worldScale: r._screen.scale, cell: entry.w,
+            radius: p.radius, worldScale: r._screen.scale, cell: entry.w, fit: entry.fit,
             fromManifest, before, liveScale: entry.scale,
           });
         })();`));
@@ -1490,9 +1525,10 @@ try {
           fail(`the renderer never drew ${SCALED_ID} — the real player path is not reaching drawSprite at all (${JSON.stringify(measured)})`);
         } else {
           // what the geometry says it must be: 2*radius world units, converted
-          // to device px, times the manifest multiplier. Derived from the live
-          // radius and viewport, not a constant retyped from the manifest.
-          const wantAt1 = measured.radius * 2 * measured.worldScale;
+          // to device px, times the sheet's content fit, times the manifest
+          // multiplier. Derived from the live radius, viewport and fit, not
+          // constants retyped from the manifest.
+          const wantAt1 = measured.radius * 2 * measured.worldScale * measured.fit;
           const wantScaled = wantAt1 * decl.scale;
           const close = (a, b) => Math.abs(a - b) < 0.5;
           if (close(measured.at1, wantAt1) && close(measured.atScale, wantScaled)) {
@@ -1503,6 +1539,19 @@ try {
           const ratio = measured.atScale / measured.at1;
           if (Math.abs(ratio - decl.scale) < 0.01) ok(`and the ratio is exactly the manifest's ${decl.scale}x (${ratio.toFixed(3)}) — nothing between the manifest and the canvas is dropping or double-applying it`);
           else fail(`on-screen ratio ${ratio.toFixed(3)}, manifest says ${decl.scale}`);
+
+          // THE PIN. Content normalisation changed how the Druid's size is
+          // EXPRESSED (2.25 on the cell became 2.18 on the content) and must
+          // not have changed the size itself. Stated in world units so it holds
+          // at any viewport: 2 x radius 16 x the 2.25 Casey tuned by eye = 72.
+          const PINNED_WORLD_UNITS = 72;
+          const cellWorld = measured.atScale / measured.worldScale;
+          if (Math.abs(cellWorld - PINNED_WORLD_UNITS) < 0.25) {
+            ok(`and he still paints ${cellWorld.toFixed(2)} world units across, against the ${PINNED_WORLD_UNITS} he was tuned at — content normalisation re-expressed the size without moving it`);
+          } else {
+            fail(`the Druid moved: ${cellWorld.toFixed(3)} world units, pinned at ${PINNED_WORLD_UNITS} `
+              + `(fit ${measured.fit} x scale ${decl.scale} = ${(measured.fit * decl.scale).toFixed(6)}, want 2.25)`);
+          }
           // checked against the manifest as served, not against the same
           // registry object the probe was mutating
           if (measured.liveScale === measured.fromManifest && measured.before === measured.fromManifest) {
@@ -1578,6 +1627,8 @@ try {
           enemy: seen.get('enemy.skulker') ?? null,
           playerRadius: p.radius, enemyRadius: en ? en.radius : null,
           worldScale: r._screen.scale,
+          playerFit: A.get('char.toh_druid').fit,
+          enemyFit: A.get('enemy.skulker') ? A.get('enemy.skulker').fit : 1,
           manifestScale: A.declared('char.toh_druid').scale,
           enemyLoaded: !!A.get('enemy.skulker'),
         });
@@ -1585,7 +1636,7 @@ try {
 
       // Players take manifest x spritescale x playerscale; enemies take
       // spritescale alone. Both derived from the live radius and viewport.
-      const wantPlayer = tuned.playerRadius * 2 * tuned.worldScale * tuned.manifestScale * 2 * 1.5;
+      const wantPlayer = tuned.playerRadius * 2 * tuned.worldScale * tuned.playerFit * tuned.manifestScale * 2 * 1.5;
       if (tuned.player !== null && Math.abs(tuned.player - wantPlayer) < 0.5) {
         ok(`?spritescale x ?playerscale compose on the real player path — the Druid draws ${tuned.player.toFixed(1)} device px (manifest ${tuned.manifestScale} x 2 x 1.5)`);
       } else fail(`tuned player size ${tuned.player}, want ${wantPlayer.toFixed(2)} — ${JSON.stringify(tuned)}`);
@@ -1593,7 +1644,7 @@ try {
       if (!tuned.enemyLoaded || tuned.enemy === null) {
         ok('no enemy sprite on disk — ?playerscale isolation checked on the player alone');
       } else {
-        const wantEnemy = tuned.enemyRadius * 2 * tuned.worldScale * 2;   // spritescale only
+        const wantEnemy = tuned.enemyRadius * 2 * tuned.worldScale * tuned.enemyFit * 2;   // spritescale only
         if (Math.abs(tuned.enemy - wantEnemy) < 0.5) ok(`and ?playerscale leaves enemies alone — the skulker draws ${tuned.enemy.toFixed(1)} device px, ?spritescale only`);
         else fail(`enemy took the player flag: ${tuned.enemy.toFixed(2)}, want ${wantEnemy.toFixed(2)} — ${JSON.stringify(tuned)}`);
       }
@@ -1609,6 +1660,128 @@ try {
       if (s7errs.length) fail(`console errors with size tuning on: ${s7errs.join(' | ').slice(0, 300)}`);
       else ok('zero console errors with ?spritescale and ?playerscale active');
     } catch (e) { fail(`size-tuning test: ${e.message}`); } finally { await S7.close(); }
+  }
+
+  // ---- 5e. CONTENT NORMALISATION: different padding, same rendered size ----
+  //
+  // This is the gate, not a derivation. Two sheets whose figures occupy very
+  // different fractions of their cell must paint at the SAME size once content
+  // is divided out — that property is the entire reason the key exists, and
+  // asserting the arithmetic instead would prove nothing about the chain from
+  // sprite-overrides.json through the generated manifest into the loader.
+  //
+  // It runs the real chain: write fixture PNGs, write the overrides, regenerate
+  // assets.json with the real generator, load the real game. Both files are
+  // restored in `finally` from copies taken before anything is touched.
+  {
+    const spriteRoot = path.join(process.cwd(), 'assets', 'sprites');
+    const enemyDir = path.join(spriteRoot, 'enemy');
+    const OVERRIDES = path.join(process.cwd(), 'assets', 'sprite-overrides.json');
+    const MANIFEST = path.join(process.cwd(), 'assets', 'assets.json');
+    const overridesBefore = fs.readFileSync(OVERRIDES, 'utf8');
+    const manifestBefore = fs.readFileSync(MANIFEST, 'utf8');
+    // TALL fills 24 of its 32 cell; SQUAT fills 16. Same 20px width, so only the
+    // height fraction differs — 75% against 50%.
+    // NAKED is installed with NO content override on purpose: the silent
+    // fallback has to be visible, so it must produce a warning naming it.
+    const TALL = 'enemy.slabjaw', SQUAT = 'enemy.lobber', NAKED = 'enemy.gemmite';
+    const tallFile = path.join(enemyDir, 'slabjaw.png'), squatFile = path.join(enemyDir, 'lobber.png');
+    const nakedFile = path.join(enemyDir, 'gemmite.png');
+    const CELL = 32, DIRS = 8, FIG_W = 20, TALL_H = 24, SQUAT_H = 16;
+    // one solid block per row, centred, transparent everywhere else
+    const blockGrid = figH => pngRGBA(CELL, CELL * DIRS, (x, y) => {
+      const cy = y % CELL;
+      const inX = x >= (CELL - FIG_W) / 2 && x < (CELL + FIG_W) / 2;
+      const inY = cy >= (CELL - figH) / 2 && cy < (CELL + figH) / 2;
+      return inX && inY ? [240, 90, 90, 255] : [0, 0, 0, 0];
+    });
+    const S8 = new Browser();
+    try {
+      fs.mkdirSync(enemyDir, { recursive: true });
+      fs.writeFileSync(tallFile, blockGrid(TALL_H));
+      fs.writeFileSync(squatFile, blockGrid(SQUAT_H));
+      fs.writeFileSync(nakedFile, blockGrid(TALL_H));
+      const over = JSON.parse(overridesBefore);
+      over[TALL] = { ...(over[TALL] || {}), content: [FIG_W, TALL_H] };
+      over[SQUAT] = { ...(over[SQUAT] || {}), content: [FIG_W, SQUAT_H] };
+      fs.writeFileSync(OVERRIDES, JSON.stringify(Object.fromEntries(Object.keys(over).sort().map(k => [k, over[k]])), null, 2) + '\n');
+      execFileSync(process.execPath, [path.join(process.cwd(), 'tools', 'gen_assets_manifest.mjs')], { stdio: 'pipe' });
+
+      await S8.open('S8');
+      await S8.goto(URL);
+      await S8.waitFor(`return window.uvAssets && window.uvAssets.ready ? 1 : 0`, 12000, 'assets settled (content)');
+
+      const m = JSON.parse(await S8.exec(`return (async () => {
+        const A = window.uvAssets, D = window.uvDrawSprite;
+        const t = A.get('${TALL}'), q = A.get('${SQUAT}');
+        if (!t || !q) return JSON.stringify({ loaded: false });
+        const c = document.createElement('canvas'); c.width = c.height = 400;
+        const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+        // painted silhouette height, measured off the canvas, not derived
+        const paintedH = (id, forceFit) => {
+          const e = A.get(id), was = e.fit;
+          if (forceFit !== undefined) e.fit = forceFit;
+          g.clearRect(0, 0, 400, 400);
+          D(g, id, 200, 200, { scale: 1, facing: Math.PI / 2 });
+          e.fit = was;
+          const d = g.getImageData(0, 0, 400, 400).data;
+          let top = -1, bot = -1;
+          for (let y = 0; y < 400; y++) {
+            let any = false;
+            for (let x = 0; x < 400; x++) if (d[(y * 400 + x) * 4 + 3] > 0) { any = true; break; }
+            if (any) { if (top < 0) top = y; bot = y; }
+          }
+          return top < 0 ? 0 : bot - top + 1;
+        };
+        return JSON.stringify({
+          loaded: true,
+          tallFit: t.fit, squatFit: q.fit,
+          tallContent: t.content, squatContent: q.content,
+          normTall: paintedH('${TALL}'), normSquat: paintedH('${SQUAT}'),
+          rawTall: paintedH('${TALL}', 1), rawSquat: paintedH('${SQUAT}', 1),
+        });
+      })();`));
+
+      if (!m.loaded) {
+        fail('content-normalisation fixtures did not load');
+      } else {
+        const wantFitT = CELL / TALL_H, wantFitQ = CELL / SQUAT_H;
+        if (Math.abs(m.tallFit - wantFitT) < 1e-6 && Math.abs(m.squatFit - wantFitQ) < 1e-6) {
+          ok(`content reached the loader through overrides -> generated manifest: fit ${m.tallFit.toFixed(3)} for a ${TALL_H}/${CELL} figure and ${m.squatFit.toFixed(3)} for a ${SQUAT_H}/${CELL} one`);
+        } else fail(`fit not derived from content: ${JSON.stringify(m)}`);
+
+        // THE GATE. Two figures padded 75% and 50% of their cell, painted.
+        if (Math.abs(m.normTall - m.normSquat) <= 1) {
+          ok(`padding no longer decides size — a 75%-filled and a 50%-filled sheet both paint ${m.normTall}px tall, measured off the canvas`);
+        } else fail(`content normalisation did not equalise: ${m.normTall}px vs ${m.normSquat}px (fits ${m.tallFit}, ${m.squatFit})`);
+
+        // and prove the gate can fail: without fit they differ by 24/16
+        const rawRatio = m.rawTall / m.rawSquat;
+        if (Math.abs(rawRatio - TALL_H / SQUAT_H) < 0.12) {
+          ok(`and the same two sheets differ ${rawRatio.toFixed(2)}x when fit is forced to 1 (${m.rawTall}px vs ${m.rawSquat}px) — the bug this replaces, still reproducible`);
+        } else fail(`forcing fit=1 should reproduce the ${TALL_H / SQUAT_H}x spread, got ${rawRatio.toFixed(2)}x`);
+      }
+
+      // A sheet installed without `content` silently falls back to fit 1 and is
+      // sized by its padding again — the bug this whole key removes, back with
+      // no symptom. So it must be ANNOUNCED, and named.
+      const naked = JSON.parse(await S8.exec(`
+        const A = window.uvAssets, e = A.get('${NAKED}');
+        return JSON.stringify({ loaded: !!e, fit: e ? e.fit : null, tracked: [...A.missingContent] });`));
+      const warnLine = (S8.consoleLines || []).find(l => /no "content"/.test(l)) || '';
+      if (naked.loaded && naked.fit === 1 && naked.tracked.includes(NAKED)) {
+        ok(`a sheet installed without content falls back to fit 1 and is tracked — ${naked.tracked.length} id(s) in Assets.missingContent`);
+      } else fail(`missing-content fallback not tracked: ${JSON.stringify(naked)}`);
+      if (warnLine.includes(NAKED) && /--record-content/.test(warnLine)) {
+        ok('and it warns at load naming the id and the command that fixes it, rather than failing silently');
+      } else fail(`no warning naming ${NAKED}: ${warnLine.slice(0, 200) || '(none)'}`);
+    } catch (e) { fail(`content-normalisation test: ${e.message}`); } finally {
+      for (const f of [tallFile, squatFile, nakedFile]) { try { fs.rmSync(f, { force: true }); } catch {} }
+      try { fs.rmdirSync(enemyDir); } catch { /* real art lives here */ }
+      fs.writeFileSync(OVERRIDES, overridesBefore);
+      fs.writeFileSync(MANIFEST, manifestBefore);
+      await S8.close();
+    }
   }
 
   // ---- 6. ?sprites=debug names what is missing and what row it picked ----

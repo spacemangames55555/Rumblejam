@@ -26,7 +26,7 @@ import { CONFIG as CFG } from '../js/config.js';
 const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { ALL_CHARS as _ALL_CHARS } from '../js/content/characters.js';
 const ALL_CHARS_N = _ALL_CHARS.length;
 
@@ -2971,6 +2971,49 @@ try {
     if (AS.PLAYER_SCALE !== 1) tune.push(`PLAYER_SCALE is ${AS.PLAYER_SCALE} with no URL to read it from`);
     if (tune.length) fail(`sprite size tuning: ${tune.join(' | ')}`);
     else ok('?spritescale / ?playerscale default to 1 outside a browser — the headless suites measure the same sizes the game paints');
+
+    // -- content normalisation: the rule itself --
+    const warns2 = [];
+    const realWarn2 = console.warn;
+    console.warn = m => warns2.push(String(m));
+    const fitCases = [
+      [undefined, 128, 1], [null, 128, 1],              // absent -> old behaviour
+      [[90, 124], 128, 128 / 124], [[21, 27], 32, 32 / 27],
+      [[10, 128], 128, 1], [[10, 32], 32, 1],           // full cell -> fit 1, no correction
+      [[10, 0], 128, 1], [[10, -5], 128, 1], [[10, 129], 128, 1],
+      [[10, NaN], 128, 1], ['nope', 128, 1], [[], 128, 1],
+    ];
+    const fitBad = [];
+    for (const [content, cellH, want] of fitCases) {
+      const got = AS.contentFit('char.probe', content, cellH);
+      if (Math.abs(got - want) > 1e-9) fitBad.push(`${JSON.stringify(content)}@${cellH} -> ${got}, want ${want}`);
+    }
+    console.warn = realWarn2;
+    if (fitBad.length) fail(`content fit: ${fitBad.join(' | ')}`);
+    else ok(`content fit = cellH / content[1], with absent and out-of-range content falling back to 1 — ${warns2.length} bad value(s) refused out loud`);
+
+    // -- every sheet with art must declare content, or it is sized by its
+    //    padding and nobody finds out. The loader warns at runtime; this is the
+    //    same rule where it can be enforced. --
+    const withArt = [], noContent = [];
+    for (const [id, spec] of Object.entries(man)) {
+      if (!existsSync(new URL(`../assets/sprites/${spec.file}`, import.meta.url))) continue;
+      withArt.push(id);
+      if (!Array.isArray(spec.content)) noContent.push(id);
+    }
+    if (noContent.length) fail(`${noContent.length} installed sheet(s) have no "content" and are normalised on the cell: ${noContent.join(', ')} — run: node tools/process_sprite.mjs --record-content <id>`);
+    else ok(`all ${withArt.length} installed sheet(s) declare measured content, so scale means the same thing on each of them`);
+
+    // -- and the conversion is exact: normalising must not move what ships --
+    const dr = man['char.toh_druid'];
+    if (dr && Array.isArray(dr.content)) {
+      const eff = (dr.h / dr.content[1]) * dr.scale;
+      const SHIPPED = 2.25;                     // the cell-normalised value Casey tuned
+      const driftPx = (eff - SHIPPED) * 2 * 16 * 2.25;   // 2*radius world units, 1440x900 dpr2
+      if (Math.abs(driftPx) < 0.5) {
+        ok(`the Druid's fit x scale is ${eff.toFixed(6)} against the ${SHIPPED} he was tuned at — ${driftPx.toFixed(3)} device px of drift, so content normalisation did not resize him`);
+      } else fail(`content normalisation moved the Druid: fit x scale ${eff.toFixed(6)} vs ${SHIPPED}, ${driftPx.toFixed(2)} device px`);
+    }
   }
 
   // -- the generator is the source of truth; a hand-edit must not survive --

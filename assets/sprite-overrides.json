@@ -1,7 +1,17 @@
 {
+  "char.pulsar": {
+    "content": [
+      21,
+      27
+    ]
+  },
   "char.toh_druid": {
     "w": 128,
     "h": 128,
-    "scale": 2.25
+    "scale": 2.18,
+    "content": [
+      90,
+      124
+    ]
   }
 }
