@@ -263,9 +263,14 @@
     },
     "char.toh_samurai": {
       "file": "char/toh_samurai.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        97,
+        123
+      ]
     },
     "char.toh_savage": {
       "file": "char/toh_savage.png",

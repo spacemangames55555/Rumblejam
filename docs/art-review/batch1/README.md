@@ -1,6 +1,6 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Four are in.**
+Thirteen characters to install. **Five are in.**
 
 | | character | id | status |
 |---|---|---|---|
@@ -8,7 +8,8 @@ Thirteen characters to install. **Four are in.**
 | ✓ | Witch Doctor | `char.toh_witch_doctor` | installed |
 | ✓ | Assassin | `char.toh_assassin` | installed |
 | ✓ | Savage | `char.toh_savage` | installed |
-| | Blacksmith · Wizard · Necromancer · Mage · Bard · Samurai · Monk · Priest · Sundian | | awaiting art (9) |
+| ✓ | Samurai | `char.toh_samurai` | installed |
+| | Blacksmith · Wizard · Necromancer · Mage · Bard · Monk · Priest · Sundian | | awaiting art (8) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -29,6 +30,7 @@ artifact of padding.
 |---|---|---|---|---|---|---|
 | Druid (anchor) | 2.18 | 1.0323 | 90×124 | 162.0 | **157.0** | — |
 | Witch Doctor | 2.18 | 1.0240 | 120×125 | 160.7 | **157.0** | **+0.00%** |
+| Samurai | 2.18 | 1.0407 | 97×123 | 163.3 | **157.0** | **−0.00%** |
 | Assassin | 2.18 | 1.0492 | 121×122 | 164.7 | **157.0** | **−0.00%** |
 | Savage | 2.18 | 1.0492 | 117×122 | 164.7 | **157.0** | **−0.00%** |
 | Hunter | 2.18 | 1.0492 | 101×122 | 164.7 | **157.0** | **−0.00%** |
@@ -36,9 +38,9 @@ artifact of padding.
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Five sheets, five different content boxes, cell fills from 95.3% to 97.7%, and
-**three different source canvases**: 244×244 (Savage), 248×248 (Druid,
-Assassin), 256×256 (Hunter, Witch Doctor). Their **cells** span 160.7 to 164.7
+Six sheets, six different content boxes, cell fills from 95.3% to 97.7%, and
+**three different source canvases**: 244×244 (Savage), 248×248 (Druid, Assassin,
+Samurai), 256×256 (Hunter, Witch Doctor). Their **cells** span 160.7 to 164.7
 device px, a 4px spread that means nothing. Their **silhouettes are identical to
 a tenth of a pixel.**
 
@@ -60,11 +62,12 @@ would render its other seven short. Measured:
 | Witch Doctor | 125 122 122 124 122 118 122 125 | 125 | 118 | 5.6% |
 | Assassin | 120 120 119 122 120 115 120 121 | 122 | 115 | 5.7% |
 | Savage | 122 121 121 122 122 120 121 122 | 122 | 120 | **1.6%** |
+| Samurai | 122 123 122 123 122 121 120 121 | 123 | 120 | **2.4%** |
 
-Four sit in the same ~5% band and the Savage is notably tighter at 1.6% — his
-pose barely changes height between facings, where the others bob a few pixels.
-Nothing to act on; it just means his eight drawings are unusually consistent
-with each other. All five sit, so no facing is dragging its character
+Four sit in the same ~5% band; the Savage (1.6%) and Samurai (2.4%) are notably
+tighter — their poses barely change height between facings, where the others bob
+a few pixels. Nothing to act on; it just means those eight drawings are unusually
+consistent with each other. All six sit, so no facing is dragging its character
 smaller. Worth re-checking per character: a raised staff or a leaping pose in
 one facing only would show up here as a spread well outside this range, and the
 fix would be art-side rather than a scale tweak.
@@ -170,37 +173,66 @@ messages of four; not assembled until all eight were present.
 Assembled to `assets/sprites/char/toh_savage.png`, 128×1024, `directions: 8`,
 `content: [117, 122]`, `scale: 2.18`. Autocrop 244×244 → 120×122.
 
+### Samurai
+
+Supplied 2026-08-04, eight **248×248** RGBA PNGs, in two messages of four; not
+assembled until all eight were present.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `3fca26e663c31c64c89c3c7d9fdc264a` | `samurai/sources/east.png` |
+| SE | `b3372b3d0d4cdff40af3a7959ef765c4` | `samurai/sources/southeast.png` |
+| S | `327f60b3d28345492ba1ca63c0e4418f` | `samurai/sources/south.png` |
+| SW | `85d1ad6dc2ff86768f596d8d4a032ff3` | `samurai/sources/southwest.png` |
+| W | `1a3d9b0778bc2284d9f5b0a8cafe1db1` | `samurai/sources/west.png` |
+| NW | `944ff0ea7cf25720932c672f52f3aef8` | `samurai/sources/northwest.png` |
+| N | `c60db14aaf083828956e0ac577f6ff43` | `samurai/sources/north.png` |
+| NE | `26100c7d936ddf3b7a7c39a01634bcc3` | `samurai/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_samurai.png`, 128×1024, `directions: 8`,
+`content: [97, 123]`, `scale: 2.18`. Autocrop 248×248 → 116×124.
+
 ## What the contact sheet shows — look at this, not at numbers
 
-Size is settled and mechanical. The sheet is for everything else, and with five
-characters up there is a pattern rather than a one-off.
+Size is settled and mechanical. The sheet is for everything else.
 
-**Two characters are pulling away from the style clause, in opposite
-directions.**
+**Six characters, and the palette splits four to two.**
 
-- The **Assassin** is pale and cool — white hood, blue-grey cloak. His largest
-  value mass sits high, where the anchor's sits low.
-- The **Savage** is warm and high-chroma — orange, turquoise and brass, with a
-  lot of bright saturated mid-tone.
+Inside the style clause — *"muted earthy palette of greens browns and leather,
+desaturated next to arcade colour"*, dark-dominant with a small bright tail:
 
-The clause asks for a *"muted earthy palette of greens browns and leather,
-desaturated next to arcade colour"*. The Druid, Hunter and Witch Doctor all sit
-inside that. These two do not, and they miss it in different directions, so it
-is not a systematic shift the clause could be rewritten to capture.
+- **Druid** — dark greens, leather, antler bone
+- **Hunter** — olive, webbing, gunmetal
+- **Witch Doctor** — bronze and teal over dark cloth
+- **Samurai** — indigo lacquer, straw kasa, steel
 
-One outlier is characterisation. **Two outliers in opposite directions is the
-clause not constraining much** — which matters, because
+Outside it, in **opposite directions**:
+
+- **Assassin** — pale and cool. White hood, blue-grey cloak; his largest value
+  mass sits high where the other four sit low.
+- **Savage** — warm and high-chroma. Orange, turquoise and brass, a lot of
+  bright saturated mid-tone.
+
+### Reading it
+
+At four characters this looked like the clause failing to constrain. At six it
+looks more like **two characters with strong identities and four that agree** —
+the Samurai landed squarely in the group without anything being asked of him,
+which is the first positive evidence the clause is doing work rather than being
+ignored.
+
+That is a change of read, and it was a prediction before it was an observation:
+the Samurai was called as inside-clause from his source files, and the sheet
+confirmed it. Worth stating because the opposite happened with the Assassin —
+he looked unremarkable in isolation and only stood out once he was next to the
+others at 157 px. **The sheet is the evidence; source files are a guess.**
+
+Still open, and cheaper to answer than to keep speculating about:
 [`../../STYLE_ANCHOR.md`](../../STYLE_ANCHOR.md) records that the clause was
-written *from* the Druid and has **never been round-tripped**. Nobody has
-generated a unit from it and checked the result sits next to him. That test
-being outstanding is now the most likely explanation for the spread, and it gets
-cheaper to act on the sooner it happens.
+written *from* the Druid and has **never been round-tripped**. If two of the
+remaining eight also scatter, that test stops being optional.
 
-**Nothing has been changed on account of this.** It is an observation for
-whoever looks at the sheet, which is the point of it being here rather than in a
-gate. If the next two or three arrive inside the clause, this was two characters
-with strong identities and the answer is nothing. If they keep scattering, the
-clause needs the round-trip before the remaining nine are commissioned.
+**Nothing has been changed on account of any of this.**
 
 ## A tooling bug this batch found
 
