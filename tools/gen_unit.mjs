@@ -77,6 +77,16 @@ console.log(`  balance before: ${JSON.stringify(await balance())}`);
 const common = { image_size: { width: spec.w, height: spec.h }, no_background: true };
 if (seed !== undefined) common.seed = seed;
 
+// Style parameters. These are part of the anchor as much as the words are —
+// two runs with the same prompt and different `shading` are two different
+// styles — so they are explicit flags and get recorded in STYLE_ANCHOR.md.
+// They apply to the base generation only; /rotate takes none of them and
+// inherits the style from the image it is given.
+const styleParams = {};
+for (const k of ['outline', 'shading', 'detail']) if (flags[k]) styleParams[k] = flags[k];
+if (flags.guidance) styleParams.text_guidance_scale = Number(flags.guidance);
+if (flags.negative) styleParams.negative_description = flags.negative;
+
 let generations = 0;
 const t0 = Date.now();
 
@@ -89,7 +99,7 @@ if (flags.base && existsSync(join(flags.base, `${ROW_FILENAMES[SOUTH]}.png`))) {
   console.log('  base: reused from --base, not regenerated');
 } else {
   process.stdout.write('  [1/8] south (base) … ');
-  const body = { ...common, description: prompt, view, direction: 'south' };
+  const body = { ...common, ...styleParams, description: prompt, view, direction: 'south' };
   let res;
   if (styleImage) {
     res = await post('/generate-image-bitforge', {
@@ -104,23 +114,42 @@ if (flags.base && existsSync(join(flags.base, `${ROW_FILENAMES[SOUTH]}.png`))) {
 }
 writeFileSync(baseFile, basePng);
 
-// ---- 2. rotate to the other seven ----
-const baseB64 = b64(basePng);
+// ---- 2. rotate to the other seven, in 45-degree hops ----
+//
+// NOT one big turn from south to each target. Asking /rotate for 180 degrees in
+// a single hop makes it preserve far too much of the source: the "back" view
+// comes out looking like the front. Measured on a real unit, opposite facings
+// ended up MORE similar to each other than neighbouring ones — a ratio of 0.55
+// where anything under 1.0 means the eight facings are not really eight.
+//
+// Walking round the compass 45 degrees at a time, each hop conditioned on the
+// previous hop's output, turns that ratio to 1.03 and gives a back view that is
+// actually a back view. Lower image guidance helps for the same reason: the
+// reference should inform the drawing, not dominate it.
+const ROTATE_GUIDANCE = Number(flags['rotate-guidance'] || 1.5);
+const CHAINS = flags['no-chain']
+  ? [[2, 0], [2, 1], [2, 3], [2, 4], [2, 5], [2, 6], [2, 7]].map(p => [p])   // legacy: all from south
+  : [
+    [[2, 1], [1, 0], [0, 7], [7, 6]],   // south -> SE -> E -> NE -> N
+    [[2, 3], [3, 4], [4, 5]],           // south -> SW -> W -> NW
+  ];
 let n = 1;
-for (let row = 0; row < 8; row++) {
-  if (row === SOUTH) continue;
-  n++;
-  const to = ROW_DIRECTIONS[row];
-  process.stdout.write(`  [${n}/8] ${to} … `);
-  const res = await post('/rotate', {
-    ...common,
-    from_image: baseB64,
-    from_view: view, to_view: view,
-    from_direction: 'south', to_direction: to,
-  });
-  generations += res.usage?.generations || 0;
-  writeFileSync(join(outDir, `${ROW_FILENAMES[row]}.png`), fromB64(res.image));
-  console.log(`${((Date.now() - t0) / 1000).toFixed(0)}s`);
+for (const chain of CHAINS) {
+  for (const [fromRow, toRow] of chain) {
+    n++;
+    process.stdout.write(`  [${n}/8] ${ROW_DIRECTIONS[fromRow]} -> ${ROW_DIRECTIONS[toRow]} … `);
+    const fromPng = readFileSync(join(outDir, `${ROW_FILENAMES[fromRow]}.png`));
+    const res = await post('/rotate', {
+      ...common,
+      from_image: b64(fromPng),
+      from_view: view, to_view: view,
+      from_direction: ROW_DIRECTIONS[fromRow], to_direction: ROW_DIRECTIONS[toRow],
+      image_guidance_scale: ROTATE_GUIDANCE,
+    });
+    generations += res.usage?.generations || 0;
+    writeFileSync(join(outDir, `${ROW_FILENAMES[toRow]}.png`), fromB64(res.image));
+    console.log(`${((Date.now() - t0) / 1000).toFixed(0)}s`);
+  }
 }
 
 // ---- 3. sanity, before anyone spends time reviewing it ----

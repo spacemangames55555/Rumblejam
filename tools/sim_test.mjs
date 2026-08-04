@@ -2846,11 +2846,18 @@ try {
   else ok('direction rows: E SE S SW W NW N NE at 8 and E S W N at 4, stable across ±4 windings, sign, the ±pi seam and junk angles');
 
   // -- units are directional, everything else is not --
+  // A deviation from the category default is legal ONLY if
+  // assets/sprite-overrides.json declares it — that is the difference between a
+  // documented exception and accidental drift.
+  const overrides = JSON.parse(readFileSync(new URL('../assets/sprite-overrides.json', import.meta.url), 'utf8'));
+  const declares = (id, key) => overrides[id] && overrides[id][key] !== undefined;
   const dirWrong = [];
   for (const [id, spec] of Object.entries(man)) {
     const ns = id.slice(0, id.indexOf('.'));
     const want = S.DIRECTIONAL_NAMESPACES.has(ns) ? S.UNIT_DIRECTIONS : undefined;
-    if ((spec.directions || undefined) !== want) dirWrong.push(`${id}: directions ${spec.directions}, want ${want || 'none'}`);
+    if ((spec.directions || undefined) !== want && !declares(id, 'directions')) {
+      dirWrong.push(`${id}: directions ${spec.directions}, want ${want || 'none'} and no override declares it`);
+    }
   }
   if (dirWrong.length) fail(`manifest directions: ${dirWrong.slice(0, 5).join(' | ')}`);
   else {
@@ -2865,7 +2872,9 @@ try {
     const ns = id.slice(0, id.indexOf('.'));
     if (!NS_RE.test(id)) { hyg.push(`${id}: bad namespace`); continue; }
     const [w, h] = S.SPRITE_SIZE[ns];
-    if (spec.w !== w || spec.h !== h) hyg.push(`${id}: ${spec.w}x${spec.h}, canonical is ${w}x${h}`);
+    if ((spec.w !== w || spec.h !== h) && !(declares(id, 'w') || declares(id, 'h'))) {
+      hyg.push(`${id}: ${spec.w}x${spec.h}, canonical is ${w}x${h} and no override declares it`);
+    }
     if (/^\//.test(spec.file)) hyg.push(`${id}: leading slash in "${spec.file}"`);
     if (spec.file.includes('..')) hyg.push(`${id}: "${spec.file}" escapes the asset root`);
     if (spec.anchor !== undefined && spec.anchor !== 'center' && spec.anchor !== 'bottom') hyg.push(`${id}: anchor "${spec.anchor}"`);
@@ -3129,23 +3138,126 @@ try {
       const err2 = runFails('verify_art_batch.mjs', ['enemy.skulker']);
       if (err2 && /empty cell/.test(err2)) ok('and it catches an all-empty grid, which passes every dimension check');
       else fail(`empty-cell check said: ${String(err2).slice(0, 140)}`);
-    } finally { rmSync(nodePath.join(REPO, 'assets', 'sprites'), { recursive: true, force: true }); }
+    } finally {
+      // Remove ONLY what this fixture wrote. A blanket rmSync of assets/sprites
+      // deletes committed art — a destructive test, not a cleanup.
+      rmSync(file, { force: true });
+      try { rmSync(dir, { recursive: false }); } catch { /* other art lives here */ }
+      try { rmSync(nodePath.join(REPO, 'assets', 'sprites'), { recursive: false }); } catch { /* ditto */ }
+    }
+
+    // Whatever art happens to be committed, the gate must pass and must report
+    // coverage as a number. Not pinned to a count, so landing a batch does not
+    // break the suite.
+    // Every waiver must still be earned. A stale exception is a silent
+    // loosening of the gate, so an id that no longer fails anything must be
+    // removed from the list.
+    const exc = JSON.parse(rf(nodePath.join(REPO, 'assets', 'gate-exceptions.json'), 'utf8'));
+    const listed = Object.keys(exc).filter(k => k !== '_');
+    const stale = [];
+    for (const id of listed) {
+      const out = run('verify_art_batch.mjs', [id]);
+      if (!/band failure\(s\) waived/.test(out)) stale.push(id);
+    }
+    if (!listed.length) ok('gate-exceptions.json is empty — nothing is being waived');
+    else if (stale.length) fail(`gate-exceptions.json lists ${stale.join(', ')}, which no longer fail anything — a stale waiver silently loosens the gate`);
+    else ok(`every one of the ${listed.length} gate exception(s) still earns its waiver, and structural failures are never waivable`);
 
     const clean = run('verify_art_batch.mjs', []);
-    if (/298 still to draw/.test(clean)) ok('with no art at all the batch gate passes and reports 0/298 drawn — an empty repo is a valid state');
-    else fail(`clean batch verify said: ${clean.slice(0, 160)}`);
+    const m = clean.match(/checked (\d+) id\(s\): (\d+) with art, (\d+) still to draw/);
+    if (m && Number(m[2]) + Number(m[3]) === Number(m[1])) {
+      ok(`the batch gate passes on the committed tree and reports coverage: ${m[2]}/${m[1]} drawn, ${m[3]} to go`);
+    } else fail(`clean batch verify said: ${clean.slice(0, 160)}`);
     const reqErr = runFails('verify_art_batch.mjs', ['char', '--require-all']);
     if (reqErr && /have no art/.test(reqErr)) ok('--require-all is what makes "batch 1 is done" a number rather than a feeling');
     else fail('--require-all did not fail on an undrawn batch');
   }
 
+  // -- the value gate and the facing-separation gate, on synthetic sheets --
+  // Both encode a failure that actually happened during anchor review, so both
+  // are written as the failing case first.
+  {
+    const dir = nodePath.join(REPO, 'assets', 'sprites', 'enemy');
+    const file = nodePath.join(dir, 'skulker.png');
+    const sheet = (bodyRGB, accentRGB, distinctRows) => {
+      const g = PK.blankImage(32, 256);
+      for (let d = 0; d < 8; d++) {
+        // shift the body per row so rows differ; when distinctRows is false the
+        // shift repeats every 4 rows, which makes OPPOSITE facings identical —
+        // exactly what a collapsed rotation produces
+        const off = distinctRows ? d : d % 4;
+        for (let y = 0; y < 32; y++) {
+          for (let x = 0; x < 32; x++) {
+            if (x < 6 + off || x > 25 || y < 5 || y > 27) continue;
+            const o = ((d * 32 + y) * 32 + x) * 4;
+            // the accent block is deliberately ~30% of the body, so the gate's
+            // brightest-quarter split lands wholly inside it
+            const acc = accentRGB && y > 9 && y < 22 && x > 9 && x < 22;
+            const c = acc ? accentRGB : bodyRGB;
+            g.data[o] = c[0]; g.data[o + 1] = c[1]; g.data[o + 2] = c[2]; g.data[o + 3] = 255;
+          }
+        }
+      }
+      return PK.encodePng(g);
+    };
+    // A saturated mid-value body under a bright accent — the shape of the
+    // approved reference, and the only combination that clears all three bands.
+    const GOOD_BODY = [40, 110, 200], GOOD_ACCENT = [255, 240, 160];
+    try {
+      mkdirSync(dir, { recursive: true });
+      // the reference shape passes all three bands
+      writeFileSync(file, sheet(GOOD_BODY, GOOD_ACCENT, true));
+      const good = run('verify_art_batch.mjs', ['enemy.skulker']);
+      if (/ART BATCH OK/.test(good)) ok('the value bands pass a saturated mid-value body under a bright accent — the shape of the approved reference');
+      else fail(`value bands rejected the reference shape: ${good.slice(0, 220)}`);
+
+      // AXIS 1, contrast. Candidate C's failure: body barely above the floor,
+      // blazing accent.
+      writeFileSync(file, sheet([30, 34, 44], [60, 255, 255], true));
+      const dark = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (dark && /contrast \d+/.test(dark) && /sinks into the arena floor/.test(dark)) {
+        ok('contrast band: refuses a dark body carrying a brilliant accent — the accent cannot mask the body, which is how a sprite passes review and vanishes in play');
+      } else fail(`contrast band: ${String(dark).slice(0, 160)}`);
+
+      // AXIS 2, spread. A flat sprite: bright, saturated, and no accent at all.
+      writeFileSync(file, sheet(GOOD_BODY, null, true));
+      const noAccent = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (noAccent && /accent spread/.test(noAccent)) {
+        ok('spread band: refuses a flat sprite with no accent to read, however bright and saturated its body');
+      } else fail(`spread band: ${String(noAccent).slice(0, 160)}`);
+
+      // AXIS 3, saturation. THE 109 FAILURE: a pale body lifted to a high
+      // luminance. Clears contrast and clears spread, and is still wrong.
+      writeFileSync(file, sheet([120, 115, 110], [255, 250, 240], true));
+      const washed = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (washed && /body saturation/.test(washed) && !/contrast \d+/.test(washed) && !/accent spread/.test(washed)) {
+        ok('saturation band: refuses a washed-out body that passed contrast — the exact regression that made an anchor score 109 and lose its accent structure');
+      } else fail(`saturation band: ${String(washed).slice(0, 200)}`);
+
+      // opposites identical: a collapsed rotation
+      writeFileSync(file, sheet(GOOD_BODY, GOOD_ACCENT, false));
+      const flat = runFails('verify_art_batch.mjs', ['enemy.skulker']);
+      if (flat && /opposite facings differ/.test(flat)) {
+        ok('the facing gate refuses a sheet whose front and back are duplicates — eight rows that are not eight drawings');
+      } else fail(`facing gate: ${String(flat).slice(0, 160)}`);
+    } finally {
+      // Remove ONLY what this fixture wrote. A blanket rmSync of assets/sprites
+      // deletes committed art — a destructive test, not a cleanup.
+      rmSync(file, { force: true });
+      try { rmSync(dir, { recursive: false }); } catch { /* other art lives here */ }
+      try { rmSync(nodePath.join(REPO, 'assets', 'sprites'), { recursive: false }); } catch { /* ditto */ }
+    }
+  }
+
   // -- the anchor gate, and prompt coverage --
   {
-    const anchorErr = runFails('gen_prompts.mjs', []);
-    if (anchorErr && /still PENDING/.test(anchorErr)) ok('gen_prompts refuses to emit while the style anchor is PENDING — batch 0 is a gate, not a suggestion');
-    else fail('the style-anchor gate did not fire');
-    run('gen_prompts.mjs', ['--allow-pending']);
-    run('gen_prompts.mjs', ['--check', '--allow-pending']);
+    // The anchor's clause must reach every prompt VERBATIM. That is the whole
+    // defence against style drift: there is nowhere to type a paraphrase,
+    // because no human types the clause at all.
+    run('gen_prompts.mjs', []);
+    run('gen_prompts.mjs', ['--check']);
+    const anchorMd = rf(nodePath.join(REPO, 'docs', 'STYLE_ANCHOR.md'), 'utf8');
+    const clause = anchorMd.match(/<!-- STYLE-CLAUSE-START -->\n([\s\S]*?)\n<!-- STYLE-CLAUSE-END -->/)[1].trim();
     const prompts = JSON.parse(rf(nodePath.join(REPO, 'docs', 'prompts.json'), 'utf8'));
     const units = Object.keys(prompts.prompts);
     const sil = JSON.parse(rf(nodePath.join(REPO, 'docs', 'silhouettes.json'), 'utf8'));
@@ -3156,8 +3268,13 @@ try {
     const texts = units.map(id => sil[id].toLowerCase().replace(/[^a-z ]/g, ''));
     if (new Set(texts).size === texts.length) ok('and no two units are described the same way — identical descriptions draw identical sprites');
     else fail('duplicate silhouette notes');
-    if (prompts.styleClause === 'PENDING' && prompts.prompts['char.pulsar'].batch === 0) ok('Pulsar is batch 0, alone, and the clause it would carry is still unset');
-    else fail(`anchor wiring: clause=${prompts.styleClause}, pulsar batch=${prompts.prompts['char.pulsar'].batch}`);
+    const carried = units.filter(id => prompts.prompts[id].prompt.includes(clause));
+    if (prompts.styleClause === clause && carried.length === units.length) {
+      ok(`the style clause reaches all ${units.length} prompts byte-for-byte from STYLE_ANCHOR.md — a paraphrase has nowhere to enter`);
+    } else fail(`style clause carried by ${carried.length}/${units.length} prompts`);
+    if (prompts.prompts['char.pulsar'].batch === 0 && units.filter(id => prompts.prompts[id].batch === 0).length === 1) {
+      ok('Pulsar is batch 0, alone — the anchor is generated and approved before anything else');
+    } else fail('batch 0 is not exactly Pulsar');
   }
 
   // -- per-sprite manifest overrides survive a regeneration --
