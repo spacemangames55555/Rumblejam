@@ -81,7 +81,12 @@ for (const id of Object.values(UI)) add(id);
 // `w`/`h` are overridable because hand-supplied art does not always arrive at
 // the category's canonical canvas, and the manifest must describe what is
 // actually on disk or the loader refuses the file.
-const OVERRIDABLE = new Set(['frames', 'fps', 'directions', 'anchor', 'w', 'h']);
+//
+// `scale` is the cosmetic render-size multiplier (js/assets.js). It is only
+// ever an override, never a category default, so a sprite that does not name
+// it here is drawn at exactly 1 — which is also the only way the fast path in
+// drawSprite stays intact for the other 297 ids.
+const OVERRIDABLE = new Set(['frames', 'fps', 'directions', 'anchor', 'w', 'h', 'scale']);
 let overrides = {};
 if (existsSync(OVERRIDES)) {
   overrides = JSON.parse(readFileSync(OVERRIDES, 'utf8'));

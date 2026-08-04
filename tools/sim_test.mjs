@@ -26,7 +26,7 @@ import { CONFIG as CFG } from '../js/config.js';
 const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { ALL_CHARS as _ALL_CHARS } from '../js/content/characters.js';
 const ALL_CHARS_N = _ALL_CHARS.length;
 
@@ -2878,9 +2878,91 @@ try {
     if (/^\//.test(spec.file)) hyg.push(`${id}: leading slash in "${spec.file}"`);
     if (spec.file.includes('..')) hyg.push(`${id}: "${spec.file}" escapes the asset root`);
     if (spec.anchor !== undefined && spec.anchor !== 'center' && spec.anchor !== 'bottom') hyg.push(`${id}: anchor "${spec.anchor}"`);
+    // `scale` is cosmetic and opt-in. It must be a sane positive number, and it
+    // must be DECLARED — an entry that acquired one by accident would silently
+    // paint at the wrong size and drop off drawSprite's fast path.
+    if (spec.scale !== undefined) {
+      if (!declares(id, 'scale')) hyg.push(`${id}: scale ${spec.scale} with no override declaring it`);
+      if (!(Number.isFinite(spec.scale) && spec.scale > 0 && spec.scale <= 8)) hyg.push(`${id}: scale ${spec.scale} is not a positive number <= 8`);
+    }
   }
   if (hyg.length) fail(`${hyg.length} manifest problem(s): ${hyg.slice(0, 5).join(' | ')}`);
   else ok('manifest hygiene: canonical sizes per namespace, every path relative, no leading slashes (Pages serves from /Rumblejam/)');
+
+  // -- `scale` is COSMETIC, and this is what makes that a fact rather than an
+  //    intention. The tempting way to make art read bigger is to grow the
+  //    entity's radius, which is hitbox, collision, knockback and melee reach
+  //    all at once. The manifest key exists so that fix cannot reach any of
+  //    them, and the guarantee is structural: the sprite layer is not imported
+  //    by anything that simulates, so no sim code CAN read a scale. --
+  {
+    const SIM_MODULES = ['game.js', 'netcodec.js', 'net.js', 'dungeon.js', 'objectives.js',
+      'arenas.js', 'traits-toh.js', 'roster.js', 'config.js', 'rng.js', 'util.js'];
+    const leaked = [];
+    for (const f of SIM_MODULES) {
+      const src = readFileSync(new URL(`../js/${f}`, import.meta.url), 'utf8');
+      if (/from\s+['"][^'"]*assets\.js['"]/.test(src)) leaked.push(f);
+    }
+    for (const f of readdirSync(new URL('../js/entities', import.meta.url))) {
+      if (!f.endsWith('.js')) continue;
+      const src = readFileSync(new URL(`../js/entities/${f}`, import.meta.url), 'utf8');
+      if (/from\s+['"][^'"]*assets\.js['"]/.test(src)) leaked.push(`entities/${f}`);
+    }
+    if (leaked.length) fail(`the sprite layer is imported by simulation code: ${leaked.join(', ')} — a cosmetic key could then change the game`);
+    else ok(`js/assets.js is imported by the renderer and the shell only — ${SIM_MODULES.length} simulation modules and every entity file are blind to it, so a manifest scale cannot reach a hitbox`);
+
+    // and the entity itself is untouched: a scaled character has exactly the
+    // radius the same character has with no art at all. Compared against the
+    // engine's OWN rule (js/game.js: PLAYER_RADIUS x the immovable hitbox) so
+    // this asserts "unchanged", not a number retyped from the source.
+    const CH = await import('../js/content/characters.js');
+    const scaled = Object.entries(man).filter(([, s]) => s.scale !== undefined).map(([id]) => id);
+    const bySprite = new Map(CH.ALL_CHARS.map(c => [c.spriteId, c]));
+    const radBad = [];
+    const before = CH.ROSTER_ID;
+    for (const id of scaled) {
+      const chr = bySprite.get(id);
+      if (!chr) continue;
+      // the id only resolves while its own roster is active — otherwise the
+      // party falls back to another character and this measures the wrong one
+      CH.setRoster(CH.rosterOf(chr.id));
+      const g = new Sim({ seed: 5, party: [{ idx: 0, key: 'a', name: 'A', charId: chr.id, color: '#fff' }] });
+      const p = g.players[0];
+      if (p.char.id !== chr.id) { radBad.push(`${chr.id}: the sim resolved ${p.char.id} instead`); continue; }
+      const want = CFG.PLAYER_RADIUS * (chr.trait.key === 'immovable' ? chr.trait.hitbox : 1);
+      if (p.radius !== want) radBad.push(`${chr.id}: radius ${p.radius}, want ${want}`);
+      if ('scale' in p || 'spriteScale' in p) radBad.push(`${chr.id}: the player carries a scale field`);
+      const snap = JSON.parse(JSON.stringify(g.getSnapshot()));
+      if (/"(sprite)?[Ss]cale"/.test(JSON.stringify(snap))) radBad.push(`${chr.id}: a snapshot carries a scale field`);
+    }
+    CH.setRoster(before);
+    if (radBad.length) fail(`a cosmetic scale reached the simulation: ${radBad.join(' | ')}`);
+    else ok(`the ${scaled.length} sprite(s) with a manifest scale keep the stock entity radius and put nothing on the wire — the multiplier is paint, not hitbox`);
+
+    // -- what the loader accepts as a scale. A junk value must land on 1 and
+    //    NEVER on 0: a zero scale is an invisible sprite with no fallback,
+    //    because drawSprite still returns true and the caller skips its
+    //    primitive. That is a character who simply is not there. --
+    const warns = [];
+    const realWarn = console.warn;
+    console.warn = m => warns.push(String(m));
+    const scaleCases = [
+      [undefined, 1], [null, 1], [1, 1], [1.5, 1.5], [8, 8], ['2', 2],
+      [0, 1], [-1, 1], [-0.5, 1], [8.001, 1], [99, 1], [NaN, 1],
+      [Infinity, 1], ['big', 1], [{}, 1], [[], 1],
+    ];
+    const scBad = [];
+    for (const [input, want] of scaleCases) {
+      const got = AS.manifestScale('char.probe', input);
+      if (got !== want) scBad.push(`${JSON.stringify(input)} -> ${got}, want ${want}`);
+    }
+    console.warn = realWarn;
+    const refused = scaleCases.filter(([, w], i) => w === 1 && scaleCases[i][0] !== undefined
+      && scaleCases[i][0] !== null && scaleCases[i][0] !== 1).length;
+    if (scBad.length) fail(`manifest scale validation: ${scBad.join(' | ')}`);
+    else if (warns.length !== refused) fail(`${refused} bad scale(s) refused but ${warns.length} warning(s) logged — a rejected value must say so`);
+    else ok(`manifest scale accepts 0 < n <= ${AS.MAX_SCALE} and refuses ${refused} junk value(s) out loud, all landing on 1 — never on 0, which would be an invisible sprite with the primitive already skipped`);
+  }
 
   // -- the generator is the source of truth; a hand-edit must not survive --
   try {

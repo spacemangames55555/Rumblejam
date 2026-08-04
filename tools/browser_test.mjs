@@ -1335,6 +1335,56 @@ try {
         ok(`facing is render-local: ${wall.mapSize} entries in the renderer's map, none on any entity, none in the snapshot`);
       } else fail(`facing leaked: ${JSON.stringify(wall)}`);
 
+      // 5b: the manifest's cosmetic `scale`. It multiplies how big the cell is
+      // PAINTED, composed on top of the caller's own scale, and it must not
+      // touch which cell is chosen or leak any context state — a scaled sprite
+      // is the only thing in the renderer that takes save()/restore(), so an
+      // unbalanced one would corrupt everything drawn after it.
+      const sc = JSON.parse(await S4.exec(`
+        const A = window.uvAssets, D = window.uvDrawSprite;
+        const e = A.declared('enemy.skulker');
+        const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+        const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+        // opaque span across the sprite's middle row, in device px
+        const span = () => { const d = g.getImageData(0, 128, 256, 1).data; let n = 0;
+          for (let x = 0; x < 256; x++) if (d[x*4+3] > 0) n++; return n; };
+        const draw = opts => { g.clearRect(0,0,256,256); D(g,'enemy.skulker',128,128,opts); return span(); };
+        // which row got picked, at the sprite's own centre
+        const rowAt = () => { const d = g.getImageData(128,128,1,1).data; return Math.round((d[0]-20)/30); };
+
+        const was = e.scale;
+        const out = {};
+        e.scale = 1;
+        out.plain = draw({});                       // 32 across
+        out.callerHalf = draw({ scale: 0.5 });      // 16
+        e.scale = 1.5;
+        out.scaled = draw({});                      // 48
+        out.composed = draw({ scale: 0.5 });        // 24: caller 0.5 x manifest 1.5
+        out.rowScaled = (draw({ facing: Math.PI }), rowAt());   // still W = row 4
+
+        // save()/restore() balance: the slow path is the only one that touches
+        // the context, and it has to hand it back exactly as it found it
+        g.setTransform(1, 0, 0, 1, 7, 11); g.globalAlpha = 0.5;
+        const t0 = g.getTransform(), a0 = g.globalAlpha;
+        D(g, 'enemy.skulker', 0, 0, { scale: 2, alpha: 0.3 });
+        const t1 = g.getTransform();
+        out.transformKept = (t1.a===t0.a && t1.d===t0.d && t1.e===t0.e && t1.f===t0.f) ? 1 : 0;
+        out.alphaKept = g.globalAlpha === a0 ? 1 : 0;
+        g.setTransform(1,0,0,1,0,0); g.globalAlpha = 1;
+
+        e.scale = was;
+        out.restored = e.scale;
+        return JSON.stringify(out);`));
+      if (sc.plain === 32 && sc.scaled === 48 && sc.callerHalf === 16 && sc.composed === 24) {
+        ok(`manifest scale is a pure size multiplier: 32px at 1.0, ${sc.scaled}px at 1.5, and it composes with the caller's own scale (0.5 x 1.5 = ${sc.composed}px)`);
+      } else fail(`scale spans: ${JSON.stringify(sc)}`);
+      if (sc.rowScaled === 4) ok('a scaled sprite still resolves the same row — the multiplier changes the size a cell is painted, never which cell');
+      else fail(`scaled row ${sc.rowScaled}, want 4 (W)`);
+      if (sc.transformKept && sc.alphaKept) ok('the scaled draw hands the context back untouched — transform and globalAlpha survive it, so nothing drawn afterwards is corrupted');
+      else fail(`context leaked after a scaled draw: ${JSON.stringify(sc)}`);
+      if (sc.restored === 1) ok('and every other sprite composes to exactly 1, so it stays on drawSprite\'s bare-drawImage fast path');
+      else fail(`the fixture's scale was not restored: ${sc.restored}`);
+
       const perrs = await S4.errors();
       if (perrs.length) fail(`console errors with a partial manifest: ${perrs.join(' | ').slice(0, 300)}`);
       else ok('zero console errors with sprites, rejected grids and primitives on screen together');

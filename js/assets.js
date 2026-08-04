@@ -50,6 +50,39 @@ const DEFAULT_FPS = 8;
 const DEFAULT_FRAMES = 1;
 const DEFAULT_ANCHOR = 'center';
 
+// ---------------- the cosmetic size multiplier ----------------
+//
+// `scale` in the manifest multiplies how large a sprite is PAINTED and nothing
+// else. It is not a radius, not a hitbox, not a collision size, and it is not
+// on the wire — two clients with different manifests would disagree about how
+// big a druid looks and agree exactly about where he is and what he hits.
+//
+// It exists because art arrives at whatever size its author drew it, and a
+// figure that reads small next to the rest of the roster is a LOOK problem. The
+// tempting fix — nudge the entity's radius until the art looks right — is a
+// simulation change: radius is hitbox, is collision, is knockback distance, is
+// how far a melee swing reaches. This key is the version of that fix that
+// cannot touch any of them.
+//
+// Absent means 1, so every sprite that does not opt in is bit-identical to
+// before this key existed, fast path included.
+const DEFAULT_SCALE = 1;
+// A typo'd 15 where 1.5 was meant would paint one sprite across the whole
+// arena and look like a renderer bug rather than a bad number. Refuse it out
+// loud, and draw at 1 — the same "a silently wrong sprite is worse than no
+// sprite" rule the grid validation follows. Exported, with the check itself,
+// so the harnesses can test the real rule instead of a copy of it.
+export const MAX_SCALE = 8;
+export function manifestScale(id, v) {
+  if (v === undefined || v === null) return DEFAULT_SCALE;
+  const n = +v;
+  if (!Number.isFinite(n) || n <= 0 || n > MAX_SCALE) {
+    console.warn(`[sprites] ${id}: scale ${JSON.stringify(v)} is not a positive number <= ${MAX_SCALE} — painting at ${DEFAULT_SCALE}`);
+    return DEFAULT_SCALE;
+  }
+  return n;
+}
+
 // ---------------- directions ----------------
 //
 // A sprite with `directions > 1` is a GRID, not a strip: rows are facings,
@@ -90,7 +123,7 @@ function phaseOf(seed) {
   return h >>> 0;
 }
 
-// registry: id -> { img, w, h, frames, fps, anchor, file }
+// registry: id -> { img, w, h, frames, fps, anchor, scale, file }
 // `img` is null while loading and stays null forever if the file is not there.
 const registry = new Map();
 const missing = new Set();
@@ -160,6 +193,7 @@ export const Assets = {
           fps: spec.fps > 0 ? spec.fps : DEFAULT_FPS,
           anchor: spec.anchor === 'bottom' ? 'bottom' : DEFAULT_ANCHOR,
           directions: spec.directions > 1 ? spec.directions | 0 : 1,
+          scale: manifestScale(id, spec.scale),
         };
         registry.set(id, entry);
         jobs.push(loadImage(entry.file).then(img => {
@@ -257,6 +291,11 @@ function frameOf(s, frame, seed) {
 // rotating a single-direction sheet: units pass `facing`, projectiles pass
 // `rot`, and a `directions: 1` entry behaves precisely as it did before
 // directional support existed.
+//
+// `opts.scale` is the caller's sizing — normally spriteScaleFor(), which maps
+// the entity's world size onto the sheet. The manifest's own `scale` is a
+// separate, cosmetic multiplier composed on top of it below; the caller neither
+// knows nor needs to know that a given sprite carries one.
 export function drawSprite(ctx, id, x, y, opts) {
   if (SPRITE_MODE === 'off' || !id) return false;
   const s = Assets.get(id);
@@ -264,7 +303,7 @@ export function drawSprite(ctx, id, x, y, opts) {
     if (SPRITE_MODE === 'debug') debugBox(ctx, id, x, y);
     return false;
   }
-  const scale = opts && opts.scale !== undefined ? opts.scale : 1;
+  const callerScale = opts && opts.scale !== undefined ? opts.scale : 1;
   const alpha = opts && opts.alpha !== undefined ? opts.alpha : 1;
   const w = s.w, h = s.h;
   const directional = s.directions > 1;
@@ -285,10 +324,24 @@ export function drawSprite(ctx, id, x, y, opts) {
   const sy = row * h;
   const ay = s.anchor === 'bottom' ? h : h / 2;
 
+  // The manifest's cosmetic multiplier, composed on top of whatever the caller
+  // asked for — AFTER the row and the frame are chosen, because it changes the
+  // size the cell is painted at and never which cell. Anchoring is unaffected
+  // in kind: a centred sprite still grows about the entity's centre and a
+  // bottom-anchored one still grows upward from its feet, because the scale is
+  // applied around the same origin the draw already used.
+  const scale = callerScale * s.scale;
+
   // Fast path: an unrotated, unscaled, opaque sprite. save()/restore() around
   // every one of a few hundred entities is real cost for nothing. Every
   // directional sprite qualifies on the rotation half of the test by
   // construction, so the directional path is the cheaper of the two.
+  //
+  // A manifest `scale` other than 1 takes the sprite OFF this path, by
+  // construction — it is a real transform and there is no way to express it in
+  // a bare drawImage. That is the cost of the key and it is per-sprite, not
+  // global: an entry without `scale` composes to exactly 1 and stays on the
+  // fast path, bit-identical to before the key existed.
   if (rot === 0 && !flipX && scale === 1 && alpha === 1) {
     ctx.drawImage(s.img, sx, sy, w, h, x - w / 2, y - ay, w, h);
     if (directional && SPRITE_MODE === 'debug') debugDir(ctx, row, s, x, y);
@@ -346,6 +399,10 @@ function debugDir(ctx, row, s, x, y) {
 // themselves in world units (an enemy radius, a boss radius), and the art is
 // authored at the canonical sizes in §6 — this is the bridge. Returns 1 when
 // there is no art, which the caller never uses.
+//
+// This deliberately does NOT fold in the manifest's cosmetic `scale`. Callers
+// pass the result straight to drawSprite, which composes the two; applying it
+// here as well would square it, and a 1.5 would silently become 2.25.
 export function spriteScaleFor(id, targetPx) {
   const s = Assets.get(id);
   if (!s || !s.w) return 1;

@@ -58,6 +58,7 @@ character gets an inventory entry automatically and cannot be forgotten.
 | `fps` | `8` | playback rate |
 | `anchor` | `"center"` | `"bottom"` puts the art's feet on the entity's position — use it for anything standing on the floor |
 | `directions` | `1` | rows in the grid. `1` (or absent) is the old rotated behaviour |
+| `scale` | `1` | cosmetic render-size multiplier — see below |
 
 **Sheets are strips; unit sheets are grids.** Columns are animation frames,
 rows are facings. The cell for (frame, direction) sits at
@@ -77,6 +78,45 @@ To animate an existing static sprite, add `frames` and `fps` to the generator
 the next regeneration will wipe it. If a manifest ever claims more frames than
 the file actually holds, the loader notices, warns once, and uses what is
 really there rather than drawing blank frames.
+
+### `scale` — a cosmetic size multiplier, and only that
+
+Art arrives at whatever size its author drew it, and a figure that reads small
+next to the rest of the roster is a **look** problem. `scale` multiplies how
+large the sprite is painted and changes nothing else:
+
+```json
+"char.toh_druid": { "file": "char/toh_druid.png", "w": 128, "h": 128, "directions": 8, "scale": 1.5 }
+```
+
+It is **not** a radius. The tempting fix for art that reads small — nudge the
+entity's radius until it looks right — is a simulation change: radius is
+hitbox, is collision, is knockback distance, is how far a melee swing reaches,
+and it is on the wire. This key is the version of that fix that cannot touch
+any of them. `js/assets.js` is imported by the renderer and the app shell only;
+no simulation module can even see it, and the test suite asserts that.
+
+- Absent means `1`, so every sprite that does not opt in is bit-identical to
+  before the key existed.
+- Composed on top of the caller's own scale, **after** the row and frame are
+  chosen — it changes how big a cell is painted, never which cell.
+- Accepted range is `0 < n ≤ 8`. Anything else is refused with a console
+  warning and drawn at `1` — never at `0`, which would be an invisible sprite
+  with the primitive fallback already skipped.
+- Set it in `assets/sprite-overrides.json`, like `frames` and `directions`; it
+  is never a category default.
+
+**It costs the fast path.** `drawSprite` normally paints with a bare
+`drawImage` and no `save()`/`restore()`; a scale other than 1 is a real
+transform and cannot be expressed that way. Measured on a 128px sheet at
+72 device px, headless SwiftShader: **11.2 µs/draw on the fast path, 17.0 µs
+scaled** — about half again, covering both the transform and the 2.25× pixels a
+1.5 sprite fills. That cost is per-sprite, not global. At horde density it is
+invisible, because only party members carry a scale: 8 scaled sprites among 300
+measured 3.34 ms/frame against 3.35 ms with none scaled, inside the run-to-run
+noise. Scaling *every* sprite would cost 1.7 ms/frame at 300 — about a tenth of
+the 16.67 ms budget, so even the pathological case is affordable, but there is
+no reason to pay it broadly.
 
 ## Directional units
 
