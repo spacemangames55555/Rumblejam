@@ -194,9 +194,14 @@
     },
     "char.toh_assassin": {
       "file": "char/toh_assassin.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        121,
+        122
+      ]
     },
     "char.toh_bard": {
       "file": "char/toh_bard.png",

@@ -5,6 +5,15 @@
       27
     ]
   },
+  "char.toh_assassin": {
+    "w": 128,
+    "h": 128,
+    "scale": 2.18,
+    "content": [
+      121,
+      122
+    ]
+  },
   "char.toh_druid": {
     "w": 128,
     "h": 128,
