@@ -239,9 +239,14 @@
     },
     "char.toh_mage": {
       "file": "char/toh_mage.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        99,
+        119
+      ]
     },
     "char.toh_monk": {
       "file": "char/toh_monk.png",

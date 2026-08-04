@@ -1,6 +1,6 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Seven are in.**
+Thirteen characters to install. **Eight are in.**
 
 | | character | id | status |
 |---|---|---|---|
@@ -11,7 +11,8 @@ Thirteen characters to install. **Seven are in.**
 | ✓ | Samurai | `char.toh_samurai` | installed |
 | ✓ | Priest | `char.toh_priest` | installed |
 | ✓ | Monk | `char.toh_monk` | installed |
-| | Blacksmith · Wizard · Necromancer · Mage · Bard · Sundian | | awaiting art (6) |
+| ✓ | Mage | `char.toh_mage` | installed |
+| | Blacksmith · Wizard · Necromancer · Bard · Sundian | | awaiting art (5) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -38,28 +39,28 @@ artifact of padding.
 | Savage | 2.18 | 1.0492 | 117×122 | 164.7 | **157.0** | **−0.00%** |
 | Hunter | 2.18 | 1.0492 | 101×122 | 164.7 | **157.0** | **−0.00%** |
 | Priest | 2.18 | 1.0756 | 88×119 | **168.8** | **157.0** | **−0.00%** |
+| Mage | 2.18 | 1.0756 | 99×119 | **168.8** | **157.0** | **−0.00%** |
 
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Eight sheets, eight content boxes, cell fills from **93.0% to 97.7%**, three
-source canvases: 244×244 (Savage, Priest), 248×248 (Druid, Assassin, Samurai,
-Monk), 256×256 (Hunter, Witch Doctor).
+Nine sheets, nine content boxes, cell fills from **93.0% to 97.7%**, **four**
+source canvases: 240×240 (Mage), 244×244 (Savage, Priest), 248×248 (Druid,
+Assassin, Samurai, Monk), 256×256 (Hunter, Witch Doctor).
 
-The Priest stretched the range: at 93.0% cell fill his `fit` is 1.0756, the
-largest so far, and his cell renders at **168.8 device px against the Druid's
-162.0** — an 8.1px spread where it was 4.0px a character ago. The silhouettes
-are still identical. Normalization is now visibly doing more work than it was,
-which is the point: the spread it absorbs grows with the roster, and every
-pixel of it would otherwise have been a hand-calibration. Their **cells** span 160.7 to 164.7
-device px, a 4px spread that means nothing. Their **silhouettes are identical to
-a tenth of a pixel.**
+The spread across **cells** is now 160.7 to 168.8 device px — 8.1px, opened up
+by the Priest and matched exactly by the Mage, who lands on the same 119px
+content height from a different direction (99 wide against the Priest's 88, off
+a 240 canvas rather than 244). Their **silhouettes are identical to a tenth of a
+pixel**, as are all nine.
 
-Three canvas sizes arriving unannounced across five characters is exactly the
-situation content normalization was built for, and it turned up on its own
-rather than as a test case. Before the change this would have produced three
-different apparent sizes and required per-character hand-calibration to hide it.
-The canvas an artist happens to export on is now invisible to the game.
+Two characters converging on the same `fit` from different canvases and
+different content widths is the clearest evidence yet that the normalization is
+measuring the right thing. Four canvas sizes arriving unannounced across nine
+characters is exactly the situation it was built for, and every one of them
+turned up on its own rather than as a test case. Before the change this would
+have been four different apparent sizes and four hand-calibrations. The canvas
+an artist happens to export on is now invisible to the game.
 
 ### Per-facing height spread
 
@@ -76,14 +77,18 @@ would render its other seven short. Measured:
 | Samurai | 122 123 122 123 122 121 120 121 | 123 | 120 | **2.4%** |
 | Priest | 118 118 114 115 119 117 113 112 | 119 | 112 | 5.9% |
 | Monk | 122 122 120 122 122 120 117 120 | 122 | 117 | 4.1% |
+| Mage | 119 119 118 118 119 117 116 117 | 119 | 116 | **2.6%** |
 
-Four sit in the same ~5% band; the Savage (1.6%) and Samurai (2.4%) are notably
-tighter — their poses barely change height between facings, where the others bob
-a few pixels. Nothing to act on; it just means those eight drawings are unusually
-consistent with each other. All eight sit, so no facing is dragging its character
-smaller. Worth re-checking per character: a raised staff or a leaping pose in
-one facing only would show up here as a spread well outside this range, and the
-fix would be art-side rather than a scale tweak.
+Four sit in the same ~5% band; the Savage (1.6%), Samurai (2.4%) and Mage (2.6%)
+are notably tighter — their poses barely change height between facings, where the
+others bob a few pixels. Nothing to act on; it just means those eight drawings
+are unusually consistent with each other. The Mage is the interesting one of the
+three, because he *carries a raised staff* — the exact feature this table was
+built to catch. It stays inside the silhouette in every facing rather than
+poking above the head in one, so it costs nothing. All nine characters sit, so
+no facing is dragging its character smaller. Worth re-checking per character: a
+raised staff or a leaping pose in one facing only would show up here as a spread
+well outside this range, and the fix would be art-side rather than a scale tweak.
 
 ## Gates: structure only
 
@@ -243,11 +248,31 @@ assembled until all eight were present.
 Assembled to `assets/sprites/char/toh_monk.png`, 128×1024, `directions: 8`,
 `content: [96, 122]`, `scale: 2.18`. Autocrop 248×248 → 111×123.
 
+### Mage
+
+Supplied 2026-08-04, eight **240×240** RGBA PNGs — a fourth canvas size, in two
+messages of four; not assembled until all eight were present.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `17275a162c93f06d4ea1efdffd83cc2e` | `mage/sources/east.png` |
+| SE | `ce31253b8043187c8c260e7df2776a5a` | `mage/sources/southeast.png` |
+| S | `4cf0d94c096918a882ad4f949dfee786` | `mage/sources/south.png` |
+| SW | `0780dacb19fca67440ec61caf3d3128d` | `mage/sources/southwest.png` |
+| W | `a92ae8fedb83b1ece48c66842dc6f011` | `mage/sources/west.png` |
+| NW | `1f392826ad7003a2d6fd390dd4c7828d` | `mage/sources/northwest.png` |
+| N | `45a1d97a45863979f65d739a3efcd01b` | `mage/sources/north.png` |
+| NE | `4068221932b1817a82111a6368e5ad49` | `mage/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_mage.png`, 128×1024, `directions: 8`,
+`content: [99, 119]`, `scale: 2.18`. Autocrop 240×240 → 110×120.
+
 ## What the contact sheet shows — look at this, not at numbers
 
 Size is settled and mechanical. The sheet is for everything else.
 
-**Eight characters. Five agree, three do not.**
+**Nine characters. Five agree, four do not — and they disagree in three
+different ways.**
 
 | | | |
 |---|---|---|
@@ -259,35 +284,77 @@ Size is settled and mechanical. The sheet is for everything else.
 | **Assassin** | **pale** | white hood, blue-grey cloak |
 | **Priest** | **pale** | seafoam and cream robes, white hood, gold trim |
 | **Savage** | **high-chroma** | orange, turquoise, brass |
+| **Mage** | **cool, not earthy** | violet cloak, blue-grey plate, gold trim, pale blue crystal |
 
 "Inside" means the style clause: *"muted earthy palette… strong dark outline and
 deep shadow mass"*, value mass sitting low.
 
-### The refined hypothesis, and how much to trust it
+### The Mage is a third kind of outlier
 
-At seven characters the pattern looked like **robes come back pale** — the two
-pale outliers were the only two hooded robes.
+He is not pale and he is not high-chroma. His value mass is fine — near-black
+outlines throughout, a genuinely dark cloak, real shadow under the hood and
+between the armour plates. On the axis that caught the Assassin and the Priest
+he passes comfortably.
 
-The Monk tests that directly and **breaks the simple version**. He is robed, and
-he is not pale. What separates him from the Priest is that his robe is
-*interrupted*: a bare shoulder, a dark sash, exposed skin, a second garment
-underneath. The Priest's and Assassin's garments are single uninterrupted
-surfaces.
+What separates him is **hue**. The clause asks for *"greens browns and
+leather"*; the Mage is violet, blue-grey and gold, with a wooden staff shaft as
+the only warm earthy note on the figure. Nothing about him is wrong — he reads
+well on the floor and his silhouette is the most distinctive on the sheet — but
+he is not the palette the clause describes.
 
-So the sharper claim is **large uninterrupted single-value garments come back
-pale** — the failure is the unbroken surface, not the robe. The clause asks for
-*"deep shadow mass"*, which a figure made of many small pieces gets for free
-from the gaps between them; one continuous surface has nowhere to put it.
+**On "no glow, no emissive rim, no neon":** the shoulder crystals and the staff
+head are pale blue with near-white cores, and they read as luminous. They are
+nonetheless *literally* compliant — every crystal has a hard dark outline, and
+there is no halo, no soft falloff and no additive bleed anywhere on the sheet.
+The luminance is done with value contrast against a dark cloak, which is what
+the clause is asking for rather than what it forbids. Worth stating explicitly
+because "looks like it glows" and "is drawn with a glow" are different things,
+and only the second one is a defect.
 
-**How much to trust that: not very much yet.** It is one confirming case for a
-hypothesis formed one character earlier, and the Monk was *predicted* to confirm
-it before the sheet was rendered. That is the weakest shape evidence can take.
-Three of the remaining six (Wizard, Necromancer, Mage) are the real test, and
-they are all plausibly robed.
+### The garment hypothesis: refined again, in a way that matters
 
-Note also that the Savage is a **different axis entirely** — his value mass is
-fine; it is chroma that separates him. Two unrelated ways to fall outside one
-clause.
+At seven characters the pattern read as **robes come back pale**. The Monk broke
+the simple version — robed, not pale — and the sharper claim became **large
+uninterrupted single-value garments come back pale**, on the reasoning that the
+clause's *"deep shadow mass"* comes for free from the gaps between many small
+pieces and has nowhere to go on one continuous surface.
+
+The Mage is the first real test of that, and he **corrects it**.
+
+His front view is heavily interrupted — plate, crystal, trim, tabard — so it
+doesn't test the claim. **His back does**, and it is the cleanest test case in
+the roster: `assets/sprites/char/toh_mage.png`, row 6 (N), is a single violet
+cloak covering roughly three-quarters of the figure with nothing on it but two
+faint fold lines.
+
+It did not come back pale. It came back **flat** — mid-value violet, almost no
+internal shadow, a hem and two creases.
+
+So the mechanism is right and the symptom was wrong. A large uninterrupted
+garment loses its **shadow mass**, not its **darkness**. Where it lands after
+that depends on the garment's own value: the Priest's cream and the Assassin's
+white had nowhere to go but pale, the Mage's violet stays mid. The restated
+claim:
+
+> **A large uninterrupted single-value garment comes back with no shadow mass.
+> Whether that reads as "pale" depends on the garment's base value, not on the
+> mechanism.**
+
+That is a better claim than the one it replaces, because it now predicts two
+distinguishable outcomes instead of one, and the second is what actually
+happened.
+
+**How much to trust it: more than last time, and still not much.** It is now two
+confirming cases from three characters, one of which corrected the prediction
+rather than confirming it — which is the better kind of evidence, but it is
+still three characters. **The Wizard and the Necromancer are the remaining
+tests**, and both are plausibly robed.
+
+Note also that the Savage remains a **separate axis** — his value mass is fine
+and his shadow mass is fine; it is chroma. Three unrelated ways to fall outside
+one clause, which is itself worth knowing: the clause is doing at least three
+jobs and a single number could never have gated it. That is the retired
+aesthetic bands' obituary, restated from the other end.
 
 ### The prediction record, so far
 
@@ -300,9 +367,13 @@ anything:
 | Samurai | inside clause | inside clause | ✓ |
 | Priest | pale | pale | ✓ |
 | Monk | inside clause | inside clause | ✓ |
+| Mage | *no prediction entered* | **cool-hue outlier** | — |
 
-Three of four, with the miss in the reassuring direction. **Source files are a
-guess; the sheet is the evidence.**
+Still three of four, with the miss in the reassuring direction. The Mage row is
+deliberately empty: after the Assassin miss the standing rule became **source
+files are a guess; the sheet is the evidence**, so nothing was called before the
+sheet rendered. That costs a data point and is the right trade — a prediction
+made in order to have a row to fill in is not a prediction.
 
 **Nothing has been changed on account of any of this.** All three outliers read
 well on the arena floor. The open question is whether the roster should look
