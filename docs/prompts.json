@@ -431,10 +431,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Hunter, a summons ranged dungeon adventurer, a recurve bow carried horizontally across the back, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Hunter, a summons ranged dungeon adventurer, a recurve bow carried horizontally across the back, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "char.toh_mage": {
       "batch": 1,
