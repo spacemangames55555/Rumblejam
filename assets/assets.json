@@ -216,9 +216,14 @@
     },
     "char.toh_bard": {
       "file": "char/toh_bard.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 256,
+      "h": 256,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        190,
+        254
+      ]
     },
     "char.toh_blacksmith": {
       "file": "char/toh_blacksmith.png",

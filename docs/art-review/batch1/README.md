@@ -1,6 +1,6 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Nine are in.**
+Thirteen characters to install. **Ten are in.**
 
 | | character | id | status |
 |---|---|---|---|
@@ -13,7 +13,8 @@ Thirteen characters to install. **Nine are in.**
 | ✓ | Monk | `char.toh_monk` | installed |
 | ✓ | Mage | `char.toh_mage` | installed |
 | ✓ | Wizard | `char.toh_wizard` | installed |
-| | Blacksmith · Necromancer · Bard · Sundian | | awaiting art (4) |
+| ✓ | Bard | `char.toh_bard` | installed |
+| | Blacksmith · Necromancer · Sundian | | awaiting art (3) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -42,13 +43,22 @@ artifact of padding.
 | Priest | 2.18 | 1.0756 | 88×119 | **168.8** | **157.0** | **−0.00%** |
 | Mage | 2.18 | 1.0756 | 99×119 | **168.8** | **157.0** | **−0.00%** |
 | Wizard | 2.18 | 1.0407 | 105×123 | 163.3 | **157.0** | **−0.00%** |
+| Bard † | 2.18 | 1.0079 | 190×254 | 158.2 | **157.0** | **−0.00%** |
+
+† **The Bard is on a 256 cell, not 128** — the only one. His art arrived drawn
+at roughly twice the roster's scale: the figure fills 254 of a 256 canvas where
+every other character fills ~123 of 240–256. It does not fit a 128 cell, so the
+`w`/`h` override puts him on 256 and normalisation does the rest. See the note
+under his provenance entry — his on-screen size is right, his pixel density is
+not, and that is a judgement for the contact sheet.
 
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Ten sheets, ten content boxes, cell fills from **93.0% to 97.7%**, **four**
-source canvases: 240×240 (Mage), 244×244 (Savage, Priest), 248×248 (Druid,
-Assassin, Samurai, Monk, Wizard), 256×256 (Hunter, Witch Doctor).
+Eleven sheets, eleven content boxes, **four** source canvases: 240×240 (Mage),
+244×244 (Savage, Priest), 248×248 (Druid, Assassin, Samurai, Monk, Wizard),
+256×256 (Hunter, Witch Doctor, Bard). Cell fill runs 93.0% to 97.7% on the ten
+128-cell sheets and **99.2%** on the Bard's 256 cell.
 
 The spread across **cells** is now 160.7 to 168.8 device px — 8.1px, opened up
 by the Priest and matched exactly by the Mage, who lands on the same 119px
@@ -81,6 +91,7 @@ would render its other seven short. Measured:
 | Monk | 122 122 120 122 122 120 117 120 | 122 | 117 | 4.1% |
 | Mage | 119 119 118 118 119 117 116 117 | 119 | 116 | **2.6%** |
 | Wizard | 121 121 121 123 123 121 120 119 | 123 | 119 | **3.4%** |
+| Bard | 248 254 248 254 248 246 244 246 | 254 | 244 | **4.1%** |
 
 Four sit in the same ~5% band; the Savage (1.6%), Samurai (2.4%) and Mage (2.6%)
 are notably tighter — their poses barely change height between facings, where the
@@ -289,9 +300,65 @@ assembled until all eight were present.
 Assembled to `assets/sprites/char/toh_wizard.png`, 128×1024, `directions: 8`,
 `content: [105, 123]`, `scale: 2.18`. Autocrop 248×248 → 105×123.
 
+### Bard
+
+Supplied 2026-08-05, eight **256×256** RGBA PNGs, all eight in one message.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `8377704f0bfab9d84106484373b23a08` | `bard/sources/east.png` |
+| SE | `98a129f2b839fb4c16b3a7ef591d01f5` | `bard/sources/southeast.png` |
+| S | `d5cbff62160fb780d4839fcff9ec252d` | `bard/sources/south.png` |
+| SW | `ab25f525fea27c8cee4a4a963e0a7d08` | `bard/sources/southwest.png` |
+| W | `6e70e89bc6515ec600edfeefb059b1df` | `bard/sources/west.png` |
+| NW | `402cd2282ca9f6e8074fcd53f7e00f23` | `bard/sources/northwest.png` |
+| N | `0f090792f96a98315584cfecc366c6fa` | `bard/sources/north.png` |
+| NE | `f61f50d694d1fd4c3ec3c960781e4464` | `bard/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_bard.png`, **256×2048**, `directions: 8`,
+`content: [190, 254]`, `scale: 2.18`. Autocrop 256×256 → 214×254.
+
+**He is drawn at about twice the roster's scale, and that is worth knowing.**
+The autocrop union is 214×254 where every other character crops to roughly
+90–125 × 119–125. The figure fills its source canvas almost edge to edge. That
+will not fit a 128 cell, so he ships on a 256 one.
+
+Normalisation makes his **on-screen size** correct — silhouette 157.0 device px,
+identical to the other ten, because `fit` divides the measured content height
+out regardless of what cell it sits in. What it cannot fix is **pixel density**:
+
+| character | content height | drawn at | source px per device px |
+|---|---|---|---|
+| Druid | 124 | 157 px | 0.79 |
+| Wizard | 123 | 157 px | 0.78 |
+| Hunter | 122 | 157 px | 0.78 |
+| Mage | 119 | 157 px | 0.76 |
+| **Bard** | **254** | 157 px | **1.62** |
+
+The roster is drawn slightly *below* its rendered size and scaled up, which is
+what gives it a chunky pixel grid. The Bard is drawn well *above* it and scaled
+down, so his pixels land at roughly half the size of everyone else's and he
+reads smoother and finer next to them. Nothing is resampled at install — the
+downscale happens at draw time, same as every other sheet.
+
+**This is a size fact, not a taste one, which is why it is recorded here.**
+Whether the finer grid matters is a look question and the contact sheet is where
+it gets answered. If it does matter, the fix is a re-render at the roster's
+scale, not a change to the pipeline.
+
+He also costs more memory than the rest: 256×2048 RGBA is **2.00 MB decoded**
+against ~0.5 MB for a 128×1024 sheet. One character's worth is fine; a roster of
+them would not be.
+
 ## What the contact sheet shows — look at this, not at numbers
 
 Size is settled and mechanical. The sheet is for everything else.
+
+**The running palette commentary stops at the Wizard.** From the Bard onward the
+install report is size, the structural gate, and the sheet — consistency is
+judged by eye from the picture, which is where it was always actually decided.
+The tables below are left as they were rather than being extended; they are a
+record of a question that was answered, not a form to keep filling in.
 
 **Ten characters. Six agree, four do not — and they disagree in three different
 ways.**
