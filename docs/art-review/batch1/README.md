@@ -1,6 +1,6 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Eight are in.**
+Thirteen characters to install. **Nine are in.**
 
 | | character | id | status |
 |---|---|---|---|
@@ -12,7 +12,8 @@ Thirteen characters to install. **Eight are in.**
 | ✓ | Priest | `char.toh_priest` | installed |
 | ✓ | Monk | `char.toh_monk` | installed |
 | ✓ | Mage | `char.toh_mage` | installed |
-| | Blacksmith · Wizard · Necromancer · Bard · Sundian | | awaiting art (5) |
+| ✓ | Wizard | `char.toh_wizard` | installed |
+| | Blacksmith · Necromancer · Bard · Sundian | | awaiting art (4) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -40,13 +41,14 @@ artifact of padding.
 | Hunter | 2.18 | 1.0492 | 101×122 | 164.7 | **157.0** | **−0.00%** |
 | Priest | 2.18 | 1.0756 | 88×119 | **168.8** | **157.0** | **−0.00%** |
 | Mage | 2.18 | 1.0756 | 99×119 | **168.8** | **157.0** | **−0.00%** |
+| Wizard | 2.18 | 1.0407 | 105×123 | 163.3 | **157.0** | **−0.00%** |
 
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Nine sheets, nine content boxes, cell fills from **93.0% to 97.7%**, **four**
+Ten sheets, ten content boxes, cell fills from **93.0% to 97.7%**, **four**
 source canvases: 240×240 (Mage), 244×244 (Savage, Priest), 248×248 (Druid,
-Assassin, Samurai, Monk), 256×256 (Hunter, Witch Doctor).
+Assassin, Samurai, Monk, Wizard), 256×256 (Hunter, Witch Doctor).
 
 The spread across **cells** is now 160.7 to 168.8 device px — 8.1px, opened up
 by the Priest and matched exactly by the Mage, who lands on the same 119px
@@ -78,6 +80,7 @@ would render its other seven short. Measured:
 | Priest | 118 118 114 115 119 117 113 112 | 119 | 112 | 5.9% |
 | Monk | 122 122 120 122 122 120 117 120 | 122 | 117 | 4.1% |
 | Mage | 119 119 118 118 119 117 116 117 | 119 | 116 | **2.6%** |
+| Wizard | 121 121 121 123 123 121 120 119 | 123 | 119 | **3.4%** |
 
 Four sit in the same ~5% band; the Savage (1.6%), Samurai (2.4%) and Mage (2.6%)
 are notably tighter — their poses barely change height between facings, where the
@@ -267,12 +270,31 @@ messages of four; not assembled until all eight were present.
 Assembled to `assets/sprites/char/toh_mage.png`, 128×1024, `directions: 8`,
 `content: [99, 119]`, `scale: 2.18`. Autocrop 240×240 → 110×120.
 
+### Wizard
+
+Supplied 2026-08-05, eight **248×248** RGBA PNGs, in two messages of four; not
+assembled until all eight were present.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `e4bbf677d620884641a5d29209e3d097` | `wizard/sources/east.png` |
+| SE | `f4910ec8e0f8c73c6b79d11b5f73836a` | `wizard/sources/southeast.png` |
+| S | `12ccb326484e55a30272c2163942cbb8` | `wizard/sources/south.png` |
+| SW | `4f8ddc3a716c106205b80d8e8be2e38d` | `wizard/sources/southwest.png` |
+| W | `6512512f7e2d21fcff35b066eb9a5e6b` | `wizard/sources/west.png` |
+| NW | `4af91db22f2b38c135cd3b075c16c812` | `wizard/sources/northwest.png` |
+| N | `c207c7ced35443301b50e603e2ff4486` | `wizard/sources/north.png` |
+| NE | `fa7ea256bfc1d8428215b27acced9c74` | `wizard/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_wizard.png`, 128×1024, `directions: 8`,
+`content: [105, 123]`, `scale: 2.18`. Autocrop 248×248 → 105×123.
+
 ## What the contact sheet shows — look at this, not at numbers
 
 Size is settled and mechanical. The sheet is for everything else.
 
-**Nine characters. Five agree, four do not — and they disagree in three
-different ways.**
+**Ten characters. Six agree, four do not — and they disagree in three different
+ways.**
 
 | | | |
 |---|---|---|
@@ -285,6 +307,7 @@ different ways.**
 | **Priest** | **pale** | seafoam and cream robes, white hood, gold trim |
 | **Savage** | **high-chroma** | orange, turquoise, brass |
 | **Mage** | **cool, not earthy** | violet cloak, blue-grey plate, gold trim, pale blue crystal |
+| **Wizard** | inside *on value*, gold-heavy on hue | dark blue nemes, bronze skin, cream kilt, gold, a held flame |
 
 "Inside" means the style clause: *"muted earthy palette… strong dark outline and
 deep shadow mass"*, value mass sitting low.
@@ -311,7 +334,25 @@ the clause is asking for rather than what it forbids. Worth stating explicitly
 because "looks like it glows" and "is drawn with a glow" are different things,
 and only the second one is a defect.
 
-### The garment hypothesis: refined again, in a way that matters
+The Wizard is the one row that does not want a yes or a no. His **value mass is
+squarely inside** — near-black outlines throughout, a dark headdress and a dark
+cloak anchoring the top and back, real shadow under the drapery. His **hue is
+not**: gold, cream and bronze carry most of the figure, which is warm and
+earth-adjacent but a long way from "greens browns and leather". Calling that a
+pass or a fail would be forcing a binary onto a sheet that is plainly doing one
+of the two things well. Recorded as it reads.
+
+He also carries the roster's **first depicted light source** — an orange flame
+in the off hand — which is worth a sentence because the clause says *no glow, no
+emissive rim, no neon*. The flame is drawn, not rendered: a hard dark outline
+around the whole shape, a white-hot core made of value contrast, and **no halo,
+no falloff, and no light thrown onto the arm or the cloak that holds it**. The
+clause forbids rendering techniques, not fire. Same distinction as the Mage's
+crystals, one step further along, and still on the right side of it. The line to
+watch for is a future sheet that lights its own figure from an effect — that
+would be an emissive rim by any other name.
+
+### The garment hypothesis: confirmed from the other direction
 
 At seven characters the pattern read as **robes come back pale**. The Monk broke
 the simple version — robed, not pale — and the sharper claim became **large
@@ -344,11 +385,34 @@ That is a better claim than the one it replaces, because it now predicts two
 distinguishable outcomes instead of one, and the second is what actually
 happened.
 
-**How much to trust it: more than last time, and still not much.** It is now two
-confirming cases from three characters, one of which corrected the prediction
-rather than confirming it — which is the better kind of evidence, but it is
-still three characters. **The Wizard and the Necromancer are the remaining
-tests**, and both are plausibly robed.
+**The Wizard tests it from the opposite side, and it holds.**
+
+The Mage's back was *uninterrupted and mid-value* → it came back **flat but not
+pale**. The Wizard's front is *light and heavily interrupted* → it comes back
+**light but not flat**. His kilt is cream, which is the colour that went pale on
+the Priest and the Assassin, but it is broken by a bare torso, a belt, a sash, a
+cloak and a headdress, and it keeps its folds and its shadow.
+
+Put side by side:
+
+| | garment | interrupted? | came back |
+|---|---|---|---|
+| Priest | seafoam-cream robe, shoulder to floor | no | pale **and** flat |
+| Assassin | white hood and cloak | no | pale **and** flat |
+| Mage (back) | violet cloak over 3/4 of the figure | no | mid-value, **flat** |
+| Wizard (front) | cream kilt and drape | **yes** | light, **not flat** |
+| Monk | burnt-orange robe | **yes** | mid, not flat |
+
+That is the claim tested from both directions and surviving both: **the failure
+is the unbroken surface, not the colour.** Lightness alone does not cause it —
+the Wizard is proof — and darkness does not prevent it — the Mage is proof.
+
+**How much to trust it now: enough to act on, not enough to gate on.** Four
+confirming cases across five characters, two of which corrected an earlier
+version of the claim rather than agreeing with it. The **Necromancer is the last
+scheduled test**; if he is robed and uninterrupted and comes back with shadow
+mass, the mechanism is wrong and this section should be rewritten rather than
+patched again.
 
 Note also that the Savage remains a **separate axis** — his value mass is fine
 and his shadow mass is fine; it is chroma. Three unrelated ways to fall outside
@@ -368,12 +432,17 @@ anything:
 | Priest | pale | pale | ✓ |
 | Monk | inside clause | inside clause | ✓ |
 | Mage | *no prediction entered* | **cool-hue outlier** | — |
+| Wizard | *no prediction entered* | inside on value, gold on hue | — |
 
-Still three of four, with the miss in the reassuring direction. The Mage row is
-deliberately empty: after the Assassin miss the standing rule became **source
+Still three of four, with the miss in the reassuring direction. The last two rows
+are deliberately empty: after the Assassin miss the standing rule became **source
 files are a guess; the sheet is the evidence**, so nothing was called before the
 sheet rendered. That costs a data point and is the right trade — a prediction
 made in order to have a row to fill in is not a prediction.
+
+Note that the source images for both were *visible in the conversation* before
+the sheet existed, which is exactly the temptation the rule is for. Looking at a
+240px PNG in a chat window is the same guess the Assassin miss came from.
 
 **Nothing has been changed on account of any of this.** All three outliers read
 well on the arena floor. The open question is whether the roster should look
