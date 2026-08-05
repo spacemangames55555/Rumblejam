@@ -2835,7 +2835,9 @@ export class Sim {
       });
     }
     p.boonOffer = picks;
-    this.pushEvent({ k: 'boon', idx: p.idx, picks });
+    // trait rides along so the panel names itself — Facet and the Druid share
+    // this overlay, and the Blacksmith sets `crystal` on its own offer instead
+    this.pushEvent({ k: 'boon', idx: p.idx, picks, trait: t.key });
   }
 
   // Greed biases every rarity roll: uncommon+ weights ×(1 + Greed/100)
@@ -3257,17 +3259,22 @@ export class Sim {
         if (!p.boonOffer) return;
         const pick = p.boonOffer.find(o => o.id === msg.id) || p.boonOffer[0];
         p.boonOffer = null;
-        if (tohTakeBoon(this, p, pick)) return;   // Blacksmith infusion, not a boon
-        p.boonCounts[pick.id] = (p.boonCounts[pick.id] || 0) + 1;
-        if (p.boonCounts[pick.id] === 3) {
-          this._applyPerm(p, { [pick.stat]: pick.amount });
-          tohBoonPermanent(this, p);   // Druid: every fusion is also +1 Greed
-          this.pushEvent({ k: 'toast', idx, text: `${p.char.trait.key === 'wildshape' ? 'The shape' : 'Prism'}: the ${pick.stat} boon is now PERMANENT` });
-        } else {
-          p.boonTemp = { [pick.stat]: pick.amount };
-          if (p.boonCounts[pick.id] > 3) this.pushEvent({ k: 'toast', idx, text: 'Boon taken (already permanent — stacks this room)' });
+        // `boonDone` is the panel's ONLY exit — nothing else closes it, and the
+        // offer is already consumed above, so every later tap is dropped by the
+        // guard. Any early return between here and the push is a softlock, not
+        // a missing toast. Keep the branches inside the if; never around it.
+        if (!tohTakeBoon(this, p, pick)) {   // Blacksmith crystal consumes its own pick
+          p.boonCounts[pick.id] = (p.boonCounts[pick.id] || 0) + 1;
+          if (p.boonCounts[pick.id] === 3) {
+            this._applyPerm(p, { [pick.stat]: pick.amount });
+            tohBoonPermanent(this, p);   // Druid: every fusion is also +1 Greed
+            this.pushEvent({ k: 'toast', idx, text: `${p.char.trait.key === 'wildshape' ? 'The shape' : 'Prism'}: the ${pick.stat} boon is now PERMANENT` });
+          } else {
+            p.boonTemp = { [pick.stat]: pick.amount };
+            if (p.boonCounts[pick.id] > 3) this.pushEvent({ k: 'toast', idx, text: 'Boon taken (already permanent — stacks this room)' });
+          }
+          this._recomputeStats(p);   // tohTakeBoon already recomputes on its path
         }
-        this._recomputeStats(p);
         this.pushEvent({ k: 'boonDone', idx });
         break;
       }

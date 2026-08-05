@@ -1979,6 +1979,43 @@ try {
     await M.setOrientation('landscape');
     if (await M.exec(`return getComputedStyle(document.getElementById('rotate-overlay')).display === 'none'`)) ok('landscape dismisses the rotate overlay');
     else fail('rotate overlay stuck in landscape');
+
+    // ---- layout rule: the bottom fifth of a phone screen is input, not UI ----
+    // The joystick floats — js/touch.js anchors it wherever the first finger
+    // lands on the canvas — so a pointer-events:auto panel low on the screen
+    // eats the movement thumb with nothing on screen to explain why.
+    // Enumerated from the live DOM, never from a list here: every .overlay gets
+    // a stand-in panel so the CONTAINER's own align-items/padding decide where
+    // interactive chrome would land, which works for overlays that have never
+    // been opened. A new overlay is covered the moment it exists in the markup.
+    {
+      const probed = JSON.parse(await M.exec(`
+        const H = window.innerHeight, band = H * 0.8;
+        const out = [];
+        for (const el of document.querySelectorAll('.overlay')) {
+          const hidden = el.classList.contains('hidden'), html = el.innerHTML;
+          el.classList.remove('hidden');
+          el.innerHTML = '<div class="panel" id="__ovprobe" style="min-height:96px">probe</div>';
+          const blocking = getComputedStyle(el).pointerEvents !== 'none';
+          const r = document.getElementById('__ovprobe').getBoundingClientRect();
+          out.push({ id: el.id, blocking, bottom: Math.round(r.bottom) });
+          el.innerHTML = html;
+          if (hidden) el.classList.add('hidden');
+        }
+        return JSON.stringify({ H: Math.round(H), band: Math.round(band), out });`));
+      if (probed.out.length >= 5) ok(`thumb-zone gate enumerated ${probed.out.length} overlays from the DOM: ${probed.out.map(o => o.id).join(', ')}`);
+      else fail(`thumb-zone gate found only ${probed.out.length} overlays — the scrape is broken, not the layout`);
+      // Non-blocking overlays leave the game playable underneath, so their
+      // panel must stay above the band. Blocking ones own the whole viewport by
+      // design and are dismissed in one tap; the sim suite gates their exits.
+      for (const o of probed.out) {
+        if (o.blocking) continue;
+        if (o.bottom <= probed.band) ok(`${o.id}: non-blocking panel ends at y=${o.bottom}, clear of the ${probed.band}px thumb line (viewport ${probed.H})`);
+        else fail(`${o.id}: non-blocking panel reaches y=${o.bottom}, inside the bottom 20% (below y=${probed.band}) — it will swallow the joystick thumb`);
+      }
+      const blocking = probed.out.filter(o => o.blocking).map(o => o.id);
+      console.log(`  (blocking overlays, exempt from the band rule and gated for exits in the sim suite: ${blocking.join(', ') || 'none'})`);
+    }
     // touch-only: host → tap character → start
     await M.tap('#btn-host');
     await M.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'mobile lobby');
@@ -2010,10 +2047,62 @@ try {
     await sleep(500);
     const bt1 = await M.exec('return window.uv.sim.tickNum');
     if (bt1 > bt0) ok('boon picker never pauses the game (non-blocking)'); else fail('sim paused while boon picker open');
+    // "non-blocking" has to mean the thumb too, not just the clock. Put a
+    // finger down where a thumb actually rests — low, centre-screen, right
+    // under the strip — and require the player to move. Before the band rule
+    // the panel sat here with pointer-events:auto and ate the whole gesture.
+    {
+      const geo = JSON.parse(await M.exec(`const r=document.querySelector('.boon-panel').getBoundingClientRect();
+        return JSON.stringify({top:Math.round(r.top),bottom:Math.round(r.bottom),H:window.innerHeight,W:window.innerWidth})`));
+      const thumbY = Math.round(geo.H * 0.9), thumbX = Math.round(geo.W / 2);
+      const pos = `const p=window.uv.sim.players[0]; return JSON.stringify([Math.round(p.x),Math.round(p.y)])`;
+      const t0 = JSON.parse(await M.exec(pos));
+      await M.touchDown(thumbX, thumbY);
+      await M.touchMove(thumbX + 70, thumbY);
+      await sleep(600);
+      const t1 = JSON.parse(await M.exec(pos));
+      await M.touchUp();
+      await sleep(200);
+      const moved = Math.hypot(t1[0] - t0[0], t1[1] - t0[1]);
+      if (moved > 8) ok(`thumb at (${thumbX},${thumbY}) drives the joystick with the boon strip up — moved ${moved.toFixed(0)} world units (panel occupies y ${geo.top}–${geo.bottom} of ${geo.H})`);
+      else fail(`the boon strip swallowed the joystick: thumb at (${thumbX},${thumbY}) moved the player ${moved.toFixed(1)} units; panel occupies y ${geo.top}–${geo.bottom} of ${geo.H}`);
+      const stillOpen = await M.exec(`return !document.getElementById('overlay-boon').classList.contains('hidden')`);
+      if (stillOpen) ok('moving under the strip does not dismiss it — the pick is still there to make');
+      else fail('the joystick gesture dismissed the boon strip');
+    }
     await M.tap('.boon-card');
     await M.waitFor(`return document.getElementById('overlay-boon').classList.contains('hidden')`, 3000, 'boon picked');
     const boonApplied = await M.exec(`return JSON.stringify(window.uv.sim.players[0].boonTemp)`);
     if (boonApplied && boonApplied !== 'null') ok(`boon picked by tap → ${boonApplied}`); else fail('boon pick did not apply');
+
+    // ---- the strip is shared by three traits and they do not share its rules ----
+    // Facet/Druid roll a room-length boon that needs three takes to stick; the
+    // Blacksmith's crystal is permanent on the spot and quartz arms detonation
+    // every third. The panel used to hardcode Prism's copy, so two of the three
+    // openers told the player the wrong thing about the pick they just made.
+    // Pushed onto sim.events so it renders through the real host drain → showBoon.
+    {
+      const inject = (json) => `window.uv.sim.events.push(${json}); return 1;`;
+      const crystal = `{k:'boon',idx:window.uv.myIdx,crystal:true,picks:[{id:'crystal_quartz',stat:'attunement',rarity:'rare',crystal:'quartz',n:1,amount:4,name:'Prism Quartz',every:3}]}`;
+      await M.exec(inject(crystal));
+      await M.waitFor(`return !document.getElementById('overlay-boon').classList.contains('hidden')`, 3000, 'crystal panel render');
+      const cr = JSON.parse(await M.exec(`const e=document.getElementById('overlay-boon');
+        return JSON.stringify({title:e.querySelector('.ov-title').textContent, pips:e.querySelector('.orarity').textContent})`));
+      if (/BLACKSMITH/.test(cr.title)) ok(`crystal offer titles itself for the Blacksmith: "${cr.title}"`);
+      else fail(`crystal offer still shows the wrong trait's title: "${cr.title}"`);
+      if (/permanent/.test(cr.pips) && /2\/3 to detonation/.test(cr.pips)) ok(`crystal card states its real terms: "${cr.pips}"`);
+      else fail(`crystal card copy wrong — expected permanent + detonation progress, got "${cr.pips}"`);
+      if (!/to keep/.test(cr.pips)) ok(`crystal card no longer claims Prism's "n/3 to keep"`);
+      else fail(`crystal card still shows Prism's pip semantics: "${cr.pips}"`);
+
+      const shape = `{k:'boon',idx:window.uv.myIdx,trait:'wildshape',picks:[{id:'b_fer',stat:'ferocity',rarity:'common',n:0,amount:3}]}`;
+      await M.exec(inject(shape));
+      await sleep(250);
+      const dr = await M.exec(`return document.querySelector('#overlay-boon .ov-title').textContent`);
+      if (/THE SHAPE/.test(dr)) ok(`the Druid's offer names the Druid: "${dr}"`);
+      else fail(`the Druid's offer still shows Prism's title: "${dr}"`);
+      await M.exec(`document.getElementById('overlay-boon').classList.add('hidden'); return 1;`);
+    }
     // the touch path under test is steering, not survival — an 80-HP Facet can
     // die during the long organic combat window, killing every later step
     await M.exec(`window.uv.sim.debug('F5'); return 1;`);

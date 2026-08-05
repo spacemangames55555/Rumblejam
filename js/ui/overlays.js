@@ -449,16 +449,38 @@ export function closeTreasure() { $('overlay-treasure').classList.add('hidden');
 // Per-player and non-blocking: a compact bottom-center strip. The room plays
 // on while it's up (movement still works; it never appears for other players).
 
+// Three traits share this panel and they do NOT share its rules: Facet and the
+// Druid roll a room-length boon that needs three takes to stick, the Blacksmith
+// picks a fixed crystal that is permanent the moment it lands. Hardcoding one
+// trait's copy told two thirds of the players the wrong thing about their pick.
+function boonTitle(ev) {
+  if (ev.crystal) return 'BLACKSMITH — infuse a crystal';
+  if (ev.trait === 'wildshape') return 'THE SHAPE — pick a boon for this room';
+  return 'PRISM — pick a boon for this room';
+}
+
+// The second line of a card: what this pick is worth beyond the stat number.
+function boonProgress(p) {
+  if (!p.crystal) {
+    return `${'◆'.repeat(Math.min(3, p.n))}${'◇'.repeat(Math.max(0, 3 - p.n))} ${p.n >= 3 ? 'permanent!' : `${p.n}/3 to keep`}`;
+  }
+  const n = p.n + 1;   // infusions count the pick you are about to take
+  const det = p.every
+    ? n % p.every === 0 ? ' · arms detonation!' : ` · ${n % p.every}/${p.every} to detonation`
+    : '';
+  return `${escapeHtml(p.name || 'crystal')} · #${n} — permanent${det}`;
+}
+
 export function showBoon(ev) {
   const el = $('overlay-boon');
   el.classList.remove('hidden');
   el.innerHTML = `
     <div class="panel boon-panel">
-      <div class="ov-title" style="font-size:15px;">PRISM — pick a boon for this room</div>
+      <div class="ov-title" style="font-size:15px;">${boonTitle(ev)}</div>
       <div class="offer-row boon-row">${ev.picks.map(p => `
         <div class="offer-card r-${p.rarity} boon-card" data-id="${p.id}">
           <div class="oname">+${p.amount}${STAT_IS_PCT[p.stat] ? '%' : ''} ${STAT_NAME[p.stat]}</div>
-          <div class="orarity">${'◆'.repeat(Math.min(3, p.n))}${'◇'.repeat(Math.max(0, 3 - p.n))} ${p.n >= 3 ? 'permanent!' : `${p.n}/3 to keep`}</div>
+          <div class="orarity">${boonProgress(p)}</div>
           <div class="gloss-short">${escapeHtml(glossShort(p.stat))}</div>
         </div>`).join('')}</div>
     </div>`;

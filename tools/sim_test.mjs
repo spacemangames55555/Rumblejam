@@ -3997,5 +3997,151 @@ try {
   ok(`snapshots serialize in both phases (${json.length} bytes @ ${snap.enemies.length} enemies)`);
 } catch (err) { fail('snapshot serialization', err); }
 
+// ---- 13. overlays: nothing opens without a way out ----
+// The failure shape this gates is "a panel with no exit". The host opens an
+// overlay, the player taps, the pick is consumed — and the close event never
+// comes. The panel then sits there with `if (!p.xOffer) return` dropping every
+// later tap. Solo on a phone that is terminal: the panel covers the joystick,
+// so you can neither dismiss it nor walk to the exit.
+//
+// Why this was not already covered: drain() above answers offers by reading
+// SIM state (p.boonOffer, p.pendingOffer). The sim clears that state on the
+// broken path too, so 33 characters "cleared their first fight" with a stuck
+// panel on screen. The client only ever learns to close from the EVENT STREAM,
+// so that is what this section asserts on — never sim state.
+//
+// Everything here is enumerated from source. index.html is the only place an
+// overlay exists and js/main.js is the only place a host event opens or closes
+// one, so a new overlay lands in `overlayIds` for free. It cannot opt out by
+// not being listed: an overlay with no DRIVERS entry fails rather than skips.
+try {
+  const ROOT = new URL('../', import.meta.url);
+  const rd = f => readFileSync(new URL(f, ROOT), 'utf8');
+  const HTML = rd('index.html'), OVJS = rd('js/ui/overlays.js'), MAINJS = rd('js/main.js');
+
+  // (a) the overlay set, straight out of the markup
+  const overlayIds = [...HTML.matchAll(/<div\s+id="([^"]+)"\s+class="([^"]+)"/g)]
+    .filter(m => m[2].split(/\s+/).includes('overlay'))
+    .map(m => m[1]);
+  if (overlayIds.length >= 5) ok(`overlay gate discovered ${overlayIds.length} overlays in index.html: ${overlayIds.join(', ')}`);
+  else fail(`overlay gate found only ${overlayIds.length} overlays — the scrape is broken, not the game`);
+
+  // (b) every `case 'k':` in main.js with the body that follows it, so the gate
+  // can see which event opens and which closes each panel without a list
+  const caseBodies = [];
+  {
+    const re = /case '(\w+)':/g; let m, prev = null;
+    while ((m = re.exec(MAINJS))) {
+      if (prev) prev.body = MAINJS.slice(prev.at, m.index);
+      prev = { k: m[1], at: m.index + m[0].length }; caseBodies.push(prev);
+    }
+    if (prev) prev.body = MAINJS.slice(prev.at, prev.at + 400);
+  }
+  const casesCalling = fn => caseBodies.filter(c => new RegExp(`\\b${fn}\\(`).test(c.body)).map(c => c.k);
+
+  // (c) how the gate drives each overlay. Keyed by the id scraped in (a) — add
+  // an overlay to index.html without adding it here and (d) fails.
+  const DRIVERS = {
+    'overlay-boon':     { open: 'boon',     done: 'boonDone',     act: (p, ev) => ({ kind: 'boon', id: ev.picks[0].id }) },
+    'overlay-levelup':  { open: 'offer',    done: 'offerDone',    act: (p, ev) => ({ kind: 'levelup', id: ev.picks[0].id }) },
+    'overlay-treasure': { open: 'treasure', done: 'treasureDone', act: (p, ev) => ({ kind: 'treasure', id: ev.picks[0] }) },
+    // the shop and the sheet close locally on their own button — no host event
+    'overlay-shop':     { open: 'shop',     done: null, exit: '#shop-close' },
+    'overlay-sheet':    { open: null,       done: null, exit: '#sheet-close' },
+  };
+
+  // (d) the anti-rot assertion: refuse to skip what the gate does not understand
+  const undriven = overlayIds.filter(id => !DRIVERS[id]);
+  if (!undriven.length) ok('every overlay in index.html has a driver in the gate');
+  else fail(`overlay(s) with no gate driver — teach the gate to open and dismiss ${undriven.join(', ')} in tools/sim_test.mjs section 13`);
+  const stale = Object.keys(DRIVERS).filter(id => !overlayIds.includes(id));
+  if (stale.length) fail(`gate drives overlay(s) that no longer exist in index.html: ${stale.join(', ')}`);
+
+  // (e) wiring: named by convention so the gate can find the pair, and every
+  // panel has an exit — a host close event, or a close control in its own panel
+  for (const id of overlayIds) {
+    const d = DRIVERS[id]; if (!d) continue;
+    const Name = id.slice('overlay-'.length).replace(/^./, c => c.toUpperCase());
+    for (const fn of [`show${Name}`, `close${Name}`]) {
+      if (!new RegExp(`export function ${fn}\\b`).test(OVJS)) fail(`${id}: js/ui/overlays.js exports no ${fn}() — the show/close naming convention is what lets this gate find overlays`);
+    }
+    if (d.open) {
+      const opens = casesCalling(`show${Name}`);
+      if (!opens.includes(d.open)) fail(`${id}: driver says event '${d.open}' opens it, but main.js opens it from ${opens.length ? opens.join('/') : 'no event'}`);
+    }
+    if (d.done) {
+      const closes = casesCalling(`close${Name}`);
+      if (closes.includes(d.done)) ok(`${id}: opened by '${d.open}', closed by '${d.done}'`);
+      else fail(`${id}: nothing in main.js closes it on '${d.done}' — a host-opened panel with no close case cannot be dismissed`);
+    } else if (d.exit) {
+      if (OVJS.includes(`querySelector('${d.exit}')`)) ok(`${id}: no host close event, exits locally via ${d.exit}`);
+      else fail(`${id}: no close event and no ${d.exit} control — this panel has no exit at all`);
+    }
+  }
+
+  // (f) the behavioural half, over the WHOLE roster rather than a chosen few.
+  // The bug this replaces was trait-specific: Facet and the Druid closed the
+  // boon panel, the Blacksmith's crystal path returned before the push. One
+  // hand-picked character passed while a third of the openers were broken.
+  const CH = await import('../js/content/characters.js');
+  const prevRoster = CH.ROSTER_ID;
+  const evDrivers = Object.entries(DRIVERS).filter(([, d]) => d.open && d.done);
+  const byOpen = new Map(evDrivers.map(([id, d]) => [d.open, { id, d }]));
+  const byDone = new Map(evDrivers.map(([id, d]) => [d.done, id]));
+  const stuck = [];
+  let opensSeen = 0, charsRun = 0;
+
+  for (const c of CH.ALL_CHARS) {
+    try {
+      CH.setRoster(CH.rosterOf(c.id));
+      const sim = new Sim({ seed: 77712345, party: [{ idx: 0, key: 'k', name: 'OV', charId: c.id, color: '#fff' }] });
+      sim.god = true;
+      sim.setInput(0, { mx: 1, my: 0.5 });
+      sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+      const p = sim.players[0];
+      const live = new Map();   // overlay id -> the open event still waiting for its close
+      let read = 0, onMap = 0;
+      // The bot has to actually FIGHT: the post-fight panels are paid for with
+      // XP, and a room nuked on tick 0 clears at level 1 with nothing to offer.
+      // So kill organically for 45s — enough to bank several levels — and only
+      // then force the clear so the run stays bounded.
+      for (let t = 0; t < 60 * 120 && !sim.over; t++) {
+        sim.tick();
+        if (!p.downed && !p.gone) p.hp = p.stats.vitality;
+        if (t > 60 * 45 && t % 240 === 0) nuke(sim, p);
+        if (sim.obj && !sim.obj.done && t > 60 * 45) sim.debug('F3');
+        if (sim.boss) sim.damageEnemy(sim.boss, 300, { owner: p });
+        if (sim.pickups.length && t % 3 === 0) { const m = sim.pickups[0]; p.x = m.x; p.y = m.y; }
+        if (sim.cleared && sim.hatch) { p.x = sim.hatch.x; p.y = sim.hatch.y; }
+        if (p.shop && p._dk !== p.shop.key) { p._dk = p.shop.key; sim.uiAction(0, { kind: 'closeShop' }); }
+        // replay the client: the ONLY thing that opens or closes a panel here
+        // is an event, exactly as js/main.js sees it
+        while (read < sim.events.length) {
+          const ev = sim.events[read++];
+          if (ev.idx !== undefined && ev.idx !== 0 && ev.idx !== -1) continue;
+          if (byDone.has(ev.k)) { live.delete(byDone.get(ev.k)); continue; }
+          const o = byOpen.get(ev.k); if (!o) continue;
+          live.set(o.id, ev); opensSeen++;
+          sim.uiAction(0, o.d.act(p, ev));   // the tap
+        }
+        // back on the map with the backlog drained — give it 10s of slack for
+        // the offers that land after the clear, then stop
+        if (sim.phase === 'map' && ++onMap > 600) break;
+      }
+      charsRun++;
+      for (const [id, ev] of live) {
+        stuck.push(`${c.id} → ${id} (opened by '${ev.k}'${ev.crystal ? ', crystal offer' : ''}, never closed)`);
+      }
+    } catch (err) { fail(`overlay exit run for ${c.id} crashed`, err); }
+  }
+  CH.setRoster(prevRoster);
+
+  if (opensSeen >= CH.ALL_CHARS.length) ok(`overlay exits exercised: ${opensSeen} panels opened across ${charsRun} characters`);
+  else fail(`overlay gate only saw ${opensSeen} panels open across ${charsRun} characters — it is passing vacuously, not passing`);
+  if (!stuck.length) ok(`every panel that opened also emitted its close event (${charsRun} characters, whole roster)`);
+  else for (const s of stuck.slice(0, 12)) fail(`SOFTLOCK — panel opened with no exit: ${s}`);
+  if (stuck.length > 12) fail(`...and ${stuck.length - 12} more stuck panels`);
+} catch (err) { fail('overlay exit gate crashed', err); }
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');
 process.exit(failures ? 1 : 0);

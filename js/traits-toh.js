@@ -625,6 +625,9 @@ export function tohClearFight(sim, p) {
   p.boonOffer = CRYSTALS.map(c => ({
     id: c.id, stat: c.stat, rarity: c.rarity, crystal: c.key, n: p.infusions[c.key] || 0,
     amount: c.key === 'pyrite' ? t.pyriteGrit : c.key === 'quartz' ? t.quartzAtt : t.calciteRec,
+    // the panel needs these to say what an infusion actually does: it is
+    // permanent on the spot, and quartz arms detonation every `every` picks
+    name: c.name, every: c.key === 'quartz' ? t.detonateEvery : 0,
   }));
   sim.pushEvent({ k: 'boon', idx: p.idx, picks: p.boonOffer, crystal: true });
   return true;
