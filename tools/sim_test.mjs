@@ -1631,6 +1631,128 @@ try {
     if (!objFail) ok(`all 8 objective levels clear solo and 4p — ${times.join(' · ')}`);
   }
 
+  // --- Bounty Hunt: a mark must always be KILLABLE, and only a real kill counts ---
+  //
+  // Both of these were live defects that showed up as an intermittent gate
+  // rather than as themselves, which is why they are asserted directly here
+  // instead of being left to the clear-time gate above to catch by luck.
+  {
+    const { ELITE_MODS } = await import('../js/content/enemies.js');
+    const bountySim = (seed = 4242, n = 1) => {
+      const g = new Sim({ seed, party: quad(n) });
+      const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+      node.kind = 'bounty';
+      g.god = true;
+      for (const p of g.players) {
+        const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
+        while (p.weapons.length < 3) g._addWeapon(p, kit[p.weapons.length], 2);
+        g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
+      }
+      g._travelTo(node.id);
+      // the first mark is on a spawn timer, not instant — tick until it lands
+      for (let i = 0; i < 60 * 20 && !g.obj.markId; i++) g.tick();
+      return g;
+    };
+
+    // 1. REGEN CAN NEVER OUTRUN DAMAGE. Regeneration is a percentage of the
+    //    target's OWN max HP; player damage is a flat number. On a mark carrying
+    //    BOUNTY_HP_MULT the raw rate reached 135-151 HP/s against 105-110 landed,
+    //    so the mark healed faster than it could be hurt and the level could
+    //    never end — for any budget. The throttle is what makes that impossible.
+    const regenMod = ELITE_MODS.find(m => m.id === 'regenerating');
+    if (!regenMod) fail('no `regenerating` elite mod — this gate is measuring nothing');
+    else {
+      const g = bountySim();
+      const mark = [...g.enemyPool].find(e => e.bounty);
+      if (!mark) fail('no bounty mark spawned for the regen gate');
+      else {
+        const raw = mark.maxHp * regenMod.regenPct;
+        const throttled = raw * (regenMod.regenLockMult ?? 0);
+        // what the gate's own three-weapon kit actually lands on a mark, measured
+        const FLOOR_DPS = 100;
+        if (throttled < FLOOR_DPS * 0.5) {
+          ok(`Regenerating stays a cost, not a wall: mark ${Math.round(mark.maxHp)} HP heals ${raw.toFixed(0)}/s alone but ${throttled.toFixed(0)}/s under fire, against ~${FLOOR_DPS} HP/s landed`);
+        } else {
+          fail(`a Regenerating mark heals ${throttled.toFixed(0)} HP/s while being hit against ~${FLOOR_DPS} landed — at or past the unkillable threshold`);
+        }
+        if (regenMod.regenLockMult > 0) ok(`...and it is throttled rather than switched off (x${regenMod.regenLockMult}), so the modifier still does something`);
+        else fail('regenLockMult is 0 — the mod heals nothing at all under fire and is inert');
+      }
+    }
+
+    // 2. A REGENERATING MARK ACTUALLY DIES, solo, in a real fight. The arithmetic
+    //    above is necessary and not sufficient: this runs it.
+    {
+      const g = bountySim(90210);
+      const p = g.players[0];
+      const mark = [...g.enemyPool].find(e => e.bounty);
+      if (!mark) fail('no bounty mark for the kill gate');
+      else {
+        mark.eliteMod = regenMod;
+        mark.hp = mark.maxHp;
+        const id = mark.id;
+        let t = 0;
+        // stand in weapon range and keep firing — the fight, not the pathing
+        while (t++ < 60 * 240 && g.enemyById(id)) {
+          const e = g.enemyById(id);
+          p.x = e.x - 120; p.y = e.y;
+          g.setInput(0, { mx: 0, my: 0 });
+          g.tick();
+          if (!p.downed) p.hp = p.stats.vitality;
+        }
+        if (!g.enemyById(id)) ok(`a Regenerating mark dies solo in ${(t / 60).toFixed(0)}s of sustained fire`);
+        else {
+          const e = g.enemyById(id);
+          fail(`a Regenerating mark survived 4 minutes of point-blank solo fire at ${(e.hp / e.maxHp * 100).toFixed(0)}% HP — unkillable`);
+        }
+      }
+    }
+
+    // 3. ONLY A REAL KILL COUNTS. A mark can leave the enemy pool without dying
+    //    — a bomber fusing on the player calls explodeEnemy at full health — and
+    //    that used to increment o.killed. Free objective progress for a hunt
+    //    that never happened, and it also masked defect 1 by skipping past marks
+    //    nobody could kill.
+    {
+      const g = bountySim(31337);
+      const o = g.obj;
+      const mark = [...g.enemyPool].find(e => e.bounty);
+      if (!mark || !o) fail('no bounty mark for the free-kill gate');
+      else {
+        const before = o.killed;
+        const hpPct = mark.hp / mark.maxHp;
+        g._killEnemy(mark, null);         // removed at full health, not killed
+        g.tick();
+        if (o.killed === before) ok(`a mark REMOVED at ${(hpPct * 100).toFixed(0)}% HP scores nothing (${before}/${o.need} before and after)`);
+        else fail(`removing a live mark at ${(hpPct * 100).toFixed(0)}% HP counted as a kill: ${before} -> ${o.killed}`);
+        // ...and the level does not stall: a replacement is on the way
+        for (let i = 0; i < 60 * 8; i++) g.tick();
+        if (o.markId !== null) ok('and a replacement mark is marked, so the level still finishes');
+        else fail('no replacement mark after one was removed — the level would stall');
+      }
+    }
+
+    // 4. A MARK IS NEVER A SELF-DESTRUCTING TYPE. A Fusehead walks at the
+    //    nearest player and detonates in seconds; as a 7000 HP champion the
+    //    party is asked to hunt, it is simply the wrong casting.
+    {
+      const bad = [], seen = new Set();
+      let rolled = 0;
+      for (let i = 0; i < 30; i++) {
+        const g = bountySim(500 + i * 37);
+        const mark = [...g.enemyPool].find(e => e.bounty);
+        if (!mark || !mark.def) continue;
+        rolled++; seen.add(mark.def.id);
+        if (mark.def.behavior === 'bomber') bad.push(mark.def.id);
+      }
+      // rolled must be counted, or "found no bombers" and "found no marks" are
+      // the same green tick — which is how a gate quietly stops testing anything
+      if (rolled < 25) fail(`only ${rolled}/30 bounty marks actually spawned — this gate was not measuring the roll`);
+      else if (!bad.length) ok(`no bounty mark is a self-destructing type — ${rolled} rolls across ${seen.size} enemy type(s)`);
+      else fail(`${bad.length}/${rolled} marks rolled a bomber (${[...new Set(bad)].join(', ')}) — it kills itself before the hunt starts`);
+    }
+  }
+
   // --- objective HUD state serializes for clients ---
   {
     let missing = [];

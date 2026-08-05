@@ -511,21 +511,60 @@ never loads them:
 
 ## Known defects
 
-Two real defects are recorded, reproducible, and deliberately not fixed:
+One real defect is recorded, reproducible, and deliberately not fixed:
 [`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).
 
 1. **`rushMove()` draws from `Math.random()`**, so a fight cannot be reproduced
    from its seed — two identical-seed runs part company around tick 400. It
    cannot desync co-op (the sim is host-authoritative) but it means "it happened
    on seed ABCDEFG" is not a reproduction.
-2. **The `bounty (1p)` sim gate fails intermittently** — 2 of 5 consecutive
-   runs at `origin/main`. Which means the sim suite's exit code is not a
-   trustworthy pass/fail signal on its own, and every report in this repo that
-   says "green apart from the bounty flake" is leaning on that entry.
 
-Read the file before re-diagnosing either. Both have been found more than once.
+Read the file before re-diagnosing it; it has been found more than once. The
+`bounty (1p)` flake that used to be entry 2 was **fixed** — see below.
 
 ## Decisions (where the brief was silent or conflicted)
+
+### The unkillable bounty mark (patch 19)
+
+The `bounty (1p)` gate had been failing intermittently for long enough to be
+written off as a flake and recorded as one. It was not a flake and it was not a
+gate problem — it was two gameplay defects, and the question it was asked to
+answer ("is the objective mistuned, or is the budget wrong?") had a third
+answer: **neither**. A healthy solo clear is 5–6 minutes of a 20-minute budget,
+and non-Regenerating marks die in 62–84 seconds each.
+
+- **Regeneration scaled with the target's own max HP; player damage does not.**
+  `regenPct: 0.02` means 2% of `maxHp` per second, and a Bounty Hunt mark
+  carries `BOUNTY_HP_MULT = 10`, so a floor-1 solo mark healed **135–151 HP/s**
+  against the **105–110 HP/s** the gate's own kit lands on it. Net −25 to −42
+  HP/s, permanently: marks sat at 98–99% HP after twenty minutes with 30,000+
+  damage delivered into them. **Widening the timeout could not have helped** —
+  the mark was not slow, it was unkillable, and that is why the instruction not
+  to widen it was the right call.
+- **The fix is a throttle, not a lock, and the first attempt was wrong.** A full
+  regen lock while under fire removed the breakpoint but over-corrected: against
+  anything that fires continuously the mod healed a measured **0.0 HP/s** and
+  became indistinguishable from no modifier. The shipped version throttles to a
+  tenth for 2s after each hit — measured **13–15 HP/s** actual healing against
+  ~102 landed, which shows up as Regenerating marks taking **84s** against
+  69–79s for the other modifiers. A visible cost, never a wall, and it does not
+  depend on whether the attacker happens to have gaps in their fire.
+- **A mark that merely LEFT the enemy pool was counted as killed.** A Fusehead
+  is a `bomber`: it walks at the nearest player and self-detonates. Rolled as a
+  mark, it called `explodeEnemy` at 94–98% HP, `tickBounty` saw the mark gone
+  and did `o.killed++`. Free objective progress — and it was also *masking* the
+  regen defect, by skipping past marks nobody could kill. Fixed in two places on
+  purpose: self-destructing types are filtered out of the mark roll (prevention),
+  and `_killEnemy` stamps whether the mark actually reached 0 HP so the count
+  can only credit a real kill (the general guard, for any future removal path).
+- **Both are gated directly rather than left to the clear-time gate.** A defect
+  that only shows up as an intermittent timeout is one nobody diagnoses. The
+  suite now asserts the throttled heal rate stays well under a plausible damage
+  floor, that a Regenerating mark actually dies solo under sustained fire, that
+  removing a live mark scores nothing and does not stall the level, and that no
+  mark is ever a self-destructing type — that last one counts how many marks it
+  actually rolled, because "found no bombers" and "found no marks" would
+  otherwise be the same green tick.
 
 ### The Hunter's melee beast (patch 18)
 

@@ -77,49 +77,13 @@ field to isolate it, and the workaround is a marker pointing back here.
 
 ---
 
-## 2. The `bounty (1p)` sim gate fails intermittently — measured 2 runs in 5
+## Fixed, and kept here only as a pointer
 
-**Where:** `tools/sim_test.mjs`, the solo objective sweep.
-
-```
-✗ bounty (1p) never cleared in 20 minutes: {"type":"bounty","done":false,
-  "killed":4,"need":5,"markHp":0.99...}
-```
-
-**What is wrong.** A solo Bounty Hunt does not reliably reach 5 marks killed
-inside the 20-minute sim budget. The failure shape is consistent across runs:
-**`killed` lands at 1–4 of 5, `streamKills` is in the low hundreds, and the
-live mark is at ~99–100% HP.** The player is clearing the endless stream fine
-and is not killing the mark.
-
-**Reproduce:** `node tools/sim_test.mjs`, several times. It is not deterministic
-— this is the same defect as entry 1 showing up as a symptom — so a single
-green run proves nothing about it, and neither does a single red one.
-
-**Rate, measured rather than estimated.** Five consecutive runs at
-`origin/main` (`7c75911`, before any of the beast work): **2 failed, 3 passed.**
-Informally it has looked closer to half over ~10 runs across branches. Treat it
-as "fails often enough that a green suite is not evidence" and not as a precise
-number — establishing the real rate is part of the work, not a prerequisite for
-starting it.
-
-**What has been ruled out.** It is **not** caused by the Hunter's melee beast
-patch: the five baseline runs above predate it, and no `js/` file the bounty
-path touches is in that diff. It is also not the art pipeline — it was already
-failing across the whole `patch-art-pipeline` sequence, where every commit was
-assets and docs only.
-
-**Why the rate is the interesting part.** A gate that fails this often is not a
-flake to be re-run past; at face value it says solo Bounty Hunt fails to clear
-in 20 minutes a large fraction of the time at the tuning the sim asserts. Either
-the objective is mistuned for one player or the gate's budget is wrong, and
-**which one it is has not been established.** Whoever picks this up should
-answer that first rather than widening the timeout — widening it makes the gate
-green and leaves solo players with an objective that takes 20 minutes.
-
-Start at `js/objectives.js`, the bounty mark's HP (`bountyAnchor`) against
-`sim.coopHp` at one player, and its re-spawn cadence versus the stream.
-
-**Consequence today:** the sim suite's exit code cannot be trusted as a
-pass/fail signal on its own. Every report in this repo that says "suite green
-apart from the bounty flake" is leaning on this entry.
+**The `bounty (1p)` gate flake** was entry 2 in this file. It is fixed —
+2026-08-05, `patch-bounty-unkillable-mark`. It was never a gate problem: a
+Regenerating elite modifier on a Bounty Hunt mark healed 135–151 HP/s against
+the 105–110 HP/s a solo player lands, so the mark was mathematically
+unkillable and no budget could have covered it. A second defect, marks counted
+killed when they merely left the enemy pool, was masking it. Both are gated
+now. The reasoning is in `README.md` under Decisions; the measurements are in
+the commit.

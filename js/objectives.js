@@ -17,7 +17,7 @@ import { CONFIG } from './config.js';
 import { clamp, dist2 } from './util.js';
 import { hordeTotalSpawns } from './arenas.js';
 import { BOSS_BY_FLOOR } from './content/bosses.js';
-import { FLOOR_TABLES } from './content/enemies.js';
+import { FLOOR_TABLES, ENEMY_BY_ID } from './content/enemies.js';
 
 const { WALL } = CONFIG;
 
@@ -60,6 +60,18 @@ function anyPlayerWithin(sim, x, y, r) {
   return false;
 }
 function floorTable(sim) { return FLOOR_TABLES[sim.floorNum - 1]; }
+
+// A mark is a champion with ~7000 HP that the level asks you to hunt down. A
+// self-destructing type cannot be that: a Fusehead walks at the nearest player
+// and detonates within seconds at full health, so the "hunt" resolves itself
+// before it starts. Filter those out of the mark roll rather than patching the
+// accounting afterwards — the guard in tickBounty covers everything else that
+// can remove a mark, this stops the one case that is simply the wrong casting.
+function markType(sim, table) {
+  const ok = table.filter(id => (ENEMY_BY_ID[id] || {}).behavior !== 'bomber');
+  const pool = ok.length ? ok : table;
+  return pool[Math.floor(rnd(sim) * pool.length)];
+}
 
 // Bounty champions are priced off the floor boss's REAL spawn HP (post-patch,
 // i.e. already doubled), using the same formula _spawnBoss uses so the
@@ -502,8 +514,18 @@ function tickBounty(sim, o, dt) {
       bountyStream(sim, o, e, dt);
       return;
     }
-    // the mark died
+    // the mark left the pool — but only a real death counts. Sim._killEnemy
+    // stamps o.markDied, because a mark can also be REMOVED at full health
+    // (a bomber fusing on the player, an arena sweep), and counting that as a
+    // kill hands out free objective progress for a hunt that never happened.
     o.markId = null;
+    const died = o.markDied === true;
+    o.markDied = undefined;
+    if (!died) {
+      o.spawnT = 3;
+      sim.pushEvent({ k: 'toast', idx: -1, text: 'The mark slipped away — another stirs.' });
+      return;
+    }
     o.killed++;
     if (o.killed >= o.need) { o.done = true; return; }
     o.spawnT = 3;
@@ -521,7 +543,7 @@ function tickBounty(sim, o, dt) {
   // and then ten times that: a mark is no longer a big elite, it is a siege
   // in its own right. The floor ramp still scales off this new base.
   const target = bossHp(sim) * bountyFraction(sim, rnd(sim)) * BOUNTY_HP_MULT;
-  const base = sim.spawnEnemyById(table[Math.floor(rnd(sim) * table.length)], p.x, p.y,
+  const base = sim.spawnEnemyById(markType(sim, table), p.x, p.y,
     { elite: true, mod: sim.waveRng.pick(sim.eliteMods()) });
   if (!base) { o.spawnT = 1; return; }
   base.hp = base.maxHp = Math.round(target);

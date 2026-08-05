@@ -55,7 +55,17 @@ export function updateEnemy(sim, e, dt) {
   if (e.hitFlash > 0) e.hitFlash -= dt;
   // elite mod ticks
   if (e.eliteMod) {
-    if (e.eliteMod.regenPct && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.eliteMod.regenPct * dt);
+    // Regeneration is throttled for regenLockS seconds after the last hit.
+    // Without that, regen scales with the target's own max HP while player
+    // damage does not, so any high-HP elite crosses a threshold beyond which it
+    // heals faster than the party can hurt it — measured at 135-151 HP/s on a
+    // solo Bounty Hunt mark against 105-110 HP/s landed. That is not a tough
+    // fight, it is an unwinnable one, and no amount of extra time fixes it.
+    if (e.regenLock > 0) e.regenLock -= dt;
+    if (e.eliteMod.regenPct && e.hp < e.maxHp) {
+      const throttle = e.regenLock > 0 ? (e.eliteMod.regenLockMult ?? 0) : 1;
+      if (throttle > 0) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.eliteMod.regenPct * throttle * dt);
+    }
     if (e.eliteMod.blockCd) e.blockT = Math.max(0, (e.blockT || 0) - dt);
     if (e.eliteMod.pullR) {
       for (const p of sim.players) {
