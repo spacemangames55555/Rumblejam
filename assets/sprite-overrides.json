@@ -23,6 +23,15 @@
       122
     ]
   },
+  "char.toh_bard": {
+    "w": 256,
+    "h": 256,
+    "scale": 2.18,
+    "content": [
+      190,
+      254
+    ]
+  },
   "char.toh_druid": {
     "w": 128,
     "h": 128,
@@ -59,6 +68,15 @@
       122
     ]
   },
+  "char.toh_necromancer": {
+    "w": 256,
+    "h": 256,
+    "scale": 2.18,
+    "content": [
+      201,
+      247
+    ]
+  },
   "char.toh_priest": {
     "w": 128,
     "h": 128,
@@ -84,6 +102,15 @@
     "content": [
       117,
       122
+    ]
+  },
+  "char.toh_sundian": {
+    "w": 128,
+    "h": 128,
+    "scale": 2.18,
+    "content": [
+      92,
+      123
     ]
   },
   "char.toh_witch_doctor": {
