@@ -5,6 +5,7 @@
 import { CONFIG, DEV, PALETTE } from './config.js';
 import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
+import { BEAST, hurtBeast } from './entities/beast.js';
 import { HostTransport, ClientTransport } from './net.js';
 import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
 import { serializeObjective } from './objectives.js';
@@ -118,6 +119,7 @@ window.uvAudio = { stats: audioStats, ctxState: getCtxState, masterGain: getMast
 window.uvAssets = Assets;            // sprite registry introspection for tests
 window.uvDrawSprite = drawSprite;    // so a test can prove every id falls back
 window.uvSpriteMode = SPRITE_MODE;
+window.uvBeast = { BEAST, hurtBeast };   // beast constants + knockdown, for tests
 preloadAirhorn(); // fire-and-forget: a missing asset falls back to the synth blip
 initLeaveButton();
 document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
@@ -805,7 +807,8 @@ function viewFromSim(sim) {
       spriteId: projSpriteFor(pr.color, pr.friendly, pr.radius),
     })),
     pickups: sim.pickups,
-    summons: sim.summons.filter(s => !s.dead).map(s => ({ owner: s.owner, type: s.type, x: s.x, y: s.y, aimA: s.aimA, packed: s.deployT > 0 })),
+    summons: sim.summons.filter(s => !s.dead).map(s => ({ owner: s.owner, type: s.type, x: s.x, y: s.y, aimA: s.aimA, packed: s.deployT > 0,
+      down: !!s.down, downP: s.down ? s.downT / BEAST.DOWN_S : 0 })),
     tele: sim.telegraphs.map(tg => tg.shape === 'circle'
       ? { shape: 'c', x: tg.x, y: tg.y, r: tg.r, prog: tg.t / tg.dur, spawnMark: !!tg.spawnMark }
       : { shape: 'b', x: tg.x, y: tg.y, a: tg.angle, w: tg.w, len: tg.len, prog: tg.t / tg.dur }),
@@ -908,7 +911,8 @@ function viewFromSnaps(dtFrame) {
     hatch: s1.hatch,
     players, enemies, projs,
     pickups: s1.pickups.map(m => ({ x: m[0], y: m[1] })),
-    summons: s1.summons.map(sm => ({ owner: sm[0], type: sm[1], x: sm[2], y: sm[3], aimA: sm[5], packed: !!sm[6] })),
+    summons: s1.summons.map(sm => ({ owner: sm[0], type: sm[1], x: sm[2], y: sm[3], aimA: sm[5], packed: !!sm[6],
+      down: (sm[7] || 0) > 0, downP: sm[7] || 0 })),
     tele: s1.tele.map(tg => tg[0] === 'c'
       ? { shape: 'c', x: tg[1], y: tg[2], r: tg[3], prog: tg[4], spawnMark: !!tg[5] }
       : { shape: 'b', x: tg[1], y: tg[2], a: tg[3], w: tg[4], len: tg[5], prog: tg[6] }),

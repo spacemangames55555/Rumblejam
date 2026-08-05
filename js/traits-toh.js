@@ -306,7 +306,12 @@ function tickPack(sim, p, t) {
 
 // A beast combined in the shop counts as two for both proximity checks.
 function beastWeight(b) { return Math.max(1, b.tier || 1) >= 2 ? 2 : 1; }
-function beastsOf(sim, p) { return sim.summons.filter(s => s.owner === p.idx && !s.dead && !s.carried); }
+// A knocked-down beast is inert for the whole 15s, so it is not a beast "within
+// 120 of you" for Alpha, and Marksman's own wording is already "per LIVING
+// beast". It DOES keep its Pack Tactics slot — that count is taken from
+// sim.summons directly in game.js and reads `dead`, not `down`, so a knockdown
+// never earns the Hunter a replacement.
+function beastsOf(sim, p) { return sim.summons.filter(s => s.owner === p.idx && !s.dead && !s.carried && !s.down); }
 
 function marrownaut(sim, p) {
   const mine = sim.summons.filter(s => s.owner === p.idx && !s.dead);

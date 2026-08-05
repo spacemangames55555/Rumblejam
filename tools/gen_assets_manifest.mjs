@@ -19,7 +19,7 @@ import { BOSSES } from '../js/content/bosses.js';
 import { WEAPONS } from '../js/content/weapons.js';
 import { ITEMS } from '../js/content/items.js';
 import {
-  SPRITE_SIZE, PROP, PROP_BOTTOM_ANCHORED, FX, UI, PYLON_SPRITE, allProjSpriteIds,
+  SPRITE_SIZE, PROP, PROP_BOTTOM_ANCHORED, FX, UI, PYLON_SPRITE, BEAST_SPRITE, allProjSpriteIds,
   UNIT_DIRECTIONS, DIRECTIONAL_NAMESPACES,
 } from '../js/content/sprites.js';
 
@@ -72,6 +72,9 @@ for (const it of ITEMS) add(it.spriteId);
 for (const id of Object.values(PROP)) {
   add(id, PROP_BOTTOM_ANCHORED.has(id) ? { anchor: 'bottom' } : {});
 }
+
+// ---- combat pets: eight facings, like any other unit ----
+for (const id of Object.values(BEAST_SPRITE)) add(id);
 
 // ---- world FX and UI chrome ----
 for (const id of Object.values(FX)) add(id);

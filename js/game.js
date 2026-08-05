@@ -19,6 +19,7 @@ import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES } from './c
 import { BOSS_BY_FLOOR } from './content/bosses.js';
 import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
+import { BEAST, initBeast, updateBeast, beastUp, beastBlocks, beastAbsorbs, hurtBeast } from './entities/beast.js';
 import {
   tohInitPlayer, tohStartingGear, tohStartFight, tohStats, tohTick, tohOnFire,
   tohHitDamage, tohOnHit, tohOnHurt, tohOnDodge, tohOnHeal, tohOnKill, tohEnemyDied,
@@ -184,7 +185,7 @@ export class Sim {
     }
     if (t.key === 'mirror_drone') this._spawnSummon(p, null, 1, 'mirror');
     if (t.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
-    if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1);   // the first beast
+    if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1, 'beast');   // the first beast
   }
 
   _recomputeItems(p) {
@@ -409,7 +410,7 @@ export class Sim {
         if (p.char.trait.key === 'pack_tactics') {
           const t2 = p.char.trait;
           const alive = this.summons.filter(sm => sm.owner === p.idx && !sm.dead).length;
-          if (alive < t2.maxBeasts) this._spawnSummon(p, 'guard_drone', 1);
+          if (alive < t2.maxBeasts) this._spawnSummon(p, 'guard_drone', 1, 'beast');
         }
       }
     }
@@ -2369,6 +2370,14 @@ export class Sim {
           if (wl) { wl.hp -= 4; this.projPool.release(pr); continue; }
         }
         if (expired || oob) { this.projPool.release(pr); continue; }
+        // ...and by a Hunter's beast, which is a shield as well as a weapon.
+        // Checked BEFORE players: standing behind the bear is the point.
+        const guard = beastAbsorbs(this, pr);
+        if (guard) {
+          hurtBeast(this, guard, pr.dmg);
+          this.projPool.release(pr);
+          continue;
+        }
         for (const p of this.livePlayers()) {
           if (p.downed) continue;
           if (dist2(pr.x, pr.y, p.x, p.y) <= (pr.radius + p.radius) * (pr.radius + p.radius)) {
@@ -3040,6 +3049,8 @@ export class Sim {
       x: p.x + (Math.random() * 60 - 30), y: p.y + (Math.random() * 60 - 30),
       hp: 1, maxHp: 1, cd: 0, orbitA: Math.random() * 6.28, dead: false, aimA: 0,
     });
+    const s = this.summons[this.summons.length - 1];
+    if (s.type === 'beast') initBeast(this, s);
     this._refreshSummonsFor(p, weaponId);
   }
 
@@ -3090,7 +3101,9 @@ export class Sim {
       }
       const st = this._summonStats(s);
       s.maxHp = Math.max(1, Math.round(st.hp));
-      s.hp = s.maxHp;
+      // A knocked-down beast keeps hp 0 until its timer revives it — buying a
+      // weapon must not quietly heal a body on the floor.
+      s.hp = s.down ? 0 : s.maxHp;
     }
   }
 
@@ -3109,6 +3122,22 @@ export class Sim {
       }
       // just recalled: packed up and bolting itself back down (inert, ~0.5s)
       if (s.deployT > 0) { s.deployT -= dt; continue; }
+      // the Hunter's beast owns its whole tick: contact damage in, then the
+      // state machine (movement, leash, bite) in entities/beast.js
+      if (s.type === 'beast') {
+        if (beastUp(s)) {
+          for (const e of this.enemyPool) {
+            if ((e.summonCd || 0) > 0) continue;
+            if (dist2(e.x, e.y, s.x, s.y) < (e.radius + BEAST.RADIUS) * (e.radius + BEAST.RADIUS)) {
+              e.summonCd = 1;
+              hurtBeast(this, s, e.dmg);
+              if (!beastUp(s)) break;
+            }
+          }
+        }
+        updateBeast(this, s, st, dt);
+        continue;
+      }
       // structures obey the room bounds too — nothing lives outside the map
       s.x = clamp(s.x, WALL + 12, this.W - WALL - 12);
       s.y = clamp(s.y, WALL + 12, this.H - WALL - 12);
@@ -3484,7 +3513,18 @@ export class Sim {
     let np = 0;
     for (const m of this.pickups) { if (np++ > 130) break; snap.pickups.push([r(m.x), r(m.y)]); }
     for (const s of this.summons) {
-      if (!s.dead) snap.summons.push([s.owner, s.type, r(s.x), r(s.y), s.weaponId, +s.aimA.toFixed(2), s.deployT > 0 ? 1 : 0]);
+      // Field 7 is the beast's knockdown: 0 when it is up, otherwise the
+      // FRACTION of its revive timer still to run. One number carries both the
+      // state and the countdown, in the same 0..1 idiom decoys and telegraphs
+      // already use, and the renderer draws the countdown from it — so nothing
+      // here is sent that nothing reads.
+      //
+      // Summons are NOT packed by netcodec.js: it spreads the snapshot and
+      // only repacks enemies, projs, pickups, zones, telegraphs and fx. So
+      // widening this tuple is a VIEW change, not a wire-format change — no
+      // stride, no delta compression and no version handshake is involved.
+      if (!s.dead) snap.summons.push([s.owner, s.type, r(s.x), r(s.y), s.weaponId, +s.aimA.toFixed(2), s.deployT > 0 ? 1 : 0,
+        s.down ? Math.max(0.01, +(s.downT / BEAST.DOWN_S).toFixed(2)) : 0]);
     }
     for (const tg of this.telegraphs) {
       if (tg.shape === 'circle') snap.tele.push(['c', r(tg.x), r(tg.y), r(tg.r), +(tg.t / tg.dur).toFixed(2), tg.spawnMark ? 1 : 0]);
@@ -3572,6 +3612,9 @@ export class Sim {
     e.x = clamp(e.x, WALL + e.radius * 0.6, this.W - WALL - e.radius * 0.6);
     e.y = clamp(e.y, WALL + e.radius * 0.6, this.H - WALL - e.radius * 0.6);
     this._pushOut(e, e.radius * 0.6);
+    // A Hunter's beast is a body. Every enemy movement path in the game ends
+    // in clampToRoom, so this is the one hook that no mover can slip past.
+    beastBlocks(this, e);
   }
 }
 

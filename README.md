@@ -507,6 +507,58 @@ never loads them:
 
 ## Decisions (where the brief was silent or conflicted)
 
+### The Hunter's melee beast (patch 18)
+
+- **No new weapon was added to the catalog.** The beast is `guard_drone`
+  spawned with a forced `beast` type — the mechanism `mirror` already uses. A
+  new weapon def would have been cleaner to read and would have entered the
+  shop pool, which rolls from `WEAPONS` wholesale: every seeded shop on every
+  floor would have produced different stock, moving the economy and every
+  seed-pinned test with it. Reusing the def also makes "HP scaling stays on
+  Ingenuity, exactly as the drone does today" *literally* the same code path
+  rather than a copy that can drift. **The beast's HP, damage and cooldown are
+  the drone's numbers unchanged; only the delivery moved** from a ranged shot to
+  a bite, so nominal DPS is identical and effective DPS drops by whatever the
+  walk to the target costs. If the bite wants its own numbers later, that is a
+  `summon:` block on a new def and a conscious economy decision.
+- **The knockdown flag and its countdown are one wire field, not two.**
+  Snapshot summon tuples gained one number: `0` when the beast is up, otherwise
+  the fraction of the 15s revive timer still to run. A bare boolean would have
+  been enough for the sim, but then the client could never draw a countdown
+  without a second wire change; the 0..1 progress idiom is what decoys and
+  telegraphs already use. The renderer draws the arc from it, so the field is
+  read rather than merely sent.
+- **This is not a netcodec change.** `netcodec.js` spreads the snapshot and
+  repacks only enemies, projectiles, pickups, zones, telegraphs and fx —
+  summons pass through as plain arrays. Widening the summon tuple touches no
+  stride, no delta compression and no version handshake. A gate asserts the
+  encode/decode round-trip leaves `snap.summons` byte-identical, so this stays
+  true rather than being true today.
+- **A downed beast keeps its Pack Tactics slot but stops counting for Alpha
+  and Marksman.** The slot count reads `dead`, which a downed beast is not, so
+  a knockdown can never earn the Hunter a replacement — that is the brief.
+  Alpha and Marksman were not specified. Counting an inert body as a "beast
+  within 120u" would keep the Hunter's buff live with the whole pack down;
+  Marksman's own text already says "per *living* beast", so this follows the
+  wording rather than inventing a rule.
+- **The beast's spawn scatter is seeded, unlike every other summon's.**
+  `Sim._spawnSummon` scatters new summons with `Math.random()`. A seeded state
+  machine started from an unseeded position is not deterministic, and the
+  scatter is what every later position derives from, so `initBeast` re-places
+  the beast from the run seed. Only beasts are re-placed; drones, turrets and
+  rams keep the existing scatter.
+- **Enemy body-blocking is hooked into `clampToRoom`, not into each behaviour.**
+  Every enemy movement path in the game already ends there — walk, knockback,
+  boss charge, the ToH coral push — so there is exactly one hook and no mover
+  can slip past it. The push moves the *enemy*, never the beast: a beast shoved
+  by a crowd would be squeezed off its owner and the leash clamp would fight
+  the push every tick.
+- **Bosses are blocked too.** The brief says "blocks enemies" with no
+  exception, and a boss is an enemy. It is the most likely thing here to feel
+  wrong in play — a 45 HP pet does not read as something that should stop a
+  boss — and the one-line lever is a `!e.boss` guard in `beastBlocks`. Flagged
+  rather than pre-narrowed.
+
 ### Art generation phase (patch 17)
 
 - **No generator is connected, so no art was generated.** The phase's own first

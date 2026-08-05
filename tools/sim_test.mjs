@@ -2750,6 +2750,256 @@ try {
     ok(`the ToH snapshot stays small (${(wsT(enc) / 1024).toFixed(1)} KB with coral and two players)`);
   }
 
+  // --- the Hunter's melee beast: the one ToH trait that is an entity ---
+  //
+  // Everything here is about the beast being a well-behaved SIM object. Its
+  // ranges are world units, its randomness is seeded, its leash is a hard
+  // clamp rather than a suggestion, and a knockdown is a 15s inconvenience
+  // that does not quietly hand the Hunter a free replacement.
+  {
+    const B = await import('../js/entities/beast.js');
+    const { BEAST } = B;
+    const src = readFileSync(new URL('../js/entities/beast.js', import.meta.url), 'utf8');
+
+    const hunter = (seed = 4242) => {
+      const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'H', charId: 'toh_hunter', color: '#fff' }] });
+      const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+      node.kind = 'combat'; g._travelTo(node.id); g.god = true;
+      const p = g.players[0];
+      if (p.boonOffer && p.boonOffer.length) g.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
+      return g;
+    };
+    const beastOf = g => g.summons.find(x => x.type === 'beast');
+    const quiet = g => { g.spawnQueue.length = 0; for (const e of [...g.enemyPool]) g.enemyPool.release(e); };
+
+    // 1. world units only. A viewport term in here would make the beast behave
+    //    differently per peer, and it would be invisible until two players sat
+    //    at different window sizes.
+    // Comments stripped first: this module has to TALK about viewports to
+    // explain why it never reads one, and a scan that cannot tell prose from
+    // code would force the explanation out of the file.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const forbidden = /\b(canvas|innerWidth|innerHeight|devicePixelRatio|dpr|screen|viewport|clientWidth|clientHeight)\b/i;
+    const rnd = /Math\.random/;
+    if (!forbidden.test(code) && !rnd.test(code)) {
+      ok('beast: no viewport, canvas or Math.random term reaches the behaviour module');
+    } else fail(`beast module reaches for the screen or Math.random: ${(code.match(forbidden) || code.match(rnd))[0]}`);
+    if (BEAST.MEANDER_R === 320 && BEAST.AGGRO_R === 320 && BEAST.LEASH_R === 640) {
+      ok(`beast ranges are world-unit constants: meander ${BEAST.MEANDER_R}, aggro ${BEAST.AGGRO_R}, leash ${BEAST.LEASH_R}`);
+    } else fail(`beast ranges moved: ${JSON.stringify(BEAST)}`);
+
+    // 2. wander is seeded: same seed, same path. Measured with the field
+    //    cleared every tick, so this isolates the beast's own RNG from the
+    //    pre-existing Math.random() in enemy rush movement (entities/enemies.js).
+    const wanderPath = seed => {
+      const g = hunter(seed);
+      const out = [];
+      for (let i = 0; i < 60 * 20; i++) {
+        quiet(g); g.tick();
+        const b = beastOf(g);
+        out.push(b ? `${b.x.toFixed(4)},${b.y.toFixed(4)},${b.wanderN}` : '-');
+      }
+      return out.join('|');
+    };
+    const w1 = wanderPath(4242), w2 = wanderPath(4242), w3 = wanderPath(4243);
+    if (w1 === w2 && w1 !== w3) ok('beast: same seed walks the same wander path, a different seed does not');
+    else fail(`beast wander determinism: same-seed ${w1 === w2}, diff-seed-differs ${w1 !== w3}`);
+
+    // 3. the leash is a hard clamp in every state, including the case the
+    //    clamp exists for: the owner sprinting away mid-pursuit.
+    {
+      const g = hunter(); const p = g.players[0]; const b = beastOf(g);
+      b.x = p.x + BEAST.LEASH_R - 5; b.y = p.y;
+      let worst = 0;
+      for (let i = 0; i < 600; i++) {
+        p.x = Math.min(g.W - 60, p.x + 6);   // faster than the beast can follow
+        g.tick();
+        worst = Math.max(worst, Math.hypot(b.x - p.x, b.y - p.y));
+      }
+      if (worst <= BEAST.LEASH_R + 0.001) ok(`beast: leash held at ${worst.toFixed(1)}/${BEAST.LEASH_R} with the owner outrunning it`);
+      else fail(`beast broke its leash: ${worst.toFixed(1)} > ${BEAST.LEASH_R}`);
+    }
+
+    // 4. target commitment. Two enemies at almost the same distance must not
+    //    make it switch every tick and reach neither.
+    {
+      const g = hunter(); const p = g.players[0]; const b = beastOf(g);
+      quiet(g);
+      b.x = p.x; b.y = p.y;
+      const e1 = g.spawnEnemyById('skulker', p.x + 140, p.y - 2, {});
+      const e2 = g.spawnEnemyById('skulker', p.x + 142, p.y + 2, {});
+      e1.hp = e1.maxHp = 99999; e2.hp = e2.maxHp = 99999;
+      e1.spd = 0; e2.spd = 0;
+      let switches = 0, prev = null;
+      for (let i = 0; i < 240; i++) {
+        g.tick();
+        if (b.targetId !== null && prev !== null && b.targetId !== prev) switches++;
+        prev = b.targetId;
+      }
+      if (switches <= 2) ok(`beast: commits to a target — ${switches} switch(es) in 4s between two enemies 2u apart`);
+      else fail(`beast oscillated between targets ${switches} times in 4s`);
+    }
+
+    // 5. an enemy outside the leash is not a target, and the beast goes back to
+    //    MEANDER rather than pacing the boundary. Pacing was considered and
+    //    rejected: a pet pacing an edge is still a near-stationary target.
+    {
+      const g = hunter(); const p = g.players[0]; const b = beastOf(g);
+      quiet(g);
+      const far = g.spawnEnemyById('skulker', Math.min(g.W - 60, p.x + BEAST.LEASH_R + 200), p.y, {});
+      far.spd = 0; far.hp = far.maxHp = 99999;
+      let sawPursuit = false, maxD = 0;
+      for (let i = 0; i < 60 * 6; i++) {
+        g.tick();
+        if (b.state === 'pursue' || b.state === 'attack') sawPursuit = true;
+        maxD = Math.max(maxD, Math.hypot(b.x - p.x, b.y - p.y));
+      }
+      if (!sawPursuit && b.state === 'meander' && maxD <= BEAST.MEANDER_R + 1) {
+        ok(`beast: an enemy past the leash is ignored — stays in MEANDER within ${maxD.toFixed(0)}u of the owner, no boundary pacing`);
+      } else fail(`beast chased past the leash: pursued ${sawPursuit}, state ${b.state}, max ${maxD.toFixed(0)}u`);
+    }
+
+    // 6. the collision matrix, all four rows.
+    {
+      const g = hunter(); const p = g.players[0]; const b = beastOf(g);
+      quiet(g);
+      b.x = p.x + 200; b.y = p.y;   // parked, out of contact
+      const e = g.spawnEnemyById('skulker', b.x + 6, b.y, {});
+      e.hp = e.maxHp = 99999;
+      g.tick();
+      const sep = Math.hypot(e.x - b.x, e.y - b.y);
+      if (sep >= e.radius + BEAST.RADIUS - 0.001) ok(`beast blocks enemies: pushed out to ${sep.toFixed(1)}u, contact is ${(e.radius + BEAST.RADIUS).toFixed(0)}u`);
+      else fail(`enemy stood inside the beast: ${sep.toFixed(2)}u`);
+
+      // enemy fire stops at the beast, and the owner behind it is untouched
+      const g2 = hunter(); const p2 = g2.players[0]; const b2 = beastOf(g2);
+      quiet(g2);
+      g2.god = false;   // the owner must be able to take the hit for this to mean anything
+      const bx = p2.x + 60, by = p2.y;
+      b2.hp = b2.maxHp;
+      g2.spawnEnemyProj(p2.x + 120, p2.y, Math.PI, 600, 7, 4, '#f00');
+      const hp0 = p2.hp, bhp0 = b2.hp;
+      // pinned: this asserts what happens when a shot REACHES the beast, not
+      // whether a meandering beast happens to be standing in the line
+      for (let i = 0; i < 30; i++) { b2.x = bx; b2.y = by; g2.tick(); }
+      if (b2.hp < bhp0 && p2.hp === hp0) ok(`beast blocks enemy fire: took ${bhp0 - b2.hp}, the owner behind it took 0`);
+      else fail(`projectile block: beast ${bhp0}→${b2.hp}, owner ${hp0}→${p2.hp}`);
+
+      // the owner walks through it — a pet that can pin you to a wall is misery
+      const g3 = hunter(); const p3 = g3.players[0]; const b3 = beastOf(g3);
+      quiet(g3);
+      b3.x = p3.x; b3.y = p3.y;
+      const px = p3.x, py = p3.y;
+      g3.setInput(0, { mx: 0, my: 0 });
+      g3.tick();
+      if (Math.abs(p3.x - px) < 0.001 && Math.abs(p3.y - py) < 0.001) ok('beast passes through its owner — standing on it displaces nobody');
+      else fail(`owner shoved by their own beast: ${px.toFixed(2)},${py.toFixed(2)} → ${p3.x.toFixed(2)},${p3.y.toFixed(2)}`);
+
+      // ...and through another player and their beast: 8 players x 4 beasts is
+      // 32 bodies, and mutual collision would make an arena impassable
+      const g4 = new Sim({ seed: 99, party: [
+        { idx: 0, key: 'a', name: 'H1', charId: 'toh_hunter', color: '#fff' },
+        { idx: 1, key: 'b', name: 'H2', charId: 'toh_hunter', color: '#0ff' },
+      ] });
+      const n4 = g4.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+      n4.kind = 'combat'; g4._travelTo(n4.id); g4.god = true;
+      for (const q of g4.players) if (q.boonOffer && q.boonOffer.length) g4.uiAction(q.idx, { kind: 'boon', id: q.boonOffer[0].id });
+      quiet(g4);
+      const bs = g4.summons.filter(x => x.type === 'beast');
+      if (bs.length === 2) {
+        // both owners on the same spot: otherwise the leash clamp — not a
+        // beast-vs-beast push — is what separates them, and the test proves nothing
+        g4.players[0].x = g4.players[1].x = 700;
+        g4.players[0].y = g4.players[1].y = 500;
+        bs[0].x = bs[1].x = 700; bs[0].y = bs[1].y = 500;
+        g4.tick();
+        bs[0].x = bs[1].x = 700; bs[0].y = bs[1].y = 500;
+        g4.tick();
+        const overlap = Math.hypot(bs[0].x - bs[1].x, bs[0].y - bs[1].y);
+        if (overlap < BEAST.RADIUS) ok('beasts pass through each other and through other players — two stacked beasts stay stacked');
+        else fail(`beasts pushed each other apart by ${overlap.toFixed(1)}u`);
+      } else fail(`expected 2 beasts across 2 Hunters, got ${bs.length}`);
+    }
+
+    // 7 + 8. knockdown: inert, keeps its slot, revives on the owner at full HP.
+    {
+      const g = hunter(); const p = g.players[0]; const b = beastOf(g);
+      quiet(g);
+      const slotsBefore = g.summons.filter(sm => sm.owner === 0 && !sm.dead).length;
+      B.hurtBeast(g, b, 99999);
+      if (b.down && !b.dead && b.hp === 0 && Math.abs(b.downT - BEAST.DOWN_S) < 0.001) {
+        ok(`beast knockdown: down for ${BEAST.DOWN_S}s, not dead, not removed`);
+      } else fail(`knockdown state: down ${b.down} dead ${b.dead} hp ${b.hp} t ${b.downT}`);
+
+      // inert: no collision, no fire absorbed, no bite
+      const e = g.spawnEnemyById('skulker', b.x + 2, b.y, {});
+      e.hp = e.maxHp = 99999;
+      const ehp = e.hp;
+      g.tick();
+      const stillInside = Math.hypot(e.x - b.x, e.y - b.y) < e.radius + BEAST.RADIUS;
+      if (stillInside && e.hp === ehp) ok('a downed beast is inert: enemies walk through it and it does not bite');
+      else fail(`downed beast still acting: inside ${stillInside}, enemy hp ${ehp}→${e.hp}`);
+      g.god = false;
+      const hp0 = p.hp;
+      const dx = p.x + 60, dy = p.y;
+      g.spawnEnemyProj(p.x + 120, p.y, Math.PI, 600, 7, 4, '#f00');
+      let downTicks = 0;
+      for (let i = 0; i < 30; i++) { b.x = dx; b.y = dy; g.tick(); downTicks++; }
+      if (p.hp < hp0) ok('and it stops absorbing fire — a downed beast is not a wall');
+      else fail('a downed beast still ate an enemy shot');
+      g.god = true;
+
+      // the slot is still occupied, so a knockdown never earns a replacement
+      const slotsDown = g.summons.filter(sm => sm.owner === 0 && !sm.dead).length;
+      if (slotsDown === slotsBefore) ok(`downed beast keeps its Pack Tactics slot (${slotsDown})`);
+      else fail(`slot count moved on knockdown: ${slotsBefore} → ${slotsDown}`);
+
+      // ...and it comes back on the owner, not where it fell
+      p.hp = p.stats.vitality;
+      p.x = 900; p.y = 620;
+      let t = downTicks;   // the inert-behaviour checks above already burned some of the timer
+      while (b.down && t < 60 * 30) { g.tick(); t++; }
+      const atOwner = Math.hypot(b.x - p.x, b.y - p.y);
+      if (!b.down && b.hp === b.maxHp && atOwner < 1 && Math.abs(t / 60 - BEAST.DOWN_S) < 0.05) {
+        ok(`beast revives after ${(t / 60).toFixed(1)}s at the owner (${atOwner.toFixed(2)}u away) at full HP ${b.hp}/${b.maxHp}`);
+      } else fail(`revive: down ${b.down} hp ${b.hp}/${b.maxHp} dist ${atOwner.toFixed(1)} after ${(t / 60).toFixed(1)}s`);
+    }
+
+    // 9. the knocked-down flag rides the existing summon tuple. netcodec.js
+    //    spreads the snapshot and only repacks enemies/projs/pickups/zones/
+    //    telegraphs/fx, so summons pass through untouched — widening this
+    //    tuple is a view change, NOT a wire-format change.
+    {
+      const g = hunter(); const b = beastOf(g);
+      quiet(g);
+      B.hurtBeast(g, b, 99999);
+      const snap = g.getSnapshot();
+      const row = snap.summons.find(r0 => r0[1] === 'beast');
+      const wire = decT(encT(snap));
+      const wrow = wire && wire.summons.find(r0 => r0[1] === 'beast');
+      const upRow = (() => { const g2 = hunter(); quiet(g2); return g2.getSnapshot().summons.find(r1 => r1[1] === 'beast'); })();
+      if (row && row[7] === 1 && wrow && wrow[7] === 1 && upRow && upRow[7] === 0
+          && JSON.stringify(wire.summons) === JSON.stringify(snap.summons)) {
+        ok('the revive countdown rides the summon tuple (1.00 down → 0 up), and the codec passes summons through byte-identical');
+      } else fail(`summon tuple: down ${JSON.stringify(row)} / up ${JSON.stringify(upRow)} / wire ${JSON.stringify(wrow)}`);
+    }
+
+    // 10. the stat sheet is untouched: same base, same HP-per-Vitality, and the
+    //     beast's HP is still the drone's number through Ingenuity.
+    {
+      const g = hunter(); const p = g.players[0]; const b = beastOf(g);
+      const ing = p.stats.ingenuity;
+      const want = Math.round(30 * (1 + ing * 0.1));
+      const v0 = p.stats.vitality;
+      p.permStats.vitality = 40; g._recomputeStats(p);
+      const linear = p.stats.vitality === v0 + 40;
+      p.permStats.vitality = 0; g._recomputeStats(p);
+      if (v0 === 80 && linear && b.maxHp === want) {
+        ok(`beast changes no stats: Hunter still 80 base, 1 HP per Vitality, beast ${b.maxHp} HP = 30 x Ingenuity ${ing}`);
+      } else fail(`stat sheet moved: vit ${v0}, linear ${linear}, beast ${b.maxHp} want ${want}`);
+    }
+  }
+
   // --- and the classic roster is exactly what it was ---
   R.setRoster('classic');
   if (R.CHARACTERS.length === 33 && R.CHAR_BY_ID.bulwark && !R.CHAR_BY_ID.toh_bard) {
@@ -2772,7 +3022,7 @@ try {
   const S = await import('../js/content/sprites.js');
   const { execFileSync } = await import('node:child_process');
 
-  const NS = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui'];
+  const NS = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui', 'beast'];
   const NS_RE = new RegExp(`^(${NS.join('|')})\\.[a-z0-9_]+$`);
   const manifest = JSON.parse(readFileSync(new URL('../assets/assets.json', import.meta.url), 'utf8'));
   const man = manifest.sprites;
@@ -2795,6 +3045,7 @@ try {
     S.PYLON_SPRITE,
     ...S.allProjSpriteIds(),
     ...Object.values(S.PROP), ...Object.values(S.FX), ...Object.values(S.UI),
+    ...Object.values(S.BEAST_SPRITE),
   ]);
   const unlisted = [...askable].filter(id => !man[id]);
   if (unlisted.length) fail(`${unlisted.length} id(s) the game can ask for are not in the manifest: ${unlisted.slice(0, 6).join(', ')}`);

@@ -2,6 +2,12 @@
   "version": 1,
   "basePath": "assets/sprites/",
   "sprites": {
+    "beast.bear": {
+      "file": "beast/bear.png",
+      "w": 32,
+      "h": 32,
+      "directions": 8
+    },
     "boss.broodmother_viv": {
       "file": "boss/broodmother_viv.png",
       "w": 64,

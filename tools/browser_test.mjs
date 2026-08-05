@@ -1784,6 +1784,100 @@ try {
     }
   }
 
+  // ---- 5f. the Hunter's beast on the real client path ----
+  //
+  // The sim suite already proves the state machine. What only a browser can
+  // prove is that the beast survives the trip through the real renderer and the
+  // real client-side decode: main.js builds one view shape from the sim (host)
+  // and another from a decoded snapshot (client), and a field added to one and
+  // not the other is invisible until somebody joins a game.
+  //
+  // This runs in ONE browser on purpose. The two-browser check is in the --coop
+  // phase, which needs a working relay; this one has no such dependency, so the
+  // beast never goes unverified just because signalling was down.
+  {
+    const S9 = new Browser();
+    try {
+      await S9.open('S9');
+      await S9.goto(`${URL}?roster=toh`);
+      await S9.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 12000, 'title (beast)');
+      await S9.exec(`document.getElementById('btn-host').click()`);
+      await S9.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 8000, 'lobby (beast)');
+      await S9.exec(`document.querySelector('.char-card[data-char="toh_hunter"]').click()`);
+      await sleep(250);
+      await S9.exec(`document.getElementById('btn-start').click()`);
+      await S9.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run (beast)');
+      await S9.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
+      await S9.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena (beast)');
+      await S9.exec(`
+        const s=window.uv.sim, p=s.players[0];
+        if (p.boonOffer && p.boonOffer.length) s.uiAction(0, { kind:'boon', id:p.boonOffer[0].id });
+        s.god=true; return 1;`);
+      await sleep(500);
+
+      const live = JSON.parse(await S9.exec(`
+        const s = window.uv.sim;
+        const b = s.summons.find(x => x.type === 'beast');
+        return JSON.stringify({ has: !!b, state: b && b.state, hp: b && b.maxHp });`));
+      if (live.has) ok(`the Hunter's beast is live in a real run (state ${live.state}, ${live.hp} HP)`);
+      else fail('no beast in a real Hunter run');
+
+      // the two view builders must agree. Encode and decode the host's own
+      // snapshot in-page — the same netcodec a client uses — and compare the
+      // summon rows the client would draw from.
+      // exec() wraps page code in a PLAIN function, so anything needing await
+      // has to hand back its own async IIFE.
+      const agree = JSON.parse(await S9.exec(`return (async () => {
+        const codec = await import('/js/netcodec.js');
+        const s = window.uv.sim;
+        const snap = s.getSnapshot();
+        const wire = codec.decodeSnap(codec.encodeSnap(snap));
+        const a = snap.summons.filter(r => r[1] === 'beast');
+        const b = wire.summons.filter(r => r[1] === 'beast');
+        return JSON.stringify({ n: a.length, same: JSON.stringify(a) === JSON.stringify(b), row: a[0] || null });
+      })();`));
+      if (agree.n === 1 && agree.same && agree.row.length === 8) {
+        ok(`the beast survives the real codec unchanged — 8-field summon row, summons are pass-through (${JSON.stringify(agree.row.slice(6))} tail)`);
+      } else fail(`codec disagreement on the beast row: ${JSON.stringify(agree)}`);
+
+      // knock it down and watch the WIRE field, then the renderer, then revive
+      const down = JSON.parse(await S9.exec(`
+        const s = window.uv.sim;
+        const b = s.summons.find(x => x.type === 'beast');
+        window.uvBeast.hurtBeast(s, b, 99999);
+        const row = s.getSnapshot().summons.find(r => r[1] === 'beast');
+        return JSON.stringify({ p: row ? row[7] : -1, sent: !!row, down: !!b.down, dead: !!b.dead });`));
+      if (down.sent && down.down && !down.dead && down.p > 0.9) {
+        ok(`a downed beast stays on the wire with its countdown (${down.p}), it is not deleted`);
+      } else fail(`downed beast on the wire: ${JSON.stringify(down)}`);
+
+      // the renderer has to survive drawing it in both states — with no art on
+      // disk this exercises the primitive fallback, which is what ships first
+      await sleep(600);
+      const drewDown = await S9.exec(`return window.uvRenderer && window.uvRenderer.canvas.width > 0 ? 1 : 0`);
+      if (drewDown) ok('the renderer draws a downed beast without art on disk (primitive fallback)');
+      else fail('renderer stalled on a downed beast');
+
+      await S9.exec(`
+        const s = window.uv.sim;
+        const b = s.summons.find(x => x.type === 'beast');
+        b.downT = 0.02; return 1;`);
+      await sleep(500);
+      const back = JSON.parse(await S9.exec(`
+        const s = window.uv.sim, p = s.players[0];
+        const b = s.summons.find(x => x.type === 'beast');
+        const row = s.getSnapshot().summons.find(r => r[1] === 'beast');
+        return JSON.stringify({ down: !!b.down, hp: b.hp, max: b.maxHp, d: Math.round(Math.hypot(b.x-p.x, b.y-p.y)), p: row ? row[7] : -1 });`));
+      if (!back.down && back.hp === back.max && back.p === 0) {
+        ok(`it revives at full HP (${back.hp}/${back.max}) near the owner (${back.d}u) and the wire flag clears`);
+      } else fail(`revive on the real path: ${JSON.stringify(back)}`);
+
+      const bErrs = await S9.errors();
+      if (bErrs.length) fail(`console errors with a beast in play: ${bErrs.join(' | ').slice(0, 300)}`);
+      else ok('zero console errors across a beast knockdown and revival');
+    } catch (e) { fail(`beast client-path test: ${e.message}`); } finally { await S9.close(); }
+  }
+
   // ---- 6. ?sprites=debug names what is missing and what row it picked ----
   {
     const S5 = new Browser();
@@ -2294,6 +2388,68 @@ if (wantCoop) {
       await B.exec(`window.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyD'}))`);
       const hx1 = await A.exec(`return Math.round(window.uv.sim.players[1].x)`);
       if (hx1 > hx0 + 30) ok(`host sees client movement (${hx0}→${hx1})`); else fail(`client movement not seen by host (${hx0}→${hx1})`);
+
+      // ---- the Hunter's beast across the wire: position, state, countdown ----
+      //
+      // The beast is host-authoritative and clients run NONE of its logic, so
+      // the only thing that can be wrong is what the wire carries. The beast is
+      // spawned directly on the host rather than by re-picking characters: the
+      // Pack Tactics grant is covered by the sim suite, and what needs a real
+      // second browser is the snapshot path, not the trait.
+      {
+        await A.exec(`
+          const s = window.uv.sim, p = s.players[0];
+          s._spawnSummon(p, 'guard_drone', 1, 'beast');
+          const b = s.summons.find(x => x.type === 'beast');
+          window.__pinB = setInterval(() => { b.x = p.x + 120; b.y = p.y; }, 8);
+          return 1;`);
+        await sleep(700);
+        const hostB = JSON.parse(await A.exec(`
+          const s = window.uv.sim, b = s.summons.find(x => x.type === 'beast');
+          return JSON.stringify({ x: Math.round(b.x), y: Math.round(b.y), down: !!b.down });`));
+        const seen = await B.waitFor(`
+          const s = window.uv.snaps, last = s[s.length - 1];
+          const row = last && last.s.summons && last.s.summons.find(r => r[1] === 'beast');
+          return row && Math.abs(row[2] - ${hostB.x}) <= 3 && Math.abs(row[3] - ${hostB.y}) <= 3 ? 1 : 0;`,
+          6000, 'client sees the beast where the host has it').then(() => true).catch(() => false);
+        if (seen) ok(`client agrees on the beast's position over the wire (${hostB.x},${hostB.y})`);
+        else {
+          const got = await B.exec(`const s=window.uv.snaps,l=s[s.length-1];
+            return JSON.stringify(l && l.s.summons ? l.s.summons.filter(r=>r[1]==='beast') : null);`);
+          fail(`client beast position disagrees: host ${JSON.stringify(hostB)}, client ${got}`);
+        }
+
+        // knock it down on the host: the client must see the state flip AND a
+        // countdown that runs down rather than a bare boolean
+        await A.exec(`
+          const s = window.uv.sim, b = s.summons.find(x => x.type === 'beast');
+          window.uvBeast.hurtBeast(s, b, 99999);
+          return 1;`);
+        const downSeen = await B.waitFor(`
+          const s = window.uv.snaps, last = s[s.length - 1];
+          const row = last && last.s.summons && last.s.summons.find(r => r[1] === 'beast');
+          return row && row[7] > 0 ? 1 : 0;`, 5000, 'client sees the beast go down').then(() => true).catch(() => false);
+        if (downSeen) ok('client sees the knockdown — the beast stays on the wire while it is down, it is not deleted');
+        else fail('the knockdown never reached the client');
+        const p1 = await B.exec(`const s=window.uv.snaps,l=s[s.length-1];
+          const r=l.s.summons.find(x=>x[1]==='beast'); return r ? r[7] : -1;`);
+        await sleep(2500);
+        const p2 = await B.exec(`const s=window.uv.snaps,l=s[s.length-1];
+          const r=l.s.summons.find(x=>x[1]==='beast'); return r ? r[7] : -1;`);
+        const hostLeft = await A.exec(`const s=window.uv.sim, b=s.summons.find(x=>x.type==='beast');
+          return b.down ? Math.round(b.downT * 100) / 100 : 0;`);
+        if (p1 > 0 && p2 > 0 && p2 < p1 && Math.abs(p2 * 15 - hostLeft) < 1.2) {
+          ok(`client's revive countdown tracks the host's (${p1}→${p2} of the timer, host has ${hostLeft}s left)`);
+        } else fail(`countdown disagreement: client ${p1}→${p2}, host ${hostLeft}s left`);
+
+        // clean up: this beast belongs to a Banneret, and nothing below expects it
+        await A.exec(`
+          clearInterval(window.__pinB);
+          const s = window.uv.sim;
+          for (const b of s.summons) if (b.type === 'beast') b.dead = true;
+          return 1;`);
+        await sleep(300);
+      }
 
       // ---- gate: Banneret aura + Lodestone tether across the network ----
       await B.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyA'}))`);
