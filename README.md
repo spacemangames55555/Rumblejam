@@ -511,16 +511,21 @@ never loads them:
 
 ## Known defects
 
-One real defect is recorded, reproducible, and deliberately not fixed:
+Three are recorded, reproducible where possible, and deliberately not fixed:
 [`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).
 
 1. **`rushMove()` draws from `Math.random()`**, so a fight cannot be reproduced
    from its seed — two identical-seed runs part company around tick 400. It
    cannot desync co-op (the sim is host-authoritative) but it means "it happened
    on seed ABCDEFG" is not a reproduction.
+2. **Regeneration scales off `maxHp`**, so any entity carrying a large HP
+   multiplier can heal faster than a party can damage it. The Bounty Hunt case
+   is fixed with a damage lockout, but **the root cause is treated, not
+   removed** — read entry 2 before adding the next 10×-HP entity.
+3. **A `shielded` bounty mark stalled at 4p, twice, unexplained.** Deliberately
+   not folded into entry 2.
 
-Read the file before re-diagnosing it; it has been found more than once. The
-`bounty (1p)` flake that used to be entry 2 was **fixed** — see below.
+Read the file before re-diagnosing any of them.
 
 ## Decisions (where the brief was silent or conflicted)
 
@@ -541,30 +546,37 @@ and non-Regenerating marks die in 62–84 seconds each.
   damage delivered into them. **Widening the timeout could not have helped** —
   the mark was not slow, it was unkillable, and that is why the instruction not
   to widen it was the right call.
-- **The fix is a throttle, not a lock, and the first attempt was wrong.** A full
-  regen lock while under fire removed the breakpoint but over-corrected: against
-  anything that fires continuously the mod healed a measured **0.0 HP/s** and
-  became indistinguishable from no modifier. The shipped version throttles to a
-  tenth for 2s after each hit — measured **13–15 HP/s** actual healing against
-  ~102 landed, which shows up as Regenerating marks taking **84s** against
-  69–79s for the other modifiers. A visible cost, never a wall, and it does not
-  depend on whether the attacker happens to have gaps in their fire.
+- **The fix is a 2-second damage lockout, chosen over excluding the modifier
+  from bounty marks** because it fixes every high-HP elite rather than one
+  caller. It works because a player who is killing something is by definition
+  hitting it, so damage always wins.
+- **It makes the modifier free against sustained fire, and that is a real
+  cost of the choice rather than a detail.** Measured healing under the lock is
+  **0.0 HP/s median at both 1p and 4p**, and Regenerating marks die *faster*
+  than the other modifiers (1p: 68s against 66–72s; 4p: 36s against 35–41s) —
+  it costs a disengaging player and nothing at all to an attacking one. The
+  alternative was measured too: `regenLockMult: 0.1` leaves 13–15 HP/s ticking
+  and puts Regenerating marks at 84s against 69–79s, a constant tax instead of
+  a lockout. The dial is one character wide and both settings are recorded in
+  `docs/KNOWN-DEFECTS.md`; 0 ships because it is the stronger guarantee against
+  the unkillable case, which is the live defect.
 - **A mark that merely LEFT the enemy pool was counted as killed.** A Fusehead
   is a `bomber`: it walks at the nearest player and self-detonates. Rolled as a
   mark, it called `explodeEnemy` at 94–98% HP, `tickBounty` saw the mark gone
   and did `o.killed++`. Free objective progress — and it was also *masking* the
-  regen defect, by skipping past marks nobody could kill. Fixed in two places on
-  purpose: self-destructing types are filtered out of the mark roll (prevention),
-  and `_killEnemy` stamps whether the mark actually reached 0 HP so the count
-  can only credit a real kill (the general guard, for any future removal path).
-- **Both are gated directly rather than left to the clear-time gate.** A defect
-  that only shows up as an intermittent timeout is one nobody diagnoses. The
-  suite now asserts the throttled heal rate stays well under a plausible damage
-  floor, that a Regenerating mark actually dies solo under sustained fire, that
-  removing a live mark scores nothing and does not stall the level, and that no
-  mark is ever a self-destructing type — that last one counts how many marks it
-  actually rolled, because "found no bombers" and "found no marks" would
-  otherwise be the same green tick.
+  regen defect, by skipping past marks nobody could kill. Fixed in the
+  **accounting**, not by filtering bombers out of the mark roll: the roll is not
+  the defect, and a filter would have left the count wrong for every other way
+  an entity can leave the pool. `_killEnemy` stamps whether the mark actually
+  reached 0 HP, and `tickBounty` credits a kill only on that.
+- **The gate asserts unkillability, not a timeout.** This is the part that
+  matters most, because the old gate asked *"did the level finish in 20
+  minutes"* and a timeout **cannot tell HARD from IMPOSSIBLE** — which is
+  precisely why this survived as a "flake" for months. The suite now puts
+  sustained damage into a Regenerating mark at 1p and at 4p and requires its HP
+  to actually go **down** over the window, failing in seconds with the word
+  UNKILLABLE if it does not. Plus: the lockout constant is present, removing a
+  live mark scores nothing, and the level does not stall afterwards.
 
 ### The Hunter's melee beast (patch 18)
 

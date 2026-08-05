@@ -41,22 +41,22 @@ export const ENEMY_INDEX = Object.fromEntries(ENEMIES.map((e, i) => [e.id, i]));
 // Elite modifiers: any base type can spawn elite (×3 HP, ×1.5 dmg, ×1.45 size)
 // plus exactly one of these.
 export const ELITE_MODS = [
-  // 2% max hp / s while left alone, throttled to a TENTH of that for regenLockS
-  // seconds after every hit.
+  // 2% max hp / s, and NONE of it within regenLockS seconds of taking a hit.
   //
-  // The throttle exists because the rate is a percentage of the entity's OWN
-  // max HP while player damage is a flat number. On anything carrying a large
-  // HP multiplier — a Bounty Hunt mark is 10x a boss fraction — the raw rate
-  // outruns what a small party can land and the target stops being tough and
-  // starts being unkillable. Measured on a solo mark: 135-151 HP/s of healing
-  // against 105-110 HP/s landed.
+  // The lock exists because the rate is a percentage of the entity's OWN max HP
+  // while player damage is a flat number, so the two diverge as HP grows. On
+  // anything carrying a large multiplier — a Bounty Hunt mark is 10x a boss
+  // fraction — the raw rate outruns what a small party can land and the target
+  // stops being tough and starts being unkillable. Measured on a solo mark:
+  // 135-151 HP/s of healing against 105-110 HP/s landed.
   //
-  // A FULL lock was tried first and over-corrected: against anything that fires
-  // continuously the mod healed a measured 0.0 HP/s and became indistinguishable
-  // from no modifier at all. A tenth keeps it a real cost that stays well under
-  // any plausible damage output, and it does not depend on whether the attacker
-  // happens to have gaps in their fire.
-  { id: 'regenerating', name: 'Regenerating', regenPct: 0.02, regenLockS: 2, regenLockMult: 0.1 },
+  // regenLockMult is the fraction that still ticks WHILE locked. 0 is a hard
+  // lockout: sustained pressure shuts the healing off completely and the
+  // modifier costs a disengaging player, not an attacking one. Raising it to
+  // ~0.1 makes regen a constant tax instead — see docs/KNOWN-DEFECTS.md, which
+  // records what each setting measures, because the choice is a design one and
+  // the knob is one character wide.
+  { id: 'regenerating', name: 'Regenerating', regenPct: 0.02, regenLockS: 2, regenLockMult: 0 },
   { id: 'volatile',     name: 'Volatile',     boom: { dmg: 16, radius: 120, fuse: 0.8 } },
   { id: 'shielded',     name: 'Shielded',     blockCd: 3 },      // negates one hit every 3 s
   { id: 'magnetic',     name: 'Magnetic',     pullR: 260, pullSpd: 70 },

@@ -1654,57 +1654,77 @@ try {
       return g;
     };
 
-    // 1. REGEN CAN NEVER OUTRUN DAMAGE. Regeneration is a percentage of the
-    //    target's OWN max HP; player damage is a flat number. On a mark carrying
-    //    BOUNTY_HP_MULT the raw rate reached 135-151 HP/s against 105-110 landed,
-    //    so the mark healed faster than it could be hurt and the level could
-    //    never end — for any budget. The throttle is what makes that impossible.
+    // 1. UNKILLABILITY, MEASURED DIRECTLY — not inferred from a timeout.
+    //
+    // This is the gate that should have existed. The old one asked "did the
+    // level finish inside 20 minutes", which cannot tell HARD from IMPOSSIBLE:
+    // an unkillable mark and a merely slow one both read as a timeout, and that
+    // ambiguity is why this defect survived for months as a "flake".
+    //
+    // So assert the thing itself. Put sustained damage into a Regenerating mark
+    // and require its HP to actually GO DOWN over the window. A target that
+    // heals at least as fast as it is hurt fails here in seconds, loudly, and
+    // says so in those words.
     const regenMod = ELITE_MODS.find(m => m.id === 'regenerating');
     if (!regenMod) fail('no `regenerating` elite mod — this gate is measuring nothing');
     else {
-      const g = bountySim();
-      const mark = [...g.enemyPool].find(e => e.bounty);
-      if (!mark) fail('no bounty mark spawned for the regen gate');
-      else {
-        const raw = mark.maxHp * regenMod.regenPct;
-        const throttled = raw * (regenMod.regenLockMult ?? 0);
-        // what the gate's own three-weapon kit actually lands on a mark, measured
-        const FLOOR_DPS = 100;
-        if (throttled < FLOOR_DPS * 0.5) {
-          ok(`Regenerating stays a cost, not a wall: mark ${Math.round(mark.maxHp)} HP heals ${raw.toFixed(0)}/s alone but ${throttled.toFixed(0)}/s under fire, against ~${FLOOR_DPS} HP/s landed`);
-        } else {
-          fail(`a Regenerating mark heals ${throttled.toFixed(0)} HP/s while being hit against ~${FLOOR_DPS} landed — at or past the unkillable threshold`);
-        }
-        if (regenMod.regenLockMult > 0) ok(`...and it is throttled rather than switched off (x${regenMod.regenLockMult}), so the modifier still does something`);
-        else fail('regenLockMult is 0 — the mod heals nothing at all under fire and is inert');
-      }
-    }
-
-    // 2. A REGENERATING MARK ACTUALLY DIES, solo, in a real fight. The arithmetic
-    //    above is necessary and not sufficient: this runs it.
-    {
       const g = bountySim(90210);
       const p = g.players[0];
       const mark = [...g.enemyPool].find(e => e.bounty);
-      if (!mark) fail('no bounty mark for the kill gate');
+      if (!mark) fail('no bounty mark spawned for the unkillability gate');
       else {
         mark.eliteMod = regenMod;
         mark.hp = mark.maxHp;
         const id = mark.id;
-        let t = 0;
-        // stand in weapon range and keep firing — the fight, not the pathing
-        while (t++ < 60 * 240 && g.enemyById(id)) {
+        const WINDOW = 60 * 20;                    // 20 seconds of sustained fire
+        const hp0 = mark.hp;
+        let t = 0, alive = true;
+        while (t++ < WINDOW && (alive = !!g.enemyById(id))) {
           const e = g.enemyById(id);
-          p.x = e.x - 120; p.y = e.y;
+          p.x = e.x - 120; p.y = e.y;              // parked in weapon range, firing
           g.setInput(0, { mx: 0, my: 0 });
           g.tick();
           if (!p.downed) p.hp = p.stats.vitality;
         }
-        if (!g.enemyById(id)) ok(`a Regenerating mark dies solo in ${(t / 60).toFixed(0)}s of sustained fire`);
-        else {
-          const e = g.enemyById(id);
-          fail(`a Regenerating mark survived 4 minutes of point-blank solo fire at ${(e.hp / e.maxHp * 100).toFixed(0)}% HP — unkillable`);
+        const now = alive && g.enemyById(id) ? g.enemyById(id).hp : 0;
+        const drop = hp0 - now;
+        const dps = drop / (t / 60);
+        if (drop > 0) {
+          ok(`a Regenerating mark LOSES HP under sustained fire: ${Math.round(hp0)} → ${Math.round(now)} in ${(t / 60).toFixed(0)}s (net ${dps.toFixed(0)} HP/s) — killable, not merely slow`);
+        } else {
+          fail(`UNKILLABLE: a Regenerating mark took ${(t / 60).toFixed(0)}s of point-blank fire and its HP did not fall (${Math.round(hp0)} → ${Math.round(now)}). It heals at least as fast as it is hurt; no time budget can finish this level.`);
         }
+        // the same assertion for a PARTY, because regen is a % of max HP and a
+        // 4p mark carries ~1.75x the HP — the threshold moves with the party
+        const g4 = bountySim(90210, 4);
+        const m4 = [...g4.enemyPool].find(e => e.bounty);
+        if (!m4) fail('no bounty mark spawned for the 4p unkillability gate');
+        else {
+          m4.eliteMod = regenMod; m4.hp = m4.maxHp;
+          const id4 = m4.id, hp4 = m4.hp;
+          let t4 = 0;
+          while (t4++ < WINDOW && g4.enemyById(id4)) {
+            const e = g4.enemyById(id4);
+            for (const q of g4.players) { q.x = e.x - 120; q.y = e.y + (q.idx - 1.5) * 30; g4.setInput(q.idx, { mx: 0, my: 0 }); }
+            g4.tick();
+            for (const q of g4.players) if (!q.downed) q.hp = q.stats.vitality;
+          }
+          const now4 = g4.enemyById(id4) ? g4.enemyById(id4).hp : 0;
+          if (hp4 - now4 > 0) ok(`...and at 4p too: ${Math.round(hp4)} → ${Math.round(now4)} on a ${Math.round(m4.maxHp)} HP mark`);
+          else fail(`UNKILLABLE at 4p: ${Math.round(hp4)} → ${Math.round(now4)} after ${(t4 / 60).toFixed(0)}s of four players firing`);
+        }
+      }
+    }
+
+    // 2. AND THE MECHANISM THAT MAKES IT SAFE IS PRESENT. The gate above is the
+    //    behaviour; this is the invariant behind it, so a future edit that
+    //    removes the lock fails with a message naming what it removed rather
+    //    than as a mystery timeout somewhere else.
+    if (regenMod) {
+      if (regenMod.regenLockS > 0) {
+        ok(`Regenerating carries a ${regenMod.regenLockS}s damage lockout (regenLockMult ${regenMod.regenLockMult ?? 0}) — regen scales with max HP, so without it any high-HP entity is unkillable`);
+      } else {
+        fail('Regenerating has no regenLockS — regen scales off max HP and nothing stops it outrunning damage on a high-HP entity');
       }
     }
 
@@ -1732,25 +1752,6 @@ try {
       }
     }
 
-    // 4. A MARK IS NEVER A SELF-DESTRUCTING TYPE. A Fusehead walks at the
-    //    nearest player and detonates in seconds; as a 7000 HP champion the
-    //    party is asked to hunt, it is simply the wrong casting.
-    {
-      const bad = [], seen = new Set();
-      let rolled = 0;
-      for (let i = 0; i < 30; i++) {
-        const g = bountySim(500 + i * 37);
-        const mark = [...g.enemyPool].find(e => e.bounty);
-        if (!mark || !mark.def) continue;
-        rolled++; seen.add(mark.def.id);
-        if (mark.def.behavior === 'bomber') bad.push(mark.def.id);
-      }
-      // rolled must be counted, or "found no bombers" and "found no marks" are
-      // the same green tick — which is how a gate quietly stops testing anything
-      if (rolled < 25) fail(`only ${rolled}/30 bounty marks actually spawned — this gate was not measuring the roll`);
-      else if (!bad.length) ok(`no bounty mark is a self-destructing type — ${rolled} rolls across ${seen.size} enemy type(s)`);
-      else fail(`${bad.length}/${rolled} marks rolled a bomber (${[...new Set(bad)].join(', ')}) — it kills itself before the hunt starts`);
-    }
   }
 
   // --- objective HUD state serializes for clients ---
