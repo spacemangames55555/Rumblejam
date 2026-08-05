@@ -232,8 +232,17 @@ export function clampLeash(s, p) {
 // The push moves the ENEMY, never the beast: a beast shoved by the crowd would
 // be squeezed off its owner and the leash clamp would fight the push every
 // tick.
+//
+// BOSSES ARE EXEMPT, and this is a balance rule rather than a physics one. A
+// beast costs nothing to lose: it is knocked down rather than killed, it holds
+// its Pack Tactics slot while it is down, and it comes back on the owner at
+// full HP 15 seconds later. So a 45 HP pet parked in a boss's path would be a
+// free wall on a 15-second cycle with no resource behind it — park, lose
+// nothing, repeat. Every other enemy can walk around a beast or kill it for
+// good value; a boss fight is the one place where "block it and pay nothing"
+// is the whole encounter.
 export function beastBlocks(sim, e) {
-  if (!sim.summons.length) return;
+  if (!sim.summons.length || e.boss) return;
   const er = e.radius;
   for (const s of sim.summons) {
     if (!beastUp(s)) continue;

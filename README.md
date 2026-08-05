@@ -504,6 +504,26 @@ never loads them:
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
+- `node tools/determinism_probe.mjs [seed] [charId] [ticks]` — runs two
+  identical-seed Sims side by side and reports the first tick where the enemy
+  field disagrees. **It fails today, on purpose** — see known defect #1 below.
+  It is the instrument for that fix, not a gate; make it one when it passes.
+
+## Known defects
+
+Two real defects are recorded, reproducible, and deliberately not fixed:
+[`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).
+
+1. **`rushMove()` draws from `Math.random()`**, so a fight cannot be reproduced
+   from its seed — two identical-seed runs part company around tick 400. It
+   cannot desync co-op (the sim is host-authoritative) but it means "it happened
+   on seed ABCDEFG" is not a reproduction.
+2. **The `bounty (1p)` sim gate fails intermittently** — 2 of 5 consecutive
+   runs at `origin/main`. Which means the sim suite's exit code is not a
+   trustworthy pass/fail signal on its own, and every report in this repo that
+   says "green apart from the bounty flake" is leaning on that entry.
+
+Read the file before re-diagnosing either. Both have been found more than once.
 
 ## Decisions (where the brief was silent or conflicted)
 
@@ -553,11 +573,17 @@ never loads them:
   can slip past it. The push moves the *enemy*, never the beast: a beast shoved
   by a crowd would be squeezed off its owner and the leash clamp would fight
   the push every tick.
-- **Bosses are blocked too.** The brief says "blocks enemies" with no
-  exception, and a boss is an enemy. It is the most likely thing here to feel
-  wrong in play — a 45 HP pet does not read as something that should stop a
-  boss — and the one-line lever is a `!e.boss` guard in `beastBlocks`. Flagged
-  rather than pre-narrowed.
+- **Bosses are exempt from the body block**, and that is a balance rule rather
+  than a physics one. It was shipped without the exemption first, on the reading
+  that "blocks enemies" has no exception in it; the exemption went in
+  immediately afterwards because a beast **costs nothing to lose**. It is
+  knocked down rather than killed, it holds its Pack Tactics slot while down,
+  and it returns on the owner at full HP 15 seconds later — so a blockable boss
+  means parking a free wall in its path on a 15-second cycle with no resource
+  behind it. Every other enemy can walk around a beast or kill it for real
+  value; a boss fight is the one place where "block it and pay nothing" is the
+  whole encounter. A gate asserts a boss walks through where an ordinary enemy
+  is pushed 24u, so the exemption cannot quietly regress.
 
 ### Art generation phase (patch 17)
 

@@ -128,7 +128,10 @@ deal +8% per living beast. A combined beast counts as two for both checks.
 The beast is a **melee pet**, not a drone — `js/entities/beast.js`. It meanders
 within 320u of you, pursues an enemy inside 320u of itself, bites on contact,
 and is hard-clamped to 640u from you in every state. It **body-blocks enemies
-and enemy fire**, and passes through you, other players and their beasts. At 0
+and enemy fire** — but **not bosses**, which walk through it: a beast is knocked
+down rather than killed and returns free 15s later, so a blockable boss would be
+a free wall on a cycle. It also passes through you, other players and their
+beasts. At 0
 HP it is knocked **down for 15s** — inert, not deleted, still holding its Pack
 Tactics slot — and revives on you at full HP. A downed beast does not count for
 Alpha or Marksman; Marksman's wording was already "per *living* beast".

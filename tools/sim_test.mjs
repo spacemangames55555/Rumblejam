@@ -2871,6 +2871,34 @@ try {
       if (sep >= e.radius + BEAST.RADIUS - 0.001) ok(`beast blocks enemies: pushed out to ${sep.toFixed(1)}u, contact is ${(e.radius + BEAST.RADIUS).toFixed(0)}u`);
       else fail(`enemy stood inside the beast: ${sep.toFixed(2)}u`);
 
+      // ...but NOT a boss. A beast is knocked down rather than killed, keeps
+      // its slot while down, and returns at full HP 15s later — so a blockable
+      // boss means parking a free wall in its path on a 15s cycle at no cost.
+      {
+        const gb = hunter(); const pb = gb.players[0]; const bb = beastOf(gb);
+        quiet(gb);
+        gb._spawnSiegeBoss();
+        const boss = gb.boss;
+        if (!boss) fail('no boss spawned for the block-exemption check');
+        else {
+          bb.x = pb.x + 200; bb.y = pb.y;
+          boss.x = bb.x + 4; boss.y = bb.y;   // standing right on it
+          const bx = boss.x, by = boss.y;
+          // beastBlocks directly, not clampToRoom: the room clamp and the
+          // obstacle push also move things, and this is asking about one rule
+          B.beastBlocks(gb, boss);
+          const moved = Math.hypot(boss.x - bx, boss.y - by);
+          // control: the same call, same offset, on an ordinary enemy
+          const ctl = gb.spawnEnemyById('skulker', bb.x + 4, bb.y, {});
+          const cx0 = ctl.x, cy0 = ctl.y;
+          B.beastBlocks(gb, ctl);
+          const ctlMoved = Math.hypot(ctl.x - cx0, ctl.y - cy0);
+          if (moved < 0.001 && ctlMoved > 1) {
+            ok(`a boss walks through a beast (moved ${moved.toFixed(3)}u) where an ordinary enemy is pushed ${ctlMoved.toFixed(1)}u — the exemption is a balance rule, not a physics one`);
+          } else fail(`boss exemption: boss moved ${moved.toFixed(2)}u, control enemy moved ${ctlMoved.toFixed(2)}u`);
+        }
+      }
+
       // enemy fire stops at the beast, and the owner behind it is untouched
       const g2 = hunter(); const p2 = g2.players[0]; const b2 = beastOf(g2);
       quiet(g2);
