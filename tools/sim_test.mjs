@@ -1631,6 +1631,129 @@ try {
     if (!objFail) ok(`all 8 objective levels clear solo and 4p — ${times.join(' · ')}`);
   }
 
+  // --- Bounty Hunt: a mark must always be KILLABLE, and only a real kill counts ---
+  //
+  // Both of these were live defects that showed up as an intermittent gate
+  // rather than as themselves, which is why they are asserted directly here
+  // instead of being left to the clear-time gate above to catch by luck.
+  {
+    const { ELITE_MODS } = await import('../js/content/enemies.js');
+    const bountySim = (seed = 4242, n = 1) => {
+      const g = new Sim({ seed, party: quad(n) });
+      const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+      node.kind = 'bounty';
+      g.god = true;
+      for (const p of g.players) {
+        const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
+        while (p.weapons.length < 3) g._addWeapon(p, kit[p.weapons.length], 2);
+        g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
+      }
+      g._travelTo(node.id);
+      // the first mark is on a spawn timer, not instant — tick until it lands
+      for (let i = 0; i < 60 * 20 && !g.obj.markId; i++) g.tick();
+      return g;
+    };
+
+    // 1. UNKILLABILITY, MEASURED DIRECTLY — not inferred from a timeout.
+    //
+    // This is the gate that should have existed. The old one asked "did the
+    // level finish inside 20 minutes", which cannot tell HARD from IMPOSSIBLE:
+    // an unkillable mark and a merely slow one both read as a timeout, and that
+    // ambiguity is why this defect survived for months as a "flake".
+    //
+    // So assert the thing itself. Put sustained damage into a Regenerating mark
+    // and require its HP to actually GO DOWN over the window. A target that
+    // heals at least as fast as it is hurt fails here in seconds, loudly, and
+    // says so in those words.
+    const regenMod = ELITE_MODS.find(m => m.id === 'regenerating');
+    if (!regenMod) fail('no `regenerating` elite mod — this gate is measuring nothing');
+    else {
+      const g = bountySim(90210);
+      const p = g.players[0];
+      const mark = [...g.enemyPool].find(e => e.bounty);
+      if (!mark) fail('no bounty mark spawned for the unkillability gate');
+      else {
+        mark.eliteMod = regenMod;
+        mark.hp = mark.maxHp;
+        const id = mark.id;
+        const WINDOW = 60 * 20;                    // 20 seconds of sustained fire
+        const hp0 = mark.hp;
+        let t = 0, alive = true;
+        while (t++ < WINDOW && (alive = !!g.enemyById(id))) {
+          const e = g.enemyById(id);
+          p.x = e.x - 120; p.y = e.y;              // parked in weapon range, firing
+          g.setInput(0, { mx: 0, my: 0 });
+          g.tick();
+          if (!p.downed) p.hp = p.stats.vitality;
+        }
+        const now = alive && g.enemyById(id) ? g.enemyById(id).hp : 0;
+        const drop = hp0 - now;
+        const dps = drop / (t / 60);
+        if (drop > 0) {
+          ok(`a Regenerating mark LOSES HP under sustained fire: ${Math.round(hp0)} → ${Math.round(now)} in ${(t / 60).toFixed(0)}s (net ${dps.toFixed(0)} HP/s) — killable, not merely slow`);
+        } else {
+          fail(`UNKILLABLE: a Regenerating mark took ${(t / 60).toFixed(0)}s of point-blank fire and its HP did not fall (${Math.round(hp0)} → ${Math.round(now)}). It heals at least as fast as it is hurt; no time budget can finish this level.`);
+        }
+        // the same assertion for a PARTY, because regen is a % of max HP and a
+        // 4p mark carries ~1.75x the HP — the threshold moves with the party
+        const g4 = bountySim(90210, 4);
+        const m4 = [...g4.enemyPool].find(e => e.bounty);
+        if (!m4) fail('no bounty mark spawned for the 4p unkillability gate');
+        else {
+          m4.eliteMod = regenMod; m4.hp = m4.maxHp;
+          const id4 = m4.id, hp4 = m4.hp;
+          let t4 = 0;
+          while (t4++ < WINDOW && g4.enemyById(id4)) {
+            const e = g4.enemyById(id4);
+            for (const q of g4.players) { q.x = e.x - 120; q.y = e.y + (q.idx - 1.5) * 30; g4.setInput(q.idx, { mx: 0, my: 0 }); }
+            g4.tick();
+            for (const q of g4.players) if (!q.downed) q.hp = q.stats.vitality;
+          }
+          const now4 = g4.enemyById(id4) ? g4.enemyById(id4).hp : 0;
+          if (hp4 - now4 > 0) ok(`...and at 4p too: ${Math.round(hp4)} → ${Math.round(now4)} on a ${Math.round(m4.maxHp)} HP mark`);
+          else fail(`UNKILLABLE at 4p: ${Math.round(hp4)} → ${Math.round(now4)} after ${(t4 / 60).toFixed(0)}s of four players firing`);
+        }
+      }
+    }
+
+    // 2. AND THE MECHANISM THAT MAKES IT SAFE IS PRESENT. The gate above is the
+    //    behaviour; this is the invariant behind it, so a future edit that
+    //    removes the lock fails with a message naming what it removed rather
+    //    than as a mystery timeout somewhere else.
+    if (regenMod) {
+      if (regenMod.regenLockS > 0) {
+        ok(`Regenerating carries a ${regenMod.regenLockS}s damage lockout (regenLockMult ${regenMod.regenLockMult ?? 0}) — regen scales with max HP, so without it any high-HP entity is unkillable`);
+      } else {
+        fail('Regenerating has no regenLockS — regen scales off max HP and nothing stops it outrunning damage on a high-HP entity');
+      }
+    }
+
+    // 3. ONLY A REAL KILL COUNTS. A mark can leave the enemy pool without dying
+    //    — a bomber fusing on the player calls explodeEnemy at full health — and
+    //    that used to increment o.killed. Free objective progress for a hunt
+    //    that never happened, and it also masked defect 1 by skipping past marks
+    //    nobody could kill.
+    {
+      const g = bountySim(31337);
+      const o = g.obj;
+      const mark = [...g.enemyPool].find(e => e.bounty);
+      if (!mark || !o) fail('no bounty mark for the free-kill gate');
+      else {
+        const before = o.killed;
+        const hpPct = mark.hp / mark.maxHp;
+        g._killEnemy(mark, null);         // removed at full health, not killed
+        g.tick();
+        if (o.killed === before) ok(`a mark REMOVED at ${(hpPct * 100).toFixed(0)}% HP scores nothing (${before}/${o.need} before and after)`);
+        else fail(`removing a live mark at ${(hpPct * 100).toFixed(0)}% HP counted as a kill: ${before} -> ${o.killed}`);
+        // ...and the level does not stall: a replacement is on the way
+        for (let i = 0; i < 60 * 8; i++) g.tick();
+        if (o.markId !== null) ok('and a replacement mark is marked, so the level still finishes');
+        else fail('no replacement mark after one was removed — the level would stall');
+      }
+    }
+
+  }
+
   // --- objective HUD state serializes for clients ---
   {
     let missing = [];

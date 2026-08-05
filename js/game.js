@@ -2080,6 +2080,8 @@ export class Sim {
     amount = Math.max(1, Math.round(amount));
     e.hp -= amount;
     e.hitFlash = 0.1;
+    // a Regenerating elite stops healing while it is being hit (see ELITE_MODS)
+    if (e.eliteMod && e.eliteMod.regenLockS) e.regenLock = e.eliteMod.regenLockS;
     if (!opts.silent) this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: opts.crit ? 1 : 0 });
     const p = opts.owner;
     if (p && p.stats) {
@@ -2095,6 +2097,12 @@ export class Sim {
   }
 
   _killEnemy(e, killer) {
+    // A Bounty Hunt mark leaves the pool through here whether it was KILLED or
+    // merely removed — a bomber's self-detonation calls explodeEnemy at full
+    // health, and the objective used to count that as a kill. Stamp which it
+    // was, so tickBounty can tell the difference; hp <= 0 is the only thing
+    // that means "the party actually brought it down".
+    if (e.bounty && this.obj && this.obj.type === 'bounty') this.obj.markDied = e.hp <= 0;
     const { x, y } = e;
     this.fx.deaths.push({ x: Math.round(x), y: Math.round(y), c: e.boss ? e.bossDef.color : e.def.color, r: e.radius });
     this.pushEvent({ k: 'sfx', s: 'enemyDie' });

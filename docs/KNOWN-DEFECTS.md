@@ -77,49 +77,113 @@ field to isolate it, and the workaround is a marker pointing back here.
 
 ---
 
-## 2. The `bounty (1p)` sim gate fails intermittently — measured 2 runs in 5
+---
 
-**Where:** `tools/sim_test.mjs`, the solo objective sweep.
+## 2. Regeneration scales off `maxHp`, so a high-HP entity can become unkillable
+
+**Where:** `js/content/enemies.js`, `ELITE_MODS` — `{ id: 'regenerating',
+regenPct: 0.02 }`, applied in `js/entities/enemies.js`.
+
+**This entry is the ROOT CAUSE and it is still live.** The damage below has been
+treated, not removed. Read it before adding any entity that multiplies HP.
+
+### The shape of it
+
+Regeneration is **a percentage of the entity's own max HP**. Player damage is a
+flat number. The two diverge as HP grows, so for every build there is an HP
+above which the target heals faster than it can be hurt — not slowly killable,
+**never killable**.
+
+`js/objectives.js` has `BOUNTY_HP_MULT = 10`: a Bounty Hunt mark is priced at ten
+times a boss fraction. That put a floor-1 solo mark at ~6,700–7,600 HP, so:
+
+| | |
+|---|---|
+| mark heals (2% of max HP/s) | **135–151 HP/s** |
+| solo player lands on the mark | **105–110 HP/s** |
+| net | **−25 to −42 HP/s, permanently** |
+
+Marks sat at 98–99% HP after twenty minutes with 30,000+ damage delivered into
+them. The level could not end, for any budget.
+
+### What it looked like from the outside, and why that matters
+
+It presented as **the `bounty (1p)` sim gate failing intermittently**, and it was
+recorded in this file as a flake for exactly that reason. The gate asked *"did
+the level finish inside 20 minutes"*, and a timeout **cannot tell HARD from
+IMPOSSIBLE**. That ambiguity is the whole reason this survived as long as it did.
+
+The real rate was never the "2 of 5 suite runs" first recorded here. Measured
+properly on the solo objective itself: **4 of 13 runs cleared — roughly two in
+three solo Bounty Hunts failed.** A second defect (marks counted killed when they
+merely left the enemy pool, since fixed) was masking it by skipping past marks
+nobody could kill, which is what dragged the observed rate down.
+
+### What has been done
+
+`regenLockS: 2` — no regeneration within 2 seconds of taking damage. Sustained
+pressure shuts the healing off, so damage always wins and the breakpoint cannot
+be reached while a player is attacking.
+
+**That treats it. It does not remove it.** The rate is still a percentage of max
+HP, and a target left alone still heals at the uncapped rate. The lockout works
+because a player who is killing something is, by definition, hitting it.
+
+`regenLockMult` is the fraction that still ticks while locked, and it is the dial
+between two different modifiers:
+
+| `regenLockMult` | measured healing under sustained fire | what the mod becomes |
+|---|---|---|
+| **0** (shipped) | ~0 HP/s | a cost to *disengaging*; free to anyone who keeps firing |
+| 0.1 | 13–15 HP/s against ~102 landed | a constant tax; Regenerating marks took 84s against 69–79s for other mods |
+
+Both were measured. 0 is shipped because it is the stronger guarantee against
+unkillability; 0.1 was measured and kept documented because "the mod does
+nothing to an attacking player" is a real cost of that choice.
+
+### For whoever adds the next 10×-HP entity
+
+**This is the thing to check.** Any new multiplier on `maxHp` — a boss variant, a
+raid target, an objective anchor — re-opens the same arithmetic against any
+percentage-of-max-HP effect, and the lockout only helps while the player is
+actively hitting it. If the design has the target ever *not* being hit while
+still needing to die on a clock, do the division before shipping it:
 
 ```
-✗ bounty (1p) never cleared in 20 minutes: {"type":"bounty","done":false,
-  "killed":4,"need":5,"markHp":0.99...}
+heal rate  = maxHp × regenPct
+kill floor = the least damage a plausible build lands on ONE target
 ```
 
-**What is wrong.** A solo Bounty Hunt does not reliably reach 5 marks killed
-inside the 20-minute sim budget. The failure shape is consistent across runs:
-**`killed` lands at 1–4 of 5, `streamKills` is in the low hundreds, and the
-live mark is at ~99–100% HP.** The player is clearing the endless stream fine
-and is not killing the mark.
+If the first is anywhere near the second, the entity is unkillable for that
+build, and no timeout will tell you — only an HP-goes-down assertion will.
+`tools/sim_test.mjs` now has one.
 
-**Reproduce:** `node tools/sim_test.mjs`, several times. It is not deterministic
-— this is the same defect as entry 1 showing up as a symptom — so a single
-green run proves nothing about it, and neither does a single red one.
+---
 
-**Rate, measured rather than estimated.** Five consecutive runs at
-`origin/main` (`7c75911`, before any of the beast work): **2 failed, 3 passed.**
-Informally it has looked closer to half over ~10 runs across branches. Treat it
-as "fails often enough that a green suite is not evidence" and not as a precise
-number — establishing the real rate is part of the work, not a prerequisite for
-starting it.
+## 3. A `shielded` bounty mark stalled at 4p, and it is not explained
 
-**What has been ruled out.** It is **not** caused by the Hunter's melee beast
-patch: the five baseline runs above predate it, and no `js/` file the bounty
-path touches is in that diff. It is also not the art pipeline — it was already
-failing across the whole `patch-art-pipeline` sequence, where every commit was
-assets and docs only.
+**Where:** unknown. Seen once, during the investigation above.
 
-**Why the rate is the interesting part.** A gate that fails this often is not a
-flake to be re-run past; at face value it says solo Bounty Hunt fails to clear
-in 20 minutes a large fraction of the time at the tuning the sim asserts. Either
-the objective is mistuned for one player or the gate's budget is wrong, and
-**which one it is has not been established.** Whoever picks this up should
-answer that first rather than widening the timeout — widening it makes the gate
-green and leaves solo players with an objective that takes 20 minutes.
+A `shielded` mark at 4 players sat at **84% HP after 1,071 seconds**. It fits
+neither mechanism in entry 2 — `shielded` negates one hit every 3s, which is a
+throughput cost and nothing like a heal, and the mark was not being counted
+killed either.
 
-Start at `js/objectives.js`, the bounty mark's HP (`bountyAnchor`) against
-`sim.coopHp` at one player, and its re-spawn cadence versus the stream.
+**Deliberately not folded into entry 2.** It would have been easy to file it
+under "the same thing" and it is not obviously the same thing; a wrong story in
+this file is worse than an open question.
 
-**Consequence today:** the sim suite's exit code cannot be trusted as a
-pass/fail signal on its own. Every report in this repo that says "suite green
-apart from the bounty flake" is leaning on this entry.
+**Seen twice now, both at 4p, both `shielded`.** The second was during the
+lockout measurement for entry 2: across a 5-run 4p sweep, **8 of 9 `shielded`
+marks died and one did not**, while `regenerating` went 4/4, `volatile` 8/8 and
+`magnetic` 6/6. Two sightings is not a diagnosis, but it is enough to say this
+is not a one-off and not a symptom of the entry-2 defects — those are fixed and
+it happened anyway.
+
+It has never appeared in a solo run, and it has never tripped the suite, because
+the suite's Bounty Hunt gate runs one seed per party size.
+
+**Reproducing it is the first job**, and `tools/determinism_probe.mjs` (entry 1)
+explains why that is harder than re-running a seed. A 4p Bounty Hunt harness with
+per-mark HP logging is the tool; `bounty_regen.mjs`-style instrumentation over
+enough 4p runs to catch a second occurrence is the method.

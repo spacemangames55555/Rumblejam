@@ -61,6 +61,7 @@ function anyPlayerWithin(sim, x, y, r) {
 }
 function floorTable(sim) { return FLOOR_TABLES[sim.floorNum - 1]; }
 
+
 // Bounty champions are priced off the floor boss's REAL spawn HP (post-patch,
 // i.e. already doubled), using the same formula _spawnBoss uses so the
 // comparison is apples-to-apples.
@@ -502,8 +503,25 @@ function tickBounty(sim, o, dt) {
       bountyStream(sim, o, e, dt);
       return;
     }
-    // the mark died
+    // The mark left the pool — but only a real death counts. Sim._killEnemy
+    // stamps o.markDied, because a mark can also be REMOVED at full health: a
+    // Fusehead rolled as a mark walks at the nearest player and self-detonates
+    // at 94-98% HP, and an arena sweep removes everything. Counting either as a
+    // kill hands out free objective progress for a hunt that never happened —
+    // and it was also masking the regen defect below, by skipping past marks
+    // nobody could kill.
+    //
+    // Guarded here rather than by filtering bombers out of the mark roll: the
+    // roll is not the defect, the accounting is, and a filter would leave this
+    // wrong for every other way an entity can leave the pool.
     o.markId = null;
+    const died = o.markDied === true;
+    o.markDied = undefined;
+    if (!died) {
+      o.spawnT = 3;
+      sim.pushEvent({ k: 'toast', idx: -1, text: 'The mark slipped away — another stirs.' });
+      return;
+    }
     o.killed++;
     if (o.killed >= o.need) { o.done = true; return; }
     o.spawnT = 3;

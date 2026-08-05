@@ -511,21 +511,72 @@ never loads them:
 
 ## Known defects
 
-Two real defects are recorded, reproducible, and deliberately not fixed:
+Three are recorded, reproducible where possible, and deliberately not fixed:
 [`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).
 
 1. **`rushMove()` draws from `Math.random()`**, so a fight cannot be reproduced
    from its seed — two identical-seed runs part company around tick 400. It
    cannot desync co-op (the sim is host-authoritative) but it means "it happened
    on seed ABCDEFG" is not a reproduction.
-2. **The `bounty (1p)` sim gate fails intermittently** — 2 of 5 consecutive
-   runs at `origin/main`. Which means the sim suite's exit code is not a
-   trustworthy pass/fail signal on its own, and every report in this repo that
-   says "green apart from the bounty flake" is leaning on that entry.
+2. **Regeneration scales off `maxHp`**, so any entity carrying a large HP
+   multiplier can heal faster than a party can damage it. The Bounty Hunt case
+   is fixed with a damage lockout, but **the root cause is treated, not
+   removed** — read entry 2 before adding the next 10×-HP entity.
+3. **A `shielded` bounty mark stalled at 4p, twice, unexplained.** Deliberately
+   not folded into entry 2.
 
-Read the file before re-diagnosing either. Both have been found more than once.
+Read the file before re-diagnosing any of them.
 
 ## Decisions (where the brief was silent or conflicted)
+
+### The unkillable bounty mark (patch 19)
+
+The `bounty (1p)` gate had been failing intermittently for long enough to be
+written off as a flake and recorded as one. It was not a flake and it was not a
+gate problem — it was two gameplay defects, and the question it was asked to
+answer ("is the objective mistuned, or is the budget wrong?") had a third
+answer: **neither**. A healthy solo clear is 5–6 minutes of a 20-minute budget,
+and non-Regenerating marks die in 62–84 seconds each.
+
+- **Regeneration scaled with the target's own max HP; player damage does not.**
+  `regenPct: 0.02` means 2% of `maxHp` per second, and a Bounty Hunt mark
+  carries `BOUNTY_HP_MULT = 10`, so a floor-1 solo mark healed **135–151 HP/s**
+  against the **105–110 HP/s** the gate's own kit lands on it. Net −25 to −42
+  HP/s, permanently: marks sat at 98–99% HP after twenty minutes with 30,000+
+  damage delivered into them. **Widening the timeout could not have helped** —
+  the mark was not slow, it was unkillable, and that is why the instruction not
+  to widen it was the right call.
+- **The fix is a 2-second damage lockout, chosen over excluding the modifier
+  from bounty marks** because it fixes every high-HP elite rather than one
+  caller. It works because a player who is killing something is by definition
+  hitting it, so damage always wins.
+- **It makes the modifier free against sustained fire, and that is a real
+  cost of the choice rather than a detail.** Measured healing under the lock is
+  **0.0 HP/s median at both 1p and 4p**, and Regenerating marks die *faster*
+  than the other modifiers (1p: 68s against 66–72s; 4p: 36s against 35–41s) —
+  it costs a disengaging player and nothing at all to an attacking one. The
+  alternative was measured too: `regenLockMult: 0.1` leaves 13–15 HP/s ticking
+  and puts Regenerating marks at 84s against 69–79s, a constant tax instead of
+  a lockout. The dial is one character wide and both settings are recorded in
+  `docs/KNOWN-DEFECTS.md`; 0 ships because it is the stronger guarantee against
+  the unkillable case, which is the live defect.
+- **A mark that merely LEFT the enemy pool was counted as killed.** A Fusehead
+  is a `bomber`: it walks at the nearest player and self-detonates. Rolled as a
+  mark, it called `explodeEnemy` at 94–98% HP, `tickBounty` saw the mark gone
+  and did `o.killed++`. Free objective progress — and it was also *masking* the
+  regen defect, by skipping past marks nobody could kill. Fixed in the
+  **accounting**, not by filtering bombers out of the mark roll: the roll is not
+  the defect, and a filter would have left the count wrong for every other way
+  an entity can leave the pool. `_killEnemy` stamps whether the mark actually
+  reached 0 HP, and `tickBounty` credits a kill only on that.
+- **The gate asserts unkillability, not a timeout.** This is the part that
+  matters most, because the old gate asked *"did the level finish in 20
+  minutes"* and a timeout **cannot tell HARD from IMPOSSIBLE** — which is
+  precisely why this survived as a "flake" for months. The suite now puts
+  sustained damage into a Regenerating mark at 1p and at 4p and requires its HP
+  to actually go **down** over the window, failing in seconds with the word
+  UNKILLABLE if it does not. Plus: the lockout constant is present, removing a
+  live mark scores nothing, and the level does not stall afterwards.
 
 ### The Hunter's melee beast (patch 18)
 
