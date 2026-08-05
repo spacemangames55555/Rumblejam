@@ -140,6 +140,11 @@ Its HP, damage and cooldown are still `guard_drone`'s, scaled by Ingenuity
 exactly as before (30 × tier × (1 + 0.1 × Ingenuity) = 45 at level 1). **Only
 the delivery changed**, from a ranged shot to a bite.
 
+It renders as an armoured bear — `beast.bear`, eight facings at `scale: 2.18`,
+about a head shorter than its Hunter side-on and roughly one grid square long.
+Measurements and the reason its per-facing spread is 29.5% where every biped is
+under 6%: [`docs/art-review/beast/README.md`](docs/art-review/beast/README.md).
+
 **≋ Sundian — `coral_growth`.** Every 4th attack plants a node for 8s, slowing
 enemies within 60u by 35% and dealing 5 attuned damage/s. Two nodes within 100u
 grow a 40 HP wall that stops enemies and **enemy** projectiles but never yours.

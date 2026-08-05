@@ -3050,6 +3050,11 @@ try {
   const S = await import('../js/content/sprites.js');
   const { execFileSync } = await import('node:child_process');
 
+  // One list, three consumers: this gate, the manifest generator, and the
+  // LOADER's own whitelist in js/assets.js. The loader's is the one that
+  // matters at runtime and the one that drifted — `beast` reached the generator
+  // and this file and not js/assets.js, so beast.bear was manifested and then
+  // ignored at load. Asserted below rather than kept in sync by hand.
   const NS = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui', 'beast'];
   const NS_RE = new RegExp(`^(${NS.join('|')})\\.[a-z0-9_]+$`);
   const manifest = JSON.parse(readFileSync(new URL('../assets/assets.json', import.meta.url), 'utf8'));
@@ -3078,6 +3083,22 @@ try {
   const unlisted = [...askable].filter(id => !man[id]);
   if (unlisted.length) fail(`${unlisted.length} id(s) the game can ask for are not in the manifest: ${unlisted.slice(0, 6).join(', ')}`);
   else ok(`manifest covers every askable id — ${Object.keys(man).length} entries, ${askable.size} reachable from the tables`);
+
+  // -- the loader accepts exactly the namespaces the generator emits --
+  // A namespace the generator writes and the loader rejects produces a manifest
+  // entry that can never load: the art lands on disk, the id resolves, and the
+  // game quietly draws the primitive forever.
+  {
+    const A = await import('../js/assets.js');
+    const loader = [...A.SPRITE_NAMESPACES].sort();
+    const emitted = [...new Set(Object.keys(man).map(id => id.slice(0, id.indexOf('.'))))].sort();
+    const orphanNs = emitted.filter(ns => !loader.includes(ns));
+    if (!orphanNs.length) ok(`the loader accepts every namespace in the manifest (${emitted.join(', ')})`);
+    else fail(`${orphanNs.length} namespace(s) the manifest uses and js/assets.js rejects: ${orphanNs.join(', ')} — those ids can never load`);
+    const nsWrong = loader.filter(ns => !NS.includes(ns));
+    if (!nsWrong.length) ok('and this gate\'s namespace list matches the loader\'s');
+    else fail(`gate list is missing ${nsWrong.join(', ')} — it would not have caught this`);
+  }
 
   // -- and nothing is listed that nothing can ask for --
   const orphan = Object.keys(man).filter(id => !askable.has(id));

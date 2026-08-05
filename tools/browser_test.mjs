@@ -1822,6 +1822,54 @@ try {
       if (live.has) ok(`the Hunter's beast is live in a real run (state ${live.state}, ${live.hp} HP)`);
       else fail('no beast in a real Hunter run');
 
+      // ---- the bear sheet: does it load, and does the renderer pick the row
+      //      that matches the facing? ----
+      //
+      // _drawSummon is a DIFFERENT draw path from _drawPlayer, and it is the
+      // only one that passes a summon's aimA as a facing. Every other
+      // directional check in this file goes through the player path or through
+      // drawSprite in isolation, so neither would notice this one regressing —
+      // the bear would just face the wrong way, which reads as "the art is a
+      // bit off" and survives a playtest.
+      //
+      // The sim is frozen for the measurement: updateBeast rewrites aimA from
+      // the movement direction every tick, so a facing set from outside is
+      // overwritten before the renderer ever sees it.
+      const rows = JSON.parse(await S9.exec(`return (async () => {
+        const A = window.uvAssets, s = window.uv.sim, p = s.players[0];
+        const entry = A.get('beast.bear');
+        if (!entry || !entry.img) return JSON.stringify({ loaded: false });
+        const b = s.summons.find(x => x.type === 'beast');
+        const proto = CanvasRenderingContext2D.prototype, orig = proto.drawImage;
+        const frames = n => new Promise(r => { let i = 0; (function f(){ if (++i > n) return r(); requestAnimationFrame(f); })(); });
+        const realTick = s.tick.bind(s);
+        s.tick = () => {};
+        const out = [];
+        for (let d = 0; d < 8; d++) {
+          b.down = false; b.x = p.x + 150; b.y = p.y; b.aimA = d * Math.PI / 4;
+          await frames(2);
+          let row = -1;
+          proto.drawImage = function (img, ...a) {
+            if (img === entry.img && a.length === 8 && row < 0) row = Math.round(a[1] / entry.h);
+            return orig.apply(this, [img, ...a]);
+          };
+          await frames(3);
+          proto.drawImage = orig;
+          out.push(row);
+        }
+        s.tick = realTick;
+        return JSON.stringify({ loaded: true, rows: out, cell: entry.w, content: entry.content, scale: entry.scale });
+      })();`));
+      if (!rows.loaded) {
+        // legitimate on a branch where the sheet has not landed — say so
+        ok('no beast.bear art on disk — the sheet check is skipped, the primitive carries it');
+      } else {
+        const want = [0, 1, 2, 3, 4, 5, 6, 7];
+        if (JSON.stringify(rows.rows) === JSON.stringify(want)) {
+          ok(`the bear sheet loads and _drawSummon picks the right row for all eight facings (E→0 … NE→7, cell ${rows.cell}, content ${rows.content})`);
+        } else fail(`bear facing→row mapping is wrong: got ${JSON.stringify(rows.rows)}, want ${JSON.stringify(want)}`);
+      }
+
       // the two view builders must agree. Encode and decode the host's own
       // snapshot in-page — the same netcodec a client uses — and compare the
       // summon rows the client would draw from.
@@ -1855,7 +1903,7 @@ try {
       // disk this exercises the primitive fallback, which is what ships first
       await sleep(600);
       const drewDown = await S9.exec(`return window.uvRenderer && window.uvRenderer.canvas.width > 0 ? 1 : 0`);
-      if (drewDown) ok('the renderer draws a downed beast without art on disk (primitive fallback)');
+      if (drewDown) ok(`the renderer survives drawing a downed beast (${rows.loaded ? 'sheet path' : 'primitive fallback'})`);
       else fail('renderer stalled on a downed beast');
 
       await S9.exec(`

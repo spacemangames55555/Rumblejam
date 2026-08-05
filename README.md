@@ -573,6 +573,20 @@ Read the file before re-diagnosing either. Both have been found more than once.
   can slip past it. The push moves the *enemy*, never the beast: a beast shoved
   by a crowd would be squeezed off its owner and the leash clamp would fight
   the push every tick.
+- **The loader keeps its own namespace whitelist, and it drifted.** `beast` was
+  added to `tools/gen_assets_manifest.mjs`, to the sim gate, and not to
+  `SPRITE_NAMESPACES` in `js/assets.js`, so `beast.bear` was written into the
+  manifest and then dropped at load. Nothing caught it for a full patch cycle
+  because with no file on disk the symptom — *no sprite, draw the primitive* —
+  was also the correct behaviour, and the browser test asserting the fallback
+  passed for the wrong reason. It surfaced the moment real art landed and did
+  not appear. The lists are now asserted equal rather than kept in sync by hand.
+- **The bear's per-facing height spread is 29.5% and is not a defect.** Every
+  biped on the roster is under 6%. A quadruped is tall and narrow head-on and
+  long and short side-on; height normalisation takes the tallest cell, so the
+  side views paint 23% shorter on purpose. Recorded in
+  `docs/art-review/beast/README.md` with the inverse warning: a quadruped
+  reading 5% would be the suspicious one.
 - **Bosses are exempt from the body block**, and that is a balance rule rather
   than a physics one. It was shipped without the exemption first, on the reading
   that "blocks enemies" has no exception in it; the exemption went in

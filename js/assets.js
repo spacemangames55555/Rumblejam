@@ -84,10 +84,18 @@ if (TUNE_ALL !== 1 || TUNE_PLAYER !== 1) {
   console.log(`[sprites] size tuning active — all sprites x${TUNE_ALL}, player sprites x${TUNE_PLAYER}. Cosmetic only: hitboxes, collision and the wire are unchanged.`);
 }
 
-// The eight id namespaces. An id outside them is a typo, not a new category —
-// the loader drops it loudly rather than silently registering something no
-// call site will ever ask for.
-export const SPRITE_NAMESPACES = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui'];
+// THE LOADER'S NAMESPACE WHITELIST. An id outside it is a typo, not a new
+// category — the loader drops it loudly rather than silently registering
+// something no call site will ever ask for.
+//
+// This list is separate from the one tools/gen_assets_manifest.mjs works from,
+// and they must agree. They drifted once: `beast` was added to the generator
+// and to the sim gate and NOT here, so beast.bear was written into the manifest
+// and then ignored at load. Nothing caught it, because with no file on disk yet
+// the symptom — "no sprite, draw the primitive" — was also the correct
+// behaviour, and it only surfaced when real art landed and did not appear.
+// tools/sim_test.mjs now asserts the two lists agree.
+export const SPRITE_NAMESPACES = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui', 'beast'];
 const NS_RE = new RegExp(`^(${SPRITE_NAMESPACES.join('|')})\\.[a-z0-9_]+$`);
 
 const DEFAULT_BASE = 'assets/sprites/';

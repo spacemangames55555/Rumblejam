@@ -1,4 +1,13 @@
 {
+  "beast.bear": {
+    "w": 128,
+    "h": 128,
+    "scale": 2.18,
+    "content": [
+      120,
+      114
+    ]
+  },
   "char.pulsar": {
     "content": [
       21,
