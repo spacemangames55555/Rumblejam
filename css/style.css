@@ -190,10 +190,31 @@ body.touch-on .gloss-row{min-height:44px; align-items:center;}
 /* level-up / boon cards: the short line is always visible, never interactive */
 .gloss-short{font-size:11.5px; color:var(--dim); line-height:1.35; margin-top:3px;}
 
-/* Facet's boon strip: non-blocking — hugs the bottom edge, no backdrop, and
-   the wrapper lets clicks pass through everywhere except the panel itself */
-.overlay.overlay-boon{background:none; pointer-events:none; align-items:flex-end; justify-content:center; padding-bottom:14px;}
+/* The boon strip (Facet, the Druid, the Blacksmith's crystals): non-blocking —
+   hugs the bottom edge, no backdrop, and the wrapper lets clicks pass through
+   everywhere except the panel itself */
+.overlay.overlay-boon{background:none; align-items:flex-end; justify-content:center; padding-bottom:14px;}
+/* The wrapper must let clicks through everywhere except the panel — and it has
+   to say so from behind an id, or it loses. `#ui-root > *{pointer-events:auto}`
+   above scores (1,0,0); a plain `.overlay.overlay-boon` scores (0,2,0) and is
+   overruled, which is how this strip spent its life quietly capturing the whole
+   viewport. On a keyboard that is invisible (movement is WASD). On a phone it
+   killed the joystick outright from the moment the strip appeared until you
+   picked — everywhere on screen, not just under the panel. */
+#ui-root > .overlay.overlay-boon{pointer-events:none;}
 .overlay-boon .boon-panel{pointer-events:auto; min-width:min(94vw,620px); padding:10px 14px;}
+
+/* ---- layout rule: on touch the bottom fifth of the screen is input, not UI ----
+   The joystick floats (js/touch.js) — it anchors wherever the first finger
+   lands on the canvas, and in landscape a thumb lands low. So any overlay that
+   leaves the game playable underneath it (pointer-events:none on the wrapper,
+   auto on its panel) must keep that panel clear of the bottom 20%, or it
+   silently swallows the movement finger with no visible cause.
+   This is a rule about the band, not about one panel: it holds for every
+   non-blocking overlay, present and future. The gate in tools/browser_test.mjs
+   enumerates .overlay out of the live DOM and measures it, so a new overlay
+   cannot opt out by not being listed anywhere. */
+body.touch-on .overlay.overlay-boon{padding-bottom:calc(20vh + 8px);}
 .boon-row{gap:8px;}
 .boon-card{min-width:130px; min-height:56px; padding:10px;}
 /* stacking: a pending level-up always shows above shop/treasure/sheet */

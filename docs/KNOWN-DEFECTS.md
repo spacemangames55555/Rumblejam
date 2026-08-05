@@ -11,6 +11,11 @@ file when it is fixed — not when someone decides it is tolerable.
 undesigned; those live in the briefs. Everything here is behaviour that is
 already wrong.
 
+**One exception to "an entry leaves when it is fixed"**, at the bottom of the
+file: a *closed* section for defects whose reproduction is worth keeping because
+the failure shape recurs. Those entries name the gate that now holds them, so a
+regression is findable by the same steps rather than rediscovered.
+
 ---
 
 ## 1. `rushMove()` uses `Math.random()`, so a fight cannot be reproduced from its seed
@@ -55,8 +60,28 @@ starts running.
 
 - **It cannot desync co-op.** The sim is host-authoritative — clients render
   snapshots and run no enemy logic — so both peers see the host's roll.
-- **It does not make the test suite flaky.** Nothing in `tools/sim_test.mjs`
-  asserts tick-exact equality between two runs of one seed.
+
+**It does make the test suite flaky — this entry used to claim otherwise, and
+that was wrong.** The original wording said "nothing in `tools/sim_test.mjs`
+asserts tick-exact equality between two runs of one seed", which is true and
+beside the point: the **DPS gate** measures each character's damage in a live
+fight and asserts it lands within ±40% of the roster median. The fight is not
+reproducible, so neither is the measurement. On unchanged `origin/main`, two
+consecutive runs:
+
+| character | run 1 | run 2 |
+|---|---|---|
+| `jester` | 29.7 (+32%) | 28.4 (+26%) |
+| `voltaic` | 26.4 (+17%) | 27.0 (+20%) |
+
+`jester` and `gilded_one` sit in the low 30s against a 40% wall, so a run
+occasionally pushes one over. **Seen twice in 28 runs across two branches**
+(2026-08-05), always as `✗ DPS gate: 1 outlier(s)`, never the same character
+twice. Re-run before believing a lone DPS-gate failure; a real regression
+repeats.
+
+That makes this defect the answer to a question the suite will keep asking, and
+another reason to fix it rather than live with it.
 
 **What it does break:** seed-based bug reproduction. "It happened on seed
 ABCDEFG" is not currently a reproduction, and any future gate that wants
@@ -187,3 +212,142 @@ the suite's Bounty Hunt gate runs one seed per party size.
 explains why that is harder than re-running a seed. A 4p Bounty Hunt harness with
 per-mark HP logging is the tool; `bounty_regen.mjs`-style instrumentation over
 enough 4p runs to catch a second occurrence is the method.
+
+---
+
+# Closed — kept for the reproduction
+
+Fixed, and gated. Here because the failure shape is one that recurs, so a
+regression should be findable by these steps rather than diagnosed from scratch.
+
+## 4. The boon panel could open with no exit, softlocking a solo touch run
+
+**Fixed 2026-08-05.** Three separate defects stacked into one unrecoverable
+state. Each is gated; each gate has a negative control recorded below.
+
+### What a player saw
+
+Blacksmith, solo, phone. Floor 1/4 Cramped Crypt, Skirmish, level 9. The room is
+cleared, the crystal-infusion panel appears, they tap a crystal — and the panel
+stays. Every further tap does nothing. The run is over: they cannot dismiss it,
+and they cannot walk to the hatch, because the panel is also sitting on the
+joystick.
+
+### 4a. The close event was never sent — `js/game.js`, `uiAction` case `'boon'`
+
+```js
+p.boonOffer = null;
+if (tohTakeBoon(this, p, pick)) return;   // ← Blacksmith exits HERE
+...
+this.pushEvent({ k: 'boonDone', idx });   // ← never reached
+```
+
+`boonDone` is the panel's **only** exit (`js/main.js`, `case 'boonDone'`). The
+Blacksmith's crystal path returned before it. The offer was already consumed on
+the line above, so every later tap died on `if (!p.boonOffer) return`.
+
+Three traits share this overlay — Facet (`prism`), the Druid (`wildshape`) and
+the Blacksmith (`crystal_infusion`). Two closed it. One did not.
+
+**Why the suites missed it for so long:** `drain()` in `tools/sim_test.mjs`
+answers offers by reading **sim state** (`p.boonOffer`), and the broken path
+cleared that state too. All 33 characters "cleared their first fight" with a
+stuck panel on screen. The browser suite tapped a boon card — as Facet, the one
+character whose path worked.
+
+**Reproduce (pre-fix):** restore the `return` above and run
+
+```
+node tools/sim_test.mjs
+```
+
+Section 13 reports, naming the character and the path:
+
+```
+✗ SOFTLOCK — panel opened with no exit:
+    toh_blacksmith → overlay-boon (opened by 'boon', crystal offer, never closed)
+```
+
+with `306 panels opened across 47 characters` on the line above, so the gate is
+not passing vacuously. Section 13 drives the **event stream**, never sim state,
+because the event stream is the only thing a client can close a panel from.
+
+### 4b. `pointer-events:none` on the strip never applied — `css/style.css`
+
+```css
+#ui-root > *{pointer-events:auto;}          /* (1,0,0) — wins */
+.overlay.overlay-boon{pointer-events:none;} /* (0,2,0) — loses */
+```
+
+An id in the selector outscores two classes, so the wrapper — `position:absolute;
+inset:0` — captured **the entire viewport** whenever the strip was up, not just
+the area under the panel. The source comment claimed the opposite ("lets clicks
+pass through everywhere except the panel itself"), which is what the code
+intended and never did.
+
+Invisible on a keyboard, where movement is WASD. On touch it killed the joystick
+outright, everywhere on screen, from the moment the strip appeared until a pick
+was made. Fixed by giving the rule an id of its own:
+`#ui-root > .overlay.overlay-boon{pointer-events:none;}`.
+
+**Reproduce (pre-fix):** drop the `#ui-root > ` prefix and run
+`node tools/browser_test.mjs`:
+
+```
+✗ the boon strip swallowed the joystick: thumb at (426,354) moved the player 0.0 units;
+  panel occupies y 158–306 of 393
+```
+
+### 4c. The panel sat in the thumb zone — a layout rule, not a Blacksmith bug
+
+The strip is `align-items:flex-end`, and the joystick **floats** — `js/touch.js`
+anchors it wherever the first finger lands on the canvas, and in landscape a
+thumb lands low. On a phone the bottom ~20% of the screen is input territory, so
+a `pointer-events:auto` panel there eats the movement finger with nothing on
+screen to explain why.
+
+This is a rule about the band, not about one panel:
+
+> An overlay that leaves the game playable underneath it (`pointer-events:none`
+> on the wrapper) must keep its interactive panel clear of the bottom 20% on
+> touch. An overlay that blocks owns the whole viewport by design and must
+> instead have an exit.
+
+`overlay-boon` is the only non-blocking overlay today — no other overlay uses
+`.boon-panel`, and the other four (`levelup`, `shop`, `treasure`, `sheet`) are
+centred, full-screen, blocking modals. The rule is written for the class of
+overlay, not for this one, and the gate enumerates `.overlay` out of the live DOM
+so a new one is covered the moment it exists in the markup.
+
+Fixed with `body.touch-on .overlay.overlay-boon{padding-bottom:calc(20vh + 8px);}`
+— desktop keeps the bottom-hugging design, touch lifts it above the band.
+
+**Reproduce (pre-fix):** remove that rule and run `node tools/browser_test.mjs`:
+
+```
+✗ overlay-boon: non-blocking panel reaches y=379, inside the bottom 20%
+  (below y=314) — it will swallow the joystick thumb
+```
+
+### Co-op, for the record
+
+Reachable in co-op — the stuck player is stuck — but it does not end the session.
+`hostTick` has no overlay gate, so the sim runs regardless, and `_tickExtract`
+(`js/game.js`) needs **any one** live player on the portal, not all of them. An
+ally can still finish the level. Solo on touch is where it is terminal.
+
+### What holds it now
+
+| gate | where | asserts |
+|---|---|---|
+| overlay exits | `tools/sim_test.mjs` §13 | every panel that opens emits its close event, across **all 47 characters in both rosters** |
+| overlay wiring | `tools/sim_test.mjs` §13 | every `.overlay` in `index.html` has a `show*`/`close*` pair and either a host close event or a `#x-close` control |
+| driver coverage | `tools/sim_test.mjs` §13 | every `.overlay` has a driver in the gate — a new overlay **fails** rather than being skipped |
+| thumb-zone band | `tools/browser_test.mjs` | every non-blocking `.overlay`, enumerated from the DOM, keeps its panel above `0.8 × innerHeight` |
+| live joystick | `tools/browser_test.mjs` | a thumb at 90% screen height moves the player **while the strip is up**, and does not dismiss it |
+
+The overlay list is scraped from `index.html` and the open/close events from the
+`case` bodies in `js/main.js`. Nothing here is hand-maintained, deliberately: a
+written-down list is how the asset-loader namespace whitelist went stale and how
+the hitbox gate stopped catching things. If a new overlay can be added without
+the gate covering it, the gate will rot.
