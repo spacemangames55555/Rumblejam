@@ -486,6 +486,7 @@ export class Sim {
     this.phase = 'arena';
     this.arenaNode = node;
     this.W = arena.w; this.H = arena.h;
+    this.biome = arena.biome || null;   // cosmetic: the renderer's only input
     this.obstacles = arena.obstacles;
     this.hazards = arena.hazards.map(h => ({ ...h }));
     this.cleared = false;
@@ -575,7 +576,7 @@ export class Sim {
       this.relocateStructures(p, { all: true, instant: true });
     }
     this.pushEvent({
-      k: 'arena', nodeId: node.id, kind: node.kind, template: node.template,
+      k: 'arena', nodeId: node.id, kind: node.kind, template: node.template, biome: this.biome,
       name: arena.name, w: arena.w, h: arena.h,
       obstacles: this._snapObstacles(),
       hazards: this._serializeHazardDefs(),

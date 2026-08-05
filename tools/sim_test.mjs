@@ -26,6 +26,7 @@ import { CONFIG as CFG } from '../js/config.js';
 const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
+import { BIOMES, FLOOR_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { ALL_CHARS as _ALL_CHARS } from '../js/content/characters.js';
 const ALL_CHARS_N = _ALL_CHARS.length;
@@ -3178,7 +3179,7 @@ try {
   // matters at runtime and the one that drifted — `beast` reached the generator
   // and this file and not js/assets.js, so beast.bear was manifested and then
   // ignored at load. Asserted below rather than kept in sync by hand.
-  const NS = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui', 'beast'];
+  const NS = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui', 'beast', 'tile'];
   const NS_RE = new RegExp(`^(${NS.join('|')})\\.[a-z0-9_]+$`);
   const manifest = JSON.parse(readFileSync(new URL('../assets/assets.json', import.meta.url), 'utf8'));
   const man = manifest.sprites;
@@ -3202,6 +3203,10 @@ try {
     ...S.allProjSpriteIds(),
     ...Object.values(S.PROP), ...Object.values(S.FX), ...Object.values(S.UI),
     ...Object.values(S.BEAST_SPRITE),
+    // floor tiles: every variant of every biome, derived from js/biomes.js the
+    // same way the generator derives them, so a biome added in one place and
+    // not the other reads as an orphan here rather than as silent flat floor
+    ...Object.values(BIOMES).flatMap(b => tileSpriteIds(b)),
   ]);
   const unlisted = [...askable].filter(id => !man[id]);
   if (unlisted.length) fail(`${unlisted.length} id(s) the game can ask for are not in the manifest: ${unlisted.slice(0, 6).join(', ')}`);
@@ -4142,6 +4147,155 @@ try {
   else for (const s of stuck.slice(0, 12)) fail(`SOFTLOCK — panel opened with no exit: ${s}`);
   if (stuck.length > 12) fail(`...and ${stuck.length - 12} more stuck panels`);
 } catch (err) { fail('overlay exit gate crashed', err); }
+
+// ---- 14. biomes: cosmetic, deterministic, and non-existent by default ----
+// The floor is the one layer drawn on every frame of every room, so a floor
+// that is not reproducible is a defect you see constantly and can never chase.
+// docs/KNOWN-DEFECTS.md #1 is already that bug in the enemy layer; this section
+// exists so it cannot be that bug in the ground as well.
+try {
+  // -- the variant hash: same coordinate, same tile, always --
+  {
+    const a = [], b = [];
+    for (let ty = -40; ty <= 40; ty++) for (let tx = -40; tx <= 40; tx++) a.push(tileVariant(tx, ty, 5));
+    for (let ty = -40; ty <= 40; ty++) for (let tx = -40; tx <= 40; tx++) b.push(tileVariant(tx, ty, 5));
+    if (a.join(',') === b.join(',')) ok(`tileVariant is reproducible over ${a.length} coordinates — the floor cannot drift between runs`);
+    else fail('tileVariant returned different layouts for the same coordinates — the floor is not deterministic');
+
+    // in range for every count, including the degenerate ones
+    let bad = 0;
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      for (let ty = -60; ty <= 60; ty += 7) for (let tx = -60; tx <= 60; tx += 7) {
+        const v = tileVariant(tx, ty, n);
+        if (!Number.isInteger(v) || v < 0 || v >= n) bad++;
+      }
+    }
+    if (!bad) ok('tileVariant stays inside [0,count) for counts 1..6, including negative coordinates');
+    else fail(`tileVariant produced ${bad} out-of-range variant index(es) — a negative coordinate would draw undefined`);
+
+    // and it actually spreads: a hash that returns one variant everywhere is
+    // deterministic AND useless, and would look like a single flat texture
+    const hist = new Array(5).fill(0);
+    for (let ty = 0; ty < 50; ty++) for (let tx = 0; tx < 50; tx++) hist[tileVariant(tx, ty, 5)]++;
+    const lo = Math.min(...hist), hi = Math.max(...hist);
+    if (lo > 2500 * 0.10) ok(`tileVariant spreads across all 5 variants over 2500 cells (min ${lo}, max ${hi})`);
+    else fail(`tileVariant is lopsided over 2500 cells: ${hist.join('/')} — one variant would carpet the floor`);
+  }
+
+  // -- no Math.random() anywhere in the floor path --
+  // The rule this enforces is written down in js/biomes.js and it is the whole
+  // reason tileVariant takes coordinates instead of drawing a number.
+  {
+    // comments stripped first: these files EXPLAIN why they don't call it, and
+    // a gate that cannot tell the prohibition from the violation is noise
+    const decomment = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '');
+    const src = decomment(readFileSync(new URL('../js/biomes.js', import.meta.url), 'utf8'));
+    if (!/Math\.random/.test(src)) ok('js/biomes.js contains no Math.random() — the floor is not a second source of KNOWN-DEFECTS #1');
+    else fail('js/biomes.js calls Math.random() — the floor would reshuffle every run');
+    const rsrc = readFileSync(new URL('../js/render.js', import.meta.url), 'utf8');
+    const floorFn = decomment(rsrc.slice(rsrc.indexOf('  _drawFloor('), rsrc.indexOf('  _tileSet(')));
+    if (floorFn.length > 200 && !/Math\.random/.test(floorFn)) ok('Renderer._drawFloor() contains no Math.random()');
+    else if (floorFn.length <= 200) fail('could not isolate _drawFloor() to check it — the gate needs updating, not the code');
+    else fail('Renderer._drawFloor() calls Math.random() — the floor would shimmer every frame');
+  }
+
+  // -- config honesty: every biome names a full set of variants --
+  for (const b of Object.values(BIOMES)) {
+    const ids = tileSpriteIds(b);
+    if (ids.length === b.variants && b.variants >= 4 && b.variants <= 6) ok(`biome ${b.id}: ${b.variants} variants (4-6), ids ${ids[0]}..${ids[ids.length - 1]}`);
+    else fail(`biome ${b.id}: variants=${b.variants} produced ${ids.length} id(s) — the brief asks for 4-6`);
+    if (b.groundValue > 0 && b.groundValue < 1) ok(`biome ${b.id}: groundValue ${b.groundValue} is a 0-1 luminance`);
+    else fail(`biome ${b.id}: groundValue ${b.groundValue} is not in 0..1`);
+    if (/^#[0-9a-f]{6}$/i.test(b.fallbackFill)) ok(`biome ${b.id}: fallbackFill ${b.fallbackFill} is a colour the renderer can use with no art at all`);
+    else fail(`biome ${b.id}: fallbackFill ${b.fallbackFill} is not a hex colour — a missing atlas would draw nothing`);
+    if (b.atlas.startsWith('assets/') && b.atlas.endsWith('/')) ok(`biome ${b.id}: atlas ${b.atlas} is site-relative with a trailing slash`);
+    else fail(`biome ${b.id}: atlas ${b.atlas} must be site-relative and end in '/' — GitHub Pages serves from a subpath`);
+  }
+
+  // -- exactly one biome has art in this patch, and every other floor is
+  //    untouched. This is the acceptance criterion "all non-tundra maps are
+  //    visually unchanged", expressed where it can actually be checked. --
+  {
+    const themed = FLOOR_BIOMES.map((id, i) => [i + 1, id]).filter(([, id]) => id);
+    if (themed.length === 1 && themed[0][1] === 'tundra') ok(`exactly one floor is themed: floor ${themed[0][0]} is tundra, floors ${FLOOR_BIOMES.map((id, i) => id ? null : i + 1).filter(Boolean).join('/')} draw the flat floor`);
+    else fail(`expected one themed floor (tundra), got ${JSON.stringify(themed)}`);
+    if (FLOOR_BIOMES.length === CFG.FLOORS) ok(`FLOOR_BIOMES covers all ${CFG.FLOORS} floors`);
+    else fail(`FLOOR_BIOMES has ${FLOOR_BIOMES.length} entries for ${CFG.FLOORS} floors — a floor past the end would be undefined`);
+    if (!biomeFor(0) && !biomeFor(99) && !biomeFor(undefined)) ok('biomeFor() returns null off the end of the floor list rather than throwing');
+    else fail('biomeFor() resolved a biome for an out-of-range floor');
+  }
+
+  // -- the arena carries it, on every node kind, for every floor --
+  {
+    const { buildArena } = await import('../js/arenas.js');
+    let wrong = 0, seen = 0;
+    for (let floor = 1; floor <= CFG.FLOORS; floor++) {
+      const want = FLOOR_BIOMES[floor - 1] || null;
+      for (const template of TEMPLATE_KEYS) {
+        const a = buildArena(12345, floor, { id: 3, kind: 'combat', template }, 1);
+        seen++;
+        if ((a.biome || null) !== want) { wrong++; if (wrong < 3) fail(`buildArena floor ${floor} ${template}: biome ${a.biome} != ${want}`); }
+      }
+      const s = buildArena(12345, floor, { id: 9, kind: 'siege', template: null }, 1);
+      seen++;
+      if ((s.biome || null) !== want) { wrong++; fail(`buildArena floor ${floor} siege: biome ${s.biome} != ${want}`); }
+    }
+    if (!wrong) ok(`every arena carries its floor's biome — ${seen} arenas across ${CFG.FLOORS} floors, templates and sieges`);
+  }
+
+  // -- and the sim publishes it, because the renderer reads it off the view --
+  {
+    const g = new Sim({ seed: 909, party: [{ idx: 0, key: 'k', name: 'B', charId: 'bulwark', color: '#fff' }] });
+    g.uiAction(0, { kind: 'pickNode', nodeId: g.reachableNodes()[0] });
+    const ev = g.events.filter(e => e.k === 'arena').pop();
+    if (g.biome === 'tundra') ok(`Sim.biome is 'tundra' on floor 1 — the host renderer has a floor to draw`);
+    else fail(`Sim.biome is ${JSON.stringify(g.biome)} on floor 1, want 'tundra'`);
+    if (ev && ev.biome === 'tundra') ok(`the 'arena' event carries biome 'tundra' — clients theme from the event, not from a per-frame snapshot`);
+    else fail(`the 'arena' event carries biome ${JSON.stringify(ev && ev.biome)} — a client would draw the flat floor while the host draws tiles`);
+    // and it is NOT on the wire per frame: the floor is cosmetic and static
+    const snap = JSON.stringify(g.getSnapshot());
+    if (!snap.includes('tundra')) ok('the biome is not in the snapshot — a static cosmetic never costs bandwidth per frame');
+    else fail('the biome is being serialized into snapshots — that is per-frame bandwidth for something that never changes');
+  }
+
+  // -- the floor is cosmetic: it must not have touched the simulation --
+  {
+    // Expected radius is trait-driven, not a constant — Bulwark and the
+    // Blacksmith legitimately stand wider. A gate that hardcodes one number
+    // here fires on the wrong thing, which this one did on its first run.
+    const { ALL_CHAR_BY_ID: BY_ID } = await import('../js/content/characters.js');
+    let wrong = 0;
+    for (const id of ['bulwark', 'facet', 'toh_blacksmith', 'redmaw']) {
+      const chr = BY_ID[id]; if (!chr) continue;
+      const a = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'A', charId: id, color: '#fff' }] });
+      a.uiAction(0, { kind: 'pickNode', nodeId: a.reachableNodes()[0] });
+      const want = CFG.PLAYER_RADIUS * (chr.trait.hitbox || 1);
+      if (a.players[0].radius !== want) { wrong++; fail(`${id}: radius ${a.players[0].radius} on a themed floor, want ${want}`); }
+    }
+    if (!wrong) ok(`radii unchanged on a themed floor (4 characters, trait multipliers intact) — tiles are paint, not collision`);
+
+    // And the room is the same room whether or not it is themed. Compared on
+    // ONE floor with the biome switched off and back on, not across two floors:
+    // buildArena keys its rng on floorNum (subRng(seed,'arena',floorNum,id)),
+    // so two different floors legitimately build two different rooms and
+    // comparing them proves nothing. This is the difference the patch made.
+    const { buildArena } = await import('../js/arenas.js');
+    const shape = a => JSON.stringify([a.w, a.h, a.name, a.obstacles, a.hazards, a.mutations]);
+    let geomWrong = 0, checked = 0;
+    for (const template of TEMPLATE_KEYS) {
+      const node = { id: 3, kind: 'combat', template };
+      const themed = buildArena(4242, 1, node, 1);
+      const was = FLOOR_BIOMES[0];
+      FLOOR_BIOMES[0] = null;                       // same floor, no biome
+      const plain = buildArena(4242, 1, node, 1);
+      FLOOR_BIOMES[0] = was;
+      checked++;
+      if (themed.biome !== 'tundra' || plain.biome !== null) { geomWrong++; fail(`${template}: biome toggle did not take (${themed.biome} / ${plain.biome})`); }
+      else if (shape(themed) !== shape(plain)) { geomWrong++; fail(`${template}: theming changed the room geometry — the biome is not cosmetic`); }
+    }
+    if (!geomWrong) ok(`switching the biome on and off leaves the room byte-identical across ${checked} templates — geometry, obstacles and hazards all untouched`);
+  }
+} catch (err) { fail('biome gate crashed', err); }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');
 process.exit(failures ? 1 : 0);

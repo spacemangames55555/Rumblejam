@@ -1,0 +1,145 @@
+# Biomes and tiled floors
+
+The floor used to be one `fillRect` of `#14161f` with a grid drawn over it. It
+is now a per-biome tile atlas, with that flat fill kept as the fallback.
+
+This is **renderer groundwork**. Biomes are cosmetic: no movement modifiers, no
+ambient damage, nothing on the wire per frame, nothing that touches a hitbox.
+
+---
+
+## Adding a biome
+
+Two edits, no refactor. That is the whole point of the shape.
+
+1. An entry in `BIOMES` in `js/biomes.js`:
+
+```js
+ashfall: {
+  id: 'ashfall',
+  atlas: 'assets/tiles/ashfall/',
+  variants: 5,
+  groundValue: 0.34,          // 0-1 mean luminance of the tile set
+  fallbackFill: '#14161f',
+},
+```
+
+2. The biome's name in `FLOOR_BIOMES`, which is indexed by floor:
+
+```js
+export const FLOOR_BIOMES = ['tundra', 'ashfall', null, null];
+```
+
+Then `node tools/gen_assets_manifest.mjs` to write the tile ids into
+`assets/assets.json`, and drop `tile-00.png` … `tile-04.png` into the atlas
+directory. Nothing else in the codebase needs to know.
+
+The art can arrive later, or never. A biome whose atlas is missing logs one
+line and draws `fallbackFill` — the game has always run the whole way through
+with no art at all, and the floor does not change that.
+
+## The rules the tiles have to obey
+
+- **64×64 PNG, one tile per world grid cell.** `CONFIG.FLOOR_TILE` is 64 and it
+  is the number the atlas and the debug grid share. One tile covers exactly one
+  grid square, which is what keeps the 2.18 roster scale valid — a character
+  covers the same fraction of a tile that it covered of a grid square before.
+- **4–6 variants**, read from `variants` in the config, never hardcoded.
+- **They must read as one surface.** Vary texture between variants, not value.
+  A wide value spread reads as a checkerboard, and
+  `tools/readability_check.mjs` reports the spread so you can see it as a
+  number rather than argue about it.
+- **`groundValue` must be true.** It is the mean luminance of the actual tile
+  set, and the readability check compares the two. A config that lies about its
+  own art is worse than no config, because every later value decision — enemy
+  palettes, telegraph colours, the next biome's contrast budget — is taken
+  against that number.
+
+## Why the tundra floor is grey-blue and not white
+
+`groundValue: 0.60`, target range 0.55–0.65.
+
+Bright white snow is the intuitive choice and the wrong one. The roster is
+earth-toned and reads well dark-on-light, so white ground flatters it — but a
+necromancer biome wants bone, frost and pale undead in its enemy set, and those
+vanish against white. Mid-value ground keeps headroom **above** for pale
+enemies and **below** for the characters that already exist.
+
+Variant set: packed snow, wind-scoured snow with grain, blue-grey shadow drift,
+exposed dark rock, cracked ice.
+
+## Determinism
+
+`tileVariant(tx, ty, count)` hashes the integer tile coordinates. Same
+coordinates, same tile, every run, every client, forever.
+
+It does **not** call `Math.random()`, and it does not take the run seed either
+— the floor is not part of the simulation, and two clients in one room must see
+the same ground. `docs/KNOWN-DEFECTS.md` #1 is an open defect where
+`rushMove()` draws from `Math.random()` and breaks same-seed reproduction from
+~tick 402; a floor that reshuffled itself every run would be that same defect
+again, in the one layer that is on screen every frame of every room.
+
+`tools/sim_test.mjs` §14 gates this three ways: the hash reproduces, it stays
+in range for negative coordinates, and neither `js/biomes.js` nor
+`Renderer._drawFloor()` contains the call.
+
+## The debug grid
+
+Off by default, on with **`?grid=1`**.
+
+It is not deleted, and should not be: it is the reference the 2.18 roster scale
+was tuned against, and it will be needed again the moment biome enemy sheets
+arrive. `tools/browser_test.mjs` checks it lands on tile boundaries, so grid
+and atlas cannot quietly drift apart.
+
+## Dev tools
+
+```
+node tools/gen_tundra_tiles.mjs     # PLACEHOLDER tundra tiles (see below)
+node tools/readability_check.mjs [biome]
+```
+
+`readability_check` does two things that answer different questions:
+
+1. **A number**: mean luminance of the tile set against the configured
+   `groundValue`, tolerance ±0.05.
+2. **A picture**: every character sheet's S-facing idle composited over real
+   tiles, written to `docs/art-review/scratch/<biome>-readability.png`
+   (gitignored — it is a review artifact, regenerated from the art).
+
+**It is a check, not a gate.** It reports and exits 0 even out of tolerance,
+and it is deliberately not wired into either suite. The aesthetic gates were
+retired because they blocked good art over arithmetic; reintroducing one for
+tiles would be the same mistake with a new subject. The verdict on whether the
+roster reads is Casey's, from the contact sheet.
+
+## The tundra tiles currently on disk are placeholders
+
+`assets/tiles/tundra/tile-0*.png` were generated by
+`tools/gen_tundra_tiles.mjs` — flat-value noise fields built to the brief's
+numbers, not drawn art. They exist so everything downstream of the art could be
+verified before the art existed: the loader's structural checks, the variant
+hash, seam behaviour at viewport edges, the frame cost, and whether the roster
+reads against a 0.60 ground.
+
+Real tundra art replaces the same five paths and needs no code change.
+
+## What it costs
+
+Measured by A/B in one browser process on one static scene, with the tile
+lookup stubbed for the B side so everything except the floor draw is identical:
+
+| | median `draw()` | p95 |
+|---|---|---|
+| tiles on | **0.400 ms** | 0.700 ms |
+| tiles off (flat fill) | **0.100 ms** | 0.200 ms |
+| **delta** | **+0.300 ms** | |
+
+~336 `drawImage` calls per frame at a 1440×900 viewport, against a 16.6 ms
+60 fps budget — about 1.8% of it. Headless SwiftShader, 3 s samples.
+
+Frame *interval* cannot measure this: the browser is vsync-limited, so every
+frame reads ~16.7 ms whatever the renderer does. The first version of this
+measurement did exactly that and reported the tile layer as free. The gate
+times `Renderer.draw()` itself.

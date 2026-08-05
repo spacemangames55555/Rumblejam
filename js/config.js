@@ -115,7 +115,17 @@ export const CONFIG = {
 
   // performance
   POOL_ENEMIES: 320, POOL_PROJECTILES: 700, POOL_PARTICLES: 900,
-  GRID_CELL: 72,
+  GRID_CELL: 72,       // spatial-hash bucket for collision — NOT the floor grid
+
+  // The floor grid, in world units. One tile source cell draws to exactly one
+  // of these, so a tile is square in world units and every tile boundary lands
+  // on a grid line. That is what keeps the 2.18 roster scale valid: a character
+  // standing on a tile covers the same fraction of it that it covered of a grid
+  // square before there were tiles.
+  //
+  // This was four hardcoded `64`s in Renderer._drawArena() until the tiled
+  // floor needed the renderer and the atlas to agree on one number.
+  FLOOR_TILE: 64,
 };
 
 export const PALETTE = {

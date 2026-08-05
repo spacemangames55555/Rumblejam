@@ -1606,6 +1606,36 @@
       "w": 64,
       "h": 64
     },
+    "tile.tundra_00": {
+      "file": "assets/tiles/tundra/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.tundra_01": {
+      "file": "assets/tiles/tundra/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.tundra_02": {
+      "file": "assets/tiles/tundra/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.tundra_03": {
+      "file": "assets/tiles/tundra/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.tundra_04": {
+      "file": "assets/tiles/tundra/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
     "ui.cursor": {
       "file": "ui/cursor.png",
       "w": 32,
