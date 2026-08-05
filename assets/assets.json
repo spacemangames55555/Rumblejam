@@ -277,9 +277,14 @@
     },
     "char.toh_necromancer": {
       "file": "char/toh_necromancer.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 256,
+      "h": 256,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        201,
+        247
+      ]
     },
     "char.toh_priest": {
       "file": "char/toh_priest.png",

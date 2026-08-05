@@ -68,6 +68,15 @@
       122
     ]
   },
+  "char.toh_necromancer": {
+    "w": 256,
+    "h": 256,
+    "scale": 2.18,
+    "content": [
+      201,
+      247
+    ]
+  },
   "char.toh_priest": {
     "w": 128,
     "h": 128,
