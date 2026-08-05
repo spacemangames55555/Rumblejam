@@ -1,6 +1,6 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Ten are in.**
+Thirteen characters to install. **Eleven are in.**
 
 | | character | id | status |
 |---|---|---|---|
@@ -14,7 +14,8 @@ Thirteen characters to install. **Ten are in.**
 | ✓ | Mage | `char.toh_mage` | installed |
 | ✓ | Wizard | `char.toh_wizard` | installed |
 | ✓ | Bard | `char.toh_bard` | installed |
-| | Blacksmith · Necromancer · Sundian | | awaiting art (3) |
+| ✓ | Sundian | `char.toh_sundian` | installed |
+| | Blacksmith · Necromancer | | awaiting art (2) |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -44,6 +45,7 @@ artifact of padding.
 | Mage | 2.18 | 1.0756 | 99×119 | **168.8** | **157.0** | **−0.00%** |
 | Wizard | 2.18 | 1.0407 | 105×123 | 163.3 | **157.0** | **−0.00%** |
 | Bard † | 2.18 | 1.0079 | 190×254 | 158.2 | **157.0** | **−0.00%** |
+| Sundian | 2.18 | 1.0407 | 92×123 | 163.3 | **157.0** | **−0.00%** |
 
 † **The Bard is on a 256 cell, not 128** — the only one. His art arrived drawn
 at roughly twice the roster's scale: the figure fills 254 of a 256 canvas where
@@ -55,10 +57,10 @@ not, and that is a judgement for the contact sheet.
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Eleven sheets, eleven content boxes, **four** source canvases: 240×240 (Mage),
+Twelve sheets, twelve content boxes, **five** source canvases: 240×240 (Mage),
 244×244 (Savage, Priest), 248×248 (Druid, Assassin, Samurai, Monk, Wizard),
-256×256 (Hunter, Witch Doctor, Bard). Cell fill runs 93.0% to 97.7% on the ten
-128-cell sheets and **99.2%** on the Bard's 256 cell.
+252×252 (Sundian), 256×256 (Hunter, Witch Doctor, Bard). Cell fill runs 93.0%
+to 97.7% on the eleven 128-cell sheets and **99.2%** on the Bard's 256 cell.
 
 The spread across **cells** is now 160.7 to 168.8 device px — 8.1px, opened up
 by the Priest and matched exactly by the Mage, who lands on the same 119px
@@ -92,6 +94,12 @@ would render its other seven short. Measured:
 | Mage | 119 119 118 118 119 117 116 117 | 119 | 116 | **2.6%** |
 | Wizard | 121 121 121 123 123 121 120 119 | 123 | 119 | **3.4%** |
 | Bard | 248 254 248 254 248 246 244 246 | 254 | 244 | **4.1%** |
+| Sundian | 122 123 122 123 122 119 115 119 | 123 | 115 | **7.0%** |
+
+The **Sundian is the widest of the bipeds at 7.0%**, just outside the band the
+other ten sit in — his three north-facing rows are 4–8px shorter than the rest,
+which is a head-turn, not a broken sheet. His silhouette still lands on 157.0
+like everyone else, because normalisation keys on the tallest facing.
 
 Four sit in the same ~5% band; the Savage (1.6%), Samurai (2.4%) and Mage (2.6%)
 are notably tighter — their poses barely change height between facings, where the
@@ -349,6 +357,35 @@ scale, not a change to the pipeline.
 He also costs more memory than the rest: 256×2048 RGBA is **2.00 MB decoded**
 against ~0.5 MB for a 128×1024 sheet. One character's worth is fine; a roster of
 them would not be.
+
+### Sundian
+
+Supplied 2026-08-05, eight **252×252** RGBA PNGs — a fifth source canvas, in two
+messages of four; not assembled until all eight were present.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `707586ae699e771c508ba8c40617ca0e` | `sundian/sources/east.png` |
+| SE | `76d9009fbd394d180de95912e6908317` | `sundian/sources/southeast.png` |
+| S | `c8d00dd85e7a956dcf45d92fa16e7bcf` | `sundian/sources/south.png` |
+| SW | `0931ae048a5b92cc4ae6376bc0d40453` | `sundian/sources/southwest.png` |
+| W | `78d4e195ae078f0725967b434fbd1af1` | `sundian/sources/west.png` |
+| NW | `eaf1af8dc4924fe04ffcd8769d5489c9` | `sundian/sources/northwest.png` |
+| N | `de14642c2e72f9dee96addd39d384f75` | `sundian/sources/north.png` |
+| NE | `fb7a5aebde6cfa95fbef5b9c89963782` | `sundian/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_sundian.png`, 128×1024, `directions: 8`,
+`content: [92, 123]`, `scale: 2.18`. Autocrop 252×252 → 92×123.
+
+**Back on the roster's scale**, which was worth checking after the Bard: the
+content box was measured before installing rather than discovered by a failed
+assembly, and 92×123 fits the 128 cell with room to spare. Source pixel density
+0.78 px per device px, the same as the Druid, Wizard and Hunter.
+
+He has a **tail**, which is the one thing that could have gone wrong here — it
+extends the content box sideways in the profile views without adding height.
+Widest facing is 92px against a 128 cell, so it costs nothing, and since
+normalisation keys on height it could not have moved his rendered size anyway.
 
 ## What the contact sheet shows — look at this, not at numbers
 

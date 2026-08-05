@@ -95,6 +95,15 @@
       122
     ]
   },
+  "char.toh_sundian": {
+    "w": 128,
+    "h": 128,
+    "scale": 2.18,
+    "content": [
+      92,
+      123
+    ]
+  },
   "char.toh_witch_doctor": {
     "w": 128,
     "h": 128,
