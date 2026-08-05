@@ -239,15 +239,25 @@
     },
     "char.toh_mage": {
       "file": "char/toh_mage.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        99,
+        119
+      ]
     },
     "char.toh_monk": {
       "file": "char/toh_monk.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        96,
+        122
+      ]
     },
     "char.toh_necromancer": {
       "file": "char/toh_necromancer.png",
@@ -257,21 +267,36 @@
     },
     "char.toh_priest": {
       "file": "char/toh_priest.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        88,
+        119
+      ]
     },
     "char.toh_samurai": {
       "file": "char/toh_samurai.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        97,
+        123
+      ]
     },
     "char.toh_savage": {
       "file": "char/toh_savage.png",
-      "w": 32,
-      "h": 32,
-      "directions": 8
+      "w": 128,
+      "h": 128,
+      "directions": 8,
+      "scale": 2.18,
+      "content": [
+        117,
+        122
+      ]
     },
     "char.toh_sundian": {
       "file": "char/toh_sundian.png",
