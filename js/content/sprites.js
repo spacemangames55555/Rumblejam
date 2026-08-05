@@ -27,7 +27,7 @@ import { BOSSES } from './bosses.js';
 // four later is a per-entry manifest change with no code behind it — worth
 // deciding once there is art in play, not now.
 export const UNIT_DIRECTIONS = 8;
-export const DIRECTIONAL_NAMESPACES = new Set(['char', 'enemy', 'boss']);
+export const DIRECTIONAL_NAMESPACES = new Set(['char', 'enemy', 'boss', 'beast']);
 
 // Authored sizes. Every one is a power of two, and that is not aesthetics: the
 // generator's /rotate endpoint — the only way to produce a per-angle view —
@@ -54,6 +54,7 @@ export const SPRITE_SIZE = {
   item: [32, 32],
   prop: [64, 64],
   ui: [32, 32],
+  beast: [32, 32],
 };
 
 // ---------------- projectiles ----------------
@@ -170,6 +171,16 @@ export const PROP_BOTTOM_ANCHORED = new Set([
 // enemy id even though it reads as a structure. Its def is inline in game.js,
 // which this patch does not touch — hence the constant here.
 export const PYLON_SPRITE = 'enemy.ward_pylon';
+
+// ---------------- combat pets ----------------
+//
+// Its own namespace rather than `prop.`, because a beast is a mobile combat
+// entity and not scenery: it walks, it faces, it fights and it can be knocked
+// down, so it needs the same eight-facing GRID that char/enemy/boss get. A
+// `prop.` id is a single static drawing and could never express that.
+export const BEAST_SPRITE = {
+  bear: 'beast.bear',
+};
 
 // ---------------- world FX and pickups ----------------
 export const FX = {

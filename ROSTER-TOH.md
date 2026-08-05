@@ -125,6 +125,26 @@ Fury**: with 2+ beasts within 120u, you and every beast gain +20% Ferocity and
 +10% Tempo. **Marksman**: with no beast within 250u, projectiles pierce +1 and
 deal +8% per living beast. A combined beast counts as two for both checks.
 
+The beast is a **melee pet**, not a drone — `js/entities/beast.js`. It meanders
+within 320u of you, pursues an enemy inside 320u of itself, bites on contact,
+and is hard-clamped to 640u from you in every state. It **body-blocks enemies
+and enemy fire** — but **not bosses**, which walk through it: a beast is knocked
+down rather than killed and returns free 15s later, so a blockable boss would be
+a free wall on a cycle. It also passes through you, other players and their
+beasts. At 0
+HP it is knocked **down for 15s** — inert, not deleted, still holding its Pack
+Tactics slot — and revives on you at full HP. A downed beast does not count for
+Alpha or Marksman; Marksman's wording was already "per *living* beast".
+
+Its HP, damage and cooldown are still `guard_drone`'s, scaled by Ingenuity
+exactly as before (30 × tier × (1 + 0.1 × Ingenuity) = 45 at level 1). **Only
+the delivery changed**, from a ranged shot to a bite.
+
+It renders as an armoured bear — `beast.bear`, eight facings at `scale: 2.18`,
+about a head shorter than its Hunter side-on and roughly one grid square long.
+Measurements and the reason its per-facing spread is 29.5% where every biped is
+under 6%: [`docs/art-review/beast/README.md`](docs/art-review/beast/README.md).
+
 **≋ Sundian — `coral_growth`.** Every 4th attack plants a node for 8s, slowing
 enemies within 60u by 35% and dealing 5 attuned damage/s. Two nodes within 100u
 grow a 40 HP wall that stops enemies and **enemy** projectiles but never yours.

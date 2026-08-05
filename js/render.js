@@ -10,7 +10,7 @@
 import { CONFIG, PALETTE } from './config.js';
 import { WEAPON_BY_ID } from './content/weapons.js';
 import { Assets, drawSprite, spriteScaleFor, DEFAULT_FACING } from './assets.js';
-import { PROP, FX } from './content/sprites.js';
+import { PROP, FX, BEAST_SPRITE } from './content/sprites.js';
 import { clamp } from './util.js';
 
 // The camera viewport is one "screen" of world units (the old room size);
@@ -1023,6 +1023,40 @@ export class Renderer {
     ctx.lineWidth = 2.5;
     // just recalled: bolting itself back down, inert and translucent
     if (s.packed) { ctx.globalAlpha = 0.45; ctx.scale(0.8, 0.8); }
+    // A Hunter's beast is a unit, not a structure: eight facings, and a
+    // distinct read while it is knocked down so a downed pet never looks like
+    // a live one. The sprite is a separate upload — until it lands, drawSprite
+    // returns false and the primitive below carries the mechanic.
+    if (s.type === 'beast') {
+      if (s.down) {
+        // the revive countdown, drawn from the wire's own progress fraction —
+        // the field exists because this reads it, not the other way round
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 17, -Math.PI / 2, -Math.PI / 2 + (1 - (s.downP || 0)) * Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = PALETTE.outline;
+        ctx.lineWidth = 2.5;
+        ctx.globalAlpha = 0.4;
+        ctx.rotate(Math.PI / 2);
+      }
+      const bid = BEAST_SPRITE.bear;
+      if (drawSprite(ctx, bid, 0, 0, {
+        scale: spriteScaleFor(bid, 30),
+        facing: s.down ? DEFAULT_FACING : (s.aimA || 0),
+        flipX: Math.cos(s.aimA || 0) < 0,
+        seed: s.owner + 1,
+      })) { ctx.restore(); return; }
+      ctx.fillStyle = s.down ? '#5a4634' : '#c98a4b';
+      circle(ctx, 0, 0, 13); ctx.fill(); ctx.stroke();
+      if (!s.down) {
+        ctx.fillStyle = col;
+        circle(ctx, Math.cos(s.aimA || 0) * 9, Math.sin(s.aimA || 0) * 9, 5); ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
     const propId = s.type === 'turret' ? PROP.turret : s.type === 'ram' ? PROP.ram : PROP.drone;
     if (drawSprite(ctx, propId, 0, 0, { scale: spriteScaleFor(propId, 26), rot: s.type === 'ram' ? this.t * 9 : 0 })) {
       // a turret still has to show where it is pointing — the barrel is the

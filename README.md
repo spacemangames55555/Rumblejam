@@ -504,8 +504,100 @@ never loads them:
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
+- `node tools/determinism_probe.mjs [seed] [charId] [ticks]` — runs two
+  identical-seed Sims side by side and reports the first tick where the enemy
+  field disagrees. **It fails today, on purpose** — see known defect #1 below.
+  It is the instrument for that fix, not a gate; make it one when it passes.
+
+## Known defects
+
+Two real defects are recorded, reproducible, and deliberately not fixed:
+[`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).
+
+1. **`rushMove()` draws from `Math.random()`**, so a fight cannot be reproduced
+   from its seed — two identical-seed runs part company around tick 400. It
+   cannot desync co-op (the sim is host-authoritative) but it means "it happened
+   on seed ABCDEFG" is not a reproduction.
+2. **The `bounty (1p)` sim gate fails intermittently** — 2 of 5 consecutive
+   runs at `origin/main`. Which means the sim suite's exit code is not a
+   trustworthy pass/fail signal on its own, and every report in this repo that
+   says "green apart from the bounty flake" is leaning on that entry.
+
+Read the file before re-diagnosing either. Both have been found more than once.
 
 ## Decisions (where the brief was silent or conflicted)
+
+### The Hunter's melee beast (patch 18)
+
+- **No new weapon was added to the catalog.** The beast is `guard_drone`
+  spawned with a forced `beast` type — the mechanism `mirror` already uses. A
+  new weapon def would have been cleaner to read and would have entered the
+  shop pool, which rolls from `WEAPONS` wholesale: every seeded shop on every
+  floor would have produced different stock, moving the economy and every
+  seed-pinned test with it. Reusing the def also makes "HP scaling stays on
+  Ingenuity, exactly as the drone does today" *literally* the same code path
+  rather than a copy that can drift. **The beast's HP, damage and cooldown are
+  the drone's numbers unchanged; only the delivery moved** from a ranged shot to
+  a bite, so nominal DPS is identical and effective DPS drops by whatever the
+  walk to the target costs. If the bite wants its own numbers later, that is a
+  `summon:` block on a new def and a conscious economy decision.
+- **The knockdown flag and its countdown are one wire field, not two.**
+  Snapshot summon tuples gained one number: `0` when the beast is up, otherwise
+  the fraction of the 15s revive timer still to run. A bare boolean would have
+  been enough for the sim, but then the client could never draw a countdown
+  without a second wire change; the 0..1 progress idiom is what decoys and
+  telegraphs already use. The renderer draws the arc from it, so the field is
+  read rather than merely sent.
+- **This is not a netcodec change.** `netcodec.js` spreads the snapshot and
+  repacks only enemies, projectiles, pickups, zones, telegraphs and fx —
+  summons pass through as plain arrays. Widening the summon tuple touches no
+  stride, no delta compression and no version handshake. A gate asserts the
+  encode/decode round-trip leaves `snap.summons` byte-identical, so this stays
+  true rather than being true today.
+- **A downed beast keeps its Pack Tactics slot but stops counting for Alpha
+  and Marksman.** The slot count reads `dead`, which a downed beast is not, so
+  a knockdown can never earn the Hunter a replacement — that is the brief.
+  Alpha and Marksman were not specified. Counting an inert body as a "beast
+  within 120u" would keep the Hunter's buff live with the whole pack down;
+  Marksman's own text already says "per *living* beast", so this follows the
+  wording rather than inventing a rule.
+- **The beast's spawn scatter is seeded, unlike every other summon's.**
+  `Sim._spawnSummon` scatters new summons with `Math.random()`. A seeded state
+  machine started from an unseeded position is not deterministic, and the
+  scatter is what every later position derives from, so `initBeast` re-places
+  the beast from the run seed. Only beasts are re-placed; drones, turrets and
+  rams keep the existing scatter.
+- **Enemy body-blocking is hooked into `clampToRoom`, not into each behaviour.**
+  Every enemy movement path in the game already ends there — walk, knockback,
+  boss charge, the ToH coral push — so there is exactly one hook and no mover
+  can slip past it. The push moves the *enemy*, never the beast: a beast shoved
+  by a crowd would be squeezed off its owner and the leash clamp would fight
+  the push every tick.
+- **The loader keeps its own namespace whitelist, and it drifted.** `beast` was
+  added to `tools/gen_assets_manifest.mjs`, to the sim gate, and not to
+  `SPRITE_NAMESPACES` in `js/assets.js`, so `beast.bear` was written into the
+  manifest and then dropped at load. Nothing caught it for a full patch cycle
+  because with no file on disk the symptom — *no sprite, draw the primitive* —
+  was also the correct behaviour, and the browser test asserting the fallback
+  passed for the wrong reason. It surfaced the moment real art landed and did
+  not appear. The lists are now asserted equal rather than kept in sync by hand.
+- **The bear's per-facing height spread is 29.5% and is not a defect.** Every
+  biped on the roster is under 6%. A quadruped is tall and narrow head-on and
+  long and short side-on; height normalisation takes the tallest cell, so the
+  side views paint 23% shorter on purpose. Recorded in
+  `docs/art-review/beast/README.md` with the inverse warning: a quadruped
+  reading 5% would be the suspicious one.
+- **Bosses are exempt from the body block**, and that is a balance rule rather
+  than a physics one. It was shipped without the exemption first, on the reading
+  that "blocks enemies" has no exception in it; the exemption went in
+  immediately afterwards because a beast **costs nothing to lose**. It is
+  knocked down rather than killed, it holds its Pack Tactics slot while down,
+  and it returns on the owner at full HP 15 seconds later — so a blockable boss
+  means parking a free wall in its path on a 15-second cycle with no resource
+  behind it. Every other enemy can walk around a beast or kill it for real
+  value; a boss fight is the one place where "block it and pay nothing" is the
+  whole encounter. A gate asserts a boss walks through where an ordinary enemy
+  is pushed 24u, so the exemption cannot quietly regress.
 
 ### Art generation phase (patch 17)
 
