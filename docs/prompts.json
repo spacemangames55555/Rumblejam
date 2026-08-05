@@ -623,10 +623,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Aegimand, a warden dungeon monster, a broad shield plate carried in front, hiding most of the body, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Aegimand, a warden dungeon monster, a broad shield plate carried in front, hiding most of the body, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.deadeye": {
       "batch": 3,
@@ -635,10 +635,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Deadeye, a sniper dungeon monster, an elongated narrow diamond with a single enormous forward eye, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Deadeye, a sniper dungeon monster, an elongated narrow diamond with a single enormous forward eye, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.flit": {
       "batch": 3,
@@ -647,10 +647,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Flit, a sprinter dungeon monster, tiny, a single forward-swept wedge, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Flit, a sprinter dungeon monster, tiny, a single forward-swept wedge, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.fusehead": {
       "batch": 3,
@@ -659,10 +659,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Fusehead, a bomber dungeon monster, a round body dominated by one lit fuse arcing off the top, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Fusehead, a bomber dungeon monster, a round body dominated by one lit fuse arcing off the top, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.gemmite": {
       "batch": 3,
@@ -671,10 +671,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Gemmite, a splitter dungeon monster, a cracked geode split by a visible seam down the middle, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Gemmite, a splitter dungeon monster, a cracked geode split by a visible seam down the middle, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.gyre": {
       "batch": 3,
@@ -683,10 +683,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Gyre, a orbiter dungeon monster, a spinning double blade with no body between the halves, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Gyre, a orbiter dungeon monster, a spinning double blade with no body between the halves, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.lancerfish": {
       "batch": 3,
@@ -695,10 +695,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Lancerfish, a dasher dungeon monster, one long horizontal lance ending in a barbed point, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Lancerfish, a dasher dungeon monster, one long horizontal lance ending in a barbed point, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.lobber": {
       "batch": 3,
@@ -707,10 +707,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Lobber, a spitter dungeon monster, a bulbous sac body with one raised firing tube, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Lobber, a spitter dungeon monster, a bulbous sac body with one raised firing tube, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.skulker": {
       "batch": 3,
@@ -719,10 +719,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Skulker, a chaser dungeon monster, a low round bulk on four short scuttling legs, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Skulker, a chaser dungeon monster, a low round bulk on four short scuttling legs, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.slabjaw": {
       "batch": 3,
@@ -731,10 +731,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Slabjaw, a brute dungeon monster, the widest thing on the field, a walking slab with dragging arms, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Slabjaw, a brute dungeon monster, the widest thing on the field, a walking slab with dragging arms, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.stitcher": {
       "batch": 3,
@@ -743,10 +743,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Stitcher, a medic dungeon monster, thin and stooped, two long suture threads trailing, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Stitcher, a medic dungeon monster, thin and stooped, two long suture threads trailing, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.ward_pylon": {
       "batch": 3,
@@ -755,10 +755,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Ward Pylon, an immobile arcane siege structure, a rooted square pillar under a floating cap, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Ward Pylon, an immobile arcane siege structure, a rooted square pillar under a floating cap, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.wombden": {
       "batch": 3,
@@ -767,10 +767,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        32,
-        32
+        128,
+        128
       ],
-      "prompt": "Wombden, a nest dungeon monster, rooted and radial, splayed with no legs at all, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 32px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Wombden, a nest dungeon monster, rooted and radial, splayed with no legs at all, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     }
   }
 }

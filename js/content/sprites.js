@@ -45,9 +45,27 @@ export const DIRECTIONAL_NAMESPACES = new Set(['char', 'enemy', 'boss', 'beast']
 // 56% and throw away more than half the pixels it was authored with, which is
 // most of why early anchor art read as soft. 32px is a hair under the draw
 // size and stays crisp. Bosses are drawn at ~92 css px, so they take 64.
+//
+// That reasoning was applied to CHARACTERS and quietly assumed to hold for
+// enemies, where it does not:
+//
+// Why enemies are 128 and not 32, which is what they were until the tundra
+// creature batch was specced. An enemy is painted at its own diameter
+// (spriteScaleFor in js/render.js passes radius*2), and diameters run from the
+// flit's 22 world units to the pylon's 52 — 50 to 117 device px at the standard
+// viewport, and 72 to 170 once the x1.45 elite multiplier is on. A 32px source
+// meant every enemy was upscaled between 2.2x and 5.3x, which is not something
+// an artist can draw around. At 128 the same range is 0.56x to 1.33x: a
+// downscale almost everywhere, which is the regime the character sheets ship
+// in. Costs ~6.5 MB decoded across the 13 enemy ids.
+//
+// This is a source-resolution change ONLY. Painted size is unchanged: the
+// composed scale divides by the cell width, so a bigger cell cancels out
+// exactly. No radius, no hitbox, nothing on the wire.
+
 export const SPRITE_SIZE = {
   char: [32, 32],
-  enemy: [32, 32],
+  enemy: [128, 128],
   boss: [64, 64],
   proj: [32, 32],
   fx: [32, 32],

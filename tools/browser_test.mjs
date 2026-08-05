@@ -12,6 +12,13 @@ import zlib from 'node:zlib';
 import { tmpdir } from 'os';
 import path from 'path';
 import { execFileSync } from 'node:child_process';
+// Fixture cell sizes come from the same table the manifest generator uses. They
+// were hardcoded 32s until enemies moved to 128 and every enemy fixture became
+// a rejected sheet — a test that describes the art layout must read it, not
+// restate it.
+import { SPRITE_SIZE } from '../js/content/sprites.js';
+const E_CELL = SPRITE_SIZE.enemy[0];
+const FX_CELL = SPRITE_SIZE.fx[0];
 
 // A minimal RGBA PNG writer at module scope, for fixtures that need real
 // transparency — the sprite-pipeline block has its own opaque variant, and a
@@ -1128,17 +1135,17 @@ try {
       pngChunk('IEND', Buffer.alloc(0)),
     ]);
   };
-  // a valid 8-direction grid: 48 wide (1 frame) x 384 tall (8 rows)
-  const directionGrid = () => png(32, 32 * 8, (x, y) => ROW_RGB(Math.floor(y / 32)));
+  // a valid 8-direction enemy grid: one frame across, eight facings down
+  const directionGrid = () => png(E_CELL, E_CELL * 8, (x, y) => ROW_RGB(Math.floor(y / E_CELL)));
   // left half red, right half blue — asymmetric, so rotation is visible
-  const flatAsymmetric = () => png(32, 32, x => (x < 16 ? [255, 60, 60] : [60, 60, 255]));
+  const flatAsymmetric = () => png(FX_CELL, FX_CELL, x => (x < FX_CELL / 2 ? [255, 60, 60] : [60, 60, 255]));
 
   const installArt = () => {
     fs.mkdirSync(enemyDir, { recursive: true });
     fs.mkdirSync(fxDir, { recursive: true });
     fs.writeFileSync(gridFile, directionGrid());
     fs.writeFileSync(flatFile, flatAsymmetric());
-    fs.writeFileSync(badGridFile, png(32, 32, () => [255, 0, 255]));   // deliberately not a grid
+    fs.writeFileSync(badGridFile, png(E_CELL, E_CELL, () => [255, 0, 255]));   // square, so deliberately not an 8-row grid
   };
   // Remove ONLY the files this test wrote. A blanket rmSync of assets/sprites
   // would delete committed art, which is a destructive test, not a cleanup.
@@ -1283,7 +1290,7 @@ try {
           flatDirs:f?f.directions:0,
           badRejected:A.missing.has('enemy.flit')?1:0, badNull:A.get('enemy.flit')?0:1,
           other:A.get('enemy.gyre')?1:0});`));
-      if (part.gridDirs === 8 && part.gridW === 32 && part.gridH === 32 && part.flatDirs === 1 && !part.other) {
+      if (part.gridDirs === 8 && part.gridW === E_CELL && part.gridH === E_CELL && part.flatDirs === 1 && !part.other) {
         ok(`partial manifest: an 8-direction 32x32 grid and a 1-direction 32x32 icon load, the other ${part.missing} ids stay null`);
       } else fail(`partial state: ${JSON.stringify(part)}`);
       // grid validation: wrong dimensions is no sprite, not a wrong sprite
@@ -1392,11 +1399,11 @@ try {
         const was = e.scale;
         const out = {};
         e.scale = 1;
-        out.plain = draw({});                       // 32 across
-        out.callerHalf = draw({ scale: 0.5 });      // 16
+        out.plain = draw({});                       // one cell across
+        out.callerHalf = draw({ scale: 0.5 });      // half a cell
         e.scale = 1.5;
-        out.scaled = draw({});                      // 48
-        out.composed = draw({ scale: 0.5 });        // 24: caller 0.5 x manifest 1.5
+        out.scaled = draw({});                      // 1.5 cells
+        out.composed = draw({ scale: 0.5 });        // 0.75: caller 0.5 x manifest 1.5
         out.rowScaled = (draw({ facing: Math.PI }), rowAt());   // still W = row 4
 
         // save()/restore() balance: the slow path is the only one that touches
@@ -1412,9 +1419,12 @@ try {
         e.scale = was;
         out.restored = e.scale;
         return JSON.stringify(out);`));
-      if (sc.plain === 32 && sc.scaled === 48 && sc.callerHalf === 16 && sc.composed === 24) {
-        ok(`manifest scale is a pure size multiplier: 32px at 1.0, ${sc.scaled}px at 1.5, and it composes with the caller's own scale (0.5 x 1.5 = ${sc.composed}px)`);
-      } else fail(`scale spans: ${JSON.stringify(sc)}`);
+      // expectations derive from the enemy cell: the point of the assertion is
+      // the RATIOS (1.0 / 1.5 / caller 0.5 composing to 0.75), not the literal
+      // pixel counts, which move whenever the authored size does
+      if (sc.plain === E_CELL && sc.scaled === E_CELL * 1.5 && sc.callerHalf === E_CELL / 2 && sc.composed === E_CELL * 0.75) {
+        ok(`manifest scale is a pure size multiplier: ${sc.plain}px at 1.0, ${sc.scaled}px at 1.5, and it composes with the caller's own scale (0.5 x 1.5 = ${sc.composed}px)`);
+      } else fail(`scale spans: ${JSON.stringify(sc)} (cell ${E_CELL})`);
       if (sc.rowScaled === 4) ok('a scaled sprite still resolves the same row — the multiplier changes the size a cell is painted, never which cell');
       else fail(`scaled row ${sc.rowScaled}, want 4 (W)`);
       if (sc.transformKept && sc.alphaKept) ok('the scaled draw hands the context back untouched — transform and globalAlpha survive it, so nothing drawn afterwards is corrupted');
@@ -1689,7 +1699,8 @@ try {
     const TALL = 'enemy.slabjaw', SQUAT = 'enemy.lobber', NAKED = 'enemy.gemmite';
     const tallFile = path.join(enemyDir, 'slabjaw.png'), squatFile = path.join(enemyDir, 'lobber.png');
     const nakedFile = path.join(enemyDir, 'gemmite.png');
-    const CELL = 32, DIRS = 8, FIG_W = 20, TALL_H = 24, SQUAT_H = 16;
+    const CELL = E_CELL, DIRS = 8;
+    const FIG_W = Math.round(CELL * 0.625), TALL_H = Math.round(CELL * 0.75), SQUAT_H = Math.round(CELL * 0.5);
     // one solid block per row, centred, transparent everywhere else
     const blockGrid = figH => pngRGBA(CELL, CELL * DIRS, (x, y) => {
       const cy = y % CELL;
@@ -1940,7 +1951,7 @@ try {
       const list = logs.find(l => /\[sprites\] missing:/.test(l));
       if (list && /enemy\.gyre/.test(list)) ok(`?sprites=debug lists every missing id once at load (${list.length} chars)`);
       else fail('sprites=debug did not log the missing list');
-      const rejected = logs.find(l => /enemy\.flit.*grid must be exactly 32x256/.test(l));
+      const rejected = logs.find(l => new RegExp(`enemy\\.flit.*grid must be exactly ${E_CELL}x${E_CELL * 8}`).test(l));
       if (rejected) ok('the rejected grid says exactly what size it should have been');
       else fail('no diagnostic for the wrong-sized grid');
       // the direction readout: ink above the sprite in debug mode, none without it
@@ -2009,27 +2020,8 @@ try {
       .map(([k,n]) => ['#' + k.toString(16).padStart(6,'0'), n]);
     const px = d.length / 4;
     const flat = (hist.get(0x14161f) || 0) / px;
-    // A shift-tolerant signature: mean luminance per 16px column. The camera
-    // converges on its target asymptotically and never lands on exactly the
-    // same float twice, so the same spot rasterises a fraction of a pixel
-    // apart and a per-pixel hash always differs. This does not: a genuinely
-    // different tile layout moves a column mean by tens of levels, sub-pixel
-    // jitter moves it by well under one.
-    const COL = 16, cols = Math.floor(c.width / COL), sig = [];
-    for (let cx = 0; cx < cols; cx++) {
-      let s2 = 0, n = 0;
-      for (let y = 0; y < h; y++) {
-        for (let x = cx * COL; x < (cx + 1) * COL; x++) {
-          const i = (y * c.width + x) * 4;
-          s2 += 0.2126*d[i] + 0.7152*d[i+1] + 0.0722*d[i+2]; n++;
-        }
-      }
-      sig.push(+(s2 / n).toFixed(2));
-    }
-    return JSON.stringify({ px, distinct: hist.size, top, flatFrac: flat, hash, sig });
+    return JSON.stringify({ px, distinct: hist.size, top, flatFrac: flat, hash });
   })()`;
-  // largest per-column difference between two floor signatures
-  const sigDelta = (a, b) => Math.max(...a.sig.map((v, i) => Math.abs(v - b.sig[i])));
 
   try {
     await T.open('T');
@@ -2061,44 +2053,31 @@ try {
     else fail(`scrolling exposed bare floor: ${moved.distinct} colours, ${(moved.flatFrac * 100).toFixed(1)}% fallbackFill`);
 
     // -- same coordinates, same tiles --
-    // Sampled with the field EMPTY and the camera parked, because the raw band
-    // hash includes everything drawn over the floor: leave an enemy in shot and
-    // this measures the enemy, not the ground. The camera also glides with
-    // velocity lookahead, so it is polled to a stop rather than slept on.
-    // Clear the fight outright first. Emptying the enemy pool is not enough —
-    // the wave keeps spawning through the seconds the camera takes to settle,
-    // and a grunt standing in the sample band moves a column mean by ~67/255,
-    // which reads as "the floor is not deterministic" when the floor is fine.
-    await T.exec(clearFightJs);
-    await sleep(200);
-    const park = async (x, y) => {
-      await T.exec(`const s=window.uv.sim; s.enemyPool.clear(); s.projPool.clear(); s.pickups.length=0;
-        s.spawnQueue.length=0; s.fx.hits.length=0; window.uvRenderer.particles.length=0;
-        const p=s.players[0]; p.x=${x}; p.y=${y}; return 1;`);
-      // The camera approaches its target exponentially and never exactly stops,
-      // so "has it settled" is a delta threshold, not an equality.
-      await T.waitFor(`const r=window.uvRenderer;
-        const d = r._parkAt ? Math.abs(r.camX - r._parkAt[0]) + Math.abs(r.camY - r._parkAt[1]) : Infinity;
-        r._parkAt = [r.camX, r.camY]; return d < 0.05;`, 8000, 'camera settle');
-      await sleep(80);
-    };
-    await park(900, 500);
-    const atA = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
-    await park(1900, 800);
-    await park(900, 500);
-    const againA = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
-    const dSame = sigDelta(atA, againA);
-    await park(1900, 800);
-    const atB = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
-    const dDiff = sigDelta(atA, atB);
-    // 2/255 is rasterisation noise, not tolerance for a wrong floor: the camera
-    // lands a fraction of a pixel apart each visit. The companion assertion
-    // below is what gives this teeth — a real difference must be many times
-    // larger, so a floor that ignored coordinates could not pass both.
-    if (dSame < 2.0) ok(`the same camera position reproduces the same floor — max column delta ${dSame.toFixed(2)}/255 after a round trip (empty field); the layout is a function of coordinates, not of time or of a roll`);
-    else fail(`the same camera position produced a different floor — max column delta ${dSame.toFixed(2)}/255, want <2`);
-    if (dDiff > 4 * Math.max(dSame, 0.25)) ok(`and the gate can tell floors apart: a different position differs by ${dDiff.toFixed(2)}/255, ${(dDiff / Math.max(dSame, 0.01)).toFixed(0)}x the round-trip noise`);
-    else fail(`the signature cannot distinguish two different floor positions (${dDiff.toFixed(2)} vs ${dSame.toFixed(2)}) — it would pass on any floor at all`);
+    // Rendered through the renderer's own _drawFloor() onto a scratch canvas,
+    // with nothing else on it. Sampling the live frame cannot answer this: the
+    // band also contains the player (screen centre, time-driven idle frame),
+    // the hatch, and any fx alive that instant, and the camera only ever
+    // converges on a position asymptotically. Two earlier versions of this
+    // check measured exactly those things and called the floor
+    // non-deterministic. Isolated, the claim is exact — same world rectangle,
+    // byte-identical pixels — and needs no tolerance at all.
+    const floorHash = (x0, y0) => T.exec(`
+      const r = window.uvRenderer;
+      const c = document.createElement('canvas'); c.width = 640; c.height = 320;
+      const g = c.getContext('2d');
+      g.setTransform(1, 0, 0, 1, -${x0}, -${y0});
+      r._tileCache = null;
+      r._drawFloor(g, { biome: 'tundra' }, 100000, 100000, ${x0}, ${x0} + 640, ${y0}, ${y0} + 320);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let h = 0; for (let i = 0; i < d.length; i += 4) h = (Math.imul(h, 31) + ((d[i] << 16) | (d[i+1] << 8) | d[i+2])) | 0;
+      return h;`);
+    const hA1 = await floorHash(900, 500);
+    const hB = await floorHash(1900, 800);
+    const hA2 = await floorHash(900, 500);
+    if (hA1 === hA2) ok(`the same world rectangle renders the identical floor twice (hash ${hA1}) — byte-exact, no tolerance; the layout is a function of coordinates, not of time or of a roll`);
+    else fail(`the same world rectangle produced two different floors (${hA1} then ${hA2}) — the tile layout is not deterministic`);
+    if (hB !== hA1) ok(`and a different rectangle is a different floor (${hB}) — the check is not passing on a constant`);
+    else fail(`two different world rectangles hashed the same (${hA1}) — the floor is not varying by coordinate at all`);
 
     // -- the debug grid is off by default and comes back on the flag --
     const gridOff = JSON.parse(await T.exec(`return JSON.stringify({on: /grid=1/.test(location.search)})`));

@@ -28,6 +28,11 @@ const WALL_OUT = (p, g) => Math.max(0,
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 import { BIOMES, FLOOR_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
 import { ENEMY_BY_ID as ENEMY_BY_ID_T } from '../js/content/enemies.js';
+// Art fixtures below build sheets that must match the manifest exactly. They
+// hardcoded 32 until enemies moved to 128 and every one became a rejected
+// sheet — so the cell size is read from the same table the generator uses.
+import { SPRITE_SIZE as SS } from '../js/content/sprites.js';
+const E_CELL = SS.enemy[0], E_GRID = E_CELL * 8, E_K = E_CELL / 32;
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { ALL_CHARS as _ALL_CHARS } from '../js/content/characters.js';
 const ALL_CHARS_N = _ALL_CHARS.length;
@@ -3697,14 +3702,15 @@ try {
     const file = nodePath.join(spriteRoot, 'skulker.png');
     try {
       mkdirSync(spriteRoot, { recursive: true });
-      // right id, wrong shape: 48x48 where the manifest wants 48x384
-      writeFileSync(file, PK.encodePng(PK.blankImage(32, 32)));
+      // right id, wrong shape: one square cell where the manifest wants 8 rows
+      writeFileSync(file, PK.encodePng(PK.blankImage(E_CELL, E_CELL)));
       const err = runFails('verify_art_batch.mjs', ['enemy.skulker']);
-      if (err && /32x32, manifest wants 32x256/.test(err)) ok('verify_art_batch names a wrong-sized grid and the size it should have been');
+      const wantMsg = new RegExp(`${E_CELL}x${E_CELL}, manifest wants ${E_CELL}x${E_GRID}`);
+      if (err && wantMsg.test(err)) ok('verify_art_batch names a wrong-sized grid and the size it should have been');
       else fail(`batch verify on a bad grid said: ${String(err).slice(0, 140)}`);
 
       // right shape, but every cell empty — how a mis-assembled grid hides
-      writeFileSync(file, PK.encodePng(PK.blankImage(32, 256)));
+      writeFileSync(file, PK.encodePng(PK.blankImage(E_CELL, E_GRID)));
       const err2 = runFails('verify_art_batch.mjs', ['enemy.skulker']);
       if (err2 && /empty cell/.test(err2)) ok('and it catches an all-empty grid, which passes every dimension check');
       else fail(`empty-cell check said: ${String(err2).slice(0, 140)}`);
@@ -3755,20 +3761,24 @@ try {
     const OV = nodePath.join(REPO, 'assets', 'sprite-overrides.json');
     const MAN = nodePath.join(REPO, 'assets', 'assets.json');
     const ovBefore = rf(OV, 'utf8'), manBefore = rf(MAN, 'utf8');
-    // body spans x 6+off..25, y 5..27 -> widest row is 20 across, 23 tall
-    const FIX_CONTENT = [20, 23];
+    // Body box, expressed at the 32px scale this fixture was written for and
+    // scaled to whatever the enemy cell actually is, so the content numbers
+    // below stay the truth about the pixels rather than a stale constant.
+    const B = n => Math.round(n * E_K);
+    const X0 = B(6), X1 = B(25), Y0 = B(5), Y1 = B(27);
+    const FIX_CONTENT = [X1 - X0 + 1, Y1 - Y0 + 1];
     const sheet = (bodyRGB, accentRGB, distinctRows) => {
-      const g = PK.blankImage(32, 256);
+      const g = PK.blankImage(E_CELL, E_GRID);
       for (let d = 0; d < 8; d++) {
         // shift the body per row so rows differ; when distinctRows is false the
         // shift repeats every 4 rows, which makes OPPOSITE facings identical —
         // exactly what a collapsed rotation produces
-        const off = distinctRows ? d : d % 4;
-        for (let y = 0; y < 32; y++) {
-          for (let x = 0; x < 32; x++) {
-            if (x < 6 + off || x > 25 || y < 5 || y > 27) continue;
-            const o = ((d * 32 + y) * 32 + x) * 4;
-            const acc = accentRGB && y > 9 && y < 22 && x > 9 && x < 22;
+        const off = (distinctRows ? d : d % 4) * Math.max(1, Math.round(E_K));
+        for (let y = 0; y < E_CELL; y++) {
+          for (let x = 0; x < E_CELL; x++) {
+            if (x < X0 + off || x > X1 || y < Y0 || y > Y1) continue;
+            const o = ((d * E_CELL + y) * E_CELL + x) * 4;
+            const acc = accentRGB && y > B(9) && y < B(22) && x > B(9) && x < B(22);
             const c = acc ? accentRGB : bodyRGB;
             g.data[o] = c[0]; g.data[o + 1] = c[1]; g.data[o + 2] = c[2]; g.data[o + 3] = 255;
           }
