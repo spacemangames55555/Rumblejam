@@ -32,6 +32,15 @@
       254
     ]
   },
+  "char.toh_blacksmith": {
+    "w": 128,
+    "h": 128,
+    "scale": 2.18,
+    "content": [
+      96,
+      124
+    ]
+  },
   "char.toh_druid": {
     "w": 128,
     "h": 128,

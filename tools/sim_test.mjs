@@ -3229,7 +3229,14 @@ try {
       const g = new Sim({ seed: 5, party: [{ idx: 0, key: 'a', name: 'A', charId: chr.id, color: '#fff' }] });
       const p = g.players[0];
       if (p.char.id !== chr.id) { radBad.push(`${chr.id}: the sim resolved ${p.char.id} instead`); continue; }
-      const want = CFG.PLAYER_RADIUS * (chr.trait.key === 'immovable' ? chr.trait.hitbox : 1);
+      // A trait may legitimately resize the hitbox — Bulwark's `immovable` and
+      // the Blacksmith's `crystal_infusion` both do, at x1.4. Read that off the
+      // trait rather than naming the traits, or this gate fails the day a
+      // second one gets art: it hardcoded `immovable` and the Blacksmith's
+      // sheet landing was enough to trip it on a radius the sprite never
+      // touched. What is under test is that a COSMETIC scale cannot move a
+      // hitbox, and the trait's own declared multiplier is the honest baseline.
+      const want = CFG.PLAYER_RADIUS * (chr.trait.hitbox || 1);
       if (p.radius !== want) radBad.push(`${chr.id}: radius ${p.radius}, want ${want}`);
       if ('scale' in p || 'spriteScale' in p) radBad.push(`${chr.id}: the player carries a scale field`);
       const snap = JSON.parse(JSON.stringify(g.getSnapshot()));

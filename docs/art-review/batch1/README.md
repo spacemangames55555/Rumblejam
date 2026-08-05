@@ -1,6 +1,8 @@
 # Batch 1 — Thrones of Heaven
 
-Thirteen characters to install. **Twelve are in.**
+Thirteen characters to install. **All thirteen are in — batch 1 is complete.**
+With the Druid anchor that is the whole 14-character Thrones of Heaven roster
+shipping art.
 
 | | character | id | status |
 |---|---|---|---|
@@ -16,7 +18,7 @@ Thirteen characters to install. **Twelve are in.**
 | ✓ | Bard | `char.toh_bard` | installed |
 | ✓ | Sundian | `char.toh_sundian` | installed |
 | ✓ | Necromancer | `char.toh_necromancer` | installed |
-| | Blacksmith | | awaiting art (1) |
+| ✓ | Blacksmith | `char.toh_blacksmith` | installed |
 
 The Druid (`char.toh_druid`) is the style anchor and is not part of batch 1 —
 see [`../druid/README.md`](../druid/README.md) and
@@ -48,6 +50,7 @@ artifact of padding.
 | Bard † | 2.18 | 1.0079 | 190×254 | 158.2 | **157.0** | **−0.00%** |
 | Sundian | 2.18 | 1.0407 | 92×123 | 163.3 | **157.0** | **−0.00%** |
 | Necromancer † | 2.18 | 1.0364 | 201×247 | 162.7 | **157.0** | **+0.00%** |
+| Blacksmith | 2.18 | 1.0323 | 96×124 | 162.0 | **157.0** | **+0.00%** |
 
 † **The Bard and the Necromancer are on 256 cells, not 128.** Both arrived drawn
 at roughly twice the roster's scale — the figure fills ~247–254 of a 256 canvas
@@ -59,11 +62,17 @@ Bard's provenance entry, which covers both.
 Measured off the renderer's own `drawImage` in a real arena. Nothing is more
 than 5% off the Druid.
 
-Thirteen sheets, thirteen content boxes, **five** source canvases: 240×240
-(Mage), 244×244 (Savage, Priest), 248×248 (Druid, Assassin, Samurai, Monk,
-Wizard), 252×252 (Sundian), 256×256 (Hunter, Witch Doctor, Bard, Necromancer).
-Cell fill runs 93.0% to 97.7% on the eleven 128-cell sheets, and 96.5–99.2% on
-the two 256-cell ones.
+**Fourteen sheets — the whole roster.** Fourteen content boxes, **five** source
+canvases: 240×240 (Mage), 244×244 (Savage, Priest), 248×248 (Druid, Assassin,
+Samurai, Monk, Wizard), 252×252 (Sundian, Blacksmith), 256×256 (Hunter, Witch
+Doctor, Bard, Necromancer). Cell fill runs 93.0% to 97.7% on the twelve 128-cell
+sheets, and 96.5–99.2% on the two 256-cell ones.
+
+**Every one renders its silhouette at exactly 157.0 device px.** Fourteen
+characters, five source canvases, two cell sizes, `fit` values from 1.0079 to
+1.0756 — and not one of them is more than 0.00% off the anchor. That is the
+whole case for content normalisation, and it is now made on a complete roster
+rather than an argument.
 
 The spread across **cells** is now 160.7 to 168.8 device px — 8.1px, opened up
 by the Priest and matched exactly by the Mage, who lands on the same 119px
@@ -99,6 +108,7 @@ would render its other seven short. Measured:
 | Bard | 248 254 248 254 248 246 244 246 | 254 | 244 | **4.1%** |
 | Sundian | 122 123 122 123 122 119 115 119 | 123 | 115 | **7.0%** |
 | Necromancer | 244 247 241 247 244 238 239 240 | 247 | 238 | **3.8%** |
+| Blacksmith | 124 124 123 124 124 123 122 123 | 124 | 122 | **1.6%** |
 
 The **Sundian is the widest of the bipeds at 7.0%**, just outside the band the
 other ten sit in — his three north-facing rows are 4–8px shorter than the rest,
@@ -134,6 +144,32 @@ eight drawings. Every installed sheet passes with nothing waived —
 `assets/gate-exceptions.json` is empty.
 
 **Consistency is judged on the contact sheet**, not from numbers.
+
+## Batch 1 is closed
+
+Thirteen characters installed between 2026-08-04 and 2026-08-05, plus the Druid
+anchor: the complete Thrones of Heaven roster. Every source file is committed
+verbatim under `<character>/sources/` at the md5 it arrived with, nothing was
+regenerated, resampled or retouched, and the structural gate passes on all
+fourteen with `assets/gate-exceptions.json` empty.
+
+What the batch cost the pipeline, and what it taught:
+
+- **Content normalisation carried it.** Five source canvases and two cell sizes
+  arrived unannounced across thirteen characters, and every silhouette lands on
+  157.0 device px. Not one character needed a hand-calibrated scale.
+- **Two sheets came in at double the roster's scale** (Bard, Necromancer) and
+  ship on 256 cells. Their on-screen size is right; their pixel density is not,
+  and that is the one open look question — see the Bard's entry.
+- **Decoded memory went 5.53 MB → 10.53 MB**, most of it those two sheets. Still
+  fine; a roster of them would not be.
+- **A quadruped and a tail both turned out to be non-events**, because
+  normalisation keys on height. The bear's 29.5% per-facing spread is anatomy,
+  not drift, and it is recorded so nobody 'fixes' it.
+
+What is left is not batch 1: 288 non-character ids in the manifest still have no
+art — enemies, bosses, props, projectiles, items, UI. The pipeline that carried
+thirteen characters is the pipeline that will carry them.
 
 ## Provenance
 
@@ -432,6 +468,34 @@ rather than guessed from the cardinals, and why the union came out 3px taller
 than the four cardinals alone suggested.
 
 Per-facing height spread 3.8%, mid-range, and unremarkable for a robed figure.
+
+### Blacksmith
+
+Supplied 2026-08-05, eight **252×252** RGBA PNGs, in two messages of four; not
+assembled until all eight were present. The last character of batch 1.
+
+| facing | md5 | file |
+|---|---|---|
+| E | `0c867d0c6e4ecacfdf7d4a6dc82c4f32` | `blacksmith/sources/east.png` |
+| SE | `1caa7d4eb65ab1a1333890979b7ae4e7` | `blacksmith/sources/southeast.png` |
+| S | `9089d09c7648e5c8da81eb65c1bc87f1` | `blacksmith/sources/south.png` |
+| SW | `4227cacf145ecfd317efa6c1015e9dc5` | `blacksmith/sources/southwest.png` |
+| W | `7f72a004044e1e5af521a7e5883b3e3f` | `blacksmith/sources/west.png` |
+| NW | `98673db1d794fb93d840d83eda27ead7` | `blacksmith/sources/northwest.png` |
+| N | `664413802e0f2984be1383f7dc91eab0` | `blacksmith/sources/north.png` |
+| NE | `650385170afffa05c0adcc247c075c62` | `blacksmith/sources/northeast.png` |
+
+Assembled to `assets/sprites/char/toh_blacksmith.png`, 128×1024, `directions: 8`,
+`content: [96, 124]`, `scale: 2.18`. Autocrop 252×252 → 96×124.
+
+On the roster's scale, 128 cell, pixel density 0.79 — the Druid's number exactly.
+The union across all eight came to 96×124, the same as the four cardinals had
+predicted, which is the first time this batch that extrapolating from the
+cardinals would have been safe. It was still measured across all eight, because
+the Necromancer's diagonals came in 3px taller than his cardinals and there is no
+way to know which case you are in without looking.
+
+Per-facing spread **1.6%**, tied with the Savage for the tightest on the roster.
 
 ## What the contact sheet shows — look at this, not at numbers
 
