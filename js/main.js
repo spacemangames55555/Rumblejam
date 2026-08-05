@@ -3,6 +3,7 @@
 // sim events and UI/audio. Simulation (game.js) never touches the DOM.
 
 import { CONFIG, DEV, PALETTE } from './config.js';
+import { BIOMES, tileVariant } from './biomes.js';
 import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
 import { BEAST, hurtBeast } from './entities/beast.js';
@@ -120,6 +121,9 @@ window.uvAssets = Assets;            // sprite registry introspection for tests
 window.uvDrawSprite = drawSprite;    // so a test can prove every id falls back
 window.uvSpriteMode = SPRITE_MODE;
 window.uvBeast = { BEAST, hurtBeast };   // beast constants + knockdown, for tests
+// biome/floor introspection: the tiled floor is a pixel claim, so the browser
+// suite needs the one number the grid and the atlas must agree on
+window.uvBiome = { FLOOR_TILE: CONFIG.FLOOR_TILE, BIOMES, tileVariant };
 preloadAirhorn(); // fire-and-forget: a missing asset falls back to the synth blip
 initLeaveButton();
 document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
@@ -763,6 +767,7 @@ function viewFromSim(sim) {
     mode: 'arena',
     aw: sim.W, ah: sim.H,
     arenaKey: `${sim.floorNum}:${sim.currentNode}`,
+    biome: sim.biome || null,
     kind: sim.arenaNode ? sim.arenaNode.kind : null,
     afterSiege: sim.afterSiege,
     obstacles: sim._snapObstacles(),
@@ -897,6 +902,9 @@ function viewFromSnaps(dtFrame) {
     aw: app.arena ? app.arena.w : undefined,
     ah: app.arena ? app.arena.h : undefined,
     arenaKey: `${app.floorNum}:${s1.node}`,
+    // from the 'arena' event, not a snapshot — the floor is cosmetic and never
+    // goes on the wire per frame. A client that missed the event draws flat.
+    biome: app.arena ? app.arena.biome || null : null,
     kind: app.arena ? app.arena.kind : null,
     afterSiege: app.arena ? app.arena.kind === 'siege' : false,
     obstacles: app.arena ? app.arena.obstacles : [],

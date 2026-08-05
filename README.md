@@ -352,6 +352,27 @@ at boot, debounced to one horn per resolution moment
 (`CONFIG.AIRHORN_DEBOUNCE_S`), own level-ups at `CONFIG.AIRHORN_VOL_OWN`,
 allies' at `CONFIG.AIRHORN_VOL_ALLY`.
 
+## Biome floors
+
+The floor is a per-biome tile atlas (`js/biomes.js`, `assets/tiles/<biome>/`),
+falling back to the flat `#14161f` fill everywhere a biome is absent. Floor 1
+is **tundra**; floors 2-4 are untouched. Adding a biome is a `BIOMES` entry, a
+name in `FLOOR_BIOMES` and five 64x64 PNGs — no refactor.
+
+Cosmetic only: no movement modifiers, no ambient damage, nothing on the wire
+per frame, no hitbox anywhere near it. The tile a cell shows is a hash of its
+coordinates, never `Math.random()`.
+
+The debug grid is behind **`?grid=1`** (default off), kept because it is the
+reference the 2.18 roster scale was tuned against.
+
+Full guide, including the tundra art direction and why the ground is grey-blue
+rather than white: **`docs/BIOMES.md`**.
+
+The tundra tiles on disk today are **placeholders** from
+`tools/gen_tundra_tiles.mjs`, built to the brief's numbers so the renderer
+could be verified before the art exists. Real art replaces the same five paths.
+
 ## Adding art (sprites)
 
 Every entity keeps its Canvas-primitive draw as a fallback, so the game runs
@@ -359,7 +380,7 @@ and looks exactly as it does today with `assets/sprites/` empty — which is the
 state it ships in. Art lands one file at a time:
 
 1. Find the id in `assets/assets.json` (the manifest **is** the art inventory
-   — 298 ids, every one the game can ever ask for).
+   — 304 ids, every one the game can ever ask for).
 2. Draw a PNG at the size the manifest states.
 3. Save it at `assets/sprites/<file>`. Reload. Done — no build step, no code.
 

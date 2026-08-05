@@ -55,6 +55,7 @@ export const SPRITE_SIZE = {
   prop: [64, 64],
   ui: [32, 32],
   beast: [32, 32],
+  tile: [64, 64],   // one floor tile = one CONFIG.FLOOR_TILE world cell
 };
 
 // ---------------- projectiles ----------------

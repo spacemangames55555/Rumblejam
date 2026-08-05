@@ -95,7 +95,7 @@ if (TUNE_ALL !== 1 || TUNE_PLAYER !== 1) {
 // the symptom — "no sprite, draw the primitive" — was also the correct
 // behaviour, and it only surfaced when real art landed and did not appear.
 // tools/sim_test.mjs now asserts the two lists agree.
-export const SPRITE_NAMESPACES = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui', 'beast'];
+export const SPRITE_NAMESPACES = ['char', 'enemy', 'boss', 'proj', 'fx', 'item', 'prop', 'ui', 'beast', 'tile'];
 const NS_RE = new RegExp(`^(${SPRITE_NAMESPACES.join('|')})\\.[a-z0-9_]+$`);
 
 const DEFAULT_BASE = 'assets/sprites/';
@@ -230,6 +230,19 @@ function relPath(p) {
   return String(p || '').replace(/^\/+/, '').replace(/\.\.\//g, '');
 }
 
+// Where a manifest entry's file actually lives. Almost everything sits under
+// the manifest's basePath (assets/sprites/) and gives a path relative to it.
+// Floor tiles do not — they live at assets/tiles/<biome>/ — so an entry whose
+// file is already rooted at 'assets/' is taken as written.
+//
+// This is a path rule, deliberately NOT a second loader: tiles go through the
+// same registry, the same loadImage(), the same structural checks and the same
+// missing-art bookkeeping as every sheet. One image path, two directories.
+function assetUrl(file) {
+  const rel = relPath(file);
+  return rel.startsWith('assets/') ? rel : Assets.basePath + rel;
+}
+
 // One Image per unique file, however many sprite ids point at it.
 const fileCache = new Map();
 function loadImage(url) {
@@ -243,6 +256,25 @@ function loadImage(url) {
   });
   fileCache.set(url, p);
   return p;
+}
+
+// Did anything at all survive the decode? A PNG can load cleanly and still be
+// entirely transparent — a failed export, a wrong layer, a blank canvas — and
+// as a floor tile that reads as a hole in the world rather than as missing art.
+// Guarded for headless harnesses, which have neither Image nor canvas; there
+// the check is skipped and tools/readability_check.mjs does it offline instead.
+function isBlank(img) {
+  try {
+    if (typeof document === 'undefined') return false;
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    if (!g) return false;
+    g.drawImage(img, 0, 0);
+    const px = g.getImageData(0, 0, c.width, c.height).data;
+    for (let i = 3; i < px.length; i += 4) if (px[i] !== 0) return false;
+    return true;
+  } catch { return false; }   // tainted canvas or no 2d context: not a verdict
 }
 
 // A sheet that loaded WITHOUT `content` falls back to fit 1 and is sized by its
@@ -298,7 +330,7 @@ export const Assets = {
         if (!spec || !spec.file) { console.warn(`[sprites] ignoring "${id}" — no file`); continue; }
         const entry = {
           img: null,
-          file: Assets.basePath + relPath(spec.file),
+          file: assetUrl(spec.file),
           w: spec.w > 0 ? spec.w : 16,
           h: spec.h > 0 ? spec.h : 16,
           frames: spec.frames > 0 ? spec.frames | 0 : DEFAULT_FRAMES,
@@ -307,6 +339,7 @@ export const Assets = {
           directions: spec.directions > 1 ? spec.directions | 0 : 1,
           scale: manifestScale(id, spec.scale),
           content: Array.isArray(spec.content) ? spec.content : null,
+          strict: !!spec.strict,         // exact dimensions + non-empty (floor tiles)
           fit: 1,                        // set below, once the cell height is known
           // which tuning flag this id answers to, decided once at load
           player: id.startsWith('char.'),
@@ -327,6 +360,23 @@ export const Assets = {
               console.warn(`[sprites] ${id}: grid must be exactly ${wantW}x${wantH} `
                 + `(${entry.frames} frame(s) across x ${entry.directions} direction(s) down), `
                 + `but ${entry.file} is ${img.width}x${img.height} — falling back to the primitive`);
+              missing.add(id);
+              return;
+            }
+          } else if (entry.strict) {
+            // A floor tile is tiled edge to edge across the whole room, so a
+            // wrong size is not "slightly off" — it is a seam or an overlap on
+            // every cell, everywhere, for the whole level. Checked exactly, and
+            // the offending path is named, because "the floor looks wrong" is
+            // not something you can chase back to one PNG by eye.
+            const wantW = entry.w * entry.frames;
+            if (img.width !== wantW || img.height !== entry.h) {
+              console.warn(`[sprites] ${id}: tile must be exactly ${wantW}x${entry.h}, but ${entry.file} is ${img.width}x${img.height} — dropping it`);
+              missing.add(id);
+              return;
+            }
+            if (isBlank(img)) {
+              console.warn(`[sprites] ${id}: ${entry.file} decoded but is fully transparent — dropping it`);
               missing.add(id);
               return;
             }

@@ -9,6 +9,7 @@
 
 import { subRng } from './rng.js';
 import { CONFIG } from './config.js';
+import { biomeFor } from './biomes.js';
 
 // ---------------- the five arena shapes ----------------
 // Each is a spotlight for a different build family; every floor's fight
@@ -270,6 +271,10 @@ export function buildArena(seed, floorNum, node, playerCount = 1) {
   // and _pushOut then shoves players through the wall to escape it.
   const shape = objectiveShape(node.kind);
   const kx = crowd * shape.x, ky = crowd * shape.y;
+  // The floor's theme. Cosmetic: the renderer is the only consumer, and a
+  // floor with no biome renders exactly as it did before this existed.
+  const b = biomeFor(floorNum);
+  const biomeId = b ? b.id : null;
   if (node.kind === 'siege') {
     const s = SIEGES[floorNum - 1];
     return {
@@ -278,6 +283,7 @@ export function buildArena(seed, floorNum, node, playerCount = 1) {
       hazards: s.hazards.map(h => scaleHazard(h, kx, ky)),
       mutations: (kx === 1 && ky === 1) ? s.mutations : s.mutations.map(m => scaleMutation(m, kx, ky)),
       bossDelay: s.bossDelay, addRate: s.addRate,
+      biome: biomeId,
     };
   }
   const t = ARENA_TEMPLATES[node.template];
@@ -287,6 +293,7 @@ export function buildArena(seed, floorNum, node, playerCount = 1) {
     obstacles: t.obstacles(rng).map(o => scaleRect(o, kx, ky)),
     hazards: t.hazards(rng).map(h => scaleHazard(h, kx, ky)),
     mutations: null,
+    biome: biomeId,
   };
 }
 

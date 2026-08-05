@@ -48,6 +48,8 @@ function pngRGBA(w, h, px) {
 }
 
 // per-process ports so overlapping/stale runs can't steal each other's servers
+// NB: `URL` is shadowed by the page-url const below, so this uses argv.
+const REPO = path.resolve(path.dirname(process.argv[1]), '..');
 const PORT = 8700 + (process.pid % 199);
 const RELAY_PORT = 12400 + (process.pid % 199); // clear of the 94xx debug-port range
 const URL = `http://localhost:${PORT}/index.html`;
@@ -1960,6 +1962,338 @@ try {
       await S5.close();
       removeArt();
     }
+  }
+}
+
+// ---------- tiled floors: the biome layer, which only a renderer can check ----------
+//
+// Everything here is a pixel claim. The sim suite can prove the variant hash is
+// deterministic and that the biome never reaches the simulation; it cannot
+// prove the floor actually paints, scrolls with the camera, or has no gaps at
+// the viewport edge. That is this section's job.
+{
+  const T = new Browser();
+  // Reach into a floor-1 arena. Floor 1 is the tundra floor; floor 2 is not,
+  // which is what makes "non-tundra maps are unchanged" checkable.
+  const enterArena = async (br) => {
+    await br.exec(`document.getElementById('btn-host').click()`);
+    await br.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby');
+    await br.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
+    await sleep(200);
+    await br.exec(`document.getElementById('btn-start').click()`);
+    await br.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'run');
+    await br.exec(`const s=window.uv.sim; if(!s.god) s.debug('F5'); s._travelTo(s.reachableNodes()[0]); return 1;`);
+    await br.waitFor(`return window.uv.sim.phase==='arena'`, 5000, 'arena');
+    await sleep(400);
+  };
+  // Sample the floor: a band across the middle of the canvas, well clear of the
+  // HUD chrome at top and bottom. Returns a colour histogram plus a hash, so
+  // one readback answers "is it tiles", "is it flat" and "is it the same as
+  // last time" without three round trips.
+  const FLOOR_SCAN = `(function(){
+    const c = document.getElementById('game-canvas');
+    const g = c.getContext('2d');
+    // Below the player, deliberately. The camera keeps the player at screen
+    // centre and its idle animation is driven by performance.now(), so a band
+    // across the middle measures the character's current frame as much as the
+    // ground — which is exactly what made the determinism check fail.
+    const y0 = Math.round(c.height * 0.68), h = Math.round(c.height * 0.14);
+    const d = g.getImageData(0, y0, c.width, h).data;
+    const hist = new Map(); let hash = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const k = (d[i] << 16) | (d[i+1] << 8) | d[i+2];
+      hist.set(k, (hist.get(k) || 0) + 1);
+      hash = (Math.imul(hash, 31) + k) | 0;
+    }
+    const top = [...hist.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4)
+      .map(([k,n]) => ['#' + k.toString(16).padStart(6,'0'), n]);
+    const px = d.length / 4;
+    const flat = (hist.get(0x14161f) || 0) / px;
+    // A shift-tolerant signature: mean luminance per 16px column. The camera
+    // converges on its target asymptotically and never lands on exactly the
+    // same float twice, so the same spot rasterises a fraction of a pixel
+    // apart and a per-pixel hash always differs. This does not: a genuinely
+    // different tile layout moves a column mean by tens of levels, sub-pixel
+    // jitter moves it by well under one.
+    const COL = 16, cols = Math.floor(c.width / COL), sig = [];
+    for (let cx = 0; cx < cols; cx++) {
+      let s2 = 0, n = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = cx * COL; x < (cx + 1) * COL; x++) {
+          const i = (y * c.width + x) * 4;
+          s2 += 0.2126*d[i] + 0.7152*d[i+1] + 0.0722*d[i+2]; n++;
+        }
+      }
+      sig.push(+(s2 / n).toFixed(2));
+    }
+    return JSON.stringify({ px, distinct: hist.size, top, flatFrac: flat, hash, sig });
+  })()`;
+  // largest per-column difference between two floor signatures
+  const sigDelta = (a, b) => Math.max(...a.sig.map((v, i) => Math.abs(v - b.sig[i])));
+
+  try {
+    await T.open('T');
+    await T.goto(URL);
+    await T.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title');
+    await enterArena(T);
+
+    // -- the tiles are actually loaded, through the ordinary sprite registry --
+    const loaded = JSON.parse(await T.exec(`const ids=['tile.tundra_00','tile.tundra_01','tile.tundra_02','tile.tundra_03','tile.tundra_04'];
+      return JSON.stringify(ids.map(id => { const s = window.uvAssets.get(id); return s && s.img ? [s.w, s.h] : null; }));`));
+    const got = loaded.filter(Boolean);
+    if (got.length === 5 && got.every(([w, h]) => w === 64 && h === 64)) ok(`all 5 tundra tiles loaded at 64x64 through the sprite registry — no second image path`);
+    else fail(`tundra tiles loaded: ${JSON.stringify(loaded)} — want five 64x64 entries`);
+
+    // -- floor 1 renders tiled, not flat --
+    const tundra = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
+    if (tundra.distinct > 20) ok(`tundra floor renders tiled — ${tundra.distinct} distinct colours across ${tundra.px} sampled pixels (a flat fill is 1)`);
+    else fail(`tundra floor looks flat: only ${tundra.distinct} distinct colour(s), top ${JSON.stringify(tundra.top)}`);
+    if (tundra.flatFrac < 0.02) ok(`no gaps at the viewport edges — ${(tundra.flatFrac * 100).toFixed(2)}% of the band is bare fallbackFill (a seam or a missed margin row shows as #14161f)`);
+    else fail(`${(tundra.flatFrac * 100).toFixed(1)}% of the floor band is bare fallbackFill — the tile draw is leaving gaps`);
+
+    // -- and it scrolls with the camera, using the entity layer's transform --
+    await T.exec(`const s=window.uv.sim; s.players[0].x += 500; s.players[0].y += 220; return 1;`);
+    await sleep(700);   // camera glides; give it time to arrive
+    const moved = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
+    if (moved.hash !== tundra.hash) ok(`the floor scrolls with the camera — the sampled band changed after the player moved 500u (was ${tundra.hash}, now ${moved.hash})`);
+    else fail('the floor did not change when the camera moved — it is not tracking the camera transform');
+    if (moved.distinct > 20 && moved.flatFrac < 0.02) ok(`still fully tiled after scrolling (${moved.distinct} colours, ${(moved.flatFrac * 100).toFixed(2)}% bare)`);
+    else fail(`scrolling exposed bare floor: ${moved.distinct} colours, ${(moved.flatFrac * 100).toFixed(1)}% fallbackFill`);
+
+    // -- same coordinates, same tiles --
+    // Sampled with the field EMPTY and the camera parked, because the raw band
+    // hash includes everything drawn over the floor: leave an enemy in shot and
+    // this measures the enemy, not the ground. The camera also glides with
+    // velocity lookahead, so it is polled to a stop rather than slept on.
+    // Clear the fight outright first. Emptying the enemy pool is not enough —
+    // the wave keeps spawning through the seconds the camera takes to settle,
+    // and a grunt standing in the sample band moves a column mean by ~67/255,
+    // which reads as "the floor is not deterministic" when the floor is fine.
+    await T.exec(clearFightJs);
+    await sleep(200);
+    const park = async (x, y) => {
+      await T.exec(`const s=window.uv.sim; s.enemyPool.clear(); s.projPool.clear(); s.pickups.length=0;
+        s.spawnQueue.length=0; s.fx.hits.length=0; window.uvRenderer.particles.length=0;
+        const p=s.players[0]; p.x=${x}; p.y=${y}; return 1;`);
+      // The camera approaches its target exponentially and never exactly stops,
+      // so "has it settled" is a delta threshold, not an equality.
+      await T.waitFor(`const r=window.uvRenderer;
+        const d = r._parkAt ? Math.abs(r.camX - r._parkAt[0]) + Math.abs(r.camY - r._parkAt[1]) : Infinity;
+        r._parkAt = [r.camX, r.camY]; return d < 0.05;`, 8000, 'camera settle');
+      await sleep(80);
+    };
+    await park(900, 500);
+    const atA = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
+    await park(1900, 800);
+    await park(900, 500);
+    const againA = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
+    const dSame = sigDelta(atA, againA);
+    await park(1900, 800);
+    const atB = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
+    const dDiff = sigDelta(atA, atB);
+    // 2/255 is rasterisation noise, not tolerance for a wrong floor: the camera
+    // lands a fraction of a pixel apart each visit. The companion assertion
+    // below is what gives this teeth — a real difference must be many times
+    // larger, so a floor that ignored coordinates could not pass both.
+    if (dSame < 2.0) ok(`the same camera position reproduces the same floor — max column delta ${dSame.toFixed(2)}/255 after a round trip (empty field); the layout is a function of coordinates, not of time or of a roll`);
+    else fail(`the same camera position produced a different floor — max column delta ${dSame.toFixed(2)}/255, want <2`);
+    if (dDiff > 4 * Math.max(dSame, 0.25)) ok(`and the gate can tell floors apart: a different position differs by ${dDiff.toFixed(2)}/255, ${(dDiff / Math.max(dSame, 0.01)).toFixed(0)}x the round-trip noise`);
+    else fail(`the signature cannot distinguish two different floor positions (${dDiff.toFixed(2)} vs ${dSame.toFixed(2)}) — it would pass on any floor at all`);
+
+    // -- the debug grid is off by default and comes back on the flag --
+    const gridOff = JSON.parse(await T.exec(`return JSON.stringify({on: /grid=1/.test(location.search)})`));
+    const noGrid = await T.exec(`const c=document.getElementById('game-canvas'); const g=c.getContext('2d');
+      const d=g.getImageData(0, Math.round(c.height*0.42), c.width, Math.round(c.height*0.16)).data;
+      let n=0; for (let i=0;i<d.length;i+=4) if (d[i]===0x1b && d[i+1]===0x1e && d[i+2]===0x2b) n++; return n;`);
+    if (!gridOff.on && noGrid === 0) ok('the debug grid is off by default — no grid pixels on a themed floor');
+    else fail(`debug grid drew ${noGrid} grid-coloured pixels with no ?grid=1`);
+
+    // -- floor 2 has no biome and must look exactly as it always has --
+    await T.exec(`const s=window.uv.sim; s._startFloor(2); return 1;`);
+    await T.exec(`const s=window.uv.sim; s._travelTo(s.reachableNodes()[0]); return 1;`);
+    await T.waitFor(`return window.uv.sim.phase==='arena' && window.uv.sim.floorNum===2`, 5000, 'floor 2 arena');
+    await sleep(400);
+    const plain = JSON.parse(await T.exec(`return ${FLOOR_SCAN}`));
+    const biome2 = await T.exec(`return JSON.stringify(window.uv.sim.biome)`);
+    if (biome2 === 'null') ok('floor 2 carries no biome');
+    else fail(`floor 2 biome is ${biome2}, want null`);
+    if (plain.flatFrac > 0.5) ok(`floor 2 renders the flat #14161f floor exactly as before — ${(plain.flatFrac * 100).toFixed(0)}% of the band is the original fill`);
+    else fail(`floor 2 is not flat: only ${(plain.flatFrac * 100).toFixed(1)}% original fill, top colours ${JSON.stringify(plain.top)}`);
+
+    const terr = await T.errors();
+    if (!terr.length) ok('no console errors rendering a themed floor');
+    else fail(`console errors on the tiled floor: ${terr.join(' | ').slice(0, 300)}`);
+  } catch (e) { fail(`tiled floor: ${e.message}`); } finally { await T.close(); }
+
+  // -- what the tiled floor costs, measured rather than asserted --
+  // A/B in ONE process on ONE static scene: same build, same camera, same
+  // frame, tiles on and then off. Cross-build timing on headless SwiftShader is
+  // dominated by machine noise; this difference is not, because everything
+  // except the floor draw is identical between the two measurements.
+  //
+  // It times Renderer.draw() itself, NOT the rAF interval. The browser is
+  // vsync-limited, so every frame interval reads ~16.7 ms whatever the renderer
+  // does — measuring intervals reported the tile layer as free, which it is
+  // not. Draw duration is the thing the floor can actually move.
+  {
+    const P = new Browser();
+    try {
+      await P.open('P');
+      await P.goto(URL);
+      await P.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title (perf)');
+      await enterArena(P);
+      await P.exec(clearFightJs);
+      await sleep(300);
+      await P.exec(`const r = window.uvRenderer;
+        if (!r._perfWrapped) { const orig = r.draw.bind(r); r._perfT = [];
+          r.draw = (v, d) => { const t0 = performance.now(); orig(v, d); r._perfT.push(performance.now() - t0); };
+          r._perfWrapped = true; }
+        return 1;`);
+      const drawMs = async () => {
+        await P.exec(`window.uvRenderer._perfT.length = 0; return 1;`);
+        await sleep(3000);
+        return JSON.parse(await P.exec(`const t = window.uvRenderer._perfT.slice().sort((a,b)=>a-b);
+          return JSON.stringify({ n: t.length, med: +t[t.length>>1].toFixed(3), p95: +t[Math.floor(t.length*0.95)].toFixed(3) });`));
+      };
+      const drawn = await P.exec(`const r = window.uvRenderer, c = document.getElementById('game-canvas');
+        const T = window.uvBiome.FLOOR_TILE, sc = r._screen.scale;
+        return Math.ceil(c.width / sc / T + 2) * Math.ceil(c.height / sc / T + 2);`);
+      const on = await drawMs();
+      // Tiles off at the renderer, not via the biome config: stubbing the one
+      // lookup is unambiguous, where mutating `variants` left the cache holding
+      // the old set and quietly measured the same scene twice.
+      await P.exec(`const r = window.uvRenderer; r._tileSetReal = r._tileSet; r._tileSet = () => null; r._tileCache = null; return 1;`);
+      await sleep(400);
+      const flatCheck = JSON.parse(await P.exec(`return ${FLOOR_SCAN}`));
+      const off = await drawMs();
+      await P.exec(`const r = window.uvRenderer; r._tileSet = r._tileSetReal; r._tileCache = null; return 1;`);
+      if (flatCheck.flatFrac > 0.5) ok(`perf A/B is honest — with the tile lookup stubbed the same scene draws ${(flatCheck.flatFrac * 100).toFixed(0)}% flat fill`);
+      else fail(`perf A/B did not actually turn the tiles off (${(flatCheck.flatFrac * 100).toFixed(1)}% flat) — the numbers below would compare nothing`);
+      const d = on.med - off.med;
+      console.log(`  PERF tundra floor draw(): tiles ON ${on.med.toFixed(3)} ms median / ${on.p95.toFixed(3)} p95 (n=${on.n})`
+        + ` · OFF ${off.med.toFixed(3)} / ${off.p95.toFixed(3)} (n=${off.n})`
+        + ` · delta ${d >= 0 ? '+' : ''}${d.toFixed(3)} ms for ~${drawn} drawImage calls/frame (headless SwiftShader)`);
+      if (on.med <= 16.6) ok(`tundra floor holds the 60fps budget: ${on.med.toFixed(3)} ms median draw() <= 16.6 ms`);
+      else fail(`tundra floor draw() ${on.med.toFixed(3)} ms exceeds the 16.6 ms 60fps budget`);
+      if (d <= 4) ok(`the tile layer costs ${d >= 0 ? '+' : ''}${d.toFixed(3)} ms/frame on an identical scene (~${drawn} tiles)`);
+      else fail(`the tile layer costs ${d.toFixed(3)} ms/frame — more than the 4 ms this patch is willing to spend on ground`);
+    } catch (e) { fail(`floor perf: ${e.message}`); } finally { await P.close(); }
+  }
+
+  // -- degrade: a biome whose atlas is not there must draw the flat floor --
+  // Missing art is the normal state of this project, so the failure mode has to
+  // be a floor, not a black screen and not a crash. Tested by moving the real
+  // tiles aside, which is also the state every future biome is in on the day
+  // its config lands and before its art does.
+  {
+    const tilesDir = path.join(REPO, 'assets/tiles/tundra');
+    const stashed = path.join(REPO, 'assets/tiles/_tundra_stashed');
+    const D = new Browser();
+    let moved = false;
+    try {
+      if (fs.existsSync(tilesDir)) { fs.renameSync(tilesDir, stashed); moved = true; }
+      await D.open('D');
+      await D.goto(URL);
+      await D.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title (no atlas)');
+      await enterArena(D);
+      const bare = JSON.parse(await D.exec(`return ${FLOOR_SCAN}`));
+      if (bare.flatFrac > 0.5) ok(`a missing atlas degrades to the flat ${'#14161f'} floor — ${(bare.flatFrac * 100).toFixed(0)}% of the band, no black screen`);
+      else fail(`missing atlas did not fall back: ${(bare.flatFrac * 100).toFixed(1)}% fallbackFill, top ${JSON.stringify(bare.top)}`);
+      const derrs = await D.errors();
+      if (!derrs.length) ok('a missing atlas is not an error — zero console errors with no tiles on disk');
+      else fail(`missing atlas raised console errors: ${derrs.join(' | ').slice(0, 300)}`);
+      const lines = (await D.logs()).filter(l => /\[biome\]/.test(l));
+      if (lines.length === 1) ok(`and it says so exactly once: "${lines[0].trim().slice(0, 110)}"`);
+      else fail(`expected one [biome] log line with no atlas, got ${lines.length}${lines.length ? ': ' + lines[0].slice(0, 120) : ''}`);
+      // and the game is still a game: the sim keeps running under a flat floor
+      const t0 = await D.exec('return window.uv.sim.tickNum');
+      await sleep(400);
+      const t1 = await D.exec('return window.uv.sim.tickNum');
+      if (t1 > t0) ok('the run continues normally with no floor art'); else fail('the sim stalled with no floor art');
+    } catch (e) { fail(`missing atlas: ${e.message}`); } finally {
+      await D.close();
+      if (moved && fs.existsSync(stashed)) fs.renameSync(stashed, tilesDir);
+    }
+  }
+
+  // -- degrade: a tile of the wrong size is rejected BY PATH, not drawn --
+  {
+    const bad = path.join(REPO, 'assets/tiles/tundra/tile-00.png');
+    const keep = fs.existsSync(bad) ? fs.readFileSync(bad) : null;
+    const C = new Browser();
+    try {
+      fs.writeFileSync(bad, pngRGBA(32, 32, () => [255, 0, 255, 255]));   // right file, wrong size
+      await C.open('C');
+      await C.goto(URL);
+      await C.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title (bad tile)');
+      await enterArena(C);
+      const reject = (await C.logs()).find(l => /tile\.tundra_00/.test(l) && /32x32/.test(l)) || '';
+      if (/tile-00\.png/.test(reject)) ok(`a 32x32 tile is rejected and the offending PATH is named: "${reject.trim().slice(0, 130)}"`);
+      else fail(`a wrong-sized tile was not rejected by path — logs: ${(await C.logs()).filter(l => /tile/.test(l)).slice(0, 2).join(' | ').slice(0, 200)}`);
+      const four = JSON.parse(await C.exec(`return ${FLOOR_SCAN}`));
+      if (four.distinct > 20 && four.flatFrac < 0.02) ok(`and the floor still tiles from the four good variants (${four.distinct} colours, ${(four.flatFrac * 100).toFixed(2)}% bare) — one bad tile is not a bare floor`);
+      else fail(`one bad tile broke the floor: ${four.distinct} colours, ${(four.flatFrac * 100).toFixed(1)}% bare`);
+      const cerrs = await C.errors();
+      if (!cerrs.length) ok('a wrong-sized tile warns, it does not error'); else fail(`bad tile raised console errors: ${cerrs.join(' | ').slice(0, 200)}`);
+    } catch (e) { fail(`bad tile: ${e.message}`); } finally {
+      await C.close();
+      if (keep) fs.writeFileSync(bad, keep);
+    }
+  }
+
+  // -- the debug grid, on the flag, aligned to tile boundaries --
+  {
+    const G = new Browser();
+    try {
+      await G.open('G');
+      await G.goto(URL + '?grid=1');
+      await G.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title (grid)');
+      await enterArena(G);
+      // Grid lines are drawn at world multiples of CONFIG.FLOOR_TILE. Convert
+      // one to screen and confirm a grid-coloured pixel is actually there:
+      // "the grid still aligns to tile boundaries" is a claim about geometry,
+      // not about whether any lines appeared.
+      // A grid line is 1 WORLD unit wide, so at any scale below 1 device px per
+      // world unit it lands antialiased — a blend of #1b1e2b and whatever tile
+      // is under it, never the pure grid colour. Looking for an exact RGB match
+      // finds almost nothing (it found 1 of 13). What is actually true is that
+      // the boundary column is DARKER than the tile a half-cell away, because
+      // the grid is much darker than 0.60-value snow. That is what is measured.
+      await G.exec(`const s=window.uv.sim; s.enemyPool.clear(); s.projPool.clear(); s.pickups.length=0; return 1;`);
+      await sleep(300);
+      const align = JSON.parse(await G.exec(`
+        const c = document.getElementById('game-canvas'), g = c.getContext('2d');
+        const T = window.uvBiome.FLOOR_TILE;
+        const r = window.uvRenderer;
+        const scale = r._screen.scale, camX = r.camX;   // the renderer's own numbers
+        const ox = c.width / 2 - camX * scale;
+        const y0 = Math.round(c.height * 0.44), h = Math.round(c.height * 0.10);
+        const lumAt = sx => {
+          const d = g.getImageData(sx, y0, 1, h).data;
+          let s2 = 0; for (let i = 0; i < d.length; i += 4) s2 += 0.2126*d[i] + 0.7152*d[i+1] + 0.0722*d[i+2];
+          return s2 / (d.length / 4);
+        };
+        let hits = 0, tried = 0; const deltas = [];
+        for (let wx = Math.ceil((camX - 380) / T) * T; wx < camX + 380; wx += T) {
+          const sx = Math.round(wx * scale + ox);
+          const ref = Math.round((wx + T / 2) * scale + ox);
+          if (sx < 2 || sx > c.width - 3 || ref < 2 || ref > c.width - 3) continue;
+          tried++;
+          // best of the boundary pixel and its two neighbours: the line can
+          // straddle a device-pixel edge at a fractional scale
+          const onLine = Math.min(lumAt(sx - 1), lumAt(sx), lumAt(sx + 1));
+          const d = lumAt(ref) - onLine;
+          deltas.push(Math.round(d));
+          if (d > 8) hits++;
+        }
+        return JSON.stringify({ T, tried, hits, deltas, scale: +scale.toFixed(3) });`));
+      if (align.T === 64) ok(`the grid and the atlas agree on one number: CONFIG.FLOOR_TILE = ${align.T}`);
+      else fail(`CONFIG.FLOOR_TILE is ${align.T} — the tile atlas is 64px, so a tile would not fill a cell`);
+      if (align.tried >= 4 && align.hits >= align.tried - 1) ok(`?grid=1 draws the grid ON tile boundaries — ${align.hits}/${align.tried} world-multiples of ${align.T} are darker than the tile beside them (render scale ${align.scale})`);
+      else fail(`grid alignment: only ${align.hits}/${align.tried} tile boundaries carried a darker line — the grid and the tiles have drifted apart (per-boundary luminance deltas: ${align.deltas.join(',')})`);
+      const gerr = await G.errors();
+      if (gerr.length) fail(`console errors with ?grid=1: ${gerr.join(' | ').slice(0, 200)}`);
+    } catch (e) { fail(`debug grid: ${e.message}`); } finally { await G.close(); }
   }
 }
 

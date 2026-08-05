@@ -11,7 +11,18 @@ import { CONFIG, PALETTE } from './config.js';
 import { WEAPON_BY_ID } from './content/weapons.js';
 import { Assets, drawSprite, spriteScaleFor, DEFAULT_FACING } from './assets.js';
 import { PROP, FX, BEAST_SPRITE } from './content/sprites.js';
+import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
 import { clamp } from './util.js';
+
+// The debug grid. Default OFF — it is the reference the 2.18 roster scale was
+// tuned against, and it will be needed again the moment biome enemy sheets
+// arrive, so it is a flag rather than a deletion.
+//
+//   ?grid=1   draw the floor grid over whatever the floor is
+const GRID_DEBUG = (() => {
+  try { return new URLSearchParams(location.search).get('grid') === '1'; }
+  catch { return false; }   // non-browser (headless harnesses)
+})();
 
 // The camera viewport is one "screen" of world units (the old room size);
 // arenas are several screens wide and the camera follows your character.
@@ -457,19 +468,76 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
-  // The arena: floor grid (visible span only), border walls, and obstacles.
-  _drawArena(ctx, view, aw, ah, cl, cr, ct, cb) {
-    // floor over the visible region
-    ctx.fillStyle = PALETTE.bg;
-    ctx.fillRect(Math.max(0, cl), Math.max(0, ct), Math.min(aw, cr) - Math.max(0, cl), Math.min(ah, cb) - Math.max(0, ct));
+  // The floor: a biome's tile set if one is loaded, the flat fill otherwise.
+  //
+  // Drawn in WORLD coordinates, inside the transform draw() already set from
+  // the camera — there is deliberately no second offset here. The floor scrolls
+  // because the entity layer's transform scrolls, so the two cannot drift.
+  _drawFloor(ctx, view, aw, ah, cl, cr, ct, cb) {
+    const x0 = Math.max(0, cl), y0 = Math.max(0, ct);
+    const x1 = Math.min(aw, cr), y1 = Math.min(ah, cb);
+    if (x1 <= x0 || y1 <= y0) return;
+    const biome = view.biome && BIOMES[view.biome] ? BIOMES[view.biome] : null;
+    const T = CONFIG.FLOOR_TILE;
+
+    // The flat fill goes down first either way. With tiles it is what shows
+    // through if a variant is missing; without them it IS the floor.
+    ctx.fillStyle = biome ? biome.fallbackFill : PALETTE.bg;
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+
+    const tiles = biome ? this._tileSet(biome) : null;
+    if (tiles) {
+      // One row and column of margin on each side, so a tile only partly on
+      // screen is still drawn and the viewport edge can never show a gap.
+      const tx0 = Math.floor(x0 / T) - 1, tx1 = Math.floor((x1 - 1) / T) + 1;
+      const ty0 = Math.floor(y0 / T) - 1, ty1 = Math.floor((y1 - 1) / T) + 1;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x0, y0, x1 - x0, y1 - y0);
+      ctx.clip();
+      for (let ty = ty0; ty <= ty1; ty++) {
+        for (let tx = tx0; tx <= tx1; tx++) {
+          const s = tiles[tileVariant(tx, ty, tiles.length)];
+          ctx.drawImage(s.img, 0, 0, s.w, s.h, tx * T, ty * T, T, T);
+        }
+      }
+      ctx.restore();
+    }
+
+    if (!GRID_DEBUG) return;
     ctx.strokeStyle = PALETTE.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    const gx0 = Math.max(WALL, Math.floor(cl / 64) * 64), gx1 = Math.min(aw - WALL, cr);
-    const gy0 = Math.max(WALL, Math.floor(ct / 64) * 64), gy1 = Math.min(ah - WALL, cb);
-    for (let x = gx0; x <= gx1; x += 64) { ctx.moveTo(x, Math.max(WALL, ct)); ctx.lineTo(x, Math.min(ah - WALL, cb)); }
-    for (let y = gy0; y <= gy1; y += 64) { ctx.moveTo(Math.max(WALL, cl), y); ctx.lineTo(Math.min(aw - WALL, cr), y); }
+    const gx0 = Math.max(WALL, Math.floor(cl / T) * T), gx1 = Math.min(aw - WALL, cr);
+    const gy0 = Math.max(WALL, Math.floor(ct / T) * T), gy1 = Math.min(ah - WALL, cb);
+    for (let x = gx0; x <= gx1; x += T) { ctx.moveTo(x, Math.max(WALL, ct)); ctx.lineTo(x, Math.min(ah - WALL, cb)); }
+    for (let y = gy0; y <= gy1; y += T) { ctx.moveTo(Math.max(WALL, cl), y); ctx.lineTo(Math.min(aw - WALL, cr), y); }
     ctx.stroke();
+  }
+
+  // The loaded tiles for a biome, or null if none of them are there. Cached
+  // against the registry's version so a floor draw is not a map lookup per
+  // tile — at 64u tiles a 1440x900 viewport asks for this ~400 times a frame.
+  //
+  // A biome whose atlas did not load is not an error and never a black screen:
+  // one log line, and the flat fill stands in. Art arriving later, or not at
+  // all, is the normal state of this project.
+  _tileSet(biome) {
+    const c = this._tileCache;
+    if (c && c.id === biome.id && c.v === Assets.version && c.ready === Assets.ready) return c.ids;
+    const found = tileSpriteIds(biome).map(id => Assets.get(id)).filter(s => s && s.img);
+    const ids = found.length ? found : null;
+    if (!ids && Assets.ready && this._warnedBiome !== biome.id) {
+      this._warnedBiome = biome.id;
+      console.log(`[biome] ${biome.id}: no tiles loaded from ${biome.atlas} — drawing the flat ${biome.fallbackFill} floor`);
+    }
+    this._tileCache = { id: biome.id, v: Assets.version, ready: Assets.ready, ids };
+    return ids;
+  }
+
+  // The arena: floor, border walls, and obstacles.
+  _drawArena(ctx, view, aw, ah, cl, cr, ct, cb) {
+    this._drawFloor(ctx, view, aw, ah, cl, cr, ct, cb);
     // border walls
     ctx.fillStyle = PALETTE.wall;
     if (ct < WALL) ctx.fillRect(0, 0, aw, WALL);

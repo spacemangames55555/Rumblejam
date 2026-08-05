@@ -22,6 +22,7 @@ import {
   SPRITE_SIZE, PROP, PROP_BOTTOM_ANCHORED, FX, UI, PYLON_SPRITE, BEAST_SPRITE, allProjSpriteIds,
   UNIT_DIRECTIONS, DIRECTIONAL_NAMESPACES,
 } from '../js/content/sprites.js';
+import { BIOMES, tileSpriteIds, tileFile } from '../js/biomes.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'assets', 'assets.json');
@@ -79,6 +80,16 @@ for (const id of Object.values(BEAST_SPRITE)) add(id);
 // ---- world FX and UI chrome ----
 for (const id of Object.values(FX)) add(id);
 for (const id of Object.values(UI)) add(id);
+
+// ---- floor tiles: one entry per biome variant ----
+// These are the one category that does NOT live under basePath — they sit at
+// assets/tiles/<biome>/ — so they carry a rooted `file` the loader takes as
+// written. `strict` makes the loader check the size exactly and reject a blank
+// PNG: a tile is drawn edge to edge across the whole room, so a wrong one is a
+// seam on every cell rather than one odd-looking sprite.
+for (const biome of Object.values(BIOMES)) {
+  tileSpriteIds(biome).forEach((id, i) => add(id, { file: tileFile(biome, i), strict: true }));
+}
 
 // ---- per-sprite overrides, applied last ----
 // `w`/`h` are overridable because hand-supplied art does not always arrive at
