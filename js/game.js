@@ -648,12 +648,18 @@ export class Sim {
     // `obstacles` is rebuilt each call rather than cached, so the siege
     // collapse — which used to need its own one-shot `obstacles` event to
     // mutate the client's copy — is simply carried by the next snapshot.
+    // `biome` is deliberately NOT in this block. The block rides every snapshot;
+    // the biome is a static per-floor cosmetic, and by the standing rule — if
+    // losing it breaks the game it is state, if losing it is cosmetic it is an
+    // event — it is an event. A client that misses it draws the flat floor,
+    // which is degraded, not broken. Putting it in `st` cost per-frame
+    // bandwidth for a string that never changes, and sim_test caught it.
     this._arena = {
-      nodeId: node.id, kind: node.kind, template: node.template, biome: this.biome,
+      nodeId: node.id, kind: node.kind, template: node.template,
       name: arena.name, w: arena.w, h: arena.h,
       hazards: this._serializeHazardDefs(),
     };
-    this.pushEvent({ k: 'arena', ...this._arena, obstacles: this._snapObstacles() });
+    this.pushEvent({ k: 'arena', ...this._arena, biome: this.biome, obstacles: this._snapObstacles() });
   }
 
   // The arena block for the snapshot. Obstacles are read live so a wall that
