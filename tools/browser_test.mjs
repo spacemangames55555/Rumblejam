@@ -2809,7 +2809,21 @@ if (wantCoop) {
 
       // ---- DoD 6: contested node pick — consent countdown, one redirect, lock ----
       await A.waitFor(`return !document.getElementById('screen-map').classList.contains('hidden')`, 4000, 'host map screen');
-      await B.waitFor(`return !document.getElementById('screen-map').classList.contains('hidden')`, 5000, 'client map screen');
+      try {
+        await B.waitFor(`return !document.getElementById('screen-map').classList.contains('hidden')`, 5000, 'client map screen');
+      } catch (e) {
+        const d = await B.exec(`const g=id=>{const el=document.getElementById(id); return el?el.className:'MISSING'};
+          const s=window.uv.snaps||[]; const last=s[s.length-1];
+          return JSON.stringify({mode:window.uv.mode, map:g('screen-map'), game:g('screen-game'), title:g('screen-title'),
+            snaps:s.length, lastMode:last&&last.s&&last.s.mode, lastKeys:last&&last.s?Object.keys(last.s).slice(0,20):null,
+            nodes:document.querySelectorAll('.map-node').length})`).catch(x => 'diag failed: ' + x.message);
+        console.error('  CLIENT MAP DIAG:', d);
+        console.error('  CLIENT ERRORS:', (await B.errors()).join(' | ').slice(0, 800));
+        console.error('  CLIENT LOGS:', (await B.logs()).slice(-15).join(' | ').slice(0, 800));
+        const hd = await A.exec(`return JSON.stringify({mode:window.uv.mode, phase:window.uv.sim&&window.uv.sim.phase, cleared:window.uv.sim&&window.uv.sim.cleared})`).catch(x => 'x');
+        console.error('  HOST STATE:', hd);
+        throw e;
+      }
       ok('both players see the node map');
       const firstPick = await A.exec(`const b=document.querySelector('.map-node.reachable'); b.click(); return parseInt(b.dataset.node,10);`);
       await A.waitFor(`return window.uv.sim.nodeVote && window.uv.sim.nodeVote.nodeId===${firstPick}`, 3000, 'vote started');
