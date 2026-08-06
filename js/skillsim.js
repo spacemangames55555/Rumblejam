@@ -29,6 +29,7 @@ export function initSkillPlayer(sim, p) {
   p.engines = { footing: 0, armor: 0 };
   p.engineScaleBonus = { footing: 0, armor: 0 };   // passives that raise a stack's worth
   p.footingAcc = 0;
+  p.footingMove = 0;                  // grace budget: movement time, decays while still
   p.footingShield = 0;               // the stance's absorb pool (see engineStatBonus)
   p.movingT = 0;
   p.shieldT = 0; p.ward = 0; p.wardT = 0; p.wardReflect = 0; p.wardDomain = null;
@@ -88,31 +89,34 @@ export function grantSkillPoint(sim, p) {
 
 // ---------------------------------------------------------------- the engines
 
-// FOOTING. One stack per half-second stationary; the whole stack drops the
-// instant the player moves. No decay — a gradual falloff would let the Samurai
-// drift and keep the payoff, which erases the decision the engine exists for.
+// FOOTING. One stack per half-second stationary. Movement inside the grace
+// window (footingGraceMs) holds the stance without growing it; movement past it
+// drops the whole stack at once. No gradual decay — a falloff would let the
+// Samurai drift and keep most of the payoff, which erases the decision.
 function tickFooting(sim, p, dt) {
   if (!treesFor(p).includes('samurai_armor')) return;
+  // THE GRACE BUDGET. Movement time accumulates here and decays while standing
+  // still; the stance drops when the budget is spent, not the moment a key goes
+  // down. See footingGraceMs in the Armor tree's TUNING for why.
+  const grace = SAM.footingGraceMs / 1000;
+  if (p.moving) p.footingMove = (p.footingMove || 0) + dt;
+  else p.footingMove = Math.max(0, (p.footingMove || 0) - dt * SAM.footingGraceRefill);
+
   if (p.moving) {
-    // THE WHOLE STACK, INSTANTLY. No decay, no partial retention — a gradual
-    // falloff would let the Samurai drift and keep the payoff, which erases the
-    // decision. The absorb pool goes with it.
+    // Inside the window: the stance HOLDS but does not grow. A sidestep out of
+    // a committed zone keeps what you had; it does not pay you for moving.
+    if (p.footingMove < grace) { p.footingAcc = 0; return; }
+    // Past the window: the whole stack, at once. No partial falloff — a
+    // gradual decay would let the Samurai drift across a room and keep most of
+    // the payoff, which erases the decision. The absorb pool goes with it.
     //
-    // MEASURED CONSEQUENCE, and the agreed fix — NOT YET IMPLEMENTED.
-    // Criterion 13 at 50% telegraph density: damage is a wash (holder x1.00 to
-    // x1.18 against a sidestepper) but the holder takes a third of the damage,
-    // x0.37-x0.40, and that ratio is completely insensitive to density. The
-    // cause is here: an instant drop means a 200ms sidestep costs the entire
-    // stance, and the rebuild is slower than the next commit arrives — so a bot
-    // that dodges correctly is permanently stanceless at 0-3 stacks and 6-18
-    // Grit against the holder's capped 10 and 46.
-    //
-    // The fix is a ~400ms movement grace window, so a sidestep keeps stance
-    // while repositioning still loses it. It is deliberately NOT implemented
-    // yet: it has to be verified against the three-way harness (holder /
-    // dodger / mixed) once the regions are playable, because a grace window
-    // long enough to protect a sidestep is also long enough to protect a short
-    // reposition, and only the harness can say where that line falls.
+    // WHY THE WINDOW EXISTS. Before it, criterion 13 at 50% telegraph density
+    // put the holder at x0.37-x0.40 damage taken against a correct sidestepper,
+    // and that ratio did not move for any dial tried. The insensitivity was the
+    // evidence: it was never the size of a stack, it was that a 200ms sidestep
+    // cost the entire stance and the rebuild is slower than the next commit
+    // arrives, so a bot that dodged correctly lived permanently at 0-3 stacks
+    // and never had a stance to make a decision about.
     if (p.engines.footing) { p.engines.footing = 0; p.footingShield = 0; sim._recomputeStats(p); }
     p.footingAcc = 0;
     return;

@@ -32,6 +32,30 @@ export const TUNING = {
   // the call site, because a cap a skill can raise is not a cap.
   FOOTING_MAX_STACKS: 10,
 
+  // THE MOVEMENT GRACE WINDOW. Movement shorter than this does not drop the
+  // stance; movement longer than it drops all of it.
+  //
+  // Criterion 13 measured the holder taking a THIRD of what a correct
+  // sidestepper takes — x0.37 to x0.40 — and that ratio did not move for any
+  // dial tried, including halving the per-stack grit, removing Reflex entirely
+  // and tripling telegraph density. That insensitivity is what identified the
+  // cause: it was never the size of a stack, it was that a 200ms sidestep cost
+  // the WHOLE stance and the rebuild is slower than the next commit arrives. A
+  // bot that dodges correctly lived permanently at 0-3 stacks — it never had a
+  // stance to make a decision about.
+  //
+  // 400ms is chosen against the attacks: the shortest wind-up on the roster is
+  // 400ms (obsidian lancer), so one sidestep out of the fastest committed zone
+  // fits inside the window. Crossing a room does not.
+  footingGraceMs: 400,
+
+  // ...AND THE GRACE IS A BUDGET, NOT A TIMER RESET BY STANDING STILL FOR ONE
+  // TICK. Accumulated movement decays while stationary at this multiple of real
+  // time. Without it, "move 300ms, stop one tick, move 300ms" keeps a full
+  // stance across the whole map, which is repositioning for free — the exact
+  // thing the instant drop existed to prevent.
+  footingGraceRefill: 1.0,
+
   // Absorb per stack, NOT max HP — see engineStatBonus in js/skillsim.js for
   // why. Roughly the old per-stack vitality, so a full stance is worth about
   // what it was worth before, without taking current HP when it breaks.
