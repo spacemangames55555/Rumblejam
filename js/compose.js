@@ -24,6 +24,31 @@ export function rankedDuration(base, skill, rank) {
   return base * (1 + inc * rank);
 }
 
+// ENGINE SCALING. A step may declare `scaleWith: '<engine>'` and `scalePer`,
+// and its magnitude then rides that engine's current value. It arrived in phase
+// 1 on `shield` alone (Iron Sleeve, absorb scaled by Footing); the Samurai's
+// Tactics tree needs it on `strike` across ten skills, so it is a shared hook
+// rather than a per-primitive special case.
+//
+// It reads p.engines[name], which is the generic readable-resource bag — NOT a
+// Footing field. Every remaining class engine (cascade, drench, crystallize,
+// Chi, judgment marks, killbox, two bodies) exposes its state the same way and
+// gets this for free.
+export function engineScale(step, p) {
+  if (!step.scaleWith) return 1;
+  // Passives may raise what a stack is WORTH without touching the step. Held
+  // Edge does exactly that for Footing; the bonus is keyed by engine name so a
+  // future tree can do it for any other engine with no code here.
+  const bonus = (p.engineScaleBonus && p.engineScaleBonus[step.scaleWith]) || 0;
+  return 1 + ((p.engines && p.engines[step.scaleWith]) || 0) * (step.scalePer + bonus);
+}
+
+// Magnitude for a step: base, ranked, then scaled by whatever engine it rides.
+// One function so a primitive cannot accidentally apply one and not the other.
+export function stepDamage(step, skill, rank, p) {
+  return rankedDamage(step.damage, skill, rank) * engineScale(step, p);
+}
+
 const TAU = Math.PI * 2;          // structural
 const MS = 1000;                  // structural: step params are milliseconds
 
@@ -97,7 +122,7 @@ export const PRIMITIVES = {
   strike(sim, p, skill, step, rank, grid, out) {
     const reach = step.reach;
     const arc = step.arc;
-    const dmg = rankedDamage(step.damage, skill, rank);
+    const dmg = stepDamage(step, skill, rank, p);
     const r = step.riders || {};
     const pulses = r.multiPulse || 1;
     const a0 = facing(sim, p, grid, reach);
@@ -139,7 +164,7 @@ export const PRIMITIVES = {
   // Fan of damage. Points at the densest cluster, which is what makes it the
   // crowd answer rather than a wide single-target hit.
   cone(sim, p, skill, step, rank, grid, out) {
-    const dmg = rankedDamage(step.damage, skill, rank);
+    const dmg = stepDamage(step, skill, rank, p);
     const a0 = grid.densestAngle(p.x, p.y, step.range) ?? facing(sim, p, grid, step.range);
     for (const e of grid.near(p.x, p.y, step.range)) {
       const dx = e.x - p.x, dy = e.y - p.y;
@@ -154,7 +179,7 @@ export const PRIMITIVES = {
 
   // Straight beam, clipped by walls like every other beam in the game.
   line(sim, p, skill, step, rank, grid, out) {
-    const dmg = rankedDamage(step.damage, skill, rank);
+    const dmg = stepDamage(step, skill, rank, p);
     const r = step.riders || {};
     const pulses = r.multiPulse || 1;
     const a0 = facing(sim, p, grid, step.length);
@@ -183,7 +208,7 @@ export const PRIMITIVES = {
     const r = step.riders || {};
     sim.addZone({
       x, y, r: step.radius,
-      dps: rankedDamage(step.damage, skill, rank) / (step.tickMs / MS),
+      dps: stepDamage(step, skill, rank, p) / (step.tickMs / MS),
       dur: rankedDuration(step.duration, skill, rank) / MS,
       hurts: 'enemies', color: p.color,
       skillDomain: skill.domain, ownerIdx: p.idx,
@@ -195,7 +220,7 @@ export const PRIMITIVES = {
   // Restores HP to the caster and nearby allies. No phase-1 skill uses it; the
   // behaviour is real so phase 2 does not reopen this file.
   heal(sim, p, skill, step, rank, grid, out) {
-    const amt = rankedDamage(step.amount, skill, rank);
+    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
     for (const q of sim.livePlayers()) {
       const dx = q.x - p.x, dy = q.y - p.y;
       if (dx * dx + dy * dy > step.radius * step.radius) continue;
@@ -207,10 +232,9 @@ export const PRIMITIVES = {
 
   // Flat absorb pool with a lifetime.
   shield(sim, p, skill, step, rank, grid, out) {
-    let amt = rankedDamage(step.amount, skill, rank);
-    // scaleWithFooting is a named, data-driven hook, not a Samurai special case:
-    // any engine exposing a readable stack count can drive it.
-    if (step.scaleWith) amt *= 1 + (p.engines[step.scaleWith] || 0) * step.scalePer;
+    // `amount` rather than `damage`, so it cannot use stepDamage — but it rides
+    // the same engine hook, through the same function.
+    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
     p.shield = Math.max(p.shield, amt);
     p.shieldT = Math.max(p.shieldT || 0, rankedDuration(step.duration, skill, rank) / MS);
     out.states++;
@@ -218,7 +242,7 @@ export const PRIMITIVES = {
 
   // Absorb that also returns a fraction of what it eats.
   ward(sim, p, skill, step, rank, grid, out) {
-    p.ward = Math.max(p.ward || 0, rankedDamage(step.amount, skill, rank));
+    p.ward = Math.max(p.ward || 0, rankedDamage(step.amount, skill, rank) * engineScale(step, p));
     p.wardT = Math.max(p.wardT || 0, rankedDuration(step.duration, skill, rank) / MS);
     p.wardReflect = Math.max(p.wardReflect || 0, step.reflectPct || 0);
     p.wardDomain = skill.domain;
@@ -227,7 +251,7 @@ export const PRIMITIVES = {
 
   // Damage that returns a fraction as healing. Unused in phase 1.
   drain(sim, p, skill, step, rank, grid, out) {
-    const dmg = rankedDamage(step.damage, skill, rank);
+    const dmg = stepDamage(step, skill, rank, p);
     const t = grid.nearest(p.x, p.y, step.range);
     if (!t) return;
     const dealt = sim.skillDamage(t, dmg, p, skill);

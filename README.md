@@ -373,6 +373,70 @@ The tundra tiles on disk today are **placeholders** from
 `tools/gen_tundra_tiles.mjs`, built to the brief's numbers so the renderer
 could be verified before the art exists. Real art replaces the same five paths.
 
+## Regions, node trees and saves
+
+The run structure above (node map → arenas → Siege) is the **floor** layer. Above
+it sits the **world** layer: eight regions, played in order, each one a ten-node
+tree you pick five nodes through.
+
+- **`js/regions.js`** — a region is a tileset, a hazard, a population, a boss and
+  a set of numbers. Two are declared (Pacific Northwest, Central America); the
+  other six are named in `LOCKED_REGION_NAMES` and nothing more. Adding region
+  three is an entry in `REGIONS` and nothing else.
+- **`js/nodetree.js`** — five columns of two, ten nodes, mix fixed at
+  4 horde / 2 elite / 2 objective / 1 shrine / 1 cursed. Every node links to its
+  same-row successor and, at `CROSS_LINK_CHANCE` (0.45), to the other row's.
+  **Every path is exactly five nodes long by construction** — the shape cannot
+  produce a dead end or a short route, so there is nothing to validate. Shrine
+  and Cursed may not sit in column 1: the first choice should be between fights,
+  not between a fight and a free skill point.
+- **`js/saves.js`** — `localStorage`, one bundle, `SAVE_VERSION`-gated, with
+  export/import to a file. Characters carry level, points spent per skill, items,
+  their world **frontier**, and a **parked** region (the tree they were partway
+  through). `importBundle()` refuses a malformed bundle by name rather than
+  half-loading it.
+
+**The frontier rule.** A character advances only by clearing the region at their
+own frontier. Clearing *below* it is a replay and changes nothing; being carried
+*above* it by a friend grants loot and XP but no world progress. Tested from all
+three sides, because a rule tested from one side is a rule that holds in one
+direction.
+
+`DEPTH_MULT_PER_COLUMN` (0.08) escalates enemy stats across a region's five
+columns and resets each region — that is the map-depth axis, not the world axis.
+
+**Not built yet, deliberately:** the world-map screen, both regions' actual
+content (tilesets, twelve enemies, two hazards, two cursed modifiers, two
+bosses), the difficulty setting, and runtime behaviour for the Shrine and Cursed
+node types. Those are typed and reachable; they are not implemented. `contentReady`
+on each region says so in code rather than in a comment.
+
+## Skill trees
+
+Weapons are gone. A character's output is its **skill trees** — two per class,
+ten skills each, points spendable freely across both. Slots unlock by level at
+`SLOT_LEVELS` (1, 5, 12, 21, 31, 42, 54, 66) to a hard ceiling of eight.
+
+Skills are **auto-triggered**: each slotted skill has a trigger (`NEAREST`,
+`PROXIMITY`, `ON_DODGE`, `MOVEMENT`, `TARGET_THRESHOLD`, …) evaluated on a 10 Hz
+tick, and a body composed from ten primitives plus riders. There is no per-skill
+code: a new skill is a data entry.
+
+Four trees ship: Necromancer **Dark Matter** and **Marrow**, Samurai **Armor**
+and **Tactics**. `js/skills.js` asserts the tree invariants **at import and
+throws** — a tree that violates one is not a warning to triage, it is a build
+that cannot answer the design question.
+
+**Class engines.** A class exposes one number that its skills read:
+`scaleWith: '<engine>'` plus `scalePer`, resolved by `engineScale()` in
+`js/compose.js`, which knows no engine by name. The Samurai's is **Footing** —
+one stack per half-second stationary, the whole stack lost the instant you move.
+Marrow uses a second engine (`armor`) through the same hook with no new code.
+
+Footing grants Grit, Reflex and an **absorb pool** — never max Vitality. It did
+grant Vitality once, which meant breaking stance clamped current HP down and a
+Samurai lost health for dodging, by an amount unrelated to the attack.
+
 ## Adding art (sprites)
 
 Every entity keeps its Canvas-primitive draw as a fallback, so the game runs
@@ -528,6 +592,23 @@ never loads them:
 - `node tools/gen_prompts.mjs [--check]` — assembles `docs/prompts.json` from
   `docs/silhouettes.json` and the style clause in `docs/STYLE_ANCHOR.md`.
   Refuses to emit while the anchor is `PENDING`.
+- `node tools/skill_sweep.mjs [--verbose]` — drives **every** skill through the
+  live sim: arranges the world so its trigger genuinely holds, runs real ticks,
+  and requires an observable effect. Also fails when a primitive or rider is
+  defined but unreachable. Confirming a skill exists in a data file proves
+  nothing; the source project shipped 19 skill kinds wired to nothing.
+- `node tools/telegraph_test.mjs` — the telegraph state machine through live
+  ticks, every case staged from four seeds at four positions. Includes the
+  siege-boss regression (known defect #5) and the `windupMs` reaction floor.
+- `node tools/region_test.mjs` — node-tree distribution over 1000 trees, the
+  frontier rule from three sides, cross-tree point spending down two full
+  prerequisite chains, and a save round trip **through a real file** plus five
+  malformed bundles that must be refused by name.
+- `node tools/phase2_gates.mjs` — the two gate criteria that ask for numbers
+  rather than pass/fail: trigger-tick cost at phase-2 loadout density (both
+  configurations measured in one process against an identical world), and
+  whether Footing's damage scaling makes holding stance dominant. Prints tables;
+  fails only on the eval budget and the frame share.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
@@ -553,6 +634,10 @@ Three are recorded, reproducible where possible, and deliberately not fixed:
    not folded into entry 2.
 
 Read the file before re-diagnosing any of them.
+
+Two entries are **closed and kept for the reproduction**, because the failure
+shape recurs: the solo-touch boon softlock (#4), and the null `def` that made
+every siege crash the host the moment its boss spawned (#5).
 
 ## Decisions (where the brief was silent or conflicted)
 

@@ -13,7 +13,7 @@ import * as CH from '../js/content/characters.js';
 CH.setRoster('toh');
 const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
-const { TELEGRAPH_STATES, TELEGRAPH_MIN_WINDUP_MS, TELEGRAPHED_IDS } = await import('../js/telegraphs.js');
+const { TELEGRAPH_STATES, TELEGRAPH_MIN_WINDUP_MS, TELEGRAPHED_IDS, telegraphBusy } = await import('../js/telegraphs.js');
 const { inZone } = await import('../js/compose.js');
 const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
 
@@ -301,6 +301,37 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
   // and it must not have quietly given anything else a telegraph
   if (TELEGRAPHED_IDS.length === 3) ok(`still exactly 3 telegraphing enemy types (${TELEGRAPHED_IDS.join(', ')}) — the pit changes density, not the mix`);
   else fail(`telegraph count drifted to ${TELEGRAPHED_IDS.length}: ${TELEGRAPHED_IDS.join(', ')}`);
+}
+
+// ---------------------------------------------------------------- no def
+
+// THE SIEGE BOSS HAS NO `def`. _spawnSiegeBoss builds its slot with def: null
+// and a bossDef instead, and every e.def.telegraph in telegraphs.js was an
+// unguarded dereference — so the host sim threw the instant a boss existed, on
+// every siege on every floor. It survived review because the legacy sim suite
+// was hanging before it reached the siege runs; the only evidence anyone had
+// was a partial log. This drives a real siege to a real boss spawn.
+{
+  const g = new Sim({ seed: 5, party: [{ idx: 0, key: 'k', name: 'T', charId: 'toh_samurai', color: '#fff' }] });
+  g.god = true;
+  while (g.floorNum < 4) g.debug('F4');
+  g._travelTo(g.floor.siegeId);
+  let spawned = false, crash = null;
+  try {
+    for (let i = 0; i < 60 * 400 && !spawned; i++) { g.tick(); spawned = !!g.boss; }
+    for (let i = 0; i < 240; i++) g.tick();          // and keep ticking WITH it alive
+  } catch (err) { crash = err; }
+  if (crash) fail(`a siege boss crashed the tick: ${crash.constructor.name}: ${crash.message}`);
+  else if (!spawned) fail('no siege boss spawned, so this proves nothing — restage it');
+  else {
+    ok(`a siege boss (def: null, bossDef set) ticks for 4s alongside the telegraph machine without throwing`);
+    // and it is genuinely outside the system rather than accidentally inside it
+    if (!telegraphBusy(g.boss) && g.telegraphZones().every(z => z.id !== g.boss.id)) {
+      ok('...and it is outside the telegraph system entirely — never busy, never a zone');
+    } else {
+      fail('the boss ended up inside the telegraph machine');
+    }
+  }
 }
 
 console.log(failures ? `\n${failures} TELEGRAPH FAILURE(S)` : '\nALL TELEGRAPH PATHS VERIFIED');

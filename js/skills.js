@@ -8,6 +8,8 @@
 
 import { NECRO_DARK_MATTER, TUNING as NECRO_TUNING } from './content/skills/necro_dark_matter.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
+import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
+import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS } from './triggers.js';
 import { PRIMITIVE_KINDS, RIDERS_BY_PRIMITIVE } from './compose.js';
 import { isDomain } from './domains.js';
@@ -15,6 +17,8 @@ import { isDomain } from './domains.js';
 export const TREES = {
   necro_dark_matter: { id: 'necro_dark_matter', name: 'Dark Matter', classId: 'toh_necromancer', skills: NECRO_DARK_MATTER, tuning: NECRO_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
+  necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
+  samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
 };
 
 export const ALL_SKILLS = Object.values(TREES).flatMap(t => t.skills);

@@ -351,3 +351,65 @@ The overlay list is scraped from `index.html` and the open/close events from the
 written-down list is how the asset-loader namespace whitelist went stale and how
 the hitbox gate stopped catching things. If a new overlay can be added without
 the gate covering it, the gate will rot.
+
+---
+
+## 5. Every siege crashed the host the moment its boss spawned
+
+**Fixed 2026-08-06.** Introduced by `patch-telegraphs`, found by
+`patch-region-shell`, never merged to `main`.
+
+### What happened
+
+`js/telegraphs.js` read `e.def.telegraph` in five places without a guard. The
+siege boss does not have a `def`:
+
+```js
+// js/game.js, _spawnSiegeBoss()
+Object.assign(e, {
+  id: ++this.spawnCounter, def: null, typeIdx: -1, boss: true, bossDef: def, ...
+```
+
+So `tickTelegraphs()` threw `TypeError: Cannot read properties of null (reading
+'telegraph')` on the first tick after a boss existed — on **every siege, on
+every floor**. Not an edge case; the mid-siege boss is the point of the siege.
+
+### Why it survived a whole patch
+
+The legacy suite was hanging at §9i on seven `while (p.weapons.length < 3)`
+loops that could never terminate once `weaponSlots` was 0, so the only evidence
+anyone had was a **partial** log that stopped before the siege runs. The
+telegraph suite passed in full — it stages single enemies in cleared rooms and
+never reaches a boss. Two green-looking suites, neither of which had executed
+the failing line.
+
+*The lesson is not "add a boss test". It is that a suite which stops early is
+not a suite that passed, and a partial log must be read as unknown rather than
+as clean.*
+
+### The second instance of the same shape
+
+Enemy slots are **pooled**. `spawnEnemyById()` cleared the objective flags on
+reuse but not the telegraph fields, so a recycled chaff slot could inherit
+`telState: WINDUP` from the slabjaw that held it last. `tickTelegraphs` skips it
+(no `def.telegraph`) and it sits in WINDUP forever — until a stun rider calls
+`cancelTelegraph()` on it and dereferences the same missing block. Found by
+Unsheathed's stun landing on a recycled skulker.
+
+**Reproduce (pre-fix):**
+
+```
+node tools/telegraph_test.mjs
+```
+
+```
+✗ a siege boss crashed the tick: TypeError: Cannot read properties of null (reading 'telegraph')
+```
+
+### What holds it now
+
+| gate | where | asserts |
+|---|---|---|
+| boss ticks | `tools/telegraph_test.mjs` | a real siege is driven to a real boss spawn and ticked 4s **with it alive**, and the boss is confirmed outside the telegraph system rather than accidentally inside it |
+| pooled reset | `js/game.js`, `spawnEnemyById()` | `telState/telT/telZone/telCaught/telCd` are cleared on every spawn, beside the objective flags that taught the same lesson |
+| single reader | `js/telegraphs.js`, `telegraphOf()` | one helper answers "does this entity telegraph"; nothing in the file reads `e.def` directly, so a sixth call site cannot reintroduce the dereference |

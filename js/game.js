@@ -1221,6 +1221,15 @@ export class Sim {
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0.8 + Math.random(), healTarget: null, brood: null, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
+      // THE TELEGRAPH MACHINE, RESET. Same recycling hazard as the objective
+      // flags below, and it shipped: only the siege boss cleared these, so an
+      // ordinary chaff slot could inherit telState=WINDUP from the slabjaw that
+      // held it last. tickTelegraphs skips it (no def.telegraph) and it sits in
+      // WINDUP forever — until a stun rider calls cancelTelegraph on it, which
+      // reads e.def.telegraph.recoverMs and throws. Found by Unsheathed's stun
+      // landing on a recycled skulker.
+      telState: 0, telT: 0, telZone: null, telCaught: null,
+      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * Math.random() : 0,
       // pressure-profile variants (patch 9)
       mortar: !!opts.mortar,   // Lobber artillery: telegraphed shells on your position
       puddle: !!opts.puddle,   // chaff that leaves an acid puddle on death

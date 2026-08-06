@@ -25,7 +25,11 @@ let failures = 0;
 const ok = m => console.log(`✓ ${m}`);
 const fail = m => { failures++; console.error(`✗ ${m}`); };
 
-const CLASS_OF = { necro_dark_matter: 'toh_necromancer', samurai_armor: 'toh_samurai' };
+// Derived from the registry, not restated. This was a hand-written two-entry
+// map and it drifted the moment a third tree existed — every skill in the new
+// trees crashed on an undefined charId. A list of things that already exist
+// somewhere else is a list that goes stale.
+const CLASS_OF = Object.fromEntries(Object.values(TREES).map(t => [t.id, t.classId]));
 
 // Build a sim with one player who has learned `skill` and its whole prereq
 // chain at rank 1, with `skill` slotted and nothing else able to fire.
