@@ -335,7 +335,13 @@ function pitRun(mode) {
   g._recomputeStats(p);
   g.obstacles.length = 0;
   p.x = g.W / 2; p.y = g.H / 2;
-  g.debug('F7');                                   // the telegraph pit: 8 heavies
+  // The pit at INTENDED DENSITY — a region population weighted by encounter
+  // weight, ~50% telegraphing — not the all-heavies pit criterion 13 was
+  // originally measured in. An all-heavy pit makes every point of incoming
+  // damage dodgeable, which flatters the dodger exactly as the base roster's
+  // 21% flatters the holder.
+  g.pitRegion = process.env.PIT_REGION || 'pacific_northwest';
+  g.debug('F7');
   for (const e of g.enemyPool) { e.maxHp = 400000; e.hp = 400000; }
 
   const log = instrument(g);
@@ -364,12 +370,43 @@ function pitRun(mode) {
   for (let k = 0; k < TICKS; k++) {
     let mx = 0, my = 0;
     if (mode === 'dodger') {
-      // step out of any committed zone this player is standing in
+      // RETREAT. Step directly away from any committed zone this player is
+      // standing in. Simple, and it also walks the bot out of its own melee
+      // range — which is the confound the `mixed` bot below exists to separate.
       for (const { z } of g.telegraphZones()) {
         if (!inZone(z, p.x, p.y, p.radius)) continue;
         const dx = p.x - z.x, dy = p.y - z.y;
         const d = Math.hypot(dx, dy) || 1;
         mx = dx / d; my = dy / d;
+        break;
+      }
+    } else if (mode === 'mixed') {
+      // THE STRATEGY FOOTING IS ACTUALLY DESIGNED AROUND: hold by default, eat
+      // everything untelegraphed, and break stance ONLY for a committed zone —
+      // then re-plant the instant the ground is clear.
+      //
+      // The difference from `dodger` is the DIRECTION. This sidesteps
+      // PERPENDICULAR to the zone's axis rather than retreating along it, which
+      // is the minimal displacement that leaves the ground and keeps the bot in
+      // its own reach. `dodger` retreats radially and walks out of melee range,
+      // so its lost damage conflates "broke stance" with "stopped being able to
+      // attack" — and holder-vs-dodger alone may only be measuring never-break
+      // against always-break-and-disengage.
+      for (const { z } of g.telegraphZones()) {
+        if (!inZone(z, p.x, p.y, p.radius)) continue;
+        const dx = p.x - z.x, dy = p.y - z.y;
+        const d = Math.hypot(dx, dy) || 1;
+        // two perpendiculars to the radial; take the one that leaves the zone
+        // sooner, judged by probing a step along each
+        const probe = 26;
+        const cands = [[-dy / d, dx / d], [dy / d, -dx / d]];
+        let best = null, bestIn = Infinity;
+        for (const [ux, uy] of cands) {
+          const inCount = g.telegraphZones()
+            .filter(o => inZone(o.z, p.x + ux * probe, p.y + uy * probe, p.radius)).length;
+          if (inCount < bestIn) { bestIn = inCount; best = [ux, uy]; }
+        }
+        if (best) { mx = best[0]; my = best[1]; }
         break;
       }
     }
@@ -390,8 +427,9 @@ function pitRun(mode) {
 
 const holder = pitRun('holder');
 const dodger = pitRun('dodger');
+const mixed = pitRun('mixed');
 console.log('\n  bot      dmg dealt   fires   dmg/fire   dmg taken   of it telegraph   offered -> landed   moved     commit/resolve/dodge   footing  grit  reflex');
-for (const r of [holder, dodger]) {
+for (const r of [holder, dodger, mixed]) {
   console.log(`  ${r.mode.padEnd(7)}  ${r.dealt.toFixed(0).padStart(9)}   ${String(r.fires).padStart(5)}   ${r.perFire.toFixed(1).padStart(8)}   ${r.taken.toFixed(0).padStart(9)}   ${r.takenTel.toFixed(0).padStart(15)}   ${(r.offered.toFixed(0) + ' -> ' + r.taken.toFixed(0)).padStart(17)}   ${(r.moved / 60).toFixed(1).padStart(5)}s   ${(String(r.committed) + ' / ' + r.resolved + ' / ' + r.dodged).padStart(20)}   ${String(r.stacksEnd).padStart(7)}  ${r.gritEnd.toFixed(0).padStart(4)}  ${r.reflexEnd.toFixed(0).padStart(6)}`);
 }
 note('');
@@ -403,19 +441,27 @@ else fail(`the holder was credited ${holder.dodged} dodges without ever moving`)
 if (Number.isFinite(holder.taken) && Number.isFinite(dodger.taken) && holder.taken > 0 && dodger.taken > 0) ok(`damage taken is a finite number on both bots (${holder.taken.toFixed(0)} / ${dodger.taken.toFixed(0)}) — the interception survives the whole window`);
 else fail(`damage taken came back ${holder.taken} / ${dodger.taken} — the instrument broke, so the comparison below is worthless`);
 
-const dmgRatio = holder.dealt / Math.max(1, dodger.dealt);
-const takeRatio = holder.taken / Math.max(1, dodger.taken);
-const fireRatio = holder.fires / Math.max(1, dodger.fires);
-const perFireRatio = holder.perFire / Math.max(1e-9, dodger.perFire);
-note(`FINDING (criterion 13): holding deals x${dmgRatio.toFixed(2)} the damage and takes x${takeRatio.toFixed(2)} the damage of dodging.`);
-note(`DECOMPOSED: x${fireRatio.toFixed(2)} on how OFTEN skills fired, x${perFireRatio.toFixed(2)} on how HARD each one hit. Only the second is the scaleWith multiplier; the first is positioning — a bot that walks away from a melee trigger fires it less, and that has nothing to do with Footing.`);
-if (dmgRatio > 1 && takeRatio > 1) {
-  note(`Holding is stronger on offence and worse on defence — which is the trade the engine is supposed to be. It is NOT dominant: the extra output is paid for in telegraph damage, and that price only exists because telegraphs shipped. Without them holding would be free.`);
-} else if (dmgRatio > 1 && takeRatio <= 1) {
-  note(`DOMINANT: holding deals more AND takes less. Nothing in the current enemy set punishes standing still hard enough, and Tactics' scaleWith is a straight upgrade with no decision attached.`);
-} else {
-  note(`Holding is not winning on offence here — the uptime cost of the stance outweighs the per-stack multiplier at this density.`);
-}
+const cmp = (a, b) => ({
+  dmg: a.dealt / Math.max(1, b.dealt),
+  take: a.taken / Math.max(1, b.taken),
+  fire: a.fires / Math.max(1, b.fires),
+  per: a.perFire / Math.max(1e-9, b.perFire),
+});
+const vsDodger = cmp(holder, dodger);
+const vsMixed = cmp(holder, mixed);
+note(`FINDING (criterion 13), holder as the baseline:`);
+note(`  vs DODGER (retreats radially): x${vsDodger.dmg.toFixed(2)} damage, x${vsDodger.take.toFixed(2)} taken — decomposed x${vsDodger.fire.toFixed(2)} fire count, x${vsDodger.per.toFixed(2)} per hit`);
+note(`  vs MIXED  (sidesteps, stays in reach): x${vsMixed.dmg.toFixed(2)} damage, x${vsMixed.take.toFixed(2)} taken — decomposed x${vsMixed.fire.toFixed(2)} fire count, x${vsMixed.per.toFixed(2)} per hit`);
+// The point of the third bot: if MIXED closes most of the damage gap, then
+// holder-vs-dodger was measuring disengagement, not stance. If it does not, the
+// stance multiplier really is the whole story.
+const closed = (vsDodger.dmg - vsMixed.dmg) / Math.max(1e-9, vsDodger.dmg - 1);
+if (mixed.fires > dodger.fires * 1.05) note(`  the sidestep keeps ${mixed.fires} fires against the retreat's ${dodger.fires} — it stays in its own reach, which is exactly the confound the third bot exists to separate`);
+if (Number.isFinite(closed) && closed > 0.3) note(`  MIXED closes ${(100 * closed).toFixed(0)}% of the holder's damage advantage over DODGER. Holder-vs-dodger was substantially measuring disengagement rather than stance.`);
+else note(`  MIXED closes ${(100 * Math.max(0, closed)).toFixed(0)}% of the gap — the holder's edge survives a bot that breaks stance WITHOUT leaving melee, so it is the stance multiplier and not disengagement.`);
+if (vsMixed.dmg > 1 && vsMixed.take < 1) note(`  DOMINANT against the strategy Footing is designed around: holding beats a competent sidestepper on both axes.`);
+else if (vsMixed.dmg > 1) note(`  Holding out-damages the sidestepper but pays for it in damage taken — that is a trade, not dominance.`);
+else note(`  The sidestepper out-damages the holder. Breaking stance for committed zones is the stronger line.`);
 note(`Note the scope: only 3 of 12 enemies telegraph. The price above is what 3 of 12 charges. Every enemy added to TELEGRAPHED_IDS raises it, and this ratio is the dial to re-read when they are.`);
 
 console.log(failures ? `\n${failures} PHASE-2 GATE FAILURE(S)` : '\nCRITERIA 12 AND 13 MEASURED');

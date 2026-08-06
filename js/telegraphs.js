@@ -16,7 +16,10 @@
 
 import { inZone } from './compose.js';
 import { domainMult } from './domains.js';
-import { ENEMIES } from './content/enemies.js';
+// ALL_ENEMY_DEFS, not ENEMIES: region populations are registered in the same
+// table and must be covered by the same assertions. Reading the base twelve
+// here would have let a region enemy ship with a 200ms wind-up unchecked.
+import { ALL_ENEMY_DEFS } from './content/enemies.js';
 
 // Below this a wind-up is not something a person can react to on a phone, with
 // a thumb, on a small screen. Asserted at load rather than trusted.
@@ -34,7 +37,7 @@ const SHAPE_PARAMS = {
 
 export function assertTelegraphs() {
   const problems = [];
-  for (const def of ENEMIES) {
+  for (const def of ALL_ENEMY_DEFS) {
     const t = def.telegraph;
     if (!t) continue;
     if (!(t.windupMs >= TELEGRAPH_MIN_WINDUP_MS)) {
@@ -67,7 +70,7 @@ export function assertTelegraphs() {
 
 assertTelegraphs();
 
-export const TELEGRAPHED_IDS = ENEMIES.filter(e => e.telegraph).map(e => e.id);
+export const TELEGRAPHED_IDS = ALL_ENEMY_DEFS.filter(e => e.telegraph).map(e => e.id);
 
 // ---------------------------------------------------------------- the zone
 

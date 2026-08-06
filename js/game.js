@@ -19,6 +19,7 @@ import { EnemyGrid } from './triggers.js';
 import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES } from './content/enemies.js';
+import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
 import { BOSS_BY_FLOOR } from './content/bosses.js';
 import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
@@ -3626,10 +3627,24 @@ export class Sim {
         const cx = live.reduce((a, q) => a + q.x, 0) / live.length;
         const cy = live.reduce((a, q) => a + q.y, 0) / live.length;
         const N = CONFIG.TELEGRAPH_PIT_COUNT;
+        // The pit draws from a REGION population now, weighted by encounter
+        // weight, rather than being all-heavies. All-heavies made every point of
+        // incoming damage dodgeable, which is as unrepresentative as the base
+        // roster's 21% is in the other direction — and criterion 13 was measured
+        // in it. `this.pitRegion` selects which; default region 1.
+        const pop = REGION_ENEMIES[this.pitRegion || 'pacific_northwest'];
+        const pool = pop ? pop.enemies : null;
+        const wTotal = pool ? pool.reduce((a, e) => a + e.w, 0) : 0;
         for (let i = 0; i < N; i++) {
           const a = i / N * Math.PI * 2;
           const r = CONFIG.TELEGRAPH_PIT_RING + (i % 2) * CONFIG.TELEGRAPH_PIT_STAGGER;
-          const id = i % 2 ? 'aegimand' : 'slabjaw';
+          // deterministic stratified pick: walk the weighted population so the
+          // realised mix matches the designed weights rather than sampling it
+          let id = 'slabjaw';
+          if (pool) {
+            let acc = 0; const target = ((i + 0.5) / N) * wTotal;
+            for (const e of pool) { acc += e.w; if (target <= acc) { id = e.id; break; } }
+          }
           this.spawnEnemyById(id, clamp(cx + Math.cos(a) * r, WALL + 40, this.W - WALL - 40),
             clamp(cy + Math.sin(a) * r, WALL + 40, this.H - WALL - 40), { noMats: true });
         }
