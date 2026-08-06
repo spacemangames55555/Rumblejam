@@ -3,6 +3,7 @@
 // telegraphs and damage so behaviors stay declarative.
 
 import { dist, dist2, angleTo, clamp } from '../util.js';
+import { telegraphBusy } from '../telegraphs.js';
 
 // The gyre's stoop, named rather than inlined: the telegraph's length has to be
 // derived from the same two numbers the dive uses, or the warning stops
@@ -99,6 +100,12 @@ export function updateEnemy(sim, e, dt) {
   // attacks but not movement, so it is checked inside the movement helpers'
   // caller rather than here.
   if (e.stunT > 0) return;
+
+  // COMMITTED. During a wind-up (and the recovery after it) the enemy runs no
+  // behaviour at all: it does not step, and — the part that matters — it does
+  // not reaim. The zone was fixed at commit and the body must not drift toward
+  // you afterwards, or the attack is undodgeable and the patch is pointless.
+  if (telegraphBusy(e)) return;
 
   const t = e.def;
   const p = sim.tauntTarget(e.x, e.y);

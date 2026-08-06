@@ -27,6 +27,52 @@ export function rankedDuration(base, skill, rank) {
 const TAU = Math.PI * 2;          // structural
 const MS = 1000;                  // structural: step params are milliseconds
 
+// ---------------------------------------------------------------- geometry
+//
+// The three zone shapes, extracted so an enemy telegraph and a player skill ask
+// the SAME question of the same shape. Two implementations of "is this point in
+// the cone" would drift, and the drift would show up as an attack that looks
+// dodged and lands anyway — which is the one bug that would make telegraphs
+// worse than no telegraphs.
+
+export function angleDelta(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= TAU;
+  while (d < -Math.PI) d += TAU;
+  return d;
+}
+
+// `pad` is the target's own radius: a body is not a point, and an attack that
+// clips your edge has hit you.
+export function inCircle(z, x, y, pad = 0) {
+  const dx = x - z.x, dy = y - z.y;
+  return dx * dx + dy * dy <= (z.radius + pad) * (z.radius + pad);
+}
+
+export function inCone(z, x, y, pad = 0) {
+  const dx = x - z.x, dy = y - z.y;
+  const d2 = dx * dx + dy * dy;
+  if (d2 > (z.range + pad) * (z.range + pad)) return false;
+  if (d2 < 1) return true;                       // standing on the origin
+  return Math.abs(angleDelta(Math.atan2(dy, dx), z.angle0)) <= z.angle / 2;
+}
+
+export function inLine(z, x, y, pad = 0) {
+  const ca = Math.cos(z.angle0), sa = Math.sin(z.angle0);
+  const dx = x - z.x, dy = y - z.y;
+  const along = dx * ca + dy * sa;
+  if (along < -pad || along > z.length + pad) return false;
+  return Math.abs(-dx * sa + dy * ca) <= z.width / 2 + pad;
+}
+
+export function inZone(z, x, y, pad = 0) {
+  if (!z) return false;
+  if (z.kind === 'circle') return inCircle(z, x, y, pad);
+  if (z.kind === 'cone') return inCone(z, x, y, pad);
+  if (z.kind === 'line') return inLine(z, x, y, pad);
+  return false;
+}
+
 // ---------------------------------------------------------------- targeting
 //
 // Triggers decide WHETHER a skill fires. The primitive decides WHAT it hits.
@@ -67,10 +113,7 @@ export const PRIMITIVES = {
       for (const e of grid.near(p.x, p.y, reach + p.radius)) {
         const dx = e.x - p.x, dy = e.y - p.y;
         if (dx * dx + dy * dy > (reach + e.radius) * (reach + e.radius)) continue;
-        let da = Math.atan2(dy, dx) - a0;
-        while (da > Math.PI) da -= TAU;
-        while (da < -Math.PI) da += TAU;
-        if (Math.abs(da) > arc / 2) continue;
+        if (Math.abs(angleDelta(Math.atan2(dy, dx), a0)) > arc / 2) continue;
         sim.skillDamage(e, dmg, p, skill);
         applyImpactRiders(sim, p, skill, r, e, rank, Math.atan2(dy, dx), out);
         out.hits++;
@@ -101,10 +144,7 @@ export const PRIMITIVES = {
     for (const e of grid.near(p.x, p.y, step.range)) {
       const dx = e.x - p.x, dy = e.y - p.y;
       if (dx * dx + dy * dy > step.range * step.range) continue;
-      let da = Math.atan2(dy, dx) - a0;
-      while (da > Math.PI) da -= TAU;
-      while (da < -Math.PI) da += TAU;
-      if (Math.abs(da) > step.angle / 2) continue;
+      if (Math.abs(angleDelta(Math.atan2(dy, dx), a0)) > step.angle / 2) continue;
       if (sim.losBlocked(p.x, p.y, e.x, e.y)) continue;
       sim.skillDamage(e, dmg, p, skill);
       out.hits++;
@@ -219,7 +259,15 @@ export const PRIMITIVES = {
 // and modelling it as two steps would make every combination a new entry.
 
 export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
-  if (r.stun) { e.stunT = Math.max(e.stunT || 0, r.stun / MS); out.statuses++; }
+  if (r.stun) {
+    e.stunT = Math.max(e.stunT || 0, r.stun / MS);
+    // A stun during a wind-up cancels the attack outright. This is what turns
+    // Rebuke into a counter-attack LOOP rather than a one-off payout: break
+    // stance, dodge, stun, and the NEXT wind-up dies too, which is the time to
+    // rebuild the stack.
+    if (sim.cancelTelegraph) sim.cancelTelegraph(e);
+    out.statuses++;
+  }
   if (r.root) { e.rootT = Math.max(e.rootT || 0, r.root / MS); out.statuses++; }
   if (r.taunt) { e.tauntT = Math.max(e.tauntT || 0, r.taunt / MS); e.tauntIdx = p.idx; out.statuses++; }
   if (r.knockback) { e.knockX += Math.cos(angle) * r.knockback; e.knockY += Math.sin(angle) * r.knockback; out.statuses++; }

@@ -213,6 +213,8 @@ export class Renderer {
     this._screen = { scale, cw, ch, vw, vh };
 
     this._drawArena(ctx, view, aw, ah, cl, cr, ct, cb);
+    // under everything else: the ground is where the promise is made
+    if (view.telZones && view.telZones.length) this._drawTelegraphZones(ctx, view.telZones);
     this._drawHazards(ctx, view, inView);
     for (const z of view.zones || []) {
       if (!inView(z.x, z.y, z.r)) continue;
@@ -491,7 +493,7 @@ export class Renderer {
     let y = 96;
     const line = (t, c) => { ctx.fillStyle = c || '#c8cde8'; ctx.fillText(t, x + 10, y); y += 14; };
 
-    const rows = 12 + d.players.length * 2 + Math.min(8, d.log.length);
+    const rows = 22 + d.players.length * 2 + Math.min(8, d.log.length) + Math.min(4, (d.telZones || []).length) + Math.min(5, (d.dodges || []).length);
     ctx.fillStyle = 'rgba(10,11,18,0.86)';
     ctx.fillRect(x, y - 16, w, rows * 14 + 18);
     ctx.strokeStyle = '#454b6e'; ctx.lineWidth = 1;
@@ -513,6 +515,21 @@ export class Renderer {
       line(`P${q.idx} ${q.name}${q.footing ? `  footing ${q.footing}` : ''}`, '#8fa3c8');
       const cds = q.cds.map(c => `${c.id.replace(/^(necro|sam)_/, '')}${c.cd > 0 ? `:${c.cd}` : ''}`).join(' ');
       line(`  ${cds || '(no actives slotted)'}`, q.last ? '#5ee0a8' : '#9aa0bd');
+    }
+    y += 4;
+    // THE fastest read on whether telegraphs are working: dodges near zero
+    // means wind-ups are too short or the zones unreadable; resolves near zero
+    // means they are too long.
+    const T = d.tel || {};
+    line(`telegraphs  committed ${T.committed || 0}  resolved ${T.resolved || 0}  dodged ${T.dodged || 0}  stunned ${T.interrupted || 0}`, '#ffd45e');
+    for (const z of (d.telZones || []).slice(0, 4)) {
+      line(`  e${z.id} ${z.z.kind.padEnd(6)} ${String(z.msLeft).padStart(4)} ms  ${'#'.repeat(Math.round(z.fill * 10)).padEnd(10)}`);
+    }
+    y += 4;
+    line('last dodges (player / enemy / passed)', '#8fa3c8');
+    for (const dg of (d.dodges || []).slice(-5).reverse()) {
+      line(`  P${dg.p} e${dg.e} ${dg.kind.padEnd(6)} ${dg.dodged ? 'DODGED' : dg.wasCaught ? 'hit (stayed)' : 'hit'}`,
+        dg.dodged ? '#5ee0a8' : '#ff5d6c');
     }
     y += 4;
     line('last fires', '#8fa3c8');
@@ -587,6 +604,46 @@ export class Renderer {
     }
     this._tileCache = { id: biome.id, v: Assets.version, ready: Assets.ready, ids };
     return ids;
+  }
+
+  // COMMITTED DANGER ZONES, drawn on the ground under everything else.
+  //
+  // The fill IS the timer: it sweeps 0 -> 100% over the wind-up, so time to
+  // impact is read from how full the shape is, with no numbers and no separate
+  // UI. Colour is domain-tinted from the triangle palette, so the same shape
+  // also says what kind of damage is coming.
+  //
+  // EVERY ZONE IS OUTLINED, not just filled. Overlapping translucent fills turn
+  // to mud, and mud at 8 players is the failure mode this whole patch would die
+  // of — the outline is what keeps two overlapping slams legible as two.
+  _drawTelegraphZones(ctx, zones) {
+    for (const t of zones) {
+      const z = t.z;
+      const col = DOMAIN_COLOR[z.domain] || '#ff5d6c';
+      ctx.save();
+      ctx.translate(z.x, z.y);
+      ctx.beginPath();
+      if (z.kind === 'circle') {
+        ctx.arc(0, 0, z.radius, 0, Math.PI * 2);
+      } else if (z.kind === 'cone') {
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, z.range, z.angle0 - z.angle / 2, z.angle0 + z.angle / 2);
+        ctx.closePath();
+      } else {
+        ctx.rotate(z.angle0);
+        ctx.rect(0, -z.width / 2, z.length, z.width);
+      }
+      // the sweep: a low base wash the whole time so the shape is visible from
+      // commit, brightening toward impact
+      ctx.globalAlpha = 0.14 + 0.34 * t.fill;
+      ctx.fillStyle = col;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // The arena: floor, border walls, and obstacles.
@@ -1004,6 +1061,17 @@ export class Renderer {
     // THE DAMAGE TRIANGLE, always visible. A 4px ring in the enemy's domain
     // colour: the triangle is only a decision a player can act on if they can
     // see which way it points without inspecting anything.
+    // WINDING UP: a bright ring that pulses on the body, so with three zones on
+    // the floor you can still tell which enemy owns which.
+    if (e.winding) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(this.t * 22);
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     if (e.domain && DOMAIN_COLOR[e.domain]) {
       ctx.strokeStyle = DOMAIN_COLOR[e.domain];
       ctx.lineWidth = 4;

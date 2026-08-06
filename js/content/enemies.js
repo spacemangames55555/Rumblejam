@@ -1,5 +1,17 @@
 // The 12 base enemy types.
 //
+// `telegraph` marks a COMMITTED attack: a wind-up during which the enemy neither
+// moves nor reaims, a danger zone fixed at commit, and damage applied to
+// whatever stands in it when the timer expires. See js/telegraphs.js.
+//
+// THREE of the twelve have one, and that is a design decision rather than a
+// scope cut. If every enemy telegraphed, holding stance would always be
+// punished and Footing collapses into "always break". If none did, holding is
+// free and it collapses into "always hold". The decision only exists when some
+// damage is dodgeable and some is not — so the swarm stays undodgeable contact
+// damage, which is what Footing's grit and vitality are for, and the heavies
+// commit.
+//
 // `domain` places each type in the damage triangle (js/domains.js): physical
 // beats spiritual, mental beats physical, spiritual beats mental. Distributed
 // roughly evenly for now — four of each — because per-region skew is a later
@@ -17,7 +29,12 @@ export const ENEMIES = [
   { id: 'flit', domain: 'mental',      name: 'Flit',      behavior: 'sprinter', hp: 4,  spd: 215, dmg: 3,  radius: 11, mats: 1,
     shape: 'triangle', color: '#ffab4f', w: 2.2 },                                  // fast, fragile
   { id: 'slabjaw', domain: 'physical',   name: 'Slabjaw',   behavior: 'brute',    hp: 30, spd: 68,  dmg: 10, radius: 24, mats: 3,
-    shape: 'square',   color: '#b03a3a', w: 1.4 },                                  // slow tank
+    shape: 'square',   color: '#b03a3a', w: 1.4,                                    // slow tank
+    // The biggest thing on the floor gets the longest wind-up and the biggest
+    // zone: bigger and more punishing means more time to read it, or the
+    // "decision" is a coin flip.
+    telegraph: { windupMs: 650, recoverMs: 500, cooldownMs: 3400, retryFrac: 0.25,
+      shape: { kind: 'circle', radius: 120 }, damage: 26, domain: 'physical' } },
   { id: 'lobber', domain: 'spiritual',    name: 'Lobber',    behavior: 'spitter',  hp: 9,  spd: 92,  dmg: 3,  radius: 14, mats: 2,
     shape: 'pentagon', color: '#a86ae8', w: 1.8,
     proj: { dmg: 6, speed: 320, radius: 6 }, keepDist: 260, fireCd: 2.2,            // ranged spitter
@@ -31,14 +48,22 @@ export const ENEMIES = [
     shape: 'circle',   color: '#ffd45e', w: 1.6,
     boom: { dmg: 14, radius: 90, fuse: 0.9 }, triggerDist: 70 },                    // telegraphed death explosion
   { id: 'aegimand', domain: 'physical',  name: 'Aegimand',  behavior: 'warden',   hp: 22, spd: 78,  dmg: 5,  radius: 18, mats: 3,
-    shape: 'hex',      color: '#5ea8ff', w: 1.2, shieldR: 150, shieldReduce: 0.5 }, // shields nearby allies
+    shape: 'hex',      color: '#5ea8ff', w: 1.2, shieldR: 150, shieldReduce: 0.5,   // shields nearby allies
+    // A cleave: narrower than the slam, so sidestepping is a smaller movement
+    // and a shorter wind-up is still fair.
+    telegraph: { windupMs: 500, recoverMs: 400, cooldownMs: 4000, retryFrac: 0.25,
+      shape: { kind: 'cone', angle: 70, range: 150 }, damage: 18, domain: 'physical' } },
   { id: 'stitcher', domain: 'mental',  name: 'Stitcher',  behavior: 'medic',    hp: 11, spd: 118, dmg: 3,  radius: 13, mats: 3,
     shape: 'cross',    color: '#8be8c8', w: 1.2, healPs: 6, healR: 170 },           // heals allies, flees
   { id: 'wombden', domain: 'spiritual',   name: 'Wombden',   behavior: 'nest',     hp: 26, spd: 0,   dmg: 4,  radius: 22, mats: 3,
     shape: 'star',     color: '#c98b4f', w: 1.0, spawnCd: 4, maxBrood: 3, broodId: 'flit' }, // spawner
   { id: 'lancerfish', domain: 'physical', name: 'Lancerfish', behavior: 'dasher', hp: 11, spd: 105, dmg: 7,  radius: 14, mats: 2,
     shape: 'arrow',    color: '#4fd8eb', w: 1.6,
-    dash: { windup: 0.55, speed: 560, dur: 0.45, cd: 2.4 } },                       // telegraphed dash
+    dash: { windup: 0.55, speed: 560, dur: 0.45, cd: 2.4 },                         // telegraphed dash
+    // The shortest wind-up of the three: a lunge should feel fast, and a narrow
+    // line means the dodge is one step sideways rather than a sprint.
+    telegraph: { windupMs: 450, recoverMs: 350, cooldownMs: 3800, retryFrac: 0.25,
+      shape: { kind: 'line', width: 46, length: 300 }, damage: 20, domain: 'physical' } },
   { id: 'deadeye', domain: 'mental',   name: 'Deadeye',   behavior: 'sniper',   hp: 8,  spd: 62,  dmg: 6, radius: 13, mats: 2,
     shape: 'thindiamond', color: '#e85aa0', w: 1.2,
     beam: { windup: 1.4, dmg: 11, width: 16, len: 900, cd: 3.2 } },                 // long windup beam

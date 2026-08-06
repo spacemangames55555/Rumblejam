@@ -773,6 +773,8 @@ function viewFromSim(sim) {
     aw: sim.W, ah: sim.H,
     arenaKey: `${sim.floorNum}:${sim.currentNode}`,
     biome: sim.biome || null,
+    // committed zones ride the view like any other world layer
+    telZones: sim.telegraphZones(),
     kind: sim.arenaNode ? sim.arenaNode.kind : null,
     afterSiege: sim.afterSiege,
     obstacles: sim._snapObstacles(),
@@ -808,6 +810,8 @@ function viewFromSim(sim) {
       id: e.id, x: e.x, y: e.y, radius: e.radius, shape: e.shape, color: e.color,
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
       flash: e.hitFlash > 0, fusing: e.fusing, pylon: e.typeIdx === -2,
+      winding: e.telState === 1,   // TELEGRAPH_STATES.WINDUP — drives the wind-up pose
+      domain: e.domain,
       // sprite id from the definition table, exactly as shape/color are — the
       // client resolves the same id from the type index on the wire
       spriteId: e.boss ? e.bossDef.spriteId : (e.typeIdx === -2 ? PYLON_SPRITE : (e.def && e.def.spriteId)),
@@ -1011,6 +1015,9 @@ function frame(now) {
     })),
     log: (app.sim.players[app.myIdx] && app.sim.players[app.myIdx].fireLog) || [],
     enemies: app.sim.enemyPool.count,
+    tel: app.sim.telStats,
+    telZones: app.sim.telegraphZones(),
+    dodges: app.sim.telDodgeLog,
   } : null;
   renderer.draw(view, dtFrame);
 

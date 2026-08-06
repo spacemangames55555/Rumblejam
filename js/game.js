@@ -16,6 +16,7 @@ import { CHAR_BY_ID } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
 import { EnemyGrid } from './triggers.js';
+import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES } from './content/enemies.js';
 import { BOSS_BY_FLOOR } from './content/bosses.js';
@@ -73,6 +74,11 @@ export class Sim {
     this.trigAcc = 0;
     this.trigCursor = 0;
     this.trigStats = { evals: 0, fires: 0, capped: false, queries: 0, cells: 0, enemies: 0, ms: 0, cappedCount: 0, ticks: 0 };
+    // The fastest read on whether telegraphs are working at all: dodges near
+    // zero means wind-ups are too short or zones unreadable; resolves near zero
+    // means they are too long.
+    this.telStats = { committed: 0, resolved: 0, dodged: 0, interrupted: 0 };
+    this.telDodgeLog = [];
     this.spawnCounter = 0;
     this.shake = 0;
 
@@ -124,7 +130,7 @@ export class Sim {
     for (const p of this.players) this._initStartingGear(p);
   }
 
-  _emptyFx() { return { hits: [], deaths: [], booms: [], beams: [], swings: [], blocks: [], skillFires: [] }; }
+  _emptyFx() { return { hits: [], deaths: [], booms: [], beams: [], swings: [], blocks: [], skillFires: [], telResolve: [] }; }
   pushEvent(ev) { this.events.push(ev); }
   livePlayers() { return this.players.filter(p => !p.gone); }
 
@@ -951,6 +957,8 @@ export class Sim {
       maxHp: Math.round(def.hp * this.coopHp * this.greedHp * CONFIG.enemyHpMult),
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       domain: def.domain || null,
+      telState: 0, telT: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
+      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * Math.random() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -1305,6 +1313,7 @@ export class Sim {
     this._tickProjectiles(dt);
     SK.tickSkills(this, dt);
     SK.tickSkillStatuses(this, dt);
+    tickTelegraphs(this, dt);
     // telegraphs / zones / vortexes
     this._tickAreas(dt);
     tohTick(this, dt);   // Thrones of Heaven world entities + per-player meters
@@ -2265,7 +2274,11 @@ export class Sim {
       }
       if (p.hookAgg.nextAttackAfterDodge > 0) { p.dmgBuffT = 3; p.dmgBuffAmt = p.hookAgg.nextAttackAfterDodge; }
       tohOnDodge(this, p);   // Monk: leave a spirit behind
-      SK.onSkillDodge(this, p);   // ON_DODGE trigger window opens here
+      // NOT an ON_DODGE. Reflex remains a defensive stat and still avoids the
+      // damage — but avoiding a hit with a dice roll is not a positional dodge,
+      // and treating it as one is exactly what made Rebuke reward Reflex
+      // instead of movement. ON_DODGE now comes only from telegraphs.js, where
+      // it means "was inside the committed zone, left it before it resolved".
       return;
     }
     SK.onSkillHitTaken(this, p);
@@ -2476,6 +2489,14 @@ export class Sim {
     this.telegraphs.push(entry);
   }
   addZone(z) { this.zones.push({ t: 0, acc: 0, ...z }); }
+
+  // A POSITIONAL dodge: inside the committed zone at commit, outside it at
+  // resolve. This is the only thing that sets the ON_DODGE window now — the
+  // Reflex stat roll no longer does, because avoiding damage with a stat is not
+  // a dodge and conflating them made Rebuke reward Reflex instead of movement.
+  onTelegraphDodge(p, e) { SK.onSkillDodge(this, p); }
+  cancelTelegraph(e) { return cancelTelegraph(this, e); }
+  telegraphZones() { return liveZones(this); }
 
   // ---- composed-action surface (js/compose.js calls these) ----
   skillDamage(e, amount, p, skill) { return SK.skillDamage(this, e, amount, p, skill); }
