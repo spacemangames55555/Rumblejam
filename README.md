@@ -429,13 +429,61 @@ that cannot answer the design question.
 
 **Class engines.** A class exposes one number that its skills read:
 `scaleWith: '<engine>'` plus `scalePer`, resolved by `engineScale()` in
-`js/compose.js`, which knows no engine by name. The Samurai's is **Footing** —
-one stack per half-second stationary, the whole stack lost the instant you move.
+`js/compose.js`, which knows no engine by name. The Samurai's is **Footing**.
 Marrow uses a second engine (`armor`) through the same hook with no new code.
 
-Footing grants Grit, Reflex and an **absorb pool** — never max Vitality. It did
-grant Vitality once, which meant breaking stance clamped current HP down and a
-Samurai lost health for dodging, by an amount unrelated to the attack.
+### Footing — the tuning constants
+
+Authoritative values live in `TUNING` in `js/content/skills/samurai_armor.js`.
+There is no GDD file in this repository — it is referenced by section number
+(§7.5.3, §2.2) but not tracked here, so this table is the in-repo record.
+
+| constant | value | what it is |
+|---|---|---|
+| `footingTickMs` | 500 | one stack per half-second stationary |
+| `FOOTING_MAX_STACKS` | 10 | **hard cap, and no skill may raise it** |
+| `footingShieldPerStack` | 4 | absorb pool per stack |
+| `footingGritPerStack` | 2 | Grit per stack |
+| `footingGraceMs` | **400** | movement shorter than this does not drop the stance |
+| `footingGraceRefill` | **1.0** | how fast standing still repays the grace budget |
+
+**Footing grants Grit and an absorb pool. Not Reflex, and not max Vitality.**
+Both were removed for the same class of reason. Vitality meant breaking stance
+clamped current HP down, so a Samurai lost health for dodging by an amount
+unrelated to the attack. Reflex meant the stance granted dodge *chance*, which
+contradicts the design outright — the Samurai has surrendered the ability to
+dodge anything telegraphed — and it was most of why holding beat sidestepping on
+both axes.
+
+The cap is enforced in the engine (`tickFooting`), not at the call site. It was
+previously a base of ten plus a rankable `+1 max stack`, which is how a designed
+ten was measured at **seventeen**, inflating every per-stack term by 70%. A cap
+a skill can raise is not a cap.
+
+### The grace window is a BUDGET, not a timer
+
+`footingGraceMs` is not a countdown reset by standing still. Movement time
+accumulates; standing still decays it at `footingGraceRefill × dt`. The stance
+drops when the budget is spent.
+
+**This distinction is the whole design.** A timer reset by standing still lets a
+player cross the entire map at full stance in 300 ms hops — move 300 ms, stop
+one frame, repeat — which defeats the instant drop's purpose by a different
+route. `tools/footing_grace_test.mjs` gates that case explicitly.
+
+400 ms is chosen against the attacks, not picked round: the shortest wind-up on
+the roster is 400 ms (Obsidian Lancer), so one sidestep out of the *fastest*
+committed zone fits inside the window. Crossing a room does not.
+
+Why it exists: criterion 13 measured a holder taking **×0.37–×0.40** the damage
+of a correct sidestepper, and that ratio did not move for any dial tried — per-
+stack Grit, removing Reflex entirely, tripling telegraph density. The
+insensitivity was the evidence. The problem was never the size of a stack; it
+was that a 200 ms sidestep cost the *whole* stance while the rebuild is slower
+than the next commit arrives, so a bot that dodged correctly lived permanently
+at 0–3 stacks and never had a stance to make a decision about. With the window,
+the sidestepper ends a 90 s fight at a **capped** stance having dodged 85
+attacks, and the gap is **×0.60**.
 
 ## Adding art (sprites)
 
@@ -609,6 +657,17 @@ never loads them:
   configurations measured in one process against an identical world), and
   whether Footing's damage scaling makes holding stance dominant. Prints tables;
   fails only on the eval budget and the frame share.
+- `node tools/determinism_test.mjs` — same seed, same run. Six configurations
+  compare the **whole snapshot** every 60 ticks across two runs; a negative
+  control proves a *different* seed differs; a lint keeps `Math.random()` out of
+  all 13 simulation modules. Was KNOWN-DEFECTS #1 — 43 calls, not the one the
+  entry named.
+- `node tools/footing_grace_test.mjs` — the movement grace window, five
+  behaviours: sidestep keeps the stance, reposition drops it, **wiggling drops
+  it**, settling recharges the window, and moving never grows the stance.
+- `node tools/snapstate_test.mjs` — every case runs with `pushEvent` replaced by
+  a sink, so **no event is delivered at all**, and the snapshot must still carry
+  everything a client cannot play without.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
