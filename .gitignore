@@ -1,2 +1,21 @@
 tools/contact_sheet.html
 docs/art-review/scratch/
+
+# BROWSER-SUITE SPRITE FIXTURES — never art, never committed.
+#
+# tools/browser_test.mjs writes generated PNGs to these three paths to test the
+# 8-direction grid, the rejected-grid path and a flat FX sprite. They are
+# scratch output with a 3-run lifetime, not assets.
+#
+# They have been committed by accident TWICE, both times by `git add -A` run
+# while a suite had left them on disk — once, then removed, then re-added one
+# commit later by the same reflex. A gate that checks the tree is clean does
+# not stop that: the tree was clean, the fixtures were simply in it. Ignoring
+# them is what actually makes the mistake unavailable.
+#
+# If real art ever lands at these paths it must be force-added deliberately
+# (`git add -f`) and this block removed, which is the point — it should take a
+# decision, not a habit.
+assets/sprites/enemy/skulker.png
+assets/sprites/enemy/flit.png
+assets/sprites/fx/material.png
