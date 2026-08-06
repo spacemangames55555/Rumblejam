@@ -3,6 +3,7 @@
 // telegraphs and damage so behaviors stay declarative.
 
 import { dist, dist2, angleTo, clamp } from '../util.js';
+import { telegraphBusy } from '../telegraphs.js';
 
 // The gyre's stoop, named rather than inlined: the telegraph's length has to be
 // derived from the same two numbers the dive uses, or the warning stops
@@ -94,6 +95,20 @@ export function updateEnemy(sim, e, dt) {
     sim.clampToRoom(e);
   }
   if (e.boss) { updateBoss(sim, e, dt, spd); return; }
+
+  // Skill statuses that stop a body moving. Stun halts everything; root allows
+  // attacks but not movement, so it is checked inside the movement helpers'
+  // caller rather than here.
+  if (e.stunT > 0) return;
+
+  // COMMITTED. During a wind-up the enemy runs no behaviour at all: it does not
+  // step, and — the part that matters — it does not reaim. The zone was fixed
+  // at commit and the body must not drift toward you afterwards, or the attack
+  // is undodgeable and the patch is pointless.
+  //
+  // Whether the RECOVERY also freezes is a per-enemy dial (`recoverFrozen`);
+  // telegraphBusy owns that decision. See js/telegraphs.js.
+  if (telegraphBusy(e)) return;
 
   const t = e.def;
   const p = sim.tauntTarget(e.x, e.y);
@@ -295,7 +310,12 @@ export function updateEnemy(sim, e, dt) {
         if (e.dashCd <= 0 && p && dist(e.x, e.y, p.x, p.y) < 420) {
           e.phase = 1; e.windT = D.windup;
           e.aimA = angleTo(e.x, e.y, p.x, p.y);
-          sim.addTelegraph({ shape: 'beam', x: e.x, y: e.y, angle: e.aimA, w: e.radius * 2, len: D.speed * D.dur + 60, dur: D.windup, follow: e, followAim: true });
+          // followAim REMOVED. The lancerfish carries a committed telegraph in
+          // js/telegraphs.js AND this dash, and a tracking dash in the same body
+          // undermined the committed one: the player learns that this enemy's
+          // wind-ups can be dodged, then eats a lunge that followed them. Both
+          // of its attacks now promise a piece of ground at commit.
+          sim.addTelegraph({ shape: 'beam', x: e.x, y: e.y, angle: e.aimA, w: e.radius * 2, len: D.speed * D.dur + 60, dur: D.windup, follow: e });
         }
       }
       break;

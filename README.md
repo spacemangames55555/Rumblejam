@@ -432,6 +432,12 @@ clean play). They act on the **host's** simulation:
   cleanup, so the room goes inert exactly as it does on a real clear)
 - **F4** — skip to the next floor
 - **F5** — god mode toggle
+- **F7** — the **telegraph pit**: clears the field and reseeds it with 8 slabjaws
+  and aegimands ringed at commit distance, and resets the telegraph counters.
+  Telegraph density in a normal room is deliberately low (3 of 12 enemy types),
+  which makes the hold-or-break decision come up roughly twice a minute — too
+  rarely to judge in a sitting. This does not give more enemies a telegraph;
+  the real mix is what is being judged.
 - **F6** — show hitboxes + FPS/entity counter
 
 Console helper: `uvSmoke()` runs every character through a scripted combat and

@@ -8,7 +8,7 @@ import { getTouchMove, touchEnabled } from './touch.js';
 const keys = new Set();
 let interactLatch = false;
 let stanceLatch = false;   // Samurai: Q, or the on-screen stance button
-const debugPressed = new Set(); // F1-F6 single-fire
+const debugPressed = new Set(); // F1-F7 single-fire
 
 export function initInput() {
   window.addEventListener('keydown', e => {
@@ -16,7 +16,7 @@ export function initInput() {
     keys.add(e.code);
     if (e.code === 'KeyE') interactLatch = true;
     if (e.code === 'KeyQ') stanceLatch = true;
-    if (/^F[1-6]$/.test(e.code)) { debugPressed.add(e.code); e.preventDefault(); }
+    if (/^F[1-7]$/.test(e.code)) { debugPressed.add(e.code); e.preventDefault(); }
   });
   window.addEventListener('keyup', e => keys.delete(e.code));
   window.addEventListener('blur', () => keys.clear());

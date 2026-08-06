@@ -130,7 +130,12 @@ document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInte
 document.getElementById('stance-btn').onclick = () => { sfx.click(); pressStance(); };
 document.getElementById('sheet-btn').onclick = () => { sfx.click(); toggleSheet(); };
 window.addEventListener('keydown', e => {
-  if (e.code === 'KeyC' && app.mode === 'run' && document.activeElement.tagName !== 'INPUT') toggleSheet();
+  if (document.activeElement.tagName === 'INPUT') return;
+  if (e.code === 'KeyC' && app.mode === 'run') toggleSheet();
+  // The trigger-core debug overlay. Not optional: without it the gate cannot be
+  // evaluated — "it felt bad" is not actionable, and a trigger budget problem
+  // is invisible until it is structural.
+  if (e.code === 'KeyT' && app.mode === 'run') renderer.debugTrig = !renderer.debugTrig;
 });
 showTitle();
 
@@ -768,6 +773,8 @@ function viewFromSim(sim) {
     aw: sim.W, ah: sim.H,
     arenaKey: `${sim.floorNum}:${sim.currentNode}`,
     biome: sim.biome || null,
+    // committed zones ride the view like any other world layer
+    telZones: sim.telegraphZones(),
     kind: sim.arenaNode ? sim.arenaNode.kind : null,
     afterSiege: sim.afterSiege,
     obstacles: sim._snapObstacles(),
@@ -803,6 +810,8 @@ function viewFromSim(sim) {
       id: e.id, x: e.x, y: e.y, radius: e.radius, shape: e.shape, color: e.color,
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
       flash: e.hitFlash > 0, fusing: e.fusing, pylon: e.typeIdx === -2,
+      winding: e.telState === 1,   // TELEGRAPH_STATES.WINDUP — drives the wind-up pose
+      domain: e.domain,
       // sprite id from the definition table, exactly as shape/color are — the
       // client resolves the same id from the type index on the wire
       spriteId: e.boss ? e.bossDef.spriteId : (e.typeIdx === -2 ? PYLON_SPRITE : (e.def && e.def.spriteId)),
@@ -994,6 +1003,22 @@ function frame(now) {
     view = viewFromSnaps(dtFrame);
   }
 
+  // Overlay state is read straight off the host sim. On a client it stays null,
+  // which is correct — a client has no trigger state to show because it never
+  // evaluates one.
+  renderer.trigDebug = app.sim ? {
+    stats: app.sim.trigStats,
+    players: app.sim.players.filter(q => !q.gone).map(q => ({
+      idx: q.idx, name: q.name, footing: q.engines ? q.engines.footing : 0,
+      cds: (q.loadout || []).filter(Boolean).map(id => ({ id, cd: +(q.skillCd[id] || 0).toFixed(1) })),
+      last: q.trigEvents ? q.trigEvents.lastFired : null,
+    })),
+    log: (app.sim.players[app.myIdx] && app.sim.players[app.myIdx].fireLog) || [],
+    enemies: app.sim.enemyPool.count,
+    tel: app.sim.telStats,
+    telZones: app.sim.telegraphZones(),
+    dodges: app.sim.telDodgeLog,
+  } : null;
   renderer.draw(view, dtFrame);
 
   // node-map screen follows the run mode (host and client alike)

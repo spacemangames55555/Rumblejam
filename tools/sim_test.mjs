@@ -27,6 +27,7 @@ const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 import { BIOMES, FLOOR_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
+import * as SKILLSIM from '../js/skillsim.js';
 import { ENEMY_BY_ID as ENEMY_BY_ID_T } from '../js/content/enemies.js';
 // Art fixtures below build sheets that must match the manifest exactly. They
 // hardcoded 32 until enemies moved to 128 and every one became a rejected
@@ -268,7 +269,39 @@ function unstick(g, p, mx, my) {
 }
 
 // ---- helpers ----
+// patch-trigger-core: the suite's "give the bot three weapons" idiom is now an
+// INFINITE LOOP — _addWeapon refuses at weaponSlots 0, so p.weapons.length
+// never grows. armBot() replaces every one of those loops. It maxes whatever
+// tree the character has; a character with no tree (45 of 47, because the other
+// 12 classes are out of scope) simply cannot fight on this branch, which is a
+// property of the patch and not something the helper can paper over.
+function armBot(g, p, ranks = 3) {
+  const trees = SKILLSIM.treesFor(p);
+  if (!trees.length) return false;
+  for (let i = 0; i < 60; i++) {
+    const learnable = SKILLSIM.learnableSkills(p);
+    if (!learnable.length) break;
+    p.skillPoints++;
+    SKILLSIM.spendSkillPoint(g, p, learnable.sort((a, b) => b.tier - a.tier)[0].id);
+  }
+  for (const id of Object.keys(p.skillRanks)) {
+    for (let r = 1; r < ranks; r++) { p.skillPoints++; SKILLSIM.spendSkillPoint(g, p, id); }
+  }
+  return true;
+}
+
 function drain(sim, p, buyStuff) {
+  // patch-trigger-core: weapons are gone, so a bot that never spends a skill
+  // point walks into every fight with no way to affect it. Spend down the tree
+  // as points arrive — deepest learnable node first, so the bot exercises the
+  // prerequisite chain rather than stacking rank 40 on the opener.
+  let guard = 0;
+  while (p.skillPoints > 0 && guard++ < 40) {
+    const learnable = SKILLSIM.learnableSkills(p);
+    if (!learnable.length) break;
+    const pick = learnable.sort((a, b) => b.tier - a.tier)[0];
+    if (!SKILLSIM.spendSkillPoint(sim, p, pick.id)) break;
+  }
   let g = 0;
   while (p.pendingOffer && g++ < 40) sim.uiAction(p.idx, { kind: 'levelup', id: p.pendingOffer[0].id });
   if (p.treasureOffer) sim.uiAction(p.idx, { kind: 'treasure', id: p.treasureOffer.picks[0] });
@@ -826,7 +859,7 @@ try {
     if (cp.weaponSlots !== wantCap) { fail(`${charId} weapon cap ${cp.weaponSlots} (want ${wantCap})`); continue; }
     cp.materials = 500;
     cs.currentNode = 0; cs._openShop(cp, 'clear');
-    while (cp.weapons.length < cp.weaponSlots - 1) cs._addWeapon(cp, 'pebbleshot', 1);
+    armBot(cs, cp);
     cs._addWeapon(cp, 'coilgun', 2);
     cp.shop.stock[0] = { kind: 'weapon', id: 'coilgun', tier: 2, price: 40, sold: false, locked: false };
     const m0 = cp.materials;
@@ -881,7 +914,7 @@ try {
     const ss = new Sim({ seed: 14, party: [{ idx: 0, key: 'k', name: 'W', charId: 'bulwark', color: '#fff' }] });
     const sp = ss.players[0];
     ss.currentNode = 0; ss._openShop(sp, 'clear');
-    while (sp.weapons.length < sp.weaponSlots) ss._addWeapon(sp, 'pebbleshot', 1);
+    armBot(ss, sp);
     sp.shop.stock[0] = { kind: 'weapon', id: 'rustcleaver', tier: 1, price: 30, sold: false, locked: false };
     sp.materials = 28; // can't afford outright — the refund covers the difference
     ss.uiAction(0, { kind: 'swapBuy', slot: 0, sell: 0, sellId: sp.weapons[0].id, sellTier: sp.weapons[0].tier });
@@ -987,7 +1020,7 @@ try {
   const cp = cs.players[0];
   cp.materials = 2000;
   cs.currentNode = 0; cs._openShop(cp, 'clear');
-  while (cp.weapons.length < cp.weaponSlots) cs._addWeapon(cp, 'kegbomb', 2);
+  armBot(cs, cp);
   cp.shop.stock[0] = { kind: 'weapon', id: 'kegbomb', tier: 2, price: 60, sold: false, locked: false };
   cs.uiAction(0, { kind: 'buy', slot: 0 });
   // the starting Kegbomb is tier I — the first TIER-II copy absorbs the buy
@@ -1616,7 +1649,7 @@ try {
         g.god = true; // the level's win condition is what's under test, not survival
         for (const p of g.players) {   // a plausible mid-floor build, not a naked kit
           const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
-          while (p.weapons.length < 3) g._addWeapon(p, kit[p.weapons.length], 2);
+          armBot(g, p);
           g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
         }
         g._travelTo(node.id);
@@ -1652,7 +1685,7 @@ try {
       g.god = true;
       for (const p of g.players) {
         const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
-        while (p.weapons.length < 3) g._addWeapon(p, kit[p.weapons.length], 2);
+        armBot(g, p);
         g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
       }
       g._travelTo(node.id);
@@ -1964,7 +1997,7 @@ try {
   const squad = n => mkp(Array.from({ length: n }, (_, i) => ['bulwark', 'cindermage', 'zephyr', 'banneret'][i % 4]));
   const gear = g => { for (const p of g.players) {
     const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
-    while (p.weapons.length < 3) g._addWeapon(p, kit[p.weapons.length], 2);
+    armBot(g, p);
     g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
   } };
   const enterKind = (g, kind) => {
@@ -2146,7 +2179,7 @@ try {
     (_, i) => ['bulwark', 'cindermage', 'zephyr', 'banneret', 'sawbones', 'redmaw', 'longshot', 'frostcaller'][i % 8]));
   const gear3 = g => { for (const p of g.players) {
     const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
-    while (p.weapons.length < 3) g._addWeapon(p, kit[p.weapons.length], 2);
+    armBot(g, p);
     g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
   } };
   const enter3 = (g, kind) => {
