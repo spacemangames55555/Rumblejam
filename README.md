@@ -678,21 +678,37 @@ never loads them:
 
 ## Known defects
 
-Three are recorded, reproducible where possible, and deliberately not fixed:
-[`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).
+Recorded, reproducible where possible, and deliberately not fixed:
+[`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md). Read the file before
+re-diagnosing any of them.
 
-1. **`rushMove()` draws from `Math.random()`**, so a fight cannot be reproduced
-   from its seed — two identical-seed runs part company around tick 400. It
-   cannot desync co-op (the sim is host-authoritative) but it means "it happened
-   on seed ABCDEFG" is not a reproduction.
+**Open — and two of the four touch co-op:**
+
 2. **Regeneration scales off `maxHp`**, so any entity carrying a large HP
    multiplier can heal faster than a party can damage it. The Bounty Hunt case
    is fixed with a damage lockout, but **the root cause is treated, not
-   removed** — read entry 2 before adding the next 10×-HP entity.
+   removed** — read the entry before adding the next 10×-HP entity.
 3. **A `shielded` bounty mark stalled at 4p, twice, unexplained.** Deliberately
    not folded into entry 2.
+8. **Client input has no delivery guarantee, no repeating channel, and nothing
+   to heal from.** Everything a client does — character pick, ready, node tap,
+   buy — leaves by `ClientTransport.send`. Host→client state was fixed (moved
+   onto the 15 Hz snapshot, plus a 3 Hz lobby heartbeat); **this is the other
+   direction**, and it is why `client ready` still fails intermittently in
+   `browser_test.mjs --coop`. Every skipped send is now logged and counted, so
+   the next occurrence is evidence rather than another seven-run hunt.
+9. **Room registration fails against the local relay**, before any peer exists —
+   roughly one co-op run in three or four never gets a room code. Undiagnosed;
+   nothing ruled out. Recorded separately so it stops being absorbed into "co-op
+   is flaky", which is how three distinct failures wore one description.
 
-Read the file before re-diagnosing any of them.
+**Resolved:**
+
+1. **`Math.random()` in the simulation** broke same-seed reproduction. The entry
+   named `rushMove()`; it was **43 calls** across four modules. All route
+   through `Sim.rng` now, and `node tools/determinism_test.mjs` proves six
+   configurations are byte-identical run to run, with a negative control and a
+   lint.
 
 Closed entries are kept when the failure shape recurs: the solo-touch boon
 softlock (#4), the null `def` that made every siege crash the host the moment
