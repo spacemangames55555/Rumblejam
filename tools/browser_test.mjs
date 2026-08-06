@@ -750,12 +750,24 @@ try {
   const exTitle = await A.exec(`return document.querySelector('#overlay-shop .ov-title').textContent`);
   if (exTitle === 'TRADER') ok('extraction shop opens at the fight clear (standard, not Black Market)');
   else fail(`extraction shop title: ${exTitle}`);
-  const exW = await A.exec(`return window.uv.sim.players[0].shop.stock.filter(s=>s.kind==='weapon').length`);
-  if (exW >= 2) ok(`floor-1 extraction stock guarantees weapons (${exW} in 4 slots)`); else fail(`floor-1 stock weapons: ${exW}`);
+  // The old assertion here was "floor-1 stock guarantees >=2 weapons". That
+  // guarantee is gone, because with weapons removed it guaranteed two cards
+  // nobody could buy. The rule now is the one the sim suite's §16 gates: every
+  // slot is filled, and nothing in it is a kind this player cannot hold.
+  const exStock = JSON.parse(await A.exec(`const p=window.uv.sim.players[0];
+    return JSON.stringify({n: p.shop.stock.length,
+      unbuyable: p.shop.stock.filter(s=>s.kind==='weapon').length, slots: p.weaponSlots})`));
+  if (exStock.n === 4 && exStock.unbuyable === 0) ok(`floor-1 extraction stock fills all ${exStock.n} slots with nothing unbuyable (weaponSlots ${exStock.slots})`);
+  else fail(`floor-1 extraction stock: ${JSON.stringify(exStock)}`);
   // buy + reroll right here
   await A.exec(`window.uv.sim.debug('F2'); return 1;`);
   const exM0 = await A.exec('return window.uv.sim.players[0].materials');
-  await A.exec(`const s=window.uv.sim,p=s.players[0]; const i=p.shop.stock.findIndex(x=>x.kind==='weapon'&&!x.sold); s.uiAction(0,{kind:'buy',slot:i}); s.uiAction(0,{kind:'reroll'}); return 1;`);
+  // buy the first AFFORDABLE unsold card, whatever kind it is — this hunted for
+  // a weapon specifically, and findIndex returning -1 made the buy a no-op that
+  // the reroll then covered for
+  await A.exec(`const s=window.uv.sim,p=s.players[0];
+    const i=p.shop.stock.findIndex(x=>!x.sold && x.price<=p.materials);
+    if (i>=0) s.uiAction(0,{kind:'buy',slot:i}); s.uiAction(0,{kind:'reroll'}); return 1;`);
   const exM1 = await A.exec('return window.uv.sim.players[0].materials');
   if (exM1 < exM0) ok('buy + reroll work at the extraction shop'); else fail('extraction shop buy/reroll no-op');
   // the F2 grant crossed level thresholds — the airhorn fires once the event
@@ -827,7 +839,9 @@ try {
   await A.waitFor(`return document.querySelector('#overlay-shop .ov-title').textContent === 'BLACK MARKET'`, 3000, 'Black Market banner');
   const bmInfo = JSON.parse(await A.exec(`const st=window.uv.sim.players[0].shop.stock;
     return JSON.stringify({slots: st.length, weapons: st.filter(s=>s.kind==='weapon').length})`));
-  if (bmInfo.slots === 6 && bmInfo.weapons >= 2) ok(`Black Market: ${bmInfo.slots} slots, ${bmInfo.weapons} weapons in stock`);
+  // Six slots is still the Black Market's identity; ">=2 weapons" was the other
+  // half and is now ">=2 cards nobody can buy", so the rule inverts.
+  if (bmInfo.slots === 6 && bmInfo.weapons === 0) ok(`Black Market: ${bmInfo.slots} slots, none of them unbuyable`);
   else fail(`Black Market stock: ${JSON.stringify(bmInfo)}`);
   // drain until the HOST says no level-ups remain
   async function clickAwayLevelups(br) {
@@ -1185,43 +1199,30 @@ try {
   // left half red, right half blue — asymmetric, so rotation is visible
   const flatAsymmetric = () => png(FX_CELL, FX_CELL, x => (x < FX_CELL / 2 ? [255, 60, 60] : [60, 60, 255]));
 
-  // THESE THREE PATHS ARE COMMITTED ART. skulker.png, flit.png and material.png
-  // are all tracked; this test overwrites them with fixtures. The previous
-  // cleanup deleted "only the files this test wrote" — but it did not write
-  // them, it clobbered them, so every run of this suite removed three sprites
-  // from the working tree. A later `git add -A` then committed the deletion,
-  // which is how art leaves a repository without anyone deciding to remove it.
+  // These three paths hold NO committed art. The enemy and fx sheets do not
+  // exist yet; the manifest carries their ids and expects them to resolve to
+  // null. This test creates them as scratch fixtures and removes them again,
+  // which is exactly right, and the original cleanup comment — "Remove ONLY the
+  // files this test wrote" — was accurate.
   //
-  // Originals are read into memory before anything is touched and put back
-  // byte-for-byte afterwards, the same way the sprite-override block below
-  // already handles assets.json and sprite-overrides.json.
-  // AND THE RESTORE MUST NOT RATCHET. Recording `null` for a path that is
-  // missing looks harmless, but if a previous run left one of these deleted,
-  // this run records null, writes its fixture, and then "restores" by deleting
-  // it again — permanently, every run after, with each run correctly reporting
-  // that IT changed nothing. Committed art must come back from git before the
-  // snapshot is taken, so a tree that is already damaged heals instead of
-  // staying damaged quietly.
+  // DO NOT "fix" that into a git restore. I read the cleanup as destructive,
+  // swept the fixtures into the repo with `git add -A`, and then built
+  // machinery to preserve them as if they were art. That broke the two sprite
+  // tests below: `enemy.skulker` began resolving to a 2.5 KB synthetic grid, so
+  // the zero-file registry check saw a hit and the "primitive" baseline it
+  // captures stopped being a primitive.
+  //
+  // The snapshot/restore below is kept for the day REAL art lands here: it puts
+  // back whatever was present and removes what was not. With nothing committed
+  // at these paths it records null and deletes, which is the original
+  // behaviour.
   const ART = [gridFile, badGridFile, flatFile];
   const originals = new Map();
-  const restoreFromGit = f => {
-    try {
-      const rel = path.relative(process.cwd(), f);
-      // tracked? (git cat-file exits non-zero for a path git does not know)
-      execFileSync('git', ['cat-file', '-e', `HEAD:${rel}`], { stdio: 'ignore' });
-      execFileSync('git', ['checkout', '--', rel], { stdio: 'ignore' });
-      return fs.existsSync(f);
-    } catch { return false; }   // untracked, or not a git checkout: nothing to heal
-  };
   const installArt = () => {
     fs.mkdirSync(enemyDir, { recursive: true });
     fs.mkdirSync(fxDir, { recursive: true });
     for (const f of ART) {
-      if (originals.has(f)) continue;
-      if (!fs.existsSync(f) && restoreFromGit(f)) {
-        console.warn(`⚠ ${path.relative(process.cwd(), f)} was missing from the working tree — restored from git before taking the fixture snapshot`);
-      }
-      originals.set(f, fs.existsSync(f) ? fs.readFileSync(f) : null);
+      if (!originals.has(f)) originals.set(f, fs.existsSync(f) ? fs.readFileSync(f) : null);
     }
     fs.writeFileSync(gridFile, directionGrid());
     fs.writeFileSync(flatFile, flatAsymmetric());

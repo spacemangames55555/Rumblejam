@@ -635,9 +635,11 @@ Three are recorded, reproducible where possible, and deliberately not fixed:
 
 Read the file before re-diagnosing any of them.
 
-Two entries are **closed and kept for the reproduction**, because the failure
-shape recurs: the solo-touch boon softlock (#4), and the null `def` that made
-every siege crash the host the moment its boss spawned (#5).
+Closed entries are kept when the failure shape recurs: the solo-touch boon
+softlock (#4), the null `def` that made every siege crash the host the moment
+its boss spawned (#5), and the shop stocking weapons after weapons were removed
+(#6). Entry **#7 is a retraction** — a "destructive test" that turned out to be
+me committing the test's own fixtures — kept because the mistake is instructive.
 
 ## Decisions (where the brief was silent or conflicted)
 

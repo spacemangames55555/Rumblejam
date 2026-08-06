@@ -497,84 +497,75 @@ the phase-4 category split.
 
 ---
 
-## 7. The browser suite deleted committed sprite art on every run
+## 7. RETRACTED — the browser suite was never destructive; I committed its fixtures
 
-**Fixed 2026-08-06.** `tools/browser_test.mjs`, the 8-direction sprite-grid
-block.
+**Retracted 2026-08-06, same day it was filed.** This entry claimed the suite
+deleted committed sprite art on every run. **It did not. There was no committed
+art at those paths, and there still isn't.**
 
-**What was wrong.** The test writes fixture PNGs to three paths and cleans up
-after itself:
+### What actually happened
 
-```js
-// Remove ONLY the files this test wrote. A blanket rmSync of assets/sprites
-// would delete committed art, which is a destructive test, not a cleanup.
-const removeArt = () => {
-  for (const f of [gridFile, badGridFile, flatFile]) fs.rmSync(f, { force: true });
-```
+`tools/browser_test.mjs` writes three scratch fixtures — an 8-direction grid, a
+flat magenta square, a two-tone 32×32 — to `assets/sprites/enemy/skulker.png`,
+`assets/sprites/enemy/flit.png` and `assets/sprites/fx/material.png`, then
+removes them. The enemy and fx sheets **do not exist yet**; the manifest carries
+their ids and the tests assert they resolve to null. Creating and deleting
+scratch files at those paths is correct, and the original comment — *"Remove
+ONLY the files this test wrote"* — was accurate.
 
-The comment is right about the danger and wrong about the facts. All three paths
-are **committed art**:
+I read that comment as wrong, swept the fixtures into the repository with
+`git add -A`, and then built machinery to preserve them as if they were art.
 
-```
-assets/sprites/enemy/skulker.png    tracked=YES
-assets/sprites/enemy/flit.png       tracked=YES
-assets/sprites/fx/material.png      tracked=YES
-```
-
-The test did not *write* those files, it *clobbered* them — so the cleanup
-deleted three tracked sprites from the working tree on every run. Nothing failed
-and nothing warned; the files were simply gone. A later `git add -A` commits the
-deletion, which is how art leaves a repository without anyone deciding to remove
-it. This was caught exactly that way: a commit hook reported three deleted PNGs
-as uncommitted changes to be pushed.
-
-**Reproduce (pre-fix):**
+The evidence I should have gathered before filing, not after:
 
 ```
-md5sum assets/sprites/enemy/skulker.png > /tmp/before
-node tools/browser_test.mjs
-git status --short -- assets/
-  D assets/sprites/enemy/flit.png
-  D assets/sprites/enemy/skulker.png
-  D assets/sprites/fx/material.png
+$ git log --all --oneline -- assets/sprites/enemy/ assets/sprites/fx/
+bb99b9f Dump client state when the co-op map screen never appears   <- my own commit
+
+$ ls -l + PNG headers
+assets/sprites/enemy/skulker.png    128x1024   2512B  <- directionGrid(), the fixture
+assets/sprites/enemy/flit.png       128x128     356B  <- flat magenta, the fixture
+assets/sprites/fx/material.png       32x32      107B  <- flatAsymmetric(), the fixture
 ```
 
-**Why the sibling block was safe.** The sprite-override test forty lines below
-uses `slabjaw.png`, `lobber.png` and `gemmite.png` — none of which are tracked —
-and it *also* reads `assets.json` and `sprite-overrides.json` into memory before
-touching them and restores them in `finally`. The correct pattern was already in
-the same file, applied to the JSON and not to the PNGs.
+One `git log --diff-filter=A` would have shown the files entered the repository
+in my own commit, hours after I started calling their deletion a defect. Their
+dimensions and byte sizes are exactly what the generators produce.
 
-**The fix.** Originals are read into memory before the fixtures are written and
-restored byte-for-byte afterwards. A path with no original (genuinely created by
-the test) is still removed.
+### What it broke
 
-**The restore alone was not enough.** It ran, and the art still went missing
-again across later runs, because two things around it were wrong:
+Committing them made `enemy.skulker` resolve to a 2.5 KB synthetic grid, which
+broke two sprite tests that had been passing:
 
-- `installArt()` and `removeArt()` sat ~700 lines and several sibling blocks
-  apart, with `removeArt` in the *last inner* `finally`. Anything that threw
-  outside an inner `try` skipped the restore completely. The fixture lifetime
-  is now wrapped in one spanning `try/finally`.
-- The restore **ratcheted**. A path missing at install time recorded `null`,
-  so the restore deleted it again — permanently, on every subsequent run, with
-  each run truthfully reporting that *it* changed nothing. Committed art is now
-  restored from git before the snapshot is taken, so a damaged tree heals.
-- `removeArt()` iterated `ART` rather than the snapshot, so calling it without a
-  matching `installArt()` deleted committed art outright. Now it iterates only
-  what it actually recorded, which is what makes it safe in a `finally`.
+```
+✗ registry state: {"size":304,"missing":281,"hit":1}     <- expects enemy.skulker to have NO file
+✗ sprites=off pixel [226,80,76] != baseline [80,200,40]  <- the "primitive" baseline drew the fixture
+```
 
-**What holds it now.** A teardown gate, which is what should have existed from
-the start:
+Confirmed by running the pre-change commit with the files present: both
+reproduce, so the cause is the files, not any code change.
 
-| gate | where | asserts |
-|---|---|---|
-| clean working tree | `tools/browser_test.mjs`, `assertCleanTree()` at both exit points | the dirty set of **tracked** files after the run matches the dirty set before it; a suite that changed one fails, naming the file and flagging deletions specially |
+### What was kept
 
-It diffs before against after rather than requiring a clean tree outright, so it
-blames only what the run did and stays quiet about a developer's work in
-progress. Negative controls, all three run: deleting a tracked sprite → `FAIL …
-1 DELETED`; leaving a fixture behind → `FAIL … M`; touching nothing → `PASS`.
+- The fixture snapshot/restore, which is inert while nothing is committed at
+  those paths (records null, deletes — the original behaviour) and becomes
+  useful the day real art lands there.
+- The spanning `try/finally`, so cleanup runs on every exit path rather than
+  only the last inner `finally`.
+- `assertCleanTree()` at both suite exits. The gate is still right for its own
+  reasons — a suite that dirties the tree has failed — and it is what would have
+  caught the fixtures being left behind in the first place.
+
+The `restoreFromGit` helper was removed. It existed only to resurrect files that
+should never have been committed.
+
+### The lesson
+
+Three separate signals said "these are test fixtures" — the byte sizes, the
+dimensions matching `E_CELL`/`E_GRID` exactly, and the fact that no enemy art
+has ever been generated — and I read a stop-hook nag about uncommitted changes
+as proof of a destructive test instead. *Check whether a file is art before
+defending it as art.* `git log --diff-filter=A` is one command.
 
 ---
 
