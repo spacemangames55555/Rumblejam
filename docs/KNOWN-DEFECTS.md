@@ -18,91 +18,39 @@ regression is findable by the same steps rather than rediscovered.
 
 ---
 
-## 1. `rushMove()` uses `Math.random()`, so a fight cannot be reproduced from its seed
+## 1. RESOLVED — `Math.random()` in the simulation broke same-seed reproduction
 
-**Where:** `js/entities/enemies.js`, `rushMove()` — the stall-detection detour.
+**Fixed 2026-08-06.** Moved out of the open list because it is fixed and gated,
+not because it was tolerated.
 
-```js
-if (moved < 24 * 24) { // barely moved: detour somewhere open at random
-  const a = Math.random() * Math.PI * 2;
-```
+**What it was.** This entry named `rushMove()`'s stall detour as the one call
+drawing from `Math.random()` instead of the seeded stream. It was **43 calls**
+across `js/game.js` (29), `js/entities/enemies.js` (15), `js/telegraphs.js` (1)
+and `js/traits-toh.js` (2) — spawn jitter, cooldown scatter, proc chances, the
+Reflex dodge roll, material scatter, wander points, boss teleport targets.
 
-**What is wrong.** Everything else in the sim derives from the run seed through
-named sub-streams (`js/rng.js`, `subRng`). This one call does not. It fires
-whenever a rushing enemy has moved less than 24u in 1.2s — which is common the
-moment `wave.done` flips and survivors start pressing — so **two runs of the
-same seed stop matching partway through the first real fight.**
+**What it cost, concretely.** Every A/B comparison in patch-region-shell needed
+three runs to say anything, because one run proved nothing. It produced at least
+two wrong conclusions in a single session: `elite_arena (1p)` was reported as a
+regression when it flips between runs on both branches, and a co-op fix was
+credited from one clean run out of three.
 
-**Reproduce — one command:**
+**The fix.** `Sim.rng`, a seeded stream created from the run seed, and every one
+of the 43 routed through it. One shared stream rather than named sub-streams:
+sub-streams stop systems perturbing each other, which matters for CONTENT rolls
+(layout, shop stock, offers) and those keep theirs — these are per-tick
+incidentals whose order is already fixed by tick order.
 
-```
-node tools/determinism_probe.mjs [seed] [charId] [ticks]
-```
+`initTelegraph(sim, e)` now takes `sim` as a REQUIRED first parameter rather
+than defaulting when a caller forgets, which is how this survived four patches.
 
-It builds two `Sim`s on the same seed, travels both to the same `open_expanse`
-combat node, ticks them side by side and reports the first tick where a
-positional hash of the enemy field disagrees. It exits 1 while the defect is
-live and 0 once the two runs match, so it can become a gate the day it starts
-passing.
+**What holds it now** — `node tools/determinism_test.mjs`:
 
-**Measured**, on a party with no Hunter and no beast in it, so none of this is
-the beast's RNG:
-
-| seed | character | diverged at |
-|---|---|---|
-| 4242 | `toh_druid` | tick **402** (6.70s) |
-| 777 | `bulwark` | tick **431** (7.18s) |
-
-Both land shortly after the wave-end rush begins, which is when `rushMove()`
-starts running.
-
-**What this does NOT break, and why it has survived this long:**
-
-- **It cannot desync co-op.** The sim is host-authoritative — clients render
-  snapshots and run no enemy logic — so both peers see the host's roll.
-
-**It does make the test suite flaky — this entry used to claim otherwise, and
-that was wrong.** The original wording said "nothing in `tools/sim_test.mjs`
-asserts tick-exact equality between two runs of one seed", which is true and
-beside the point: the **DPS gate** measures each character's damage in a live
-fight and asserts it lands within ±40% of the roster median. The fight is not
-reproducible, so neither is the measurement. On unchanged `origin/main`, two
-consecutive runs:
-
-| character | run 1 | run 2 |
-|---|---|---|
-| `jester` | 29.7 (+32%) | 28.4 (+26%) |
-| `voltaic` | 26.4 (+17%) | 27.0 (+20%) |
-
-`jester` and `gilded_one` sit in the low 30s against a 40% wall, so a run
-occasionally pushes one over. **Seen twice in 28 runs across two branches**
-(2026-08-05), always as `✗ DPS gate: 1 outlier(s)`, never the same character
-twice. Re-run before believing a lone DPS-gate failure; a real regression
-repeats.
-
-That makes this defect the answer to a question the suite will keep asking, and
-another reason to fix it rather than live with it.
-
-**What it does break:** seed-based bug reproduction. "It happened on seed
-ABCDEFG" is not currently a reproduction, and any future gate that wants
-tick-exact replay — desync detection, a recorded-input regression, netcode
-rollback — has to fix this first.
-
-**What a fix looks like.** A per-enemy sub-stream, the way
-`js/entities/beast.js` does it for wander points:
-`subRng(sim.seed, 'rush', e.id, e.rushN++)`. The enemy id is already stable and
-already deterministic, so the change is local. Check the other `Math.random()`
-sites in the sim at the same time — `Sim._spawnSummon` scatters new summons the
-same way (beasts already opt out of that in `initBeast`, deliberately, and the
-comment there explains why).
-
-**Not in scope for `patch-hunter-melee-beast`** (2026-08-05), which found it.
-The beast's own wander is seeded and gated; that gate has to clear the enemy
-field to isolate it, and the workaround is a marker pointing back here.
-
----
-
----
+| gate | asserts |
+|---|---|
+| six configurations | the WHOLE SNAPSHOT every 60 ticks is byte-identical across two runs — both rosters, region and non-region, two players with scripted but *different* inputs so movement and dodge paths actually run |
+| negative control | a *different* seed produces a *different* run, so the comparisons are not vacuously true |
+| the lint | zero `Math.random()` in any of the 13 simulation modules, comments stripped first — routing 43 calls is worth nothing if the 44th goes back in |
 
 ## 2. Regeneration scales off `maxHp`, so a high-HP entity can become unkillable
 

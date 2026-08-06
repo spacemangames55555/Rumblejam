@@ -23,7 +23,7 @@ function rushMove(sim, e, p, spd, dt) {
     const moved = dist2(e.x, e.y, e.stuckX || 0, e.stuckY || 0);
     e.stuckX = e.x; e.stuckY = e.y; e.stuckT = 0;
     if (moved < 24 * 24) { // barely moved: detour somewhere open at random
-      const a = Math.random() * Math.PI * 2;
+      const a = sim.rng.float() * Math.PI * 2;
       e.rushX = clamp(e.x + Math.cos(a) * 420, 40, sim.W - 40);
       e.rushY = clamp(e.y + Math.sin(a) * 420, 40, sim.H - 40);
       e.rushSet = true;
@@ -131,7 +131,7 @@ export function updateEnemy(sim, e, dt) {
       }
       e.fireT -= dt;
       if (e.fireT <= 0 && dist(e.x, e.y, p.x, p.y) < M.range) {
-        e.fireT = M.cd * (0.85 + Math.random() * 0.3);
+        e.fireT = M.cd * (0.85 + sim.rng.float() * 0.3);
         sim.addTelegraph({
           shape: 'circle', x: p.x, y: p.y, r: M.radius, dur: M.windup,
           boom: { dmg: Math.round(M.dmg * e.dmgScale), radius: M.radius },
@@ -173,8 +173,8 @@ export function updateEnemy(sim, e, dt) {
       if (e.fireT <= 0 && d < 520) {
         // an occasional shot into the wall is fine (cover WORKING is the
         // point) — but mostly they hold fire and reposition
-        if (blocked && Math.random() > 0.25) { e.fireT = t.fireCd * 0.35; break; }
-        e.fireT = t.fireCd * (0.8 + Math.random() * 0.4);
+        if (blocked && sim.rng.float() > 0.25) { e.fireT = t.fireCd * 0.35; break; }
+        e.fireT = t.fireCd * (0.8 + sim.rng.float() * 0.4);
         const a = angleTo(e.x, e.y, p.x, p.y);
         sim.spawnEnemyProj(e.x, e.y, a, t.proj.speed, Math.round(t.proj.dmg * e.dmgScale), t.proj.radius, e.def.color);
       }
@@ -204,13 +204,13 @@ export function updateEnemy(sim, e, dt) {
         if (e.diveT <= 0) e.phase = 0;
       } else {
         if (rush) { rushMove(sim, e, p, spd, dt); break; }
-        e.orbitA = (e.orbitA ?? Math.random() * 6.28) + dt * 1.4;
+        e.orbitA = (e.orbitA ?? sim.rng.float() * 6.28) + dt * 1.4;
         const tx = p.x + Math.cos(e.orbitA) * t.orbitR;
         const ty = p.y + Math.sin(e.orbitA) * t.orbitR;
         sim.walk(e, tx, ty, spd, dt);
         e.diveCd = (e.diveCd ?? t.diveCd) - dt;
         if (e.diveCd <= 0 && dist(e.x, e.y, p.x, p.y) < t.orbitR * 1.5) {
-          e.diveCd = t.diveCd * (0.8 + Math.random() * 0.5);
+          e.diveCd = t.diveCd * (0.8 + sim.rng.float() * 0.5);
           e.phase = 1; e.windT = t.diveWindup;
           // Aim LOCKS here and does not track (no followAim, unlike the
           // dasher). A stoop commits — that is what makes sidestepping it a
@@ -286,7 +286,7 @@ export function updateEnemy(sim, e, dt) {
       e.brood = e.brood.filter(id => sim.enemyById(id));
       if (e.spawnT <= 0 && e.brood.length < (e.maxBroodCap || t.maxBrood) && sim.enemyPool.count < 300) {
         e.spawnT = cd;
-        const child = sim.spawnEnemyById(t.broodId, e.x + (Math.random() * 40 - 20), e.y + (Math.random() * 40 - 20), { noMats: true });
+        const child = sim.spawnEnemyById(t.broodId, e.x + (sim.rng.float() * 40 - 20), e.y + (sim.rng.float() * 40 - 20), { noMats: true });
         if (child) e.brood.push(child.id);
       }
       break;
@@ -303,10 +303,10 @@ export function updateEnemy(sim, e, dt) {
         e.x += e.vx * dt; e.y += e.vy * dt;
         sim.clampToRoom(e);
         e.dashT -= dt;
-        if (e.dashT <= 0) { e.phase = 0; e.dashCd = D.cd * (0.8 + Math.random() * 0.4); }
+        if (e.dashT <= 0) { e.phase = 0; e.dashCd = D.cd * (0.8 + sim.rng.float() * 0.4); }
       } else {
         if (p) { if (rush) rushMove(sim, e, p, spd, dt); else sim.walk(e, p.x, p.y, spd * 0.9, dt); }
-        e.dashCd = (e.dashCd ?? D.cd * Math.random()) - dt;
+        e.dashCd = (e.dashCd ?? D.cd * sim.rng.float()) - dt;
         if (e.dashCd <= 0 && p && dist(e.x, e.y, p.x, p.y) < 420) {
           e.phase = 1; e.windT = D.windup;
           e.aimA = angleTo(e.x, e.y, p.x, p.y);
@@ -333,7 +333,7 @@ export function updateEnemy(sim, e, dt) {
           e.aimA += clamp(d, -0.5 * dt, 0.5 * dt);
         }
         if (e.windT <= 0) {
-          e.phase = 0; e.fireCd = B.cd * (0.85 + Math.random() * 0.3);
+          e.phase = 0; e.fireCd = B.cd * (0.85 + sim.rng.float() * 0.3);
           sim.fireBeam(e.x, e.y, e.aimA, B.len, B.width, Math.round(B.dmg * e.dmgScale), e);
         }
       } else {
@@ -343,7 +343,7 @@ export function updateEnemy(sim, e, dt) {
           else if (d < 260) sim.walk(e, e.x * 2 - p.x, e.y * 2 - p.y, spd, dt);
           else sim.walk(e, p.x, p.y, spd * 0.5, dt);
         }
-        e.fireCd = (e.fireCd ?? B.cd * Math.random()) - dt;
+        e.fireCd = (e.fireCd ?? B.cd * sim.rng.float()) - dt;
         if (e.fireCd <= 0 && p) {
           // snipers lock on faster against stationary targets
           e.phase = 1; e.windT = B.windup * (p.stillT > 0.8 ? 0.55 : 1);
@@ -467,7 +467,7 @@ function updateBoss(sim, e, dt, spd) {
       if (s.poolCd <= 0) {
         s.poolCd = b.pools.cd;
         for (let i = 0; i < b.pools.count; i++) {
-          const px = 80 + Math.random() * (sim.W - 160), py = 80 + Math.random() * (sim.H - 160);
+          const px = 80 + sim.rng.float() * (sim.W - 160), py = 80 + sim.rng.float() * (sim.H - 160);
           sim.addTelegraph({ shape: 'circle', x: px, y: py, r: b.pools.radius, dur: b.pools.windup,
             onFire: () => sim.addZone({ x: px, y: py, r: b.pools.radius, dps: b.pools.dps * e.dmgScale, dur: b.pools.dur, hurts: 'players', color: '#ff7b3a' }) });
         }
@@ -488,7 +488,7 @@ function updateBoss(sim, e, dt, spd) {
       s.slamCd = (s.slamCd ?? 3) - dt;
       if (s.beamCd <= 0 && s.beamT <= 0) {
         s.beamCd = b.beams.cd; s.busyT = b.beams.windup;
-        const startA = Math.random() * Math.PI * 2;
+        const startA = sim.rng.float() * Math.PI * 2;
         for (let i = 0; i < b.beams.count; i++) {
           sim.addTelegraph({ shape: 'beam', x: e.x, y: e.y, angle: startA + (i / b.beams.count) * Math.PI * 2, w: b.beams.width, len: 900, dur: b.beams.windup, follow: e });
         }

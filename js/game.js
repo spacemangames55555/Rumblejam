@@ -3,7 +3,7 @@
 // single source of truth. Solo play runs this exact code with one player.
 
 import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, SCALING_RATES } from './config.js';
-import { Rng, subRng } from './rng.js';
+import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
 import { buildArena, waveConfig, PROFILES } from './arenas.js';
@@ -53,6 +53,24 @@ const TIER_WEIGHTS = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 
 export class Sim {
   constructor({ seed, party }) {
     this.seed = seed >>> 0;
+
+    // THE SIM STREAM. Every incidental roll the simulation makes — spawn
+    // jitter, cooldown scatter, proc chances, dodge rolls, material scatter,
+    // wander points — comes from HERE, not from this.rng.float().
+    //
+    // KNOWN-DEFECTS #1 named rushMove() as the one offender. It was 43 of them
+    // across game.js, entities/enemies.js, telegraphs.js and traits-toh.js, and
+    // the consequence was not academic: every A/B comparison in this patch
+    // needed three runs to say anything, because two runs of the same seed
+    // stopped matching partway through the first fight. "It happened on seed
+    // ABCDEFG" was not a reproduction.
+    //
+    // One stream rather than named sub-streams on purpose. Sub-streams keep
+    // systems from perturbing each other, which matters for CONTENT rolls
+    // (layout, shop stock, offers) and those keep theirs. These are per-tick
+    // incidentals whose order is already fully determined by the tick order;
+    // a shared stream is both simpler and exactly as reproducible.
+    this.rng = new Rng(hashString(`sim:${this.seed}`));
     this.W = 1280; this.H = 720; // placeholder until the first arena sets real dims
     this.tickNum = 0;
     this.time = 0;
@@ -853,7 +871,7 @@ export class Sim {
   _openSpot(x, y) {
     // nudge a point out of any obstacle
     for (let tries = 0; tries < 20 && this._inObstacle(x, y, 60); tries++) {
-      x += (Math.random() - 0.5) * 300; y += (Math.random() - 0.5) * 300;
+      x += (this.rng.float() - 0.5) * 300; y += (this.rng.float() - 0.5) * 300;
       x = clamp(x, WALL + 80, this.W - WALL - 80); y = clamp(y, WALL + 80, this.H - WALL - 80);
     }
     return { x, y };
@@ -1002,7 +1020,7 @@ export class Sim {
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       domain: def.domain || null,
       telState: 0, telT: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
-      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * Math.random() : 0,
+      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -1261,9 +1279,9 @@ export class Sim {
       mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
-      t: Math.random(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
+      t: this.rng.float(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
-      fireT: 0.8 + Math.random(), healTarget: null, brood: null, shape: def.shape, color: def.color,
+      fireT: 0.8 + this.rng.float(), healTarget: null, brood: null, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
       // THE TELEGRAPH MACHINE, RESET. Same recycling hazard as the objective
       // flags below, and it shipped: only the siege boss cleared these, so an
@@ -1273,7 +1291,7 @@ export class Sim {
       // reads e.def.telegraph.recoverMs and throws. Found by Unsheathed's stun
       // landing on a recycled skulker.
       telState: 0, telT: 0, telZone: null, telCaught: null,
-      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * Math.random() : 0,
+      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       // pressure-profile variants (patch 9)
       mortar: !!opts.mortar,   // Lobber artillery: telegraphed shells on your position
       puddle: !!opts.puddle,   // chaff that leaves an acid puddle on death
@@ -1563,8 +1581,8 @@ export class Sim {
     const shells = 3 * this.curseBarrage;
     for (let i = 0; i < shells; i++) {
       const t = live[i % live.length];
-      const x = clamp(t.x + (Math.random() - 0.5) * 320, WALL + 40, this.W - WALL - 40);
-      const y = clamp(t.y + (Math.random() - 0.5) * 320, WALL + 40, this.H - WALL - 40);
+      const x = clamp(t.x + (this.rng.float() - 0.5) * 320, WALL + 40, this.W - WALL - 40);
+      const y = clamp(t.y + (this.rng.float() - 0.5) * 320, WALL + 40, this.H - WALL - 40);
       this.addTelegraph({
         shape: 'circle', x, y, r: 74, dur: 1.5 + i * 0.12,
         boom: { dmg: Math.round(12 * Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1)), radius: 74 },
@@ -1848,7 +1866,7 @@ export class Sim {
     if ((agg.critVsFullHp || t.key === 'executioner' || t.key === 'contract') && target.hp >= target.maxHp) crit = true;
     // Jester: trait-internal odds that ramp per attack and reset when a crit lands
     if (t.key === 'crit_ramp') {
-      if (!crit && Math.random() * 100 < p.jesterOdds) crit = true;
+      if (!crit && this.rng.float() * 100 < p.jesterOdds) crit = true;
       p.jesterOdds = crit ? 0 : Math.min(t.max, p.jesterOdds + t.per);
     }
     // Blood Dance rewards committing to a slow weapon
@@ -1993,13 +2011,13 @@ export class Sim {
     // character trait payloads
     if (t.key === 'burn_attacks') this._applyBurn(e, this._attuned(p, t.dps), t.dur, p);
     if (t.key === 'slow_attacks') this._applySlow(e, t.mult, t.dur, p);
-    if (t.key === 'chain_attacks' && Math.random() < t.chance) {
+    if (t.key === 'chain_attacks' && this.rng.float() < t.chance) {
       this._chainLightning(e, ctx, { count: 1, range: t.range, factor: t.factor });
     }
     // item payloads
-    for (const b of p.hookAgg.burnOnHit) if (Math.random() < b.chance) this._applyBurn(e, this._attuned(p, b.dps), b.duration, p);
-    for (const s of p.hookAgg.chillOnHit) if (Math.random() < s.chance) this._applySlow(e, s.mult, s.duration, p);
-    for (const c of p.hookAgg.chainOnHit) if (Math.random() < c.chance) {
+    for (const b of p.hookAgg.burnOnHit) if (this.rng.float() < b.chance) this._applyBurn(e, this._attuned(p, b.dps), b.duration, p);
+    for (const s of p.hookAgg.chillOnHit) if (this.rng.float() < s.chance) this._applySlow(e, s.mult, s.duration, p);
+    for (const c of p.hookAgg.chainOnHit) if (this.rng.float() < c.chance) {
       const near = this._nearestEnemyExcept(e.x, e.y, c.range, e);
       if (near) {
         this.fx.beams.push({ x1: e.x, y1: e.y, x2: near.x, y2: near.y, color: '#4fd8eb' });
@@ -2212,8 +2230,8 @@ export class Sim {
     if (killer && killer.stats) tohOnKill(this, killer, e);
     // drops
     let mats = objectiveKillPays(this, e) ? e.mats * this.greedMats : 0;
-    if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && Math.random() < killer.hookAgg.doubleMaterials) mats *= 2;
-    for (let i = 0; i < mats; i++) this._dropMaterial(x + (Math.random() * 30 - 15), y + (Math.random() * 30 - 15));
+    if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && this.rng.float() < killer.hookAgg.doubleMaterials) mats *= 2;
+    for (let i = 0; i < mats; i++) this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15));
     // killer hooks & traits
     if (killer && killer.stats) {
       killer.kills++;
@@ -2225,7 +2243,7 @@ export class Sim {
       if (killer.hookAgg.killHeal > 0) this._heal(killer, killer.hookAgg.killHeal);
       if (killer.hookAgg.critAfterKill) killer.critArmed = true;
       for (const ke of killer.hookAgg.killExplode) {
-        if (Math.random() < ke.chance) {
+        if (this.rng.float() < ke.chance) {
           this.fx.booms.push({ x, y, r: ke.radius });
           this._areaDamageEnemies(x, y, ke.radius, Math.max(1, Math.round(this._attuned(killer, ke.damage))), killer, { exclude: e });
           this.pushEvent({ k: 'sfx', s: 'boom' });
@@ -2256,7 +2274,7 @@ export class Sim {
       }
       if (e.def.behavior === 'splitter' && !e.mini) {
         for (let i = 0; i < e.def.splitInto; i++) {
-          this.spawnEnemyById(e.def.id, x + (i ? 18 : -18), y + (Math.random() * 20 - 10), { mini: true, noMats: false });
+          this.spawnEnemyById(e.def.id, x + (i ? 18 : -18), y + (this.rng.float() * 20 - 10), { mini: true, noMats: false });
         }
       }
       if (e.def.behavior === 'bomber' && !e.fusing) {
@@ -2319,7 +2337,7 @@ export class Sim {
     raw *= this.enemyBuff; // the siege's ward pylon empowers everything
     const t = p.char.trait;
     // Reflex: dodge chance (capped in recompute); every on-dodge effect keys off this
-    if (!opts.shared && Math.random() * 100 < p.stats.reflex) {
+    if (!opts.shared && this.rng.float() * 100 < p.stats.reflex) {
       this.fx.hits.push({ x: Math.round(p.x), y: Math.round(p.y - 24), a: 0, c: 2 }); // "dodge" popup
       if (t.key === 'slipstream') { p.tempoBuffT = t.dur; p.nextCrit = true; }
       if (t.key === 'afterimage') {
@@ -2716,7 +2734,7 @@ export class Sim {
 
   _dropMaterial(x, y, value = 1) {
     if (this.pickups.length >= 240) {
-      const m = this.pickups[(Math.random() * this.pickups.length) | 0];
+      const m = this.pickups[(this.rng.float() * this.pickups.length) | 0];
       m.v += value;
       return;
     }
@@ -2752,7 +2770,7 @@ export class Sim {
 
   _collectMaterial(p, v) {
     this.pushEvent({ k: 'sfx', s: 'pickup' });
-    if (p.hookAgg.pickupBonusChance > 0 && Math.random() < p.hookAgg.pickupBonusChance) v += 1;
+    if (p.hookAgg.pickupBonusChance > 0 && this.rng.float() < p.hookAgg.pickupBonusChance) v += 1;
     p.materials += v;
     p.matsCollected += v;
     const xpGain = v * (1 + p.hookAgg.xpBonus / 100);
@@ -2783,7 +2801,7 @@ export class Sim {
     for (const pt of p.hookAgg.pickupTempo) {
       if (p.frenzy.length < (pt.maxStacks || 5)) p.frenzy.push({ tempo: pt.tempo, t: pt.duration });
     }
-    for (const mh of p.hookAgg.materialHeal) if (Math.random() < mh.chance) this._heal(p, mh.amount);
+    for (const mh of p.hookAgg.materialHeal) if (this.rng.float() < mh.chance) this._heal(p, mh.amount);
     p.metaDirty = true;
   }
 
@@ -3240,8 +3258,8 @@ export class Sim {
     const sd = def ? def.summon : { hp: 25, dmg: 0, cd: 1, range: 0 };
     this.summons.push({
       owner: p.idx, weaponId, weaponUid, tier, deployT: 0, type: forceType || (sd.type || 'turret'),
-      x: p.x + (Math.random() * 60 - 30), y: p.y + (Math.random() * 60 - 30),
-      hp: 1, maxHp: 1, cd: 0, orbitA: Math.random() * 6.28, dead: false, aimA: 0,
+      x: p.x + (this.rng.float() * 60 - 30), y: p.y + (this.rng.float() * 60 - 30),
+      hp: 1, maxHp: 1, cd: 0, orbitA: this.rng.float() * 6.28, dead: false, aimA: 0,
     });
     const s = this.summons[this.summons.length - 1];
     if (s.type === 'beast') initBeast(this, s);
@@ -3636,9 +3654,9 @@ export class Sim {
         if (this.phase !== 'arena') break;
         const table = FLOOR_TABLES[this.floorNum - 1];
         for (let i = 0; i < 50; i++) {
-          const pos = { x: WALL + 40 + Math.random() * (this.W - 2 * WALL - 80), y: WALL + 40 + Math.random() * (this.H - 2 * WALL - 80) };
+          const pos = { x: WALL + 40 + this.rng.float() * (this.W - 2 * WALL - 80), y: WALL + 40 + this.rng.float() * (this.H - 2 * WALL - 80) };
           if (this._inObstacle(pos.x, pos.y, 20)) continue;
-          this.spawnEnemyById(table[(Math.random() * table.length) | 0], pos.x, pos.y, { noMats: false });
+          this.spawnEnemyById(table[(this.rng.float() * table.length) | 0], pos.x, pos.y, { noMats: false });
         }
         break;
       }

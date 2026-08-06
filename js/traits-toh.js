@@ -584,7 +584,7 @@ export function tohOnKill(sim, p, e) {
       p.contractT = t.remarkDelay;
       p.contractsDone++;
       const pay = Math.round(t.payoutBase + Math.max(0, p.stats.greed) * t.payoutGreedScale);
-      for (let i = 0; i < pay; i++) sim._dropMaterial(e.x + (Math.random() * 30 - 15), e.y + (Math.random() * 30 - 15));
+      for (let i = 0; i < pay; i++) sim._dropMaterial(e.x + (sim.rng.float() * 30 - 15), e.y + (sim.rng.float() * 30 - 15));
       sim._recomputeStats(p);
       sim.pushEvent({ k: 'toast', idx: p.idx, text: `CONTRACT CLOSED — +${pay} ⟡, +${t.ferPerContract}% Ferocity` });
     }

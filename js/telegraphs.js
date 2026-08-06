@@ -99,12 +99,15 @@ function telegraphOf(e) {
   return (e && e.def && e.def.telegraph) || null;
 }
 
-export function initTelegraph(e) {
+// `sim` is required, not optional: the initial cooldown scatter is a seeded
+// roll like every other, and defaulting it to Math.random() when a caller
+// forgets is how KNOWN-DEFECTS #1 stayed alive across four patches.
+export function initTelegraph(sim, e) {
   const t = telegraphOf(e);
   e.telState = TELEGRAPH_STATES.IDLE;
   e.telT = 0;
   e.telZone = null;
-  e.telCd = (t ? t.cooldownMs / 1000 : 0) * Math.random();
+  e.telCd = (t ? t.cooldownMs / 1000 : 0) * sim.rng.float();
   e.telCaught = null;
 }
 
@@ -153,7 +156,7 @@ export function tickTelegraphs(sim, dt) {
     if (!e.active) continue;
     const t = telegraphOf(e);
     if (!t) continue;
-    if (e.telState === undefined) initTelegraph(e);
+    if (e.telState === undefined) initTelegraph(sim, e);
 
     // a stun at any point during the wind-up kills the attack
     if (e.stunT > 0 && e.telState === TELEGRAPH_STATES.WINDUP) { cancelTelegraph(sim, e); continue; }
