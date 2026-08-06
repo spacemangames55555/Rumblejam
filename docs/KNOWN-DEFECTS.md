@@ -413,3 +413,64 @@ node tools/telegraph_test.mjs
 | boss ticks | `tools/telegraph_test.mjs` | a real siege is driven to a real boss spawn and ticked 4s **with it alive**, and the boss is confirmed outside the telegraph system rather than accidentally inside it |
 | pooled reset | `js/game.js`, `spawnEnemyById()` | `telState/telT/telZone/telCaught/telCd` are cleared on every spawn, beside the objective flags that taught the same lesson |
 | single reader | `js/telegraphs.js`, `telegraphOf()` | one helper answers "does this entity telegraph"; nothing in the file reads `e.def` directly, so a sixth call site cannot reintroduce the dereference |
+
+---
+
+# Open again
+
+## 6. The shop still stocks weapons no character can equip
+
+**Where:** `js/config.js` `SHOP_WEAPON_CHANCE: 0.3`, and every shop-stock roll
+that reads it. Introduced by `patch-trigger-core`, which set `weaponSlots: 0`
+and removed weapons as a source of damage but left the shop generating them.
+
+**What is wrong.** Measured over 400 seeded shops on floor 1:
+
+```
+SHOP_WEAPON_CHANCE = 0.3
+slot 0 is a weapon in 128/400 shops (32.0%)
+at least one weapon in stock: 400/400 (100.0%)
+player weaponSlots at spawn: 0
+```
+
+**Every single shop** offers at least one card that cannot be bought by anybody.
+Tapping one spends nothing and prints `Can't buy: no weapon slots`. That is a
+live player-facing defect — materials are the run's only currency and a third of
+the storefront is inert — not merely a test artifact.
+
+**Reproduce — the observable a player sees:**
+
+```
+node tools/browser_test.mjs
+```
+
+Roughly one run in three:
+
+```
+✗ tap purchase failed (408 unchanged) — diag: {"shop":true,...,"stock0":{"kind":"weapon","id":"sparkbolt",
+  "tier":1,"price":22,...},"toasts":"...\nCan't buy: no weapon slots","weapons":0,"slots":0}
+```
+
+**This is what made the browser suite look flaky, and it is not defect #1.** The
+suite taps card 0 unconditionally; the roll decides whether that card is
+purchasable. Observed failing on `sparkbolt` and on `fanblade`, and passing on
+the runs where slot 0 rolled an item — a 32% failure rate against a 4↔5 failure
+count that flickered across four runs in two trees. Nothing about it is
+non-deterministic given the seed; the harness simply does not pin the stock.
+
+**What has been ruled out.** Not `rushMove()` (defect #1) — no enemy movement is
+involved, the shop is a map-phase overlay. Not a timing race — the 3s
+`waitFor` expires because the purchase is *refused*, and the refusal toast is
+already on screen when the diagnostic runs. Not a touch-input problem — the same
+tap succeeds whenever slot 0 is an item.
+
+**What a fix would have to do.** Decide what a shop sells now that weapons are
+gone. Either drop `SHOP_WEAPON_CHANCE` to 0 and backfill those slots with items,
+or make weapon cards unofferable while `weaponSlots` is 0 — the second keeps the
+code path alive for a future in which something can hold a weapon again. Whatever
+is chosen, the browser gate should pin the stock rather than tap whatever rolled,
+so that a real purchase regression is distinguishable from a stock composition.
+
+**Not fixed here** because the shop's role after the weapon removal is a design
+question this patch has no mandate to answer, and guessing at it would bury the
+decision in a region-shell commit.

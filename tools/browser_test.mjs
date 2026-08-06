@@ -802,7 +802,13 @@ try {
   await clickAwayLevelups(A);
   // duplicate pair (purchase mechanics covered elsewhere; the combine UI is under test)
   await A.exec(`const s=window.uv.sim, p=s.players[0]; s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); return 1;`);
-  await A.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'pair in meta');
+  // Labelled 'a matching pair of coilguns', not 'pair'. The old label read as a
+  // PEER pairing in a failure line — "timeout waiting for pair in meta" — and a
+  // room-code failure is the most alarming thing this game could report, so a
+  // weapon-combine timeout wearing that name cost real diagnosis time. A
+  // waitFor label is failure-message text; it should name the thing being
+  // waited for in words that cannot be read as a different subsystem.
+  await A.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'a matching pair of coilguns in meta');
   const slotsBefore = await A.exec('return window.uv.meta.weapons.length');
   // character sheet by C key: shows the pair, and solo PAUSES
   await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
