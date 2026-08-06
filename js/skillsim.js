@@ -26,6 +26,7 @@ export function initSkillPlayer(sim, p) {
   p.trigEvents = { kill: 0, hitTaken: 0, dodgeT: -999, lastFired: null };
   p.engines = { footing: 0 };        // readable resource state for other trees
   p.footingAcc = 0;
+  p.footingShield = 0;               // the stance's absorb pool (see engineStatBonus)
   p.movingT = 0;
   p.shieldT = 0; p.ward = 0; p.wardT = 0; p.wardReflect = 0; p.wardDomain = null;
   p.queuedSteps = [];
@@ -90,7 +91,10 @@ export function grantSkillPoint(sim, p) {
 function tickFooting(sim, p, dt) {
   if (!treesFor(p).includes('samurai_armor')) return;
   if (p.moving) {
-    if (p.engines.footing) { p.engines.footing = 0; sim._recomputeStats(p); }
+    // THE WHOLE STACK, INSTANTLY. No decay, no partial retention — a gradual
+    // falloff would let the Samurai drift and keep the payoff, which erases the
+    // decision. The absorb pool goes with it.
+    if (p.engines.footing) { p.engines.footing = 0; p.footingShield = 0; sim._recomputeStats(p); }
     p.footingAcc = 0;
     return;
   }
@@ -101,6 +105,7 @@ function tickFooting(sim, p, dt) {
   while (p.footingAcc >= per && p.engines.footing < maxStacks) {
     p.footingAcc -= per;
     p.engines.footing++;
+    p.footingShield = footingShieldFor(p);
     sim._recomputeStats(p);
   }
   if (p.engines.footing >= maxStacks) p.footingAcc = 0;
@@ -119,14 +124,30 @@ export function passiveSum(p, key) {
 }
 
 // Stat contribution from engines, folded into _recomputeStats.
+//
+// NOT vitality. Footing used to grant max HP per stack, which meant breaking
+// stance lowered max Vitality and CLAMPED current HP down with it: a Samurai
+// lost health for dodging, by an amount unrelated to the attack, and the loss
+// landed hardest exactly when they did the thing the mechanic exists to reward.
+// The stack now carries an absorb pool instead (footingShield below), which
+// costs the same to break and takes nothing the player already had.
 export function engineStatBonus(p) {
   const f = (p.engines && p.engines.footing) || 0;
   if (!f) return null;
   return {
-    vitality: f * SAM.footingVitPerStack,
     grit: f * (SAM.footingGritPerStack + passiveSum(p, 'footingGritBonus')),
     reflex: f * SAM.footingDodgePerStack,
   };
+}
+
+// The pool itself. It reuses the shield mechanism — same absorb-then-carry
+// path in hurtPlayer — but lives in its own field rather than in p.shield,
+// because breaking stance must drop exactly the Footing part and not eat an
+// Iron Sleeve proc that happens to be running. Recomputed whenever the stack
+// changes, so it tracks the stack exactly in both directions.
+export function footingShieldFor(p) {
+  const f = (p.engines && p.engines.footing) || 0;
+  return f * SAM.footingShieldPerStack;
 }
 
 // ---------------------------------------------------------------- the tick

@@ -33,7 +33,7 @@ export const ENEMIES = [
     // The biggest thing on the floor gets the longest wind-up and the biggest
     // zone: bigger and more punishing means more time to read it, or the
     // "decision" is a coin flip.
-    telegraph: { windupMs: 650, recoverMs: 500, cooldownMs: 3400, retryFrac: 0.25,
+    telegraph: { windupMs: 650, recoverMs: 500, cooldownMs: 3400, retryFrac: 0.25, recoverFrozen: true,
       shape: { kind: 'circle', radius: 120 }, damage: 26, domain: 'physical' } },
   { id: 'lobber', domain: 'spiritual',    name: 'Lobber',    behavior: 'spitter',  hp: 9,  spd: 92,  dmg: 3,  radius: 14, mats: 2,
     shape: 'pentagon', color: '#a86ae8', w: 1.8,
@@ -51,7 +51,7 @@ export const ENEMIES = [
     shape: 'hex',      color: '#5ea8ff', w: 1.2, shieldR: 150, shieldReduce: 0.5,   // shields nearby allies
     // A cleave: narrower than the slam, so sidestepping is a smaller movement
     // and a shorter wind-up is still fair.
-    telegraph: { windupMs: 500, recoverMs: 400, cooldownMs: 4000, retryFrac: 0.25,
+    telegraph: { windupMs: 500, recoverMs: 400, cooldownMs: 4000, retryFrac: 0.25, recoverFrozen: true,
       shape: { kind: 'cone', angle: 70, range: 150 }, damage: 18, domain: 'physical' } },
   { id: 'stitcher', domain: 'mental',  name: 'Stitcher',  behavior: 'medic',    hp: 11, spd: 118, dmg: 3,  radius: 13, mats: 3,
     shape: 'cross',    color: '#8be8c8', w: 1.2, healPs: 6, healR: 170 },           // heals allies, flees
@@ -62,7 +62,7 @@ export const ENEMIES = [
     dash: { windup: 0.55, speed: 560, dur: 0.45, cd: 2.4 },                         // telegraphed dash
     // The shortest wind-up of the three: a lunge should feel fast, and a narrow
     // line means the dodge is one step sideways rather than a sprint.
-    telegraph: { windupMs: 450, recoverMs: 350, cooldownMs: 3800, retryFrac: 0.25,
+    telegraph: { windupMs: 450, recoverMs: 350, cooldownMs: 3800, retryFrac: 0.25, recoverFrozen: true,
       shape: { kind: 'line', width: 46, length: 300 }, damage: 20, domain: 'physical' } },
   { id: 'deadeye', domain: 'mental',   name: 'Deadeye',   behavior: 'sniper',   hp: 8,  spd: 62,  dmg: 6, radius: 13, mats: 2,
     shape: 'thindiamond', color: '#e85aa0', w: 1.2,

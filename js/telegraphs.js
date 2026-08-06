@@ -41,6 +41,10 @@ export function assertTelegraphs() {
       problems.push(`${def.id}: windupMs ${t.windupMs} is below TELEGRAPH_MIN_WINDUP_MS (${TELEGRAPH_MIN_WINDUP_MS}) — not dodgeable`);
     }
     if (!(t.recoverMs >= 0)) problems.push(`${def.id}: recoverMs ${t.recoverMs} is not a duration`);
+    // Declared explicitly either way. A telegraph that leaves it undefined is
+    // one where nobody decided, and the punish window is too load-bearing for
+    // that — it is the entire payoff for having dodged.
+    if (typeof t.recoverFrozen !== 'boolean') problems.push(`${def.id}: recoverFrozen must be declared true or false — it is the punish window, not a default`);
     if (!(t.cooldownMs > 0)) problems.push(`${def.id}: telegraph needs a cooldownMs or it fires every tick it can`);
     if (!(t.retryFrac > 0 && t.retryFrac <= 1)) problems.push(`${def.id}: retryFrac ${t.retryFrac} must be in (0,1] — it is how soon a balked commit tries again`);
     if (!t.shape || !SHAPE_PARAMS[t.shape.kind]) {
@@ -91,8 +95,21 @@ export function initTelegraph(e) {
 
 // True while the enemy is committed — the caller skips its behaviour, so it
 // neither moves nor reaims.
+//
+// WINDUP is not negotiable: an enemy that moves or reaims mid-wind-up produces
+// an undodgeable attack and the patch is pointless.
+//
+// RECOVER is a DELIBERATE DESIGN CHOICE and is now a dial rather than a side
+// effect of this function. Freezing after the swing is the punish window — it
+// is what a player who dodged gets in exchange for breaking stance, and without
+// it dodging buys distance and nothing else. It shipped as an accident of
+// lumping both states together; `recoverFrozen: true` in the enemy's telegraph
+// block makes it a decision somebody has to actively reverse rather than a bug
+// somebody tidies away.
 export function telegraphBusy(e) {
-  return e.telState === TELEGRAPH_STATES.WINDUP || e.telState === TELEGRAPH_STATES.RECOVER;
+  if (e.telState === TELEGRAPH_STATES.WINDUP) return true;
+  if (e.telState === TELEGRAPH_STATES.RECOVER) return !!(e.def.telegraph && e.def.telegraph.recoverFrozen);
+  return false;
 }
 
 // A stun landing during WINDUP cancels the attack outright: no damage, straight

@@ -24,7 +24,10 @@ export const TUNING = {
   // the engine
   footingTickMs: 500,          // one stack per half-second stationary
   footingMaxStacks: 10,
-  footingVitPerStack: 3,
+  // Absorb per stack, NOT max HP — see engineStatBonus in js/skillsim.js for
+  // why. Roughly the old per-stack vitality, so a full stance is worth about
+  // what it was worth before, without taking current HP when it breaks.
+  footingShieldPerStack: 4,
   footingGritPerStack: 2,
   footingDodgePerStack: 1.2,
   // tier 1 — Cross Guard Cut

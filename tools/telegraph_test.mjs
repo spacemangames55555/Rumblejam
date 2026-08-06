@@ -8,6 +8,7 @@
 // because every case ran from one seed at one spot, next to a pillar that ate
 // the projectile, and one arena is not a sample.
 
+import { readFileSync } from 'node:fs';
 import * as CH from '../js/content/characters.js';
 CH.setRoster('toh');
 const { Sim } = await import('../js/game.js');
@@ -178,14 +179,19 @@ run('a stun during wind-up cancels the attack with no damage', 'slabjaw', (g, p,
 });
 
 // 5. Knockback moves the BODY, not the promise.
+// On the log, like the others. HP is not an instrument here: Footing's absorb
+// pool eats the hit, so a player can take a full slam with their health bar
+// unchanged — which is the pool doing its job, not the attack missing.
 run('an enemy knocked back during wind-up still resolves at the committed spot', 'slabjaw', (g, p, e) => {
   const zx = e.telZone.x, zy = e.telZone.y;
   e.knockX = 900; e.knockY = 0;              // shove it well clear of its own zone
-  const hp0 = p.hp;
+  const logFrom = g.telDodgeLog.length;
   for (let i = 0; i < 120; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); e.hp = e.maxHp; if (e.telState === TELEGRAPH_STATES.RECOVER) break; }
   const moved = Math.hypot(e.x - zx, e.y - zy);
   if (moved < 60) return `the enemy did not actually move (${moved.toFixed(0)}u)`;
-  if (p.hp >= hp0) return `the zone followed the body — the player standing on the committed spot took nothing`;
+  const mine = g.telDodgeLog.slice(logFrom).filter(d => d.p === 0);
+  if (!mine.length) return 'the attack never resolved on the player at all';
+  if (mine.every(d => d.dodged)) return 'the zone followed the body — the player on the committed spot was scored as having dodged';
   return true;
 });
 
@@ -225,6 +231,76 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
   }
   if (staged && fired === staged) ok(`Rebuke fires off a REAL telegraph dodge — ${fired}/${staged} seeds (phase 1 could only test this with a synthetic event)`);
   else fail(`Rebuke fired on ${fired}/${staged} seeds through a real telegraph`);
+}
+
+// ---------------------------------------------------------------- Footing
+
+// Footing grants an ABSORB POOL, never max HP. The first version granted
+// vitality per stack, which meant breaking stance lowered max Vitality and
+// clamped current HP with it — a Samurai lost health for dodging, by an amount
+// unrelated to the attack, and it landed hardest exactly when they did the
+// thing the mechanic exists to reward.
+{
+  const g = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'S', charId: 'toh_samurai', color: '#fff' }] });
+  g.uiAction(0, { kind: 'pickNode', nodeId: g.reachableNodes()[0] });
+  const p = g.players[0];
+  for (const e of [...g.enemyPool]) g.enemyPool.release(e);
+  g.spawnQueue.length = 0; g.wave.done = false; g.obstacles.length = 0;
+  p.x = g.W / 2; p.y = g.H / 2;
+
+  const vit0 = p.stats.vitality, hp0 = p.hp;
+  for (let i = 0; i < 60 * 8; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+  const stacks = p.engines.footing, pool = p.footingShield, vitUp = p.stats.vitality;
+  if (stacks > 0) ok(`Footing accrues while still — ${stacks} stacks`);
+  else fail('Footing never accrued');
+  if (pool > 0) ok(`...and carries an absorb pool of ${Math.round(pool)}`);
+  else fail('Footing granted no absorb pool');
+  if (vitUp === vit0) ok(`...without touching max Vitality (${vit0} before, ${vitUp} at full stance)`);
+  else fail(`Footing moved max Vitality ${vit0} -> ${vitUp} — it must not`);
+  if (p.stats.grit > 0) ok(`...and grit is still on the stack (grit ${p.stats.grit})`);
+  else fail('Footing no longer grants grit');
+
+  const hpAtFull = p.hp;
+  for (let i = 0; i < 30; i++) { g.setInput(0, { mx: 1, my: 0 }); g.tick(); }
+  if (p.engines.footing === 0 && p.footingShield === 0) ok('moving drops the whole stack and the whole pool');
+  else fail(`stance survived movement: ${p.engines.footing} stacks, ${p.footingShield} pool`);
+  if (p.hp === hpAtFull && p.hp === hp0) ok(`breaking stance costs NO current HP (${hp0} throughout) — this is the regression the pool exists to prevent`);
+  else fail(`breaking stance moved HP ${hpAtFull} -> ${p.hp}`);
+}
+
+// ---------------------------------------------------------------- unification
+
+{
+  // Comments stripped first. The dasher case now EXPLAINS why followAim is
+  // gone, and a check that cannot tell the prohibition from the violation is
+  // noise — the biome gate learned this the same way.
+  const decomment = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '');
+  const src = decomment(readFileSync(new URL('../js/entities/enemies.js', import.meta.url), 'utf8'));
+  const dash = src.slice(src.indexOf("case 'dasher'"), src.indexOf("case 'sniper'"));
+  if (dash.length > 200 && !/followAim/.test(dash)) ok("the lancerfish dash no longer reaims during its wind-up — both of its attacks now promise a piece of ground");
+  else fail('the lancerfish dash still carries followAim: a tracking attack in the same body undermines its committed telegraph');
+  const stillTracks = /followAim:\s*true/.test(src);
+  console.log(stillTracks
+    ? '  (deadeye\'s beam still tracks at <=0.5 rad/s during its own wind-up — left alone deliberately, per the brief)'
+    : '  (no reaiming wind-up remains anywhere in the enemy file)');
+}
+
+// ---------------------------------------------------------------- the pit
+
+{
+  const g = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'S', charId: 'toh_samurai', color: '#fff' }] });
+  g.uiAction(0, { kind: 'pickNode', nodeId: g.reachableNodes()[0] });
+  g.debug('F7');
+  const ids = [...g.enemyPool].filter(e => e.active).map(e => e.def.id);
+  const kinds = [...new Set(ids)].sort();
+  const heavies = ids.filter(id => id === 'slabjaw' || id === 'aegimand').length;
+  if (ids.length && heavies === ids.length) ok(`F7 telegraph pit: ${ids.length} enemies, all telegraphing heavies (${kinds.join(' + ')})`);
+  else fail(`F7 pit seeded ${ids.length} enemies but only ${heavies} are heavies: ${kinds.join(', ')}`);
+  if (g.telStats.committed === 0) ok('...and the pit resets the telegraph counters, so a sitting measures itself');
+  else fail('the pit did not reset the counters');
+  // and it must not have quietly given anything else a telegraph
+  if (TELEGRAPHED_IDS.length === 3) ok(`still exactly 3 telegraphing enemy types (${TELEGRAPHED_IDS.join(', ')}) — the pit changes density, not the mix`);
+  else fail(`telegraph count drifted to ${TELEGRAPHED_IDS.length}: ${TELEGRAPHED_IDS.join(', ')}`);
 }
 
 console.log(failures ? `\n${failures} TELEGRAPH FAILURE(S)` : '\nALL TELEGRAPH PATHS VERIFIED');

@@ -2302,8 +2302,14 @@ export class Sim {
     // Soulbond: 30% of post-mitigation damage flows across the tether
     if (!opts.shared) dmg = this._soulbondShare(p, dmg);
     tohOnHurt(this, p, raw, dmg);   // Karma bank, Iron stance refund
+    // The stance absorbs before anything else: it is the thing the player is
+    // standing still to maintain, and it should be what breaks first.
+    if (p.footingShield > 0) {
+      const eaten = Math.min(p.footingShield, dmg);
+      p.footingShield -= eaten; dmg -= eaten;
+    }
     // overheal shield absorbs first
-    if (p.shield > 0) {
+    if (dmg > 0 && p.shield > 0) {
       const absorbed = Math.min(p.shield, dmg);
       p.shield -= absorbed; dmg -= absorbed;
       // Grace shields throw a share of what they eat back at the attacker
@@ -3544,6 +3550,36 @@ export class Sim {
       }
       case 'F4': if (this.floorNum < CONFIG.FLOORS) this._startFloor(this.floorNum + 1); break;
       case 'F5': this.god = !this.god; this.pushEvent({ k: 'toast', idx: 0, text: `God mode ${this.god ? 'ON' : 'OFF'}` }); break;
+      // F7 — THE TELEGRAPH PIT. (F6 is the hitbox/fps overlay, client-side.) Clears the field and reseeds it with slabjaws
+      // and aegimands only, ringed around the party at their commit distance.
+      //
+      // This exists because telegraph density in a normal room is too low to
+      // judge: 3 of 12 enemy types telegraph, and a 90s four-player fight
+      // produced only ~14 commits. Deciding whether hold-or-break is a live
+      // decision needs the decision to come up repeatedly in a short sitting.
+      // It deliberately does NOT give more enemy types a telegraph — the mix in
+      // a real room is the thing being judged, and changing it to make judging
+      // easier would judge something else.
+      case 'F7': {
+        for (const e of [...this.enemyPool]) { e.mats = 0; this.enemyPool.release(e); }
+        this.spawnQueue.length = 0;
+        const live = this.livePlayers();
+        if (!live.length) break;
+        const cx = live.reduce((a, q) => a + q.x, 0) / live.length;
+        const cy = live.reduce((a, q) => a + q.y, 0) / live.length;
+        const N = CONFIG.TELEGRAPH_PIT_COUNT;
+        for (let i = 0; i < N; i++) {
+          const a = i / N * Math.PI * 2;
+          const r = CONFIG.TELEGRAPH_PIT_RING + (i % 2) * CONFIG.TELEGRAPH_PIT_STAGGER;
+          const id = i % 2 ? 'aegimand' : 'slabjaw';
+          this.spawnEnemyById(id, clamp(cx + Math.cos(a) * r, WALL + 40, this.W - WALL - 40),
+            clamp(cy + Math.sin(a) * r, WALL + 40, this.H - WALL - 40), { noMats: true });
+        }
+        this.telStats = { committed: 0, resolved: 0, dodged: 0, interrupted: 0 };
+        this.telDodgeLog.length = 0;
+        this.pushEvent({ k: 'toast', idx: 0, text: `Telegraph pit: ${N} heavies, counters reset` });
+        break;
+      }
     }
   }
 

@@ -1,7 +1,7 @@
 // UNDERVAULT — global tuning constants and palette. All numbers referenced by the
 // simulation live here or in js/content/ data modules.
 
-export const DEV = true; // enables F1–F6 debug keys (host only; see README). Set false for clean runs.
+export const DEV = true; // enables F1–F7 debug keys (host only; see README). Set false for clean runs.
 
 export const CONFIG = {
   TICK_RATE: 60,
@@ -126,6 +126,13 @@ export const CONFIG = {
   // This was four hardcoded `64`s in Renderer._drawArena() until the tiled
   // floor needed the renderer and the atlas to agree on one number.
   FLOOR_TILE: 64,
+
+  // The F6 telegraph pit — a playtest room, not a level. Density high enough
+  // that the hold-or-break decision comes up every few seconds instead of
+  // roughly twice a minute, which is what a normal room produces.
+  TELEGRAPH_PIT_COUNT: 8,
+  TELEGRAPH_PIT_RING: 190,
+  TELEGRAPH_PIT_STAGGER: 70,
 };
 
 export const PALETTE = {
