@@ -16,6 +16,8 @@ const SK = await import('../js/skillsim.js');
 const { TELEGRAPH_STATES, TELEGRAPH_MIN_WINDUP_MS, TELEGRAPHED_IDS, telegraphBusy } = await import('../js/telegraphs.js');
 const { inZone } = await import('../js/compose.js');
 const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
+const { REGION_ENEMIES, REGION_ENEMY_BY_ID, telegraphWeight, MIN_TELEGRAPH_WEIGHT } = await import('../js/content/regions-enemies.js');
+const { CONFIG } = await import('../js/config.js');
 
 let failures = 0;
 const ok = m => console.log(`✓ ${m}`);
@@ -293,14 +295,33 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
   g.debug('F7');
   const ids = [...g.enemyPool].filter(e => e.active).map(e => e.def.id);
   const kinds = [...new Set(ids)].sort();
-  const heavies = ids.filter(id => id === 'slabjaw' || id === 'aegimand').length;
-  if (ids.length && heavies === ids.length) ok(`F7 telegraph pit: ${ids.length} enemies, all telegraphing heavies (${kinds.join(' + ')})`);
-  else fail(`F7 pit seeded ${ids.length} enemies but only ${heavies} are heavies: ${kinds.join(', ')}`);
+  // The pit used to be 8 slabjaw/aegimand — 100% telegraphing, which flatters a
+  // dodging bot exactly as the base roster's 21% flatters a holder. It now
+  // draws a weighted sample from a REGION population, so what it measures is
+  // the density the regions actually ship at.
+  const tel = ids.filter(id => ENEMY_BY_ID[id] && ENEMY_BY_ID[id].telegraph).length;
+  const share = ids.length ? tel / ids.length : 0;
+  if (ids.length === CONFIG.TELEGRAPH_PIT_COUNT && share >= 0.4 && share <= 0.7) {
+    ok(`F7 telegraph pit: ${ids.length} enemies from a region population, ${tel} telegraphing (${(100 * share).toFixed(0)}%) — representative density, not an all-heavy room (${kinds.join(', ')})`);
+  } else {
+    fail(`F7 pit seeded ${ids.length} enemies at ${(100 * share).toFixed(0)}% telegraphing, want ${CONFIG.TELEGRAPH_PIT_COUNT} at 40-70%: ${kinds.join(', ')}`);
+  }
   if (g.telStats.committed === 0) ok('...and the pit resets the telegraph counters, so a sitting measures itself');
   else fail('the pit did not reset the counters');
   // and it must not have quietly given anything else a telegraph
-  if (TELEGRAPHED_IDS.length === 3) ok(`still exactly 3 telegraphing enemy types (${TELEGRAPHED_IDS.join(', ')}) — the pit changes density, not the mix`);
-  else fail(`telegraph count drifted to ${TELEGRAPHED_IDS.length}: ${TELEGRAPHED_IDS.join(', ')}`);
+  // Not a hardcoded count any more — the number grows with every region, and a
+  // gate that pins it just gets bumped. What must hold is the RULE: every heavy
+  // archetype in a region commits, and each region clears the density floor.
+  const base = TELEGRAPHED_IDS.filter(id => !REGION_ENEMY_BY_ID[id]);
+  if (base.length === 3) ok(`the base roster still telegraphs on exactly 3 of 12 (${base.join(', ')}) — regions raise density, they do not change the base mix`);
+  else fail(`base telegraph count drifted to ${base.length}: ${base.join(', ')}`);
+  const bad = [];
+  for (const [rid, pop] of Object.entries(REGION_ENEMIES)) {
+    const { share } = telegraphWeight(pop.enemies);
+    if (share < MIN_TELEGRAPH_WEIGHT) bad.push(`${rid} ${(100 * share).toFixed(0)}%`);
+  }
+  if (!bad.length) ok(`every region clears the ${(100 * MIN_TELEGRAPH_WEIGHT).toFixed(0)}% telegraph-density floor: ${Object.entries(REGION_ENEMIES).map(([r, p]) => `${r} ${(100 * telegraphWeight(p.enemies).share).toFixed(0)}%`).join(', ')}`);
+  else fail(`under the density floor: ${bad.join(', ')}`);
 }
 
 // ---------------------------------------------------------------- no def

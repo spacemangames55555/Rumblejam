@@ -704,11 +704,16 @@ export class Sim {
       // on an elite node — instead of the base twelve. That is what makes a
       // region a place rather than a skin, and it is what carries the 50%
       // telegraph density into real rooms rather than only into the F7 pit.
-      let id = this._regionPick();
-      if (!id) {
-        const table = FLOOR_TABLES[this.floorNum - 1];
-        id = table[Math.floor(this.waveRng.float() * table.length)];
-      }
+      // `table` stays in scope: the profile levers and the per-type spawn caps
+      // below both fall back to it. Scoping it inside the `if` compiled fine
+      // and threw `table is not defined` on the first capped spawn — caught by
+      // the telegraph suite, not by node --check, which is the whole argument
+      // for running the suites rather than the parser.
+      const regionPop = this._regionPick();
+      const table = regionPop
+        ? (REGION_ENEMIES[this.region] ? REGION_ENEMIES[this.region].enemies.map(e => e.id) : FLOOR_TABLES[this.floorNum - 1])
+        : FLOOR_TABLES[this.floorNum - 1];
+      let id = regionPop || table[Math.floor(this.waveRng.float() * table.length)];
       let mortar = false, puddle = false;
       // profile levers shape the roll: flankers become wave citizens,
       // artillery turns Lobbers into mortars, chaff picks up death-puddles
