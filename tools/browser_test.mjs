@@ -1146,17 +1146,34 @@ try {
   // left half red, right half blue — asymmetric, so rotation is visible
   const flatAsymmetric = () => png(FX_CELL, FX_CELL, x => (x < FX_CELL / 2 ? [255, 60, 60] : [60, 60, 255]));
 
+  // THESE THREE PATHS ARE COMMITTED ART. skulker.png, flit.png and material.png
+  // are all tracked; this test overwrites them with fixtures. The previous
+  // cleanup deleted "only the files this test wrote" — but it did not write
+  // them, it clobbered them, so every run of this suite removed three sprites
+  // from the working tree. A later `git add -A` then committed the deletion,
+  // which is how art leaves a repository without anyone deciding to remove it.
+  //
+  // Originals are read into memory before anything is touched and put back
+  // byte-for-byte afterwards, the same way the sprite-override block below
+  // already handles assets.json and sprite-overrides.json.
+  const ART = [gridFile, badGridFile, flatFile];
+  const originals = new Map();
   const installArt = () => {
     fs.mkdirSync(enemyDir, { recursive: true });
     fs.mkdirSync(fxDir, { recursive: true });
+    for (const f of ART) if (!originals.has(f)) originals.set(f, fs.existsSync(f) ? fs.readFileSync(f) : null);
     fs.writeFileSync(gridFile, directionGrid());
     fs.writeFileSync(flatFile, flatAsymmetric());
     fs.writeFileSync(badGridFile, png(E_CELL, E_CELL, () => [255, 0, 255]));   // square, so deliberately not an 8-row grid
   };
-  // Remove ONLY the files this test wrote. A blanket rmSync of assets/sprites
-  // would delete committed art, which is a destructive test, not a cleanup.
+  // Restore what was there. A file this test genuinely created (no original) is
+  // removed; a file it clobbered is written back exactly as it was.
   const removeArt = () => {
-    for (const f of [gridFile, badGridFile, flatFile]) fs.rmSync(f, { force: true });
+    for (const f of ART) {
+      const was = originals.get(f);
+      if (was) fs.writeFileSync(f, was);
+      else fs.rmSync(f, { force: true });
+    }
     for (const d of [enemyDir, fxDir, spriteRoot]) { try { fs.rmdirSync(d); } catch { /* not empty: real art lives here */ } }
   };
 

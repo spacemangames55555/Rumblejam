@@ -474,3 +474,140 @@ so that a real purchase regression is distinguishable from a stock composition.
 **Not fixed here** because the shop's role after the weapon removal is a design
 question this patch has no mandate to answer, and guessing at it would bury the
 decision in a region-shell commit.
+
+---
+
+## 7. The browser suite deleted committed sprite art on every run
+
+**Fixed 2026-08-06.** `tools/browser_test.mjs`, the 8-direction sprite-grid
+block.
+
+**What was wrong.** The test writes fixture PNGs to three paths and cleans up
+after itself:
+
+```js
+// Remove ONLY the files this test wrote. A blanket rmSync of assets/sprites
+// would delete committed art, which is a destructive test, not a cleanup.
+const removeArt = () => {
+  for (const f of [gridFile, badGridFile, flatFile]) fs.rmSync(f, { force: true });
+```
+
+The comment is right about the danger and wrong about the facts. All three paths
+are **committed art**:
+
+```
+assets/sprites/enemy/skulker.png    tracked=YES
+assets/sprites/enemy/flit.png       tracked=YES
+assets/sprites/fx/material.png      tracked=YES
+```
+
+The test did not *write* those files, it *clobbered* them — so the cleanup
+deleted three tracked sprites from the working tree on every run. Nothing failed
+and nothing warned; the files were simply gone. A later `git add -A` commits the
+deletion, which is how art leaves a repository without anyone deciding to remove
+it. This was caught exactly that way: a commit hook reported three deleted PNGs
+as uncommitted changes to be pushed.
+
+**Reproduce (pre-fix):**
+
+```
+md5sum assets/sprites/enemy/skulker.png > /tmp/before
+node tools/browser_test.mjs
+git status --short -- assets/
+  D assets/sprites/enemy/flit.png
+  D assets/sprites/enemy/skulker.png
+  D assets/sprites/fx/material.png
+```
+
+**Why the sibling block was safe.** The sprite-override test forty lines below
+uses `slabjaw.png`, `lobber.png` and `gemmite.png` — none of which are tracked —
+and it *also* reads `assets.json` and `sprite-overrides.json` into memory before
+touching them and restores them in `finally`. The correct pattern was already in
+the same file, applied to the JSON and not to the PNGs.
+
+**The fix.** Originals are read into memory before the fixtures are written and
+restored byte-for-byte afterwards. A path with no original (genuinely created by
+the test) is still removed.
+
+**What holds it now.** Nothing automated, and that is worth stating plainly
+rather than implying a gate exists. The check is one command after any suite
+run — `git status --short -- assets/` — and the honest guard would be a suite
+that fails when it dirties the working tree. That is not built.
+
+---
+
+## 8. A co-op event sent while a peer's channel is not open is lost forever
+
+**Where:** `js/net.js` `broadcast()` and `js/main.js` `drainSimOutputs()`.
+
+```js
+// js/net.js
+broadcast(msg) {
+  for (const c of this.conns.values()) {
+    if (c.open) { try { c.send(msg); } catch { /* ignore */ } }
+  }
+}
+
+// js/main.js
+const list = sim.events.splice(0);          // <- gone from the queue
+if (app.hostT) app.hostT.broadcast({ t: 'ev', list });
+```
+
+**What is wrong.** The event list is spliced off the queue and broadcast once.
+A connection that is not `open` at that instant is skipped, a `send` that throws
+is swallowed, and there is **no buffer, no replay, no acknowledgement and no
+error**. The event is simply gone for that peer, permanently.
+
+Snapshots recover from this — they are sent 15 times a second and carry whole
+state. Events do not: they are one-shot edge notifications, and several of them
+are load-bearing for what a client can even see.
+
+**What a player experiences.** The node map is the clearest case. A client opens
+it only when it has BOTH `mode === 'map'` from a snapshot AND `app.map`, which
+is set *only* by the `map` event (`js/main.js:580`, `js/main.js:1027`). Miss that
+one event and the client sits on a blank screen, receiving snapshots, with no
+error, while the host plays on. Measured directly:
+
+```
+CLIENT MAP DIAG: {"mode":"run","map":"screen hidden","snaps":30,"lastMode":0,"nodes":0}
+CLIENT ERRORS:
+HOST STATE:      {"mode":"run","phase":"map","cleared":false}
+```
+
+Thirty map-mode snapshots arrived, zero console errors, screen still hidden.
+
+**Reproduce:**
+
+```
+node tools/browser_test.mjs --coop
+```
+
+The co-op block fails intermittently at whichever assertion the lost event
+happened to gate. Observed across seven runs on two branches:
+
+| failure point | `patch-region-shell` | `patch-telegraphs` (331898b) |
+|---|---|---|
+| `host run` | 0/5 | 1/4 |
+| `client map screen` | 5/5 | 1/4 |
+| `host pair` (late, weapon-related) | 0/5 | 2/4 |
+
+**It is not a regression in either branch** — the same assertion fails on both.
+The distribution differs (one branch lands on the same assertion every time,
+the other scatters), which is what a timing-sensitive race does when startup
+work changes around it.
+
+**What has been ruled out.** Not pairing: registration and join-by-code
+succeeded 6/6 across both trees, with the built-in registration retry never
+firing. Not a client exception: the console is clean at the moment of failure.
+Not the region-shell modules: `regions.js`, `nodetree.js` and `saves.js` are
+imported by nothing in the runtime.
+
+**What a fix would have to do.** Give events the delivery guarantee they are
+already assumed to have — a per-peer outbound queue that survives a
+not-yet-open channel and flushes on open, or a sequence number the client can
+detect a gap in and request a resync for. Either way the host must stop
+discarding an event list before every peer has actually taken it.
+
+**Not fixed here** because it is netcode surgery well outside a region-shell
+patch, and because the right shape (buffer vs. resync) is a decision about the
+protocol, not a bug to patch locally.
