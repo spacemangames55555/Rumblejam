@@ -95,6 +95,11 @@ export function updateEnemy(sim, e, dt) {
   }
   if (e.boss) { updateBoss(sim, e, dt, spd); return; }
 
+  // Skill statuses that stop a body moving. Stun halts everything; root allows
+  // attacks but not movement, so it is checked inside the movement helpers'
+  // caller rather than here.
+  if (e.stunT > 0) return;
+
   const t = e.def;
   const p = sim.tauntTarget(e.x, e.y);
   // once the fight's spawning stops, survivors press the attack instead of

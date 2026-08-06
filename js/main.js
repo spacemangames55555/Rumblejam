@@ -130,7 +130,12 @@ document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInte
 document.getElementById('stance-btn').onclick = () => { sfx.click(); pressStance(); };
 document.getElementById('sheet-btn').onclick = () => { sfx.click(); toggleSheet(); };
 window.addEventListener('keydown', e => {
-  if (e.code === 'KeyC' && app.mode === 'run' && document.activeElement.tagName !== 'INPUT') toggleSheet();
+  if (document.activeElement.tagName === 'INPUT') return;
+  if (e.code === 'KeyC' && app.mode === 'run') toggleSheet();
+  // The trigger-core debug overlay. Not optional: without it the gate cannot be
+  // evaluated — "it felt bad" is not actionable, and a trigger budget problem
+  // is invisible until it is structural.
+  if (e.code === 'KeyT' && app.mode === 'run') renderer.debugTrig = !renderer.debugTrig;
 });
 showTitle();
 
@@ -994,6 +999,19 @@ function frame(now) {
     view = viewFromSnaps(dtFrame);
   }
 
+  // Overlay state is read straight off the host sim. On a client it stays null,
+  // which is correct — a client has no trigger state to show because it never
+  // evaluates one.
+  renderer.trigDebug = app.sim ? {
+    stats: app.sim.trigStats,
+    players: app.sim.players.filter(q => !q.gone).map(q => ({
+      idx: q.idx, name: q.name, footing: q.engines ? q.engines.footing : 0,
+      cds: (q.loadout || []).filter(Boolean).map(id => ({ id, cd: +(q.skillCd[id] || 0).toFixed(1) })),
+      last: q.trigEvents ? q.trigEvents.lastFired : null,
+    })),
+    log: (app.sim.players[app.myIdx] && app.sim.players[app.myIdx].fireLog) || [],
+    enemies: app.sim.enemyPool.count,
+  } : null;
   renderer.draw(view, dtFrame);
 
   // node-map screen follows the run mode (host and client alike)

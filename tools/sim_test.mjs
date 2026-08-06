@@ -27,6 +27,7 @@ const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 import { BIOMES, FLOOR_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
+import * as SKILLSIM from '../js/skillsim.js';
 import { ENEMY_BY_ID as ENEMY_BY_ID_T } from '../js/content/enemies.js';
 // Art fixtures below build sheets that must match the manifest exactly. They
 // hardcoded 32 until enemies moved to 128 and every one became a rejected
@@ -269,6 +270,17 @@ function unstick(g, p, mx, my) {
 
 // ---- helpers ----
 function drain(sim, p, buyStuff) {
+  // patch-trigger-core: weapons are gone, so a bot that never spends a skill
+  // point walks into every fight with no way to affect it. Spend down the tree
+  // as points arrive — deepest learnable node first, so the bot exercises the
+  // prerequisite chain rather than stacking rank 40 on the opener.
+  let guard = 0;
+  while (p.skillPoints > 0 && guard++ < 40) {
+    const learnable = SKILLSIM.learnableSkills(p);
+    if (!learnable.length) break;
+    const pick = learnable.sort((a, b) => b.tier - a.tier)[0];
+    if (!SKILLSIM.spendSkillPoint(sim, p, pick.id)) break;
+  }
   let g = 0;
   while (p.pendingOffer && g++ < 40) sim.uiAction(p.idx, { kind: 'levelup', id: p.pendingOffer[0].id });
   if (p.treasureOffer) sim.uiAction(p.idx, { kind: 'treasure', id: p.treasureOffer.picks[0] });

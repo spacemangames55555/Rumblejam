@@ -14,6 +14,8 @@ import {
 } from './objectives.js';
 import { CHAR_BY_ID } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
+import * as SK from './skillsim.js';
+import { EnemyGrid } from './triggers.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES } from './content/enemies.js';
 import { BOSS_BY_FLOOR } from './content/bosses.js';
@@ -39,7 +41,7 @@ const SPAWN_CAPS = {
 const ING_SCALE = 0.1; // +10% summon damage & HP per Ingenuity point
 const VOTE_TIME = 4;   // consent countdown (node picks and extraction)
 // the Siege's ward pylon — a destructible structure, not a roster enemy
-const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', behavior: 'pylon', hp: 260, spd: 0, dmg: 0, radius: 26, mats: 6, shape: 'square', color: '#c05eff' };
+const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', domain: 'mental', behavior: 'pylon', hp: 260, spd: 0, dmg: 0, radius: 26, mats: 6, shape: 'square', color: '#c05eff' };
 // shop tier weights per floor (chance out of 100 for tiers I–IV)
 const TIER_WEIGHTS = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 40, 20]];
 
@@ -64,6 +66,13 @@ export class Sim {
     this.vortexes = [];
     this.activeBeams = [];
     this.fx = this._emptyFx();
+    // trigger-core state. The grid is rebuilt once per trigger tick and every
+    // proximity query in the game goes through it — no trigger ever scans the
+    // full enemy array.
+    this.trigGrid = new EnemyGrid();
+    this.trigAcc = 0;
+    this.trigCursor = 0;
+    this.trigStats = { evals: 0, fires: 0, capped: false, queries: 0, cells: 0, enemies: 0, ms: 0, cappedCount: 0, ticks: 0 };
     this.spawnCounter = 0;
     this.shake = 0;
 
@@ -115,7 +124,7 @@ export class Sim {
     for (const p of this.players) this._initStartingGear(p);
   }
 
-  _emptyFx() { return { hits: [], deaths: [], booms: [], beams: [], swings: [], blocks: [] }; }
+  _emptyFx() { return { hits: [], deaths: [], booms: [], beams: [], swings: [], blocks: [], skillFires: [] }; }
   pushEvent(ev) { this.events.push(ev); }
   livePlayers() { return this.players.filter(p => !p.gone); }
 
@@ -166,6 +175,11 @@ export class Sim {
     if (t.key === 'nova_core') p.weaponSlots = t.slots;
     if (t.key === 'reflex_master') p.reflexCap = t.cap;
     if (t.key === 'executioner' || t.key === 'contract') p.critMult = t.openerCritMult || 3;
+    // patch-trigger-core: weapons are gone. Skills replace them entirely, with
+    // no toggle and no compatibility layer — a half-migrated combat model would
+    // not answer the gate question, and this branch is disposable if it fails.
+    p.weaponSlots = 0;
+    SK.initSkillPlayer(this, p);
     this._recomputeItems(p);
     this._recomputeStats(p);
     p.hp = p.stats.vitality;
@@ -174,7 +188,16 @@ export class Sim {
   }
 
   _initStartingGear(p) {
+    // No starting weapon: the character's first skill point IS their opening
+    // ability, chosen from the tier-1 nodes. Trait summons still spawn — they
+    // are not weapons and are out of this patch's scope.
     const t = p.char.trait;
+    if (true) {
+      if (t.key === 'mirror_drone') this._spawnSummon(p, null, 1, 'mirror');
+      if (t.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
+      if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1, 'beast');
+      return;
+    }
     if (tohStartingGear(this, p)) { /* Necromancer: mounts, no weapons */ }
     else if (t.key === 'overseer') {
       // turrets ARE weapons for the Overseer: combinable, sellable, four mounts.
@@ -307,6 +330,10 @@ export class Sim {
     for (const id of p.items) { const it = ITEM_BY_ID[id]; if (it && it.stats) add(it.stats); }
     add(p.boosts);
     add(p.permStats);
+    // Engines are readable resources that feed stats — Footing's per-stack
+    // vitality/grit/dodge lands here so it composes with everything else rather
+    // than being applied at the point of use.
+    { const eb = SK.engineStatBonus(p); if (eb) add(eb); }
     const t = p.char.trait;
     const vitNow = p.stats ? p.stats.vitality : s.vitality;
     const hpFrac = p.stats ? clamp(p.hp / Math.max(1, vitNow), 0, 1) : 1;
@@ -899,6 +926,7 @@ export class Sim {
       id: ++this.spawnCounter, def: PYLON_DEF, typeIdx: -2, boss: false, bossDef: null,
       x, y, hp, maxHp: hp, radius: PYLON_DEF.radius, spd: 0, dmg: 0, dmgScale: 1,
       mats: PYLON_DEF.mats, mini: false, elite: false, eliteMod: null,
+      domain: PYLON_DEF.domain,
       t: 0, phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0, healTarget: null, brood: null, shape: PYLON_DEF.shape, color: PYLON_DEF.color,
@@ -922,6 +950,7 @@ export class Sim {
       x, y: this.H * 0.3, hp: Math.round(def.hp * this.coopHp * this.greedHp * CONFIG.enemyHpMult),
       maxHp: Math.round(def.hp * this.coopHp * this.greedHp * CONFIG.enemyHpMult),
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
+      domain: def.domain || null,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -1179,6 +1208,7 @@ export class Sim {
       dmg: def.dmg * dmgScale, dmgScale,
       mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
+      domain: def.domain || (def.bossDomain || 'physical'),
       t: Math.random(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0.8 + Math.random(), healTarget: null, brood: null, shape: def.shape, color: def.color,
@@ -1273,6 +1303,8 @@ export class Sim {
     for (const e of this.enemyPool) this.grid.insert(e);
     // projectiles
     this._tickProjectiles(dt);
+    SK.tickSkills(this, dt);
+    SK.tickSkillStatuses(this, dt);
     // telegraphs / zones / vortexes
     this._tickAreas(dt);
     tohTick(this, dt);   // Thrones of Heaven world entities + per-player meters
@@ -1357,8 +1389,7 @@ export class Sim {
       }
     }
 
-    // weapons
-    this._tickWeapons(p, dt);
+    // patch-trigger-core: skills replace weapons entirely (see js/skillsim.js)
 
     // Pulsar's nova core
     if (t.key === 'nova_core') this._tickNova(p, t, dt);
@@ -2105,6 +2136,7 @@ export class Sim {
     // that means "the party actually brought it down".
     if (e.bounty && this.obj && this.obj.type === 'bounty') this.obj.markDied = e.hp <= 0;
     const { x, y } = e;
+    if (killer && killer.trigEvents) SK.onSkillKill(this, killer);
     this.fx.deaths.push({ x: Math.round(x), y: Math.round(y), c: e.boss ? e.bossDef.color : e.def.color, r: e.radius });
     this.pushEvent({ k: 'sfx', s: 'enemyDie' });
     // the ward pylon falls: the empowerment ends
@@ -2233,8 +2265,13 @@ export class Sim {
       }
       if (p.hookAgg.nextAttackAfterDodge > 0) { p.dmgBuffT = 3; p.dmgBuffAmt = p.hookAgg.nextAttackAfterDodge; }
       tohOnDodge(this, p);   // Monk: leave a spirit behind
+      SK.onSkillDodge(this, p);   // ON_DODGE trigger window opens here
       return;
     }
+    SK.onSkillHitTaken(this, p);
+    // the ward eats damage and returns a share of it to whatever landed the hit
+    raw = SK.wardAbsorb(this, p, raw, src);
+    if (raw <= 0) return;
     // auto-block shield item
     if (p.hookAgg.blockShield !== null && p.blockT <= 0) {
       p.blockT = p.hookAgg.blockShield;
@@ -2360,6 +2397,11 @@ export class Sim {
           if (dead || !e.active || pr.hitIds.has(e.id)) return;
           if (dist2(pr.x, pr.y, e.x, e.y) <= (pr.radius + e.radius) * (pr.radius + e.radius)) {
             pr.hitIds.add(e.id);
+            if (pr.skill) {
+              SK.hitSkillProj(this, pr, e);
+              if (pr.pierce > 0) pr.pierce--; else { dead = true; }
+              return;
+            }
             const owner = this.players[pr.owner];
             const def = WEAPON_BY_ID[pr.weaponId];
             const knock = ((def && def.knock) || pr.summonKnock || 0) * owner.hookAgg.knockMult;
@@ -2434,6 +2476,14 @@ export class Sim {
     this.telegraphs.push(entry);
   }
   addZone(z) { this.zones.push({ t: 0, acc: 0, ...z }); }
+
+  // ---- composed-action surface (js/compose.js calls these) ----
+  skillDamage(e, amount, p, skill) { return SK.skillDamage(this, e, amount, p, skill); }
+  skillSplash(p, skill, x, y, r, dmg, exclude) { return SK.skillSplash(this, p, skill, x, y, r, dmg, exclude); }
+  spawnSkillProj(p, skill, step, rank, angle, range) { return SK.spawnSkillProj(this, p, skill, step, rank, angle, range); }
+  applyPlague(e, dmg, dur, p, skill) { return SK.applyPlague(this, e, dmg, dur, p, skill); }
+  applySlow(e, mult, dur) { return SK.applySlow(this, e, mult, dur); }
+  queueSkillStep(p, skill, step, rank, delay) { return SK.queueSkillStep(this, p, skill, step, rank, delay); }
   addVortex(x, y, v, scale) { this.vortexes.push({ x, y, t: v.dur, pullR: v.pullR, pullSpd: v.pullSpd, dps: v.dps * scale, coreR: v.coreR, acc: 0 }); }
 
   fireBeam(x, y, a, len, width, dmg, src) {
@@ -2631,6 +2681,7 @@ export class Sim {
       p.xp -= p.xpNext;
       p.level++;
       p.banked++;
+      SK.grantSkillPoint(this, p);
       p.xpNext = CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * p.level;
       for (const ls of p.hookAgg.levelStats) this._applyPerm(p, ls.stats);
       // the level-up sound is idx-aware and debounced client-side (airhorn) —
@@ -3229,6 +3280,17 @@ export class Sim {
     // slots arrive over the network — accept only small non-negative integers
     if ('slot' in msg && (!Number.isInteger(msg.slot) || msg.slot < 0 || msg.slot > 15)) return;
     switch (msg.kind) {
+      // ---- trigger-core: spend a point, change a slot ----
+      case 'learnSkill': {
+        SK.spendSkillPoint(this, p, msg.id);
+        break;
+      }
+      case 'setSlot': {
+        const r = SK.setLoadout(this, p, msg.slot | 0, msg.id || null);
+        if (!r.ok) this.pushEvent({ k: 'slotResult', idx, ok: false, reason: r.reason });
+        else this.pushEvent({ k: 'slotResult', idx, ok: true, loadout: [...p.loadout] });
+        break;
+      }
       case 'levelup': {
         if (!p.pendingOffer) return;
         const pick = p.pendingOffer.find(o => o.id === msg.id) || p.pendingOffer[0];

@@ -12,6 +12,7 @@ import { WEAPON_BY_ID } from './content/weapons.js';
 import { Assets, drawSprite, spriteScaleFor, DEFAULT_FACING } from './assets.js';
 import { PROP, FX, BEAST_SPRITE } from './content/sprites.js';
 import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
+import { DOMAIN_COLOR } from './domains.js';
 import { clamp } from './util.js';
 
 // The debug grid. Default OFF — it is the reference the 2.18 roster scale was
@@ -160,6 +161,7 @@ export class Renderer {
   }
 
   draw(view, dtFrame) {
+    const _t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
     this.t += dtFrame;
     this._facingGen++;
     this._sweepFacing();
@@ -289,7 +291,12 @@ export class Renderer {
     this._drawEdgeArrows(ctx, view);
     this._drawExtract(ctx, view);
     if (this.showHitboxes) this._drawHitboxes(ctx, view);
+    if (this.debugTrig) this._drawTrigDebug(ctx, this._screen);
     this._drawJoystick(ctx);
+    // frame time measured over the whole draw, reported beside the trigger-tick
+    // time as a SEPARATE number: one rising without the other tells you which
+    // half of the design is the problem
+    this.frameMs = (typeof performance !== 'undefined' ? performance.now() : 0) - _t0;
   }
 
   // Off-screen indicators: allies always (downed ones scream for help),
@@ -466,6 +473,53 @@ export class Renderer {
     ctx.fillStyle = '#e8e9f2';
     circle(ctx, j.anchorX + dx / len * c, j.anchorY + dy / len * c, 24); ctx.fill();
     ctx.globalAlpha = 1;
+  }
+
+  // THE TRIGGER-CORE DEBUG OVERLAY (toggle: T).
+  //
+  // Not optional, and not decoration. The gate this patch exists to answer is
+  // "does auto-triggered combat feel good", and "it felt bad" is not an
+  // actionable finding — you need to see WHICH trigger fired and when. The
+  // performance half is worse: a trigger budget being exhausted is completely
+  // invisible from inside a fight until it is structural.
+  _drawTrigDebug(ctx, s) {
+    const d = this.trigDebug;
+    if (!d) return;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const W = s.cw / this.dpr, H = s.ch / this.dpr;
+    const x = 12, w = 330;
+    let y = 96;
+    const line = (t, c) => { ctx.fillStyle = c || '#c8cde8'; ctx.fillText(t, x + 10, y); y += 14; };
+
+    const rows = 12 + d.players.length * 2 + Math.min(8, d.log.length);
+    ctx.fillStyle = 'rgba(10,11,18,0.86)';
+    ctx.fillRect(x, y - 16, w, rows * 14 + 18);
+    ctx.strokeStyle = '#454b6e'; ctx.lineWidth = 1;
+    ctx.strokeRect(x, y - 16, w, rows * 14 + 18);
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'left';
+
+    const st = d.stats || {};
+    line('TRIGGER CORE  [T to hide]', '#ffd45e');
+    // frame time and trigger-tick time are SEPARATE numbers on purpose: one
+    // rising without the other says which half of the design is the problem
+    line(`frame ${(this.frameMs || 0).toFixed(2)} ms   trigger tick ${(st.ms || 0).toFixed(3)} ms`);
+    line(`evals ${st.evals || 0}/tick   fires ${st.fires || 0}   budget hits ${st.cappedCount || 0}/${st.ticks || 0}`,
+      st.capped ? '#ff5d6c' : '#c8cde8');
+    line(`grid ${st.cells || 0} cells / ${st.enemies || 0} enemies   ${st.queries || 0} queries/tick`);
+    line(`live enemies ${d.enemies}`);
+    y += 4;
+    for (const q of d.players) {
+      line(`P${q.idx} ${q.name}${q.footing ? `  footing ${q.footing}` : ''}`, '#8fa3c8');
+      const cds = q.cds.map(c => `${c.id.replace(/^(necro|sam)_/, '')}${c.cd > 0 ? `:${c.cd}` : ''}`).join(' ');
+      line(`  ${cds || '(no actives slotted)'}`, q.last ? '#5ee0a8' : '#9aa0bd');
+    }
+    y += 4;
+    line('last fires', '#8fa3c8');
+    for (const f of d.log.slice(-8).reverse()) {
+      line(`  ${f.id.replace(/^(necro|sam)_/, '').padEnd(14)} ${f.trigger.padEnd(17)} ${f.hits} hit`);
+    }
+    ctx.textAlign = 'start';
   }
 
   // The floor: a biome's tile set if one is loaded, the flat fill otherwise.
@@ -945,6 +999,16 @@ export class Renderer {
     if (!drew) {
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
+      ctx.stroke();
+    }
+    // THE DAMAGE TRIANGLE, always visible. A 4px ring in the enemy's domain
+    // colour: the triangle is only a decision a player can act on if they can
+    // see which way it points without inspecting anything.
+    if (e.domain && DOMAIN_COLOR[e.domain]) {
+      ctx.strokeStyle = DOMAIN_COLOR[e.domain];
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 3, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.shadowBlur = 0;
