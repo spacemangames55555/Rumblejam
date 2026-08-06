@@ -511,6 +511,7 @@ function clientOnMessage(msg) {
       app.snaps.push({ rt: app.lastSnapAt, s: snap });
       if (app.snaps.length > 30) app.snaps.splice(0, app.snaps.length - 30);
       renderer.ingestFx(snap.fx);
+      applySnapState(snap);   // state first: the screens no longer trust edges
       break;
     }
     case 'ev': for (const ev of msg.list) handleEvent(ev); break;
@@ -567,6 +568,61 @@ function leaveToTitle() {
   hideMapScreen();
   setNetStatus('');
   showTitle();
+}
+
+// SNAPSHOT STATE → CLIENT SCREENS. Runs on every snapshot, before the event
+// pump, and is the authority for anything a client cannot play without.
+//
+// Events are edges: they fire once and are gone. A peer whose data channel was
+// not open at that instant loses them permanently, silently — net.js now logs
+// every such drop, but logging it does not bring it back. So the load-bearing
+// half of what used to arrive by event is now carried by `snap.st`, which
+// repeats 15 times a second and therefore heals itself on the very next frame.
+//
+// The events still fire, and still do their cosmetic half: banners, the floor
+// announcement, roars. Losing one of those costs a player a banner. Losing the
+// state cost them the game.
+function applySnapState(snap) {
+  const st = snap && snap.st;
+  if (!st) return;
+
+  // ---- the node map ----
+  if (st.map) {
+    const newFloor = !app.map || app.map.floorNum !== st.map.floorNum;
+    app.map = st.map;
+    app.arena = null;
+    app.runMode = 'map';
+    if (newFloor) { app.floorNum = st.map.floorNum; app.bossInfo = null; }
+  } else if (st.arena) {
+    // ---- the room, including walls that moved mid-siege ----
+    app.arena = st.arena;
+    app.runMode = 'arena';
+  }
+
+  // ---- pending picks: PRESENCE is the truth, not two edges ----
+  //
+  // Closed defect #4 was a missing `boonDone` leaving a panel open with no
+  // exit, which ended the run. Deriving open/closed from state means a lost
+  // close event costs nothing: the next snapshot says the offer is gone and the
+  // panel goes with it. The OPEN direction still needs the event, because only
+  // the event carries the picks themselves — but a lost open is a missed pick,
+  // and a lost close was a dead run, so this closes the worse of the two.
+  const mine = (st.pend || []).find(r => r[0] === app.myIdx);
+  if (mine) {
+    if (!mine[1]) closeLevelup();
+    if (!mine[2]) closeTreasure();
+    if (!mine[3]) closeBoon();
+  }
+
+  // ---- the run being over ----
+  if (st.over && app.mode === 'run') {
+    // The results payload only exists on the `end` event; what state can say is
+    // that the run has finished, which is enough to stop a client sitting in a
+    // dead world forever waiting for a screen that already came and went.
+    showHud(false);
+    closeAllOverlays();
+    hideMapScreen();
+  }
 }
 
 // event → UI/audio. Runs on host (own events) and on clients (broadcast).

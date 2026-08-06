@@ -70,14 +70,40 @@ export class HostTransport {
     conn.on('error', drop);
   }
 
+  // EVERY DROP IS LOGGED. These two used to skip a not-open connection and
+  // swallow a throwing send in silence, which meant a message could vanish for
+  // one peer with a completely clean console on both ends. That is why a lost
+  // `map` event took seven suite runs across two branches to find: the failure
+  // presented as "the client just sits there", with nothing anywhere saying a
+  // send had been skipped.
+  //
+  // Counters as well as console lines, because a console line scrolls and a
+  // counter can be asserted. window.uvNet.drops is the ledger.
+  _drop(peerKey, msg, why) {
+    const kind = msg && msg.t === 'ev'
+      ? `ev[${(msg.list || []).map(e => e.k).join(',') || 'empty'}]`
+      : (msg && msg.t) || (msg && msg.k) || typeof msg;
+    this.drops = (this.drops || 0) + 1;
+    const led = (typeof window !== 'undefined' && window.uvNet) || null;
+    if (led) {
+      led.drops = (led.drops || 0) + 1;
+      (led.dropLog ||= []).push({ peer: peerKey, kind, why });
+      if (led.dropLog.length > 50) led.dropLog.shift();
+    }
+    console.warn(`[net] DROPPED ${kind} for peer ${peerKey}: ${why}. Anything load-bearing in it is now lost for that peer — state belongs in the snapshot, not in a one-shot event.`);
+  }
+
   send(peerKey, msg) {
     const c = this.conns.get(peerKey);
-    if (c && c.open) { try { c.send(msg); } catch { /* peer racing a close */ } }
+    if (!c) return this._drop(peerKey, msg, 'no connection for this peer');
+    if (!c.open) return this._drop(peerKey, msg, 'channel not open');
+    try { c.send(msg); } catch (err) { this._drop(peerKey, msg, `send threw: ${err && err.message}`); }
   }
 
   broadcast(msg) {
-    for (const c of this.conns.values()) {
-      if (c.open) { try { c.send(msg); } catch { /* ignore */ } }
+    for (const [key, c] of this.conns) {
+      if (!c.open) { this._drop(key, msg, 'channel not open'); continue; }
+      try { c.send(msg); } catch (err) { this._drop(key, msg, `send threw: ${err && err.message}`); }
     }
   }
 

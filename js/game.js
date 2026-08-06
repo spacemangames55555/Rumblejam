@@ -458,11 +458,24 @@ export class Sim {
     return [...this.floor.nodes[this.currentNode].edges];
   }
 
-  _mapEvent() {
-    this.pushEvent({
-      k: 'map', layout: serializeMap(this.floor), floorNum: this.floorNum,
+  // THE MAP IS STATE, NOT AN ANNOUNCEMENT. Built here and read by BOTH the
+  // event (which still fires, for the floor banner and the overlay-closing that
+  // are genuinely one-shot) and every snapshot while the party is on the map.
+  //
+  // The standing rule: if losing it breaks the game, it is state and rides the
+  // snapshot; if losing it is cosmetic, it is an event and may be dropped. This
+  // was delivered only as an event, so a client whose channel was not open at
+  // that instant sat on a blank screen forever — receiving 30 map-mode
+  // snapshots, with a clean console, while the host played on.
+  _mapState() {
+    return {
+      layout: serializeMap(this.floor), floorNum: this.floorNum,
       current: this.currentNode, visited: [...this.visited], reachable: this.reachableNodes(),
-    });
+    };
+  }
+
+  _mapEvent() {
+    this.pushEvent({ k: 'map', ...this._mapState() });
   }
 
   // Any player taps a reachable node → 4s consent countdown on every screen.
@@ -608,12 +621,25 @@ export class Sim {
       p.relocT = 0; p.carrying = null;
       this.relocateStructures(p, { all: true, instant: true });
     }
-    this.pushEvent({
-      k: 'arena', nodeId: node.id, kind: node.kind, template: node.template, biome: this.biome,
+    // Same rule as the map: the room a client is standing in is state. The
+    // event still fires for its banner; the geometry rides every snapshot.
+    // `obstacles` is rebuilt each call rather than cached, so the siege
+    // collapse — which used to need its own one-shot `obstacles` event to
+    // mutate the client's copy — is simply carried by the next snapshot.
+    this._arena = {
+      nodeId: node.id, kind: node.kind, template: node.template, biome: this.biome,
       name: arena.name, w: arena.w, h: arena.h,
-      obstacles: this._snapObstacles(),
       hazards: this._serializeHazardDefs(),
-    });
+    };
+    this.pushEvent({ k: 'arena', ...this._arena, obstacles: this._snapObstacles() });
+  }
+
+  // The arena block for the snapshot. Obstacles are read live so a wall that
+  // changes mid-siege reaches every client on the next snapshot whether or not
+  // the `obstacles` event survived.
+  _arenaState() {
+    if (this.phase !== 'arena' || !this._arena) return null;
+    return { ...this._arena, obstacles: this._snapObstacles() };
   }
 
   _serializeHazardDefs() {
@@ -3644,7 +3670,48 @@ export class Sim {
         tohState(this, p)]),
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
       beams: this.activeBeams,
-      boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp } : null,
+      // `phase2` rides here rather than only in the one-shot `bossPhase` event.
+      // The event still fires for the ENRAGED banner and the roar; the FACT of
+      // the enrage is state, and a client that missed it was fighting a boss it
+      // believed was still in phase 1.
+      boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp, phase2: !!(this.boss.bs && this.boss.bs.phase2) } : null,
+
+      // ---- STATE THAT USED TO TRAVEL ONLY AS A ONE-SHOT EVENT ----
+      //
+      // The rule: if losing it breaks the game it is state and rides the
+      // snapshot; if losing it is cosmetic it is an event and may be dropped.
+      // Everything in `st` failed that test as an event — a peer whose channel
+      // was not open at the moment it fired lost it permanently, silently.
+      //
+      // Only the block for the CURRENT PHASE is carried, so the map costs
+      // nothing during a fight and the arena costs nothing on the map screen.
+      st: {
+        map: this.phase === 'map' ? this._mapState() : null,
+        arena: this._arenaState(),
+        // Pending picks. A lost `boon`/`offer`/`treasure` costs a player their
+        // progression; a lost `boonDone`/`offerDone`/`treasureDone` SOFTLOCKS
+        // them behind a panel with no exit — that is closed defect #4, and it
+        // was one dropped event away from happening again by a different route.
+        // Presence here is the truth: the client opens when a pick appears and
+        // closes when it goes away, instead of trusting two edges to arrive.
+        pend: this.players.filter(p => !p.gone).map(p => [
+          p.idx,
+          p.pendingOffer ? 1 : 0,
+          p.treasureOffer ? 1 : 0,
+          p.boonOffer ? 1 : 0,
+        ]),
+        // The run being over is the most load-bearing edge there is: a client
+        // that missed `end` sits in a dead run with no results and no way out.
+        over: this.over ? 1 : 0,
+        // LOADOUT AND UNSPENT POINTS. These were on no channel at all: getMeta
+        // still ships `weapons`, and patch-trigger-core replaced weapons with
+        // skills without ever putting the loadout on the wire. A client could
+        // not see what it had slotted, and a player who cannot see their skills
+        // cannot spend a point on one — progression, delivered by nothing.
+        // Slot ids are interned into `ldk` so eight players sharing an opener
+        // cost one copy of the string rather than eight.
+        ld: null, ldk: null,
+      },
       fx: this.fxBatch || this._emptyFx(),
       hazards: (this.hazards || []).map(h => h.type === 'spikes'
         ? ['s', r(h.x), r(h.y), r(h.w), r(h.h), h.state]
@@ -3659,6 +3726,22 @@ export class Sim {
       spirits: this.players.filter(q => !q.gone && q.spirit)
         .map(q => [r(q.spirit.x), r(q.spirit.y), +(q.spirit.t / q.spirit.dur).toFixed(2), q.idx]),
     };
+    // Loadout, interned. `ldk` is the id table for this snapshot; `ld` is one
+    // row per live player of [idx, unspentPoints, ...slotIndices], with -1 for
+    // an empty slot. Eight Samurai running the same opener pay for the string
+    // once. Measured cost of the whole `st` block is in the README.
+    {
+      const keys = [], byKey = new Map();
+      const intern = id => {
+        if (id == null) return -1;
+        let i = byKey.get(id);
+        if (i === undefined) { i = keys.length; byKey.set(id, i); keys.push(id); }
+        return i;
+      };
+      snap.st.ld = this.players.filter(p => !p.gone).map(p =>
+        [p.idx, p.skillPoints || 0, ...(p.loadout || []).map(intern)]);
+      snap.st.ldk = keys;
+    }
     // radius is derived client-side from type + elite/mini flags — not sent.
     // Interest culling: chaff farther than SNAP_CULL_R from EVERY live player
     // is off every screen (radar and edge arrows only track elites/bosses/
