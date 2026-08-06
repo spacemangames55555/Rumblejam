@@ -4411,5 +4411,52 @@ try {
   else fail(`gyre aim drifted during ${aimDriftT} windup tick(s) — the telegraph would point somewhere it is not going`);
 } catch (err) { fail('gyre telegraph gate crashed', err); }
 
+// ---- 16. a shop never stocks something nobody can buy ----
+//
+// Weapons are removed. Before this gate, SHOP_WEAPON_CHANCE (0.3) plus the
+// "every shop guarantees 1-2 weapons" rule put a dead card in 400 of 400
+// measured shops, and made the first card unbuyable a third of the time. It
+// read as browser-suite flakiness for four runs across two branches.
+//
+// The gate is written against the RULE — "no stock entry may be a kind the
+// player cannot hold" — rather than against `kind === 'weapon'`, so it keeps
+// working when the phase-4 stat/modifier split adds categories.
+try {
+  const R = await import('../js/content/characters.js');
+  let shops = 0, bad = 0, kinds = new Set(), slotZeroBad = 0;
+  const offenders = {};
+  for (const roster of ['classic', 'toh']) {
+    R.setRoster(roster);
+    // every character in the ACTIVE roster, read from the registry rather than
+    // a list here — a new character must be covered without editing this gate
+    for (const c of R.CHARACTERS) {
+      for (let s = 0; s < 4; s++) {
+        const g = new Sim({ seed: 7000 + s, party: [{ idx: 0, key: 'k', name: 'T', charId: c.id, color: '#fff' }] });
+        for (let f = 1; f < 1 + (s % 4); f++) g._startFloor(f + 1);
+        const node = g.floor.nodes.find(n => n.kind === 'shop');
+        if (!node) continue;
+        g._travelTo(node.id);
+        const p = g.players[0];
+        if (!p.shop || !p.shop.stock.length) continue;
+        // base roll AND rerolls — the guarantees re-run on every reroll, which
+        // is exactly where a weapon minimum would sneak back in
+        for (let r = 0; r <= 3; r++) {
+          if (r) g.uiAction(0, { kind: 'reroll' });
+          shops++;
+          const st = p.shop.stock;
+          for (const x of st) kinds.add(x.kind);
+          const unbuyable = st.filter(x => x.kind === 'weapon' && p.weaponSlots === 0);
+          if (unbuyable.length) { bad++; offenders[p.char.trait.key] = (offenders[p.char.trait.key] || 0) + unbuyable.length; }
+          if (st[0] && st[0].kind === 'weapon' && p.weaponSlots === 0) slotZeroBad++;
+        }
+      }
+    }
+  }
+  R.setRoster('classic');
+  if (!shops) fail('shop stock gate sampled 0 shops — it proves nothing, restage it');
+  else if (!bad) ok(`no shop stocks an unbuyable card — ${shops} shops across both rosters, 4 floors, base roll + 3 rerolls (kinds seen: ${[...kinds].join(', ')})`);
+  else fail(`${bad}/${shops} shops stock a weapon no one can hold (first card in ${slotZeroBad}): ${JSON.stringify(offenders)}`);
+} catch (err) { fail('shop stock gate crashed', err); }
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');
 process.exit(failures ? 1 : 0);

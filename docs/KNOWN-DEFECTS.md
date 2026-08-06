@@ -416,9 +416,7 @@ node tools/telegraph_test.mjs
 
 ---
 
-# Open again
-
-## 6. The shop still stocks weapons no character can equip
+## 6. The shop stocked weapons no character could equip
 
 **Where:** `js/config.js` `SHOP_WEAPON_CHANCE: 0.3`, and every shop-stock roll
 that reads it. Introduced by `patch-trigger-core`, which set `weaponSlots: 0`
@@ -471,9 +469,31 @@ code path alive for a future in which something can hold a weapon again. Whateve
 is chosen, the browser gate should pin the stock rather than tap whatever rolled,
 so that a real purchase regression is distinguishable from a stock composition.
 
-**Not fixed here** because the shop's role after the weapon removal is a design
-question this patch has no mandate to answer, and guessing at it would bury the
-decision in a region-shell commit.
+**FIXED 2026-08-06.** It was not a design question — weapons are removed from
+the game, so a shop stocking one is simply a bug. Shops stock stat items only,
+from the existing pool; no new item category was introduced, because the
+stat/modifier split is phase 4 and is not being pulled forward to paper over
+this.
+
+The gate is `Sim._stocksWeapons(p)`, which reads `p.weaponSlots > 0` — the
+player's real state, not a `WEAPONS_REMOVED` flag that could go stale. Every
+weapon branch consults it: the base roll, the per-shop weapon minimums, the
+Quartermaster's all-weapon rack, the Overseer's summon rack, the Gilded One's
+top-tier shelf. All fall through to items.
+
+One hole had to be closed for the predicate to be trustworthy: `js/traits-toh.js`
+handed the Necromancer four weapon slots back *after* `_makePlayer` zeroed them
+for the whole roster — the only exception in an otherwise total removal, and the
+source of all 48 remaining weapon-stocking shops in a 2256-shop sweep. Nothing
+depended on it: `_startingGear` is short-circuited so the Necromancer never
+receives a weapon, and the Marrownaut payoff reads `sim.summons` for a fused
+tier-IV summon, not a mount.
+
+Measured after the fix: **0 of 2256** shops stock a weapon, across 47 characters
+in both rosters, four floors, base roll plus three rerolls each. Held by
+`tools/sim_test.mjs` §16, which asserts the rule ("no stock entry may be a kind
+the player cannot hold") rather than the literal string `weapon`, so it survives
+the phase-4 category split.
 
 ---
 
@@ -529,12 +549,36 @@ the same file, applied to the JSON and not to the PNGs.
 restored byte-for-byte afterwards. A path with no original (genuinely created by
 the test) is still removed.
 
-**What holds it now.** Nothing automated, and that is worth stating plainly
-rather than implying a gate exists. The check is one command after any suite
-run — `git status --short -- assets/` — and the honest guard would be a suite
-that fails when it dirties the working tree. That is not built.
+**The restore alone was not enough.** It ran, and the art still went missing
+again across later runs, because two things around it were wrong:
+
+- `installArt()` and `removeArt()` sat ~700 lines and several sibling blocks
+  apart, with `removeArt` in the *last inner* `finally`. Anything that threw
+  outside an inner `try` skipped the restore completely. The fixture lifetime
+  is now wrapped in one spanning `try/finally`.
+- The restore **ratcheted**. A path missing at install time recorded `null`,
+  so the restore deleted it again — permanently, on every subsequent run, with
+  each run truthfully reporting that *it* changed nothing. Committed art is now
+  restored from git before the snapshot is taken, so a damaged tree heals.
+- `removeArt()` iterated `ART` rather than the snapshot, so calling it without a
+  matching `installArt()` deleted committed art outright. Now it iterates only
+  what it actually recorded, which is what makes it safe in a `finally`.
+
+**What holds it now.** A teardown gate, which is what should have existed from
+the start:
+
+| gate | where | asserts |
+|---|---|---|
+| clean working tree | `tools/browser_test.mjs`, `assertCleanTree()` at both exit points | the dirty set of **tracked** files after the run matches the dirty set before it; a suite that changed one fails, naming the file and flagging deletions specially |
+
+It diffs before against after rather than requiring a clean tree outright, so it
+blames only what the run did and stays quiet about a developer's work in
+progress. Negative controls, all three run: deleting a tracked sprite → `FAIL …
+1 DELETED`; leaving a fixture behind → `FAIL … M`; touching nothing → `PASS`.
 
 ---
+
+# Open
 
 ## 8. A co-op event sent while a peer's channel is not open is lost forever
 

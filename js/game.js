@@ -2982,7 +2982,14 @@ export class Sim {
     // rule, Quartermaster is all-weapon). Locked slots are never replaced.
     if (t.key === 'legendary_shop') return;
     const swappable = s => !s.locked && !s.sold;
-    const needW = t.key === 'arsenal_doctrine' ? 0 : (shop.black ? 2 : (this.floorNum === 1 ? 2 : 1));
+    // A GUARANTEE OF SOMETHING UNBUYABLE IS NOT A GUARANTEE. These minimums
+    // exist so a kit is never starved of weapons; with no weapon slots on the
+    // roster they instead forced 1-2 dead cards into every shop and 2 into
+    // every Black Market, which is how 400 of 400 measured shops ended up
+    // stocking at least one card nobody could buy.
+    const needW = !this._stocksWeapons(p) ? 0
+      : t.key === 'arsenal_doctrine' ? 0
+      : (shop.black ? 2 : (this.floorNum === 1 ? 2 : 1));
     let weapons = shop.stock.filter(s => s.kind === 'weapon').length;
     for (let i = shop.stock.length - 1; i >= 0 && weapons < needW; i--) {
       const s = shop.stock[i];
@@ -3000,6 +3007,21 @@ export class Sim {
     }
   }
 
+  // CAN THIS PLAYER STOCK A WEAPON AT ALL? Derived from the player, never from
+  // a parallel flag. patch-trigger-core sets weaponSlots to 0 for everybody, so
+  // this is false for the whole roster today — and a shop offering a card that
+  // nobody can buy is a bug, not a design question. Reading the real number
+  // rather than a WEAPONS_REMOVED constant means the shop is automatically
+  // right again the day anything grants a slot back, with no second place to
+  // remember to update.
+  //
+  // Every weapon branch below consults this. Trait shops built entirely around
+  // weapons — the Quartermaster's all-weapon rack, the Overseer's summon rack,
+  // the Gilded One's top-tier shelf — fall through to items from the same pool.
+  // No new item category: the stat/modifier split is phase 4 and is not being
+  // pulled forward to paper over this.
+  _stocksWeapons(p) { return p.weaponSlots > 0; }
+
   // force: 'weapon' | 'rareplus' — used by the stock guarantees
   _rollStockEntry(p, rng, force = null) {
     const t = p.char.trait;
@@ -3010,7 +3032,8 @@ export class Sim {
     // goods (legendary items, or weapons at the floor's top tier); the
     // Overseer's weapon rolls come from the summon rack (turrets/drones)
     const weaponChance = t.key === 'overseer' ? 0.5 : CONFIG.SHOP_WEAPON_CHANCE;
-    const wantWeapon = force === 'weapon' ? true
+    const wantWeapon = !this._stocksWeapons(p) ? false
+      : force === 'weapon' ? true
       : force === 'rareplus' ? false
       : t.key === 'arsenal_doctrine' ? true
       : rng.chance(weaponChance);

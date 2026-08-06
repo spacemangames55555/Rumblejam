@@ -223,6 +223,45 @@ await sleep(900);
 
 const wantCoop = process.argv.includes('--coop');
 
+// ---------- teardown gate: a suite that dirties the working tree has failed ----------
+//
+// This suite writes sprite fixtures over real paths. Three of them —
+// skulker.png, flit.png, material.png — are TRACKED, and the cleanup deleted
+// them on every run for as long as that test has existed. Nothing noticed,
+// because nothing looked. `git add -A` would have committed the deletion, which
+// is how committed art leaves a repository with nobody deciding to remove it.
+//
+// The restore is in place now, but a restore is a promise and this is the
+// check. It compares the dirty set BEFORE the suite against the dirty set
+// AFTER, so it fails on what THIS RUN changed and stays quiet about whatever
+// work in progress the person running it already had open. Tracked files only:
+// a tool that generates new art is a different conversation from a test that
+// destroys existing art.
+const gitDirty = () => {
+  try {
+    return new Map(execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' })
+      .split('\n').filter(Boolean).map(l => [l.slice(3).trim(), l.slice(0, 2)]));
+  } catch { return null; }   // not a git checkout: the gate reports that, it does not crash
+};
+const dirtyBefore = gitDirty();
+
+function assertCleanTree() {
+  if (!dirtyBefore) { console.warn('⚠ working-tree gate skipped — not a git checkout'); return; }
+  const after = gitDirty();
+  if (!after) { fail('working-tree gate: git status failed after the run'); return; }
+  const caused = [...after].filter(([f, st]) => dirtyBefore.get(f) !== st);
+  if (!caused.length) {
+    ok(`the suite left the working tree as it found it (${after.size} pre-existing change(s) untouched)`);
+    return;
+  }
+  // ' D' is the shape that started this: a tracked file deleted by a test.
+  const deleted = caused.filter(([, st]) => st.trim() === 'D');
+  fail(`THE SUITE DIRTIED THE WORKING TREE — ${caused.length} tracked file(s) changed by this run`
+    + (deleted.length ? `, ${deleted.length} DELETED` : '')
+    + `: ${caused.map(([f, st]) => `${st.trim()} ${f}`).join(', ')}`
+    + '. A test that modifies committed files is destructive, not a test. Restore what you write.');
+}
+
 // ---------- shared Gauntlet-flow helpers ----------
 const measureFps = br => br.exec(`return new Promise(res => { let f = 0; const t0 = performance.now();
   function g() { f++; if (performance.now() - t0 < 3000) requestAnimationFrame(g); else res(Math.round(f / 3)); }
@@ -836,7 +875,7 @@ try {
   await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
   await A.waitFor(`return document.querySelector('[data-combine]')!==null`, 3000, 'combine affordance on the match');
   await A.exec(`document.querySelector('[data-combine]').click(); return 1;`);
-  await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'combined pair');
+  await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'two coilguns fused into one tier-II');
   const slotsAfter = await A.exec('return window.uv.meta.weapons.length');
   if (slotsAfter === slotsBefore - 1) ok('combine via UI: pair → tier II, slot freed'); else fail(`slots ${slotsBefore}→${slotsAfter}`);
   await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
@@ -1156,12 +1195,34 @@ try {
   // Originals are read into memory before anything is touched and put back
   // byte-for-byte afterwards, the same way the sprite-override block below
   // already handles assets.json and sprite-overrides.json.
+  // AND THE RESTORE MUST NOT RATCHET. Recording `null` for a path that is
+  // missing looks harmless, but if a previous run left one of these deleted,
+  // this run records null, writes its fixture, and then "restores" by deleting
+  // it again — permanently, every run after, with each run correctly reporting
+  // that IT changed nothing. Committed art must come back from git before the
+  // snapshot is taken, so a tree that is already damaged heals instead of
+  // staying damaged quietly.
   const ART = [gridFile, badGridFile, flatFile];
   const originals = new Map();
+  const restoreFromGit = f => {
+    try {
+      const rel = path.relative(process.cwd(), f);
+      // tracked? (git cat-file exits non-zero for a path git does not know)
+      execFileSync('git', ['cat-file', '-e', `HEAD:${rel}`], { stdio: 'ignore' });
+      execFileSync('git', ['checkout', '--', rel], { stdio: 'ignore' });
+      return fs.existsSync(f);
+    } catch { return false; }   // untracked, or not a git checkout: nothing to heal
+  };
   const installArt = () => {
     fs.mkdirSync(enemyDir, { recursive: true });
     fs.mkdirSync(fxDir, { recursive: true });
-    for (const f of ART) if (!originals.has(f)) originals.set(f, fs.existsSync(f) ? fs.readFileSync(f) : null);
+    for (const f of ART) {
+      if (originals.has(f)) continue;
+      if (!fs.existsSync(f) && restoreFromGit(f)) {
+        console.warn(`⚠ ${path.relative(process.cwd(), f)} was missing from the working tree — restored from git before taking the fixture snapshot`);
+      }
+      originals.set(f, fs.existsSync(f) ? fs.readFileSync(f) : null);
+    }
     fs.writeFileSync(gridFile, directionGrid());
     fs.writeFileSync(flatFile, flatAsymmetric());
     fs.writeFileSync(badGridFile, png(E_CELL, E_CELL, () => [255, 0, 255]));   // square, so deliberately not an 8-row grid
@@ -1169,11 +1230,16 @@ try {
   // Restore what was there. A file this test genuinely created (no original) is
   // removed; a file it clobbered is written back exactly as it was.
   const removeArt = () => {
-    for (const f of ART) {
-      const was = originals.get(f);
+    // ITERATE THE SNAPSHOT, NOT `ART`. With originals empty — removeArt called
+    // on a path where installArt never ran, which the spanning finally below
+    // makes reachable — `originals.get(f)` is undefined and the else branch
+    // deletes committed art. Restoring only what was actually recorded makes
+    // this safe to call unconditionally.
+    for (const [f, was] of originals) {
       if (was) fs.writeFileSync(f, was);
       else fs.rmSync(f, { force: true });
     }
+    originals.clear();
     for (const d of [enemyDir, fxDir, spriteRoot]) { try { fs.rmdirSync(d); } catch { /* not empty: real art lives here */ } }
   };
 
@@ -1284,6 +1350,14 @@ try {
   //         reproduce the primitive exactly, art present or not ----
   // ---- 4. directional grids, on a live entity and cell by cell ----
   // ---- 5. a directions:1 entry still rotates, exactly as before ----
+  //
+  // installArt() and removeArt() are ~700 lines and several sibling blocks
+  // apart, and removeArt lived in the LAST inner finally. Anything throwing
+  // outside an inner try skipped the restore entirely and left three fixtures
+  // sitting on top of committed art. This try/finally spans every block that
+  // runs while the fixtures are installed, so the restore happens on exit
+  // paths nobody enumerated.
+  try {
   {
     installArt();
     const S3 = new Browser(), S4 = new Browser();
@@ -1994,9 +2068,9 @@ try {
       else ok('debug mode logs, it does not error');
     } catch (e) { fail(`sprites=debug test: ${e.message}`); } finally {
       await S5.close();
-      removeArt();
     }
   }
+  } finally { removeArt(); }
 }
 
 // ---------- tiled floors: the biome layer, which only a renderer can check ----------
@@ -2714,6 +2788,7 @@ if (wantCoop) {
   const PJS = process.env.PEERJS_LOCAL || '/tmp/peerjs.min.js';
   if (!existsSync(PJS)) {
     console.warn('⚠ COOP SKIPPED — no local peerjs.min.js (set PEERJS_LOCAL or place /tmp/peerjs.min.js)');
+    assertCleanTree();
     console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL BROWSER TESTS PASSED');
     process.exit(failures ? 1 : 0);
   }
@@ -3019,8 +3094,8 @@ if (wantCoop) {
       ok('both players get their own shop overlay at the Trader stop');
       const coopItem = JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.vitality>0&&!it.hooks); return JSON.stringify({id:it.id})`));
       await A.exec(`const s=window.uv.sim; for (const p of s.players){ s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); p.items.push(${JSON.stringify(coopItem.id)}); s._recomputeItems(p); s._recomputeStats(p); } return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'host pair');
-      await B.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 4000, 'client pair');
+      await A.waitFor(`return window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'a matching pair of coilguns in the host\'s meta');
+      await B.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 4000, 'a matching pair of coilguns in the client\'s meta');
       // interleave: host arms a combine while client arms a sell, then both confirm
       await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
       await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
@@ -3115,7 +3190,7 @@ if (wantCoop) {
         p0.shop.stock[0]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
         p0.shop.stock[1]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
         s._sendShop(p0); s._sendShop(p1); return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'host at cap');
+      await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'the host holding weapons equal to its weapon-slot cap');
       // simultaneous: client rerolls while the host's duplicate buy auto-combines
       await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
       await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
@@ -3615,5 +3690,6 @@ if (wantCoop) {
   }
 }
 
+assertCleanTree();
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL BROWSER TESTS PASSED');
 process.exit(failures ? 1 : 0);
