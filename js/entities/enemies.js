@@ -4,6 +4,12 @@
 
 import { dist, dist2, angleTo, clamp } from '../util.js';
 
+// The gyre's stoop, named rather than inlined: the telegraph's length has to be
+// derived from the same two numbers the dive uses, or the warning stops
+// matching the attack the first time either is tuned.
+const GYRE_DIVE_DUR = 0.55;
+const GYRE_DIVE_MULT = 2.6;
+
 // wave-end rush: dash THROUGH the player's position and overshoot — the
 // fight ends in chaos, not a queue politely settling at melee range.
 // Stall detection re-rolls the waypoint randomly: an enemy wedged in a
@@ -160,8 +166,23 @@ export function updateEnemy(sim, e, dt) {
       break;
     }
     case 'orbiter': {
+      // Phases follow the dasher's convention: 1 winding, 2 committed.
+      //
+      // The windup is new. The dive used to fire on the same tick it was
+      // decided — 416 u/s arriving with no warning, the only attack on floor 1
+      // with none. A wings-back pose alone could not fix that: it would appear
+      // simultaneously with the attack it was meant to announce, which is a
+      // state, not a telegraph. A telegraph has to occupy time BEFORE the
+      // commitment, so the stoop now costs `diveWindup` seconds first.
       if (!p) break;
-      if (e.phase === 1) { // diving
+      if (e.phase === 1) { // winding up: aimed, wings back, not yet moving
+        e.windT -= dt;
+        if (e.windT <= 0) {
+          e.phase = 2; e.diveT = GYRE_DIVE_DUR;
+          e.vx = Math.cos(e.aimA) * spd * GYRE_DIVE_MULT;
+          e.vy = Math.sin(e.aimA) * spd * GYRE_DIVE_MULT;
+        }
+      } else if (e.phase === 2) { // diving
         e.x += e.vx * dt; e.y += e.vy * dt;
         sim.clampToRoom(e);
         e.diveT -= dt;
@@ -175,9 +196,15 @@ export function updateEnemy(sim, e, dt) {
         e.diveCd = (e.diveCd ?? t.diveCd) - dt;
         if (e.diveCd <= 0 && dist(e.x, e.y, p.x, p.y) < t.orbitR * 1.5) {
           e.diveCd = t.diveCd * (0.8 + Math.random() * 0.5);
-          e.phase = 1; e.diveT = 0.55;
-          const a = angleTo(e.x, e.y, p.x, p.y);
-          e.vx = Math.cos(a) * spd * 2.6; e.vy = Math.sin(a) * spd * 2.6;
+          e.phase = 1; e.windT = t.diveWindup;
+          // Aim LOCKS here and does not track (no followAim, unlike the
+          // dasher). A stoop commits — that is what makes sidestepping it a
+          // real answer rather than a delay.
+          e.aimA = angleTo(e.x, e.y, p.x, p.y);
+          sim.addTelegraph({
+            shape: 'beam', x: e.x, y: e.y, angle: e.aimA, w: e.radius * 2,
+            len: spd * GYRE_DIVE_MULT * GYRE_DIVE_DUR + 60, dur: t.diveWindup, follow: e,
+          });
         }
       }
       break;

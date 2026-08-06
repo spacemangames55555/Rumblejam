@@ -395,80 +395,80 @@
     },
     "enemy.aegimand": {
       "file": "enemy/aegimand.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.deadeye": {
       "file": "enemy/deadeye.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.flit": {
       "file": "enemy/flit.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.fusehead": {
       "file": "enemy/fusehead.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.gemmite": {
       "file": "enemy/gemmite.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.gyre": {
       "file": "enemy/gyre.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.lancerfish": {
       "file": "enemy/lancerfish.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.lobber": {
       "file": "enemy/lobber.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.skulker": {
       "file": "enemy/skulker.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.slabjaw": {
       "file": "enemy/slabjaw.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.stitcher": {
       "file": "enemy/stitcher.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.ward_pylon": {
       "file": "enemy/ward_pylon.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "enemy.wombden": {
       "file": "enemy/wombden.png",
-      "w": 32,
-      "h": 32,
+      "w": 128,
+      "h": 128,
       "directions": 8
     },
     "fx.block": {

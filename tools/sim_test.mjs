@@ -27,6 +27,12 @@ const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 import { BIOMES, FLOOR_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
+import { ENEMY_BY_ID as ENEMY_BY_ID_T } from '../js/content/enemies.js';
+// Art fixtures below build sheets that must match the manifest exactly. They
+// hardcoded 32 until enemies moved to 128 and every one became a rejected
+// sheet — so the cell size is read from the same table the generator uses.
+import { SPRITE_SIZE as SS } from '../js/content/sprites.js';
+const E_CELL = SS.enemy[0], E_GRID = E_CELL * 8, E_K = E_CELL / 32;
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { ALL_CHARS as _ALL_CHARS } from '../js/content/characters.js';
 const ALL_CHARS_N = _ALL_CHARS.length;
@@ -3696,14 +3702,15 @@ try {
     const file = nodePath.join(spriteRoot, 'skulker.png');
     try {
       mkdirSync(spriteRoot, { recursive: true });
-      // right id, wrong shape: 48x48 where the manifest wants 48x384
-      writeFileSync(file, PK.encodePng(PK.blankImage(32, 32)));
+      // right id, wrong shape: one square cell where the manifest wants 8 rows
+      writeFileSync(file, PK.encodePng(PK.blankImage(E_CELL, E_CELL)));
       const err = runFails('verify_art_batch.mjs', ['enemy.skulker']);
-      if (err && /32x32, manifest wants 32x256/.test(err)) ok('verify_art_batch names a wrong-sized grid and the size it should have been');
+      const wantMsg = new RegExp(`${E_CELL}x${E_CELL}, manifest wants ${E_CELL}x${E_GRID}`);
+      if (err && wantMsg.test(err)) ok('verify_art_batch names a wrong-sized grid and the size it should have been');
       else fail(`batch verify on a bad grid said: ${String(err).slice(0, 140)}`);
 
       // right shape, but every cell empty — how a mis-assembled grid hides
-      writeFileSync(file, PK.encodePng(PK.blankImage(32, 256)));
+      writeFileSync(file, PK.encodePng(PK.blankImage(E_CELL, E_GRID)));
       const err2 = runFails('verify_art_batch.mjs', ['enemy.skulker']);
       if (err2 && /empty cell/.test(err2)) ok('and it catches an all-empty grid, which passes every dimension check');
       else fail(`empty-cell check said: ${String(err2).slice(0, 140)}`);
@@ -3754,20 +3761,24 @@ try {
     const OV = nodePath.join(REPO, 'assets', 'sprite-overrides.json');
     const MAN = nodePath.join(REPO, 'assets', 'assets.json');
     const ovBefore = rf(OV, 'utf8'), manBefore = rf(MAN, 'utf8');
-    // body spans x 6+off..25, y 5..27 -> widest row is 20 across, 23 tall
-    const FIX_CONTENT = [20, 23];
+    // Body box, expressed at the 32px scale this fixture was written for and
+    // scaled to whatever the enemy cell actually is, so the content numbers
+    // below stay the truth about the pixels rather than a stale constant.
+    const B = n => Math.round(n * E_K);
+    const X0 = B(6), X1 = B(25), Y0 = B(5), Y1 = B(27);
+    const FIX_CONTENT = [X1 - X0 + 1, Y1 - Y0 + 1];
     const sheet = (bodyRGB, accentRGB, distinctRows) => {
-      const g = PK.blankImage(32, 256);
+      const g = PK.blankImage(E_CELL, E_GRID);
       for (let d = 0; d < 8; d++) {
         // shift the body per row so rows differ; when distinctRows is false the
         // shift repeats every 4 rows, which makes OPPOSITE facings identical —
         // exactly what a collapsed rotation produces
-        const off = distinctRows ? d : d % 4;
-        for (let y = 0; y < 32; y++) {
-          for (let x = 0; x < 32; x++) {
-            if (x < 6 + off || x > 25 || y < 5 || y > 27) continue;
-            const o = ((d * 32 + y) * 32 + x) * 4;
-            const acc = accentRGB && y > 9 && y < 22 && x > 9 && x < 22;
+        const off = (distinctRows ? d : d % 4) * Math.max(1, Math.round(E_K));
+        for (let y = 0; y < E_CELL; y++) {
+          for (let x = 0; x < E_CELL; x++) {
+            if (x < X0 + off || x > X1 || y < Y0 || y > Y1) continue;
+            const o = ((d * E_CELL + y) * E_CELL + x) * 4;
+            const acc = accentRGB && y > B(9) && y < B(22) && x > B(9) && x < B(22);
             const c = acc ? accentRGB : bodyRGB;
             g.data[o] = c[0]; g.data[o + 1] = c[1]; g.data[o + 2] = c[2]; g.data[o + 3] = 255;
           }
@@ -4296,6 +4307,76 @@ try {
     if (!geomWrong) ok(`switching the biome on and off leaves the room byte-identical across ${checked} templates — geometry, obstacles and hazards all untouched`);
   }
 } catch (err) { fail('biome gate crashed', err); }
+
+// ---- 15. the gyre's stoop is telegraphed ----
+// The dive used to commit on the same tick it was decided: 416 u/s arriving
+// with no warning. A wings-back art pose could not have fixed that — it would
+// have appeared at the same instant as the attack it was meant to announce.
+// A telegraph has to occupy time BEFORE the commitment, so there is a windup.
+try {
+  const G = ENEMY_BY_ID_T.gyre;
+  if (G.diveWindup > 0.15) ok(`gyre carries a dive windup of ${G.diveWindup}s — long enough to be a warning, not a flicker`);
+  else fail(`gyre diveWindup is ${G.diveWindup} — a telegraph shorter than ~0.15s is not readable`);
+
+  // Several seeds rather than one long run: room architecture decides how often
+  // a gyre is inside dive range at all, so one arena is a thin sample. Raising
+  // the sample is the honest way to clear the vacuity bar — lowering the bar to
+  // fit one seed's result would be fitting the gate to the answer.
+  let sawWindT = 0, sawDiveT = 0, unwarnedT = 0, aimDriftT = 0, telegraphedT = 0;
+  for (const seed of [8801, 4417, 20613, 90210]) {
+  const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: 'bulwark', color: '#fff' }] });
+  g.uiAction(0, { kind: 'pickNode', nodeId: g.reachableNodes()[0] });
+  const p = g.players[0];
+  // Sterile arena: strip the target's weapons and drain the spawn queue every
+  // tick. Otherwise the player kills the gyres and the wave replaces them, and
+  // the gate ends up sampling whatever spawned next. wave.done stays FALSE —
+  // true switches the orbiter to rushMove and there is no stoop to check.
+  p.weapons.length = 0;
+  for (const e of [...g.enemyPool]) g.enemyPool.release(e);
+  g.spawnQueue.length = 0; g.wave.done = false;
+  p.x = g.W / 2; p.y = g.H / 2;
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    g.spawnEnemyById('gyre', p.x + Math.cos(a) * 200, p.y + Math.sin(a) * 200, { noMats: true });
+  }
+  let sawWind = 0, sawDive = 0, unwarned = 0, aimDrift = 0, telegraphed = 0;
+  const prevPhase = new Map(), lockAim = new Map();
+  for (let t = 0; t < 60 * 45; t++) {
+    g.setInput(0, { mx: 0, my: 0 });
+    g.tick();
+    g.spawnQueue.length = 0;
+    p.hp = p.stats.vitality; p.x = g.W / 2; p.y = g.H / 2;
+    for (const e of g.enemyPool) {
+      if (e.def.behavior !== 'orbiter') continue;
+      e.hp = e.maxHp;   // the gate measures the stoop, not how long a gyre survives
+      const was = prevPhase.get(e.id) ?? 0;
+      if (e.phase === 1 && was !== 1) {
+        sawWind++;
+        lockAim.set(e.id, e.aimA);
+        // a beam telegraph must exist for this gyre, right now
+        if (g.telegraphs.some(tg => tg.follow === e && tg.shape === 'beam')) telegraphed++;
+      }
+      // THE assertion: nothing may enter the dive without having wound up
+      if (e.phase === 2 && was !== 2) { sawDive++; if (was !== 1) unwarned++; }
+      // and the aim must not track during the windup — a stoop commits
+      if (e.phase === 1 && was === 1 && lockAim.has(e.id) && e.aimA !== lockAim.get(e.id)) aimDrift++;
+      prevPhase.set(e.id, e.phase);
+    }
+  }
+  sawWindT += sawWind; sawDiveT += sawDive; unwarnedT += unwarned;
+  aimDriftT += aimDrift; telegraphedT += telegraphed;
+  }
+  if (sawDiveT >= 12) ok(`gyre stoop gate exercised: ${sawWindT} windups, ${sawDiveT} dives across 4 arenas`);
+  else fail(`only ${sawDiveT} gyre dive(s) across 4 arenas — the gate is passing vacuously`);
+  if (!unwarnedT) ok(`every dive was preceded by a windup — ${sawDiveT}/${sawDiveT} warned`);
+  else fail(`${unwarnedT} of ${sawDiveT} gyre dives committed with no windup — the telegraph can be skipped`);
+  // sawWindT in the condition, not just the equality: with the windup removed
+  // this is 0 === 0 and would pass vacuously while the gate beside it fails.
+  if (sawWindT >= 12 && telegraphedT === sawWindT) ok(`every windup raised a beam telegraph (${telegraphedT}/${sawWindT})`);
+  else fail(`${sawWindT - telegraphedT} of ${sawWindT} windups drew no telegraph — the warning is invisible (windups seen: ${sawWindT})`);
+  if (!aimDriftT) ok('the stoop locks its aim at windup and does not track — sidestepping it is a real answer, not a delay');
+  else fail(`gyre aim drifted during ${aimDriftT} windup tick(s) — the telegraph would point somewhere it is not going`);
+} catch (err) { fail('gyre telegraph gate crashed', err); }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');
 process.exit(failures ? 1 : 0);
