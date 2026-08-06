@@ -260,7 +260,14 @@ function multiplierAt(setStanceRank, heldEdgeRank, skillId) {
   const stacksCold = p.engines.footing;
 
   // hot: stand still until the stance caps, then sample the same window
-  const maxStacks = ARMOR.footingMaxStacks + SK.passiveSum(p, 'footingMaxBonus');
+  // FOOTING_MAX_STACKS, not the old base+bonus. §1.2 made the cap the engine's
+  // and deleted the rankable bonus; this line kept reading the old names, so
+  // maxStacks became NaN, the accrual wait exited immediately and the `stacks`
+  // column reported 0 while the ratios beside it were measured against a stance
+  // that had in fact built up during the sample. A broken instrument printing a
+  // plausible number next to a real one.
+  const maxStacks = ARMOR.FOOTING_MAX_STACKS;
+  if (!(maxStacks > 0)) throw new Error(`FOOTING_MAX_STACKS is ${maxStacks} — the gate cannot measure a cap it cannot read`);
   for (let k = 0; k < 60 * 30 && p.engines.footing < maxStacks; k++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); p.x = pin.x; p.y = pin.y; heal(); }
   const stacksHot = p.engines.footing;
   p.skillCd = {};

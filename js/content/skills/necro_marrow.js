@@ -58,6 +58,8 @@ export const NECRO_MARROW = [
     type: 'passive', domain: 'physical', prereq: 'necro_bone_dart',
     trigger: null, cooldown: 0, compose: [],
     passive: { armorGrit: T.calcifyGrit, armorVit: T.calcifyVit },
+    // §1.3: grants no damage and no duration, so a second point buys nothing.
+    maxRank: 1,
     ranks: R,
   },
   {

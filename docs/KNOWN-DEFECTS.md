@@ -571,45 +571,42 @@ defending it as art.* `git log --diff-filter=A` is one command.
 
 # Open
 
-## 8. A co-op event sent while a peer's channel is not open is lost forever
+## 8. Client input has no delivery guarantee, no repeating channel, and nothing to heal from
 
-**Where:** `js/net.js` `broadcast()` and `js/main.js` `drainSimOutputs()`.
+**Where:** `js/net.js` `ClientTransport.send()`.
 
-```js
-// js/net.js
-broadcast(msg) {
-  for (const c of this.conns.values()) {
-    if (c.open) { try { c.send(msg); } catch { /* ignore */ } }
-  }
-}
+**Scope corrected 2026-08-06.** This entry originally blamed host→client event
+delivery. Half of that is now fixed and the half that remains is the *other
+direction*, which the original diagnosis had backwards.
 
-// js/main.js
-const list = sim.events.splice(0);          // <- gone from the queue
-if (app.hostT) app.hostT.broadcast({ t: 'ev', list });
-```
+### What was fixed
 
-**What is wrong.** The event list is spliced off the queue and broadcast once.
-A connection that is not `open` at that instant is skipped, a `send` that throws
-is swallowed, and there is **no buffer, no replay, no acknowledgement and no
-error**. The event is simply gone for that peer, permanently.
+In-run state (node map, arena geometry and obstacles, pending picks, boss phase,
+run-over, loadout) moved out of one-shot events and into `snap.st`, which
+repeats 15x/s and therefore heals on the next frame. Lobby state got a 3Hz
+heartbeat (`CONFIG.LOBBY_HEARTBEAT_HZ`) for the same reason — the lobby has no
+snapshot stream, so it needed a repeating channel of its own.
 
-Snapshots recover from this — they are sent 15 times a second and carry whole
-state. Events do not: they are one-shot edge notifications, and several of them
-are load-bearing for what a client can even see.
+Both are gated: `tools/snapstate_test.mjs` runs every case with `pushEvent`
+replaced by a sink, so **no event is delivered at all**, and the snapshot must
+still carry everything.
 
-**What a player experiences.** The node map is the clearest case. A client opens
-it only when it has BOTH `mode === 'map'` from a snapshot AND `app.map`, which
-is set *only* by the `map` event (`js/main.js:580`, `js/main.js:1027`). Miss that
-one event and the client sits on a blank screen, receiving snapshots, with no
-error, while the host plays on. Measured directly:
+### What is still broken, and why the first diagnosis was wrong
 
-```
-CLIENT MAP DIAG: {"mode":"run","map":"screen hidden","snaps":30,"lastMode":0,"nodes":0}
-CLIENT ERRORS:
-HOST STATE:      {"mode":"run","phase":"map","cleared":false}
-```
+`client ready` still fails intermittently in `browser_test.mjs --coop`, **with
+the drop counter reading zero**. That reading was true and useless: only
+`HostTransport` was instrumented, and the failing path is
+`ClientTransport.send` — the client clicks ready, the host never sees it.
 
-Thirty map-mode snapshots arrived, zero console errors, screen still hidden.
+Everything a client does leaves by that method: character pick, ready, node tap,
+buy, loadout change. It has:
+
+- **no delivery guarantee** — a not-open channel or a throwing send is a
+  permanent loss (now logged and counted, previously silent);
+- **no repeating channel** — the lobby heartbeat repeats HOST state to clients
+  and does nothing for input travelling the other way;
+- **nothing to heal from** — snapshots are host-authored, so there is no stream
+  a client can re-derive its own unsent intent from.
 
 **Reproduce:**
 
@@ -617,32 +614,46 @@ Thirty map-mode snapshots arrived, zero console errors, screen still hidden.
 node tools/browser_test.mjs --coop
 ```
 
-The co-op block fails intermittently at whichever assertion the lost event
-happened to gate. Observed across seven runs on two branches:
+Observed across three runs after the state fix and the heartbeat:
 
-| failure point | `patch-region-shell` | `patch-telegraphs` (331898b) |
-|---|---|---|
-| `host run` | 0/5 | 1/4 |
-| `client map screen` | 5/5 | 1/4 |
-| `host pair` (late, weapon-related) | 0/5 | 2/4 |
+| run | outcome |
+|---|---|
+| 1 | full co-op sequence to the end |
+| 2 | `room registration failed against local relay` (see #9) |
+| 3 | `timeout waiting for client ready` — this defect |
 
-**It is not a regression in either branch** — the same assertion fails on both.
-The distribution differs (one branch lands on the same assertion every time,
-the other scatters), which is what a timing-sensitive race does when startup
-work changes around it.
+**What a fix would have to do.** Give client input the property host state now
+has: repetition or acknowledgement. Either the client re-sends unacknowledged
+intent until the host confirms it, or intent becomes state the client repeats
+(a "my current pick/ready" beat) rather than an edge it fires once. The second
+matches the rule the rest of this patch follows — if losing it breaks the game,
+it repeats — and is probably the smaller change.
 
-**What has been ruled out.** Not pairing: registration and join-by-code
-succeeded 6/6 across both trees, with the built-in registration retry never
-firing. Not a client exception: the console is clean at the moment of failure.
-Not the region-shell modules: `regions.js`, `nodetree.js` and `saves.js` are
-imported by nothing in the runtime.
+**Not fixed here.** The instrument now covers both directions, which is what
+turns the next occurrence into evidence rather than another seven-run hunt.
 
-**What a fix would have to do.** Give events the delivery guarantee they are
-already assumed to have — a per-peer outbound queue that survives a
-not-yet-open channel and flushes on open, or a sequence number the client can
-detect a gap in and request a resync for. Either way the host must stop
-discarding an event list before every peer has actually taken it.
+---
 
-**Not fixed here** because it is netcode surgery well outside a region-shell
-patch, and because the right shape (buffer vs. resync) is a decision about the
-protocol, not a bug to patch locally.
+## 9. Room registration fails against the local relay, before any peer exists
+
+**Where:** unknown. `js/net.js` `HostTransport` room creation, `tools/peer_relay.mjs`,
+or the harness's relay probe.
+
+**What is wrong.** One co-op run in three or four never gets a room code at all:
+
+```
+✗ room registration failed against local relay
+```
+
+The harness boots the relay, probes `/peerjs/id` until it answers, and only then
+opens the host browser — and it retries registration once before failing. So
+this is not a naive startup race, and it is not the retry being absent.
+
+**Separate from #8.** No peer exists yet, so nothing has been sent or dropped;
+the drop ledger is clean on these runs. Recorded as its own entry specifically
+so it stops being absorbed into "co-op is flaky", which is how it stayed
+invisible while two other distinct failures wore the same description.
+
+**Undiagnosed.** Nothing has been ruled out. The next step is logging the
+PeerJS error on the registration path, which currently reports only that the
+code never arrived.

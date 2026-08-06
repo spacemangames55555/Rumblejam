@@ -101,7 +101,13 @@ function tickFooting(sim, p, dt) {
     p.footingAcc = 0;
     return;
   }
-  const maxStacks = SAM.footingMaxStacks + passiveSum(p, 'footingMaxBonus');
+  // THE CAP IS THE ENGINE'S, AND NOTHING RAISES IT. This read
+  // `SAM.footingMaxStacks + passiveSum(p, 'footingMaxBonus')`, so Set Stance's
+  // rankable +1 pushed a designed ten to a measured seventeen and inflated
+  // every per-stack term with it. `footingMaxBonus` is deliberately not summed
+  // here any more: if a future skill declares one it does nothing, which is the
+  // correct outcome for a passive trying to raise a hard cap.
+  const maxStacks = SAM.FOOTING_MAX_STACKS;
   const rate = 1 + passiveSum(p, 'footingAccrualPct');
   p.footingAcc += dt * rate;
   const per = SAM.footingTickMs / 1000;
@@ -140,9 +146,12 @@ export function engineStatBonus(p) {
   // the same place so the two compose rather than racing.
   const grit = f * (SAM.footingGritPerStack + passiveSum(p, 'footingGritBonus')) + passiveSum(p, 'armorGrit');
   const vit = passiveSum(p, 'armorVit');
-  const reflex = f * SAM.footingDodgePerStack;
-  if (!grit && !vit && !reflex) return null;
-  return { grit, vitality: vit, reflex };
+  // NO REFLEX. Footing grants vitality and grit only — see the note in the
+  // Armor tree's TUNING. The Samurai has surrendered the ability to dodge
+  // anything telegraphed; paying him dodge chance for standing still was the
+  // opposite of that, and most of why holding beat dodging on both axes.
+  if (!grit && !vit) return null;
+  return { grit, vitality: vit };
 }
 
 // The pool itself. It reuses the shield mechanism — same absorb-then-carry

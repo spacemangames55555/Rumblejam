@@ -64,6 +64,8 @@ export const SAMURAI_TACTICS = [
     type: 'passive', domain: 'mental', prereq: 'sam_draw_cut',
     trigger: null, cooldown: 0, compose: [],
     passive: { footingAccrualPct: T.breathAccrualPct },
+    // §1.3: grants no damage and no duration, so a second point buys nothing.
+    maxRank: 1,
     ranks: R,
   },
   {

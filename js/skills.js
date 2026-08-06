@@ -30,6 +30,25 @@ export const SKILL_BY_ID = Object.fromEntries(ALL_SKILLS.map(s => [s.id, s]));
 export const TREES_BY_CLASS = {};
 for (const t of Object.values(TREES)) (TREES_BY_CLASS[t.classId] ||= []).push(t.id);
 
+// WHAT EACH PASSIVE KEY ACTUALLY BUYS. Declared, not inferred, because the
+// rank-1 ruling (§1.3) turns on it: a passive granting neither damage nor
+// duration is an unlock and must declare maxRank: 1.
+//
+// Every value in a `passive` block is multiplied by rank in passiveSum(), so
+// "does ranking this buy anything" is exactly "is this key damage or duration".
+// A key absent from this table fails the load assertion rather than defaulting,
+// so adding a passive forces the author to answer the question once.
+export const PASSIVE_EFFECT = {
+  // scale damage — genuine investments, rankable
+  footingDamageBonus: 'damage',   // Held Edge: more damage per Footing stack
+  reflectPerGrit: 'damage',       // Quill: reflected damage scaled by Grit
+  // everything else — unlocks, rank-1
+  footingAccrualPct: 'other',     // Set Stance / Measured Breath: settle faster
+  footingGritBonus: 'other',      // Weight: more Grit per stack
+  armorGrit: 'other',             // Calcify
+  armorVit: 'other',              // Calcify
+};
+
 // A skill is "damaging" if any step deals damage. Used by the tier-1 assertion
 // and by the anti-softlock floor, so both read the same definition.
 const DAMAGING_KINDS = new Set(['strike', 'bolt', 'cone', 'line', 'hazard', 'drain', 'plague']);
@@ -58,6 +77,11 @@ export function skillRank(p, id) { return (p.skillRanks && p.skillRanks[id]) || 
 export function canLearn(p, skill) {
   if (!skill) return false;
   if (!(TREES_BY_CLASS[p.charId] || []).includes(skill.tree)) return false;
+  // maxRank ENFORCED HERE, not merely declared. A cap that only exists in a
+  // data file and a load assertion is a label; the spend path is where it has
+  // to bite, or a rank-1-only passive is still rankable at a level-up screen.
+  // Same lesson as the Footing stack cap: the clamp belongs in the engine.
+  if (skill.maxRank !== undefined && skillRank(p, skill.id) >= skill.maxRank) return false;
   if (!skill.prereq) return true;
   return skillRank(p, skill.prereq) >= 1;
 }
@@ -107,6 +131,35 @@ function assertTrees() {
         }
       } else if (s.type !== 'passive') {
         problems.push(`${s.id}: type ${JSON.stringify(s.type)} is neither active nor passive`);
+      }
+
+      // A PASSIVE THAT GRANTS NEITHER DAMAGE NOR DURATION IS AN UNLOCK, NOT AN
+      // INVESTMENT — a design ruling for the whole game, not a Samurai patch.
+      // Such a passive must declare `maxRank: 1`.
+      //
+      // Classified by PASSIVE KEY, from the registry above. The first version
+      // of this check read s.compose, which is empty for every passive by
+      // definition, so it flagged all six — including Held Edge, whose whole
+      // purpose is to scale damage. A check that cannot distinguish the case it
+      // exists to permit is a check that will be deleted the first time it is
+      // inconvenient.
+      if (s.type === 'passive') {
+        const keys = Object.keys(s.passive || {});
+        if (!keys.length) problems.push(`${s.id}: passive with no passive block — it grants nothing at any rank`);
+        const unknown = keys.filter(k => !(k in PASSIVE_EFFECT));
+        if (unknown.length) {
+          problems.push(`${s.id}: passive key(s) ${unknown.join(', ')} are not in PASSIVE_EFFECT — classify them as 'damage', 'duration' or 'other' so the rank-1 rule can be applied rather than guessed`);
+        }
+        const buysScaling = keys.some(k => PASSIVE_EFFECT[k] === 'damage' || PASSIVE_EFFECT[k] === 'duration');
+        if (!buysScaling && s.maxRank !== 1) {
+          problems.push(`${s.id}: passive grants only ${keys.map(k => `${k} (${PASSIVE_EFFECT[k] || '?'})`).join(', ')} — neither damage nor duration, so a second point buys nothing. Declare maxRank: 1; it is an unlock, not an investment`);
+        }
+        if (buysScaling && s.maxRank === 1) {
+          problems.push(`${s.id}: passive grants damage/duration scaling but is capped at maxRank 1 — either it is an investment or it is not`);
+        }
+      }
+      if (s.maxRank !== undefined && !(s.maxRank >= 1 && Number.isInteger(s.maxRank))) {
+        problems.push(`${s.id}: maxRank ${s.maxRank} must be a positive integer`);
       }
 
       // 6.1: ranks are linear. A skill declaring a multiplicative rank block

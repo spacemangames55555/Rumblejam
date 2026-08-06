@@ -169,8 +169,34 @@ export class ClientTransport {
     });
   }
 
+  // THE OTHER DIRECTION, AND THE ONE THAT ACTUALLY FAILED. Everything a client
+  // does — picking a character, readying up, tapping a node, buying — leaves by
+  // this method, and it swallowed exactly like the host's two did.
+  //
+  // Instrumenting only HostTransport produced a "zero drops" reading that was
+  // true and useless: a co-op run failed at `client ready` with the counter
+  // clean, because the client's ready never reached the host and nothing on
+  // this path was counting. A drop ledger that covers one direction is a ledger
+  // that will be trusted for both.
+  //
+  // Nothing here is recoverable by a heartbeat either: the lobby heartbeat
+  // repeats HOST state to clients. Client input has no repeating channel at all.
   send(msg) {
-    if (this.conn && this.conn.open) { try { this.conn.send(msg); } catch { /* ignore */ } }
+    const kind = (msg && msg.t) || (msg && msg.kind) || typeof msg;
+    if (!this.conn) return this._drop(kind, 'no connection to the host');
+    if (!this.conn.open) return this._drop(kind, 'channel to the host not open');
+    try { this.conn.send(msg); } catch (err) { this._drop(kind, `send threw: ${err && err.message}`); }
+  }
+
+  _drop(kind, why) {
+    this.drops = (this.drops || 0) + 1;
+    const led = (typeof window !== 'undefined' && window.uvNet) || null;
+    if (led) {
+      led.drops = (led.drops || 0) + 1;
+      (led.dropLog ||= []).push({ peer: 'host', kind, why });
+      if (led.dropLog.length > 50) led.dropLog.shift();
+    }
+    console.warn(`[net] DROPPED ${kind} for peer host: ${why}. This is CLIENT INPUT — it has no repeating channel and no snapshot to heal from, so it is simply lost.`);
   }
 
   close() {
