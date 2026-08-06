@@ -32,7 +32,9 @@ export const REGIONS = [
     enemies: ['pnw_sapling', 'pnw_elk', 'pnw_bark_hulk', 'pnw_mistwalker', 'pnw_thornhound', 'pnw_cedar_warden'],
     boss: 'pnw_boss',
     tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
-    contentReady: false,
+    // Six enemies, a two-phase boss and a cursed modifier all exist and are
+    // registered; the population clears the 50% telegraph-density floor.
+    contentReady: true,
   },
   {
     id: 'central_america', index: 2, name: 'Central America',
@@ -47,7 +49,7 @@ export const REGIONS = [
     enemies: ['ca_jaguar_priest', 'ca_bloodletter', 'ca_xib_shade', 'ca_obsidian_knight', 'ca_howler', 'ca_skull_rack'],
     boss: 'ca_boss',
     tuning: { hpMult: 1.15, damageMult: 1.1, densityMult: 1.05 },
-    contentReady: false,
+    contentReady: true,
   },
 ];
 

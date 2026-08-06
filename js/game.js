@@ -20,6 +20,9 @@ import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './tel
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES } from './content/enemies.js';
 import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
+import { nodePopulation, nodeModifiers } from './nodebehaviour.js';
+import { REGION_BY_INDEX, depthMult } from './regions.js';
+import { difficultyOf } from './worldmap.js';
 import { BOSS_BY_FLOOR } from './content/bosses.js';
 import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
@@ -695,8 +698,17 @@ export class Sim {
       if (this.enemyPool.count + this.spawnQueue.length >= Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10)) break;
       w.acc -= 1;
       const prof = this.profile || {};
-      const table = FLOOR_TABLES[this.floorNum - 1];
-      let id = table[Math.floor(this.waveRng.float() * table.length)];
+      // REGION POPULATIONS OVERRIDE THE FLOOR TABLE. `this.region` is the
+      // region id the party entered from the world map; when it is set, waves
+      // draw from that region's weighted population — and from its HEAVY half
+      // on an elite node — instead of the base twelve. That is what makes a
+      // region a place rather than a skin, and it is what carries the 50%
+      // telegraph density into real rooms rather than only into the F7 pit.
+      let id = this._regionPick();
+      if (!id) {
+        const table = FLOOR_TABLES[this.floorNum - 1];
+        id = table[Math.floor(this.waveRng.float() * table.length)];
+      }
       let mortar = false, puddle = false;
       // profile levers shape the roll: flankers become wave citizens,
       // artillery turns Lobbers into mortars, chaff picks up death-puddles
@@ -3032,6 +3044,35 @@ export class Sim {
         }
       }
     }
+  }
+
+  // Weighted pick from the current region's population, honouring the node
+  // type. Returns null when the party is not in a region, so the base floor
+  // tables still drive everything that is not region play.
+  _regionPick() {
+    if (!this.region) return null;
+    const pop = nodePopulation(this.region, this.nodeType || 'horde');
+    if (!pop || !pop.length) return null;
+    const total = pop.reduce((a, x) => a + x.w, 0);
+    let roll = this.waveRng.float() * total;
+    for (const x of pop) { roll -= x.w; if (roll <= 0) return x.def.id; }
+    return pop[pop.length - 1].def.id;
+  }
+
+  // The combined multipliers for the room being fought: node type first, then
+  // the party's difficulty. Difficulty does NOT touch XP — see worldmap.js.
+  regionFightMods() {
+    const region = REGION_BY_INDEX[this.regionIndex] || null;
+    const n = nodeModifiers(this.nodeType || 'horde', region);
+    const d = difficultyOf(this.difficulty);
+    return {
+      count: n.count * d.density,
+      hp: n.hp * d.hp,
+      dmg: n.dmg * d.dmg,
+      gold: n.gold * d.gold,
+      cursed: n.cursed,
+      depth: depthMult(this.regionColumn || 1),
+    };
   }
 
   // CAN THIS PLAYER STOCK A WEAPON AT ALL? Derived from the player, never from

@@ -97,6 +97,22 @@ function tickFooting(sim, p, dt) {
     // THE WHOLE STACK, INSTANTLY. No decay, no partial retention — a gradual
     // falloff would let the Samurai drift and keep the payoff, which erases the
     // decision. The absorb pool goes with it.
+    //
+    // MEASURED CONSEQUENCE, and the agreed fix — NOT YET IMPLEMENTED.
+    // Criterion 13 at 50% telegraph density: damage is a wash (holder x1.00 to
+    // x1.18 against a sidestepper) but the holder takes a third of the damage,
+    // x0.37-x0.40, and that ratio is completely insensitive to density. The
+    // cause is here: an instant drop means a 200ms sidestep costs the entire
+    // stance, and the rebuild is slower than the next commit arrives — so a bot
+    // that dodges correctly is permanently stanceless at 0-3 stacks and 6-18
+    // Grit against the holder's capped 10 and 46.
+    //
+    // The fix is a ~400ms movement grace window, so a sidestep keeps stance
+    // while repositioning still loses it. It is deliberately NOT implemented
+    // yet: it has to be verified against the three-way harness (holder /
+    // dodger / mixed) once the regions are playable, because a grace window
+    // long enough to protect a sidestep is also long enough to protect a short
+    // reposition, and only the harness can say where that line falls.
     if (p.engines.footing) { p.engines.footing = 0; p.footingShield = 0; sim._recomputeStats(p); }
     p.footingAcc = 0;
     return;
