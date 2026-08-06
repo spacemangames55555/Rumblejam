@@ -110,6 +110,13 @@ export const CONFIG = {
 
   HARVEST_GROWTH: 0.05,    // harvesting grows 5% (floored) per room clear
 
+  // The lobby's repeating channel. In-run state rides the 15Hz snapshot stream,
+  // which heals a dropped message on the next frame; the lobby has no snapshot
+  // stream at all, so its state travelled only as edges and a peer that missed
+  // one sat on a stale lobby forever. 3Hz is fast enough that a missed edge is
+  // invisible and slow enough to be free — nothing else is on the wire pre-run.
+  LOBBY_HEARTBEAT_HZ: 3,
+
   DISCONNECT_TIMEOUT: 5,   // s of silence before a client is dropped
   MAX_PLAYERS: 8,
 

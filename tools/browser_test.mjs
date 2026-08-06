@@ -160,7 +160,14 @@ class Browser {
       if (!/peerjs|PeerJS|wss:|ERR_|Failed to fetch|NetworkError|WebSocket/i.test(line)) this.errorsList.push(line);
       this.consoleLines.push(line);
     } else if (m.method === 'Runtime.consoleAPICalled') {
-      this.consoleLines.push(m.params.args.map(a => a.value ?? '').join(' '));
+      const line = m.params.args.map(a => a.value ?? '').join(' ');
+      this.consoleLines.push(line);
+      // PIPE THE ONES THAT MATTER TO STDOUT. net.js logs every skipped send,
+      // and that log lived only in the page console — which this harness
+      // captured into an array nobody printed. A diagnostic whose output goes
+      // into a buffer no test reads is not a diagnostic. The drop counter is
+      // asserted at teardown; this is so the reason is on screen when it fires.
+      if (/^\[net\] DROPPED/.test(line)) { NET_DROPS.push(`[${this.label}] ${line}`); console.error(`  [${this.label}] ${line}`); }
     }
   }
 
@@ -223,6 +230,12 @@ await sleep(900);
 
 const wantCoop = process.argv.includes('--coop');
 
+// Every `[net] DROPPED` line any browser emits, for the teardown assertion.
+// Counted AS IT ARRIVES rather than read off a live page at the end, because
+// the browsers are closed by then — and a drop that happened in a browser that
+// has since exited is exactly as bad as one in a browser still open.
+const NET_DROPS = [];
+
 // ---------- teardown gate: a suite that dirties the working tree has failed ----------
 //
 // This suite writes sprite fixtures over real paths. Three of them —
@@ -244,6 +257,21 @@ const gitDirty = () => {
   } catch { return null; }   // not a git checkout: the gate reports that, it does not crash
 };
 const dirtyBefore = gitDirty();
+
+// EVERY DROPPED SEND FAILS THE SUITE. js/net.js counts skipped sends into
+// window.uvNet.drops with a 50-entry dropLog; before this, nothing anywhere
+// read either. An instrument no test consumes is not an instrument — it is a
+// line of code that makes you feel covered. A drop is now a loud failure with
+// the peer and message kind attached, which is exactly what seven runs of
+// hunting a silent one earned.
+//
+// Takes the live browsers so it can ask each of them; a drop on the HOST and a
+// drop on a CLIENT are different bugs and both matter.
+function assertNoNetDrops() {
+  if (!NET_DROPS.length) { ok('no peer send was skipped or swallowed all run — zero [net] DROPPED lines from any browser'); return; }
+  fail(`${NET_DROPS.length} SEND(S) DROPPED. Anything load-bearing in them is gone for that peer, silently — that is open defect #8, and it is why this assertion exists. `
+    + NET_DROPS.slice(0, 6).join(' | ') + (NET_DROPS.length > 6 ? ` (+${NET_DROPS.length - 6} more)` : ''));
+}
 
 function assertCleanTree() {
   if (!dirtyBefore) { console.warn('⚠ working-tree gate skipped — not a git checkout'); return; }
@@ -2789,6 +2817,7 @@ if (wantCoop) {
   const PJS = process.env.PEERJS_LOCAL || '/tmp/peerjs.min.js';
   if (!existsSync(PJS)) {
     console.warn('⚠ COOP SKIPPED — no local peerjs.min.js (set PEERJS_LOCAL or place /tmp/peerjs.min.js)');
+    assertNoNetDrops();
     assertCleanTree();
     console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL BROWSER TESTS PASSED');
     process.exit(failures ? 1 : 0);
@@ -3691,6 +3720,7 @@ if (wantCoop) {
   }
 }
 
+assertNoNetDrops();
 assertCleanTree();
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL BROWSER TESTS PASSED');
 process.exit(failures ? 1 : 0);
