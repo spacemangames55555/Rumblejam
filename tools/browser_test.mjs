@@ -3034,7 +3034,42 @@ if (wantCoop) {
       await B.exec(`document.querySelector('.char-card[data-char="lodestone"]').click()`);
       await sleep(400);
       await B.exec(`document.getElementById('btn-ready').click()`);
-      await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready && window.uv.lobby.players[1].charId`, 5000, 'client ready');
+      // THREE CONDITIONS, ONE LABEL. This was a single waitFor for "the client
+      // exists AND is ready AND has picked", reported as 'client ready' — so a
+      // pick that never landed and a ready that never landed printed the same
+      // sentence, and #8 was diagnosed off that sentence. The four-run ledger
+      // then read uiResends 0 / drops 0 / uiGaveUp 0 on every page, meaning
+      // NOTHING was ever queued for resend: the ack path was not involved at
+      // all, so whatever fails here is not the transport losing a message.
+      //
+      // This reports which condition is false, and what both ends believe about
+      // delivery, so the next occurrence is a diagnosis instead of a rerun.
+      {
+        const t0 = Date.now();
+        let st = null;
+        for (;;) {
+          st = JSON.parse(await A.exec(`
+            const p = window.uv.lobby && window.uv.lobby.players && window.uv.lobby.players[1];
+            return JSON.stringify({ present: !!p, ready: !!(p && p.ready), charId: (p && p.charId) || null,
+              n: (window.uv.lobby && window.uv.lobby.players || []).length,
+              seen: [...(window.uv.uiSeen || new Map())].map(([k, v]) => k.slice(-6) + ':' + v).join(','),
+              conns: window.uv.hostT ? window.uv.hostT.conns.size : -1 });`));
+          if (st.present && st.ready && st.charId) break;
+          if (Date.now() - t0 > 5000) break;
+          await sleep(200);
+        }
+        if (st.present && st.ready && st.charId) ok(`client picked ${st.charId} and readied`);
+        else {
+          const cst = await B.exec(`return JSON.stringify({ uiSeq: window.uv.uiSeq, pending: [...window.uv.uiPending.keys()],
+            open: !!(window.uv.clientT && window.uv.clientT.conn && window.uv.clientT.conn.open),
+            drops: (window.uvNet && window.uvNet.drops) || 0, resends: (window.uvNet && window.uvNet.uiResends) || 0,
+            myKey: (window.uv.myKey || '').slice(-6) })`).catch(() => '{}');
+          const missing = !st.present ? 'the client is not in the host roster at all'
+            : !st.charId ? 'the client is present and its PICK never applied'
+            : 'the client is present with a pick and its READY never applied';
+          fail(`client ready: ${missing}. host: ${JSON.stringify(st)} | client: ${cst}`);
+        }
+      }
       await A.exec(`document.getElementById('btn-start').click()`);
       await A.waitFor(`return window.uv.mode==='run'`, 5000, 'host run');
       await B.waitFor(`return window.uv.mode==='run'`, 5000, 'client run');
@@ -3357,26 +3392,43 @@ if (wantCoop) {
         p0.shop.stock[0]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
         p0.shop.stock[1]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
         s._sendShop(p0); s._sendShop(p1); return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'the host holding weapons equal to its weapon-slot cap');
-      // simultaneous: client rerolls while the host's duplicate buy auto-combines
-      await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
-      await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='pebbleshot'&&w.tier===2)`, 4000, 'co-op auto-combine');
-      await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===1`, 4000, 'client reroll validated');
-      ok('client rerolls while the host auto-combines at full slots — host validates both');
+      // The CLIENT half of every pair below is live and is the co-op content:
+      // the client acts while the host acts, and the host validates both. Only
+      // the host's half was a weapon operation, so only that is skipped.
+      if (WEAPONS) {
+        await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'the host holding weapons equal to its weapon-slot cap');
+        // simultaneous: client rerolls while the host's duplicate buy auto-combines
+        await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
+        await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
+        await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='pebbleshot'&&w.tier===2)`, 4000, 'co-op auto-combine');
+        await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===1`, 4000, 'client reroll validated');
+        ok('client rerolls while the host auto-combines at full slots — host validates both');
+      } else {
+        skip("host's half of the simultaneous pair is a weapon auto-combine");
+        await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
+        await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===1`, 4000, 'client reroll validated');
+        ok('client reroll is validated by the host while the host works its own shop');
+      }
       // simultaneous: client rerolls again while the host runs a make-room swap
       await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
-      await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
-      await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'co-op swap picker');
-      await A.exec(`document.querySelector('.swap-card:not(.cantafford)').click(); return 1;`);
-      await A.exec(`const c=document.querySelector('.swap-card.armed'); if (c) c.click(); return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='rustcleaver')`, 4000, 'co-op swap executed');
+      if (WEAPONS) {
+        await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
+        await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'co-op swap picker');
+        await A.exec(`document.querySelector('.swap-card:not(.cantafford)').click(); return 1;`);
+        await A.exec(`const c=document.querySelector('.swap-card.armed'); if (c) c.click(); return 1;`);
+        await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='rustcleaver')`, 4000, 'co-op swap executed');
+      } else skip("host's make-room swap needs a weapon to swap out");
       await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===2`, 4000, 'client second reroll validated');
-      const coopSlots = await A.exec('return window.uv.meta.weaponSlots');
-      const coopN = await A.exec('return window.uv.meta.weapons.length');
-      if (coopN === coopSlots) ok(`swap + parallel rerolls: host still at ${coopN}/${coopSlots}, no desync`);
-      else fail(`co-op swap count: ${coopN}/${coopSlots}`);
-      // client display agrees with the authoritative build
+      if (!WEAPONS) skip('swap + parallel rerolls: host slot count unchanged');
+      else {
+        const coopSlots = await A.exec('return window.uv.meta.weaponSlots');
+        const coopN = await A.exec('return window.uv.meta.weapons.length');
+        if (coopN === coopSlots) ok(`swap + parallel rerolls: host still at ${coopN}/${coopSlots}, no desync`);
+        else fail(`co-op swap count: ${coopN}/${coopSlots}`);
+      }
+      // client display agrees with the authoritative build. Still worth running
+      // with weapons gone: both sides serialise an empty list, so a mismatch
+      // here would mean the client is showing a build the host never sent.
       const cv = await B.exec(`return JSON.stringify(window.uv.meta.weapons.map(w=>[w.id,w.tier]))`);
       const hv2 = await A.exec(`return JSON.stringify(window.uv.sim.players[1].weapons.map(w=>[w.id,w.tier]))`);
       if (cv === hv2) ok('client build display matches the host after the parallel session');
