@@ -215,7 +215,15 @@ class Browser {
     const r = await this.cdp('Runtime.evaluate', { expression: wrapped, awaitPromise: true, returnByValue: true });
     if (r.exceptionDetails) {
       const d = r.exceptionDetails;
-      throw new Error('page eval failed: ' + ((d.exception && d.exception.description) || d.text).slice(0, 300));
+      // WITH THE SCRIPT THAT FAILED. "page eval failed: TypeError: Cannot read
+      // properties of undefined (reading 'x')" names neither the page nor the
+      // expression, and this file contains hundreds of evals — so the message
+      // located nothing and the phase it ended stayed unexplained across three
+      // runs. Same rule as every other diagnostic here: name what you assert.
+      const snippet = script.replace(/\s+/g, ' ').trim().slice(0, 160);
+      throw new Error(`page eval failed on [${this.label}]: `
+        + ((d.exception && d.exception.description) || d.text).slice(0, 300)
+        + ` — while evaluating: ${snippet}${script.length > 160 ? '…' : ''}`);
     }
     return r.result ? r.result.value : undefined;
   }
