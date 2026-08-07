@@ -586,6 +586,21 @@ Each of these has caught a real defect on this project. They are recorded here b
 14. **All numbers in `TUNING` blocks.** No inline constants in behaviour code.
 15. **Verified push** — confirm with `git ls-remote` before treating a branch as landed.
 16. **Save tests round-trip through a real file**, not in-memory serialise alone.
+17. **A harness must arrive in the state a player would arrive in.** Level,
+    slots and items are part of the FIXTURE, not incidental setup. Objective
+    harnesses dropped a party in at level 1, and `spendSkillPoint` auto-slots
+    only into an already-unlocked slot while `setLoadout` refuses mid-fight —
+    so a party that learned ten skills fought entire objectives with **one**,
+    however high it levelled during them. That single detail hid a build-depth
+    constraint behind an apparent HP constraint for three patches: at three
+    slots, with nothing tuned, Nest Purge at 4p went from 1/3 to cleared and
+    Elite Arena solo from zero kills to cleared. Sixth instance of a measurement
+    describing a world no player occupies.
+18. **A test's negative case must be unreachable by search-and-replace over the
+    thing it tests.** A bulk rename rewrote a retired-id literal into a live
+    class *inside the assertion that retired ids are rejected* — twice — turning
+    it into a tautology that still printed a tick. Assemble it, compute it, read
+    it from a fixture; never leave it as a bare literal a sweep can reach.
 
 ---
 
@@ -641,27 +656,41 @@ document before code.
 
 | what fails | count | the question |
 |---|---:|---|
-| `bounty (1p/4p) never cleared` | 2 | **The escort wall, which is #17's design resolution showing up as a red line.** A 4-player armed party reaches 3 of 5 marks in the full budget; the shortfall is the escort it cannot punch through without pierce, and pierce is a §9.2 modifier item that does not exist until phase 4. Not a mark-HP question. |
+| `bounty (1p/4p) never cleared` | 2 | **EXPECTED-RED UNTIL PHASE 4 — see below.** |
 | `the summoner class has no structure to recall` | 1 | **`bonelord` builds its structure via `_addWeapon`.** With `weaponSlots` at 0 it summons nothing, so no class in the game can exercise structure recall (the retired Cogsmith's `overseer` mounts were the other). Making it a skill-era summon needs deciding what grants it — a tree node? the trait at fight start? |
 
-**RESOLVED AS DESIGN — no code change.** `objective_target` selects correctly
-and the shots are intercepted by the escort: the selector chose the mark on 23
-of 23 fires and 2 arrived. That is the intended shape. **Escorts are a wall you
-clear first, and that is what distinguishes a bounty mark from a nest** — a nest
-is a structure you reach, a mark is a target you have to earn a line on.
+#### Bounty Hunt is EXPECTED-RED until phase 4. Do not re-diagnose it.
 
-Pierce stays a **modifier item** at §9.2's magnitude tier, not a property of
-`objective_target`. A party that commits to punching through buys pierce and
-slots it: a build decision with a cost, which is the whole point of the item
-tier. Making it free on every objective-targeting bolt would delete that
-decision.
+`bounty (1p) never cleared` and `bounty (4p) never cleared` are **#17, resolved
+as design — no code change.** They are **not a tuning gap and not a throughput
+question**, and the specific thing to not do is reach for mark HP.
 
-**Until phase 4 ships modifier items, bounty marks are clear-the-escort-first by
-design.** They will not complete in the sim harness's budget and that is not a
-defect. `offence_test` therefore asserts SELECTION CORRECTNESS for that
-objective — did every fire choose the mark — and not mark kills.
+- Marks spawn with an escort pack **by design**. Escorts are a wall you clear
+  first, and that is what distinguishes a bounty mark from a nest: a nest is a
+  structure you reach, a mark is a target you have to earn a line on.
+- Punching straight through needs **pierce**, which is a §9.2 modifier item at
+  the magnitude tier, not a property of `objective_target`. A party that commits
+  to punching through buys pierce and slots it — a build decision with a cost,
+  which is the whole point of the item tier. Making it free on every
+  objective-targeting bolt would delete that decision. It does not exist until
+  phase 4 ships modifier items.
+- So the capability the level asks for is genuinely absent from the game. A
+  4-player armed party reaches **3 of 5 marks** in the full 20-minute budget,
+  and that is the correct number for a party with no pierce.
 
-#### The throughput questions closed, and it was never HP
+Measured twice, so nobody has to re-derive it. Per-target attribution on the
+1p mark: the selector chose the mark on **23 of 23** fires and **2** arrived —
+the rest were intercepted. Across `offence_test`, the selector chooses the mark
+on **93.4%** of objective-targeting fires. It is not a targeting failure; the
+shots are stopped by the wall. `offence_test` therefore asserts SELECTION
+CORRECTNESS for this objective and never mark kills, because asserting kills
+would demand a capability the game has not shipped and would quietly turn into a
+retune request on mark HP.
+
+**These two go green when pierce exists, not before.** If they go green earlier,
+something has been tuned that should not have been.
+
+#### The other throughput questions closed, and it was never HP
 
 Objectives are co-op content and the table that raised the question was solo.
 Measured at both sizes, with the party **arriving at level 12** rather than
