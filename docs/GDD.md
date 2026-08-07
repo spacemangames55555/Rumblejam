@@ -794,7 +794,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 18. **Verified push** — confirm with `git ls-remote` before treating a branch as landed.
 19. **Save tests round-trip through a real file.**
 20. **A harness must arrive in the state a player would arrive in.** Level, slots and items are part of the FIXTURE, not incidental setup. Objective harnesses dropped a party in at level 1, and `spendSkillPoint` auto-slots only into an already-unlocked slot while `setLoadout` refuses mid-fight — so a party that learned ten skills fought entire objectives with **one**, however high it levelled during them. That hid a build-depth constraint behind an apparent HP constraint for three patches: at three slots, with nothing tuned, Nest Purge at 4p went from 1/3 to cleared and Elite Arena solo from zero kills to cleared.
-21. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing primitives and the owner's identity by reference; do not give it verbs of its own. A minion's attack is a compose step through the same `PRIMITIVES` table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the owner's fields, so attribution never has to be forwarded because it never diverged. This is why summoning — the largest bespoke category in the source project, where every summon carried its own spawn, attack and death code — cost **one primitive and one trigger** here, with zero per-archetype handlers across twenty new skills. The same shape is waiting for the Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks. See §8.5.
+21. **Everything the game SELLS a player must be read by something in the live path, and a gate must prove it by effect rather than by existence.** This is the stat-system form of the offence gate, and its absence was the same gap: a green suite once hid a party that could not deal damage, and a green suite then hid three stats that did nothing while being offered at every level-up. A search for the identifier is not evidence — `p.stats.ferocity` is read in four places, all of them dead code. `tools/stat_gate.mjs` stages each stat in the situation it would matter in and compares a large swing against an unbumped run from the same seed; a stat that moves no observable fails. Extend it to any other currency the game offers, and never let a probe that could not run report as a pass.
+22. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing primitives and the owner's identity by reference; do not give it verbs of its own. A minion's attack is a compose step through the same `PRIMITIVES` table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the owner's fields, so attribution never has to be forwarded because it never diverged. This is why summoning — the largest bespoke category in the source project, where every summon carried its own spawn, attack and death code — cost **one primitive and one trigger** here, with zero per-archetype handlers across twenty new skills. The same shape is waiting for the Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks. See §8.5.
 
 ### 13.1 The through-line
 
@@ -820,7 +821,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current red is a defect.** `tools/sim_test.mjs` reports **16 failing checks**: 6 are content not authored, 3 await a design decision, 7 are a deferred subsystem. **Group D is empty.** The counts sum to 16 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
+**Almost none of the current red is a defect — but Group D is no longer empty.** `tools/sim_test.mjs` reports **16 failing checks**: 6 are content not authored, 3 await a design decision, 7 are a deferred subsystem. Alongside them, `tools/stat_gate.mjs` reports **3 real defects** (D-23): three of the ten stats are sold to players and do nothing. The counts sum to 16 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -867,9 +868,46 @@ Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, co
 
 The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same defect, different class in the string — worth knowing before a set diff reads one as fixed and the other as new.
 
-### Group D — genuine open defects (0)
+### Group D — genuine open defects (1)
 
-Empty. Every remaining failure is content not authored, a decision not taken, or a subsystem deferred.
+#### D-23 — three of the ten stats are sold to players and do nothing
+
+**Ferocity, Ingenuity and Attunement are read by nothing in the live path.** They are offered at every level-up from `STAT_BOOSTS` — Ferocity at 4/7/12% — and a player who buys them gets no effect of any kind. This is a defect, not a note: the game is taking a level-up pick in exchange for nothing.
+
+Measured by `tools/stat_gate.mjs`, which stages each stat in the situation it would matter in and compares a +120 swing against an unbumped run from the same seed:
+
+| stat | probe | base | +120 |
+|---|---|---:|---:|
+| **ferocity** | damage a skill deals to a pinned target | 35 | **35** |
+| **ingenuity** | damage a summoned minion deals | 45 | **45** |
+| **attunement** | chill depth + plague rate applied through the skill path | 900 | **900** |
+
+Ferocity is dead for **every selectable class**, Samurai included — its one live reader is the stance-1 precision bleed in `traits-toh.js`, which needs a stance the fight never holds long enough to reach.
+
+**Why it survived this long.** A grep finds all three: `p.stats.ferocity` is read in `_fireWeapon`, `p.stats.ingenuity` in `_summonStats`, and `_attuned()` has twenty callers. Every one of those sites is on a dead path — `_tickWeapons` has not been called since weapons were removed, `_summonStats` serves weapon-era structures rather than skill-era minions, and `_attuned`'s callers are all in `game.js` and `traits-toh.js` with none in `compose.js` or `skillsim.js`. **Existence is not the question; effect is**, and no check asked the second question until now.
+
+The clearest single instance: the chill path forked and nobody noticed. `_applySlow` (`game.js`) takes an owner and applies Attunement; `applySlow` (`skillsim.js`) — the one every composed skill calls — takes no owner and applies none. Two functions one character apart in name, one of which silently drops the stat.
+
+**Not being fixed in the patch that found it.** §9.5 records no intent, so there is nothing to say what Ferocity *should* multiply. The read-site table below is the input for writing §9.5; the fix follows the section, not the other way round.
+
+#### What each stat is actually read by
+
+`live` = moved its probe. Dead paths are listed because they are what a search finds, and what would otherwise be mistaken for the stat working.
+
+| stat | verdict | live readers | dead readers (what a grep finds) |
+|---|---|---|---|
+| **vitality** | live | max HP everywhere; room-start restore; `hpAbove`/`hpBelow` conditions; objective % -max true damage | — |
+| **ferocity** | **DEAD** | none reachable | `weapons.js` weaponStats; `_fireWeapon`; `_tickNova` (`nova_core`, archived); `_summonStats` (`overseer`, archived); Samurai stance-1 bleed (stance never held) |
+| **tempo** | live (movement only) | move speed (`game.js:1509`); Wizard decree tick | **skill cooldowns do not read it** — `skillCd = cooldown/1000`, no Tempo term. Every attack-speed site is weapon-era |
+| **grit** | live | mitigation; knockback resist; **bridges to skills** as `p.engines.armor` for `scaleWith: 'armor'`; Quill reflect | — |
+| **reflex** | live | dodge roll in `hurtPlayer` | — |
+| **recovery** | live | `_heal()` — every healing source | Priest shield scaling (no tree yet) |
+| **ingenuity** | **DEAD** | none | `_summonStats` only — weapon-era structures. **Skill-era minions do not read it**, so the class that just gained summons still ignores the summon stat |
+| **attunement** | **DEAD** | none | `_attuned()` × 20 callers, all in `game.js`/`traits-toh.js`, none in the skill path; `_applySlow` applies it, `applySlow` (the skill one) does not |
+| **greed** | live | tithe on fight clear (`_clearRewards`); rarity bias in `_rollRarity` | Assassin contract payout (no tree yet) |
+| **reach** | live | pickup magnetism (`game.js:2832`); ToH trait radii | weapon range; `standard_high` (archived) |
+
+Two of the live ones are only *partly* live and should be settled in §9.5 as well: **Tempo** claims "attack + move speed" and reaches only movement, and **Greed**'s two channels both work while its declared "+1% Ferocity per bonus Grit" interaction feeds a dead stat.
 
 ### The browser suite is counted separately, and it is not clean
 
@@ -913,6 +951,7 @@ Empty. Every remaining failure is content not authored, a decision not taken, or
 | Netcode state migration | Built, lobby heartbeat at 3 Hz, drops classified |
 | Determinism | Built, negative control, byte-identical same-seed runs |
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
+| Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **3 of 10 fail** (D-23) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
