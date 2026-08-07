@@ -23,7 +23,10 @@ export const TUNING = {
   // tier 2 — Raise Skeleton (the slot grant)
   skelSlotsPerRank: 1,          // one skeleton per point, capped by SUMMON_SLOT_CAP
   skelHp: 26, skelRadius: 10, skelDamage: 5, skelReach: 46, skelArc: 1.6,
-  skelAtkCd: 1100, skelSpawnRadius: 44, skelCd: 2600, skelTrigRadius: 300, skelTrigCount: 1,
+  skelAtkCd: 1100, skelSpawnRadius: 44, skelCd: 2600,
+  // ON_TOKEN: the range within which a soul token can be reached, and the
+  // flight of the throw that reaches it. §8.5 row 4.
+  skelTokenRange: 320, skelSeedSpeed: 620, skelSeedRadius: 6,
   // tier 3 — Gravechill
   chillDamage: 5, chillRadius: 120, chillDuration: 4000, chillTickMs: 500,
   chillSlowMult: 0.55, chillSlowDur: 1200, chillCd: 6000, chillTrigCount: 3,
@@ -75,7 +78,11 @@ export const NECRO_SUMMONS = [
     desc: 'It remembers how to hold a weapon. It remembers nothing else.',
     type: 'active', domain: 'spiritual', prereq: 'necro_bone_shard',
     select: 'nearest',
-    trigger: { kind: 'PROXIMITY', radius: T.skelTrigRadius, count: T.skelTrigCount },
+    // §8.5: Raise Skeleton is triggered by a SOUL TOKEN in range, not by a
+    // crowd. The skill throws at the token and the skeleton rises where the
+    // throw lands, which is what makes a token a place rather than a counter —
+    // a Necromancer's positioning becomes about where things DIED.
+    trigger: { kind: 'ON_TOKEN', range: T.skelTokenRange },
     cooldown: T.skelCd,
     // THE ONE SKILL WHERE A RANK BUYS SOMETHING STRUCTURAL. Every other rank in
     // the game buys damage or duration; this one buys room on the field. It is
@@ -88,6 +95,10 @@ export const NECRO_SUMMONS = [
       count: 1, slotted: true, revives: false,
       hp: T.skelHp, radius: T.skelRadius, spawnRadius: T.skelSpawnRadius,
       duration: 0,                        // permanent: it holds a slot, not a timer
+      // THE THROW. `deliver` makes the summon travel to the spot the trigger
+      // spent and rise there. It is a property of the step, so any future
+      // summon can be delivered without the engine learning a new skill.
+      deliver: { speed: T.skelSeedSpeed, radius: T.skelSeedRadius },
       attackCd: T.skelAtkCd,
       attack: { kind: 'strike', damage: T.skelDamage, arc: T.skelArc, reach: T.skelReach, select: 'nearest', riders: {} },
     }],

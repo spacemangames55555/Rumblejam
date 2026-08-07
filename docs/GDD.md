@@ -589,6 +589,16 @@ reviveMs = 15000 + 4000 × (totalAnimals − 1)
 | Across a room | Persist, revive on a timer | Wipe, rebuild from zero |
 | Cost | Offence forgone; revives slow as the pack grows | Cold start every room; capacity is useless without offence |
 
+#### The token is a place, not a counter
+
+Row 4 is the substantial one, and it matters beyond correctness. A token that is merely *spent* is a counter: it could be an integer on the player and nothing about the game would change. A token that is **thrown at, and raises a skeleton where the throw lands**, is a position on the floor — and positions are what this game is made of.
+
+**This is §5.1's premise applied to a resource.** Players do not fire manually; every ability triggers from a condition the player controls through where they stand and how they move. Until row 4, the Necromancer's positioning was about where enemies *are*, like everyone else's. Now it is also about **where things died** — a fought-over corner is a place worth standing near, a body dropped behind a wall is a skeleton you cannot reach, and a kill in the wrong spot is a resource wasted. The build reads the floor's history rather than only its present.
+
+It is also why the Necromancer's cold start is a real cost rather than a tax. A room begins with no tokens because nothing has died in it yet: the floor has no history to read.
+
+Mechanically this is a `deliver` block on the summon step — a property of the step, not of the skill — so any future summon can be thrown without the engine learning what a skeleton is. `claimToken()` returns the position rather than a boolean for the same reason; a boolean would reduce it back to a counter in the one function that decides.
+
 #### Divergence log — where the code disagrees with this section
 
 **This is not a list of proposed values. It is a record of eight defects.** The summoning engine, both trees and the instrumentation were built from a brief citing a §8.5 that had not yet reached the repository, so the magnitudes and several mechanics were invented at the keyboard. **§8.5 wins on every row. The code changes to match, never the reverse.**
@@ -598,7 +608,7 @@ reviveMs = 15000 + 4000 × (totalAnimals − 1)
 | 1 | **Every** enemy killed drops a soul token | `SOUL_TOKEN_CHANCE` 0.22 per death | spec wins — drop is certain, delete the roll |
 | 2 | Tokens are **visible only to Necromancers**; state on the wire, rendered per-player | rendered for every player | spec wins — per-player render |
 | 3 | Tokens expire after **30 s** | `SOUL_TOKEN_TTL` 8 s | spec wins — 30 s |
-| 4 | **Raise Skeleton is triggered by `ON_TOKEN`**, fires a projectile at the token, and the skeleton rises **where it lands** | Raise Skeleton uses `PROXIMITY` and spawns at a random offset from the caster; `ON_TOKEN` is used by Soul Harvest and Charnel Pact instead | spec wins — this is the biggest single change, and it makes the token a *place* rather than a counter |
+| 4 | **Raise Skeleton is triggered by `ON_TOKEN`**, fires a projectile at the token, and the skeleton rises **where it lands** | ✅ **CLOSED** — `trigger: ON_TOKEN`, a `deliver` step throws the summon, and the skeleton rises at the impact point. Asserted spatially: staged 260u away, the skeleton lands 4u from the token and 264u from the caster | done |
 | 5 | Skeletons **wipe at the end of every room** | they persist across rooms | spec wins — every fight ramps from zero |
 | 6 | **No cap beyond rank.** Rank 20 means 20 skeletons | rank + a base allowance, hard-capped at 8 | spec wins — uncapped for first playtest |
 | 7 | All animals spawn **at the start of every map**, fully restored | spawned by `PROXIMITY` triggers mid-fight | spec wins — the pack is present, not summoned under fire |

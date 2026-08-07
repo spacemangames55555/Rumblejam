@@ -145,6 +145,18 @@ function summonStepProblems(s, step) {
   if (!step.slotted && !(step.duration > 0)) {
     out.push(`${s.id}: summon step is neither slotted nor timed — declare "slotted: true" or a duration, or it accumulates without limit`);
   }
+  // A DELIVERED SUMMON NEEDS A PLACE TO BE DELIVERED TO, and the only thing
+  // that produces one is the ON_TOKEN trigger spending a token. Declaring
+  // `deliver` on a summon with any other trigger would give the primitive a
+  // null position and it would silently never spawn — the wired-to-nothing
+  // shape, in the one skill whose whole point is that the token is a place.
+  if (step.deliver) {
+    if (!(step.deliver.speed > 0)) out.push(`${s.id}: deliver needs a positive speed`);
+    if (!(step.deliver.radius > 0)) out.push(`${s.id}: deliver needs a positive radius`);
+    if (!s.trigger || s.trigger.kind !== 'ON_TOKEN') {
+      out.push(`${s.id}: summon declares "deliver" but its trigger is ${JSON.stringify(s.trigger && s.trigger.kind)} — only ON_TOKEN produces a place to deliver to, so this would spawn nothing, ever`);
+    }
+  }
   if (step.maxAlive !== undefined && !(step.maxAlive >= 1 && Number.isInteger(step.maxAlive))) {
     out.push(`${s.id}: summon maxAlive ${step.maxAlive} must be a positive integer — omit it for "as many as slots allow"`);
   }

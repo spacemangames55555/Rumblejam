@@ -2557,6 +2557,14 @@ export class Sim {
           if (hitWall) this.damageWall(hitWall, pr.dmg, this.players[pr.owner]);
           this.projPool.release(pr); continue;
         }
+        // A summon seed is a delivery, not a shot: it passes through everything
+        // and plants its payload where it stops. Handled here rather than in a
+        // per-skill branch — this code knows a seed carries something, never
+        // what. See §8.5, "the token is a place".
+        if (pr.kind === 'summonSeed') {
+          if (expired || oob) { MIN.plantSeed(this, pr); this.projPool.release(pr); }
+          continue;
+        }
         if (expired || oob) { this.projPool.release(pr); continue; }
         // vs enemies
         let dead = false;
@@ -2661,6 +2669,7 @@ export class Sim {
   queueSkillStep(p, skill, step, rank, delay) { return SK.queueSkillStep(this, p, skill, step, rank, delay); }
   // ---- summon surface (js/compose.js's `summon` primitive and ON_TOKEN) ----
   spawnMinions(p, skill, step, rank) { return MIN.spawnMinions(this, p, skill, step, rank); }
+  spawnSummonSeed(p, skill, step, rank, at) { return MIN.spawnSummonSeed(this, p, skill, step, rank, at); }
   tokenWithin(x, y, range) { return MIN.tokenWithin(this, x, y, range); }
   claimToken(x, y, range) { return MIN.claimToken(this, x, y, range); }
   addVortex(x, y, v, scale) { this.vortexes.push({ x, y, t: v.dur, pullR: v.pullR, pullSpd: v.pullSpd, dps: v.dps * scale, coreR: v.coreR, acc: 0 }); }

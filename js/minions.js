@@ -150,7 +150,45 @@ function makeActor(sim, m) {
 // Returns how many were actually spawned. A refusal is counted, never silent:
 // "the skill fired and nothing appeared" is the exact shape of a wired-to-
 // nothing bug, so a full slot bar has to be visible in the instrument.
-export function spawnMinions(sim, p, skill, step, rank) {
+// A thrown summon in flight. It carries the payload rather than damage: on
+// landing it plants the minion at the point it reached, which is what makes the
+// soul token a PLACE (§8.5). Its ttl is the flight time to the claimed spot, so
+// "where it lands" is the token's position and not an arbitrary range limit.
+export function spawnSummonSeed(sim, p, skill, step, rank, at) {
+  const pr = sim.projPool.alloc();
+  if (!pr) return false;
+  const dx = at.x - p.x, dy = at.y - p.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const speed = step.deliver.speed;
+  Object.assign(pr, {
+    id: ++sim.spawnCounter, x: p.x, y: p.y,
+    vx: dx / dist * speed, vy: dy / dist * speed,
+    dmg: 0, crit: false, friendly: true, lob: false,
+    ttl: dist / speed, radius: step.deliver.radius, color: p.color, owner: p.idx,
+    pierce: 0, hitIds: new Set(),
+    weaponId: null, kind: 'summonSeed', summonBurn: null, summonKnock: 0, fromSummon: false,
+    // The payload. The projectile tick plants this and knows nothing else
+    // about it — no archetype name reaches that code.
+    seed: { skillId: skill.id, step, rank, ranks: skill.ranks, domain: skill.domain },
+    skill: null,
+  });
+  return true;
+}
+
+// Called by the projectile tick when a seed reaches its spot.
+export function plantSeed(sim, pr) {
+  const p = sim.players[pr.owner];
+  if (!p || p.gone || !pr.seed) return;
+  const { step, rank, skillId, ranks, domain } = pr.seed;
+  // Rebuilt rather than looked up: js/skills.js imports MOVE_KINDS from this
+  // file, so importing it back would be circular. The seed carries the two
+  // fields a minion's attack actually needs — its rank block and its domain —
+  // which is also what keeps a stale registry from changing a skeleton already
+  // in flight.
+  spawnMinions(sim, p, { id: skillId, ranks, domain }, step, rank, { x: pr.x, y: pr.y });
+}
+
+export function spawnMinions(sim, p, skill, step, rank, origin = null) {
   const count = step.count || 1;
   let made = 0;
   for (let i = 0; i < count; i++) {
@@ -175,8 +213,10 @@ export function spawnMinions(sim, p, skill, step, rank) {
       // as that skill: same domain for the damage triangle, same rank block, so
       // a point spent on the summon raises what the summon hits for.
       skillId: skill.id, rank, ranks: skill.ranks, domain: skill.domain,
-      x: clamp(p.x + Math.cos(ang) * step.spawnRadius, CONFIG.WALL + step.radius, sim.W - CONFIG.WALL - step.radius),
-      y: clamp(p.y + Math.sin(ang) * step.spawnRadius, CONFIG.WALL + step.radius, sim.H - CONFIG.WALL - step.radius),
+      // A delivered summon rises exactly where its seed landed; an ordinary
+      // one scatters around its caster.
+      x: clamp((origin ? origin.x : p.x + Math.cos(ang) * step.spawnRadius), CONFIG.WALL + step.radius, sim.W - CONFIG.WALL - step.radius),
+      y: clamp((origin ? origin.y : p.y + Math.sin(ang) * step.spawnRadius), CONFIG.WALL + step.radius, sim.H - CONFIG.WALL - step.radius),
       radius: step.radius, color: p.color,
       hp: step.hp, maxHp: step.hp,
       ttl: step.duration ? step.duration / MS : 0,     // 0 = permanent
@@ -344,6 +384,11 @@ export function tokenWithin(sim, x, y, range) {
 
 // Consumed when the skill that read it fires — the same shape as ON_KILL and
 // ON_HIT_TAKEN, whose events are cleared by the tick that saw them.
+//
+// RETURNS THE POSITION, NOT A BOOLEAN. §8.5 makes the token a PLACE: Raise
+// Skeleton throws at the token and the skeleton rises where it lands, so the
+// spot the token occupied is the whole payload. A boolean would reduce it back
+// to a counter, which is the thing the section is deliberately not.
 export function claimToken(sim, x, y, range) {
   const r2 = range * range;
   let bi = -1, bd = Infinity;
@@ -351,8 +396,9 @@ export function claimToken(sim, x, y, range) {
     const d = dist2(sim.tokens[i].x, sim.tokens[i].y, x, y);
     if (d <= r2 && d < bd) { bd = d; bi = i; }
   }
-  if (bi < 0) return false;
+  if (bi < 0) return null;
+  const t = sim.tokens[bi];
   sim.tokens.splice(bi, 1);
   sim.tokenStats.claimed++;
-  return true;
+  return { x: t.x, y: t.y };
 }

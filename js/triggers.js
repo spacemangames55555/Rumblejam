@@ -231,7 +231,14 @@ export function triggerHolds(sim, p, skill, st, grid) {
 // Keyed by trigger KIND, in the module that owns trigger semantics. A skill
 // never appears here — the day one does, the taxonomy was the wrong shape.
 export function triggerConsume(sim, p, skill) {
-  if (skill.trigger.kind === 'ON_TOKEN') sim.claimToken(p.x, p.y, skill.trigger.range);
+  if (skill.trigger.kind !== 'ON_TOKEN') return;
+  // The claimed token's POSITION is handed to the compose steps that follow,
+  // because §8.5 makes a token a place rather than a counter: Raise Skeleton
+  // throws at the spot and the skeleton rises where it lands. Cleared to null
+  // on a miss so a step can never plant at a stale position from a fire two
+  // rooms ago — a coordinate that is silently the wrong one is worse than
+  // none, since it still produces a skeleton somewhere plausible.
+  p.tokenClaimAt = sim.claimToken(p.x, p.y, skill.trigger.range);
 }
 
 // The status vocabulary a trigger can ask about, mapped onto the fields the

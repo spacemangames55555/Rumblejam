@@ -4623,6 +4623,49 @@ try {
     else fail(`summonSlots ${p.summonSlots}, expected ${want} at rank ${rank}`);
   }
 
+  // -- §8.5 row 4: the token is a PLACE, not a counter --
+  //
+  // Raise Skeleton throws at a soul token and the skeleton rises WHERE THE
+  // THROW LANDS. The distinguishing assertion is spatial: a counter would raise
+  // it at the caster, so the test plants a token far away and checks the
+  // skeleton is at the TOKEN, not at the Necromancer.
+  {
+    const { g, p } = armTree('toh_necromancer', 'necro_summons');
+    const sk = SK_BY_ID['necro_raise_skeleton'];
+    if (sk.trigger.kind === 'ON_TOKEN') ok('Raise Skeleton is triggered by ON_TOKEN, not by a crowd');
+    else fail(`Raise Skeleton trigger is ${sk.trigger.kind}, want ON_TOKEN (§8.5 row 4)`);
+    if (sk.compose[0].deliver) ok(`Raise Skeleton delivers its summon (speed ${sk.compose[0].deliver.speed})`);
+    else fail('Raise Skeleton does not declare deliver — the skeleton would rise at the caster');
+
+    // clear the field and the pool so only the staged token can fire it
+    for (const e of [...g.enemyPool]) if (e.active) { e.hp = 0; e.active = false; }
+    g.tokens.length = 0;
+    p.minions.length = 0;
+    p.loadout = new Array(8).fill(null);
+    p.loadout[0] = sk.id;
+    delete p.skillCd[sk.id];
+    const TX = p.x + 260, TY = p.y;
+    const fromCaster = Math.hypot(TX - p.x, TY - p.y);
+    g.tokens.push({ id: ++g.spawnCounter, x: TX, y: TY, ttl: CFG.SOUL_TOKEN_TTL });
+    for (let i = 0; i < 60 * 4 && !p.minions.length; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+    const m = p.minions[0];
+    if (!m) {
+      fail('no skeleton rose from a staged token in 4 s — the delivery never planted');
+    } else {
+      const dTok = Math.hypot(m.x - TX, m.y - TY);
+      const dCaster = Math.hypot(m.x - p.x, m.y - p.y);
+      // The token sits 260 units from the caster; a skeleton raised AT the
+      // caster would land within its spawnRadius of the player instead.
+      if (dTok < dCaster && dTok < fromCaster / 2) {
+        ok(`the skeleton rises where the throw lands: ${Math.round(dTok)}u from the token, ${Math.round(dCaster)}u from the caster — a counter would invert those`);
+      } else {
+        fail(`the skeleton rose ${Math.round(dCaster)}u from the caster and ${Math.round(dTok)}u from the token — the token is being read as a counter, not a place`);
+      }
+      if (g.tokenStats.claimed > 0) ok(`the throw spent the token it read (${g.tokenStats.claimed} claimed)`);
+      else fail('a skeleton rose but no token was claimed — the resource is free');
+    }
+  }
+
   // -- soul tokens: dropped, expired, claimed — all three, on one run --
   {
     const { g, p } = armTree('toh_necromancer', 'necro_summons');

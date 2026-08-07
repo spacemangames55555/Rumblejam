@@ -274,6 +274,21 @@ export const PRIMITIVES = {
   // `strike` above, not a copy of it. This function does not know what a
   // skeleton is, and js/minions.js does not either.
   summon(sim, p, skill, step, rank, grid, out) {
+    // DELIVERED SUMMONS. §8.5: Raise Skeleton throws at a soul token and the
+    // skeleton rises WHERE IT LANDS. `deliver` makes that a property of the
+    // step rather than of the skill, so any future summon can be thrown and
+    // this function still does not know what a skeleton is.
+    //
+    // It is what turns the token from a counter into a place: the position
+    // comes from the trigger that spent it, and a Necromancer's positioning
+    // stops being only about where enemies are.
+    if (step.deliver) {
+      const at = p.tokenClaimAt;
+      if (!at) return;                     // nothing was spent, nothing lands
+      sim.spawnSummonSeed(p, skill, step, rank, at);
+      out.states++;
+      return;
+    }
     out.states += sim.spawnMinions(p, skill, step, rank);
   },
 
