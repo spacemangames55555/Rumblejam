@@ -5,10 +5,18 @@ server to run. Pick one of **33 characters** and descend through a 4-floor
 Gauntlet: each floor is a **branching node map** (a decision screen, not
 corridors) of big scrolling battle arenas, and every floor ends in a
 **Siege** — a continuous, mutating last stand capped by the floor boss. Clear
-fights with **auto-attacking weapons** (Brotato-style stat stacking — every
-mechanic and name here is original), bank level-ups, shop and reroll, and
+fights, bank level-ups, shop and reroll, and
 destroy **The Vault Regent** on floor 4. If the whole party goes down, the run
 is over.
+
+> **The combat model changed and this paragraph is the old one.** Weapons are
+> removed; a character's output is auto-triggered **skills** across two trees
+> per class, and above the four-floor Gauntlet there is now a **world layer** of
+> regions played in order. [`docs/GDD.md`](docs/GDD.md) is the authoritative
+> design document — §5 for the combat model, §2 for run structure, §16 for what
+> is actually built today. The paragraph above is kept because the Gauntlet
+> layer still exists underneath and most of this README still describes it
+> accurately.
 
 Everything is plain JavaScript (ES modules) + Canvas 2D + WebAudio. All art is
 drawn with canvas primitives and nearly all sound is synthesized; the only
@@ -159,43 +167,26 @@ sideways for an angle rather than plinking masonry forever.
 
 ## The stat sheet (the Great Rebalance)
 
-Ten stats, and any of them can be a damage stat:
+**Constants: `STATS` and `SCALING_RATES` in `js/config.js`. Formulas:
+`_recomputeStats` and `hurtPlayer` in `js/game.js`.**
 
-1. **Vitality** — hit points. Base 80. Gaining Vitality also grants the
-   difference as current HP.
-2. **Ferocity** — the universal damage %:
-   `hit = weapon base × tier mult × (1 + Ferocity/100) × (1 + scaling-tag bonus/100)`.
-3. **Tempo** — one stat for all speed: attack cooldown
-   `= base / max(0.25, 1 + Tempo/100)`, move speed `= 300 × (1 + Tempo/100)`
-   (floor 60).
-4. **Grit** — mitigation `raw × 15/(15 + Grit)` (negative capped at +50%
-   extra damage) plus knockback/pull resistance by the same ratio.
-5. **Reflex** — dodge chance, cap 60 (traits can change it). Every on-dodge
-   effect keys off this.
-6. **Recovery** — amplifies **all** healing received. Healing has two layers:
-   **sources** (regen items, lifesteal, kill-heals, fight-clear breathers,
-   between-floor heals — they live on items and traits) and Recovery, which
-   multiplies every source by `(1 + Recovery/100)`.
-7. **Ingenuity** — summon/structure damage and HP `×(1 + 0.1 × Ingenuity)`.
-8. **Attunement** — every elemental/status effect (burn DPS, chill strength
-   *and* duration, chain lightning, novas, blasts, echoes) scales
-   `×(1 + Attunement/100)`.
-9. **Greed** — fortune unified: rarity weights for uncommon+ are
-   `×(1 + Greed/100)` everywhere rarity is rolled, and every fight cleared
-   pays `floor(Greed / 2)` bonus materials. No self-growth.
-10. **Reach** — weapon reach (ranged/lobbed +100% of Reach, melee +30%,
-    floor 40) and pickup radius `60 + Reach × 0.5`.
+Ten stats, and any of them can be a damage stat: Vitality, Ferocity, Tempo,
+Grit, Reflex, Recovery, Ingenuity, Attunement, Greed, Reach. The design property
+that matters is that none of them is dead weight for any build — the dead-stat
+gate in `tools/sim_test.mjs` requires every stat to appear on at least two
+weapons, five items and one statline.
 
-**Crit is not a stat.** Critical hits exist only as granted effects — traits
-and items that say "this attack crits" — at ×2 damage (Duskblade's are ×3 and
-never random). Six-plus items grant crits under conditions (after a kill, every
-Nth attack, vs chilled/burning/full-HP targets, first hit of a fight).
+**Crit is not a stat.** Critical hits exist only as granted effects — traits and
+items that say "this attack crits" — so there is no crit-chance number to stack
+and no build that is simply "more crit".
 
-**Weapon scaling**: every weapon lists one or two scaling stats in its tooltip.
-Percent stats contribute their percentage directly; flat stats convert via
-`SCALING_RATES` in `js/config.js` (1% damage per 4 Vitality; per 1 Grit,
-Ingenuity or Greed; per 12 Reach). Weapon class (melee/ranged/lobbed/summon)
-remains only as a tag for conditions and traits.
+> **Note:** [`docs/GDD.md`](docs/GDD.md) does not currently cover the stat
+> sheet; it starts at the combat model. The values above are authoritative in
+> `js/config.js` until a GDD section exists to record the intent behind them.
+>
+> The **weapon-scaling** rules this section used to restate are gone with
+> weapons (GDD §5.1) — `SCALING_RATES` still exists in config and is now unread
+> by the combat path.
 
 ## Run it locally
 
@@ -375,52 +366,47 @@ could be verified before the art exists. Real art replaces the same five paths.
 
 ## Regions, node trees and saves
 
+**Design: [`docs/GDD.md`](docs/GDD.md) §2.3–§2.5 (map tree, node types, world
+map), §3 (regions), §11 (saves and the frontier rule). Current build state: GDD
+§16. Constants: `js/regions.js`, `js/nodetree.js`, `js/nodebehaviour.js`.**
+
 The run structure above (node map → arenas → Siege) is the **floor** layer. Above
-it sits the **world** layer: eight regions, played in order, each one a ten-node
-tree you pick five nodes through.
+it sits the **world** layer: regions played in order, each one a node tree you
+pick a route through.
 
-- **`js/regions.js`** — a region is a tileset, a hazard, a population, a boss and
-  a set of numbers. Two are declared (Pacific Northwest, Central America); the
-  other six are named in `LOCKED_REGION_NAMES` and nothing more. Adding region
-  three is an entry in `REGIONS` and nothing else.
-- **`js/nodetree.js`** — five columns of two, ten nodes, mix fixed at
-  4 horde / 2 elite / 2 objective / 1 shrine / 1 cursed. Every node links to its
-  same-row successor and, at `CROSS_LINK_CHANCE` (0.45), to the other row's.
-  **Every path is exactly five nodes long by construction** — the shape cannot
-  produce a dead end or a short route, so there is nothing to validate. Shrine
-  and Cursed may not sit in column 1: the first choice should be between fights,
-  not between a fight and a free skill point.
-- **`js/saves.js`** — `localStorage`, one bundle, `SAVE_VERSION`-gated, with
-  export/import to a file. Characters carry level, points spent per skill, items,
-  their world **frontier**, and a **parked** region (the tree they were partway
-  through). `importBundle()` refuses a malformed bundle by name rather than
-  half-loading it.
+| | |
+|---|---|
+| region data, depth scaling | `js/regions.js` |
+| tree generation and its assertions | `js/nodetree.js` |
+| what Shrine / Cursed / Elite actually do | `js/nodebehaviour.js` |
+| world map rules, difficulty ladder | `js/worldmap.js` |
+| save format, frontier, parking | `js/saves.js` |
+| region populations and the density rule | `js/content/regions-enemies.js` |
 
-**The frontier rule.** A character advances only by clearing the region at their
-own frontier. Clearing *below* it is a replay and changes nothing; being carried
-*above* it by a friend grants loot and XP but no world progress. Tested from all
-three sides, because a rule tested from one side is a rule that holds in one
-direction.
+Two properties worth knowing before reading any of it, because they are the
+reason those files are shaped the way they are:
 
-`DEPTH_MULT_PER_COLUMN` (0.08) escalates enemy stats across a region's five
-columns and resets each region — that is the map-depth axis, not the world axis.
+- **Every path through a node tree is the same length by construction.** The
+  generator builds columns rather than a graph, so a dead end or a short route
+  is not something to validate against — it cannot be expressed.
+- **A save that survives `JSON.stringify` but not a file write does not exist.**
+  `tools/region_test.mjs` round-trips through a real file on disk and requires
+  malformed bundles to be refused by name rather than half-loaded.
 
-**Not built yet, deliberately:** the world-map screen, both regions' actual
-content (tilesets, twelve enemies, two hazards, two cursed modifiers, two
-bosses), the difficulty setting, and runtime behaviour for the Shrine and Cursed
-node types. Those are typed and reachable; they are not implemented. `contentReady`
-on each region says so in code rather than in a comment.
+**This section deliberately does not list what is built.** It said "not built
+yet: the world map, the difficulty setting, the region content" for exactly as
+long as it took to build all three. GDD §16 is the status table.
 
 ## Skill trees
 
-Weapons are gone. A character's output is its **skill trees** — two per class,
-ten skills each, points spendable freely across both. Slots unlock by level at
-`SLOT_LEVELS` (1, 5, 12, 21, 31, 42, 54, 66) to a hard ceiling of eight.
+**Design: [`docs/GDD.md`](docs/GDD.md) §5 (combat model), §8 (skill system),
+§8.4 (Footing). Constants: the `TUNING` block in each tree's content file.**
 
-Skills are **auto-triggered**: each slotted skill has a trigger (`NEAREST`,
-`PROXIMITY`, `ON_DODGE`, `MOVEMENT`, `TARGET_THRESHOLD`, …) evaluated on a 10 Hz
-tick, and a body composed from ten primitives plus riders. There is no per-skill
-code: a new skill is a data entry.
+Weapons are gone. A character's output is its **skill trees** — two per class,
+ten skills each, points spendable freely across both. Skills are
+**auto-triggered**: each slotted skill has a trigger evaluated on a fixed tick,
+and a body composed from primitives plus riders. There is no per-skill code — a
+new skill is a data entry, which is the property the whole system exists to have.
 
 Four trees ship: Necromancer **Dark Matter** and **Marrow**, Samurai **Armor**
 and **Tactics**. `js/skills.js` asserts the tree invariants **at import and
@@ -429,61 +415,18 @@ that cannot answer the design question.
 
 **Class engines.** A class exposes one number that its skills read:
 `scaleWith: '<engine>'` plus `scalePer`, resolved by `engineScale()` in
-`js/compose.js`, which knows no engine by name. The Samurai's is **Footing**.
-Marrow uses a second engine (`armor`) through the same hook with no new code.
+`js/compose.js`, which knows no engine by name. The Samurai's is **Footing**
+(GDD §8.4); Marrow uses a second engine (`armor`) through the same hook with no
+new code, which is the evidence that the remaining twelve classes are data.
 
-### Footing — the tuning constants
+Where the code lives:
 
-Authoritative values live in `TUNING` in `js/content/skills/samurai_armor.js`.
-There is no GDD file in this repository — it is referenced by section number
-(§7.5.3, §2.2) but not tracked here, so this table is the in-repo record.
-
-| constant | value | what it is |
-|---|---|---|
-| `footingTickMs` | 500 | one stack per half-second stationary |
-| `FOOTING_MAX_STACKS` | 10 | **hard cap, and no skill may raise it** |
-| `footingShieldPerStack` | 4 | absorb pool per stack |
-| `footingGritPerStack` | 2 | Grit per stack |
-| `footingGraceMs` | **400** | movement shorter than this does not drop the stance |
-| `footingGraceRefill` | **1.0** | how fast standing still repays the grace budget |
-
-**Footing grants Grit and an absorb pool. Not Reflex, and not max Vitality.**
-Both were removed for the same class of reason. Vitality meant breaking stance
-clamped current HP down, so a Samurai lost health for dodging by an amount
-unrelated to the attack. Reflex meant the stance granted dodge *chance*, which
-contradicts the design outright — the Samurai has surrendered the ability to
-dodge anything telegraphed — and it was most of why holding beat sidestepping on
-both axes.
-
-The cap is enforced in the engine (`tickFooting`), not at the call site. It was
-previously a base of ten plus a rankable `+1 max stack`, which is how a designed
-ten was measured at **seventeen**, inflating every per-stack term by 70%. A cap
-a skill can raise is not a cap.
-
-### The grace window is a BUDGET, not a timer
-
-`footingGraceMs` is not a countdown reset by standing still. Movement time
-accumulates; standing still decays it at `footingGraceRefill × dt`. The stance
-drops when the budget is spent.
-
-**This distinction is the whole design.** A timer reset by standing still lets a
-player cross the entire map at full stance in 300 ms hops — move 300 ms, stop
-one frame, repeat — which defeats the instant drop's purpose by a different
-route. `tools/footing_grace_test.mjs` gates that case explicitly.
-
-400 ms is chosen against the attacks, not picked round: the shortest wind-up on
-the roster is 400 ms (Obsidian Lancer), so one sidestep out of the *fastest*
-committed zone fits inside the window. Crossing a room does not.
-
-Why it exists: criterion 13 measured a holder taking **×0.37–×0.40** the damage
-of a correct sidestepper, and that ratio did not move for any dial tried — per-
-stack Grit, removing Reflex entirely, tripling telegraph density. The
-insensitivity was the evidence. The problem was never the size of a stack; it
-was that a 200 ms sidestep cost the *whole* stance while the rebuild is slower
-than the next commit arrives, so a bot that dodged correctly lived permanently
-at 0–3 stacks and never had a stance to make a decision about. With the window,
-the sidestepper ends a 90 s fight at a **capped** stance having dodged 85
-attacks, and the gap is **×0.60**.
+| | |
+|---|---|
+| registry, progression, load assertions | `js/skills.js` |
+| trigger evaluation, engines, statuses | `js/skillsim.js` |
+| the ten primitives and their riders | `js/compose.js` |
+| per-tree content and constants | `js/content/skills/*.js` |
 
 ## Adding art (sprites)
 
@@ -667,7 +610,8 @@ never loads them:
   it**, settling recharges the window, and moving never grows the stance.
 - `node tools/snapstate_test.mjs` — every case runs with `pushEvent` replaced by
   a sink, so **no event is delivered at all**, and the snapshot must still carry
-  everything a client cannot play without.
+  everything a client cannot play without. The state/event rule it enforces is
+  GDD §12.1; the repeating-channel rule is §12.2.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
@@ -678,43 +622,18 @@ never loads them:
 
 ## Known defects
 
-Recorded, reproducible where possible, and deliberately not fixed:
-[`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md). Read the file before
-re-diagnosing any of them.
+**The list lives in [`docs/GDD.md`](docs/GDD.md) §15, with full reproductions in
+[`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).** Read the file before
+re-diagnosing any of them — several have been diagnosed twice.
 
-**Open — and two of the four touch co-op:**
+Two are **open and player-facing, and both touch co-op**: client→host input has
+no delivery guarantee (#8), and room registration fails before any peer exists
+(#9). They are separate entries on purpose — three distinct failures wore
+"co-op is flaky" as a single description for most of a patch, which is why none
+of them got fixed.
 
-2. **Regeneration scales off `maxHp`**, so any entity carrying a large HP
-   multiplier can heal faster than a party can damage it. The Bounty Hunt case
-   is fixed with a damage lockout, but **the root cause is treated, not
-   removed** — read the entry before adding the next 10×-HP entity.
-3. **A `shielded` bounty mark stalled at 4p, twice, unexplained.** Deliberately
-   not folded into entry 2.
-8. **Client input has no delivery guarantee, no repeating channel, and nothing
-   to heal from.** Everything a client does — character pick, ready, node tap,
-   buy — leaves by `ClientTransport.send`. Host→client state was fixed (moved
-   onto the 15 Hz snapshot, plus a 3 Hz lobby heartbeat); **this is the other
-   direction**, and it is why `client ready` still fails intermittently in
-   `browser_test.mjs --coop`. Every skipped send is now logged and counted, so
-   the next occurrence is evidence rather than another seven-run hunt.
-9. **Room registration fails against the local relay**, before any peer exists —
-   roughly one co-op run in three or four never gets a room code. Undiagnosed;
-   nothing ruled out. Recorded separately so it stops being absorbed into "co-op
-   is flaky", which is how three distinct failures wore one description.
-
-**Resolved:**
-
-1. **`Math.random()` in the simulation** broke same-seed reproduction. The entry
-   named `rushMove()`; it was **43 calls** across four modules. All route
-   through `Sim.rng` now, and `node tools/determinism_test.mjs` proves six
-   configurations are byte-identical run to run, with a negative control and a
-   lint.
-
-Closed entries are kept when the failure shape recurs: the solo-touch boon
-softlock (#4), the null `def` that made every siege crash the host the moment
-its boss spawned (#5), and the shop stocking weapons after weapons were removed
-(#6). Entry **#7 is a retraction** — a "destructive test" that turned out to be
-me committing the test's own fixtures — kept because the mistake is instructive.
+This section used to restate the list. It went stale twice: once claiming a
+resolved defect was open, once omitting both co-op entries entirely.
 
 ## Decisions (where the brief was silent or conflicted)
 
@@ -847,7 +766,7 @@ and non-Regenerating marks die in 62–84 seconds each.
   no image tool of any kind. Outbound HTTPS is blocked by the environment's
   network policy too (the proxy answers 403 to CONNECT for every external host,
   google.com included), so the API cannot be reached directly and the pricing
-  page cannot be read. Batches 0–8 and the budget question in §9 are both
+  page cannot be read. Batches 0–8 and the budget question in that brief's §9 are both
   blocked on that, not on a decision.
 - **Everything generator-independent was built instead**, because all of it is
   needed the moment a generator exists and none of it depends on which one:
@@ -880,7 +799,7 @@ and non-Regenerating marks die in 62–84 seconds each.
   enemies; the live catalog has 4 bosses and 13 enemy sheets (12 types plus the
   Ward Pylon). Total units is **64**, not ~90 — batch 3 is a quarter the size it
   was planned for, and the projected texture cost is proportionally smaller.
-- **The iOS Safari PWA measurement in §7 cannot be done from here.** It needs a
+- **The iOS Safari PWA measurement in that brief's §7 cannot be done from here.** It needs a
   real device; the desktop numbers the tooling reports are not a substitute and
   are labelled as such.
 
