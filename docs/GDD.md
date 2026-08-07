@@ -166,6 +166,27 @@ The difficulty setting's primary purpose is replay — a maxed character levelli
 
 Skills fire on cooldowns. A character running few skills has long gaps and spiky damage. A character running many has syncopated fire rates and smooth damage, but each skill is under-invested and hits softly. Neither extreme wins; the optimum sits in the middle and moves with enemy HP and density.
 
+#### MEASURED — the optimum does not sit in the middle at the endgame
+
+`tools/balance_summoners.mjs` measures deep-versus-wide at two anchors. **At the level-70 anchor, three of four measured trees are depth-dominant**, and the one that is not is the only tree with a cost attached to going wide.
+
+| tree | deep/wide at L12 | deep/wide at L70 |
+|---|---:|---:|
+| `necro_summons` | 1.74 | **1.85** |
+| `samurai_armor` | 0.63 | **1.70** |
+| `samurai_tactics` | — | **1.41** |
+| `druid_beasts` | 0.43 | **0.69** |
+
+**The claim above holds in one direction and needs watching in the other.** Breadth is genuinely punished early — at level 12 the Samurai's deep build is 0.63, exactly the "under-invested and hits softly" case. But by the endgame the syncopation argument stops paying: a rank-69 skill on an 8-slot bar out-damages eight rank-9 skills, and nothing in the fire-rate maths pushes back hard enough.
+
+**The Druid is the only breadth-priced tree in the game, and its price is one engine.** `druid_beasts` stays under 1.0 because §8.5's revive scale charges for pack size — `15000 + 4000 × (totalAnimals − 1)`, so a wide Druid waits more than twice as long to get anything back. That is currently **the only mechanism in the game that prices breadth at all**. A design-wide claim that "the optimum sits in the middle" resting on one tree's engine is thin, and it should not be assumed to generalise to the eleven classes phase 5 adds. If breadth is meant to be live everywhere, something like the revive scale has to exist everywhere.
+
+#### Measure a ratio at more than one level
+
+Capping skeletons was nearly ruled from the level-12 number alone, where `necro_summons` read 1.90 against the Samurai's 0.63 and looked like an outlier. At level 70 the Samurai trees themselves are 1.70 and 1.41, and the Necromancer's 1.85 sits beside them: depth-dominance at the endgame is the *norm*, not the anomaly.
+
+**Capping from the level-12 ratio would have capped the endgame using the tutorial.** A rank-11 skill is 92% of every point a level-12 character owns and 16% of a level-70 one's — the same rank is a different decision at each end of the run, so a single-anchor measurement of a build-shape question is measuring one point on a curve and reporting it as the curve.
+
 #### The two levers that must stay off ranks
 
 **Cooldown** is load-bearing. If deep investment bought both damage and uptime, wide builds would lose on every axis and the tension would collapse. A narrow build must always pay in gaps. **Cooldown reduction is off ranks and off items.**
@@ -755,7 +776,24 @@ Two constraints on the roll:
 1. **A penalty may not roll into a stat the character has none of.** Reducing a stat already at zero is free, and a shop full of free items has no trade-offs.
 2. **Tempo is rollable; cooldown is not a stat.** Nothing in the roll table may reach a cooldown, directly or by proxy.
 
-**OPEN — penalty weighting.** Fully random still lets a penalty land on a stat a build does not care about. Light weighting toward stats the build actually uses would keep the roll a real question without removing the luck. Needs a ruling before the roll table is built.
+**OPEN — penalty weighting. MEASURED, NOT YET RULED.** `tools/penalty_roll.mjs` applies a real penalty to each eligible stat, replays the same fight from the same seed, and calls it free when nothing observable changes.
+
+| build | eligible pool | free-roll rate | free for this build |
+|---|---:|---:|---|
+| Necromancer L12 | 7/10 | 40.3% | reflex, recovery, reach |
+| Druid L12 | 7/10 | 28.5% | reflex, recovery |
+| Samurai L12 | 7/10 | 42.3% | reflex, recovery, ingenuity |
+| Necromancer L70 | 10/10 | 9.8% | recovery |
+| Druid L70 | 10/10 | 17.8% | reflex, recovery |
+| Samurai L70 | 10/10 | 29.3% | grit, recovery, ingenuity |
+
+**Mean 28.0%, worst 42.3%.** The zero-stat constraint alone removes only 1.5 of 10 stats from the pool on average, so **it is not sufficient** — roughly one roll in 3.5 lands somewhere the build cannot feel.
+
+**But the number is inflated by content that does not exist yet, and weighting should not be added on it.** Recovery is free in **five of the six builds**, and it dominates the result for one reason: `druid_rejuvenate` is the only healing skill in the game. A stat is free for a build with no source for it, and eleven of fourteen classes have no tree at all — so the measured pool of "stats a build engages" is small because the content is missing, not because the design leaks.
+
+**Re-measure when phase 5 has landed healers, status classes and more summoners.** If the rate stays near 30% with a full roster, weighting is justified; if it falls, fully random stands and the lottery is preserved unmodified. Adding weighting now would tune against a three-class game.
+
+*Known limitation:* three cells read UNTESTED — a build owns a status or summon source that the 45-second staged fight never fired. They are counted as neither free nor felt rather than assumed.
 
 #### The stat gate
 
@@ -1035,6 +1073,7 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Determinism | Built, negative control, byte-identical same-seed runs |
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **10 of 10 live** |
+| Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
