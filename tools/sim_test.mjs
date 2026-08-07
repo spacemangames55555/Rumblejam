@@ -1687,6 +1687,9 @@ try {
           .filter(r => r > 0);
         const PARK_D = ranges.length ? Math.max(30, Math.min(...ranges) * 0.5) : 120;
         if (!p.loadout.filter(Boolean).length) fail('UNKILLABLE gate: the parked player has nothing armed, so it measures nothing');
+        // PER-TARGET ATTRIBUTION. Three causes, three readings, no guessing.
+        g.dmgLog = new Map();
+        g.selLog = new Map();
         const hp0 = mark.hp;
         let t = 0, alive = true;
         while (t++ < WINDOW && (alive = !!g.enemyById(id))) {
@@ -1712,10 +1715,36 @@ try {
           // opposite fixes — the mark out-heals the damage, or no damage was
           // ever aimed at it — and this message could not tell them apart.
           // Parking distance and the armed loadout decide which one it is.
-          fail(`UNKILLABLE: a Regenerating mark took ${(t / 60).toFixed(0)}s and its HP did not fall (${Math.round(hp0)} → ${Math.round(now)}). `
-            + `armed: [${p.loadout.filter(Boolean).join(',') || 'NOTHING'}] parked ${Math.round(PARK_D)}u, `
-            + `player dealt ${Math.round(p.damageDealt)} total, level ${p.level}, fires ${(p.fireLog || []).length}. `
-            + `If "dealt" is 0 the mark was never shot at and this says nothing about regeneration.`);
+          const onMark = g.dmgLog.get(id) || { landed: 0, hits: 0, blocked: 0 };
+          const byTag = {};
+          for (const r of g.dmgLog.values()) {
+            byTag[r.tag] = byTag[r.tag] || { landed: 0, hits: 0, blocked: 0 };
+            byTag[r.tag].landed += r.landed; byTag[r.tag].hits += r.hits; byTag[r.tag].blocked += r.blocked;
+          }
+          const sel = [...g.selLog].map(([k, n]) => `${k}x${n}`).join(' ') || 'nothing selected';
+          // WHICH OF THE THREE IT IS, said outright rather than left to a reader.
+          // FOUR causes, not three. The first version of this classifier had
+          // only three and called the answer REGENERATION because a couple of
+          // hits landed — while 21 of 23 shots aimed at the mark were being
+          // intercepted by its escort. Selection and DELIVERY are separate:
+          // the selector can be right 23 times out of 23 and almost none of it
+          // arrive.
+          const selectedMark = [...g.selLog].filter(([k]) => /->MARK$/.test(k)).reduce((n, [, v]) => n + v, 0);
+          const cause = selectedMark === 0
+            ? 'SELECTION: no fire ever chose the mark'
+            : onMark.hits === 0 && onMark.blocked === 0
+              ? 'DELIVERY: every fire chose the mark and not one reached it'
+              : onMark.blocked > 0 && onMark.landed === 0
+                ? 'ABSORPTION: every hit that reached the mark was blocked'
+                : onMark.hits < selectedMark * 0.5
+                  ? `DELIVERY: the mark was chosen ${selectedMark}x but only ${onMark.hits} shot(s) arrived — the rest were intercepted`
+                  : 'REGENERATION: the shots arrived and its HP still did not fall';
+          fail(`UNKILLABLE (${cause}): ${Math.round(hp0)} → ${Math.round(now)} in ${(t / 60).toFixed(0)}s. `
+            + `armed [${p.loadout.filter(Boolean).join(',') || 'NOTHING'}] parked ${Math.round(PARK_D)}u, `
+            + `${(p.fireLog || []).length} fires, ${Math.round(p.damageDealt)} dealt total. `
+            + `ON THE MARK: ${onMark.hits} hits for ${Math.round(onMark.landed)}, ${onMark.blocked} blocked. `
+            + `BY TAG: ${Object.entries(byTag).map(([k, v]) => `${k} ${v.hits}h/${Math.round(v.landed)}dmg/${v.blocked}blk`).join(', ')}. `
+            + `SELECTED: ${sel}`);
         }
         // the same assertion for a PARTY, because regen is a % of max HP and a
         // 4p mark carries ~1.75x the HP — the threshold moves with the party

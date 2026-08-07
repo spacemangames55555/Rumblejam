@@ -166,6 +166,30 @@ export class Sim {
   // the sim side and a second edge would close a cycle.
   tohOnFire(p, ctx) { tohOnFire(this, p, ctx); }
 
+  // PER-TARGET DAMAGE ATTRIBUTION, opt-in. "The player is armed and firing and
+  // the mark's HP does not move" has three causes that want three different
+  // fixes — the selector chose something else, the selector chose the mark and
+  // the projectile missed, or the mark absorbed the hit — and a total-damage
+  // counter cannot tell them apart. A harness sets sim.dmgLog = new Map() and
+  // reads it at teardown; nothing is recorded when it is absent, so live play
+  // pays one property check.
+  _dmgLedger(e, owner, amount, outcome) {
+    if (!this.dmgLog || !owner || !owner.stats) return;
+    const k = e.id;
+    let r = this.dmgLog.get(k);
+    if (!r) { r = { id: k, tag: e.bounty ? 'MARK' : e.isNest ? 'nest' : e.boss ? 'boss' : e.elite ? 'elite' : 'chaff', landed: 0, hits: 0, blocked: 0 }; this.dmgLog.set(k, r); }
+    if (outcome === 'landed') { r.landed += amount; r.hits++; } else r.blocked++;
+  }
+
+  // What each skill fire SELECTED, before anything travelled. A projectile that
+  // misses and a target never chosen look identical downstream.
+  _selLedger(skillId, target) {
+    if (!this.selLog) return;
+    const k = target ? (target.bounty ? 'MARK' : target.isNest ? 'nest' : target.boss ? 'boss' : target.elite ? 'elite' : 'chaff') : 'none';
+    const key = `${skillId}->${k}`;
+    this.selLog.set(key, (this.selLog.get(key) || 0) + 1);
+  }
+
   _makePlayer(member, idx) {
     // NO SILENT SUBSTITUTION. This used to be
     //   CHAR_BY_ID[member.charId] || CHAR_BY_ID.bulwark
@@ -2218,7 +2242,7 @@ export class Sim {
     // Sight and projectiles already stop at the barricades; this makes the
     // rule absolute, so novas and other line-of-sight-ignoring damage do
     // not quietly skip the part of the level that IS the level.
-    if (e.nestShielded) { this.fx.blocks.push({ x: e.x, y: e.y }); return; }
+    if (e.nestShielded) { this.fx.blocks.push({ x: e.x, y: e.y }); this._dmgLedger(e, opts.owner, 0, 'nest-shielded'); return; }
     // warden allies shield: 50% reduction if a living warden is nearby (not self)
     if (!e.boss && e.def.behavior !== 'warden') {
       for (const w of this.enemyPool) {
@@ -2228,7 +2252,11 @@ export class Sim {
     }
     // shielded elite: eats one hit periodically
     if (e.eliteMod && e.eliteMod.blockCd && !opts.noEffects) {
-      if ((e.blockT || 0) <= 0) { e.blockT = e.eliteMod.blockCd; this.fx.blocks.push({ x: e.x, y: e.y }); return; }
+      if ((e.blockT || 0) <= 0) {
+        e.blockT = e.eliteMod.blockCd; this.fx.blocks.push({ x: e.x, y: e.y });
+        this._dmgLedger(e, opts.owner, 0, 'blocked');
+        return;
+      }
     }
     amount = Math.max(1, Math.round(amount));
     e.hp -= amount;
@@ -2237,6 +2265,7 @@ export class Sim {
     if (e.eliteMod && e.eliteMod.regenLockS) e.regenLock = e.eliteMod.regenLockS;
     if (!opts.silent) this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: opts.crit ? 1 : 0 });
     const p = opts.owner;
+    this._dmgLedger(e, p, amount, 'landed');
     if (p && p.stats) {
       p.damageDealt += amount;
       // lifesteal is a healing SOURCE (items + innate traits), amplified by Recovery in _heal

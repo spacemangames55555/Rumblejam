@@ -1187,5 +1187,31 @@ closed (it parks at half the armed skill's own trigger range now, not a
 weapons-era literal 120u). What remains is: where did the 260 go — the escort
 pack, or projectiles missing a moving stalker at range?
 
-**Next step is one more field**, not another guess: attribute damage per target
-so the message says whether the mark was hit at all.
+### Resolved by per-target attribution: it is DELIVERY, not any of the three
+
+`sim.dmgLog` (every damage event, by target, with `landed`/`blocked`) and
+`sim.selLog` (what each fire selected) are opt-in ledgers — a harness sets them,
+nothing records when they are absent. Read at teardown:
+
+```
+SELECTED:    necro_blip->MARK x23
+ON THE MARK: 2 hits for 10, 0 blocked
+BY TAG:      MARK 2h/10dmg/0blk, chaff 21h/120dmg/0blk
+```
+
+**The selector is right 23 times out of 23.** Nothing was blocked. Of 23 shots
+aimed at the mark, **2 arrived** — the other 21 were intercepted by the escort
+pack that spawns with every bounty mark by design.
+
+So it was a fourth cause, and none of the three I had listed. **Selection is not
+delivery.** `objective_target` picks the correct entity and the bolt primitive
+stops at the first body it meets, so a deliberately-escorted target cannot be
+focused at all. A `pierce` rider on objective-targeting bolts would fix it;
+whether that is the right answer — or whether escorts are supposed to be a wall
+you clear first — is a design question. Recorded as §15 defect #17.
+
+**A note against my own instrument.** The first classifier had three branches
+and reported `REGENERATION` here, because two hits did land. Two hits out of
+twenty-three is not regeneration; the branch was too coarse and would have sent
+the fix at the elite mod. It now compares hits-on-target against
+selections-of-target and names `DELIVERY` when the gap is wide.

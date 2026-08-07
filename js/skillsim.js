@@ -273,6 +273,7 @@ function fireSkill(sim, p, sk) {
   // target position, so it takes the one this skill's own selector chose.
   const range = sk.trigger.range || sk.trigger.radius || 0;
   const tgt = range ? selectTarget(sk.select, sim.trigGrid, p.x, p.y, range) : null;
+  sim._selLedger(sk.id, tgt);
   sim.tohOnFire(p, { def: null, a: p.aimA, tx: tgt ? tgt.x : p.x, ty: tgt ? tgt.y : p.y });
   p.trigEvents.lastFired = sk.id;
   p.fireLog.push({ id: sk.id, trigger: sk.trigger.kind, t: sim.time, hits: out.hits });
