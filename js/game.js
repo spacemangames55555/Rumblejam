@@ -2680,7 +2680,7 @@ export class Sim {
   skillSplash(p, skill, x, y, r, dmg, exclude) { return SK.skillSplash(this, p, skill, x, y, r, dmg, exclude); }
   spawnSkillProj(p, skill, step, rank, angle, range) { return SK.spawnSkillProj(this, p, skill, step, rank, angle, range); }
   applyPlague(e, dmg, dur, p, skill) { return SK.applyPlague(this, e, dmg, dur, p, skill); }
-  applySlow(e, mult, dur) { return SK.applySlow(this, e, mult, dur); }
+  applySlow(e, mult, dur, owner = null) { return SK.applySlow(this, e, mult, dur, owner); }
   queueSkillStep(p, skill, step, rank, delay) { return SK.queueSkillStep(this, p, skill, step, rank, delay); }
   // ---- summon surface (js/compose.js's `summon` primitive and ON_TOKEN) ----
   spawnMinions(p, skill, step, rank) { return MIN.spawnMinions(this, p, skill, step, rank); }

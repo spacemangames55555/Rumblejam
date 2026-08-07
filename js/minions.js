@@ -22,7 +22,7 @@
 // systems is the correct number while one of them is scheduled for deletion.
 
 import { CONFIG } from './config.js';
-import { PRIMITIVES } from './compose.js';
+import { PRIMITIVES, rankedDuration } from './compose.js';
 import { clamp, dist2 } from './util.js';
 
 const MS = 1000;                  // structural: step params are milliseconds
@@ -131,6 +131,16 @@ export function reviveSeconds(step, total) {
   return (step.reviveBase + step.revivePerAnimal * Math.max(0, total - 1)) / MS;
 }
 
+// INGENUITY — the summoner stat (§9.5): minion damage and minion HP. It was
+// read only by `_summonStats`, the weapon-era structure path, in a game that
+// then had no skill-era summons; the class that gained summons was ignoring the
+// summon stat. Same per-point rate the weapon era used, so the number means the
+// same thing it always did.
+const ING_PER_POINT = 0.1;
+export function ingenuityMult(p) {
+  return Math.max(0.2, 1 + (p && p.stats ? Math.max(-8, p.stats.ingenuity) : 0) * ING_PER_POINT);
+}
+
 // ---------------------------------------------------------------- the actor
 //
 // A minion presented in the shape the primitives read. Identity fields (idx,
@@ -145,6 +155,10 @@ function makeActor(sim, m) {
   const p = sim.players[m.ownerIdx];
   const a = {
     minion: m,
+    // Read by stepDamage(). A getter rather than a snapshot so a mid-fight
+    // Ingenuity change reaches a minion already standing, the same way the
+    // owner's stats do.
+    get ingMult() { return ingenuityMult(p); },
     x: m.x, y: m.y, radius: m.radius, color: m.color, aimA: 0,
     idx: p.idx, stats: p.stats, hookAgg: p.hookAgg, char: p.char,
     engines: p.engines, engineScaleBonus: p.engineScaleBonus,
@@ -231,7 +245,14 @@ export function spawnMinions(sim, p, skill, step, rank, origin = null) {
       x: clamp((origin ? origin.x : p.x + Math.cos(ang) * step.spawnRadius), CONFIG.WALL + step.radius, sim.W - CONFIG.WALL - step.radius),
       y: clamp((origin ? origin.y : p.y + Math.sin(ang) * step.spawnRadius), CONFIG.WALL + step.radius, sim.H - CONFIG.WALL - step.radius),
       radius: step.radius, color: p.color,
-      hp: step.hp, maxHp: step.hp,
+      // MINION HP IS THE DURATION TERM (§9.5). §4.2 says a rank raises damage
+      // and duration; for an actor with a body those are its attack and how
+      // long it survives, so a rank buys both. Raising HP as a flat constant
+      // instead moved the number and not the shape — a rank-11 wolf still died
+      // as fast as a rank-1 one, which is what made depth strictly worse than
+      // breadth for the Druid. Ingenuity multiplies the same term.
+      hp: rankedDuration(step.hp, skill, rank) * ingenuityMult(p),
+      maxHp: rankedDuration(step.hp, skill, rank) * ingenuityMult(p),
       ttl: step.duration ? step.duration / MS : 0,     // 0 = permanent
       slotted: !!step.slotted,
       revives: !!step.revives,

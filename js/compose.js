@@ -47,7 +47,11 @@ export function engineScale(step, p) {
 // Magnitude for a step: base, ranked, then scaled by whatever engine it rides.
 // One function so a primitive cannot accidentally apply one and not the other.
 export function stepDamage(step, skill, rank, p) {
-  return rankedDamage(step.damage, skill, rank) * engineScale(step, p);
+  // `ingMult` is present only on a minion's actor facade — Ingenuity (§9.5)
+  // applies to a summon's swing, never to the summoner's own skills, and this
+  // is the one place the two can be told apart. A player has no such field, so
+  // the term is exactly 1 for every non-minion caster.
+  return rankedDamage(step.damage, skill, rank) * engineScale(step, p) * (p.ingMult || 1);
 }
 
 const TAU = Math.PI * 2;          // structural
@@ -328,7 +332,7 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
   if (r.root) { e.rootT = Math.max(e.rootT || 0, r.root / MS); out.statuses++; }
   if (r.taunt) { e.tauntT = Math.max(e.tauntT || 0, r.taunt / MS); e.tauntIdx = p.idx; out.statuses++; }
   if (r.knockback) { e.knockX += Math.cos(angle) * r.knockback; e.knockY += Math.sin(angle) * r.knockback; out.statuses++; }
-  if (r.slow) { sim.applySlow(e, r.slow.mult, r.slow.dur / MS); out.statuses++; }
+  if (r.slow) { sim.applySlow(e, r.slow.mult, r.slow.dur / MS, p); out.statuses++; }
   if (r.weakenDamage) { e.weakDmgT = r.weakenDamage.dur / MS; e.weakDmgMult = r.weakenDamage.mult; out.statuses++; }
   if (r.weakenDefense) { e.defDownT = r.weakenDefense.dur / MS; e.defDownMult = r.weakenDefense.mult; out.statuses++; }
   if (r.healPerHit) { p.hp = Math.min(p.stats.vitality, p.hp + r.healPerHit); out.states++; }

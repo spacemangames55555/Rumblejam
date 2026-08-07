@@ -23,14 +23,14 @@
 export const TUNING = {
   // tier 1 — Thorn Lash
   lashDamage: 8, lashReach: 92, lashArc: 1.5, lashCd: 1000,
-  // ANIMAL HP IS TUNED AGAINST THE REVIVE COST, NOT AGAINST THE ENEMY.
-  // §8.5 puts a lone animal's revive at 15 s. At the first-guess HP an armed
-  // Druid's wolf spent HALF THE FIGHT DOWN (0.53 average standing at rank 11),
-  // which made depth strictly worse than breadth — points bought a pet that hit
-  // harder, died just as fast, and then cost fifteen seconds. Raised so a pet
-  // survives long enough for its damage to be worth investing in.
+  // HP IS THE RANK'S DURATION TERM (§9.5), so these are BASE values that a rank
+  // raises. They were briefly inflated as a flat balance patch when a rank-11
+  // wolf was dying as fast as a rank-1 one; that moved the number (0.53 to 0.84
+  // animals standing) without moving the shape, because the missing thing was
+  // the rank rule and not the constant. Reverted to the first guesses now that
+  // rankedDuration scales them.
   // tier 2 — Call Wolf (the first animal)
-  wolfHp: 62, wolfRadius: 11, wolfDamage: 7, wolfReach: 48, wolfArc: 1.5,
+  wolfHp: 34, wolfRadius: 11, wolfDamage: 7, wolfReach: 48, wolfArc: 1.5,
   wolfAtkCd: 950, wolfSpawnRadius: 48, wolfCd: 3000,
   wolfTrigRadius: 320, wolfTrigCount: 1,
   // THE REVIVE CURVE, from §8.5: 15000 + 4000 x (totalAnimals - 1), measured
@@ -43,7 +43,7 @@ export const TUNING = {
   // tier 4 — Pack Bond (passive)
   bondPerPack: 0.05,
   // tier 5 — Call Bear
-  bearHp: 130, bearRadius: 15, bearDamage: 12, bearReach: 60, bearArc: 1.8,
+  bearHp: 78, bearRadius: 15, bearDamage: 12, bearReach: 60, bearArc: 1.8,
   bearAtkCd: 1500, bearSpawnRadius: 56, bearCd: 7000, bearTaunt: 2200,
   bearTrigRadius: 240, bearTrigCount: 3,
   // tier 6 — Maul
@@ -51,7 +51,7 @@ export const TUNING = {
   // tier 7 — Rejuvenate
   rejuvAmount: 16, rejuvRadius: 260, rejuvCd: 9000, rejuvPct: 55,
   // tier 8 — Call Hawk
-  hawkHp: 40, hawkRadius: 8, hawkDamage: 9, hawkSpeed: 520, hawkRange: 280,
+  hawkHp: 20, hawkRadius: 8, hawkDamage: 9, hawkSpeed: 520, hawkRange: 280,
   hawkAtkCd: 1000, hawkOrbit: 74, hawkCd: 6000, hawkTrigRange: 300,
   // tier 9 — Stampede
   stampedeDamage: 19, stampedeWidth: 66, stampedeLength: 340, stampedeCd: 8500,

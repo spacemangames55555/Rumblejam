@@ -166,10 +166,35 @@ const PROBES = {
       if (!sk) return NaN;
       const e = target(g, p.x + 50, p.y);
       if (!e) return NaN;
-      // Put a minion on the field through the real primitive, then let it work.
+      // Slots are recomputed on the skill tick, and stage() has not ticked yet —
+      // so summonSlots is still 0 here and every spawn is REFUSED. The first
+      // version of this probe missed that, put nothing on the field, and
+      // measured the player's own damage: Ingenuity correctly does not scale
+      // that, so a working stat read as dead.
+      g.tick();
+      // Bench the player's own skills: with the loadout empty, every point of
+      // damage the target takes came from the minion, so the number is the
+      // minion's and nothing else's.
+      p.loadout = new Array(8).fill(null);
       g.spawnMinions(p, sk, sk.compose[0], 5);
+      // §13 rule 3 — the probe verifies its own instrument. No minion means the
+      // measurement is about an empty field, which is BROKEN, not DEAD.
+      if (!p.minions.length) return NaN;
+      // Only the MINION's contribution counts. The player is firing too, and
+      // Ingenuity is not supposed to touch that.
       const before = e.hp;
-      for (let i = 0; i < 60 * 8; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); e.x = e.spawnX; e.y = e.spawnY; }
+      const ownBefore = p.damageDealt;
+      let minionDmg = 0;
+      for (let i = 0; i < 60 * 8; i++) {
+        const h0 = e.hp;
+        g.setInput(0, { mx: 0, my: 0 });
+        g.tick();
+        e.x = e.spawnX; e.y = e.spawnY;
+        minionDmg += (h0 - e.hp);
+      }
+      // total damage to the target minus what the player's own skills did to it
+      // is not separable per-source, so the probe instead measures the field:
+      // with the player's loadout emptied, everything landing is the minion's.
       return Math.round(before - e.hp);
     },
   },

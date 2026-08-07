@@ -243,7 +243,12 @@ export const PALETTE = {
 export const STATS = [
   { key: 'vitality',   name: 'Vitality',   pct: false, base: 80 }, // hit points
   { key: 'ferocity',   name: 'Ferocity',   pct: true,  base: 0 },  // universal damage %
-  { key: 'tempo',      name: 'Tempo',      pct: true,  base: 0 },  // attack + move speed
+  // MOVEMENT ONLY, and the label was the defect (§9.5). An "attack speed" stat
+  // is cooldown reduction renamed, and §4.2 keeps that off ranks and off items
+  // because it is the only thing stopping a narrow build buying back its
+  // uptime. The implementation was right; this comment claimed otherwise, and
+  // so did the glossary the player reads.
+  { key: 'tempo',      name: 'Tempo',      pct: true,  base: 0 },  // move speed
   { key: 'grit',       name: 'Grit',       pct: false, base: 0 },  // mitigation + knockback resist
   { key: 'reflex',     name: 'Reflex',     pct: true,  base: 0 },  // dodge (cap 60)
   { key: 'recovery',   name: 'Recovery',   pct: true,  base: 0 },  // amplifies ALL healing received

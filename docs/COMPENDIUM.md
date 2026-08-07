@@ -70,9 +70,9 @@ A straight boost to every hit from every weapon. The most common damage stat —
 
 ### Tempo
 
-Makes you attack faster and run faster at the same time. Fast weapons and hit-and-run fighters love it.
+Makes you run faster. It does NOT make your skills fire faster — skills fire on their own cooldowns, and nothing in the game shortens those. Positioning is what Tempo buys.
 
-**How it works:** Divides every weapon cooldown by `1 + Tempo/100` and multiplies move speed by the same factor — one stat for attack speed and footspeed. Contributes its percentage directly as a scaling tag.
+**How it works:** Multiplies move speed by `1 + Tempo/100`. **Movement only** — see GDD §9.5. It does not shorten skill cooldowns: an attack-speed stat would be cooldown reduction renamed, and §4.2 keeps that off ranks and items so a narrow build cannot buy back its uptime.
 
 **Where you find it:** 5 weapons scale with it (Twinlash, Stormlance, Threadneedle, Fanblade, Hailburst) · 13 items grant it · 6 characters carry it on their sheet.
 

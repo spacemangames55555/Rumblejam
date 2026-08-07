@@ -340,8 +340,21 @@ function fireSkill(sim, p, sk) {
 // hazard ticks and plague ticks included. There is no unrouted path, because
 // the moment one exists a build is strong for reasons the rim colour cannot
 // explain.
+// FEROCITY — the general offence stat (§9.5). Applied HERE, at the single
+// damage path every composed action routes through, because "multiplies all
+// composed damage" has to mean all of it: a strike, a bolt's impact, a cone, a
+// hazard tick, a splash and a minion's swing are the same call.
+//
+// It was weapon damage in the weapon era and was left behind when the damage
+// path moved to skills — §9.5's ruling is that this is the same job
+// generalised, not a new stat. The floor at -100% keeps a heavy penalty roll
+// from inverting damage into healing.
+export function ferocityMult(p) {
+  return Math.max(0, 1 + (p && p.stats ? p.stats.ferocity : 0) / 100);
+}
+
 export function skillDamage(sim, e, amount, p, skill) {
-  let amt = amount * domainMult(skill.domain, e.domain);
+  let amt = amount * domainMult(skill.domain, e.domain) * ferocityMult(p);
   if (e.defDownT > 0) amt /= e.defDownMult;         // defense down = takes more
   const before = e.hp;
   sim.damageEnemy(e, amt, { owner: p });
@@ -397,17 +410,35 @@ export function hitSkillProj(sim, pr, e) {
 
 // ---------------------------------------------------------------- statuses
 
-export function applySlow(sim, e, mult, dur) {
-  e.slowT = Math.max(e.slowT || 0, dur);
-  e.slowMult = Math.min(e.slowMult || 1, mult);
+// ATTUNEMENT — status potency (§9.5). This is the function every composed
+// skill calls, and it applied nothing: `_applySlow` in game.js took an owner
+// and amplified, `applySlow` here took none and did not. Two functions one
+// character apart, one silently dropping the stat, and that single fork is
+// most of why Attunement measured dead.
+//
+// A deeper slow AND a longer one, matching _applySlow so the two paths cannot
+// drift again. The clamp at 0.15 keeps a chill from becoming a stun.
+export function statusMult(p) {
+  return 1 + ((p && p.stats ? p.stats.attunement : 0) + (p && p.hookAgg ? p.hookAgg.statusBoost : 0)) / 100;
+}
+
+export function applySlow(sim, e, mult, dur, owner = null) {
+  const att = statusMult(owner);
+  const m = Math.max(0.15, 1 - (1 - mult) * att);
+  e.slowT = Math.max(e.slowT || 0, dur * Math.max(0.25, att));
+  e.slowMult = Math.min(e.slowMult || 1, m);
 }
 
 // Plague STACKS rather than refreshing — that is what makes Internal Collapse a
 // payoff for a tree that already applies dots, and it is marked EXACT in the
 // spec for a reason.
 export function applyPlague(sim, e, damage, dur, p, skill) {
+  // Attunement rides the magnitude at APPLICATION, so the stored dps already
+  // carries it and the tick loop stays a plain subtraction. Ferocity does not:
+  // a dot is a status, and §9.5 gives status potency to Attunement.
+  const amt = damage * statusMult(p);
   e.plagueT = Math.max(e.plagueT || 0, dur);
-  e.plagueDps = (e.plagueDps || 0) + damage / Math.max(0.1, dur);
+  e.plagueDps = (e.plagueDps || 0) + amt / Math.max(0.1, dur);
   e.plagueOwner = p.idx;
   e.plagueDomain = skill.domain;
 }
