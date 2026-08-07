@@ -4943,6 +4943,73 @@ try {
   }
 } catch (err) { fail('summoning gate crashed', err); }
 
+// ============================================================================
+// D-24 — AN ELITE NODE IS FEWER AND FATTER (§2.4), ASSERTED BY EFFECT.
+//
+// §2.4's Elite modifiers were unreachable for the whole life of the node type:
+// `regionFightMods()` had no callers and `nodeType` was never assigned, so
+// every fight computed 'horde'. What shipped instead was a waveConfig rate
+// bump, which made an Elite node field MORE enemies at the SAME health — Horde
+// with a bigger number, asking the same build question.
+//
+// This asserts the FIGHT, not the wiring. A version that resolves the
+// modifiers, stores them on the sim, and never applies them would pass any
+// check that read `sim.fightMods`; it fails this one, because the numbers below
+// come from counting what actually spawned.
+// ============================================================================
+try {
+  const NODE_T = (await import('../js/nodebehaviour.js')).NODE_TUNING;
+  const field = (kind, seed) => {
+    const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    node.kind = kind;
+    g.god = true;                       // measuring the ROOM, not the player
+    g._travelTo(node.id);
+    let n = 0, hp = 0, dmg = 0, mats = 0;
+    for (let t = 0; t < 60 * 60; t++) {
+      g.setInput(0, { mx: 0, my: 0 });
+      g.tick();
+      for (const e of g.enemyPool) {
+        if (!e.active || e._d24) continue;
+        e._d24 = 1; n++; hp += e.maxHp; dmg += e.dmg; mats += e.mats;
+      }
+    }
+    return { nodeType: g.nodeType, n, hp: hp / Math.max(1, n), dmg: dmg / Math.max(1, n), mats: mats / Math.max(1, n) };
+  };
+  const SEED = 4242;
+  const h = field('combat', SEED), e = field('elite', SEED);
+
+  if (e.nodeType === 'elite') ok(`an elite node knows it is one: sim.nodeType = "${e.nodeType}" (D-24: it was never assigned)`);
+  else fail(`sim.nodeType is ${JSON.stringify(e.nodeType)} on an elite node — the modifiers cannot resolve`);
+
+  if (h.n > 0 && e.n > 0) ok(`D-24 fixture fielded both rooms: horde ${h.n} enemies, elite ${e.n}`);
+  else fail(`D-24 fixture fielded nothing (horde ${h.n}, elite ${e.n}) — every ratio below would be vacuous`);
+
+  // THE FOUR AXES, each measured against the horde room from the same seed.
+  // Directions come from NODE_TUNING rather than from literals here, so a
+  // retune of the design moves the test with it.
+  const axes = [
+    ['count', e.n / Math.max(1, h.n), NODE_T.eliteCountMult, 'fewer'],
+    ['HP', e.hp / Math.max(1e-9, h.hp), NODE_T.eliteHpMult, 'tougher'],
+    ['damage', e.dmg / Math.max(1e-9, h.dmg), NODE_T.eliteDmgMult, 'harder-hitting'],
+    ['gold', e.mats / Math.max(1e-9, h.mats), NODE_T.eliteGoldMult, 'better-paying'],
+  ];
+  for (const [name, got, want, word] of axes) {
+    // A generous band — spawn tables, rounding and floor scaling all sit
+    // between the multiplier and the measurement — but the DIRECTION is
+    // absolute: below 1 must stay below 1, above 1 must stay above 1.
+    const rightSide = (want < 1) ? got < 1 : got > 1;
+    const close = Math.abs(got - want) / want <= 0.25;
+    if (rightSide && close) ok(`elite is measurably ${word}: ${name} ×${got.toFixed(2)} against horde (§2.4 asks ×${want})`);
+    else if (!rightSide) fail(`elite ${name} ×${got.toFixed(2)} is on the WRONG SIDE of 1 — §2.4 asks ×${want}. An elite node that is horde with a bigger number asks the same build question`);
+    else fail(`elite ${name} ×${got.toFixed(2)} is more than 25% off §2.4's ×${want}`);
+  }
+  // The negative the whole defect turned on: the modifiers existing is not the
+  // same as the modifiers applying.
+  if (e.n < h.n) ok('the fight itself changed, not just the modifier object — a wire-up that resolved the mods and left the counts alone would fail here');
+  else fail(`elite fielded ${e.n} against horde's ${h.n} — the modifiers may be resolved but they are not reaching the spawns`);
+} catch (err) { fail('D-24 elite-node gate crashed', err); }
+
 // WHAT THIS SUITE DID NOT MEASURE, said out loud every run. A green sim_test
 // has never meant the party can win a fight, and for a whole patch it did not:
 // weapons were removed, the roster had no skill trees, the party dealt zero

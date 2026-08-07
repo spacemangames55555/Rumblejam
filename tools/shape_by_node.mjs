@@ -7,16 +7,13 @@
 // — and few-fat versus many-thin should favour opposite builds. A ratio
 // measured in one arena cannot see that, so this measures four.
 //
-// WHAT THIS FOUND FIRST, AND WHY THERE ARE FOUR SHAPES RATHER THAN THREE:
-// §2.4's Elite modifiers are not implemented. `regionFightMods()` is the only
-// consumer of `nodeModifiers()`, and it appears exactly once in the codebase —
-// its own definition. Nothing calls it. `this.nodeType` is never assigned
-// either, so even a wired call would compute 'horde'. What an elite node
-// actually does is waveConfig's rate bump (+0.2/+0.5) and periodic injections:
-// MORE enemies at the SAME health, which is backwards on count and absent on
-// HP. So the sweep runs BOTH — elite as shipped, and elite reconstructed to
-// §2.4 — because the design question needs the spec and the game needs the
-// truth about itself.
+// THE ELITE NODE IS REAL NOW (D-24). The first run of this sweep found §2.4's
+// Elite modifiers unreachable — `regionFightMods()` had no callers and
+// `nodeType` was never assigned — so it measured a reconstruction alongside the
+// shipped node. §2.4 won the ruling: `nodeType` is assigned, the modifiers are
+// applied, and waveConfig's opposing rate bump is gone. The reconstruction is
+// deleted with it, because a harness that rebuilds what the game now does is a
+// second definition waiting to drift.
 //
 // Usage: node tools/shape_by_node.mjs [--verbose]
 
@@ -32,14 +29,10 @@ const SEEDS = [4711, 90210];
 const TREE_IDS = ['samurai_armor', 'samurai_tactics', 'necro_marrow', 'necro_dark_matter', 'necro_summons', 'druid_beasts'];
 const SIGNATURE = { necro_summons: 'necro_raise_skeleton', druid_beasts: 'druid_call_wolf' };
 
-// §2.4's numbers, reconstructed here because the game does not apply them.
-const ELITE_COUNT = 0.55, ELITE_HP = 2.4;
-
 const SHAPES = [
-  { id: 'horde', kind: 'combat', spec: false, why: '§2.4 baseline: many, thin' },
-  { id: 'elite-shipped', kind: 'elite', spec: false, why: 'what a player actually gets today' },
-  { id: 'elite-spec', kind: 'combat', spec: true, why: `§2.4 as written: x${ELITE_COUNT} count, x${ELITE_HP} HP` },
-  { id: 'objective', kind: 'nest', spec: false, why: 'a structure to reach, not a crowd to clear' },
+  { id: 'horde', kind: 'combat', why: '§2.4 baseline: many, thin' },
+  { id: 'elite', kind: 'elite', why: '§2.4: fewer, fatter — applied, not reconstructed' },
+  { id: 'objective', kind: 'nest', why: 'a structure to reach, not a crowd to clear' },
 ];
 
 function spendWide(g, p, treeId, points) {
@@ -69,19 +62,9 @@ function run(treeId, shape, seed, deep) {
   const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
   node.kind = shape.kind;
   g._travelTo(node.id);
-  // §2.4 reconstructed: fewer of them, each much fatter. The rate scaling is
-  // applied to the live wave and the HP to each enemy as it arrives, which is
-  // where a wired regionFightMods() would have put them.
-  if (shape.spec && g.wave) { g.wave.r0 *= ELITE_COUNT; g.wave.r1 *= ELITE_COUNT; }
 
   let dealt0 = p.damageDealt, spawned = 0, hpSum = 0;
   for (let t = 0; t < 60 * SECONDS; t++) {
-    if (shape.spec) {
-      for (const e of g.enemyPool) {
-        if (!e.active || e._specScaled) continue;
-        e._specScaled = true; e.maxHp *= ELITE_HP; e.hp *= ELITE_HP;
-      }
-    }
     for (const e of g.enemyPool) { if (e.active && !e._counted) { e._counted = true; spawned++; hpSum += e.maxHp; } }
     const tgt = g.trigGrid && g.trigGrid.nearest ? g.trigGrid.nearest(p.x, p.y, 900) : null;
     if (tgt) {
@@ -145,15 +128,12 @@ for (const shape of SHAPES) {
 // as 4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed — and a player clears
 // FIVE of the ten. So the shape a build is optimised against is not any single
 // encounter, it is that mixture. Weighting by the combat node counts:
-const MIX = { horde: 4, 'elite-shipped': 2, objective: 2 };
-const MIX_SPEC = { horde: 4, 'elite-spec': 2, objective: 2 };
+const MIX = { horde: 4, elite: 2, objective: 2 };
 const weighted = mix => {
   const tot = Object.values(mix).reduce((a, b) => a + b, 0);
   return Object.entries(mix).reduce((a, [k, w]) => a + means[k] * w, 0) / tot;
 };
-console.log(`\n  REGION-WEIGHTED (§2.4 mix: 4 horde / 2 elite / 2 objective)`);
-console.log(`    as shipped:   ${weighted(MIX).toFixed(2)}`);
-console.log(`    with §2.4 elite: ${weighted(MIX_SPEC).toFixed(2)}`);
+console.log(`\n  REGION-WEIGHTED (§2.4 mix: 4 horde / 2 elite / 2 objective): ${weighted(MIX).toFixed(2)}`);
 console.log(`  A region-weighted ratio near 1.0 means the optimum sits in the middle ACROSS a region,`);
 console.log(`  even where it sits at depth within a single horde fight.`);
 console.log('');

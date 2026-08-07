@@ -649,6 +649,14 @@ export class Sim {
     this.boss = null;
     this.roomEnteredT = this.time;
     this.waveRng = subRng(this.seed, 'wave', this.floorNum, node.id);
+    // D-24. `nodeType` was read in two places and assigned in none, so every
+    // fight in the game computed 'horde' and §2.4's node modifiers were
+    // unreachable. Assigned here, at the one moment the node is known.
+    this.nodeType = node.kind;
+    // Resolved ONCE per fight rather than per spawn: the modifiers cannot
+    // change mid-room, and a per-spawn call would put a region lookup inside
+    // the spawn loop.
+    this.fightMods = this.regionFightMods();
     this.wave = waveConfig(this.floorNum, node.col, node.kind);
     // the fight's pressure profile: sieges are always high-friction; stops
     // have none; combat/elite carry the recipe rolled at map generation
@@ -769,6 +777,7 @@ export class Sim {
     if (w.t >= w.dur) { w.done = true; return; }
     let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult
       * ((this.profile && this.profile.rateMult) || 1)
+      * ((this.fightMods && this.fightMods.count) || 1)   // §2.4: an Elite node fields FEWER
       * objectiveSpawnMult(this);
     if (this.boss) {
       // "reduced add spawns" while the boss is up — and tapering to silence,
@@ -1351,8 +1360,10 @@ export class Sim {
     const e = this.enemyPool.alloc();
     if (!e) return null;
     const fl = Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1);
-    const dmgScale = Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1);
+    const dmgScale = Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1)
+      * ((this.fightMods && this.fightMods.dmg) || 1);      // §2.4 node damage
     let hp = def.hp * fl * this.coopHp * this.greedHp * CONFIG.enemyHpMult * (opts.elite ? CONFIG.ELITE_HP_MULT : 1);
+    hp *= (this.fightMods && this.fightMods.hp) || 1;      // §2.4: and each one TOUGHER
     hp *= this.curseEnemyHp;                       // cursed round: tougher enemies
     if (opts.hpMult) hp *= opts.hpMult;            // objective variants (elite arena, bounties)
     // a level-wide toughness dial the objective owns (Nest Purge: +50%);
@@ -1366,7 +1377,8 @@ export class Sim {
       radius: def.radius * (opts.elite ? 1.45 : 1) * (opts.mini ? 0.6 : 1),
       spd: def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * (opts.spdMult || 1),
       dmg: def.dmg * dmgScale, dmgScale,
-      mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
+      // §2.4: an Elite node pays more, or nobody takes the harder route.
+      mats: opts.noMats ? 0 : Math.round(def.mats * ((this.fightMods && this.fightMods.gold) || 1)), mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
       t: this.rng.float(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,

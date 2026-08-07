@@ -64,7 +64,7 @@ Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
 | Type | Contents |
 |---|---|
 | Horde | Standard arena wave combat |
-| Elite | ×0.55 count, ×2.4 HP, 75% drawn from the region's heavy half — **NOT IMPLEMENTED, see D-24** |
+| Elite | ×0.55 count, ×2.4 HP, ×1.35 damage, ×1.35 gold, 75% drawn from the region's heavy half |
 | Objective | One of the 8 existing objective types |
 | Shrine | No combat. Party chooses: +1 skill point **or** one guaranteed shop reroll. Never both, never rolled |
 | Cursed | Region modifier active for that node only, ×1.6 gold |
@@ -170,20 +170,24 @@ Skills fire on cooldowns. A character running few skills has long gaps and spiky
 
 `tools/shape_by_node.mjs` measures deep-versus-wide for six trees at the level-70 anchor, in four encounter shapes rather than one. **Depth does not win everywhere, and where it wins depends on the node.**
 
-| tree | Horde | Elite (shipped) | Elite (§2.4 as written) | Objective |
-|---|---:|---:|---:|---:|
-| `samurai_armor` | 2.42 | 1.83 | 1.35 | **0.93** |
-| `samurai_tactics` | 1.63 | 1.60 | 1.09 | **0.86** |
-| `necro_marrow` | **0.25** | **0.35** | **0.50** | **0.61** |
-| `necro_dark_matter` | 1.02 | **0.78** | 1.84 | **0.82** |
-| `necro_summons` | 1.86 | 1.99 | 1.56 | **0.91** |
-| `druid_beasts` | **0.80** | **0.61** | **0.85** | **0.79** |
-| **depth wins** | 4/6 | 3/6 | 4/6 | **0/6** |
-| **mean ratio** | 1.33 | 1.19 | 1.20 | **0.82** |
+| tree | Horde | Elite | Objective |
+|---|---:|---:|---:|
+| `samurai_armor` | 2.42 | 1.29 | **0.93** |
+| `samurai_tactics` | 1.63 | 1.32 | **0.86** |
+| `necro_marrow` | **0.25** | **0.55** | **0.61** |
+| `necro_dark_matter` | 1.02 | 1.62 | **0.82** |
+| `necro_summons` | 1.86 | 1.98 | **0.91** |
+| `druid_beasts` | **0.80** | **0.98** | **0.79** |
+| **depth wins** | 4/6 | 4/6 | **0/6** |
+| **mean ratio** | 1.33 | 1.29 | **0.82** |
 
-**Objective nodes favour breadth in every tree measured.** A nest is a structure to reach past tough company — 124 enemies at 58 average HP against a horde's 118 at 9 — and a build that covers several situations beats one that does a single thing hard. Horde is the opposite and favours depth in four of six.
+Measured against a **real** Elite node — §2.4's modifiers applied, not reconstructed (D-24). Elite fields 65 enemies at 22 HP against Horde's 118 at 9.
 
-**Region-weighted, the claim holds.** §2.4 gives a region 4 Horde, 2 Elite and 2 Objective combat nodes, and a player clears five of ten. Weighted by that mixture the ratio is **1.17** — mildly depth-favouring, not the runaway a single horde arena suggests.
+**Objective nodes favour breadth in every tree measured.** A nest is a structure to reach past tough company, and covering several situations beats doing one thing hard. Horde and Elite both favour depth in four of six.
+
+**Elite pulls toward breadth, but by less than the reconstruction suggested.** Its mean is 1.29 against Horde's 1.33 — a real narrowing, and it moves the two trees that were furthest into depth (`samurai_armor` 2.42 → 1.29, `druid_beasts` 0.80 → 0.98) hardest. Fewer-and-fatter compresses the spread rather than reversing it. **Objective, not Elite, is the node that prices breadth.**
+
+**Region-weighted, the claim holds.** §2.4 gives a region 4 Horde, 2 Elite and 2 Objective combat nodes. Weighted by that mixture the ratio is **1.19** — mildly depth-favouring, not the runaway a single horde arena suggests.
 
 So the optimum sits in the middle **across a region, not within a fight**. A player who optimises for the horde nodes pays for it at the objective, and the route decision in §2.3 is what prices the choice. **No per-class breadth cost is needed**, and the Druid's revive scale is a flavour of its engine rather than the only thing holding the design up.
 
@@ -548,7 +552,7 @@ A minion here is an **actor**. It does not know how to do anything. It is a posi
 
 What falls out: a new archetype is a row of data. `js/minions.js` does not know what a skeleton is, and neither does `js/compose.js` — asserted by a scan in `sim_test` that searches every engine file for any skill id or archetype name, reading the needles out of the live registry so a rename cannot empty the search, and carrying a negative control that plants a handler and confirms the scan sees it.
 
-**Generalise it as: give the new thing an actor, not a vocabulary.** The Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks are all the same shape — an entity that acts somewhere the player is not. Each should borrow the primitives and the owner's identity rather than grow its own verbs. Recorded as §13 rule 21.
+**Generalise it as: give the new thing an actor, not a vocabulary.** The Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks are all the same shape — an entity that acts somewhere the player is not. Each should borrow the primitives and the owner's identity rather than grow its own verbs. Recorded as §13 rule 23.
 
 #### The shape
 
@@ -936,7 +940,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 19. **Save tests round-trip through a real file.**
 20. **A harness must arrive in the state a player would arrive in.** Level, slots and items are part of the FIXTURE, not incidental setup. Objective harnesses dropped a party in at level 1, and `spendSkillPoint` auto-slots only into an already-unlocked slot while `setLoadout` refuses mid-fight — so a party that learned ten skills fought entire objectives with **one**, however high it levelled during them. That hid a build-depth constraint behind an apparent HP constraint for three patches: at three slots, with nothing tuned, Nest Purge at 4p went from 1/3 to cleared and Elite Arena solo from zero kills to cleared.
 21. **Everything the game SELLS a player must be read by something in the live path, and a gate must prove it by effect rather than by existence.** This is the stat-system form of the offence gate, and its absence was the same gap: a green suite once hid a party that could not deal damage, and a green suite then hid three stats that did nothing while being offered at every level-up. A search for the identifier is not evidence — `p.stats.ferocity` is read in four places, all of them dead code. `tools/stat_gate.mjs` stages each stat in the situation it would matter in and compares a large swing against an unbumped run from the same seed; a stat that moves no observable fails. Extend it to any other currency the game offers, and never let a probe that could not run report as a pass.
-22. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing primitives and the owner's identity by reference; do not give it verbs of its own. A minion's attack is a compose step through the same `PRIMITIVES` table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the owner's fields, so attribution never has to be forwarded because it never diverged. This is why summoning — the largest bespoke category in the source project, where every summon carried its own spawn, attack and death code — cost **one primitive and one trigger** here, with zero per-archetype handlers across twenty new skills. The same shape is waiting for the Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks. See §8.5.
+22. **A ratio reported over a chosen subset is not a finding.** Six trees measured deep-versus-wide at the endgame anchor came out 3 depth-dominant and 3 breadth-dominant. A four-tree table drawn from the same run — omitting the two breadth-dominant Necromancer trees — read as "3 of 4 depth-dominant" and sent a design conclusion the wrong way: it argued that §4.2's self-balancing claim was half broken and that every class might need its own breadth cost. Neither was true. Report the whole population or state the selection rule in the same sentence as the number; a subset chosen while building a table is a selection rule nobody declared.
+23. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing primitives and the owner's identity by reference; do not give it verbs of its own. A minion's attack is a compose step through the same `PRIMITIVES` table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the owner's fields, so attribution never has to be forwarded because it never diverged. This is why summoning — the largest bespoke category in the source project, where every summon carried its own spawn, attack and death code — cost **one primitive and one trigger** here, with zero per-archetype handlers across twenty new skills. The same shape is waiting for the Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks. See §8.5.
 
 ### 13.1 The through-line
 
@@ -962,7 +967,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**One open defect, and it is not in the suite.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem — none of them defects. Group D holds **D-24**, found by measurement rather than by a red check: §2.4's Elite node modifiers reach nothing. D-23 is closed. The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
+**None of the current red is a defect.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem. **Group D is empty — D-23 and D-24 are both closed.** Both were found by measurement rather than by a red check, which is the argument for keeping the measuring tools around between patches. The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1013,25 +1018,26 @@ Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, co
 
 The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same defect, different class in the string — worth knowing before a set diff reads one as fixed and the other as new.
 
-### Group D — genuine open defects (1)
+### Group D — genuine open defects (0)
 
-#### D-24 — §2.4's Elite node modifiers reach nothing, and the shipped behaviour is backwards
+#### D-24 — CLOSED: §2.4 wins, and an Elite node is now fewer and fatter
 
-**`regionFightMods()` appears exactly once in the codebase: its own definition.** Nothing calls it. It is the only consumer of `nodeModifiers()`, so §2.4's ×0.55 count, ×2.4 HP, ×1.35 damage and ×1.35 gold are unreachable. `this.nodeType` is never assigned anywhere either, so even a wired call would compute `'horde'` and return the baseline.
+**The ruling: §2.4 is the definition of an Elite node.** An Elite node that fields more enemies at the same health is a Horde node with a bigger number, and the two would ask the same build question — which wastes 2 of every 10 nodes and the route decision they exist to create.
 
-**What an Elite node actually does is the opposite of the spec on the axis it does touch.** `waveConfig()` raises an elite node's spawn *rates* (`r0 +0.2`, `r1 +0.5`) and adds periodic injections. Measured over 90 s at level 70:
+Three things were wrong and all three are fixed. `this.nodeType` was read twice and assigned nowhere, so every fight computed `'horde'`. `regionFightMods()` — the only consumer of `nodeModifiers()` — appeared exactly once in the codebase, its own definition, and had no callers. And `waveConfig()` raised an Elite node's spawn *rates*, pulling against the modifiers rather than agreeing with them; that bump is deleted, along with the elite injections, which are now siege-only. **§2.4 is the single definition; nothing multiplies against it.**
 
-| node | enemies fielded | average HP |
+Measured against a Horde room from the same seed, over 60 s:
+
+| axis | §2.4 asks | measured |
 |---|---:|---:|
-| Horde | 118 | 9 |
-| Elite, as shipped | **172** | **10** |
-| Elite, per §2.4 | 71 | 23 |
+| count | ×0.55 | **×0.53** |
+| HP | ×2.4 | **×2.60** |
+| damage | ×1.35 | **×1.38** |
+| gold | ×1.35 | **×1.23** |
 
-An elite node currently fields **more** enemies at the **same** health. §2.4 asks for fewer and much tougher. `js/nodebehaviour.js` carries a load-time validator that rejects exactly this shape — *"elite nodes must field FEWER enemies — same count with more HP is a slog, not an elite fight"* — enforcing the rule on the data table while the game applies neither half of it.
+**Asserted by effect, not by wiring.** `sim_test` counts what actually spawned; a version that resolved the modifiers, stored them on the sim and never applied them would pass any check reading `sim.fightMods` and fails this one. The direction of each axis is absolute — a count ratio above 1 fails outright, with the message naming why: an Elite node that is Horde with a bigger number asks the same build question.
 
-**Not fixed here, because it is a design call rather than a wire-up.** Two systems currently disagree about what "elite" means: `waveConfig` says more-and-faster, `nodeModifiers` says fewer-and-fatter. Wiring `nodeType` would make both fire at once and multiply, which is a third thing nobody specified. The ruling needed is which of the two is the elite node, and whether the other stands down.
-
-It matters beyond correctness: an Elite node reconstructed to §2.4 is the encounter shape that pulls hardest **toward breadth** (mean deep/wide 1.20 against horde's 1.33), so the node type meant to vary the build question is currently varying it in the wrong direction.
+*Wired along with it:* `difficultyOf()` was the other half of the orphan and had never been applied either. At the default setting every multiplier is 1.0, so nothing changed today — but difficulty is now live for the first time, and a non-default setting will do something.
 
 #### D-23 — CLOSED: three stats sold and doing nothing
 
@@ -1102,8 +1108,8 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **10 of 10 live** |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
-| Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.17; objective nodes favour breadth 0/6 (§4.2) |
-| Node types | Horde/Objective live; **Elite modifiers unreachable — D-24** |
+| Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.19; objective nodes favour breadth 0/6 (§4.2) |
+| Node types | Horde, Elite and Objective all live and measured; difficulty wired (D-24) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
