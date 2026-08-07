@@ -50,6 +50,10 @@ const T2 = _SEL[1 % _SEL.length].id;
 // hardcoded lists of retired classic characters; those tests care about party
 // SIZE and mixture, never about which retired trait was in slot 3.
 const pickN = n => Array.from({ length: n }, (_, i) => _SEL[i % _SEL.length].id);
+// The level an armed bot arrives at. 12 is the third loadout slot (SLOT_LEVELS
+// = [1, 5, 12, …]) — a party a few rooms into a floor, not one that has just
+// pressed START.
+const ARM_LEVEL = 12;
 // A retired id, assembled so no search-and-replace over character names can
 // reach it. Two passes of bulk editing rewrote this literal into a valid class
 // and quietly turned its assertion into a tautology.
@@ -293,9 +297,21 @@ function unstick(g, p, mx, my) {
 // tree the character has; a character with no tree (45 of 47, because the other
 // 12 classes are out of scope) simply cannot fight on this branch, which is a
 // property of the patch and not something the helper can paper over.
-function armBot(g, p, ranks = 3) {
+// "A plausible mid-floor build" — and a mid-floor build HAS LEVELS. This left
+// p.level at 1, and spendSkillPoint auto-slots only into an already-unlocked
+// slot while setLoadout refuses mid-fight ("between rooms only"). So an armed
+// bot learned ten skills and fought the whole objective with ONE of them, at
+// every party size, no matter how high it levelled during the fight.
+//
+// That is faithful to a party dropped cold into a nest node and completely
+// unfaithful to one that got there by clearing rooms. It also made every
+// objective read as an HP problem when it was a slot problem: levelling first
+// takes Nest Purge at 4p from 1/3 to 3/3 CLEARED, and Elite Arena solo from
+// zero kills to cleared.
+function armBot(g, p, ranks = 3, level = ARM_LEVEL) {
   const trees = SKILLSIM.treesFor(p);
   if (!trees.length) return false;
+  p.level = Math.max(p.level, level);
   for (let i = 0; i < 60; i++) {
     const learnable = SKILLSIM.learnableSkills(p);
     if (!learnable.length) break;

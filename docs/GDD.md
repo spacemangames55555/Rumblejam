@@ -610,18 +610,18 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–2 established th
 ## 15. Open Defects — by cause, not by symptom
 
 **Read this before treating any suite failure as a bug.** `tools/sim_test.mjs`
-reports **21 failures and none of them are defects**: 8 are classes that do not
-exist yet, 6 are design questions or decisions already taken, 7 are a subsystem
-deliberately left for phase 4. Group D is empty. They are grouped here by
+reports **17 failures and none of them are defects**: 7 are classes that do not
+exist yet, 3 are decisions already taken, 7 are a subsystem deliberately left
+for phase 4. Group D is empty. They are grouped here by
 *what would make them go away*, because "not built yet" and "broken" look
 identical in a red test log and the difference decides who picks the work up.
 
-Counts are the sim-suite failures each entry accounts for, and they sum to 21 with nothing double-counted. The focused
+Counts are the sim-suite failures each entry accounts for, and they sum to 17 with nothing double-counted. The focused
 instruments — `offence_test`, `determinism_test`, `snapstate_test`,
 `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`,
 `validate_items` — are all green.
 
-### A. Waiting on phase-5 trees — 8 of 21
+### A. Waiting on phase-5 trees — 7 of 17
 
 Twelve of the fourteen classes have no skill tree. Weapons are removed, so a
 class without a tree cannot attack, cannot trigger an attack hook, and cannot
@@ -630,19 +630,18 @@ finish a level. **Nothing here is repairable by code.**
 | what fails | count | why |
 |---|---:|---|
 | `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is now correctly wired to `fireSkill` — but `toh_bard`, `toh_mage`, `toh_sundian` and `toh_druid` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. |
-| `elite_arena (1p/4p) never cleared` | 2 | One tier-1 skill in the single loadout slot a level-1 character has cannot finish a 3×-HP elite before the budget. More tiers and more slots are trees. |
+| `elite_arena (1p) never cleared` | 1 | Solo, at three slots, this is on the edge — it clears in the focused instrument and not in the suite's staging. 4p clears comfortably. Solo is not the target party size for an objective node. |
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
 | `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; twelve score 0 because they cannot attack. Two non-zero entries against twelve zeroes is the outlier. |
 
-### B. Waiting on a design decision — 6 of 21
+### B. Waiting on a design decision — 3 of 17
 
 Real questions with no obviously-correct answer. Each needs a call in this
 document before code.
 
 | what fails | count | the question |
 |---|---:|---|
-| `nest (1p/4p) never cleared`, `bounty (1p/4p) never cleared` | 4 | **Throughput.** Since §13, targets are selected correctly and damaged — nests went 0/3 → 1/3, marks 0/5 → 2/5, Elite Arena now clears. What remains is whether a tier-1 skill at ten ranks *should* chew through a 3×-HP elite or a 10×-HP mark inside the budget. That is elite and mark HP, and retuning it on the back of a targeting fix would let a throughput change silently satisfy a targeting test. |
-| `UNKILLABLE (DELIVERY: …)` | 1 | **Resolved as design, kept as a red line until phase 4.** The mark cannot be killed through its escort without pierce, and pierce is a modifier item. The check stays red because the capability genuinely does not exist yet — it is not a bug to chase. |
+| `bounty (1p/4p) never cleared` | 2 | **The escort wall, which is #17's design resolution showing up as a red line.** A 4-player armed party reaches 3 of 5 marks in the full budget; the shortfall is the escort it cannot punch through without pierce, and pierce is a §9.2 modifier item that does not exist until phase 4. Not a mark-HP question. |
 | `the summoner class has no structure to recall` | 1 | **`bonelord` builds its structure via `_addWeapon`.** With `weaponSlots` at 0 it summons nothing, so no class in the game can exercise structure recall (the retired Cogsmith's `overseer` mounts were the other). Making it a skill-era summon needs deciding what grants it — a tree node? the trait at fight start? |
 
 **RESOLVED AS DESIGN — no code change.** `objective_target` selects correctly
@@ -662,7 +661,36 @@ design.** They will not complete in the sim harness's budget and that is not a
 defect. `offence_test` therefore asserts SELECTION CORRECTNESS for that
 objective — did every fire choose the mark — and not mark kills.
 
-### C. Phase 4 — the economy — 7 of 21
+#### The throughput questions closed, and it was never HP
+
+Objectives are co-op content and the table that raised the question was solo.
+Measured at both sizes, with the party **arriving at level 12** rather than
+being dropped in at level 1:
+
+| objective | 1p | 4p |
+|---|---|---|
+| Nest Purge | 2/3 nests | **3/3 — CLEARED at 213s of 360s** |
+| Elite Arena | **CLEARED** | **CLEARED at 99s of 360s** |
+| Bounty Hunt | 1/5 marks | 3/5 marks |
+
+**Nest Purge and Elite Arena close as working-as-intended.** Solo is not the
+target party size for an objective node.
+
+The thing that decided it was not health, it was **loadout slots**.
+`spendSkillPoint` auto-slots only into an already-unlocked slot, and
+`setLoadout` refuses mid-fight — "between rooms only". So a party dropped into
+an objective at level 1 fights the whole thing with **one skill**, however high
+it levels during it, and every harness in the repo was doing exactly that. At
+three slots, with no tuning changed anywhere:
+
+- Nest Purge 4p went from 1/3 to cleared
+- Elite Arena solo went from **zero kills** to cleared
+
+A party that reaches a nest node has cleared rooms to get there. Measuring it at
+level 1 was measuring something no player experiences, and it made a build-depth
+constraint look like an HP constraint for three patches.
+
+### C. Phase 4 — the economy — 7 of 17
 
 Weapons were removed in `patch-trigger-core`; the shop, combine, sell and
 slot-cap machinery still exists and still has tests. **Do not touch these
@@ -676,7 +704,7 @@ stat/modifier split when it lands.
 The suite also prints two `⊘ SKIPPED (weapons removed)` lines for swap-buy
 checks that cannot run at all. Skips are counted separately and never as passes.
 
-### D. Genuine open defects — 0 of 21
+### D. Genuine open defects — 0 of 17
 
 **Empty.** Every failure in the suite is now accounted for by A, B or C: content
 that has not been authored, a decision that has not been taken, or a subsystem
