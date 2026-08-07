@@ -1,11 +1,11 @@
 # Rumblejam — Game Design Document
 
-**Draft 8 · August 2026**
-**Status: authoritative.** This file supersedes all prior drafts, including the Word documents used for design review through Draft 7. Where this document and any other source disagree, this document wins — except for tuning constants, where the per-tree `TUNING` blocks in code are authoritative and this document records intent.
+**Draft 10 · August 2026**
+**Status: authoritative.** This file supersedes all prior drafts. Where this document and any other source disagree, this document wins — except for tuning constants, where the per-tree `TUNING` blocks in code are authoritative and this document records intent.
 
-**How to read this.** Plain text is settled design. Blocks marked **PROPOSED** are not settled and should not be built without a ruling. Section 16 records implementation status per system, so a reader can tell what exists from what is described.
+**Reference convention:** a bare §N means this document. Any other source must be named inline.
 
-**Why this file is here.** Drafts 1–7 lived outside the repo and were cited by section number in specs that Claude Code could not read. The README drifted from the design twice as a result — it still described Footing as granting Reflex and dropping instantly, months after both were changed. Design that governs code belongs beside the code.
+**How to read this.** Plain text is settled design. Blocks marked **PROPOSED** are not settled and should not be built without a ruling. §15 group B lists design questions awaiting a decision. §16 records implementation status per system.
 
 ---
 
@@ -13,7 +13,7 @@
 
 Rumblejam is a browser-based co-op action RPG for up to 8 players, played from a link and a room code. Players are monster slayers working through the mythologies of the real world — a swamp, an Egyptian necropolis, a Russian tundra, a Celtic grassland — hunting the creatures, spirits, and old gods native to each region.
 
-Combat is twin-stick movement and positioning. Players do not aim or fire. Every ability triggers automatically from a condition the player controls through **where they stand and how they move**. The build decides what the player's movement means.
+Combat is twin-stick movement and positioning. Players do not fire manually. Every ability triggers automatically from a condition the player controls through **where they stand and how they move**, and directs itself by a **selection rule the player chooses when building**. The build decides both what the player's movement means and what their damage lands on.
 
 ### 1.1 Design pillars
 
@@ -104,15 +104,25 @@ Fixed order, permanently tuned to a difficulty band. Because the order is fixed,
 
 No region exceeds **60%** one domain. Region 8 is deliberately even, so the endgame demands full party coverage rather than one counter-build.
 
-### 3.3 Class unlocks
+### 3.3 The roster
 
-The **six non-region classes are the starting roster** — Blacksmith, Mage, Samurai, Monk, Assassin, Priest. The **eight region-native classes unlock by clearing their home region.**
+**There is one roster: the fourteen classes in §8.2.** The 33-character classic roster was pre-overhaul content and has been retired to `archive/classic-roster/`. Roster-switching machinery, `setRoster()`, and the silent `charId` fallback are all removed — an unknown id now throws, because a fallback that kept a character's stats while losing its trees is how a totally unplayable party survived an entire patch.
 
-Unlocks live on the **player**, not the character — the point of unlocking the Wizard is to create a *new* Wizard, so it cannot sit inside the character that earned it.
+**Take the design from the archive, not the data.** Archived traits are engine hooks keyed to `trait.key` values that mostly no longer exist.
+
+### 3.4 Class unlocks and selectability
+
+The **six non-region classes are the starting roster** — Blacksmith, Mage, Samurai, Monk, Assassin, Priest. The **eight region-native classes unlock by clearing their home region.** Unlocks live on the **player**, not the character — the point of unlocking the Wizard is to create a *new* Wizard.
 
 Clearing region 8 completes the run. The Hunter unlocks at that moment and pays off on the next character.
 
-### 3.4 Region identity checklist
+**Selectability is derived from tree data, not listed.** A class is selectable when it has a tree with a damaging tier-1 active; otherwise it is visible, greyed, and states why. As phase 5 authors trees, classes become selectable with no code change.
+
+The lobby card is an affordance, not a boundary: the host validates the pick and the sim refuses to start on an unplayable class, because a client can send anything.
+
+Asserted at load: every selectable class has a tier-1 active **carrying damage**. "Has a tree" is not enough — a tree of passives arms nobody.
+
+### 3.5 Region identity checklist
 
 1. A tileset and palette recognisable in one frame.
 2. **Six or more enemy archetypes**, at least two unique to the region.
@@ -123,7 +133,7 @@ Clearing region 8 completes the run. The Hunter unlocks at that moment and pays 
 7. **Telegraph density at or above 50% by encounter weight** — see §6.4.
 8. A node pool large enough to generate a varied 10-node tree.
 
-### 3.5 Where to spend effort
+### 3.6 Where to spend effort
 
 Region 1 is played more than regions 6, 7 and 8 combined — every new save starts there, every new player's first impression is there, every wipe replays it. It gets the most map variety, the most polish, the most archetypes. If scope must be cut, it is cut at the top of the list.
 
@@ -170,6 +180,14 @@ This ruling exists because "ranks raise damage and duration only" said nothing a
 
 Enforced at import **and** in `canLearn`. A cap that lives only in a data file and an assertion is a label. Classification is a declared registry; an unclassified passive key fails the load.
 
+#### Engine capacity is a declared exception
+
+One skill in the game breaks "damage and duration only": **Raise Skeleton**, where each rank grants one summon slot (§8.5).
+
+It is written as an explicit declaration — `rankGrants: 'summonSlots'` — and asserted at load, so no other skill can acquire the behaviour by accident. This matters because the unstated version of exactly this already happened once: Set Stance granted max Footing stacks per rank, nothing in the rules covered it, and it silently breached a designed hard cap.
+
+**An engine capacity granted by rank must be declared. There is currently one, and adding a second is a design decision, not an implementation detail.**
+
 ### 4.3 Enemy scaling
 
 Authored per region band, not computed from a global curve. Expected player level on entry:
@@ -188,9 +206,9 @@ If a party arrives significantly above or below the anchor, that is the difficul
 
 Weapons are gone. Skills replace them, and conditions replace the firing timer. A skill does not fire because time passed; it fires because the player created the situation it was waiting for.
 
-This preserves the moment-to-moment feel — still moving, still reacting, no menus mid-fight — while making the build determine what good positioning looks like.
+**Two separate jobs.** A trigger decides **when** a skill fires. A selector decides **what it hits**. Both are declared per skill, and both are build decisions.
 
-### 5.2 Trigger taxonomy
+### 5.2 Trigger taxonomy — *when*
 
 Every active declares exactly one trigger and one cooldown. Triggers evaluate **on the host only**, on a fixed interval.
 
@@ -206,12 +224,46 @@ Every active declares exactly one trigger and one cooldown. Triggers evaluate **
 | `TARGET_THRESHOLD` | `pct`, `range` | An enemy within `range` drops below `pct` HP |
 | `ON_STATUS` | `status`, `range` | An enemy within `range` carries `status` |
 | `MOVEMENT` | `mode`, `seconds` | Moving or still, sustained |
+| `ON_TOKEN` | `range` | A soul token lies within `range` — see §8.5 |
 
 **No unconditional trigger.** There is no "fires when off cooldown" kind and none may be added. The moment one exists it becomes correct for every skill, positioning stops mattering, and the game is an idle auto-battler. Any trigger added later must still depend on a player-controllable condition.
 
+`ON_TOKEN` is the eleventh trigger and the only addition since the taxonomy was written. It qualifies because a token exists only where the player killed something — the condition is created by play, not by waiting.
+
 `ISOLATED` is true in an empty room — a skill rewarding solitude should not also require company. Steps needing a target no-op when there is none.
 
-### 5.3 Evaluation
+### 5.3 Selectors — *what*
+
+Every active declares a `select`. **There is no default**, and a missing selector fails at load.
+
+```js
+trigger: { kind: 'PROXIMITY', radius: 140, count: 3 },   // when
+select:  'highest_hp',                                    // what
+```
+
+| Selector | Picks |
+|---|---|
+| `nearest` | Closest valid target |
+| `farthest` | Most distant within range |
+| `highest_hp` | Fattest target — elites, heavies |
+| `lowest_hp` | Weakest — finishers, execution |
+| `densest_cluster` | The point maximising enemies hit |
+| `objective_target` | Role-tagged objective entities: nest → mark → boss → elite, distance as tiebreak |
+
+#### Why selectors exist
+
+Weapons had varied targeting rules built in — a shotgun hit everything close, a sniper took the farthest or fattest, a homing weapon tracked one thing — and the player chose the rule by choosing the weapon. The first trigger taxonomy collapsed all of that into position and health fraction, so every skill converged on *whatever is nearest*, and chaff is always nearest.
+
+The measured consequence: an armed necromancer dealt 4230 damage in Elite Arena with **zero kills**, spreading it across forty enemies instead of concentrating into one, and never damaged a single nest across a full Nest Purge. Objectives assume the player can choose targets. Splitting selection out of the trigger restored that as a build decision — after the split, the same test cleared Elite Arena outright.
+
+#### Two rules selectors must obey
+
+1. **A selector re-ranks only what the skill's own range already returns.** It never widens the search. A selector that could reach past a skill's range would silently hand every skill infinite reach.
+2. **A selector never picks a target that cannot be hurt.** `objective_target` skips shielded nests — preferring one would fire into a wall while the ring that drops the shield went unkilled.
+
+A passive declaring a selector is an error.
+
+### 5.4 Evaluation
 
 ```
 TRIGGER_TICK_MS            = 100    // 10 Hz
@@ -223,7 +275,7 @@ Cooldown is tested **before** any spatial query. This ordering is most of the pe
 
 Clients never evaluate a trigger, never decide a skill fired, and never predict locally.
 
-### 5.4 The loadout
+### 5.5 The loadout
 
 Passives are always on; actives must be slotted.
 
@@ -237,11 +289,11 @@ Passives are always on; actives must be slotted.
 
 Loadout changes happen at the world map, at Shrine nodes, and between rooms — never mid-fight.
 
-### 5.5 The opening ability
+### 5.6 The opening ability
 
 Characters start with **no abilities at all**. The first point spent is the character's opening ability, chosen from the tier-1 nodes of their trees. **Every tree's tier-1 node must be a damaging active**, asserted at load.
 
-### 5.6 The composed-action schema
+### 5.7 The composed-action schema
 
 Any active is data: an ordered list of steps from ten primitives plus riders.
 
@@ -257,11 +309,21 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Result:** 40 skills across 4 trees, zero bespoke handlers. Summons remain untested and were the largest bespoke category in the source project — expect the rate to rise there, but not enough to threaten the schema.
 
-### 5.7 Engine scaling — `scaleWith`
+### 5.8 Engine scaling — `scaleWith`
 
 A step may declare `scaleWith: '<engine>'` and `scalePer`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
 
 This is what makes the remaining twelve class engines data rather than engineering. Cascade, drench, crystallize, Chi, judgment marks, killbox, and two bodies all use the same hook.
+
+### 5.9 Selection is not delivery
+
+A selector picks the right entity. Whether damage reaches it is a separate question.
+
+Measured on a bounty mark: 23 of 23 shots correctly selected the mark; **2 arrived.** The other 21 were intercepted by the escort pack that spawns with every mark by design — `bolt` stops at the first body it meets.
+
+**This is intended.** Escorts are a wall you clear first, and that is what distinguishes a mark from a nest. **`pierce` remains a §9.2 modifier item**, not a property of `objective_target` — a party that wants to punch through buys it and slots it, which is a build decision with a cost.
+
+Consequence: until phase 4 ships modifier items, bounty marks are clear-the-escort-first. Tests for this objective assert **selection correctness**, never mark kills, so a throughput change cannot silently satisfy a targeting test.
 
 ---
 
@@ -328,7 +390,7 @@ DISADVANTAGE_MULT = 0.80
 
 All damage routes through the triangle, including hazard and plague ticks. There is no unrouted damage path. Every skill and every enemy declares a domain. Enemies render a **4px domain-coloured rim**, always visible, no inspection required.
 
-**Assigning a domain to each skill happens while writing its tree, never afterward.** One extra field during authoring; a 420-item audit with no context otherwise. The same applies to trigger assignment and TUNING placement.
+**Domain, trigger, selector, and TUNING assignment all happen while writing a tree, never afterward.** One extra field during authoring; a 420-item audit with no context otherwise.
 
 ---
 
@@ -360,7 +422,9 @@ All damage routes through the triangle, including hazard and plague ticks. There
 | 13 | Hunter | Sydney | Melee | Marksmanship | Beast Control |
 | 14 | Sundian | Bali | Tide | Regalia | Deluge |
 
-The Sundian's display name is Sundian everywhere; its internal `classId` remains `atlantean` for save compatibility. **Do not rename the id.**
+The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
+
+**Built: 2 of 14.** Samurai (Armor, Tactics) and Necromancer (Marrow, Dark Matter). The remaining twelve are §15 group A.
 
 ### 8.3 Class engines
 
@@ -372,9 +436,9 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Sundian | **Drench stacks** — a stacking debuff spent by `ON_STATUS` triggers |
 | Mage | **Crystallize** |
 | Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
-| Druid | **Morph** — invest in animal DNA; the character visually mutates to match the build |
+| Druid | **The pack** — one summon per animal skill, revive timer scales with pack size (§8.5). Morph layers on top: animal DNA visibly mutates the character |
 | Blacksmith | **Crystal Forms** — timed transformations on `SELF_THRESHOLD` |
-| Necromancer | **Summons** that persist and scale |
+| Necromancer | **Soul tokens** — kills drop tokens, `ON_TOKEN` raises skeletons into rank-granted slots, all wiped at room end (§8.5) |
 | Bard | **Stances** — a stance multiplier gates other skills' output |
 | Wizard | **Domain shift** — the only class that changes its own damage domain mid-fight |
 | Priest | **Judgment marks** — marks detonate on the target's death, healing nearby allies |
@@ -438,54 +502,24 @@ The lesson generalises: **a measurement insensitive to every dial you try is mea
 
 ### 8.5 Summoning
 
-**This section did not exist when summoning was built.** The patch was briefed
-as "build summoning per §8.5" and §8 ran 8.1–8.4 straight into §9 — no soul
-token, no `summonSlots`, no `totalAnimals` anywhere in the repo. What follows is
-the spec as built, written down so the next reader is not sent to a section that
-was never there. The load-bearing rules came from the brief; the magnitudes were
-chosen here and are flagged as such.
+Summons were the largest bespoke category in the source project and are the largest untested area of the composed-action schema. Two classes use them, and they are deliberately opposite engines rather than one mechanic with different art.
 
-Two classes ship it, and they ship together on purpose: the Necromancer's
-summons are **disposable** and the Druid's are **persistent**. A schema that fit
-only one would have fit half the category.
+**Implementation status: built, and diverging from this section in eight places.** The engine, both trees and the instrumentation shipped before this section was available to build against. The divergence log at the end of §8.5 lists every gap; **§8.5 wins on all eight and the code changes to match.** Nothing below is a proposal.
 
 #### A minion is an ACTOR, not a behaviour
 
-**This is the pattern the remaining eleven classes should follow, and it is the
-reason summoning cost one primitive instead of a handler per archetype.**
+**This is the pattern the remaining eleven classes should follow, and it is the reason summoning cost one primitive instead of a handler per archetype.**
 
-The instinct is to model a summon as a *behaviour*: a skeleton knows how to
-swing, a hawk knows how to dive, and each new archetype brings the code that
-makes it act. That is what the source project did, and it is why summons were
-its largest bespoke category — every summon carried its own spawn, attack and
-death path, so adding one meant editing the engine.
+The instinct is to model a summon as a *behaviour*: a skeleton knows how to swing, a hawk knows how to dive, and each new archetype brings the code that makes it act. That is what the source project did, and it is why summons were its largest bespoke category — every summon carried its own spawn, attack and death path, so adding one meant editing the engine.
 
-A minion here is an **actor**. It does not know how to do anything. It is a
-position, a body and an allegiance, handed to the same machinery a player is
-handed to. Two halves make that work:
+A minion here is an **actor**. It does not know how to do anything. It is a position, a body and an allegiance, handed to the same machinery a player is handed to. Two halves make that work:
 
-1. **Its attack is a compose step**, run through the same `PRIMITIVES` table a
-   player's skill uses. A skeleton's cleave *is* `strike`. A hawk's dive *is*
-   `bolt`. There is no minion attack code, because an attack is already a thing
-   this codebase knows how to resolve, and a minion has no better claim to a
-   private version of it than a skill does.
-2. **Its identity fields are the owner's, by reference** — `idx`, `stats`,
-   `hookAgg`, `char`. Only the spatial fields are the minion's own. So a
-   skeleton's kill is the Necromancer's kill, its lifesteal heals the
-   Necromancer, and the damage ledger attributes to the Necromancer, with **no
-   special case in `damageEnemy` or `skillDamage`**. Attribution is not
-   forwarded; it never diverged.
+1. **Its attack is a compose step**, run through the same `PRIMITIVES` table a player's skill uses (§5.7). A skeleton's cleave *is* `strike`. A hawk's dive *is* `bolt`. There is no minion attack code, because an attack is already a thing this codebase knows how to resolve, and a minion has no better claim to a private version of it than a skill does.
+2. **Its identity fields are the owner's, by reference** — `idx`, `stats`, `hookAgg`, `char`. Only the spatial fields are the minion's own. So a skeleton's kill is the Necromancer's kill, its lifesteal heals the Necromancer, and the damage ledger attributes to the Necromancer, with **no special case in `damageEnemy` or `skillDamage`**. Attribution is not forwarded; it never diverged.
 
-What falls out: a new archetype is a row of data. `js/minions.js` does not know
-what a skeleton is, and neither does `js/compose.js` — asserted, not asserted-
-by-hand, by a scan in `sim_test` that searches every engine file for any skill
-id or archetype name and carries a negative control that plants one.
+What falls out: a new archetype is a row of data. `js/minions.js` does not know what a skeleton is, and neither does `js/compose.js` — asserted by a scan in `sim_test` that searches every engine file for any skill id or archetype name, reading the needles out of the live registry so a rename cannot empty the search, and carrying a negative control that plants a handler and confirms the scan sees it.
 
-**Generalise it as: give the new thing an actor, not a vocabulary.** The Monk's
-traps, the Assassin's killbox, the Hunter's second body and the Priest's
-judgment marks are all the same shape — an entity that acts somewhere the player
-is not. Each should borrow the primitives and the owner's identity rather than
-grow its own verbs. Recorded as §13.19.
+**Generalise it as: give the new thing an actor, not a vocabulary.** The Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks are all the same shape — an entity that acts somewhere the player is not. Each should borrow the primitives and the owner's identity rather than grow its own verbs. Recorded as §13 rule 21.
 
 #### The shape
 
@@ -496,77 +530,85 @@ grow its own verbs. Recorded as §13.19.
   attack: { kind: 'strike', damage, arc, reach, select: 'nearest' } }
 ```
 
-`move` is a closed taxonomy (`MOVE_KINDS`: `chase`, `orbit`), asserted at load
-like `TRIGGER_KINDS` and `SELECT_KINDS`. A third kind, `guard`, was written and
-deleted before shipping because no skill used one — see §13.1.
+`move` is a closed taxonomy (`MOVE_KINDS`: `chase`, `orbit`), asserted at load like `TRIGGER_KINDS` (§5.2) and `SELECT_KINDS` (§5.3). A third kind, `guard`, was written and deleted before shipping because no skill used one — §13 rule 1.
 
-`select` on the **attack** step is the minion's own targeting rule, not the
-summoner's: the summoner chose where to put it, the minion chooses what to bite.
+**`select` on the *attack* step is the minion's own targeting rule, not the summoner's.** The summoner chose where to put it; the minion chooses what to bite. A summon step therefore carries two independent selection decisions, and collapsing them would make every pet a mirror of its owner's build.
 
-#### `ON_TOKEN` — the eleventh trigger
+`maxAlive` caps one archetype without capping the rest. It exists because the cheapest-triggering summon otherwise takes every available place: the first armed Druid fielded three wolves and never once a bear.
 
-A **soul token** is a world resource dropped by *any* enemy death, for *any*
-party, expiring on a timer. `ON_TOKEN` asks whether one is within range; the
-skill that fires takes it off the floor, the same way `ON_KILL`'s counter is
-cleared by the tick that read it.
+**Tier 1 in both summoner trees is a direct attack, not a summon.** §5.6 requires a tree's opening pick to be a damaging active, and a summon defers its damage behind a spawn, a walk and an attack cooldown — "something that kills" has to kill now. The first animal and the first skeleton are tier 2.
 
-It is in the trigger taxonomy, **not in the Necromancer**. The Wizard's Soul
-tree (§8.2) reads the same pool with no code added. A class-local version would
-have had to be either duplicated or generalised later.
+#### Druid — the pack
 
-#### `rankGrants` — the one structural rank in the game
-
-Ranks buy damage or duration. `ranks` is asserted to contain nothing else.
-**Raise Skeleton is the single exception**: its rank buys a summon slot.
-
-It is registered in `RANK_GRANTS` and locked both ways — a skill declaring a
-grant must be its registered owner, and a registered grant must be claimed by a
-skill that exists. Adding a third exception means editing that table on purpose.
-
-The lock exists because the unstated version of this rule already failed: Set
-Stance declared a rankable `footingMaxBonus`, nothing asserted that a rank may
-not raise a hard cap, and a designed ten Footing stacks measured as **seventeen**
-(§8.4).
-
-**Base slots are not a grant.** `SUMMON_SLOTS_BASE` is 3 — the Druid's pack read
-off its own tree, one wolf, one bear, one hawk. Without it, keeping `rankGrants`
-unique to one skill left the Druid unable to hold any animal at all: the first
-instrumented run reported `spawned: 0, refused: 22` for a fully-armed Druid.
-
-#### The revive cost counts animals OWNED, not animals ALIVE
+- **One summon per animal skill.** Additional ranks make that animal stronger, not more numerous.
+- **All animals spawn at the start of every map**, fully restored, alongside the room-start HP restore in §10.
+- **A dead animal revives at the Druid's current position** after a timer.
 
 ```
-reviveSeconds = (reviveBase + revivePerAnimal × totalAnimals) / 1000
-totalAnimals  = animals owned — standing AND waiting to be revived
+reviveMs = 15000 + 4000 × (totalAnimals − 1)
 ```
 
-A downed animal stays in the array and keeps its slot. **This is the one thing
-to get right in the Druid.** Counting the living inverts the cost exactly where
-it must not: a wiped pack would have zero alive and therefore the *fastest*
-revives, so the worst thing that can happen to a Druid would also be the
-cheapest to repair, and the correct play would become letting the pack die.
+| Animals | Revive |
+|---|---|
+| 1 | 15s |
+| 2 | 19s |
+| 3 | 23s |
+| 4 | 27s |
+| 5 | 31s |
+| 6 | 35s |
 
-Both versions produce a plausible number, so it is asserted directly — `sim_test`
-wipes a real pack and reads the durations back, and separately checks the curve
-never falls as pack size rises.
+**`totalAnimals` counts animals owned, not animals alive.** If it counted the living, losing the whole pack would make revives fastest — the cost would invert exactly when the player is most punished. Each dead animal runs its own independent timer at the same N-derived duration.
 
-#### Assumptions, not spec
+**The engine's built-in cost is opportunity, not the timer.** Points spent on animals are points not spent on the Druid's own offence, so a Druid whose pack is down has to survive on badly reduced damage output. The revive scale exists so that going wide has a price at the moment it matters: a six-animal Druid waits more than twice as long as a one-animal Druid to get anything back.
 
-Chosen in this patch because no §8.5 existed to read them from. Retune freely;
-none of them carry a rule.
+**Depth versus breadth, expressed as shape.** Six animal skills at rank 1 is six weak pets on a 35s revive. One animal at rank 20 is a single strong pet back in 15s. Neither is obviously correct, which is the test.
 
-| | value | why |
+#### Necromancer — soul tokens
+
+- **Every enemy killed drops a soul token** at the place it died.
+- **Tokens are visible only to Necromancers.** They are state and ride the snapshot per §12.1, but render per-player.
+- **Tokens expire after 30 seconds.**
+- **Raise Skeleton is triggered by `ON_TOKEN`** — a token within range. The skill fires a projectile at the token, and a skeleton rises where it lands.
+- **Each rank of Raise Skeleton grants one skeleton slot.** Ranks buy capacity; kills fill it.
+- **Skeletons are weak**, and they **wipe at the end of every room.**
+- With two Necromancers in a party, **one token drops per enemy and it is shared.** First to fire claims it.
+
+**No cap beyond rank.** A rank-20 Raise Skeleton means twenty skeletons, each earned by a kill. This is deliberately uncapped for first playtest; a cap may follow.
+
+**The built-in cost is the cold start.** A Necromancer begins every room with nothing and must kill with its own skills to get the first token, so points cannot all go into Raise Skeleton — a build with twenty slots and no offence fills none of them. And because skeletons wipe at room end, the count never compounds across a map: every fight ramps from zero.
+
+**Shared tokens make two Necromancers a weaker pairing** than two of any other class, since each token can only raise one skeleton. That is a known consequence rather than a defect.
+
+#### Why they are different engines
+
+| | Druid | Necromancer |
 |---|---|---|
-| `SOUL_TOKEN_CHANCE` | 0.22 per death | frequent enough that `ON_TOKEN` is a build, rare enough not to carpet a crest |
-| `SOUL_TOKEN_TTL` / `_MAX` | 8 s / 40 live | a token is an opportunity, not a bank |
-| `SUMMON_SLOTS_BASE` | 3 | the Druid's three animal types |
-| `MINION_CAP_PER_PLAYER` | 12 | backstop; slot rules bite long first |
-| revive curve | 2.6 s + 1.4 s per owned | a solo wolf returns fast, a full pack is a real bill |
-| every hp / damage / cooldown | see each tree's `TUNING` | unmeasured — no balance pass has been run |
+| What breadth buys | More pets | Nothing |
+| What depth buys | Stronger pets | More pet capacity |
+| Where pets come from | Free at map start | Earned by killing |
+| Across a room | Persist, revive on a timer | Wipe, rebuild from zero |
+| Cost | Offence forgone; revives slow as the pack grows | Cold start every room; capacity is useless without offence |
 
-Tier 1 in both trees is a **direct attack, not a summon**: §6.3 asks a tree's
-opening pick to kill something now, and a summon defers that behind a spawn, a
-walk and an attack cooldown.
+#### Divergence log — where the code disagrees with this section
+
+**This is not a list of proposed values. It is a record of eight defects.** The summoning engine, both trees and the instrumentation were built from a brief citing a §8.5 that had not yet reached the repository, so the magnitudes and several mechanics were invented at the keyboard. **§8.5 wins on every row. The code changes to match, never the reverse.**
+
+| # | §8.5 says — **authoritative** | code currently does | verdict |
+|---|---|---|---|
+| 1 | **Every** enemy killed drops a soul token | `SOUL_TOKEN_CHANCE` 0.22 per death | spec wins — drop is certain, delete the roll |
+| 2 | Tokens are **visible only to Necromancers**; state on the wire, rendered per-player | rendered for every player | spec wins — per-player render |
+| 3 | Tokens expire after **30 s** | `SOUL_TOKEN_TTL` 8 s | spec wins — 30 s |
+| 4 | **Raise Skeleton is triggered by `ON_TOKEN`**, fires a projectile at the token, and the skeleton rises **where it lands** | Raise Skeleton uses `PROXIMITY` and spawns at a random offset from the caster; `ON_TOKEN` is used by Soul Harvest and Charnel Pact instead | spec wins — this is the biggest single change, and it makes the token a *place* rather than a counter |
+| 5 | Skeletons **wipe at the end of every room** | they persist across rooms | spec wins — every fight ramps from zero |
+| 6 | **No cap beyond rank.** Rank 20 means 20 skeletons | rank + a base allowance, hard-capped at 8 | spec wins — uncapped for first playtest |
+| 7 | All animals spawn **at the start of every map**, fully restored | spawned by `PROXIMITY` triggers mid-fight | spec wins — the pack is present, not summoned under fire |
+| 8 | `reviveMs = 15000 + 4000 × (totalAnimals − 1)` → 15 s at one animal | `2600 + 1400 × totalAnimals` → 4.0 s at one animal | spec wins — the shipped curve is roughly a quarter of the intended cost |
+
+Already agreeing, and not to be disturbed by the fix: `totalAnimals` counts animals **owned, not alive** (derived independently on both sides, same reasoning); revive at the Druid's current position; each dead animal on its own independent timer; one rank of Raise Skeleton grants one skeleton slot; one animal per animal skill; two Necromancers sharing one token per enemy, first fire claiming it.
+
+**`SUMMON_SLOTS_BASE` is removed, not reconciled.** It was invented to fix a problem this section does not have. Keeping `rankGrants` unique to Raise Skeleton left the Druid unable to hold any animal at all — the instrument reported `spawned: 0, refused: 22` for a fully-armed Druid — and a shared base allowance was the quickest repair. **§8.5 has no slot pool.** The Druid's pack size is *how many animal skills it took*; the Necromancer's capacity is *rank-only*. There is nothing for a base allowance to be the base of, and a shared pool would silently couple two engines the table above exists to keep opposite. It must not come back: if a future class needs standing capacity, that capacity belongs to that class's own engine.
+
+**The balance pass waits for the code to match.** Every hp, damage and cooldown in both trees is still a first guess, and tuning them against the current mechanics would measure a game this section says should not exist — a certain 30-second token that plants a skeleton where it lands is a different economy from a 22% 8-second token, not a different number.
 
 ---
 
@@ -584,17 +626,39 @@ Two levers together: **slower income** and **escalating prices**. Price escalati
 
 | Tier | Changes | Rarity |
 |---|---|---|
-| Stat items | Flat + or +/− along opposing axes | Common |
-| Magnitude | Splash radius, projectile count, pierce, chain jumps, duration | Common–Rare |
+| Stat items | Flat + with a **randomly rolled** − on another stat | Common |
+| Magnitude | Splash radius, projectile count, **pierce**, chain jumps, duration | Common–Rare |
 | Rider | Adds an effect the skill did not have | Rare |
 | Domain swap | Changes one skill's damage domain | Rare–Legendary |
-| Trigger swap | Changes a skill's trigger type or threshold | Legendary only |
+| Selector add | The skill **also** hits what a second selector picks | Rare–Legendary |
 
 **Radius lives in magnitude items exclusively**, since ranks no longer grant it.
 
 **No cooldown reduction on any item.** Same reasoning as ranks: an item that shortens cooldowns lets a narrow build buy back its uptime and the depth-versus-breadth pressure disappears.
 
-Trigger swaps are the highest-upside and highest-risk item in the game — one that lands badly can invalidate a build mid-run. Gated to legendary; may be cut.
+**Pierce is the answer to escorted targets** (§5.9) and belongs in magnitude.
+
+#### Items add, they never take away
+
+**Trigger-swap items are deleted from the design.** An item that changed *when* a skill fired could invalidate a build mid-run — a player who had spent forty points around a trigger could have it rewritten by a shop roll.
+
+The late-game power spike that tier was meant to deliver is better served by items that **add** to what a skill already does: hit the nearest two targets instead of one, add a little splash, add an effect it did not have. Those are the magnitude and rider tiers, which already exist and need no new machinery.
+
+The same principle governs selection. **Selector-add, not selector-swap.** An item does not change `nearest` to `highest_hp`; it makes the skill *also* strike the highest-HP target in range. A crowd-clearing build that finds one gains an elite-killer without losing its crowd clear and without spending a point.
+
+**The rule for every modifier tier: an item may add, never take away.** Finding a modifier should feel like a new capability arriving, never like a familiar one leaving.
+
+#### Late-game weighting
+
+Magnitude, rider, and selector-add items weight toward later regions. That is where an additive spike belongs — the maps are harder, and a build has settled enough by then for a new capability to read as a change rather than as noise. It is also the second reward curve in the game: §3.4's class unlocks pay off on the *next* character, while modifiers pay off on this one.
+
+#### Stat items and the random roll
+
+A stat item grants a flat bonus and rolls its penalty **randomly against another stat**. There is no fixed opposition table.
+
+A fixed table — damage always costs speed — is memorised after one run, and the shop stops being a gamble. Rolling the pairing keeps every offer a real question: sometimes the penalty lands somewhere the build does not care about, sometimes it lands on the stat the whole character rests on. That variance is the point, and it is the same lottery the reroll economy is built around.
+
+**OPEN — penalty weighting.** Fully random means an item can roll its penalty into a stat the build does not use at all, which makes it free. Roll enough offers and the correct play becomes shopping for the free one, and the trade-off stops existing. The candidate fix is to weight the penalty *lightly* toward stats the build actually uses — still random, still occasionally lucky, rarely free. Needs a ruling before the roll table is built.
 
 **Weapons are gone from the game. `SHOP_WEAPON_CHANCE = 0`.** A shop stocking unequippable items is a bug, not a design question.
 
@@ -605,6 +669,12 @@ Shop rerolls escalating within a visit; item upgrades; **skill respec at 1000 go
 ### 9.4 Numbers
 
 All placeholders for playtest. Income roughly flat within a region, scaling ~15% per band; item prices ~25% per band; reroll cost doubling within a visit. **Target: 1–2 purchases per shop visit throughout the run, never 6.**
+
+### 9.5 Stats
+
+**GAP — this document does not record the stat system.** The ten stats live in `js/config.js` and are authoritative there, but the GDD records no intent: what each stat is for, which are opposed for §9.2's +/− trade-offs, and which are engine-readable via `scaleWith`. This needs writing before phase 4, since the stat item tier is defined in terms of opposing axes that are nowhere named.
+
+`SCALING_RATES` in config is dead with weapons and is scheduled for removal.
 
 ---
 
@@ -696,55 +766,39 @@ A silent drop with a clean console cost seven runs to diagnose. Every skipped se
 
 **Both directions must be instrumented.** "Zero drops" was true and useless for a full session because only `HostTransport` was instrumented while the failing path was `ClientTransport.send`.
 
+Drops are classified: `ui` resends until acknowledged, so a drop there is a delay; `in` and `ping` are lossy by design; anything else fails. A `GAVE UP` line fails regardless — that is an action resent for its whole budget and never acknowledged.
+
 ---
 
 ## 13. Engineering Standing Rules
 
-Each of these has caught a real defect on this project. They are recorded here because they are design constraints on how the game is built, not preferences.
+Each has caught a real defect on this project. They are design constraints on how the game is built, not preferences.
 
-1. **Runtime-path tests, not definition tests.** The source project shipped 19 skill kinds wired to nothing, all passing existence checks. Every skill, node type, hazard, and boss phase must be swept through its real path producing an observable effect.
-2. **An instrument no test reads is not an instrument.** A drop log written to a console the harness does not pipe caught nothing. Diagnostics get a consumer in the same patch that adds them.
-3. **Gates assert their own instrument before measuring.** Five instances: a walked-away player, a sample window shorter than the cooldown, a field players do not have, a picker that re-ranked one node forty times, a stack reading broken by a rename. A gate verifies it can see a known-good baseline before reporting a number.
-4. **Assertions read the event log, never derived state.** HP has misled three times, in both directions.
-5. **A count is not a set.** Three times in one patch an identical failure count hid a composition change. Regressions are reported by set diff.
-6. **A suite that stops early is not a suite that passed.** A siege-boss crash survived a full patch because an earlier section hung before reaching it. Partial logs are not partial evidence.
-7. **A suite that dirties the working tree is a failed suite.** Assert tracked assets clean at teardown. Where a reflex can be made unavailable rather than detectable — `.gitignore` over a gate — prefer that.
-8. **Enumerated resets are the defect.** Pool reuse wipes every own field; anything forgotten reads `undefined` at the point of use rather than a plausible value from another entity.
-9. **Determinism is a prerequisite for measurement.** Same seed → byte-identical run, with a negative control that fails if the sim ignores its seed. Every three-run protocol before this existed because it was not true.
-10. **Diagnostic strings are named for what they assert.** "Timeout waiting for pair" meant a pair of coilguns and produced a wrong conclusion about PeerJS pairing.
-11. **Guards use `&&`, never `;`.** A guard that cannot fail the command is not a guard.
-12. **Strip comments before pattern-checking code.** Checks have failed on their own explanatory comments twice.
-13. **Vary test staging** — more than one seed, more than one position. Five bolt skills read as wired-to-nothing because a pillar ate the projectile 26 units out.
-14. **All numbers in `TUNING` blocks.** No inline constants in behaviour code.
-15. **Verified push** — confirm with `git ls-remote` before treating a branch as landed.
-16. **Save tests round-trip through a real file**, not in-memory serialise alone.
-17. **A harness must arrive in the state a player would arrive in.** Level,
-    slots and items are part of the FIXTURE, not incidental setup. Objective
-    harnesses dropped a party in at level 1, and `spendSkillPoint` auto-slots
-    only into an already-unlocked slot while `setLoadout` refuses mid-fight —
-    so a party that learned ten skills fought entire objectives with **one**,
-    however high it levelled during them. That single detail hid a build-depth
-    constraint behind an apparent HP constraint for three patches: at three
-    slots, with nothing tuned, Nest Purge at 4p went from 1/3 to cleared and
-    Elite Arena solo from zero kills to cleared. Sixth instance of a measurement
-    describing a world no player occupies.
-18. **A test's negative case must be unreachable by search-and-replace over the
-    thing it tests.** A bulk rename rewrote a retired-id literal into a live
-    class *inside the assertion that retired ids are rejected* — twice — turning
-    it into a tautology that still printed a tick. Assemble it, compute it, read
-    it from a fixture; never leave it as a bare literal a sweep can reach.
-19. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing
-    primitives and the owner's identity by reference; do not give it verbs of
-    its own. A minion's attack is a compose step through the same `PRIMITIVES`
-    table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the
-    owner's fields, so attribution never has to be forwarded because it never
-    diverged. This is why summoning — the largest bespoke category in the source
-    project, where every summon carried its own spawn, attack and death code —
-    cost **one primitive and one trigger** here, with zero per-archetype
-    handlers across twenty new skills. The same shape is waiting for the Monk's
-    traps, the Assassin's killbox, the Hunter's second body and the Priest's
-    judgment marks: each is an entity acting where the player is not, and none
-    of them needs a vocabulary. See §8.5.
+1. **Runtime-path tests, not definition tests.** The source project shipped 19 skill kinds wired to nothing, all passing existence checks.
+2. **A harness that clears fights cannot launder a combat result.** `nuke()` killed every enemy every 240 ticks, so the suite stayed green against a party with **no offence at all**, for the entire overhaul. It is now `clearFieldForSetup(sim, p, reason)` — it demands a reason, stamps the sim, and a stamped sim may not carry a combat result. Every run prints how many fights the harness ended.
+3. **An instrument no test reads is not an instrument.** A drop log written to a console the harness did not pipe caught nothing.
+4. **Gates assert their own instrument before measuring.** Seven instances, including a 12-second offence test that declared a working engine broken, and a three-branch classifier that read 2-of-23 hits as regeneration.
+5. **Assertions read the event log, never derived state.** HP has misled three times, in both directions.
+6. **A count is not a set.** Regressions are reported by set diff, always.
+7. **A suite that stops early is not a suite that passed.** A crash is not one failure — fixing it reveals what it was hiding.
+8. **A suite that dirties the working tree is a failed suite.** Prefer making a reflex unavailable over detectable — `.gitignore` over a gate.
+9. **Enumerated resets are the defect.** Pool reuse wipes every own field; anything forgotten reads `undefined` at the point of use rather than a plausible value from another entity.
+10. **Determinism is a prerequisite for measurement.** Same seed → byte-identical run, with a negative control that fails if the sim ignores its seed.
+11. **A failure name describes the cause, not the symptom that tripped first.** Five instances: "co-op is flaky" covering three defects, a "coilgun pair" read as PeerJS pairing, a compound `client ready`, one unplayable-run defect wearing three names, and a cogsmith check naming the wrong gap.
+12. **A test's negative case must be unreachable by search-and-replace over the thing it tests.** A bulk rename rewrote a deliberate retired-id literal into a valid class, turning the test into a tautology — twice. `RETIRED_ID = ['bul','wark'].join('')` is ugly on purpose.
+13. **A number impossible on its face is a free bug detector.** "78 of 52 elites" caught a miscount before anyone quoted it.
+14. **Guards use `&&`, never `;`.** A guard that cannot fail the command is not a guard.
+15. **Strip comments before pattern-checking code.**
+16. **Vary test staging** — more than one seed, more than one position.
+17. **All numbers in `TUNING` blocks.**
+18. **Verified push** — confirm with `git ls-remote` before treating a branch as landed.
+19. **Save tests round-trip through a real file.**
+20. **A harness must arrive in the state a player would arrive in.** Level, slots and items are part of the FIXTURE, not incidental setup. Objective harnesses dropped a party in at level 1, and `spendSkillPoint` auto-slots only into an already-unlocked slot while `setLoadout` refuses mid-fight — so a party that learned ten skills fought entire objectives with **one**, however high it levelled during them. That hid a build-depth constraint behind an apparent HP constraint for three patches: at three slots, with nothing tuned, Nest Purge at 4p went from 1/3 to cleared and Elite Arena solo from zero kills to cleared.
+21. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing primitives and the owner's identity by reference; do not give it verbs of its own. A minion's attack is a compose step through the same `PRIMITIVES` table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the owner's fields, so attribution never has to be forwarded because it never diverged. This is why summoning — the largest bespoke category in the source project, where every summon carried its own spawn, attack and death code — cost **one primitive and one trigger** here, with zero per-archetype handlers across twenty new skills. The same shape is waiting for the Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks. See §8.5.
+
+### 13.1 The through-line
+
+**After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
 
 ---
 
@@ -756,35 +810,23 @@ Each of these has caught a real defect on this project. They are recorded here b
 | 1.5 | Telegraphs, positional `ON_DODGE` | **Done** |
 | 2 | Region systems, node trees, saves, second trees | **Done** |
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
-| 3 | Co-op hardening — defects #8, #9 | **Next** |
-| 4 | Economy: stat items, modifier tiers, sinks, respec | Not started |
+| 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
+| 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | Not started |
 | 5 | Remaining 12 classes, 38 trees, regions 3–8 | Not started |
 
-Phase 5 is the bulk of remaining work by volume, but phases 1–2 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, and `scaleWith` generalising with no engine known by name. **The binding constraint on phase 5 is art**, not code — 36+ enemies and 6 bosses.
-
-**Phase 3 outranks phases 4 and 5.** Both open co-op defects are reachable by a real player and both break the link-and-room-code promise rather than degrading it.
+Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
 
 ---
 
-## 15. Open Defects — by cause, not by symptom
+## 15. Open Items
 
-**Read this before treating any suite failure as a bug.** `tools/sim_test.mjs`
-reports **16 failures and none of them are defects**: 6 are classes that do not
-exist yet, 3 are decisions already taken, 7 are a subsystem deliberately left
-for phase 4. Group D is empty. They are grouped here by
-*what would make them go away*, because "not built yet" and "broken" look
-identical in a red test log and the difference decides who picks the work up.
+**None of the current red is a defect.** `tools/sim_test.mjs` reports **16 failing checks**: 6 are content not authored, 3 await a design decision, 7 are a deferred subsystem. **Group D is empty.** The counts sum to 16 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
 
-Counts are the sim-suite failures each entry accounts for, and they sum to 16 with nothing double-counted. The focused
-instruments — `offence_test`, `determinism_test`, `snapstate_test`,
-`region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`,
-`validate_items` — are all green.
+**A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
-### A. Waiting on phase-5 trees — 6 of 16
+### Group A — waiting on phase-5 trees (6)
 
-Eleven of the fourteen classes have no skill tree. Weapons are removed, so a
-class without a tree cannot attack, cannot trigger an attack hook, and cannot
-finish a level. **Nothing here is repairable by code.**
+Eleven classes have no trees. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
@@ -792,156 +834,74 @@ finish a level. **Nothing here is repairable by code.**
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
 | `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; eleven score 0 because they cannot attack. |
 
-**One entry left this group by being built.** `elite_arena (1p) never cleared`
-went green when the Necromancer's Summons tree landed — the class gained a third
-tree, the solo build got deeper, and the objective cleared with nothing tuned.
-That is the group working as labelled: it said "not built yet", something got
-built, and it closed. `toh_druid` also left the group, having gained a tree.
+**Two entries left this group by being built.** `elite_arena (1p) never cleared` went green when the Necromancer's Summons tree landed — the class gained a third tree, the solo build got deeper, and the objective cleared with nothing tuned. `toh_druid` left with its own tree. That is the group working as labelled: it said "not built yet", something got built, and it closed.
 
-### B. Waiting on a design decision — 3 of 16
+### Group B — waiting on a design decision (3 failing, 3 open questions)
 
-Real questions with no obviously-correct answer. Each needs a call in this
-document before code.
-
-| what fails | count | the question |
-|---|---:|---|
-| `bounty (1p/4p) never cleared` | 2 | **EXPECTED-RED UNTIL PHASE 4 — see below.** |
-| `the summoner class has no structure to recall` | 1 | **Narrowed, not closed, by §8.5.** Skill-era summons exist now and the Necromancer fields them, but they are *units* — they walk, they die, they are re-raised. Structure RECALL (channel to pack a sited thing up and redeploy it near you, `STRUCT_CHANNEL_S`) still has nothing to act on: `bonelord` builds its structure via `_addWeapon` and `weaponSlots` is 0. The remaining decision is whether recall survives at all once weapons go, or whether the `guard` move kind comes back with a totem to justify it. |
+| Item | Question |
+|---|---|
+| **Throughput: Nest Purge** | **CLOSED — working as intended.** Measured at both party sizes with the party arriving at level 12: 4p clears 3/3 at 213 s of 360 s. Solo reaches 2/3 and is not the target. The deciding factor was **loadout slots, not HP** — see §13 rule 20. *No failing check.* |
+| **Throughput: Bounty Hunt** *(2 failing)* | **EXPECTED-RED until phase 4 — see below.** Not throughput and not a tuning gap. |
+| **Summoner harness gap** *(1 failing)* | Narrowed by §8.5, not closed. Skill-era summons exist and the Necromancer fields them, but they are *units* — they walk, they die, they are re-raised. Structure **recall** (`STRUCT_CHANNEL_S`) still has nothing to act on: `bonelord` builds its structure via `_addWeapon` and `weaponSlots` is 0. The decision is whether recall survives the removal of weapons at all. |
+| **Penalty weighting on stat items** | §9.2 — fully random penalties can roll free on stats a build does not use. Weight lightly toward used stats, or accept free rolls as luck? *No failing check.* |
+| **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data. *No failing check.* |
+| **§9.5 stats** | The stat system has no recorded intent, and phase 4's stat tier is defined in terms of opposing axes that are nowhere named. Separately measured: **Ferocity, Tempo and Attunement are read by no skill path** — Ferocity multiplies no composed damage at all, Tempo reaches move speed only, and `_attuned` has no caller in `compose.js` or `skillsim.js`. Ferocity is still offered on level-up at 4/7/12%. *No failing check — nothing asserts it yet.* |
 
 #### Bounty Hunt is EXPECTED-RED until phase 4. Do not re-diagnose it.
 
-`bounty (1p) never cleared` and `bounty (4p) never cleared` are **#17, resolved
-as design — no code change.** They are **not a tuning gap and not a throughput
-question**, and the specific thing to not do is reach for mark HP.
+`bounty (1p) never cleared` and `bounty (4p) never cleared` are **§5.9's design resolution appearing as a red line.** The specific thing to not do is reach for mark HP.
 
-- Marks spawn with an escort pack **by design**. Escorts are a wall you clear
-  first, and that is what distinguishes a bounty mark from a nest: a nest is a
-  structure you reach, a mark is a target you have to earn a line on.
-- Punching straight through needs **pierce**, which is a §9.2 modifier item at
-  the magnitude tier, not a property of `objective_target`. A party that commits
-  to punching through buys pierce and slots it — a build decision with a cost,
-  which is the whole point of the item tier. Making it free on every
-  objective-targeting bolt would delete that decision. It does not exist until
-  phase 4 ships modifier items.
-- So the capability the level asks for is genuinely absent from the game. A
-  4-player armed party reaches **3 of 5 marks** in the full 20-minute budget,
-  and that is the correct number for a party with no pierce.
+- Marks spawn with an escort pack **by design**. Escorts are a wall you clear first, and that is what distinguishes a mark from a nest: a nest is a structure you reach, a mark is a target you earn a line on.
+- Punching straight through needs **pierce**, a §9.2 modifier item at the magnitude tier. It does not exist until phase 4.
+- A 4-player armed party reaches **3 of 5 marks** in the full budget, which is the correct number for a party with no pierce.
 
-Measured twice, so nobody has to re-derive it. Per-target attribution on the
-1p mark: the selector chose the mark on **23 of 23** fires and **2** arrived —
-the rest were intercepted. Across `offence_test`, the selector chooses the mark
-on **93.4%** of objective-targeting fires. It is not a targeting failure; the
-shots are stopped by the wall. `offence_test` therefore asserts SELECTION
-CORRECTNESS for this objective and never mark kills, because asserting kills
-would demand a capability the game has not shipped and would quietly turn into a
-retune request on mark HP.
+Measured twice so nobody re-derives it: per-target attribution on the 1p mark showed the selector chose the mark on **23 of 23** fires with **2** arriving; across `offence_test` the selector chooses the mark on **93.4%** of objective-targeting fires. It is not a targeting failure — the shots are intercepted. `offence_test` therefore asserts **selection correctness** for this objective and never mark kills, because asserting kills would demand a capability the game has not shipped and would quietly become a retune request on mark HP.
 
-**These two go green when pierce exists, not before.** If they go green earlier,
-something has been tuned that should not have been.
+**These two go green when pierce exists, not before.** If they go green earlier, something has been tuned that should not have been.
 
-#### The other throughput questions closed, and it was never HP
+### Group C — phase 4, the economy (7)
 
-Objectives are co-op content and the table that raised the question was solo.
-Measured at both sizes, with the party **arriving at level 12** rather than
-being dropped in at level 1:
+Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, counted, and reported separately so a skip never reads as a pass, and restored by flipping `CONFIG.WEAPONS_ENABLED`.
 
-| objective | 1p | 4p |
-|---|---|---|
-| Nest Purge | 2/3 nests | **3/3 — CLEARED at 213s of 360s** |
-| Elite Arena | **CLEARED** | **CLEARED at 99s of 360s** |
-| Bounty Hunt | 1/5 marks | 3/5 marks |
+`below-max duplicate` · `combine result wrong` · `manual combine broke` · `extraction shop buy failed` · `sell weapon: mats 0→0` · `toh_druid weapon cap 0` · `toh_necromancer weapon cap 0`.
 
-**Nest Purge and Elite Arena close as working-as-intended.** Solo is not the
-target party size for an objective node.
+The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same defect, different class in the string — worth knowing before a set diff reads one as fixed and the other as new.
 
-The thing that decided it was not health, it was **loadout slots**.
-`spendSkillPoint` auto-slots only into an already-unlocked slot, and
-`setLoadout` refuses mid-fight — "between rooms only". So a party dropped into
-an objective at level 1 fights the whole thing with **one skill**, however high
-it levels during it, and every harness in the repo was doing exactly that. At
-three slots, with no tuning changed anywhere:
+### Group D — genuine open defects (0)
 
-- Nest Purge 4p went from 1/3 to cleared
-- Elite Arena solo went from **zero kills** to cleared
-
-A party that reaches a nest node has cleared rooms to get there. Measuring it at
-level 1 was measuring something no player experiences, and it made a build-depth
-constraint look like an HP constraint for three patches.
-
-### C. Phase 4 — the economy — 7 of 16
-
-Weapons were removed in `patch-trigger-core`; the shop, combine, sell and
-slot-cap machinery still exists and still has tests. **Do not touch these
-outside the phase-4 economy work** — they are the acceptance tests for the
-stat/modifier split when it lands.
-
-`below-max duplicate` · `combine result wrong` · `manual combine broke` ·
-`extraction shop buy failed` · `sell weapon: mats 0→0` ·
-`toh_druid weapon cap 0` · `toh_necromancer weapon cap 0`.
-
-The weapon-cap pair names whichever two classes sit at the front of
-`SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same
-defect, different class in the string — worth knowing before a set diff reads
-one as fixed and the other as new.
-
-The suite also prints two `⊘ SKIPPED (weapons removed)` lines for swap-buy
-checks that cannot run at all. Skips are counted separately and never as passes.
+Empty. Every remaining failure is content not authored, a decision not taken, or a subsystem deferred.
 
 ### The browser suite is counted separately, and it is not clean
 
-`tools/browser_test.mjs` reports **13 failures, none of them in this list**,
-because §15 has only ever tallied `sim_test`. They share one cause: the browser
-fixtures still click `.char-card[data-char="bulwark"]` and `"facet"` — **retired
-classic ids**, left behind when the roster was retired. Every one is a
-`querySelector(...).click()` on null, which then fails the whole page's test.
+`tools/browser_test.mjs` reports **13 failures, none of them in the count above**, because this section has only ever tallied `sim_test`. They share one cause: the browser fixtures still click `.char-card[data-char="bulwark"]` and `"facet"` — **retired classic ids** left behind by §3.3. Every one is a `querySelector(...).click()` on null, which then fails that whole page's test. Fixture cleanup, not a game defect. Measured across the summoning patch the set went **15 → 13** with no additions.
 
-They are a fixture cleanup, not a game defect, and they are named here so the
-next person does not rediscover them as a rendering regression. Measured across
-this patch the set went **15 → 13** with no additions.
-
-### D. Genuine open defects — 0 of 16
-
-**Empty.** Every failure in the suite is now accounted for by A, B or C: content
-that has not been authored, a decision that has not been taken, or a subsystem
-deliberately deferred. Nothing here is broken code waiting to be found.
-
-The five that were here were fixed, and four of the five turned out to be the
-*test* rather than the thing tested:
-
-| # | was | what it actually was |
-|---|---|---|
-| 18 | Camper statue dies in every Bastion template ×5 | The test ran the camper as whichever class was selectable. The camper archetype is a contact tank — `toh_blacksmith`, hitbox ×1.4 — which survives all five. The samurai dies at 48s and the necromancer at 20s. The Bastion sanction was never broken; it was being measured against a caster standing still. |
-| 21 | `--require-all` does not fail on an undrawn batch | It named `char`, and with the roster down to 14 all 14 are drawn. The flag was right and the batch was finished. The check now *discovers* a namespace with undrawn ids. |
-| 20 | `sprites.js` projectile radii do not match the engine | It observed projectiles from `_addWeapon`, which spawns nothing now, so every bucket read empty. Re-pointed at the skill path; the engine's radius is a named `SKILL_PROJ_R` rather than a literal that happened to equal `PROJ_R_SHOT`. |
-| 22 | Row re-centring loses a 6px bob at a 128px cell | The fixture's row stride stayed `32` when the cell became 128, so it wrote garbage. Measured directly, `process_sprite` preserves the bob exactly. |
-| 19 | Relic Run still spawns ambient waves | Gemmites are **splitters**: killing one spawns two by design. One kill sweep left six children and the check read them as ambient inflow. It drains to empty before watching. |
-
-**Four of five were instruments, not defects.** That is worth stating plainly:
-after a migration this large, a red check is more likely to be a test still
-describing the old world than a bug in the new one — which is exactly why this
-section is organised by cause.
-
-### Fixed this patch, kept for the record
+### Fixed, kept for the record
 
 | # | was | now |
 |---|---|---|
-| 8 | Client→host input had no delivery guarantee | Ack with resend-until-acked; **but the wild `client ready` failure is NOT explained by it** — see `docs/KNOWN-DEFECTS.md` |
-| 9 | Room registration failing ~1 run in 3–4 | **A negative result, not a fix.** 20/20 direct trials at 3–8 ms, 8/8 co-op runs. It stopped reproducing and nobody knows why |
+| 8 | Client→host input had no delivery guarantee | Ack with resend-until-acked; **the wild `client ready` failure is NOT explained by it** — still open above |
+| 9 | Room registration failing ~1 run in 3–4 | **A negative result, not a fix** — see below |
 | 10 | Suite gated co-op behind tests for removed weapons | Skipped, named, counted; co-op reaches its phase every run |
-| 11 | Only 2 of 47 characters could deal damage | Classic roster retired to `archive/classic-roster/`; selection gated on having a tree |
-| 13 | Skills converged on "whatever is nearest" | `select` is a required field on every active |
+| 11 | Only 2 of 47 characters could deal damage | Classic roster retired per §3.3; selection gated on having a tree |
+| 13 | Skills converged on "whatever is nearest" | `select` is a required field on every active (§5.3) |
 | 14 | `tohOnFire` orphaned on a dead `_tickWeapons` | Called from `fireSkill` |
 | 15 | `hitbox` honoured by trait *name* (`immovable`, retired) | Read by presence |
-| 16 | Art style anchor hardcoded retired `char.pulsar` | `STYLE_ANCHOR_ID`, named and live |
+| 16 | Art style anchor hardcoded a retired character | `STYLE_ANCHOR_ID`, named and live |
 
+### Recorded negatives
+
+**#9 — room registration.** Failed roughly 1 co-op run in 3–4. Now 8/8 full runs and 20/20 direct trials at 3–8 ms with zero `regFailures`. **It stopped reproducing and nobody knows why.** A healthy measurement of the component a defect *names* is evidence the name was wrong, not that anything was repaired. Closing conditions are recorded; the entry stays open.
+
+---
 
 ## 16. Implementation Status
 
 | System | Status |
 |---|---|
-| Trigger system, 10 kinds | Built, gated, measured |
-| Composed-action schema, 10 primitives | Built, zero bespoke across 40 skills |
-| `scaleWith` engine hook | Built, generalised across two engines |
+| Trigger system, 11 kinds | Built, gated, measured — `ON_TOKEN` added with summoning |
+| Selectors, 6 rules | Built, required field, no default |
+| Composed-action schema | Built, 11 primitives, **zero bespoke handlers across 60 skills** — scanned, with a negative control |
+| `scaleWith` engine hook | Built, generalised across three engines — footing, armor, pack |
 | Damage triangle | Built, all damage routed |
 | Telegraphs | Built, 9 telegraphing types, ≥50% density both regions |
 | Footing | Built, three-way measured, decision live |
@@ -950,22 +910,28 @@ section is organised by cause.
 | World map | Rules built, **no DOM** |
 | Difficulty | Built, 4 settings, XP exclusion asserted |
 | Saves, frontier rule | Built, file round-trip verified |
-| Netcode state migration | Built, lobby heartbeat at 3 Hz |
+| Netcode state migration | Built, lobby heartbeat at 3 Hz, drops classified |
 | Determinism | Built, negative control, byte-identical same-seed runs |
+| Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
+| Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** |
-| Classes 3–14 | **Not started** — 45 of 47 characters have no combat ability |
+| Classes 3–14 | **Not started** — 11 of 14 classes have no trees |
+| Summoning | **Built, diverging from §8.5 in 8 places** — engine, both trees, instrumented. Divergence log in §8.5; the code changes to match |
+| `ON_TOKEN` trigger | **Built** — in the taxonomy, world-resource pool, consumed on fire. Drop rate, TTL and Raise Skeleton's use of it all diverge from §8.5 |
 | Economy | **Not started** |
 
 ---
 
 ## 17. Notes for Future Work
 
-**`bloodmire` and Footing.** The Region 2 curse damages players for standing still, aimed squarely at Footing. It was authored while `FOOTING_DROP = 'instant'` was still unfixed, so it punished a stance that was over-rewarded defensively for unrelated reasons. Re-check that it is a real counter and not a Samurai-specific tax now that the grace window has landed.
+**`bloodmire` and Footing.** The Region 2 curse damages players for standing still, aimed at Footing. It was authored while instant-drop was still live, so it punished a stance over-rewarded for unrelated reasons. Re-check that it is a real counter and not a Samurai-specific tax.
 
-**Pending-pick and results screens are partial fixes.** Presence rides state so a lost close cannot softlock a panel open, but the contents of an offer still ride the open event — a lost open is a missed level-up pick. Similarly `st.over` stops a client stranding in a dead world but the results payload still rides `end`. Both are the lesser half of their failure; both are noted in code where the next reader hits them.
+**Pending-pick and results screens are partial fixes.** Presence rides state so a lost close cannot softlock a panel open, but an offer's contents still ride the open event — a lost open is a missed level-up pick. Similarly `st.over` stops a client stranding in a dead world but the results payload still rides `end`. Both are noted in code where the next reader hits them.
 
-**Summons are the largest untested area of the composed-action schema.** They were the biggest bespoke category in the source project and were deliberately excluded from every patch so far. Test them in a patch where they are the subject.
+**Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
 
-**Six class engines exist only as design.** Wizard, Priest, Monk, Assassin, Hunter, and the Samurai's remaining trees have engines specified in §8.3 but no implementation.
+**Twelve class engines exist only as design.** §8.3 specifies them; only Footing and Marrow's `armor` are implemented.
+
+**The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.

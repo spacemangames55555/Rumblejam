@@ -32,21 +32,29 @@ export const CONFIG = {
   // block and arrive on the compose step, so a Necromancer skeleton and a Druid
   // wolf differ as data. These are the numbers that belong to the engine rather
   // than to any one summon.
-  MINION_CAP_PER_PLAYER: 12,   // hard ceiling; slot rules bite long before this
-  // BASE SLOTS EVERY SUMMONER STARTS WITH, before any rank buys more.
   //
-  // This exists because `rankGrants: 'summonSlots'` is registered to exactly
-  // one skill — Raise Skeleton — and that is deliberate. Without a base
-  // allowance the Druid could never hold an animal at all: its whole pack is
-  // slotted, and no Druid skill grants a slot. The first run of the instrument
-  // reported `refused: 22, spawned: 0` for a fully-armed Druid, which is what a
-  // rule applied to one class and quietly assumed by another looks like.
+  // ⚠ THIS BLOCK DIVERGES FROM GDD §8.5 AND LOSES. Summoning was built from a
+  // brief citing a §8.5 that had not yet reached the repository; the section
+  // exists now and is authoritative. §8.5's divergence log lists eight rows.
+  // The behaviour patch that closes them changes the code, never the section.
+  // Do not tune anything here first — a certain 30-second token that plants a
+  // skeleton where it lands is a different economy, not a different number.
   //
-  // 3 is the Druid's pack read straight off the tree: wolf, bear, hawk, one of
-  // each. The Necromancer stacks its Raise Skeleton ranks on top of the same
-  // base, so the grant still buys exactly what it says it buys.
-  SUMMON_SLOTS_BASE: 3,
-  SUMMON_SLOT_CAP: 8,          // ceiling on base + everything rankGrants adds
+  MINION_CAP_PER_PLAYER: 12,   // DIVERGES: §8.5 says "no cap beyond rank"
+  // ⚠ SUMMON_SLOTS_BASE IS REMOVED BY §8.5 AND MUST NOT COME BACK.
+  //
+  // It was invented here to fix a problem the design does not have. Keeping
+  // `rankGrants: 'summonSlots'` unique to Raise Skeleton left the Druid unable
+  // to hold any animal — the instrument read `spawned: 0, refused: 22` for a
+  // fully-armed Druid — and a shared base allowance was the quickest repair.
+  //
+  // §8.5 has NO SLOT POOL. The Druid's pack size is how many animal skills it
+  // took; the Necromancer's capacity is rank-only. There is nothing for a base
+  // to be the base of, and a shared pool silently couples two engines the
+  // design keeps deliberately opposite. If a future class needs standing
+  // capacity, that capacity belongs to that class's own engine.
+  SUMMON_SLOTS_BASE: 3,        // REMOVED by the behaviour patch — see above
+  SUMMON_SLOT_CAP: 8,          // REMOVED with it: §8.5 caps nothing beyond rank
   MINION_SPEED: 250,           // u/s; below BASE_SPEED so a pack cannot outrun its owner
   MINION_AGGRO_RANGE: 420,     // how far a chaser will look for something to fight
   MINION_HEEL_RANGE: 70,       // with nothing to fight, this close to the owner is close enough
@@ -57,9 +65,11 @@ export const CONFIG = {
   // ---- soul tokens ----
   // A world resource read by the ON_TOKEN trigger. Not a Necromancer field: any
   // enemy death can leave one and any class's skill may read one.
-  SOUL_TOKEN_CHANCE: 0.22,     // per enemy death
-  SOUL_TOKEN_TTL: 8,           // s before it fades
-  SOUL_TOKEN_MAX: 40,          // live cap, so a crest cannot carpet the floor
+  //
+  // ⚠ ALL THREE DIVERGE FROM §8.5 AND LOSE — rows 1, 2 and 3 of its log.
+  SOUL_TOKEN_CHANCE: 0.22,     // DIVERGES: §8.5 says EVERY kill drops one
+  SOUL_TOKEN_TTL: 8,           // DIVERGES: §8.5 says 30 s
+  SOUL_TOKEN_MAX: 40,          // DIVERGES: §8.5 caps nothing; tokens are per-kill
 
   // ---- structure relocation (turrets/drones follow their owner) ----
   // "Off the owner's screen" is judged against a box GENEROUSLY larger than
