@@ -6,7 +6,11 @@
 // Peer ids are `sg-dungeon-<CODE>` where CODE is 5 unambiguous uppercase
 // letters. Host-authoritative star topology; no host migration.
 
-import { NET_PREFIX } from './config.js';
+import { NET_PREFIX, CONFIG } from './config.js';
+
+const ROOM_REGISTER_ATTEMPTS = CONFIG.ROOM_REGISTER_ATTEMPTS;
+const ROOM_REGISTER_TIMEOUT_MS = CONFIG.ROOM_REGISTER_TIMEOUT_MS;
+const ROOM_REGISTER_BACKOFF_MS = CONFIG.ROOM_REGISTER_BACKOFF_MS;
 import { randomRoomCode } from './rng.js';
 
 // Optional custom PeerServer via URL params (?peerhost=…&peerport=…&peerpath=…
@@ -36,24 +40,57 @@ export class HostTransport {
     this.closed = false;
   }
 
-  // Registers with the PeerJS cloud. Resolves with the room code, or rejects
-  // (host can still play solo offline).
-  createRoom() {
-    return new Promise((resolve, reject) => {
-      if (typeof Peer === 'undefined') { reject(new Error('PeerJS failed to load')); return; }
+  // Registers with the signalling server. Resolves with the room code, or
+  // rejects (host can still play solo offline).
+  //
+  // EVERY FAILURE CARRIES ITS REASON. Defect #9 — roughly one co-op run in
+  // three or four never getting a code — sat "undiagnosed" for a patch because
+  // this rejected with a bare Error and main.js logged it to a console nobody
+  // read. That is the same shape as the silently swallowed send in send()/
+  // broadcast(): a failure with no evidence attached cannot be fixed, only
+  // re-encountered. `err.type` is PeerJS's own classification and is the single
+  // most useful field — `unavailable-id` and `network` demand opposite fixes.
+  //
+  // ATTEMPTS ARE RETRIED ON A FRESH CODE. `unavailable-id` means this exact
+  // room code is already registered; retrying the same one can never succeed,
+  // and there was no retry at all. Each attempt draws a new code.
+  createRoom(attempts = ROOM_REGISTER_ATTEMPTS) {
+    const tryOnce = n => new Promise((resolve, reject) => {
+      if (typeof Peer === 'undefined') { reject(this._regErr('peerjs-missing', 'PeerJS failed to load', n)); return; }
       const code = randomRoomCode();
       const peer = new Peer(NET_PREFIX + code, peerOptions());
-      const timeout = setTimeout(() => { try { peer.destroy(); } catch { /* noop */ } reject(new Error('timeout')); }, 8000);
-      peer.on('open', () => {
-        clearTimeout(timeout);
+      let settled = false;
+      const done = fn => { if (settled) return; settled = true; clearTimeout(timeout); fn(); };
+      const timeout = setTimeout(() => done(() => {
+        try { peer.destroy(); } catch { /* noop */ }
+        reject(this._regErr('timeout', `no 'open' within ${ROOM_REGISTER_TIMEOUT_MS}ms`, n, code));
+      }), ROOM_REGISTER_TIMEOUT_MS);
+      peer.on('open', () => done(() => {
         this.peer = peer;
         this.code = code;
         peer.on('connection', conn => this._accept(conn));
         peer.on('error', err => { if (this.onError) this.onError(err); });
         resolve(code);
-      });
-      peer.on('error', err => { clearTimeout(timeout); reject(err); });
+      }));
+      peer.on('error', err => done(() => {
+        try { peer.destroy(); } catch { /* noop */ }
+        reject(this._regErr((err && err.type) || 'unknown', (err && err.message) || String(err), n, code));
+      }));
     });
+
+    const run = n => tryOnce(n).catch(err => {
+      this.regFailures = (this.regFailures || []).concat(err.reg);
+      console.warn(`[net] room registration attempt ${n}/${attempts} failed: ${err.reg.type} — ${err.reg.detail}${err.reg.code ? ` (code ${err.reg.code})` : ''}`);
+      if (n >= attempts) throw err;
+      return new Promise(r => setTimeout(r, ROOM_REGISTER_BACKOFF_MS * n)).then(() => run(n + 1));
+    });
+    return run(1);
+  }
+
+  _regErr(type, detail, attempt, code) {
+    const e = new Error(`room registration failed (${type}): ${detail}`);
+    e.reg = { type, detail, attempt, code: code || null };
+    return e;
   }
 
   _accept(conn) {

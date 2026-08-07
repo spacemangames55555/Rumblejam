@@ -117,6 +117,14 @@ export const CONFIG = {
   // invisible and slow enough to be free — nothing else is on the wire pre-run.
   LOBBY_HEARTBEAT_HZ: 3,
 
+  // Room registration (defect #9). One attempt with a bare 8s timeout and no
+  // retry meant any transient signalling failure — or a room-code collision,
+  // which can NEVER succeed on a retry of the same code — cost the whole
+  // session. Each attempt draws a fresh code; the backoff is per-attempt.
+  ROOM_REGISTER_ATTEMPTS: 3,
+  ROOM_REGISTER_TIMEOUT_MS: 8000,
+  ROOM_REGISTER_BACKOFF_MS: 400,
+
   DISCONNECT_TIMEOUT: 5,   // s of silence before a client is dropped
   MAX_PLAYERS: 8,
 

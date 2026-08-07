@@ -167,6 +167,7 @@ class Browser {
       // captured into an array nobody printed. A diagnostic whose output goes
       // into a buffer no test reads is not a diagnostic. The drop counter is
       // asserted at teardown; this is so the reason is on screen when it fires.
+      if (/^\[net\] (ROOM REGISTRATION|room registration)/.test(line)) console.error(`  [${this.label}] ${line}`);
       if (/^\[net\] DROPPED/.test(line)) { NET_DROPS.push(`[${this.label}] ${line}`); console.error(`  [${this.label}] ${line}`); }
     }
   }
@@ -2866,7 +2867,11 @@ if (wantCoop) {
       code = await tryRegister();
     }
     if (!code) {
-      fail('room registration failed against local relay');
+      // WITH THE REASON. This reported only "failed" for a whole patch, which
+      // is exactly why defect #9 is still open — nothing in the log said what
+      // PeerJS objected to.
+      const diag = await A.exec(`return JSON.stringify((window.uvNet && window.uvNet.regFailures) || [])`).catch(() => '[]');
+      fail(`room registration failed against local relay — attempts: ${diag}`);
     } else {
       ok(`room registered: ${code}`);
       await B.open('B', { peerjsB64 });

@@ -253,7 +253,16 @@ function hostGame() {
     app.lobby.codePending = false;
     refreshLobby();
   }).catch(err => {
-    console.warn('PeerJS room registration failed — offline solo mode', err);
+    // The reason, not just the fact. Defect #9 was "undiagnosed" for a patch
+    // because this line said "failed" and threw the cause away.
+    const reg = err && err.reg;
+    const tried = (t.regFailures || []).map(f => `${f.type}(${f.code || '-'})`).join(', ');
+    console.warn(`[net] ROOM REGISTRATION FAILED after ${(t.regFailures || []).length} attempt(s) — offline solo mode. `
+      + `last: ${reg ? `${reg.type} — ${reg.detail}` : (err && err.message) || err}. all attempts: ${tried || 'none recorded'}`);
+    if (typeof window !== 'undefined') {
+      window.uvNet = window.uvNet || {};
+      window.uvNet.regFailures = t.regFailures || [];
+    }
     if (app.role !== 'host' || app.hostT !== t || !app.lobby) return;
     app.lobby.codePending = false;
     app.lobby.code = null;
