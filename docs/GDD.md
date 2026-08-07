@@ -436,6 +436,105 @@ Two earlier versions failed:
 
 The lesson generalises: **a measurement insensitive to every dial you try is measuring something other than what you think.**
 
+### 8.5 Summoning
+
+**This section did not exist when summoning was built.** The patch was briefed
+as "build summoning per §8.5" and §8 ran 8.1–8.4 straight into §9 — no soul
+token, no `summonSlots`, no `totalAnimals` anywhere in the repo. What follows is
+the spec as built, written down so the next reader is not sent to a section that
+was never there. The load-bearing rules came from the brief; the magnitudes were
+chosen here and are flagged as such.
+
+Two classes ship it, and they ship together on purpose: the Necromancer's
+summons are **disposable** and the Druid's are **persistent**. A schema that fit
+only one would have fit half the category.
+
+#### The shape
+
+A summon is a compose step. Its **attack is another compose step**, run through
+the same `PRIMITIVES` table a player's skill uses, with the minion standing in
+as the actor. A skeleton's cleave *is* `strike`; a hawk's dive *is* `bolt`.
+
+```
+{ kind: 'summon', archetype: 'wolf', move: 'chase', maxAlive: 1,
+  slotted: true, revives: true, hp, radius, spawnRadius, duration,
+  attackCd, reviveBase, revivePerAnimal,
+  attack: { kind: 'strike', damage, arc, reach, select: 'nearest' } }
+```
+
+`move` is a closed taxonomy (`MOVE_KINDS`: `chase`, `orbit`), asserted at load
+like `TRIGGER_KINDS` and `SELECT_KINDS`. A third kind, `guard`, was written and
+deleted before shipping because no skill used one — see §13.1.
+
+Identity fields on the actor (`idx`, `stats`, `hookAgg`) are the **owner's by
+reference**, so a skeleton's kill is the Necromancer's kill and its lifesteal
+heals the Necromancer, with no special case in `damageEnemy`.
+
+#### `ON_TOKEN` — the eleventh trigger
+
+A **soul token** is a world resource dropped by *any* enemy death, for *any*
+party, expiring on a timer. `ON_TOKEN` asks whether one is within range; the
+skill that fires takes it off the floor, the same way `ON_KILL`'s counter is
+cleared by the tick that read it.
+
+It is in the trigger taxonomy, **not in the Necromancer**. The Wizard's Soul
+tree (§8.2) reads the same pool with no code added. A class-local version would
+have had to be either duplicated or generalised later.
+
+#### `rankGrants` — the one structural rank in the game
+
+Ranks buy damage or duration. `ranks` is asserted to contain nothing else.
+**Raise Skeleton is the single exception**: its rank buys a summon slot.
+
+It is registered in `RANK_GRANTS` and locked both ways — a skill declaring a
+grant must be its registered owner, and a registered grant must be claimed by a
+skill that exists. Adding a third exception means editing that table on purpose.
+
+The lock exists because the unstated version of this rule already failed: Set
+Stance declared a rankable `footingMaxBonus`, nothing asserted that a rank may
+not raise a hard cap, and a designed ten Footing stacks measured as **seventeen**
+(§8.4).
+
+**Base slots are not a grant.** `SUMMON_SLOTS_BASE` is 3 — the Druid's pack read
+off its own tree, one wolf, one bear, one hawk. Without it, keeping `rankGrants`
+unique to one skill left the Druid unable to hold any animal at all: the first
+instrumented run reported `spawned: 0, refused: 22` for a fully-armed Druid.
+
+#### The revive cost counts animals OWNED, not animals ALIVE
+
+```
+reviveSeconds = (reviveBase + revivePerAnimal × totalAnimals) / 1000
+totalAnimals  = animals owned — standing AND waiting to be revived
+```
+
+A downed animal stays in the array and keeps its slot. **This is the one thing
+to get right in the Druid.** Counting the living inverts the cost exactly where
+it must not: a wiped pack would have zero alive and therefore the *fastest*
+revives, so the worst thing that can happen to a Druid would also be the
+cheapest to repair, and the correct play would become letting the pack die.
+
+Both versions produce a plausible number, so it is asserted directly — `sim_test`
+wipes a real pack and reads the durations back, and separately checks the curve
+never falls as pack size rises.
+
+#### Assumptions, not spec
+
+Chosen in this patch because no §8.5 existed to read them from. Retune freely;
+none of them carry a rule.
+
+| | value | why |
+|---|---|---|
+| `SOUL_TOKEN_CHANCE` | 0.22 per death | frequent enough that `ON_TOKEN` is a build, rare enough not to carpet a crest |
+| `SOUL_TOKEN_TTL` / `_MAX` | 8 s / 40 live | a token is an opportunity, not a bank |
+| `SUMMON_SLOTS_BASE` | 3 | the Druid's three animal types |
+| `MINION_CAP_PER_PLAYER` | 12 | backstop; slot rules bite long first |
+| revive curve | 2.6 s + 1.4 s per owned | a solo wolf returns fast, a full pack is a real bill |
+| every hp / damage / cooldown | see each tree's `TUNING` | unmeasured — no balance pass has been run |
+
+Tier 1 in both trees is a **direct attack, not a summon**: §6.3 asks a tree's
+opening pick to kill something now, and a summon defers that behind a spawn, a
+walk and an attack cooldown.
+
 ---
 
 ## 9. Economy and Shop
@@ -625,31 +724,36 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–2 established th
 ## 15. Open Defects — by cause, not by symptom
 
 **Read this before treating any suite failure as a bug.** `tools/sim_test.mjs`
-reports **17 failures and none of them are defects**: 7 are classes that do not
+reports **16 failures and none of them are defects**: 6 are classes that do not
 exist yet, 3 are decisions already taken, 7 are a subsystem deliberately left
 for phase 4. Group D is empty. They are grouped here by
 *what would make them go away*, because "not built yet" and "broken" look
 identical in a red test log and the difference decides who picks the work up.
 
-Counts are the sim-suite failures each entry accounts for, and they sum to 17 with nothing double-counted. The focused
+Counts are the sim-suite failures each entry accounts for, and they sum to 16 with nothing double-counted. The focused
 instruments — `offence_test`, `determinism_test`, `snapstate_test`,
 `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`,
 `validate_items` — are all green.
 
-### A. Waiting on phase-5 trees — 7 of 17
+### A. Waiting on phase-5 trees — 6 of 16
 
-Twelve of the fourteen classes have no skill tree. Weapons are removed, so a
+Eleven of the fourteen classes have no skill tree. Weapons are removed, so a
 class without a tree cannot attack, cannot trigger an attack hook, and cannot
 finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
-| `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is now correctly wired to `fireSkill` — but `toh_bard`, `toh_mage`, `toh_sundian` and `toh_druid` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. |
-| `elite_arena (1p) never cleared` | 1 | Solo, at three slots, this is on the edge — it clears in the focused instrument and not in the suite's staging. 4p clears comfortably. Solo is not the target party size for an objective node. |
+| `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_bard`, `toh_mage` and `toh_sundian` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
-| `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; twelve score 0 because they cannot attack. Two non-zero entries against twelve zeroes is the outlier. |
+| `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; eleven score 0 because they cannot attack. |
 
-### B. Waiting on a design decision — 3 of 17
+**One entry left this group by being built.** `elite_arena (1p) never cleared`
+went green when the Necromancer's Summons tree landed — the class gained a third
+tree, the solo build got deeper, and the objective cleared with nothing tuned.
+That is the group working as labelled: it said "not built yet", something got
+built, and it closed. `toh_druid` also left the group, having gained a tree.
+
+### B. Waiting on a design decision — 3 of 16
 
 Real questions with no obviously-correct answer. Each needs a call in this
 document before code.
@@ -657,7 +761,7 @@ document before code.
 | what fails | count | the question |
 |---|---:|---|
 | `bounty (1p/4p) never cleared` | 2 | **EXPECTED-RED UNTIL PHASE 4 — see below.** |
-| `the summoner class has no structure to recall` | 1 | **`bonelord` builds its structure via `_addWeapon`.** With `weaponSlots` at 0 it summons nothing, so no class in the game can exercise structure recall (the retired Cogsmith's `overseer` mounts were the other). Making it a skill-era summon needs deciding what grants it — a tree node? the trait at fight start? |
+| `the summoner class has no structure to recall` | 1 | **Narrowed, not closed, by §8.5.** Skill-era summons exist now and the Necromancer fields them, but they are *units* — they walk, they die, they are re-raised. Structure RECALL (channel to pack a sited thing up and redeploy it near you, `STRUCT_CHANNEL_S`) still has nothing to act on: `bonelord` builds its structure via `_addWeapon` and `weaponSlots` is 0. The remaining decision is whether recall survives at all once weapons go, or whether the `guard` move kind comes back with a totem to justify it. |
 
 #### Bounty Hunt is EXPECTED-RED until phase 4. Do not re-diagnose it.
 
@@ -719,7 +823,7 @@ A party that reaches a nest node has cleared rooms to get there. Measuring it at
 level 1 was measuring something no player experiences, and it made a build-depth
 constraint look like an HP constraint for three patches.
 
-### C. Phase 4 — the economy — 7 of 17
+### C. Phase 4 — the economy — 7 of 16
 
 Weapons were removed in `patch-trigger-core`; the shop, combine, sell and
 slot-cap machinery still exists and still has tests. **Do not touch these
@@ -728,12 +832,29 @@ stat/modifier split when it lands.
 
 `below-max duplicate` · `combine result wrong` · `manual combine broke` ·
 `extraction shop buy failed` · `sell weapon: mats 0→0` ·
-`toh_samurai weapon cap 0` · `toh_necromancer weapon cap 0`.
+`toh_druid weapon cap 0` · `toh_necromancer weapon cap 0`.
+
+The weapon-cap pair names whichever two classes sit at the front of
+`SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same
+defect, different class in the string — worth knowing before a set diff reads
+one as fixed and the other as new.
 
 The suite also prints two `⊘ SKIPPED (weapons removed)` lines for swap-buy
 checks that cannot run at all. Skips are counted separately and never as passes.
 
-### D. Genuine open defects — 0 of 17
+### The browser suite is counted separately, and it is not clean
+
+`tools/browser_test.mjs` reports **13 failures, none of them in this list**,
+because §15 has only ever tallied `sim_test`. They share one cause: the browser
+fixtures still click `.char-card[data-char="bulwark"]` and `"facet"` — **retired
+classic ids**, left behind when the roster was retired. Every one is a
+`querySelector(...).click()` on null, which then fails the whole page's test.
+
+They are a fixture cleanup, not a game defect, and they are named here so the
+next person does not rediscover them as a rendering regression. Measured across
+this patch the set went **15 → 13** with no additions.
+
+### D. Genuine open defects — 0 of 16
 
 **Empty.** Every failure in the suite is now accounted for by A, B or C: content
 that has not been authored, a decision that has not been taken, or a subsystem

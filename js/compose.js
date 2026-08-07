@@ -263,6 +263,20 @@ export const PRIMITIVES = {
     out.hits++;
   },
 
+  // Puts a minion on the field. The ELEVENTH primitive, and the one that
+  // decides whether this table generalises: summons were the largest bespoke
+  // category in the source project, and every one of them had its own spawn,
+  // attack and death code.
+  //
+  // Everything that made them bespoke is data here. `archetype` names a row,
+  // `move` names one of MOVE_KINDS, and `attack` is ITSELF A COMPOSE STEP that
+  // the minion runs through this same table — so a skeleton's cleave is the
+  // `strike` above, not a copy of it. This function does not know what a
+  // skeleton is, and js/minions.js does not either.
+  summon(sim, p, skill, step, rank, grid, out) {
+    out.states += sim.spawnMinions(p, skill, step, rank);
+  },
+
   // A spreading damage-over-time. Stacks rather than refreshing, which is what
   // makes Internal Collapse a payoff for a tree that already applies dots.
   plague(sim, p, skill, step, rank, grid, out) {
@@ -353,5 +367,10 @@ export const RIDERS_BY_PRIMITIVE = {
   cone: [...IMPACT_RIDERS],
   bolt: [...IMPACT_RIDERS, ...BOLT_RIDERS],
   hazard: ['slow'],
+  // A summon takes no riders. Riders resolve on a target at the moment of
+  // impact; a summon has no impact. What the MINION'S attack carries is
+  // declared on the attack step, and is validated against that step's own
+  // primitive — see assertTrees().
+  summon: [],
   heal: [], shield: [], ward: [], drain: [], plague: [],
 };

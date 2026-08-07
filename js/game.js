@@ -15,6 +15,7 @@ import {
 import { CHAR_BY_ID, isSelectable, unselectableReason } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
+import * as MIN from './minions.js';
 import { EnemyGrid } from './triggers.js';
 import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
@@ -86,7 +87,8 @@ export class Sim {
     this.projPool = new Pool(CONFIG.POOL_PROJECTILES, () => ({}));
     this.grid = new SpatialHash(CONFIG.GRID_CELL);
     this.pickups = [];
-    this.summons = [];
+    this.summons = [];        // weapon-era structures; phase 4, untouched
+    MIN.initTokens(this);     // skill-era soul-token pool + its counters
     this.telegraphs = [];
     this.zones = [];
     this.vortexes = [];
@@ -1455,8 +1457,9 @@ export class Sim {
     for (const e of this.enemyPool) this.grid.insert(e);
     // projectiles
     this._tickProjectiles(dt);
-    SK.tickSkills(this, dt);
+    SK.tickSkills(this, dt);            // also ticks minions — they are skill state
     SK.tickSkillStatuses(this, dt);
+    MIN.tickTokens(this, dt);
     tickTelegraphs(this, dt);
     // telegraphs / zones / vortexes
     this._tickAreas(dt);
@@ -2297,6 +2300,10 @@ export class Sim {
       this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
     }
     tohEnemyDied(this, e);              // Necromancer bone-dust — any kill, anywhere
+    // A soul token, from ANY death, for ANY party. It is a world resource read
+    // by the ON_TOKEN trigger, not a Necromancer counter — so the Wizard's Soul
+    // tree reads the same pool later with nothing added here.
+    MIN.dropToken(this, x, y);
     if (killer && killer.stats) tohOnKill(this, killer, e);
     // drops
     let mats = objectiveKillPays(this, e) ? e.mats * this.greedMats : 0;
@@ -2652,6 +2659,10 @@ export class Sim {
   applyPlague(e, dmg, dur, p, skill) { return SK.applyPlague(this, e, dmg, dur, p, skill); }
   applySlow(e, mult, dur) { return SK.applySlow(this, e, mult, dur); }
   queueSkillStep(p, skill, step, rank, delay) { return SK.queueSkillStep(this, p, skill, step, rank, delay); }
+  // ---- summon surface (js/compose.js's `summon` primitive and ON_TOKEN) ----
+  spawnMinions(p, skill, step, rank) { return MIN.spawnMinions(this, p, skill, step, rank); }
+  tokenWithin(x, y, range) { return MIN.tokenWithin(this, x, y, range); }
+  claimToken(x, y, range) { return MIN.claimToken(this, x, y, range); }
   addVortex(x, y, v, scale) { this.vortexes.push({ x, y, t: v.dur, pullR: v.pullR, pullSpd: v.pullSpd, dps: v.dps * scale, coreR: v.coreR, acc: 0 }); }
 
   fireBeam(x, y, a, len, width, dmg, src) {
@@ -3818,6 +3829,24 @@ export class Sim {
         // contracts closed, Hunter pack mode, Blacksmith infusions
         tohState(this, p)]),
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
+      // SKILL-ERA SUMMONS AND SOUL TOKENS RIDE THE SNAPSHOT (§12.1: if losing
+      // it breaks the game it is state). A client that missed a skeleton would
+      // see enemies dying to nothing; a client that missed the tokens would see
+      // a Necromancer's ON_TOKEN skills fire for no visible reason.
+      //
+      // Like `summons`, neither list is packed by js/netcodec.js — it spreads
+      // the snapshot and repacks only enemies, projs, pickups, zones,
+      // telegraphs and fx. So these are a VIEW addition, not a wire-format
+      // change: no stride, no delta compression, no version handshake.
+      // Field 5 is the down fraction, in the same 0..1 idiom decoys, telegraphs
+      // and the Hunter's beast already use — one number carries both "it is
+      // down" and "how long until it is back".
+      minions: this.players.flatMap(p => (p.minions || []).map(m => [
+        p.idx, m.arch, r(m.x), r(m.y),
+        m.maxHp > 0 ? +Math.max(0, m.hp / m.maxHp).toFixed(2) : 0,
+        m.down ? Math.max(0.01, +(m.downT / Math.max(0.01, m.downDur)).toFixed(2)) : 0,
+      ])),
+      tokens: this.tokens.map(tk => [r(tk.x), r(tk.y), +Math.min(1, tk.ttl / CONFIG.SOUL_TOKEN_TTL).toFixed(2)]),
       beams: this.activeBeams,
       // `phase2` rides here rather than only in the one-shot `bossPhase` event.
       // The event still fires for the ENRAGED banner and the roar; the FACT of

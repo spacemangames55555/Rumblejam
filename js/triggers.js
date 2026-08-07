@@ -20,7 +20,7 @@ export const MAX_TRIGGER_EVALS_PER_TICK = 256;
 
 export const TRIGGER_KINDS = [
   'PROXIMITY', 'NEAREST', 'ISOLATED', 'ON_KILL', 'ON_HIT_TAKEN', 'ON_DODGE',
-  'SELF_THRESHOLD', 'TARGET_THRESHOLD', 'ON_STATUS', 'MOVEMENT',
+  'SELF_THRESHOLD', 'TARGET_THRESHOLD', 'ON_STATUS', 'MOVEMENT', 'ON_TOKEN',
 ];
 
 // Which params each kind requires. Checked at load — a trigger missing a param
@@ -37,6 +37,7 @@ export const TRIGGER_PARAMS = {
   TARGET_THRESHOLD: ['pct', 'range'],
   ON_STATUS: ['status', 'range'],
   MOVEMENT: ['mode', 'seconds'],
+  ON_TOKEN: ['range'],
 };
 
 // ---------------------------------------------------------------- spatial grid
@@ -206,9 +207,31 @@ export function triggerHolds(sim, p, skill, st, grid) {
         ? p.stillT >= t.seconds
         : (p.movingT || 0) >= t.seconds;
 
+    // THE ELEVENTH TRIGGER. A soul token within range — a world resource left
+    // by an enemy death, not a Necromancer field.
+    //
+    // It goes in the taxonomy rather than into the class that first uses it,
+    // because the alternative is a Necromancer special case that the Wizard's
+    // Soul tree then has to either duplicate or generalise later. The pool
+    // lives in js/minions.js and is owned by nobody; this asks the same
+    // question ON_STATUS asks, against a different kind of thing on the floor.
+    case 'ON_TOKEN':
+      return sim.tokenWithin(p.x, p.y, t.range);
+
     default:
       return false;
   }
+}
+
+// WHAT A FIRE CONSUMES. Most triggers consume nothing — proximity is still true
+// on the next tick and that is correct. The event-shaped ones spend what they
+// read: ON_KILL and ON_HIT_TAKEN have their counters cleared by the tick that
+// saw them, and a token is taken off the floor by the skill that read it.
+//
+// Keyed by trigger KIND, in the module that owns trigger semantics. A skill
+// never appears here — the day one does, the taxonomy was the wrong shape.
+export function triggerConsume(sim, p, skill) {
+  if (skill.trigger.kind === 'ON_TOKEN') sim.claimToken(p.x, p.y, skill.trigger.range);
 }
 
 // The status vocabulary a trigger can ask about, mapped onto the fields the

@@ -7,10 +7,11 @@
 // Everything here runs on the HOST. Clients receive fire events in the fx
 // stream and render them; they never evaluate a trigger.
 
-import { EnemyGrid, triggerHolds, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
+import { EnemyGrid, triggerHolds, triggerConsume, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
 import { selectTarget } from './selectors.js';
 import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
+import { initMinionPlayer, summonSlotsFor, tickMinions } from './minions.js';
 import { domainMult } from './domains.js';
 import { TUNING as SAM } from './content/skills/samurai_armor.js';
 
@@ -27,8 +28,9 @@ export function initSkillPlayer(sim, p) {
   p.trigEvents = { kill: 0, hitTaken: 0, dodgeT: -999, lastFired: null };
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0 };   // passives that raise a stack's worth
+  initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
   p.footingShield = 0;               // the stance's absorb pool (see engineStatBonus)
@@ -193,6 +195,11 @@ export function tickSkills(sim, dt) {
     // publish the engines other trees read
     p.engines.armor = Math.max(0, p.stats.grit);
     p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
+    p.engineScaleBonus.pack = passiveSum(p, 'packDamageBonus');
+    // Slots are recomputed from ranks every tick rather than incremented on
+    // spend, so respecs, save loads and rank rollbacks cannot leave a player
+    // holding slots no skill still pays for.
+    p.summonSlots = summonSlotsFor(p, p.skillRanks, SKILL_BY_ID);
     p.movingT = p.moving ? (p.movingT || 0) + dt : 0;
     tickFooting(sim, p, dt);
     for (const id of Object.keys(p.skillCd)) {
@@ -207,6 +214,8 @@ export function tickSkills(sim, dt) {
       runCompose(sim, p, { ...q.skill, compose: [q.step] }, q.rank, sim.trigGrid);
     }
   }
+
+  tickMinions(sim, dt);
 
   sim.trigAcc += dt;
   if (sim.trigAcc < S) return;
@@ -264,6 +273,10 @@ function runTriggerTick(sim) {
 function fireSkill(sim, p, sk) {
   const rank = skillRank(p, sk.id);
   p.skillCd[sk.id] = sk.cooldown / 1000;
+  // What the fire SPENDS, before what it does. A token is taken off the floor
+  // by the skill that read it — the same shape as ON_KILL's counter being
+  // cleared by the tick that saw it. Keyed by trigger kind in triggers.js.
+  triggerConsume(sim, p, sk);
   const out = runCompose(sim, p, sk, rank, sim.trigGrid);
   // THE ToH TRAIT LAYER OBSERVES ATTACKS, and this is what an attack is now.
   // tohOnFire() was called from _tickWeapons() and nothing else — and

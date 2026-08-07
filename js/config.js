@@ -26,6 +26,41 @@ export const CONFIG = {
   CONTACT_COOLDOWN: 0.8,   // s between contact hits from one enemy
   INVULN_AFTER_HIT: 0.35,  // brief player i-frames after any hit
 
+  // ---- skill-era summons (js/minions.js) ----
+  // Engine-wide limits and shared kinematics. Per-summon magnitudes — hp,
+  // damage, duration, counts — are NOT here: they live in each tree's TUNING
+  // block and arrive on the compose step, so a Necromancer skeleton and a Druid
+  // wolf differ as data. These are the numbers that belong to the engine rather
+  // than to any one summon.
+  MINION_CAP_PER_PLAYER: 12,   // hard ceiling; slot rules bite long before this
+  // BASE SLOTS EVERY SUMMONER STARTS WITH, before any rank buys more.
+  //
+  // This exists because `rankGrants: 'summonSlots'` is registered to exactly
+  // one skill — Raise Skeleton — and that is deliberate. Without a base
+  // allowance the Druid could never hold an animal at all: its whole pack is
+  // slotted, and no Druid skill grants a slot. The first run of the instrument
+  // reported `refused: 22, spawned: 0` for a fully-armed Druid, which is what a
+  // rule applied to one class and quietly assumed by another looks like.
+  //
+  // 3 is the Druid's pack read straight off the tree: wolf, bear, hawk, one of
+  // each. The Necromancer stacks its Raise Skeleton ranks on top of the same
+  // base, so the grant still buys exactly what it says it buys.
+  SUMMON_SLOTS_BASE: 3,
+  SUMMON_SLOT_CAP: 8,          // ceiling on base + everything rankGrants adds
+  MINION_SPEED: 250,           // u/s; below BASE_SPEED so a pack cannot outrun its owner
+  MINION_AGGRO_RANGE: 420,     // how far a chaser will look for something to fight
+  MINION_HEEL_RANGE: 70,       // with nothing to fight, this close to the owner is close enough
+  MINION_ORBIT_RATE: 1.6,      // rad/s for orbiters
+  MINION_ORBIT_LERP: 8,        // how hard an orbiter corrects toward its station
+  MINION_CONTACT_CD: 1,        // s between contact hits from one enemy onto one minion
+
+  // ---- soul tokens ----
+  // A world resource read by the ON_TOKEN trigger. Not a Necromancer field: any
+  // enemy death can leave one and any class's skill may read one.
+  SOUL_TOKEN_CHANCE: 0.22,     // per enemy death
+  SOUL_TOKEN_TTL: 8,           // s before it fades
+  SOUL_TOKEN_MAX: 40,          // live cap, so a crest cannot carpet the floor
+
   // ---- structure relocation (turrets/drones follow their owner) ----
   // "Off the owner's screen" is judged against a box GENEROUSLY larger than
   // any real viewport (the renderer shows ROOM_W×ROOM_H of world at the
