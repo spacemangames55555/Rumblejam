@@ -1,0 +1,654 @@
+# Rumblejam — Game Design Document
+
+**Draft 8 · August 2026**
+**Status: authoritative.** This file supersedes all prior drafts, including the Word documents used for design review through Draft 7. Where this document and any other source disagree, this document wins — except for tuning constants, where the per-tree `TUNING` blocks in code are authoritative and this document records intent.
+
+**How to read this.** Plain text is settled design. Blocks marked **PROPOSED** are not settled and should not be built without a ruling. Section 16 records implementation status per system, so a reader can tell what exists from what is described.
+
+**Why this file is here.** Drafts 1–7 lived outside the repo and were cited by section number in specs that Claude Code could not read. The README drifted from the design twice as a result — it still described Footing as granting Reflex and dropping instantly, months after both were changed. Design that governs code belongs beside the code.
+
+---
+
+## 1. Concept
+
+Rumblejam is a browser-based co-op action RPG for up to 8 players, played from a link and a room code. Players are monster slayers working through the mythologies of the real world — a swamp, an Egyptian necropolis, a Russian tundra, a Celtic grassland — hunting the creatures, spirits, and old gods native to each region.
+
+Combat is twin-stick movement and positioning. Players do not aim or fire. Every ability triggers automatically from a condition the player controls through **where they stand and how they move**. The build decides what the player's movement means.
+
+### 1.1 Design pillars
+
+- **Move and react, not menu and think.** Combat stays fast and physical. All complexity lives in the build screen, never in the fight.
+- **Engine, not multiplier.** Every class has a distinct mechanical engine. No class is another class with bigger numbers.
+- **A link and a room code.** No accounts, no installs, no setup. Any friction added here is a design failure.
+- **Trade-offs make decisions.** Power without cost is not a choice. Items, skills, and map routes all cost something.
+- **The world is the progression.** Advancement is measured in territory conquered, not in a number going up.
+
+---
+
+## 2. Run Structure
+
+### 2.1 Definitions
+
+| Term | Meaning |
+|---|---|
+| Map | One playable dungeon, comparable to a floor in the pre-overhaul build |
+| Region | A themed area containing 10 maps on a tree, plus a boss map |
+| Run | A full game across all 8 regions, persisting across many sittings |
+| Character save | One object: class, level, points, items, frontier, parked region state |
+
+### 2.2 Structure
+
+- **8 regions**, fixed order, 1 through 8.
+- Each region presents **10 maps on a branching tree**. The player clears **5** to reach the boss.
+- Clearing the **region boss** unlocks the next region.
+- **6 maps per region × 8 regions = 48 maps** in a full run.
+
+Picking 5 of 10 means a region replays with roughly half new content, and gives every region a route decision without touching global difficulty.
+
+### 2.3 The map tree
+
+Ten nodes in **five columns of two**. Entry connects to both column-1 nodes; each node links forward to one or two nodes in the next column; both column-5 nodes reach the boss gate.
+
+```
+        ┌─ A1 ─┬─ A2 ─┬─ A3 ─┬─ A4 ─┬─ A5 ─┐
+ENTRY ──┤      ╳      ╳      ╳      ╳      ├── BOSS
+        └─ B1 ─┴─ B2 ─┴─ B3 ─┴─ B4 ─┴─ B5 ─┘
+```
+
+Every path is exactly five nodes **by construction**, not by validation. Cross-links randomise per generation (`CROSS_LINK_CHANCE = 0.45`) so routes diverge and reconverge without changing path length.
+
+### 2.4 Node types
+
+Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
+
+| Type | Contents |
+|---|---|
+| Horde | Standard arena wave combat |
+| Elite | ×0.55 count, ×2.4 HP, 75% drawn from the region's heavy half |
+| Objective | One of the 8 existing objective types |
+| Shrine | No combat. Party chooses: +1 skill point **or** one guaranteed shop reroll. Never both, never rolled |
+| Cursed | Region modifier active for that node only, ×1.6 gold |
+
+Placement: Shrine and Cursed may not sit in column 1; both Elites may not share a column. Node type is **visible before selection** — the route decision does not exist otherwise.
+
+Depth scaling within a region: `depthMult = 1 + 0.08 * (column - 1)`. Resets each region.
+
+The tree regenerates from the region's node pool on party wipe. A failed region never replays identically.
+
+### 2.5 The world map
+
+A **lobby, not a hub**. No shops, no vendors, no walking around. Shows the eight regions with frontier gating and a stated reason on every locked card, each player's character and level, party difficulty, unspent points, and loadout editing.
+
+---
+
+## 3. Regions
+
+Fixed order, permanently tuned to a difficulty band. Because the order is fixed, each region's enemies, hazards, and boss are hand-authored against a known player power level.
+
+### 3.1 Scope
+
+**Eight regions is the complete game.** The target is eight regions fully developed rather than a larger number partially realised. Anything beyond region 8 is a post-launch expansion. No system should be built to accommodate hypothetical regions 9 and up.
+
+### 3.2 The eight regions
+
+| # | Region | Native class | Domain skew | Mythology |
+|---|---|---|---|---|
+| 1 | Pacific Northwest | Druid | Physical | Coast Salish and Cascadian folklore, forest spirits, old-growth beasts |
+| 2 | Central America | Savage | Spiritual | Aztec and Maya underworld, jaguar cults, Xibalba |
+| 3 | Great Britain | Bard | Mental | Celtic myth, fae courts, standing stones, hill gods |
+| 4 | Egypt | Wizard | Spiritual / Mental | Ancient Egyptian necropolis, animal-headed gods, tomb constructs |
+| 5 | Central Africa | Witch Doctor | Spiritual / Physical | Primal Congo spirit cosmology, swamp, rot, masked ancestors |
+| 6 | Northern Russia | Necromancer | Physical / Mental | Slavic myth, frozen dead, deep-winter horrors |
+| 7 | Off Indonesia | Sundian | Mental | Sunken aquatic city, drowned Sundaland, tide gods |
+| 8 | Australian Outback | Hunter | Even across all three | Aboriginal Dreaming, desert megafauna |
+
+No region exceeds **60%** one domain. Region 8 is deliberately even, so the endgame demands full party coverage rather than one counter-build.
+
+### 3.3 Class unlocks
+
+The **six non-region classes are the starting roster** — Blacksmith, Mage, Samurai, Monk, Assassin, Priest. The **eight region-native classes unlock by clearing their home region.**
+
+Unlocks live on the **player**, not the character — the point of unlocking the Wizard is to create a *new* Wizard, so it cannot sit inside the character that earned it.
+
+Clearing region 8 completes the run. The Hunter unlocks at that moment and pays off on the next character.
+
+### 3.4 Region identity checklist
+
+1. A tileset and palette recognisable in one frame.
+2. **Six or more enemy archetypes**, at least two unique to the region.
+3. **One environmental hazard** that changes how players move.
+4. **A damage-domain skew** per §3.2.
+5. **One boss** with at least two phases and a mechanic that is not a bigger normal enemy.
+6. **One Cursed modifier** unique to the region.
+7. **Telegraph density at or above 50% by encounter weight** — see §6.4.
+8. A node pool large enough to generate a varied 10-node tree.
+
+### 3.5 Where to spend effort
+
+Region 1 is played more than regions 6, 7 and 8 combined — every new save starts there, every new player's first impression is there, every wipe replays it. It gets the most map variety, the most polish, the most archetypes. If scope must be cut, it is cut at the top of the list.
+
+---
+
+## 4. Difficulty and Scaling
+
+### 4.1 Three separate axes
+
+| Axis | Granularity | Controls |
+|---|---|---|
+| Region band | Coarse, permanent | Baseline enemy HP, damage, density, archetypes |
+| Map depth | Fine, within region | Escalation across the 5 chosen maps plus boss |
+| Difficulty setting | Party-selected | Global multiplier, adjustable per region |
+
+Four difficulty settings scale HP, damage, density, and gold. **Standard is exactly 1.0 on every axis**, and the ladder is monotonic — otherwise two settings are the same choice.
+
+**XP is never scaled by difficulty.** Asserted at load: a difficulty declaring an XP multiplier fails import. If the hardest setting paid more XP it would stop being a preference and become the only correct choice.
+
+The difficulty setting's primary purpose is replay — a maxed character levelling an alt through region 1.
+
+### 4.2 The player power curve
+
+- **1–2 levels per map.** Across 48 maps this produces a character in the **low 70s** at the end of a run.
+- **No rank cap.** A skill accepts unlimited points.
+- **Per-rank increment: +4% of base damage, +3% of base duration, linear against base.** Never compounding — `damage *= 1.04` per rank is explosive at rank 40.
+- **Ranks raise damage and duration only.** Not radius, not cooldown, not projectile count, not trigger thresholds.
+
+#### Why no cap self-balances
+
+Skills fire on cooldowns. A character running few skills has long gaps and spiky damage. A character running many has syncopated fire rates and smooth damage, but each skill is under-invested and hits softly. Neither extreme wins; the optimum sits in the middle and moves with enemy HP and density.
+
+#### The two levers that must stay off ranks
+
+**Cooldown** is load-bearing. If deep investment bought both damage and uptime, wide builds would lose on every axis and the tension would collapse. A narrow build must always pay in gaps. **Cooldown reduction is off ranks and off items.**
+
+**Radius** is off ranks. Radius growth comes only from modifier items, which raises the item pool's value and keeps skill investment about output.
+
+#### Rank-1-only passives
+
+**A passive granting neither damage nor duration is rank-1 only.** It is an unlock, not an investment.
+
+This ruling exists because "ranks raise damage and duration only" said nothing about a passive granting max stacks or accrual speed, and the ambiguity resolved toward the most permissive reading available — which breached a designed hard cap. Left unstated it recurs across all ~420 skills.
+
+Enforced at import **and** in `canLearn`. A cap that lives only in a data file and an assertion is a label. Classification is a declared registry; an unclassified passive key fails the load.
+
+### 4.3 Enemy scaling
+
+Authored per region band, not computed from a global curve. Expected player level on entry:
+
+| Region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| Level | 1 | 10 | 19 | 28 | 37 | 46 | 55 | 64 |
+
+If a party arrives significantly above or below the anchor, that is the difficulty setting doing its job, not a bug.
+
+---
+
+## 5. Combat Model
+
+### 5.1 The core change
+
+Weapons are gone. Skills replace them, and conditions replace the firing timer. A skill does not fire because time passed; it fires because the player created the situation it was waiting for.
+
+This preserves the moment-to-moment feel — still moving, still reacting, no menus mid-fight — while making the build determine what good positioning looks like.
+
+### 5.2 Trigger taxonomy
+
+Every active declares exactly one trigger and one cooldown. Triggers evaluate **on the host only**, on a fixed interval.
+
+| Trigger | Params | Fires when |
+|---|---|---|
+| `PROXIMITY` | `radius`, `count` | `count` or more enemies within `radius` |
+| `NEAREST` | `range` | Any enemy within `range` |
+| `ISOLATED` | `radius`, `count` | Fewer than `count` enemies within `radius` |
+| `ON_KILL` | — | The owning player kills an enemy |
+| `ON_HIT_TAKEN` | — | The owning player takes damage |
+| `ON_DODGE` | `window` | Player was inside a committed zone at commit and outside at resolve |
+| `SELF_THRESHOLD` | `pct` | Own HP crosses below `pct`, edge-triggered |
+| `TARGET_THRESHOLD` | `pct`, `range` | An enemy within `range` drops below `pct` HP |
+| `ON_STATUS` | `status`, `range` | An enemy within `range` carries `status` |
+| `MOVEMENT` | `mode`, `seconds` | Moving or still, sustained |
+
+**No unconditional trigger.** There is no "fires when off cooldown" kind and none may be added. The moment one exists it becomes correct for every skill, positioning stops mattering, and the game is an idle auto-battler. Any trigger added later must still depend on a player-controllable condition.
+
+`ISOLATED` is true in an empty room — a skill rewarding solitude should not also require company. Steps needing a target no-op when there is none.
+
+### 5.3 Evaluation
+
+```
+TRIGGER_TICK_MS            = 100    // 10 Hz
+GRID_CELL_PX               = 128
+MAX_TRIGGER_EVALS_PER_TICK = 256
+```
+
+Cooldown is tested **before** any spatial query. This ordering is most of the performance win — measured at 8 players, 20 skills, 8 slots, 200 enemies: 25.8 evals/tick, 0.280 ms median, 0 cap hits. Roughly 0.9% of a 60 fps frame.
+
+Clients never evaluate a trigger, never decide a skill fired, and never predict locally.
+
+### 5.4 The loadout
+
+Passives are always on; actives must be slotted.
+
+| Slot | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| Level | 1 | 5 | 12 | 21 | 31 | 42 | 54 | 66 |
+
+**8 slots is a hard ceiling** — beyond that the screen stops being readable on a phone.
+
+**Anti-softlock floor:** the loadout UI refuses to leave a player with zero damaging actives slotted. With a 1-slot start this is load-bearing from the first minute.
+
+Loadout changes happen at the world map, at Shrine nodes, and between rooms — never mid-fight.
+
+### 5.5 The opening ability
+
+Characters start with **no abilities at all**. The first point spent is the character's opening ability, chosen from the tier-1 nodes of their trees. **Every tree's tier-1 node must be a damaging active**, asserted at load.
+
+### 5.6 The composed-action schema
+
+Any active is data: an ordered list of steps from ten primitives plus riders.
+
+**Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `heal` · `shield` · `ward` · `drain` · `plague`
+
+**Impact riders** (land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit`
+**Shape riders** (shape a swing): `arc` · `windUp` · `multiPulse`
+**Projectile riders:** `pierce` · `splash` · `impactDot` · `defenseDown`
+
+This decomposition replaced an earlier per-primitive rider split that could not express a bolt carrying `weakenDamage`.
+
+**Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
+
+**Result:** 40 skills across 4 trees, zero bespoke handlers. Summons remain untested and were the largest bespoke category in the source project — expect the rate to rise there, but not enough to threaten the schema.
+
+### 5.7 Engine scaling — `scaleWith`
+
+A step may declare `scaleWith: '<engine>'` and `scalePer`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
+
+This is what makes the remaining twelve class engines data rather than engineering. Cascade, drench, crystallize, Chi, judgment marks, killbox, and two bodies all use the same hook.
+
+---
+
+## 6. Telegraphs
+
+Not present in Draft 7. Added because `ON_DODGE` had nothing real to bind to, which made the Footing decision unjudgeable — and because positional combat is only readable if a player can see what is about to hurt them and where.
+
+### 6.1 State machine
+
+```
+IDLE  →  WINDUP  →  RESOLVE  →  RECOVER  →  IDLE
+```
+
+**The danger zone is computed once at the start of `WINDUP` and never updates.** The enemy does not track the player through the wind-up. A committed attack is a promise about a piece of ground, which is what makes stepping off it a skill rather than a stat. An enemy that reaims produces an undodgeable attack.
+
+An enemy commits only if the zone it just built **actually contains someone**. Committing against a target already outside the zone produces attacks nobody was ever caught by — which reads as "telegraphs feel bad" and is not.
+
+Knockback during `WINDUP` moves the enemy but **not** the zone. A stun during `WINDUP` cancels the attack outright.
+
+`recoverFrozen` is declared explicitly as a boolean either way — a telegraph that omits it is one where nobody decided, and the punish window is too load-bearing for a default.
+
+### 6.2 Zones and timing
+
+Shapes reuse the compose geometry (`inZone`, `inCone`, `inLine`) so an enemy telegraph and a player skill ask the same question of the same shape. Two implementations would drift, and the drift is an attack that looks dodged and lands anyway — the one bug that makes telegraphs worse than none.
+
+```
+TELEGRAPH_MIN_WINDUP_MS = 350
+```
+
+Wind-ups run 450–700 ms scaled to zone size. Bigger zone, longer read.
+
+### 6.3 Rendering
+
+The zone draws on the ground in its committed shape. **Fill sweeps 0→100% over the wind-up — the fill is the timer.** Domain-tinted, outlined so overlapping zones stay legible, cleared immediately on resolve. **No telegraph may depend on sound**; the game runs in muted tabs.
+
+### 6.4 Density
+
+**Every heavy or elite archetype telegraphs. Trash and swarm do not.**
+
+Target: **at or above 50% by encounter weight** per region, asserted at load.
+
+If everything telegraphs, holding stance is always punished. If nothing does, holding is free. The decision only exists when some damage is dodgeable and some is not.
+
+Density is also the dial that resolved Footing's offensive balance: at 21% density the holder led by ×2.24; at 50% it is ×1.08. **Do not tune a stance mechanic against a low-density world and then raise the density.**
+
+### 6.5 `ON_DODGE`
+
+Fires when a player was **inside** a committed zone at commit and **outside** it at resolve. Positional, requires actual movement, cannot be satisfied by a stat roll.
+
+The Reflex dodge stat remains as a defensive mechanic and **does not feed `ON_DODGE`**. Conflating them made dodge-triggered skills reward Reflex instead of movement.
+
+---
+
+## 7. The Damage Triangle
+
+```
+physical  beats  spiritual   →  red    #C0392B
+mental    beats  physical    →  blue   #2E6DA4
+spiritual beats  mental      →  violet #7D4A9E
+
+ADVANTAGE_MULT    = 1.25
+DISADVANTAGE_MULT = 0.80
+```
+
+All damage routes through the triangle, including hazard and plague ticks. There is no unrouted damage path. Every skill and every enemy declares a domain. Enemies render a **4px domain-coloured rim**, always visible, no inspection required.
+
+**Assigning a domain to each skill happens while writing its tree, never afterward.** One extra field during authoring; a 420-item audit with no context otherwise. The same applies to trigger assignment and TUNING placement.
+
+---
+
+## 8. Skill System
+
+### 8.1 Shape
+
+- **14 classes × 3 trees × ~10 skills ≈ 420 skills.**
+- Trees run tier 1 → tier 10, terminating in a capstone.
+- **1 skill point per level**, spendable freely across all three of a character's trees. No per-tree budget.
+- Prerequisites are linear within a tree. No cross-tree prerequisites.
+
+### 8.2 Class roster
+
+| # | Class | Home | Tree 1 | Tree 2 | Tree 3 |
+|---|---|---|---|---|---|
+| 1 | Blacksmith | Munich | Tank | DPS | Runes / Crystal Forms |
+| 2 | Wizard | Cairo | Soul | Mystic | Ethereal |
+| 3 | Necromancer | Murmansk | Marrow | Summons | Dark Matter |
+| 4 | Druid | Enumclaw | Tapestry of Beasts | Restoration | Wild Kin & Earth's Wrath |
+| 5 | Mage | Moscow | Arcane Warrior | Buffs / Debuffs | Quantum / Spacetime |
+| 6 | Bard | London | Harmony | Instrument Melee | Sonic / Resonance |
+| 7 | Witch Doctor | Kinshasa | Voodoo Mastery | Alchemy of Decay | Spirit Whisperer |
+| 8 | Samurai | Kyoto | Armor | Tactics | Agility |
+| 9 | Monk | Lhasa | Melee Heals | Gauntlets | Traps |
+| 10 | Assassin | Dubai | Traps | Stealth | Range |
+| 11 | Priest | Rome | Light | Rebuke | Vanquish |
+| 12 | Savage | Mexico City | Primal Fury | Swift Reckoning | Bloodbound Guardian |
+| 13 | Hunter | Sydney | Melee | Marksmanship | Beast Control |
+| 14 | Sundian | Bali | Tide | Regalia | Deluge |
+
+The Sundian's display name is Sundian everywhere; its internal `classId` remains `atlantean` for save compatibility. **Do not rename the id.**
+
+### 8.3 Class engines
+
+Every class has a mechanical engine no other class has. Each must interact with the trigger system differently — that is the test for whether an engine is real.
+
+| Class | Engine |
+|---|---|
+| Savage | **Cascade** — an ordered 3-skill sequence banks uncapped ranks; each grants +8% damage and removes 8% of *remaining* reducible cooldown, floored at 50% of base |
+| Sundian | **Drench stacks** — a stacking debuff spent by `ON_STATUS` triggers |
+| Mage | **Crystallize** |
+| Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
+| Druid | **Morph** — invest in animal DNA; the character visually mutates to match the build |
+| Blacksmith | **Crystal Forms** — timed transformations on `SELF_THRESHOLD` |
+| Necromancer | **Summons** that persist and scale |
+| Bard | **Stances** — a stance multiplier gates other skills' output |
+| Wizard | **Domain shift** — the only class that changes its own damage domain mid-fight |
+| Priest | **Judgment marks** — marks detonate on the target's death, healing nearby allies |
+| Samurai | **Footing** — see §8.4 |
+| Monk | **Chi loop** — damage generates Chi; heals and traps spend it |
+| Assassin | **Killbox** — traps placed inert, detonating when other skills fire nearby |
+| Hunter | **Two bodies** — skills may trigger off the pet's position |
+
+**The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat sequencing rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor.
+
+### 8.4 Footing
+
+The Samurai's engine, and the most-iterated design in the project.
+
+```
+footingTickMs         = 500     // one stack per half-second stationary
+FOOTING_MAX_STACKS    = 10      // hard cap, no skill may raise it
+footingShieldPerStack = 4
+footingGritPerStack   = 2
+footingGraceMs        = 400
+footingGraceRefill    = 1.0
+```
+
+**Footing grants a shield pool and grit. It does not grant Vitality, and it does not grant Reflex.**
+
+- *Vitality was removed* because max HP has a destructive removal path — dropping stance clamped current HP, so dodging cost health in an amount unrelated to the attack, invisibly, scaling worst at high stacks. The shield pool loses protection you had not spent, not health you had.
+- *Reflex was removed* because a stance that makes you harder to hit contradicts the mechanic. The Samurai has surrendered his ability to dodge anything telegraphed; granting dodge chance does the opposite.
+
+The shield lives in its own field, not the general shield pool, so breaking stance drops exactly the Footing part and does not eat an unrelated absorb.
+
+#### The grace window is a budget, not a timer
+
+Movement under `footingGraceMs` does not drop the stack. Movement accumulates against the budget; standing still refills it at `footingGraceRefill`.
+
+**A timer reset by standing still would let a player cross the entire map at full stance in 300 ms hops.** The budget prevents that structurally.
+
+400 ms is chosen against the shortest wind-up on the roster, so **one sidestep out of the fastest committed zone fits and a room crossing does not.**
+
+Gated explicitly: sidestep keeps, reposition drops, wiggle drops, settling recharges, and inside the window the stance holds without growing so moving never pays.
+
+#### What the engine is for
+
+Hold ground through untelegraphed trash; break stance for committed zones. Measured at 50% density, three strategies:
+
+| | damage dealt | damage taken |
+|---|---|---|
+| holder vs sidestepper | ×0.84 | ×0.60 |
+
+Roughly **+19% damage for +67% damage taken** — a live trade, which is what the engine exists to offer.
+
+**Failure condition:** if tuning ever makes it correct to always hold or always break, the engine has failed and that should be reported rather than tuned around.
+
+#### History worth keeping
+
+Two earlier versions failed:
+
+- **Iaido** (skills charge while idle, damage scales with time since last fired) was rejected: rewarding a skill for *not being used* runs against the short intense bursts the game is built on.
+- **Instant drop** made the defensive gap ×0.37 and completely insensitive to every dial tried — per-stack Grit, removing Reflex, tripling telegraph density. Movement cost the entire stance and the rebuild was slower than commits arrived, so a moving player was never *choosing* to fight without a stance; it was never allowed one. The grace window moved the number 60% on the first attempt.
+
+The lesson generalises: **a measurement insensitive to every dial you try is measuring something other than what you think.**
+
+---
+
+## 9. Economy and Shop
+
+*Not yet built. Phase 4.*
+
+### 9.1 The problem
+
+The pre-overhaul shop pays out fast because a run was one floor. Across 48 maps that curve produces a party that has bought everything relevant by region 4 and then accumulates gold with nothing to spend it on.
+
+Two levers together: **slower income** and **escalating prices**. Price escalation matters more.
+
+### 9.2 Item categories
+
+| Tier | Changes | Rarity |
+|---|---|---|
+| Stat items | Flat + or +/− along opposing axes | Common |
+| Magnitude | Splash radius, projectile count, pierce, chain jumps, duration | Common–Rare |
+| Rider | Adds an effect the skill did not have | Rare |
+| Domain swap | Changes one skill's damage domain | Rare–Legendary |
+| Trigger swap | Changes a skill's trigger type or threshold | Legendary only |
+
+**Radius lives in magnitude items exclusively**, since ranks no longer grant it.
+
+**No cooldown reduction on any item.** Same reasoning as ranks: an item that shortens cooldowns lets a narrow build buy back its uptime and the depth-versus-breadth pressure disappears.
+
+Trigger swaps are the highest-upside and highest-risk item in the game — one that lands badly can invalidate a build mid-run. Gated to legendary; may be cut.
+
+**Weapons are gone from the game. `SHOP_WEAPON_CHANCE = 0`.** A shop stocking unequippable items is a bug, not a design question.
+
+### 9.3 Sinks and respec
+
+Shop rerolls escalating within a visit; item upgrades; **skill respec at 1000 gold base, multiplying ×2.5 per use, never resetting**. Respec refunds all points at once — per-point respec would let players micro-optimise between every map.
+
+### 9.4 Numbers
+
+All placeholders for playtest. Income roughly flat within a region, scaling ~15% per band; item prices ~25% per band; reroll cost doubling within a visit. **Target: 1–2 purchases per shop visit throughout the run, never 6.**
+
+---
+
+## 10. Failure and Death
+
+**Party wipe resets the current region.** The tree regenerates, region progress is lost, the party re-enters at the first node. Level, points, and items are kept in full.
+
+**Downed, not dead.** A player at zero HP is downed and revivable by a teammate. A wipe is declared only when the whole party is down simultaneously. In an 8-player game, removing a player for the rest of a 10-minute map means they sit and watch.
+
+**No solo exception.** A solo player who goes down restarts the region.
+
+Full HP restore at the start of every room, except under the `bloodprice` curse.
+
+---
+
+## 11. Saves and Multiplayer
+
+### 11.1 One object per character
+
+There is no separate world save. World progress lives on the character:
+
+```js
+{
+  id, class, level,
+  points: { spent: {...}, unspent: n },
+  items: [...],
+  frontier: 2,
+  parked: { region, tree, cleared, difficulty }
+}
+```
+
+Opening a character in solo sets the world map to that character's frontier and restores its parked tree. A character can never be in two worlds at once, because the character **is** the world.
+
+A separate small player-level store holds unlocked classes and nothing else.
+
+### 11.2 The frontier rule
+
+- The **host's active character sets the region** for everyone.
+- A character advances its frontier **only by clearing the region that is its frontier**.
+- Playing below it is a replay and grants nothing new.
+- Playing above it — being carried — grants **levels and items but no world progress**.
+- Frontier advances on **presence at the region boss kill**.
+
+Hosting is not privileged; it only decides which region everyone is in. Two friends at the same frontier both advance by playing together.
+
+### 11.3 Mid-region state parks
+
+A character three maps into region 3 who joins a friend's region 3 plays the host's rolled tree for that session. Their own tree and cleared nodes are untouched.
+
+The save format follows: a frontier integer and parked region state, nothing more. Nodes cleared in someone else's game never write back.
+
+### 11.4 Levelling alternate characters
+
+Finishing with one character leaves every other at level 1. Replaying regions is the intended path. **Replay difficulty is the lever** — and XP is not tied to difficulty, so the reward for raising it is that content stays playable, not that it goes faster.
+
+The other path is being carried, which gives established players a standing reason to host.
+
+### 11.5 Mismatched levels
+
+**No clamping.** A high-level character may join a low-level world and power-level the party. The lobby shows each player's level against the region's expected level so a party sees the mismatch before committing.
+
+### 11.6 Storage
+
+localStorage or IndexedDB, with **export and import to a file**. **Clearing browser data destroys saves** — stated plainly in the UI, with an export prompt after each region clear.
+
+Client-authored saves are trivially editable and that is accepted. The consequence: **this model cannot support leaderboards or public matchmaking**, and neither should be proposed without revisiting the architecture.
+
+---
+
+## 12. Netcode
+
+### 12.1 State versus event
+
+**If losing it breaks the game, it is state and rides the snapshot. If losing it is cosmetic, it is an event and may be dropped.**
+
+This rule was derived from a live defect: an event sent while a peer's channel was not open was gone permanently — no buffer, no replay, no error. Snapshots survive this because they repeat at 15 Hz carrying whole state; one-shot events do not.
+
+Examples: the region node map, cleared nodes, frontier, difficulty, loadout, boss phase, and arena geometry are **state**. A per-floor biome string is an **event** — losing it costs a flat floor, not a run.
+
+**Send-on-change is not an acceptable optimisation for state.** A client that misses the single snapshot carrying a change is back where it started — this reintroduces the exact bug it appears to fix. Redundant transmission is the mechanism. Measured cost: 22.9 KB/s on the map screen, 4.9 KB/s in an arena.
+
+### 12.2 Any screen holding co-op state needs a repeating channel
+
+The lobby had none, so lobby state travelled as a one-shot broadcast with the same drop hazard. It now carries a **3 Hz heartbeat**. Screens that cannot carry state redundantly cannot hold state that matters.
+
+### 12.3 Never swallow a failed send
+
+A silent drop with a clean console cost seven runs to diagnose. Every skipped send logs peer id and event type, and the counter is asserted at suite teardown.
+
+**Both directions must be instrumented.** "Zero drops" was true and useless for a full session because only `HostTransport` was instrumented while the failing path was `ClientTransport.send`.
+
+---
+
+## 13. Engineering Standing Rules
+
+Each of these has caught a real defect on this project. They are recorded here because they are design constraints on how the game is built, not preferences.
+
+1. **Runtime-path tests, not definition tests.** The source project shipped 19 skill kinds wired to nothing, all passing existence checks. Every skill, node type, hazard, and boss phase must be swept through its real path producing an observable effect.
+2. **An instrument no test reads is not an instrument.** A drop log written to a console the harness does not pipe caught nothing. Diagnostics get a consumer in the same patch that adds them.
+3. **Gates assert their own instrument before measuring.** Five instances: a walked-away player, a sample window shorter than the cooldown, a field players do not have, a picker that re-ranked one node forty times, a stack reading broken by a rename. A gate verifies it can see a known-good baseline before reporting a number.
+4. **Assertions read the event log, never derived state.** HP has misled three times, in both directions.
+5. **A count is not a set.** Three times in one patch an identical failure count hid a composition change. Regressions are reported by set diff.
+6. **A suite that stops early is not a suite that passed.** A siege-boss crash survived a full patch because an earlier section hung before reaching it. Partial logs are not partial evidence.
+7. **A suite that dirties the working tree is a failed suite.** Assert tracked assets clean at teardown. Where a reflex can be made unavailable rather than detectable — `.gitignore` over a gate — prefer that.
+8. **Enumerated resets are the defect.** Pool reuse wipes every own field; anything forgotten reads `undefined` at the point of use rather than a plausible value from another entity.
+9. **Determinism is a prerequisite for measurement.** Same seed → byte-identical run, with a negative control that fails if the sim ignores its seed. Every three-run protocol before this existed because it was not true.
+10. **Diagnostic strings are named for what they assert.** "Timeout waiting for pair" meant a pair of coilguns and produced a wrong conclusion about PeerJS pairing.
+11. **Guards use `&&`, never `;`.** A guard that cannot fail the command is not a guard.
+12. **Strip comments before pattern-checking code.** Checks have failed on their own explanatory comments twice.
+13. **Vary test staging** — more than one seed, more than one position. Five bolt skills read as wired-to-nothing because a pillar ate the projectile 26 units out.
+14. **All numbers in `TUNING` blocks.** No inline constants in behaviour code.
+15. **Verified push** — confirm with `git ls-remote` before treating a branch as landed.
+16. **Save tests round-trip through a real file**, not in-memory serialise alone.
+
+---
+
+## 14. Build Order
+
+| Phase | Scope | Status |
+|---|---|---|
+| 1 | Trigger system, composed-action schema, damage triangle, 2 classes × 1 tree | **Done** |
+| 1.5 | Telegraphs, positional `ON_DODGE` | **Done** |
+| 2 | Region systems, node trees, saves, second trees | **Done** |
+| 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
+| 3 | Co-op hardening — defects #8, #9 | **Next** |
+| 4 | Economy: stat items, modifier tiers, sinks, respec | Not started |
+| 5 | Remaining 12 classes, 38 trees, regions 3–8 | Not started |
+
+Phase 5 is the bulk of remaining work by volume, but phases 1–2 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, and `scaleWith` generalising with no engine known by name. **The binding constraint on phase 5 is art**, not code — 36+ enemies and 6 bosses.
+
+**Phase 3 outranks phases 4 and 5.** Both open co-op defects are reachable by a real player and both break the link-and-room-code promise rather than degrading it.
+
+---
+
+## 15. Open Defects
+
+| # | Defect | Status |
+|---|---|---|
+| **8** | **Client→host input has no delivery guarantee.** Character pick, ready, node tap, and buy leave by `ClientTransport.send` with no repetition, no ack, nothing to heal from. `client ready` fails intermittently | **Open — player-facing.** The heartbeat pattern does not transfer; repeating input would re-fire actions. Likely fix: ack with resend-until-acked, which is cheap because client input is small and infrequent |
+| **9** | **Room registration fails before any peer exists.** ~1 co-op run in 3–4 never gets a code | **Open — player-facing, undiagnosed.** Split from #8 deliberately: three distinct failures wore "co-op is flaky" as one description |
+| 2 | Regeneration off `maxHp` — root cause treated, not removed | Open |
+| 3 | Shielded bounty mark stalling at 4p | Open, unexplained |
+
+---
+
+## 16. Implementation Status
+
+| System | Status |
+|---|---|
+| Trigger system, 10 kinds | Built, gated, measured |
+| Composed-action schema, 10 primitives | Built, zero bespoke across 40 skills |
+| `scaleWith` engine hook | Built, generalised across two engines |
+| Damage triangle | Built, all damage routed |
+| Telegraphs | Built, 9 telegraphing types, ≥50% density both regions |
+| Footing | Built, three-way measured, decision live |
+| Skill points, ranks, loadout | Built, rank-1 passive rule enforced |
+| Node trees, node types | Built, runtime behaviour for Shrine/Cursed/Elite |
+| World map | Rules built, **no DOM** |
+| Difficulty | Built, 4 settings, XP exclusion asserted |
+| Saves, frontier rule | Built, file round-trip verified |
+| Netcode state migration | Built, lobby heartbeat at 3 Hz |
+| Determinism | Built, negative control, byte-identical same-seed runs |
+| Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
+| Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
+| Regions 3–8 | **Names only** |
+| Classes 3–14 | **Not started** — 45 of 47 characters have no combat ability |
+| Economy | **Not started** |
+
+---
+
+## 17. Notes for Future Work
+
+**`bloodmire` and Footing.** The Region 2 curse damages players for standing still, aimed squarely at Footing. It was authored while `FOOTING_DROP = 'instant'` was still unfixed, so it punished a stance that was over-rewarded defensively for unrelated reasons. Re-check that it is a real counter and not a Samurai-specific tax now that the grace window has landed.
+
+**Pending-pick and results screens are partial fixes.** Presence rides state so a lost close cannot softlock a panel open, but the contents of an offer still ride the open event — a lost open is a missed level-up pick. Similarly `st.over` stops a client stranding in a dead world but the results payload still rides `end`. Both are the lesser half of their failure; both are noted in code where the next reader hits them.
+
+**Summons are the largest untested area of the composed-action schema.** They were the biggest bespoke category in the source project and were deliberately excluded from every patch so far. Test them in a patch where they are the subject.
+
+**Six class engines exist only as design.** Wizard, Priest, Monk, Assassin, Hunter, and the Samurai's remaining trees have engines specified in §8.3 but no implementation.
