@@ -1,11 +1,11 @@
 # Rumblejam — Game Design Document
 
-**Draft 8 · August 2026**
-**Status: authoritative.** This file supersedes all prior drafts, including the Word documents used for design review through Draft 7. Where this document and any other source disagree, this document wins — except for tuning constants, where the per-tree `TUNING` blocks in code are authoritative and this document records intent.
+**Draft 9 · August 2026**
+**Status: authoritative.** This file supersedes all prior drafts. Where this document and any other source disagree, this document wins — except for tuning constants, where the per-tree `TUNING` blocks in code are authoritative and this document records intent.
 
-**How to read this.** Plain text is settled design. Blocks marked **PROPOSED** are not settled and should not be built without a ruling. Section 16 records implementation status per system, so a reader can tell what exists from what is described.
+**Reference convention:** a bare §N means this document. Any other source must be named inline.
 
-**Why this file is here.** Drafts 1–7 lived outside the repo and were cited by section number in specs that Claude Code could not read. The README drifted from the design twice as a result — it still described Footing as granting Reflex and dropping instantly, months after both were changed. Design that governs code belongs beside the code.
+**How to read this.** Plain text is settled design. Blocks marked **PROPOSED** are not settled and should not be built without a ruling. §15 group B lists design questions awaiting a decision. §16 records implementation status per system.
 
 ---
 
@@ -13,7 +13,7 @@
 
 Rumblejam is a browser-based co-op action RPG for up to 8 players, played from a link and a room code. Players are monster slayers working through the mythologies of the real world — a swamp, an Egyptian necropolis, a Russian tundra, a Celtic grassland — hunting the creatures, spirits, and old gods native to each region.
 
-Combat is twin-stick movement and positioning. Players do not aim or fire. Every ability triggers automatically from a condition the player controls through **where they stand and how they move**. The build decides what the player's movement means.
+Combat is twin-stick movement and positioning. Players do not fire manually. Every ability triggers automatically from a condition the player controls through **where they stand and how they move**, and directs itself by a **selection rule the player chooses when building**. The build decides both what the player's movement means and what their damage lands on.
 
 ### 1.1 Design pillars
 
@@ -104,15 +104,25 @@ Fixed order, permanently tuned to a difficulty band. Because the order is fixed,
 
 No region exceeds **60%** one domain. Region 8 is deliberately even, so the endgame demands full party coverage rather than one counter-build.
 
-### 3.3 Class unlocks
+### 3.3 The roster
 
-The **six non-region classes are the starting roster** — Blacksmith, Mage, Samurai, Monk, Assassin, Priest. The **eight region-native classes unlock by clearing their home region.**
+**There is one roster: the fourteen classes in §8.2.** The 33-character classic roster was pre-overhaul content and has been retired to `archive/classic-roster/`. Roster-switching machinery, `setRoster()`, and the silent `charId` fallback are all removed — an unknown id now throws, because a fallback that kept a character's stats while losing its trees is how a totally unplayable party survived an entire patch.
 
-Unlocks live on the **player**, not the character — the point of unlocking the Wizard is to create a *new* Wizard, so it cannot sit inside the character that earned it.
+**Take the design from the archive, not the data.** Archived traits are engine hooks keyed to `trait.key` values that mostly no longer exist.
+
+### 3.4 Class unlocks and selectability
+
+The **six non-region classes are the starting roster** — Blacksmith, Mage, Samurai, Monk, Assassin, Priest. The **eight region-native classes unlock by clearing their home region.** Unlocks live on the **player**, not the character — the point of unlocking the Wizard is to create a *new* Wizard.
 
 Clearing region 8 completes the run. The Hunter unlocks at that moment and pays off on the next character.
 
-### 3.4 Region identity checklist
+**Selectability is derived from tree data, not listed.** A class is selectable when it has a tree with a damaging tier-1 active; otherwise it is visible, greyed, and states why. As phase 5 authors trees, classes become selectable with no code change.
+
+The lobby card is an affordance, not a boundary: the host validates the pick and the sim refuses to start on an unplayable class, because a client can send anything.
+
+Asserted at load: every selectable class has a tier-1 active **carrying damage**. "Has a tree" is not enough — a tree of passives arms nobody.
+
+### 3.5 Region identity checklist
 
 1. A tileset and palette recognisable in one frame.
 2. **Six or more enemy archetypes**, at least two unique to the region.
@@ -123,7 +133,7 @@ Clearing region 8 completes the run. The Hunter unlocks at that moment and pays 
 7. **Telegraph density at or above 50% by encounter weight** — see §6.4.
 8. A node pool large enough to generate a varied 10-node tree.
 
-### 3.5 Where to spend effort
+### 3.6 Where to spend effort
 
 Region 1 is played more than regions 6, 7 and 8 combined — every new save starts there, every new player's first impression is there, every wipe replays it. It gets the most map variety, the most polish, the most archetypes. If scope must be cut, it is cut at the top of the list.
 
@@ -188,9 +198,9 @@ If a party arrives significantly above or below the anchor, that is the difficul
 
 Weapons are gone. Skills replace them, and conditions replace the firing timer. A skill does not fire because time passed; it fires because the player created the situation it was waiting for.
 
-This preserves the moment-to-moment feel — still moving, still reacting, no menus mid-fight — while making the build determine what good positioning looks like.
+**Two separate jobs.** A trigger decides **when** a skill fires. A selector decides **what it hits**. Both are declared per skill, and both are build decisions.
 
-### 5.2 Trigger taxonomy
+### 5.2 Trigger taxonomy — *when*
 
 Every active declares exactly one trigger and one cooldown. Triggers evaluate **on the host only**, on a fixed interval.
 
@@ -211,7 +221,38 @@ Every active declares exactly one trigger and one cooldown. Triggers evaluate **
 
 `ISOLATED` is true in an empty room — a skill rewarding solitude should not also require company. Steps needing a target no-op when there is none.
 
-### 5.3 Evaluation
+### 5.3 Selectors — *what*
+
+Every active declares a `select`. **There is no default**, and a missing selector fails at load.
+
+```js
+trigger: { kind: 'PROXIMITY', radius: 140, count: 3 },   // when
+select:  'highest_hp',                                    // what
+```
+
+| Selector | Picks |
+|---|---|
+| `nearest` | Closest valid target |
+| `farthest` | Most distant within range |
+| `highest_hp` | Fattest target — elites, heavies |
+| `lowest_hp` | Weakest — finishers, execution |
+| `densest_cluster` | The point maximising enemies hit |
+| `objective_target` | Role-tagged objective entities: nest → mark → boss → elite, distance as tiebreak |
+
+#### Why selectors exist
+
+Weapons had varied targeting rules built in — a shotgun hit everything close, a sniper took the farthest or fattest, a homing weapon tracked one thing — and the player chose the rule by choosing the weapon. The first trigger taxonomy collapsed all of that into position and health fraction, so every skill converged on *whatever is nearest*, and chaff is always nearest.
+
+The measured consequence: an armed necromancer dealt 4230 damage in Elite Arena with **zero kills**, spreading it across forty enemies instead of concentrating into one, and never damaged a single nest across a full Nest Purge. Objectives assume the player can choose targets. Splitting selection out of the trigger restored that as a build decision — after the split, the same test cleared Elite Arena outright.
+
+#### Two rules selectors must obey
+
+1. **A selector re-ranks only what the skill's own range already returns.** It never widens the search. A selector that could reach past a skill's range would silently hand every skill infinite reach.
+2. **A selector never picks a target that cannot be hurt.** `objective_target` skips shielded nests — preferring one would fire into a wall while the ring that drops the shield went unkilled.
+
+A passive declaring a selector is an error.
+
+### 5.4 Evaluation
 
 ```
 TRIGGER_TICK_MS            = 100    // 10 Hz
@@ -223,7 +264,7 @@ Cooldown is tested **before** any spatial query. This ordering is most of the pe
 
 Clients never evaluate a trigger, never decide a skill fired, and never predict locally.
 
-### 5.4 The loadout
+### 5.5 The loadout
 
 Passives are always on; actives must be slotted.
 
@@ -237,11 +278,11 @@ Passives are always on; actives must be slotted.
 
 Loadout changes happen at the world map, at Shrine nodes, and between rooms — never mid-fight.
 
-### 5.5 The opening ability
+### 5.6 The opening ability
 
 Characters start with **no abilities at all**. The first point spent is the character's opening ability, chosen from the tier-1 nodes of their trees. **Every tree's tier-1 node must be a damaging active**, asserted at load.
 
-### 5.6 The composed-action schema
+### 5.7 The composed-action schema
 
 Any active is data: an ordered list of steps from ten primitives plus riders.
 
@@ -257,11 +298,21 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Result:** 40 skills across 4 trees, zero bespoke handlers. Summons remain untested and were the largest bespoke category in the source project — expect the rate to rise there, but not enough to threaten the schema.
 
-### 5.7 Engine scaling — `scaleWith`
+### 5.8 Engine scaling — `scaleWith`
 
 A step may declare `scaleWith: '<engine>'` and `scalePer`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
 
 This is what makes the remaining twelve class engines data rather than engineering. Cascade, drench, crystallize, Chi, judgment marks, killbox, and two bodies all use the same hook.
+
+### 5.9 Selection is not delivery
+
+A selector picks the right entity. Whether damage reaches it is a separate question.
+
+Measured on a bounty mark: 23 of 23 shots correctly selected the mark; **2 arrived.** The other 21 were intercepted by the escort pack that spawns with every mark by design — `bolt` stops at the first body it meets.
+
+**This is intended.** Escorts are a wall you clear first, and that is what distinguishes a mark from a nest. **`pierce` remains a §9.2 modifier item**, not a property of `objective_target` — a party that wants to punch through buys it and slots it, which is a build decision with a cost.
+
+Consequence: until phase 4 ships modifier items, bounty marks are clear-the-escort-first. Tests for this objective assert **selection correctness**, never mark kills, so a throughput change cannot silently satisfy a targeting test.
 
 ---
 
@@ -328,7 +379,7 @@ DISADVANTAGE_MULT = 0.80
 
 All damage routes through the triangle, including hazard and plague ticks. There is no unrouted damage path. Every skill and every enemy declares a domain. Enemies render a **4px domain-coloured rim**, always visible, no inspection required.
 
-**Assigning a domain to each skill happens while writing its tree, never afterward.** One extra field during authoring; a 420-item audit with no context otherwise. The same applies to trigger assignment and TUNING placement.
+**Domain, trigger, selector, and TUNING assignment all happen while writing a tree, never afterward.** One extra field during authoring; a 420-item audit with no context otherwise.
 
 ---
 
@@ -360,7 +411,9 @@ All damage routes through the triangle, including hazard and plague ticks. There
 | 13 | Hunter | Sydney | Melee | Marksmanship | Beast Control |
 | 14 | Sundian | Bali | Tide | Regalia | Deluge |
 
-The Sundian's display name is Sundian everywhere; its internal `classId` remains `atlantean` for save compatibility. **Do not rename the id.**
+The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
+
+**Built: 2 of 14.** Samurai (Armor, Tactics) and Necromancer (Marrow, Dark Matter). The remaining twelve are §15 group A.
 
 ### 8.3 Class engines
 
@@ -453,7 +506,7 @@ Two levers together: **slower income** and **escalating prices**. Price escalati
 | Tier | Changes | Rarity |
 |---|---|---|
 | Stat items | Flat + or +/− along opposing axes | Common |
-| Magnitude | Splash radius, projectile count, pierce, chain jumps, duration | Common–Rare |
+| Magnitude | Splash radius, projectile count, **pierce**, chain jumps, duration | Common–Rare |
 | Rider | Adds an effect the skill did not have | Rare |
 | Domain swap | Changes one skill's damage domain | Rare–Legendary |
 | Trigger swap | Changes a skill's trigger type or threshold | Legendary only |
@@ -464,6 +517,10 @@ Two levers together: **slower income** and **escalating prices**. Price escalati
 
 Trigger swaps are the highest-upside and highest-risk item in the game — one that lands badly can invalidate a build mid-run. Gated to legendary; may be cut.
 
+**Pierce is the answer to escorted targets** (§5.9) and belongs in magnitude.
+
+**PROPOSED — a selector-swap tier.** Now that selection is a declared field, an item changing one skill's selector is the natural sibling of the trigger-swap tier and probably more useful, since it repurposes a skill without changing when it fires. Needs a ruling on rarity and on whether it displaces trigger swaps entirely.
+
 **Weapons are gone from the game. `SHOP_WEAPON_CHANCE = 0`.** A shop stocking unequippable items is a bug, not a design question.
 
 ### 9.3 Sinks and respec
@@ -473,6 +530,12 @@ Shop rerolls escalating within a visit; item upgrades; **skill respec at 1000 go
 ### 9.4 Numbers
 
 All placeholders for playtest. Income roughly flat within a region, scaling ~15% per band; item prices ~25% per band; reroll cost doubling within a visit. **Target: 1–2 purchases per shop visit throughout the run, never 6.**
+
+### 9.5 Stats
+
+**GAP — this document does not record the stat system.** The ten stats live in `js/config.js` and are authoritative there, but the GDD records no intent: what each stat is for, which are opposed for §9.2's +/− trade-offs, and which are engine-readable via `scaleWith`. This needs writing before phase 4, since the stat item tier is defined in terms of opposing axes that are nowhere named.
+
+`SCALING_RATES` in config is dead with weapons and is scheduled for removal.
 
 ---
 
@@ -564,28 +627,37 @@ A silent drop with a clean console cost seven runs to diagnose. Every skipped se
 
 **Both directions must be instrumented.** "Zero drops" was true and useless for a full session because only `HostTransport` was instrumented while the failing path was `ClientTransport.send`.
 
+Drops are classified: `ui` resends until acknowledged, so a drop there is a delay; `in` and `ping` are lossy by design; anything else fails. A `GAVE UP` line fails regardless — that is an action resent for its whole budget and never acknowledged.
+
 ---
 
 ## 13. Engineering Standing Rules
 
-Each of these has caught a real defect on this project. They are recorded here because they are design constraints on how the game is built, not preferences.
+Each has caught a real defect on this project. They are design constraints on how the game is built, not preferences.
 
-1. **Runtime-path tests, not definition tests.** The source project shipped 19 skill kinds wired to nothing, all passing existence checks. Every skill, node type, hazard, and boss phase must be swept through its real path producing an observable effect.
-2. **An instrument no test reads is not an instrument.** A drop log written to a console the harness does not pipe caught nothing. Diagnostics get a consumer in the same patch that adds them.
-3. **Gates assert their own instrument before measuring.** Five instances: a walked-away player, a sample window shorter than the cooldown, a field players do not have, a picker that re-ranked one node forty times, a stack reading broken by a rename. A gate verifies it can see a known-good baseline before reporting a number.
-4. **Assertions read the event log, never derived state.** HP has misled three times, in both directions.
-5. **A count is not a set.** Three times in one patch an identical failure count hid a composition change. Regressions are reported by set diff.
-6. **A suite that stops early is not a suite that passed.** A siege-boss crash survived a full patch because an earlier section hung before reaching it. Partial logs are not partial evidence.
-7. **A suite that dirties the working tree is a failed suite.** Assert tracked assets clean at teardown. Where a reflex can be made unavailable rather than detectable — `.gitignore` over a gate — prefer that.
-8. **Enumerated resets are the defect.** Pool reuse wipes every own field; anything forgotten reads `undefined` at the point of use rather than a plausible value from another entity.
-9. **Determinism is a prerequisite for measurement.** Same seed → byte-identical run, with a negative control that fails if the sim ignores its seed. Every three-run protocol before this existed because it was not true.
-10. **Diagnostic strings are named for what they assert.** "Timeout waiting for pair" meant a pair of coilguns and produced a wrong conclusion about PeerJS pairing.
-11. **Guards use `&&`, never `;`.** A guard that cannot fail the command is not a guard.
-12. **Strip comments before pattern-checking code.** Checks have failed on their own explanatory comments twice.
-13. **Vary test staging** — more than one seed, more than one position. Five bolt skills read as wired-to-nothing because a pillar ate the projectile 26 units out.
-14. **All numbers in `TUNING` blocks.** No inline constants in behaviour code.
-15. **Verified push** — confirm with `git ls-remote` before treating a branch as landed.
-16. **Save tests round-trip through a real file**, not in-memory serialise alone.
+1. **Runtime-path tests, not definition tests.** The source project shipped 19 skill kinds wired to nothing, all passing existence checks.
+2. **A harness that clears fights cannot launder a combat result.** `nuke()` killed every enemy every 240 ticks, so the suite stayed green against a party with **no offence at all**, for the entire overhaul. It is now `clearFieldForSetup(sim, p, reason)` — it demands a reason, stamps the sim, and a stamped sim may not carry a combat result. Every run prints how many fights the harness ended.
+3. **An instrument no test reads is not an instrument.** A drop log written to a console the harness did not pipe caught nothing.
+4. **Gates assert their own instrument before measuring.** Seven instances, including a 12-second offence test that declared a working engine broken, and a three-branch classifier that read 2-of-23 hits as regeneration.
+5. **Assertions read the event log, never derived state.** HP has misled three times, in both directions.
+6. **A count is not a set.** Regressions are reported by set diff, always.
+7. **A suite that stops early is not a suite that passed.** A crash is not one failure — fixing it reveals what it was hiding.
+8. **A suite that dirties the working tree is a failed suite.** Prefer making a reflex unavailable over detectable — `.gitignore` over a gate.
+9. **Enumerated resets are the defect.** Pool reuse wipes every own field; anything forgotten reads `undefined` at the point of use rather than a plausible value from another entity.
+10. **Determinism is a prerequisite for measurement.** Same seed → byte-identical run, with a negative control that fails if the sim ignores its seed.
+11. **A failure name describes the cause, not the symptom that tripped first.** Five instances: "co-op is flaky" covering three defects, a "coilgun pair" read as PeerJS pairing, a compound `client ready`, one unplayable-run defect wearing three names, and a cogsmith check naming the wrong gap.
+12. **A test's negative case must be unreachable by search-and-replace over the thing it tests.** A bulk rename rewrote a deliberate retired-id literal into a valid class, turning the test into a tautology — twice. `RETIRED_ID = ['bul','wark'].join('')` is ugly on purpose.
+13. **A number impossible on its face is a free bug detector.** "78 of 52 elites" caught a miscount before anyone quoted it.
+14. **Guards use `&&`, never `;`.** A guard that cannot fail the command is not a guard.
+15. **Strip comments before pattern-checking code.**
+16. **Vary test staging** — more than one seed, more than one position.
+17. **All numbers in `TUNING` blocks.**
+18. **Verified push** — confirm with `git ls-remote` before treating a branch as landed.
+19. **Save tests round-trip through a real file.**
+
+### 13.1 The through-line
+
+**After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
 
 ---
 
@@ -597,107 +669,54 @@ Each of these has caught a real defect on this project. They are recorded here b
 | 1.5 | Telegraphs, positional `ON_DODGE` | **Done** |
 | 2 | Region systems, node trees, saves, second trees | **Done** |
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
-| 3 | Co-op hardening — defects #8, #9 | **Next** |
-| 4 | Economy: stat items, modifier tiers, sinks, respec | Not started |
+| 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
+| 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | Not started |
 | 5 | Remaining 12 classes, 38 trees, regions 3–8 | Not started |
 
-Phase 5 is the bulk of remaining work by volume, but phases 1–2 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, and `scaleWith` generalising with no engine known by name. **The binding constraint on phase 5 is art**, not code — 36+ enemies and 6 bosses.
-
-**Phase 3 outranks phases 4 and 5.** Both open co-op defects are reachable by a real player and both break the link-and-room-code promise rather than degrading it.
+Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
 
 ---
 
-## 15. Open Defects — by cause, not by symptom
+## 15. Open Items
 
-**Read this before treating any suite failure as a bug.** `tools/sim_test.mjs`
-reports 30 failures and two thirds of them are not defects: 8 are classes that
-do not exist yet, 5 are questions nobody has answered, 7 are a subsystem
-deliberately left for phase 4. **10 are actually broken.** They are grouped here by
-*what would make them go away*, because "not built yet" and "broken" look
-identical in a red test log and the difference decides who picks the work up.
+**Two thirds of the current red is not defects.** 21 failing checks: 8 are content not authored, 6 await a design decision, 7 are a deferred subsystem. **Group D is empty.**
 
-Counts are the sim-suite failures each entry accounts for. The focused
-instruments — `offence_test`, `determinism_test`, `snapstate_test`,
-`region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`,
-`validate_items` — are all green.
+### Group A — waiting on phase-5 trees (8)
 
-### A. Waiting on phase-5 trees — 8 of 30
+Twelve classes have no trees. Failures here are classes that do not exist yet — Bard rhythm, singularity, coral, blob, and related trait gaps. These go away as §8.2 is authored.
 
-Twelve of the fourteen classes have no skill tree. Weapons are removed, so a
-class without a tree cannot attack, cannot trigger an attack hook, and cannot
-finish a level. **Nothing here is repairable by code.**
+### Group B — waiting on a design decision (6)
 
-| what fails | count | why |
-|---|---:|---|
-| `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is now correctly wired to `fireSkill` — but `toh_bard`, `toh_mage`, `toh_sundian` and `toh_druid` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. |
-| `elite_arena (1p/4p) never cleared` | 2 | One tier-1 skill in the single loadout slot a level-1 character has cannot finish a 3×-HP elite before the budget. More tiers and more slots are trees. |
-| `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
-| `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; twelve score 0 because they cannot attack. Two non-zero entries against twelve zeroes is the outlier. |
+| Item | Question |
+|---|---|
+| **Throughput: Nest Purge** | A tier-1 skill at ten ranks makes progress but cannot finish 3 nests in budget. Are nests meant for a party, a deeper build, or is nest HP wrong? |
+| **Throughput: Bounty Hunt** | The same, for 5 marks — compounded by §5.9, since escorts are a deliberate wall |
+| **Summoner structure** | The summoner class has no structure to recall. A design gap, not a bug |
+| **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data |
+| **Selector-swap items** | §9.2 — build the tier or not |
+| **§9.5 stats** | The stat system has no recorded intent, and phase 4's stat tier is defined in terms of opposing axes that are nowhere named |
 
-### B. Waiting on a design decision — 5 of 30
+### Group C — phase 4, the economy (7)
 
-Real questions with no obviously-correct answer. Each needs a call in this
-document before code.
+Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, counted, and reported separately so a skip never reads as a pass, and restored by flipping `CONFIG.WEAPONS_ENABLED`.
 
-| what fails | count | the question |
-|---|---:|---|
-| `nest (1p/4p) never cleared`, `bounty (1p/4p) never cleared` | 4 | **Throughput.** Since §13, targets are selected correctly and damaged — nests went 0/3 → 1/3, marks 0/5 → 2/5, Elite Arena now clears. What remains is whether a tier-1 skill at ten ranks *should* chew through a 3×-HP elite or a 10×-HP mark inside the budget. That is elite and mark HP, and retuning it on the back of a targeting fix would let a throughput change silently satisfy a targeting test. |
-| `the summoner class has no structure to recall` | 1 | **`bonelord` builds its structure via `_addWeapon`.** With `weaponSlots` at 0 it summons nothing, so no class in the game can exercise structure recall (the retired Cogsmith's `overseer` mounts were the other). Making it a skill-era summon needs deciding what grants it — a tree node? the trait at fight start? |
+### Group D — genuine open defects (0)
 
-**And one design gap with no failing test yet:** `objective_target` selects
-correctly and **delivery does not honour the selection.** Measured on the bounty
-mark: the selector chose the mark on 23 of 23 fires and 21 of those shots were
-intercepted by the escort pack that spawns with it. Selection is not delivery. A
-`pierce` rider on objective-targeting bolts would fix it; whether that is the
-right answer is a design call. See D below for the check that found it.
+Empty. Every remaining failure is content not authored, a decision not taken, or a subsystem deferred.
 
-### C. Phase 4 — the economy — 7 of 30
+### Recorded negatives
 
-Weapons were removed in `patch-trigger-core`; the shop, combine, sell and
-slot-cap machinery still exists and still has tests. **Do not touch these
-outside the phase-4 economy work** — they are the acceptance tests for the
-stat/modifier split when it lands.
+**#9 — room registration.** Failed roughly 1 co-op run in 3–4. Now 8/8 full runs and 20/20 direct trials at 3–8 ms with zero `regFailures`. **It stopped reproducing and nobody knows why.** A healthy measurement of the component a defect *names* is evidence the name was wrong, not that anything was repaired. Closing conditions are recorded; the entry stays open.
 
-`below-max duplicate` · `combine result wrong` · `manual combine broke` ·
-`extraction shop buy failed` · `sell weapon: mats 0→0` ·
-`toh_samurai weapon cap 0` · `toh_necromancer weapon cap 0`.
-
-The suite also prints two `⊘ SKIPPED (weapons removed)` lines for swap-buy
-checks that cannot run at all. Skips are counted separately and never as passes.
-
-### D. Genuine open defects — 10 of 30
-
-Things that are broken now, in code that exists, and could be fixed today.
-
-| # | defect | evidence |
-|---|---|---|
-| **17** (×1) | **Bolt delivery ignores the selector.** The bounty mark is chosen on 23/23 fires; 2 shots arrive, 21 are intercepted by its escort. Per-target attribution (`sim.dmgLog` / `sim.selLog`) says `DELIVERY`, not selection, absorption or regeneration. | `UNKILLABLE (DELIVERY: the mark was chosen 23x but only 2 shot(s) arrived)` |
-| **18** (×5) | **The statue harness never spends its skill point**, so the "camper" it measures is unarmed and dies in every Bastion template. A harness gap, but a real one: the Bastion sanction is currently untested. | 5 × `camper statue DIED in Bastion/*` |
-| **19** (×1) | **Relic Run keeps spawning ambient waves** 30s after the field is emptied. | `Relic Run still spawns ambient waves: 1` |
-| **20** (×1) | **`sprites.js` projectile radii no longer match the engine** — the registry reports empty for shot/lob/summon. | `sprites.js projectile radii no longer match the engine` |
-| **21** (×1) | **`--require-all` does not fail on an undrawn batch**, so "batch 1 is done" is a feeling rather than a number. | `--require-all did not fail on an undrawn batch` |
-| **22** (×1) | **Per-row re-centring loses an animation's bob at a 128px cell** — 6px in, 2px out. Worked at the old 32px cell. | `bob preservation: row=2 (want 6)` |
-
-### Fixed this patch, kept for the record
-
-| # | was | now |
-|---|---|---|
-| 8 | Client→host input had no delivery guarantee | Ack with resend-until-acked; **but the wild `client ready` failure is NOT explained by it** — see `docs/KNOWN-DEFECTS.md` |
-| 9 | Room registration failing ~1 run in 3–4 | **A negative result, not a fix.** 20/20 direct trials at 3–8 ms, 8/8 co-op runs. It stopped reproducing and nobody knows why |
-| 10 | Suite gated co-op behind tests for removed weapons | Skipped, named, counted; co-op reaches its phase every run |
-| 11 | Only 2 of 47 characters could deal damage | Classic roster retired to `archive/classic-roster/`; selection gated on having a tree |
-| 13 | Skills converged on "whatever is nearest" | `select` is a required field on every active |
-| 14 | `tohOnFire` orphaned on a dead `_tickWeapons` | Called from `fireSkill` |
-| 15 | `hitbox` honoured by trait *name* (`immovable`, retired) | Read by presence |
-| 16 | Art style anchor hardcoded retired `char.pulsar` | `STYLE_ANCHOR_ID`, named and live |
-
+---
 
 ## 16. Implementation Status
 
 | System | Status |
 |---|---|
 | Trigger system, 10 kinds | Built, gated, measured |
-| Composed-action schema, 10 primitives | Built, zero bespoke across 40 skills |
+| Selectors, 6 rules | Built, required field, no default |
+| Composed-action schema | Built, zero bespoke across 40 skills |
 | `scaleWith` engine hook | Built, generalised across two engines |
 | Damage triangle | Built, all damage routed |
 | Telegraphs | Built, 9 telegraphing types, ≥50% density both regions |
@@ -707,22 +726,26 @@ Things that are broken now, in code that exists, and could be fixed today.
 | World map | Rules built, **no DOM** |
 | Difficulty | Built, 4 settings, XP exclusion asserted |
 | Saves, frontier rule | Built, file round-trip verified |
-| Netcode state migration | Built, lobby heartbeat at 3 Hz |
+| Netcode state migration | Built, lobby heartbeat at 3 Hz, drops classified |
 | Determinism | Built, negative control, byte-identical same-seed runs |
+| Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
+| Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** |
-| Classes 3–14 | **Not started** — 45 of 47 characters have no combat ability |
+| Classes 3–14 | **Not started** — 12 of 14 classes have no trees |
 | Economy | **Not started** |
 
 ---
 
 ## 17. Notes for Future Work
 
-**`bloodmire` and Footing.** The Region 2 curse damages players for standing still, aimed squarely at Footing. It was authored while `FOOTING_DROP = 'instant'` was still unfixed, so it punished a stance that was over-rewarded defensively for unrelated reasons. Re-check that it is a real counter and not a Samurai-specific tax now that the grace window has landed.
+**`bloodmire` and Footing.** The Region 2 curse damages players for standing still, aimed at Footing. It was authored while instant-drop was still live, so it punished a stance over-rewarded for unrelated reasons. Re-check that it is a real counter and not a Samurai-specific tax.
 
-**Pending-pick and results screens are partial fixes.** Presence rides state so a lost close cannot softlock a panel open, but the contents of an offer still ride the open event — a lost open is a missed level-up pick. Similarly `st.over` stops a client stranding in a dead world but the results payload still rides `end`. Both are the lesser half of their failure; both are noted in code where the next reader hits them.
+**Pending-pick and results screens are partial fixes.** Presence rides state so a lost close cannot softlock a panel open, but an offer's contents still ride the open event — a lost open is a missed level-up pick. Similarly `st.over` stops a client stranding in a dead world but the results payload still rides `end`. Both are noted in code where the next reader hits them.
 
-**Summons are the largest untested area of the composed-action schema.** They were the biggest bespoke category in the source project and were deliberately excluded from every patch so far. Test them in a patch where they are the subject.
+**Summons are the largest untested area of the composed-action schema.** Deliberately excluded from every patch so far, and the largest bespoke category in the source project. Test them in a patch where they are the subject.
 
-**Six class engines exist only as design.** Wizard, Priest, Monk, Assassin, Hunter, and the Samurai's remaining trees have engines specified in §8.3 but no implementation.
+**Twelve class engines exist only as design.** §8.3 specifies them; only Footing and Marrow's `armor` are implemented.
+
+**The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.
