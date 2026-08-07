@@ -404,6 +404,7 @@ function enterHorde(sim) {
 const WEAPON_SKIPS = [];
 const skipWeapon = what => { WEAPON_SKIPS.push(what); console.log(`⊘ SKIPPED (weapons removed — §15 #10): ${what}`); };
 
+import { SKILL_BY_ID as SKILLS_BY_ID_FOR_PARK } from '../js/skills.js';
 const SETUP_CLEARS = [];
 function clearFieldForSetup(sim, p, reason, { sparBoss = false } = {}) {
   if (!reason) throw new Error('clearFieldForSetup() needs a reason — an unexplained harness kill is exactly what nuke() was');
@@ -545,8 +546,15 @@ try {
   // mechanics and stay.
 
   // Greed: floor(G/2) materials at every fight clear
+  // GREED IS SET, NOT ASSUMED. This granted 15 and expected 30 total, because
+  // the character it used to run as (the retired Gilded One) carried 15 base.
+  // A bulk rename swapped the class and the arithmetic silently became wrong —
+  // the payout dropped to 7 and read as a defect in the tithe. The test now
+  // reads the sheet and tops it up to the number it is actually asserting.
   const gs = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'G', charId: T2, color: '#fff' }] });
-  gs.players[0].boosts.greed = 15; gs._recomputeStats(gs.players[0]); // 30 total → +15
+  const WANT_GREED = 30;
+  gs.players[0].boosts.greed = WANT_GREED - (gs.players[0].stats.greed || 0);
+  gs._recomputeStats(gs.players[0]);   // floor(30/2) = +15 at the clear
   enterHorde(gs);
   const matsBefore = gs.players[0].materials;
   gs.wave.done = true; gs.spawnQueue.length = 0;
@@ -1671,11 +1679,25 @@ try {
         mark.hp = mark.maxHp;
         const id = mark.id;
         const WINDOW = 60 * 20;                    // 20 seconds of sustained fire
+        // half the shortest range among the skills actually slotted, so every
+        // one of them can reach; falls back to the old 120 if nothing is armed,
+        // which then fails loudly rather than silently measuring nothing
+        const ranges = p.loadout.filter(Boolean)
+          .map(id => { const sk = SKILLS_BY_ID_FOR_PARK[id]; return sk && (sk.trigger.range || sk.trigger.radius); })
+          .filter(r => r > 0);
+        const PARK_D = ranges.length ? Math.max(30, Math.min(...ranges) * 0.5) : 120;
+        if (!p.loadout.filter(Boolean).length) fail('UNKILLABLE gate: the parked player has nothing armed, so it measures nothing');
         const hp0 = mark.hp;
         let t = 0, alive = true;
         while (t++ < WINDOW && (alive = !!g.enemyById(id))) {
           const e = g.enemyById(id);
-          p.x = e.x - 120; p.y = e.y;              // parked in weapon range, firing
+          // PARKED IN SKILL RANGE. This said "weapon range" and parked at a
+          // fixed 120u, which was a weapons-era number; a bolt whose trigger
+          // range is shorter never fires and the mark reads as unkillable when
+          // nothing was ever shot at it. The distance now comes from the
+          // armed skill's own trigger, so the player is always in range of the
+          // thing it is holding.
+          p.x = e.x - PARK_D; p.y = e.y;
           g.setInput(0, { mx: 0, my: 0 });
           g.tick();
           if (!p.downed) p.hp = p.stats.vitality;
@@ -1686,7 +1708,14 @@ try {
         if (drop > 0) {
           ok(`a Regenerating mark LOSES HP under sustained fire: ${Math.round(hp0)} → ${Math.round(now)} in ${(t / 60).toFixed(0)}s (net ${dps.toFixed(0)} HP/s) — killable, not merely slow`);
         } else {
-          fail(`UNKILLABLE: a Regenerating mark took ${(t / 60).toFixed(0)}s of point-blank fire and its HP did not fall (${Math.round(hp0)} → ${Math.round(now)}). It heals at least as fast as it is hurt; no time budget can finish this level.`);
+          // WITH WHAT IT WAS HOLDING. "HP did not fall" has two causes that want
+          // opposite fixes — the mark out-heals the damage, or no damage was
+          // ever aimed at it — and this message could not tell them apart.
+          // Parking distance and the armed loadout decide which one it is.
+          fail(`UNKILLABLE: a Regenerating mark took ${(t / 60).toFixed(0)}s and its HP did not fall (${Math.round(hp0)} → ${Math.round(now)}). `
+            + `armed: [${p.loadout.filter(Boolean).join(',') || 'NOTHING'}] parked ${Math.round(PARK_D)}u, `
+            + `player dealt ${Math.round(p.damageDealt)} total, level ${p.level}, fires ${(p.fireLog || []).length}. `
+            + `If "dealt" is 0 the mark was never shot at and this says nothing about regeneration.`);
         }
         // the same assertion for a PARTY, because regen is a % of max HP and a
         // 4p mark carries ~1.75x the HP — the threshold moves with the party
@@ -1846,7 +1875,12 @@ try {
 
   // --- structures: node-transition teleport + the stand-still recall ---
   {
-    const g = new Sim({ seed: 909, party: mk([T1]) });
+    // A SUMMONER, by name. This is the structure-recall rule, so it needs a
+    // class that HAS a structure — the retired Cogsmith's overseer mounts. The
+    // ToH equivalent is the Necromancer's bonelord, which reuses that same
+    // mounts/inheritance/carry logic. A bulk rename had left it on whichever
+    // class happened to be first, which summons nothing.
+    const g = new Sim({ seed: 909, party: mk(['toh_necromancer']) });
     const p = g.players[0];
     const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
     node.kind = 'combat';
@@ -1857,7 +1891,7 @@ try {
     // each sub-check starts from a live one
     const revive = () => { s.dead = false; s.hp = s.maxHp; s.carried = false; s.deployT = 0; };
     const park = () => { revive(); s.x = Math.min(g.W - 40, p.x + CONFIG.STRUCT_OFFSCREEN_W); s.y = p.y; };
-    if (!s) fail('cogsmith has no turret');
+    if (!s) fail('the summoner class has no structure to recall');
     else {
       // 1) a structure ON SCREEN never auto-relocates, however long you stand
       revive();
@@ -2658,7 +2692,11 @@ try {
 
     // Blacksmith: the post-fight infusion, and the third quartz arming detonation
     {
-      const g = one(T1); const p = g.players[0];
+      // toh_blacksmith BY NAME. An earlier bulk rename over character ids
+      // rewrote this to T1, so the Blacksmith's infusion/pyrite/quartz/hitbox
+      // block silently tested the necromancer — which has none of them, so all
+      // four "failures" were the test measuring the wrong class.
+      const g = one('toh_blacksmith'); const p = g.players[0];
       g.debug('F3');
       if (p.boonOffer && p.boonOffer.length === 3 && p.boonOffer.every(o => o.crystal)) {
         ok('Blacksmith: three fixed crystals offered after the fight, not a random roll');
@@ -3597,13 +3635,14 @@ try {
     // Two frames per direction where the body deliberately rises: per-row
     // re-centring must keep the rise, per-cell must flatten it. If `row` ever
     // silently becomes `cell`, this is what notices.
+    const BOB = 6;
     const src2 = nodePath.join(tmp, 'walk');
     for (let d = 0; d < 8; d++) {
       const dir = nodePath.join(src2, NAMES[d]);
       mkdirSync(dir, { recursive: true });
       for (let f = 0; f < 2; f++) {
         const img = PK.blankImage(CELL, CELL);
-        const oy = (CELL / 2) - f * 6;   // frame 1 sits 6px higher: the bob
+        const oy = (CELL / 2) - f * BOB;   // frame 1 sits BOB px higher
         for (let y = 0; y < 8; y++) {
           for (let x = 0; x < 8; x++) {
             const i = ((oy + y) * 32 + (12 + x)) * 4;
@@ -3621,17 +3660,17 @@ try {
       return a.y - b.y;   // how much higher frame 1 sits
     };
     const rowRise = rise('row'), cellRise = rise('cell');
-    if (rowRise === 6 && cellRise === 0) {
+    if (rowRise === BOB && cellRise === 0) {
       ok(`re-centring per row keeps an animation's own motion (${rowRise}px bob preserved) where per-cell flattens it (${cellRise}px) — the reason row is the default`);
-    } else fail(`bob preservation: row=${rowRise} (want 6), cell=${cellRise} (want 0)`);
+    } else fail(`bob preservation: row=${rowRise} (want ${BOB}), cell=${cellRise} (want 0)`);
 
     // -- the checks that must REFUSE --
     const badDir = nodePath.join(tmp, 'bad');
     mkdirSync(badDir, { recursive: true });
     for (let d = 0; d < 8; d++) {
       // fully opaque: a baked matte, invisible in review on a dark floor
-      const img = PK.blankImage(32, 32);
-      for (let i = 0; i < 32 * 32; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
+      const img = PK.blankImage(CELL, CELL);
+      for (let i = 0; i < CELL * CELL; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
       writeFileSync(nodePath.join(badDir, `${NAMES[d]}.png`), PK.encodePng(img));
     }
     const matteErr = runFails('process_sprite.mjs', [ART_ID, badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
@@ -3647,9 +3686,10 @@ try {
     mkdirSync(oversizeDir, { recursive: true });
     // 48 is not a multiple of the 32px cell, so it cannot be mistaken for a
     // 2-frame strip — this is unambiguously one oversized source.
-    for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(48, 48)));
+    const OVER = CELL + 16;   // bigger than the cell, whatever the cell is
+    for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(OVER, OVER)));
     const bigErr = runFails('process_sprite.mjs', [ART_ID, oversizeDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
-    if (bigErr && /48x48 source but the cell is 32x32/.test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
+    if (bigErr && new RegExp(`${OVER}x${OVER} source but the cell is ${CELL}x${CELL}`).test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
     else fail(`oversize check said: ${String(bigErr).slice(0, 140)}`);
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 
@@ -3835,8 +3875,8 @@ try {
       ok(`the style clause reaches all ${units.length} prompts byte-for-byte from STYLE_ANCHOR.md — a paraphrase has nowhere to enter`);
     } else fail(`style clause carried by ${carried.length}/${units.length} prompts`);
     if (prompts.prompts['char.toh_assassin'].batch === 0 && units.filter(id => prompts.prompts[id].batch === 0).length === 1) {
-      ok('Pulsar is batch 0, alone — the anchor is generated and approved before anything else');
-    } else fail('batch 0 is not exactly Pulsar');
+      ok('the style anchor is batch 0, alone — generated and approved before anything else');
+    } else fail(`batch 0 is not exactly the style anchor (${Object.entries(prompts.prompts).filter(([, v]) => v.batch === 0).map(([k]) => k).join(', ') || 'empty'})`);
   }
 
   // -- per-sprite manifest overrides survive a regeneration --

@@ -161,6 +161,11 @@ export class Sim {
 
   // ---------------- player construction & stats ----------------
 
+  // The skill path calls this; see fireSkill() in skillsim.js. Exposed on the
+  // Sim rather than imported there because traits-toh.js already imports from
+  // the sim side and a second edge would close a cycle.
+  tohOnFire(p, ctx) { tohOnFire(this, p, ctx); }
+
   _makePlayer(member, idx) {
     // NO SILENT SUBSTITUTION. This used to be
     //   CHAR_BY_ID[member.charId] || CHAR_BY_ID.bulwark
@@ -190,7 +195,14 @@ export class Sim {
     const p = {
       idx, name: member.name || `Player ${idx + 1}`, charId: char.id, char,
       color: member.color, gone: false,
-      x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.key === 'immovable' ? char.trait.hitbox : 1),
+      // HONOURED BY PRESENCE, not by trait name. This read
+      //   char.trait.key === 'immovable' ? char.trait.hitbox : 1
+      // and `immovable` was a RETIRED classic trait, so the Blacksmith's
+      // crystal_infusion carried a hitbox of 1.4 that the sim ignored entirely
+      // — a bigger target that was only bigger on screen. js/main.js already
+      // special-cased both names; a data field should not need the engine to
+      // know who owns it.
+      x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.hitbox || 1),
       mx: 0, my: 0, interact: false, moving: false, aimA: 0, stillT: 0,
       hp: 1, shield: 0, downed: false, reviveP: 0, invuln: 0, pullX: 0, pullY: 0,
       level: 1, xp: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,

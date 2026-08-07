@@ -1092,3 +1092,100 @@ because an armed statue still cannot aim.
 
 Recorded separately from #11 precisely so it is not absorbed into "waiting on
 phase-5 trees". Trees are content. This is not.
+
+---
+
+## 14. The ToH trait layer is wired to two subsystems that were deleted
+
+**Where:** `js/traits-toh.js`, against `js/game.js` `_tickWeapons` and
+`_addWeapon`.
+
+All fourteen trait keys are implemented. Several of them are nonetheless inert,
+because they hang off hooks that stopped being called when weapons were removed.
+
+### `tohOnFire` was orphaned — FIXED
+
+`tohOnFire(sim, p, ctx)` is the "an attack happened" hook. Its only caller was
+`_tickWeapons()`, which has not run since `weaponSlots` went to 0. So the Bard's
+Rhythm never built a stack, the Mage's every-Nth-attack singularity never
+counted, and the Sundian never planted coral — **the hook was orphaned, not
+broken.**
+
+It needs only a target position, so it is now called from `fireSkill()` with the
+position the skill's own selector chose. Skills are what attacks are now.
+
+### `bonelord` builds its structure out of a weapon — OPEN
+
+```js
+if (has(p, 'bonelord')) { sim._addWeapon(p, 'bolt_turret', 1); return true; }
+```
+
+`_addWeapon` refuses when `p.weapons.length >= p.weaponSlots`, and `weaponSlots`
+is 0, so the Necromancer's bonelord summons nothing. The structure-recall gate
+(off-screen packing, redeploy, carry) therefore has **no class in the game that
+can exercise it** — the retired Cogsmith's `overseer` mounts were the other.
+
+This is a design decision, not a repair: the bonelord's structure has to become
+a skill-era summon, and what grants it (a tree node? the trait at fight start?)
+is a GDD question. **Not attempted.**
+
+### What is still inert, and why the tests cannot pass yet
+
+`Bard rhythm`, `no singularity in 30s`, `no coral planted`, `toh blob` — these
+run as `toh_bard`, `toh_mage`, `toh_sundian`, `toh_druid`, all of which have **no
+skill tree**. With `tohOnFire` now on the skill path, a class that cannot fire a
+skill still cannot trigger an attack hook. They resolve when phase 5 arms those
+classes, and not before. Content gap, not defect.
+
+`expected 2 beasts across 2 Hunters` is the same shape: the Hunter's beast is
+granted at fight start by `pack_tactics`, but the test constructs Hunters through
+a path that only runs for a started run.
+
+---
+
+## 15. `hitbox` was honoured by trait NAME, not by presence — FIXED
+
+`js/game.js` computed a player's radius as
+
+```js
+CONFIG.PLAYER_RADIUS * (char.trait.key === 'immovable' ? char.trait.hitbox : 1)
+```
+
+`immovable` is a **retired classic trait**. The Blacksmith's `crystal_infusion`
+carries `hitbox: 1.4` and the sim ignored it entirely — a bigger target that was
+only bigger on screen, because `js/main.js` special-cased both names and the sim
+special-cased one. A data field should not need the engine to know who owns it;
+both now read `trait.hitbox || 1`.
+
+---
+
+## 16. The style anchor pointed at a retired character — FIXED
+
+`tools/gen_prompts.mjs` hardcoded `char.pulsar` as batch 0. Pulsar retired with
+the classic roster, so **batch 0 became empty** and the gate it exists to be
+stopped gating: `--require-all` had nothing to require. It is now
+`STYLE_ANCHOR_ID`, a named constant, pointing at `char.toh_assassin` — which
+unit carries the style is a decision someone should be able to find and change.
+
+---
+
+## 17. UNKILLABLE bounty mark — reclassified, still open
+
+Was "a Regenerating mark took 20s of point-blank fire and its HP did not fall
+(7354 → 7354)". Two causes want opposite fixes — the mark out-heals the damage,
+or nothing was ever aimed at it — and the message could not tell them apart.
+
+Instrumented, it now reports:
+
+```
+armed: [necro_blip] parked 130u, player dealt 260 total, level 1, fires 20
+```
+
+So the player **is** armed, **is** firing, and **is** dealing damage — and none
+of it reaches the mark, whose HP is unchanged to the point. The harness gap is
+closed (it parks at half the armed skill's own trigger range now, not a
+weapons-era literal 120u). What remains is: where did the 260 go — the escort
+pack, or projectiles missing a moving stalker at range?
+
+**Next step is one more field**, not another guess: attribute damage per target
+so the message says whether the mark was hit at all.

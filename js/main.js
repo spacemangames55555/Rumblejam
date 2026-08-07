@@ -1115,7 +1115,7 @@ function viewFromSnaps(dtFrame) {
       name: member ? member.name : '?', color: member ? member.color : '#fff', charId: member ? member.charId : null,
       sym: chr ? chr.sym : '●',
       spriteId: chr ? chr.spriteId : null,   // cosmetic; from the def, never on the wire
-      radius: chr && (chr.trait.key === 'immovable' || chr.trait.key === 'crystal_infusion') ? 16 * chr.trait.hitbox : 16,
+      radius: chr ? 16 * (chr.trait.hitbox || 1) : 16,   // by presence, not by trait name — see _makePlayer
     });
   }
   // projectiles ride the same delayed timeline as enemies (bounded extrapolation)
@@ -1174,7 +1174,7 @@ function viewFromSnaps(dtFrame) {
 }
 
 function predictSelf(dtFrame, serverP, chr) {
-  const radius = chr && (chr.trait.key === 'immovable' || chr.trait.key === 'crystal_infusion') ? 16 * chr.trait.hitbox : 16;
+  const radius = chr ? 16 * (chr.trait.hitbox || 1) : 16;   // by presence, not by trait name
   if (!app.predicted) app.predicted = { x: serverP[1], y: serverP[2] };
   const pr = app.predicted;
   const tempo = app.meta ? app.meta.stats.tempo : 0;

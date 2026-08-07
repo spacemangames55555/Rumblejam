@@ -38,7 +38,7 @@ if (!m) { console.error('✗ docs/STYLE_ANCHOR.md has no STYLE-CLAUSE-START/END 
 const styleClause = m[1].trim();
 const pending = styleClause === 'PENDING' || !styleClause;
 if (pending && !flags.has('--allow-pending')) {
-  console.error('✗ the style anchor is still PENDING — generate and approve Pulsar (batch 0) before any other prompt.');
+  console.error(`✗ the style anchor is still PENDING — generate and approve ${STYLE_ANCHOR_ID} (batch 0) before any other prompt.`);
   console.error('  docs/ART-GENERATION.md §2. Pass --allow-pending to preview the assembled prompts anyway.');
   process.exit(1);
 }
@@ -55,8 +55,15 @@ subject[PYLON_SPRITE] = 'Ward Pylon, an immobile arcane siege structure';
 for (const b of BOSSES) subject[b.spriteId] = `${b.name}, a floor-${b.floor} dungeon boss`;
 
 // ---- batches, from docs/ART-GENERATION.md §5 ----
+//
+// STYLE_ANCHOR_ID names the one unit generated and approved before anything
+// else — batch 0 is a gate, not an ordering. It was `char.pulsar`, a character
+// retired with the classic roster, so batch 0 quietly became EMPTY and the gate
+// it exists to be stopped gating. Named as a constant because which unit
+// carries the style is a decision someone should be able to find and change.
+export const STYLE_ANCHOR_ID = 'char.toh_assassin';
 function batchOf(id) {
-  if (id === 'char.pulsar') return 0;
+  if (id === STYLE_ANCHOR_ID) return 0;
   const ns = id.slice(0, id.indexOf('.'));
   return { char: 1, boss: 2, enemy: 3, proj: 5, fx: 5, prop: 6, item: 7, ui: 8 }[ns];
 }

@@ -3,7 +3,7 @@
 //
 //   node tools/verify_art_batch.mjs                 # everything on disk
 //   node tools/verify_art_batch.mjs char            # one namespace
-//   node tools/verify_art_batch.mjs char.pulsar ... # named ids
+//   node tools/verify_art_batch.mjs char.toh_assassin ... # named ids
 //   node tools/verify_art_batch.mjs char --require-all   # also fail on ids with no art yet
 //   node tools/verify_art_batch.mjs --diff-base=main    # assert the batch touched art only
 //
