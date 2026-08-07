@@ -449,11 +449,45 @@ Two classes ship it, and they ship together on purpose: the Necromancer's
 summons are **disposable** and the Druid's are **persistent**. A schema that fit
 only one would have fit half the category.
 
-#### The shape
+#### A minion is an ACTOR, not a behaviour
 
-A summon is a compose step. Its **attack is another compose step**, run through
-the same `PRIMITIVES` table a player's skill uses, with the minion standing in
-as the actor. A skeleton's cleave *is* `strike`; a hawk's dive *is* `bolt`.
+**This is the pattern the remaining eleven classes should follow, and it is the
+reason summoning cost one primitive instead of a handler per archetype.**
+
+The instinct is to model a summon as a *behaviour*: a skeleton knows how to
+swing, a hawk knows how to dive, and each new archetype brings the code that
+makes it act. That is what the source project did, and it is why summons were
+its largest bespoke category — every summon carried its own spawn, attack and
+death path, so adding one meant editing the engine.
+
+A minion here is an **actor**. It does not know how to do anything. It is a
+position, a body and an allegiance, handed to the same machinery a player is
+handed to. Two halves make that work:
+
+1. **Its attack is a compose step**, run through the same `PRIMITIVES` table a
+   player's skill uses. A skeleton's cleave *is* `strike`. A hawk's dive *is*
+   `bolt`. There is no minion attack code, because an attack is already a thing
+   this codebase knows how to resolve, and a minion has no better claim to a
+   private version of it than a skill does.
+2. **Its identity fields are the owner's, by reference** — `idx`, `stats`,
+   `hookAgg`, `char`. Only the spatial fields are the minion's own. So a
+   skeleton's kill is the Necromancer's kill, its lifesteal heals the
+   Necromancer, and the damage ledger attributes to the Necromancer, with **no
+   special case in `damageEnemy` or `skillDamage`**. Attribution is not
+   forwarded; it never diverged.
+
+What falls out: a new archetype is a row of data. `js/minions.js` does not know
+what a skeleton is, and neither does `js/compose.js` — asserted, not asserted-
+by-hand, by a scan in `sim_test` that searches every engine file for any skill
+id or archetype name and carries a negative control that plants one.
+
+**Generalise it as: give the new thing an actor, not a vocabulary.** The Monk's
+traps, the Assassin's killbox, the Hunter's second body and the Priest's
+judgment marks are all the same shape — an entity that acts somewhere the player
+is not. Each should borrow the primitives and the owner's identity rather than
+grow its own verbs. Recorded as §13.19.
+
+#### The shape
 
 ```
 { kind: 'summon', archetype: 'wolf', move: 'chase', maxAlive: 1,
@@ -466,9 +500,8 @@ as the actor. A skeleton's cleave *is* `strike`; a hawk's dive *is* `bolt`.
 like `TRIGGER_KINDS` and `SELECT_KINDS`. A third kind, `guard`, was written and
 deleted before shipping because no skill used one — see §13.1.
 
-Identity fields on the actor (`idx`, `stats`, `hookAgg`) are the **owner's by
-reference**, so a skeleton's kill is the Necromancer's kill and its lifesteal
-heals the Necromancer, with no special case in `damageEnemy`.
+`select` on the **attack** step is the minion's own targeting rule, not the
+summoner's: the summoner chose where to put it, the minion chooses what to bite.
 
 #### `ON_TOKEN` — the eleventh trigger
 
@@ -700,6 +733,18 @@ Each of these has caught a real defect on this project. They are recorded here b
     class *inside the assertion that retired ids are rejected* — twice — turning
     it into a tautology that still printed a tick. Assemble it, compute it, read
     it from a fixture; never leave it as a bare literal a sweep can reach.
+19. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing
+    primitives and the owner's identity by reference; do not give it verbs of
+    its own. A minion's attack is a compose step through the same `PRIMITIVES`
+    table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the
+    owner's fields, so attribution never has to be forwarded because it never
+    diverged. This is why summoning — the largest bespoke category in the source
+    project, where every summon carried its own spawn, attack and death code —
+    cost **one primitive and one trigger** here, with zero per-archetype
+    handlers across twenty new skills. The same shape is waiting for the Monk's
+    traps, the Assassin's killbox, the Hunter's second body and the Priest's
+    judgment marks: each is an entity acting where the player is not, and none
+    of them needs a vocabulary. See §8.5.
 
 ---
 
