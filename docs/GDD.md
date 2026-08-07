@@ -64,7 +64,7 @@ Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
 | Type | Contents |
 |---|---|
 | Horde | Standard arena wave combat |
-| Elite | ×0.55 count, ×2.4 HP, 75% drawn from the region's heavy half |
+| Elite | ×0.55 count, ×2.4 HP, 75% drawn from the region's heavy half — **NOT IMPLEMENTED, see D-24** |
 | Objective | One of the 8 existing objective types |
 | Shrine | No combat. Party chooses: +1 skill point **or** one guaranteed shop reroll. Never both, never rolled |
 | Cursed | Region modifier active for that node only, ×1.6 gold |
@@ -166,26 +166,34 @@ The difficulty setting's primary purpose is replay — a maxed character levelli
 
 Skills fire on cooldowns. A character running few skills has long gaps and spiky damage. A character running many has syncopated fire rates and smooth damage, but each skill is under-invested and hits softly. Neither extreme wins; the optimum sits in the middle and moves with enemy HP and density.
 
-#### MEASURED — the optimum does not sit in the middle at the endgame
+#### MEASURED — the claim holds, but across a region rather than within a fight
 
-`tools/balance_summoners.mjs` measures deep-versus-wide at two anchors. **At the level-70 anchor, three of four measured trees are depth-dominant**, and the one that is not is the only tree with a cost attached to going wide.
+`tools/shape_by_node.mjs` measures deep-versus-wide for six trees at the level-70 anchor, in four encounter shapes rather than one. **Depth does not win everywhere, and where it wins depends on the node.**
 
-| tree | deep/wide at L12 | deep/wide at L70 |
-|---|---:|---:|
-| `necro_summons` | 1.74 | **1.85** |
-| `samurai_armor` | 0.63 | **1.70** |
-| `samurai_tactics` | — | **1.41** |
-| `druid_beasts` | 0.43 | **0.69** |
+| tree | Horde | Elite (shipped) | Elite (§2.4 as written) | Objective |
+|---|---:|---:|---:|---:|
+| `samurai_armor` | 2.42 | 1.83 | 1.35 | **0.93** |
+| `samurai_tactics` | 1.63 | 1.60 | 1.09 | **0.86** |
+| `necro_marrow` | **0.25** | **0.35** | **0.50** | **0.61** |
+| `necro_dark_matter` | 1.02 | **0.78** | 1.84 | **0.82** |
+| `necro_summons` | 1.86 | 1.99 | 1.56 | **0.91** |
+| `druid_beasts` | **0.80** | **0.61** | **0.85** | **0.79** |
+| **depth wins** | 4/6 | 3/6 | 4/6 | **0/6** |
+| **mean ratio** | 1.33 | 1.19 | 1.20 | **0.82** |
 
-**The claim above holds in one direction and needs watching in the other.** Breadth is genuinely punished early — at level 12 the Samurai's deep build is 0.63, exactly the "under-invested and hits softly" case. But by the endgame the syncopation argument stops paying: a rank-69 skill on an 8-slot bar out-damages eight rank-9 skills, and nothing in the fire-rate maths pushes back hard enough.
+**Objective nodes favour breadth in every tree measured.** A nest is a structure to reach past tough company — 124 enemies at 58 average HP against a horde's 118 at 9 — and a build that covers several situations beats one that does a single thing hard. Horde is the opposite and favours depth in four of six.
 
-**The Druid is the only breadth-priced tree in the game, and its price is one engine.** `druid_beasts` stays under 1.0 because §8.5's revive scale charges for pack size — `15000 + 4000 × (totalAnimals − 1)`, so a wide Druid waits more than twice as long to get anything back. That is currently **the only mechanism in the game that prices breadth at all**. A design-wide claim that "the optimum sits in the middle" resting on one tree's engine is thin, and it should not be assumed to generalise to the eleven classes phase 5 adds. If breadth is meant to be live everywhere, something like the revive scale has to exist everywhere.
+**Region-weighted, the claim holds.** §2.4 gives a region 4 Horde, 2 Elite and 2 Objective combat nodes, and a player clears five of ten. Weighted by that mixture the ratio is **1.17** — mildly depth-favouring, not the runaway a single horde arena suggests.
 
-#### Measure a ratio at more than one level
+So the optimum sits in the middle **across a region, not within a fight**. A player who optimises for the horde nodes pays for it at the objective, and the route decision in §2.3 is what prices the choice. **No per-class breadth cost is needed**, and the Druid's revive scale is a flavour of its engine rather than the only thing holding the design up.
 
-Capping skeletons was nearly ruled from the level-12 number alone, where `necro_summons` read 1.90 against the Samurai's 0.63 and looked like an outlier. At level 70 the Samurai trees themselves are 1.70 and 1.41, and the Necromancer's 1.85 sits beside them: depth-dominance at the endgame is the *norm*, not the anomaly.
+**CORRECTION to the previous entry.** This section briefly claimed depth won in "three of four measured trees" at the endgame. That was drawn from a four-tree table which omitted `necro_marrow` and `necro_dark_matter` — both breadth-dominant in the same run. The full six-tree set was 3 deep / 3 breadth even in a single arena, and the conclusion was an artifact of a subset chosen for a table rather than a measurement. A ratio reported over a chosen subset is not a finding.
 
-**Capping from the level-12 ratio would have capped the endgame using the tutorial.** A rank-11 skill is 92% of every point a level-12 character owns and 16% of a level-70 one's — the same rank is a different decision at each end of the run, so a single-anchor measurement of a build-shape question is measuring one point on a curve and reporting it as the curve.
+#### Measure a ratio at more than one level, and in more than one arena
+
+Two anchors matter because a rank-11 skill is 92% of a level-12 character's points and 16% of a level-70 one's. **Capping skeletons from the level-12 ratio would have capped the endgame using the tutorial.**
+
+Two *arenas* matter for the same reason in a different axis. The single-arena reading also depended on a harness detail: an early version of the sweep restored the player to full HP every tick, which reported `druid_beasts` at 1.46 where a survival-faithful harness said 0.69 — the same tree at the same level, two answers. Two harnesses disagreeing means one is measuring something else.
 
 #### The two levers that must stay off ranks
 
@@ -954,7 +962,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current red is a defect.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem. **Group D is empty again — D-23 is closed.** The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
+**One open defect, and it is not in the suite.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem — none of them defects. Group D holds **D-24**, found by measurement rather than by a red check: §2.4's Elite node modifiers reach nothing. D-23 is closed. The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1005,9 +1013,29 @@ Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, co
 
 The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same defect, different class in the string — worth knowing before a set diff reads one as fixed and the other as new.
 
-### Group D — genuine open defects (0)
+### Group D — genuine open defects (1)
 
-**Empty. D-23 is closed.** Ferocity, Ingenuity and Attunement now have the jobs §9.5 gives them — a multiplier on all composed damage, minion damage and HP, and status potency — and `tools/stat_gate.mjs` reports **10 live of 10**. Every stat the game sells moves something a player can observe.
+#### D-24 — §2.4's Elite node modifiers reach nothing, and the shipped behaviour is backwards
+
+**`regionFightMods()` appears exactly once in the codebase: its own definition.** Nothing calls it. It is the only consumer of `nodeModifiers()`, so §2.4's ×0.55 count, ×2.4 HP, ×1.35 damage and ×1.35 gold are unreachable. `this.nodeType` is never assigned anywhere either, so even a wired call would compute `'horde'` and return the baseline.
+
+**What an Elite node actually does is the opposite of the spec on the axis it does touch.** `waveConfig()` raises an elite node's spawn *rates* (`r0 +0.2`, `r1 +0.5`) and adds periodic injections. Measured over 90 s at level 70:
+
+| node | enemies fielded | average HP |
+|---|---:|---:|
+| Horde | 118 | 9 |
+| Elite, as shipped | **172** | **10** |
+| Elite, per §2.4 | 71 | 23 |
+
+An elite node currently fields **more** enemies at the **same** health. §2.4 asks for fewer and much tougher. `js/nodebehaviour.js` carries a load-time validator that rejects exactly this shape — *"elite nodes must field FEWER enemies — same count with more HP is a slog, not an elite fight"* — enforcing the rule on the data table while the game applies neither half of it.
+
+**Not fixed here, because it is a design call rather than a wire-up.** Two systems currently disagree about what "elite" means: `waveConfig` says more-and-faster, `nodeModifiers` says fewer-and-fatter. Wiring `nodeType` would make both fire at once and multiply, which is a third thing nobody specified. The ruling needed is which of the two is the elite node, and whether the other stands down.
+
+It matters beyond correctness: an Elite node reconstructed to §2.4 is the encounter shape that pulls hardest **toward breadth** (mean deep/wide 1.20 against horde's 1.33), so the node type meant to vary the build question is currently varying it in the wrong direction.
+
+#### D-23 — CLOSED: three stats sold and doing nothing
+
+Ferocity, Ingenuity and Attunement now have the jobs §9.5 gives them — a multiplier on all composed damage, minion damage and HP, and status potency — and `tools/stat_gate.mjs` reports **10 live of 10**. Every stat the game sells moves something a player can observe.
 
 The fix was not a redesign. Each of the three was alive in the weapon era and left behind when the damage path moved to skills, so each was reconnected to the modern equivalent of the site it used to read. The one that took a second attempt was the *gate*, not the game: Ingenuity's probe never ticked, so `summonSlots` was still 0, every spawn was refused, and the probe measured the player's own damage — which Ingenuity correctly does not scale. A working stat read as dead. The probe now benches the player's loadout so every point of damage is the minion's, and returns a broken verdict rather than a dead one when no minion reaches the field.
 
@@ -1074,6 +1102,8 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **10 of 10 live** |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
+| Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.17; objective nodes favour breadth 0/6 (§4.2) |
+| Node types | Horde/Objective live; **Elite modifiers unreachable — D-24** |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
