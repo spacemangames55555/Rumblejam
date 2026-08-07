@@ -206,7 +206,11 @@ export class Sim {
     // patch-trigger-core: weapons are gone. Skills replace them entirely, with
     // no toggle and no compatibility layer — a half-migrated combat model would
     // not answer the gate question, and this branch is disposable if it fails.
-    p.weaponSlots = 0;
+    //
+    // The CONDITION moved to CONFIG so it is stated once. It used to be this
+    // bare assignment, which meant nothing outside the engine could ask whether
+    // weapons existed — and the browser suite went on asserting they did.
+    if (!CONFIG.WEAPONS_ENABLED) p.weaponSlots = 0;
     SK.initSkillPlayer(this, p);
     this._recomputeItems(p);
     this._recomputeStats(p);

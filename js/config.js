@@ -152,6 +152,16 @@ export const CONFIG = {
   UI_ACK_GIVEUP_MS: 8000,
   UI_ACK_MAX_PENDING: 64,
 
+  // WEAPONS ARE GONE (patch-trigger-core). Skills replace them entirely. This
+  // is the single place that says so: js/game.js forces weaponSlots to 0 from
+  // it, and tools/browser_test.mjs skips the checks that cannot pass because
+  // of it. It was previously an unconditional assignment buried in game.js,
+  // which left a dozen suite checks asserting on content that no longer
+  // existed — dead code failing live, and throwing hard enough to end whole
+  // suite phases (§15 defect #10). Flipping this back is the phase-4 economy
+  // work; the checks come back with it.
+  WEAPONS_ENABLED: false,
+
   DISCONNECT_TIMEOUT: 5,   // s of silence before a client is dropped
   MAX_PLAYERS: 8,
 
