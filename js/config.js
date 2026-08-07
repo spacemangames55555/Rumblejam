@@ -183,17 +183,16 @@ export const STAT_NAME = Object.fromEntries(STATS.map(s => [s.key, s.name]));
 export const STAT_IS_PCT = Object.fromEntries(STATS.map(s => [s.key, s.pct]));
 export const STAT_BASE = Object.fromEntries(STATS.map(s => [s.key, s.base]));
 
-// Weapon-scaling conversion: how much +damage% one point of a FLAT stat gives
-// when that stat is one of the weapon's scaling tags. Percent stats contribute
-// their percentage directly. Crit is not a stat: crits exist only as granted
-// effects (default ×2).
-export const SCALING_RATES = {
-  vitality: 1 / 4,   // 1% per 4 Vitality
-  grit: 1,           // 1% per point
-  ingenuity: 1,
-  greed: 1,
-  reach: 1 / 12,     // 1% per 12 Reach
-};
+// SCALING_RATES USED TO LIVE HERE and is deleted, not deprecated.
+//
+// It converted a flat stat into a weapon-damage percentage for the weapon's
+// scaling tags. Weapons were removed in patch-trigger-core: _tickWeapons is
+// never called, so _fireWeapon -> _scalingBonus -> SCALING_RATES was reachable
+// only from a test that calls _fireWeapon directly to check line of sight.
+//
+// A dead constant that LOOKS live is how the README drifted — it documented
+// weapon scaling as a live rule for four patches after the rule stopped
+// existing. The fix for that is removal, not a comment saying "unused".
 
 // Weapon tier multipliers (I–IV): damage etc. scale, price scales.
 export const TIER_MULT = [1, 1.6, 2.5, 3.9];

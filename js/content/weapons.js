@@ -2,9 +2,9 @@
 //   swing (arc melee), thrust (line melee), single (ranged shot),
 //   spread (ranged multi), lobbed (AoE), summon (structures).
 // dmg/cd/range are tier-I values; tiers II-IV scale via TIER_MULT in config.
-// `scaling` lists 1–2 stats that scale the weapon's damage (shown in tooltips):
-// percent stats contribute their % directly, flat stats convert via
-// SCALING_RATES in config. Class stays as a tag for conditions/traits only.
+// `scaling` lists 1–2 stats a weapon's damage USED to scale with. The
+// conversion (SCALING_RATES) was deleted with weapons; the tags survive only as
+// tooltip text and as conditions traits still key off.
 // Status payloads (all Attunement-scaled): burn {dps,dur},
 // chainHit {count,range,factor}, slow {mult,dur}.
 
@@ -126,15 +126,11 @@ export const WEAPON_CLASS_NAMES = {
 // chains/burns/blasts and travel time are ignored, and turrets use the plain
 // Ingenuity rule (character-specific inheritance like the Overseer's is not
 // modeled). Label it "est." wherever it's shown.
-import { TIER_MULT as _TM, STAT_IS_PCT as _PCT, SCALING_RATES as _SR } from '../config.js';
+import { TIER_MULT as _TM } from '../config.js';
 
-// per-stat contribution to the weapon's scaling-tag bonus, in percent
-export function scalingParts(def, stats) {
-  return def.scaling.map(k => ({
-    stat: k,
-    pct: Math.round(_PCT[k] ? (stats && stats[k] || 0) : (stats && stats[k] || 0) * (_SR[k] || 1)),
-  }));
-}
+// scalingParts() was deleted with SCALING_RATES — it existed only to apply it.
+// Callers that showed a per-stat breakdown now list the scaling tags by name,
+// which is the fallback they already used when a player's stats were unknown.
 
 export function estimateDps(def, tier, stats) {
   const s = stats || {};
@@ -144,8 +140,7 @@ export function estimateDps(def, tier, stats) {
     const ing = 1 + Math.max(-8, s.ingenuity || 0) * 0.1;
     return sd.dmg * _TM[tier - 1] * ing / Math.max(0.15, sd.cd);
   }
-  const bonus = Math.max(-60, scalingParts(def, s).reduce((b, part) => b + part.pct, 0));
-  const dmg = Math.max(1, def.dmg * _TM[tier - 1] * (1 + (s.ferocity || 0) / 100) * (1 + bonus / 100));
+  const dmg = Math.max(1, def.dmg * _TM[tier - 1] * (1 + (s.ferocity || 0) / 100));
   const cd = def.cd / Math.max(0.25, 1 + (s.tempo || 0) / 100);
   return dmg * (def.count || 1) / Math.max(0.05, cd);
 }

@@ -2,7 +2,7 @@
 // each player interacts at their own pace (movement keys still work).
 
 import { ITEM_BY_ID } from '../content/items.js';
-import { WEAPON_BY_ID, WEAPON_CLASS_NAMES, estimateDps, scalingParts } from '../content/weapons.js';
+import { WEAPON_BY_ID, WEAPON_CLASS_NAMES, estimateDps } from '../content/weapons.js';
 import { CHAR_BY_ID } from '../content/characters.js';
 import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_NAMES, weaponBasePrice, sellValue } from '../config.js';
 import { escapeHtml } from './screens.js';
@@ -52,11 +52,9 @@ function weaponCardHtml(def, tier, meta) {
   if (def.burn) bits.push(`burns ${def.burn.dps}/s for ${def.burn.dur}s`);
   if (def.slow) bits.push(`slows ${Math.round((1 - def.slow.mult) * 100)}%`);
   if (def.chainHit) bits.push(`chains to ${def.chainHit.count} at ${Math.round(def.chainHit.factor * 100)}%`);
-  // live math with YOUR stats — same numbers the owned detail cards show
-  const parts = meta && meta.stats ? scalingParts(def, meta.stats) : null;
-  const scaleLine = parts
-    ? `scales: ${parts.map(pt => `${glossName(pt.stat)} <b>${pt.pct >= 0 ? '+' : ''}${pt.pct}%</b>`).join(' · ')}`
-    : `scales with: ${def.scaling.map(t => glossName(t)).join(', ')}`;
+  // Tag names, not a live per-stat breakdown: the flat-stat conversion that
+  // produced the percentages went with SCALING_RATES.
+  const scaleLine = `scales with: ${def.scaling.map(t => glossName(t)).join(', ')}`;
   const est = meta && meta.stats ? `<br><span class="wd-dps">est. <b>${estimateDps(def, tier, meta.stats).toFixed(1)}</b> DPS if bought</span>` : '';
   // full-slot outcomes are shown BEFORE purchase — never a surprise
   let note = '';
@@ -73,7 +71,6 @@ function weaponCardHtml(def, tier, meta) {
 // the one information model for "what is this weapon worth to ME" — used by
 // owned-chip expansion and the make-room picker
 function weaponDetailHtml(def, tier, stats) {
-  const parts = scalingParts(def, stats || {});
   const line = def.summon
     ? `turret dmg ${Math.round(def.summon.dmg * TIER_MULT[tier - 1])} · every ${def.summon.cd}s · range ${def.summon.range} · HP ${Math.round(def.summon.hp * TIER_MULT[tier - 1])}`
     : `dmg ${Math.round(def.dmg * TIER_MULT[tier - 1])} · cooldown ${def.cd}s · range ${def.range}${def.count ? ` · ${def.count} projectiles` : ''}${def.pierce ? ` · pierce ${def.pierce}` : ''}`;
@@ -81,7 +78,7 @@ function weaponDetailHtml(def, tier, stats) {
     <div class="wdetail">
       <span>${WEAPON_CLASS_NAMES[def.cls]} · ${TIER_NAMES[tier - 1]}</span>
       <span>${line}</span>
-      <span>scales: ${parts.map(pt => `${glossName(pt.stat)} <b>${pt.pct >= 0 ? '+' : ''}${pt.pct}%</b>`).join(' · ')}</span>
+      <span>scales with: ${def.scaling.map(t => glossName(t)).join(', ')}</span>
       <span class="wd-dps">est. <b>${estimateDps(def, tier, stats).toFixed(1)}</b> DPS with your stats</span>
     </div>`;
 }

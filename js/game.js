@@ -2,7 +2,7 @@
 // rendering. Clients only ever send inputs/UI intents; everything here is the
 // single source of truth. Solo play runs this exact code with one player.
 
-import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, SCALING_RATES } from './config.js';
+import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT } from './config.js';
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
@@ -1805,16 +1805,6 @@ export class Sim {
     return this.time - p.lastFireT >= t.idle + cdMax;
   }
 
-  // Weapon damage: base × tier × (1 + Ferocity/100) × (1 + scaling-tag bonus/100).
-  // Percent scaling tags contribute their value; flat tags convert via SCALING_RATES.
-  _scalingBonus(p, def) {
-    let bonus = 0;
-    for (const key of def.scaling) {
-      bonus += STAT_IS_PCT[key] ? p.stats[key] : p.stats[key] * (SCALING_RATES[key] || 1);
-    }
-    return Math.max(-60, bonus);
-  }
-
   _fireWeapon(p, w, widx, opts = {}) {
     const def = WEAPON_BY_ID[w.id];
     const range = this._weaponRange(p, def);
@@ -1845,7 +1835,9 @@ export class Sim {
 
     // damage: base × tier × (1 + Ferocity/100) × (1 + scaling-tag bonus/100)
     let dmg = def.dmg * TIER_MULT[w.tier - 1];
-    let mult = (1 + p.stats.ferocity / 100) * (1 + this._scalingBonus(p, def) / 100);
+    // scaling tags are gone with SCALING_RATES; Ferocity is the only multiplier
+    // left on this path, which is itself only reachable from a line-of-sight test
+    let mult = (1 + p.stats.ferocity / 100);
     if (t.key === 'glass') mult *= t.dealMult;
     // Onrush: consume the movement meter (+60% at full charge)
     if (t.key === 'momentum_meter' && p.meter > 0.05) { mult *= 1 + t.bonus * p.meter; p.meter = 0; }

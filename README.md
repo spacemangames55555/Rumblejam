@@ -167,8 +167,8 @@ sideways for an angle rather than plinking masonry forever.
 
 ## The stat sheet (the Great Rebalance)
 
-**Constants: `STATS` and `SCALING_RATES` in `js/config.js`. Formulas:
-`_recomputeStats` and `hurtPlayer` in `js/game.js`.**
+**Constants: `STATS` in `js/config.js`. Formulas: `_recomputeStats` and
+`hurtPlayer` in `js/game.js`.**
 
 Ten stats, and any of them can be a damage stat: Vitality, Ferocity, Tempo,
 Grit, Reflex, Recovery, Ingenuity, Attunement, Greed, Reach. The design property
@@ -185,8 +185,9 @@ and no build that is simply "more crit".
 > `js/config.js` until a GDD section exists to record the intent behind them.
 >
 > The **weapon-scaling** rules this section used to restate are gone with
-> weapons (GDD §5.1) — `SCALING_RATES` still exists in config and is now unread
-> by the combat path.
+> weapons (GDD §5.1), and `SCALING_RATES` has been **deleted** rather than left
+> in place looking live — documenting a dead constant is how this section
+> drifted in the first place.
 
 ## Run it locally
 
@@ -497,6 +498,27 @@ clean play). They act on the **host's** simulation:
 
 Console helper: `uvSmoke()` runs every character through a scripted combat and
 reports failures (used for the automated character smoke check).
+
+## Reference convention
+
+**A bare `§N` in this repository means [`docs/GDD.md`](docs/GDD.md).** The GDD
+is the authoritative design document; `TUNING` blocks and `js/config.js` are
+authoritative for constants. Where the two disagree, the code is what runs and
+the GDD is what was intended — that gap is a bug in one of them, so say which.
+
+Any other source must be **named inline**: "that brief's §9", "GDD §8.4",
+"`samurai_armor.js` TUNING". Never a bare `§N` pointing anywhere else.
+
+This exists because it already went wrong. Two `§7`/`§9` references in the
+Decisions section below point at old *briefs*, and a checker that assumed bare
+`§N` meant the GDD resolved them to *Damage Triangle* and *Economy* — both real
+sections, both wrong, and the mistake was invisible because the citation looked
+valid. They are disambiguated inline now.
+
+**Do not restate design or tuning values here.** Point at the section. This
+README described Footing as granting Reflex and dropping instantly for four
+patches after both changed, and told readers the world map and difficulty were
+unbuilt for exactly as long as it took to build them. A pointer cannot drift.
 
 ## Dev tools (not needed to play)
 
