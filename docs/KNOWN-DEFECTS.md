@@ -886,11 +886,56 @@ phase 5 work, not a bug fix.
   still happens (a bad id must not crash a run) but it now names the id, the
   active roster, and the fact that the trees do not follow.
 
-### Not fixed here
+### Resolved by retiring the classic roster
 
-Building 45 skill trees is phase-5 content and was not in scope for a defect
-patch. What is delivered is the diagnosis, the instrument that will fail loudly
-until the content exists, and the silenced-substitution fix.
+The 33 were never waiting for trees — they are pre-overhaul content the GDD's
+14-class design replaces. Building trees for them would have been authoring
+content the design had already removed. So:
+
+- **One roster.** The ToH 14 are the roster. The classic 33 are preserved,
+  unimported, in `archive/classic-roster/` with a README on what to mine from
+  them. `js/roster.js`, `setRoster()`, `ROSTERS`, `rosterOf()`,
+  `applyHostRoster()` and the lobby roster picker are gone — with one roster
+  there is nothing to resolve, guard or switch.
+- **The silent fallback is gone.** `CHAR_BY_ID[id] || CHAR_BY_ID.bulwark` threw
+  away the distinction between "this character" and "some character", which is
+  most of why this defect survived a patch. An unknown id now throws.
+- **Selection is gated on having a tree, derived from the tree data.** Today
+  that is `toh_samurai` and `toh_necromancer`. The other twelve are *visible*
+  and greyed with the reason on the card — a roster that silently shrinks to
+  two reads as broken rather than unfinished. As phase 5 lands trees they
+  become selectable with **no code change**.
+- **A load assertion** refuses any selectable class without a damaging tier-1
+  active. Tier 1 is all a level-1 character can reach, and "has a tree" is not
+  enough — a tree of passives arms nobody.
+- **`tools/offence_test.mjs` walks every selectable class**, never a sample, so
+  a class that becomes selectable without offence fails the moment it does.
+
+Twelve of fourteen classes still need trees. That is phase-5 content and is not
+attempted here; what changed is that it is now a *stated, gated, asserted* gap
+rather than a game that boots into a roster that cannot fight.
+
+### And `nuke()` is gone
+
+It was `damageEnemy(e, 900, {owner: p})` on every enemy every 240 ticks. It is
+now `clearFieldForSetup(sim, p, reason)`: it demands a reason, stamps the sim,
+and `assertPlayerCleared()` refuses to let any sim it has touched carry a combat
+result. Every run prints how many fights the harness ended and why.
+
+**The suite went from 30 failures to 58, and that is the deliverable.** The
+previous green was measured through the nuke. Classified:
+
+| class | count | what it is |
+|---|---|---|
+| offence, newly visible | 14 | objectives never clearing, `UNKILLABLE` regenerating marks, camper statues dying, per-class first fights |
+| retired-character trait tests | 20 | Rampart/Vesper/Facet/Broker/Pulsar/Gilded One/Quartermaster/Bulwark/Soulbond/aura/drip/toll — testing characters that no longer exist. **Delete next.** |
+| weapon leftovers | 10 | pre-existing, §15 defect #10 territory |
+| crashes | 5 | same two causes as the above two rows |
+| other | 9 | ToH trait gaps (Bard rhythm, infusion, hitbox), sprite/grid plumbing |
+
+The 20 retired-trait tests are noise that should be deleted rather than fixed —
+they assert on traits of archived characters. The 14 in the first row are the
+signal this whole change was for.
 
 **One caution recorded against the instrument itself.** Its first default was 12
 seconds, at which the two characters that *can* fight scored zero, and it

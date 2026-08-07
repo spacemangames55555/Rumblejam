@@ -10,8 +10,6 @@
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as CH from '../js/content/characters.js';
-CH.setRoster('toh');
 const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
 const NT = await import('../js/nodetree.js');

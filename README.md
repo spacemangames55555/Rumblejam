@@ -654,12 +654,21 @@ never loads them:
   static server used by the two tools above. `browser_test.mjs` keeps its own,
   larger `Browser`; these want a fraction of it and want to start in a second.
 - `node tools/offence_test.mjs [seconds]` — **can a player kill anything?**
-  Walks both rosters, spends each character's opening skill point, ticks real
-  seconds and reads what the *player* dealt. It never calls `damageEnemy` on the
+  Walks every *selectable* class (never a sample), spends its opening skill
+  point, ticks real seconds and reads what the *player* dealt. It never calls `damageEnemy` on the
   player's behalf, which is exactly what `sim_test` does via `nuke()` — a
   harness that kills the enemies for you cannot answer this, and that gap let
-  §15 defect #11 sit behind a green suite. Also asserts that a charId from the
-  wrong roster warns instead of silently becoming `bulwark` with no skill trees.
+  §15 defect #11 sit behind a green suite. Also asserts that a retired or
+  unplayable charId throws instead of silently becoming someone else.
+- **`tools/sim_test.mjs` cannot tell you whether a player can win a fight.** It
+  clears fights with `clearFieldForSetup()`, which kills the enemies on the
+  player's behalf so flow tests can reach the next phase. That is legitimate
+  setup, but it used to be called `nuke()` and nothing distinguished it from
+  winning — so the suite stayed green for a patch against a party with no
+  offence at all (§15 defect #11). It now demands a reason, stamps the sim, and
+  `assertPlayerCleared()` refuses to let a nuked sim carry a combat result.
+  Every run prints how many fights the harness ended. Offence lives in
+  `offence_test.mjs`, never here.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).

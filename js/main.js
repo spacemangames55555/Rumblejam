@@ -20,8 +20,7 @@ import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon } from './ui/overlays.js';
-import { CHARACTERS, CHAR_BY_ID, ROSTER_ID, ROSTERS, ROSTER_IDS } from './content/characters.js';
-import { resolveInitialRoster, chooseRoster, applyHostRoster } from './roster.js';
+import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
 import { tohSnapshot, tohMarks, tohState, TOH_STANCE_NAMES } from './traits-toh.js';
 import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
@@ -84,7 +83,6 @@ const actions = {
   pickChar: charId => sendUi({ kind: 'pick', charId }),
   toggleReady: () => sendUi({ kind: 'ready' }),
   startGame: hostStartRun,
-  pickRoster: hostPickRoster,
 };
 // Sprites start loading NOW, at page load, while the player is still reading
 // the title and picking a character — not at game start, where a stall would
@@ -93,9 +91,6 @@ const actions = {
 // state the project ships in today.
 Assets.load('assets/assets.json');
 
-// Roster first: every screen that lists characters reads the active roster,
-// so this has to settle before the first render.
-resolveInitialRoster();
 initScreens(actions);
 initGloss(); // stat-glossary popover + document-level term handling
 initMapScreen({
@@ -344,7 +339,13 @@ function hostHandleUi(key, msg) {
   if (app.mode === 'lobby') {
     const p = app.lobby.players.find(q => q.key === key);
     if (!p) return;
-    if (msg.kind === 'pick' && CHAR_BY_ID[msg.charId]) p.charId = msg.charId;
+    // The host validates the pick. The greyed card in the client's lobby is an
+    // affordance; this is the enforcement, and it has to be here because a
+    // client can send whatever it likes.
+    if (msg.kind === 'pick') {
+      if (CHAR_BY_ID[msg.charId] && isSelectable(msg.charId)) p.charId = msg.charId;
+      else console.warn(`[lobby] refused pick "${msg.charId}" from ${key} — unknown or not selectable`);
+    }
     if (msg.kind === 'ready') p.ready = !p.ready;
     refreshLobby(); broadcastLobby();
   } else if (app.sim) {
@@ -385,7 +386,7 @@ function broadcastLobby() {
 // In-run state was moved onto the snapshot stream, which repeats 15 times a
 // second and therefore heals a dropped message on the next frame. The lobby has
 // no snapshot stream — it is not simulating anything — so lobby state travelled
-// only as edges: a `lobby` broadcast on join, on pick, on ready, on roster
+// only as edges: a `lobby` broadcast on join, on pick and on ready
 // switch. A peer whose channel was not open for one of those was left showing a
 // stale lobby with no way to notice, which is how a co-op run failed at
 // `client ready` with the party visibly assembled on the host's screen.
@@ -405,8 +406,9 @@ function startLobbyHeartbeat() {
 }
 
 function publicLobby() {
-  // `roster` is host-authoritative: it rides every lobby broadcast so a client
-  // is on the host's roster before it ever renders a character grid.
+  // There is ONE roster now, so nothing about which characters exist has to
+  // travel. This used to carry `roster`, and a joining client force-corrected
+  // itself onto the host's before rendering a single character grid.
   //
   // players[] carries key, name, colour, charId (the class pick), ready and
   // isHost — so peers, ready flags, picks and which character the host is on
@@ -415,21 +417,12 @@ function publicLobby() {
   // now is that when it does exist it rides this heartbeat rather than being
   // announced once and lost.
   return {
-    code: app.lobby.code, codePending: app.lobby.codePending, roster: ROSTER_ID,
+    code: app.lobby.code, codePending: app.lobby.codePending,
     difficulty: app.lobby.difficulty || null,
     players: app.lobby.players.map(p => ({ ...p })),
   };
 }
 
-// Host-only. Switching rosters clears everyone's character pick, because the
-// ids in the old roster do not exist in the new one.
-function hostPickRoster(id) {
-  if (app.role === 'client' || !app.lobby || !ROSTERS[id] || id === ROSTER_ID) return;
-  chooseRoster(id);
-  for (const p of app.lobby.players) { p.charId = null; p.ready = false; }
-  if (app.hostT) app.hostT.broadcast({ t: 'lobby', lobby: publicLobby() });
-  refreshLobby();
-}
 function refreshLobby() {
   if (app.mode === 'lobby') showLobby(app.lobby, app.role === 'host', app.myKey);
 }
@@ -442,7 +435,7 @@ function hostStartRun() {
     const seed = randomRunSeed();
     app.party = app.lobby.players.map((p, i) => ({ idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color }));
     app.myIdx = 0;
-    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, roster: ROSTER_ID, party: app.party });
+    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, party: app.party });
     startRunCommon();
     app.sim = new Sim({ seed, party: app.party });
     drainSimOutputs(true); // deliver initial floor/room events
@@ -529,8 +522,8 @@ function clientPump() {
     // inside conn.on('open'), so the channel is open by definition — but "open"
     // and "delivered" are the distinction this whole defect is about.
     //
-    // The lobby heartbeat is the acknowledgement: it repeats the host's roster
-    // 3x a second, so a client that is missing from its own host's roster can
+    // The lobby heartbeat is the acknowledgement: it repeats the host's PLAYER
+    // LIST 3x a second, so a client missing from that list can
     // see that and say hello again. That is self-healing off a channel that
     // already exists, rather than a second ack protocol.
     if (app.mode === 'lobby' && app.lobby && Array.isArray(app.lobby.players) && app.lobby.players.length) {
@@ -538,7 +531,7 @@ function clientPump() {
       const now = performance.now();
       if (!listed && now - (app.helloAt || 0) > CONFIG.UI_ACK_RESEND_MS * 4) {
         app.helloAt = now;
-        console.warn('[net] not in the host\'s roster — re-sending hello (the first one did not land)');
+        console.warn('[net] not in the host\'s player list — re-sending hello (the first one did not land)');
         const led = window.uvNet || (window.uvNet = {});
         led.helloResends = (led.helloResends || 0) + 1;
         app.clientT.send({ t: 'hello', name: currentName() });
@@ -559,11 +552,10 @@ function sanitizeMember(p, i) {
   };
 }
 function sanitizeLobby(lobby) {
-  if (!lobby || !Array.isArray(lobby.players)) return { code: null, codePending: false, roster: ROSTER_ID, players: [] };
+  if (!lobby || !Array.isArray(lobby.players)) return { code: null, codePending: false, players: [] };
   return {
     code: /^[A-Z2-9]{5}$/.test(String(lobby.code)) ? lobby.code : null,
     codePending: !!lobby.codePending,
-    roster: ROSTER_IDS.includes(lobby.roster) ? lobby.roster : ROSTER_ID,
     players: lobby.players.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember),
   };
 }
@@ -578,8 +570,6 @@ function clientOnMessage(msg) {
       app.uiPending.delete(msg.useq);
       break;
     case 'lobby': {
-      // the host's roster wins, always — before sanitizeLobby resolves charIds
-      applyHostRoster(msg.lobby && msg.lobby.roster, msg.lobby && msg.lobby.players);
       app.lobby = sanitizeLobby(msg.lobby);
       // REDRAW ONLY ON CHANGE. This now arrives as a 3Hz heartbeat rather than
       // only on edges, and re-rendering the lobby three times a second would
@@ -599,7 +589,6 @@ function clientOnMessage(msg) {
       break;
     case 'start': {
       if (!Array.isArray(msg.party)) break;
-      applyHostRoster(msg.roster, msg.party);   // again: sanitizeMember drops unknown charIds
       const party = msg.party.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember);
       const me = party.find(p => p.key === app.myKey);
       if (!me || !me.charId) { // raced the host's START before our hello landed — bail cleanly
@@ -629,7 +618,6 @@ function clientOnMessage(msg) {
     case 'ev': for (const ev of msg.list) handleEvent(ev); break;
     case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); updateSheetMeta(app.meta); } break;
     case 'abandon': // host ended the run for everyone — back to the lobby together
-      applyHostRoster(msg.lobby && msg.lobby.roster, msg.lobby && msg.lobby.players);
       app.lobby = sanitizeLobby(msg.lobby);
       app.mode = 'lobby';
       app.snaps = [];
@@ -1029,7 +1017,7 @@ function viewFromSim(sim) {
       trait: p.char.trait.key,
       spriteId: p.char.spriteId,   // cosmetic; resolved from the def, never networked
     })),
-    // Thrones of Heaven world layer (null/empty on the classic roster)
+    // Thrones of Heaven world layer
     toh: tohSnapshot(sim),
     tohMarks: tohMarks(sim),
     spirits: sim.players.filter(q => !q.gone && q.spirit)

@@ -11,11 +11,10 @@
 // So this one never calls damageEnemy on the player's behalf. It puts a
 // character in an arena, ticks real seconds, and reads what the PLAYER dealt.
 //
-// It also walks BOTH rosters. Weapons are gone, so skills are the only damage
-// source; skills come from trees; trees are keyed by charId — and a charId from
-// the wrong roster used to resolve silently to `bulwark`, giving a player the
-// right stats with no trees and no way to notice. Testing one roster would have
-// measured the substitution rather than the character.
+// It walks EVERY SELECTABLE CLASS, never a sample. Selectability is derived
+// from tree data, so a class becoming selectable enters this sweep with no edit
+// here — and if it arrives without offence, this fails the moment it does. A
+// sample would have covered the two that work and missed the one that broke.
 //
 // TWENTY SECONDS, NOT TWELVE. At 12 the two characters that CAN fight scored
 // zero and this tool declared an engine failure — a threshold short enough to
@@ -27,7 +26,7 @@
 // Usage: node tools/offence_test.mjs [seconds]     (default 20)
 
 import { Sim } from '../js/game.js';
-import { CHARACTERS, ROSTER_IDS, setRoster } from '../js/content/characters.js';
+import { CHARACTERS, SELECTABLE, isSelectable, unselectableReason } from '../js/content/characters.js';
 import { SKILL_BY_ID, TREES_BY_CLASS, canLearn } from '../js/skills.js';
 
 const SECONDS = parseInt(process.argv[2] || '20', 10);
@@ -70,48 +69,52 @@ function fight(charId, { arm } = {}) {
   };
 }
 
-function sweep(rosterId) {
-  setRoster(rosterId);
-  const ids = CHARACTERS.map(c => c.id);
-  console.log(`\n--- roster "${rosterId}": ${ids.length} characters, ${SECONDS}s each, opening pick spent ---`);
+function sweep() {
+  const ids = SELECTABLE.map(c => c.id);
+  console.log(`--- every selectable class: ${ids.length} of ${CHARACTERS.length}, ${SECONDS}s each, opening pick spent ---`);
+  if (!ids.length) { fail('no class is selectable — nobody can start a run at all'); return []; }
   const rows = ids.map(id => fight(id, { arm: true }));
 
   const subbed = rows.filter(r => r.substituted);
-  if (subbed.length) fail(`${subbed.length} id(s) in this roster did not resolve to themselves: ${subbed.map(r => r.charId).join(', ')}`);
+  if (subbed.length) fail(`${subbed.length} id(s) did not resolve to themselves: ${subbed.map(r => r.charId).join(', ')}`);
 
-  const treeless = rows.filter(r => !r.trees);
-  const armedOk = rows.filter(r => r.learned);
-  // A character with no tree can still show a nonzero number — reflect wards,
-  // traits, hazards. That is damage the player did not AIM, and counting it as
-  // offence would let a roster that cannot attack look half-functional. So the
-  // offence check is scoped to characters that actually armed something.
-  const mute = armedOk.filter(r => !r.err && r.dealt === 0);
+  const errored = rows.filter(r => r.err);
+  const unarmed = rows.filter(r => !r.err && !r.learned);
+  const mute = rows.filter(r => !r.err && r.learned && r.dealt === 0);
 
   console.log('  ' + rows.map(r => `${r.charId}:${r.err ? 'ERR' : r.dealt}`).join('  '));
-  console.log(`  ${armedOk.length}/${rows.length} could learn an active; ${rows.length - treeless.length}/${rows.length} have any tree at all`);
 
-  if (treeless.length === rows.length) {
-    fail(`roster "${rosterId}": NOT ONE of its ${rows.length} characters has a skill tree. Weapons are removed `
-      + `(CONFIG.WEAPONS_ENABLED false, weaponSlots 0), so skills are the only damage source — this roster cannot fight at all.`);
-  } else if (treeless.length) {
-    fail(`roster "${rosterId}": ${treeless.length}/${rows.length} characters have no skill tree, so they have no damage source: `
-      + treeless.map(r => r.charId).join(', '));
-  } else ok(`roster "${rosterId}": every character has at least one tree`);
+  if (errored.length) fail(`${errored.length} selectable class(es) could not even reach a fight: `
+    + errored.map(r => `${r.charId} (${r.err})`).join(', '));
 
-  if (!armedOk.length) {
-    fail(`roster "${rosterId}": not one character could learn an active, so none of them has an attack. `
-      + `Any nonzero number above is incidental — reflect, traits, hazards — not something the player aimed.`);
-  } else if (mute.length) {
-    fail(`roster "${rosterId}": ${mute.length}/${armedOk.length} armed characters still deal zero in ${SECONDS}s: `
+  // SELECTABLE MEANS PLAYABLE. A class is offered because it has a tree; if that
+  // tree cannot arm a level-1 character, the class is offered and unplayable —
+  // exactly the state §15 defect #11 described, one class at a time instead of
+  // a whole roster.
+  if (unarmed.length) {
+    fail(`${unarmed.length}/${rows.length} SELECTABLE class(es) cannot learn a tier-1 active, so a level-1 player `
+      + `of them cannot attack: ${unarmed.map(r => r.charId).join(', ')}`);
+  } else ok(`all ${rows.length} selectable class(es) can learn and auto-slot an opening active`);
+
+  if (mute.length) {
+    fail(`${mute.length}/${rows.length} armed class(es) still deal ZERO in ${SECONDS}s: `
       + mute.map(r => `${r.charId} (${r.learned})`).join(', '));
-  } else ok(`roster "${rosterId}": all ${armedOk.length} character(s) that could arm themselves deal damage`);
+  } else ok(`all ${rows.length} selectable class(es) deal damage once armed`);
+
+  // And the ones NOT yet selectable are named, so the gap is a number in the
+  // log rather than something you notice when a player asks where the classes
+  // went.
+  const locked = CHARACTERS.filter(c => !isSelectable(c.id));
+  if (locked.length) {
+    console.log(`  ${locked.length} class(es) not yet selectable: ${locked.map(c => c.id).join(', ')}`);
+    console.log(`  reason: ${unselectableReason(locked[0].id)}`);
+  } else ok('every class in the roster is selectable');
 
   return rows;
 }
 
-// ---------- 1: can anyone in either roster fight ----------
-const all = [];
-for (const id of ROSTER_IDS) all.push(...sweep(id));
+// ---------- 1: can every selectable class fight ----------
+const all = sweep();
 
 // ---------- 2: the two that do work, prove the ENGINE is fine ----------
 // Without this the result reads as "combat is broken", which would send the fix
@@ -128,21 +131,26 @@ console.log('\n--- where a tree exists, does the engine deliver ---');
   }
 }
 
-// ---------- 3: a wrong-roster id announces itself ----------
-// The substitution is how #11 stayed invisible: a party member from the other
-// roster silently became `bulwark`, keeping its stats and losing its trees.
-console.log('\n--- an id from the wrong roster is not silently substituted ---');
+// ---------- 3: a retired or unplayable id throws, never substitutes ----------
+// `CHAR_BY_ID[id] || CHAR_BY_ID.bulwark` is most of why #11 survived a patch:
+// an id the roster did not have became bulwark, keeping the stats and losing
+// the trees, silently. There is one roster now and nothing to fall back from.
+console.log('\n--- an unknown or unplayable character throws instead of becoming someone else ---');
 {
-  setRoster('classic');
-  const warnings = [];
-  const realWarn = console.warn;
-  console.warn = (...a) => { warnings.push(a.join(' ')); };
-  try { new Sim({ seed: 1, party: [{ idx: 0, key: 'k', name: 'X', charId: 'toh_samurai', color: '#fff' }] }); }
-  finally { console.warn = realWarn; }
-  const named = warnings.find(w => /not in the active roster/.test(w));
-  if (!named) fail('a charId from the other roster was substituted with no warning — the player gets a character with no trees and nothing says so');
-  else if (!/skill trees do NOT follow/i.test(named)) fail(`the warning fires but does not say the trees are lost: "${named}"`);
-  else ok('a wrong-roster id warns, and says the trees do not follow');
+  const cases = [
+    ['bulwark', /unknown character/, 'a retired classic id'],
+    ['not_a_character', /unknown character/, 'a nonsense id'],
+  ];
+  const locked = CHARACTERS.find(c => !isSelectable(c.id));
+  if (locked) cases.push([locked.id, /no skill tree/, 'a real but unplayable class']);
+  for (const [id, pattern, what] of cases) {
+    let threw = null;
+    try { new Sim({ seed: 1, party: [{ idx: 0, key: 'k', name: 'X', charId: id, color: '#fff' }] }); }
+    catch (e) { threw = e.message; }
+    if (!threw) fail(`${what} ("${id}") started a run instead of throwing — silent substitution is how #11 stayed invisible`);
+    else if (!pattern.test(threw)) fail(`${what} ("${id}") threw the wrong thing: ${threw.slice(0, 90)}`);
+    else ok(`${what} ("${id}") is refused: ${threw.split('.')[0]}`);
+  }
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall offence checks passed');

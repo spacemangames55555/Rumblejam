@@ -13,8 +13,6 @@
 // It also fails when a primitive or rider is defined but unreachable, which is
 // the same defect one layer down.
 
-import * as CH from '../js/content/characters.js';
-CH.setRoster('toh');
 const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
 const { TREES, SKILL_BY_ID, ALL_SKILLS } = await import('../js/skills.js');

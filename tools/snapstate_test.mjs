@@ -16,7 +16,6 @@
 // Anything a client still needs must therefore be in the snapshot, because
 // snapshots repeat 15 times a second and heal on the next frame.
 
-import * as CH from '../js/content/characters.js';
 const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
 const { encodeSnap, decodeSnap, wireSize } = await import('../js/netcodec.js');
@@ -34,8 +33,8 @@ function deafSim(seed, party) {
   return g;
 }
 const duo = [
-  { idx: 0, key: 'a', name: 'A', charId: 'bulwark', color: '#fff' },
-  { idx: 1, key: 'b', name: 'B', charId: 'onrush', color: '#fff' }];
+  { idx: 0, key: 'a', name: 'A', charId: 'toh_samurai', color: '#fff' },
+  { idx: 1, key: 'b', name: 'B', charId: 'toh_necromancer', color: '#fff' }];
 
 // ---------------------------------------------------------------- the map
 
@@ -129,7 +128,6 @@ const duo = [
 // the wire, so a client could not see what it had slotted — and a player who
 // cannot see their skills cannot spend a point on one.
 {
-  CH.setRoster('toh');
   const g = deafSim(31337, Array.from({ length: 8 }, (_, i) => ({
     idx: i, key: 'k' + i, name: 'P' + i, color: '#fff',
     charId: i % 2 ? 'toh_necromancer' : 'toh_samurai' })));
@@ -160,7 +158,6 @@ const duo = [
   const back = decodeSnap(encodeSnap(s));
   if (back.st && back.st.ld && back.st.ldk && back.st.map !== undefined) ok('the whole st block survives encodeSnap/decodeSnap — it is on the real wire, not only in the object');
   else fail('st did not survive the codec');
-  CH.setRoster('classic');
 }
 
 // ---------------------------------------------------------------- the price
@@ -169,7 +166,7 @@ const duo = [
 // player their run.
 {
   const g = deafSim(31337, Array.from({ length: 8 }, (_, i) => ({
-    idx: i, key: 'k' + i, name: 'P' + i, charId: 'bulwark', color: '#fff' })));
+    idx: i, key: 'k' + i, name: 'P' + i, charId: 'toh_samurai', color: '#fff' })));
   const s = g.getSnapshot();
   const full = wireSize(encodeSnap(s));
   const bare = wireSize(encodeSnap({ ...s, st: null }));

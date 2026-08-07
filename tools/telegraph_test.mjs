@@ -9,8 +9,6 @@
 // the projectile, and one arena is not a sample.
 
 import { readFileSync } from 'node:fs';
-import * as CH from '../js/content/characters.js';
-CH.setRoster('toh');
 const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
 const { TELEGRAPH_STATES, TELEGRAPH_MIN_WINDUP_MS, TELEGRAPHED_IDS, telegraphBusy } = await import('../js/telegraphs.js');

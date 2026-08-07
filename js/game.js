@@ -12,7 +12,7 @@ import {
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
   objectiveSpawnX,
 } from './objectives.js';
-import { CHAR_BY_ID, ROSTER_ID } from './content/characters.js';
+import { CHAR_BY_ID, isSelectable, unselectableReason } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
 import { EnemyGrid } from './triggers.js';
@@ -51,7 +51,10 @@ const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', domain: 'mental', behavior
 const TIER_WEIGHTS = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 40, 20]];
 
 export class Sim {
-  constructor({ seed, party }) {
+  constructor({ seed, party, allowUnplayable = false }) {
+    // see _makePlayer: an explicit, named opt-out for tests that measure a
+    // class's TRAIT rather than whether it can win a fight
+    this.allowUnplayable = allowUnplayable;
     this.seed = seed >>> 0;
 
     // THE SIM STREAM. Every incidental roll the simulation makes — spawn
@@ -159,17 +162,30 @@ export class Sim {
   // ---------------- player construction & stats ----------------
 
   _makePlayer(member, idx) {
-    // LOUD, because this fallback hid §15 defect #11 for a whole patch. An id
-    // from the other roster resolved silently to bulwark — right stats, right
-    // trait, WRONG charId — and treesFor(p) keys off charId, so the player got
-    // a character with no skill trees and no way to attack, with nothing
-    // anywhere saying a substitution had happened. The fallback stays (a party
-    // member with a bad id must not crash the run) but it announces itself.
-    let char = CHAR_BY_ID[member.charId];
+    // NO SILENT SUBSTITUTION. This used to be
+    //   CHAR_BY_ID[member.charId] || CHAR_BY_ID.bulwark
+    // and that single `||` is most of why §15 defect #11 survived a patch: an
+    // id from the other roster resolved to bulwark with the right stats and the
+    // WRONG charId, treesFor(p) keys off charId, and the player got a character
+    // with no skill trees and no way to attack — silently.
+    //
+    // There is one roster now, so there is nothing to fall back FROM. An
+    // unknown id is a bug in whoever built the party, and it throws.
+    const char = CHAR_BY_ID[member.charId];
     if (!char) {
-      char = CHAR_BY_ID.bulwark;
-      console.warn(`[sim] character "${member.charId}" is not in the active roster "${ROSTER_ID}" — `
-        + `falling back to ${char.id}. Its skill trees do NOT follow, so this player will have none.`);
+      throw new Error(`[sim] unknown character "${member.charId}". There is one roster and this is not in it. `
+        + `Known: ${Object.keys(CHAR_BY_ID).join(', ')}`);
+    }
+    // SELECTABILITY IS ABOUT STARTING A RUN. A class with no tree cannot fight,
+    // so a lobby must not offer it and a client must not be able to force it.
+    // But its TRAIT may be fully implemented and worth testing, and refusing to
+    // construct a Sim at all would block those tests — so the escape hatch is
+    // explicit and named, never a default. `allowUnplayable` says: I know this
+    // class cannot win a fight, I am measuring something else.
+    if (!isSelectable(char.id) && !this.allowUnplayable) {
+      throw new Error(`[sim] "${char.id}" has no skill tree, so it has no way to deal damage — `
+        + `${unselectableReason(char.id)} A run started with it could never clear a fight. `
+        + `If you are testing something other than whether it can fight, pass allowUnplayable: true.`);
     }
     const p = {
       idx, name: member.name || `Player ${idx + 1}`, charId: char.id, char,
