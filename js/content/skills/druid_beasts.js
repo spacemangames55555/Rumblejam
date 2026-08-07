@@ -23,20 +23,27 @@
 export const TUNING = {
   // tier 1 — Thorn Lash
   lashDamage: 8, lashReach: 92, lashArc: 1.5, lashCd: 1000,
+  // ANIMAL HP IS TUNED AGAINST THE REVIVE COST, NOT AGAINST THE ENEMY.
+  // §8.5 puts a lone animal's revive at 15 s. At the first-guess HP an armed
+  // Druid's wolf spent HALF THE FIGHT DOWN (0.53 average standing at rank 11),
+  // which made depth strictly worse than breadth — points bought a pet that hit
+  // harder, died just as fast, and then cost fifteen seconds. Raised so a pet
+  // survives long enough for its damage to be worth investing in.
   // tier 2 — Call Wolf (the first animal)
-  wolfHp: 34, wolfRadius: 11, wolfDamage: 7, wolfReach: 48, wolfArc: 1.5,
+  wolfHp: 62, wolfRadius: 11, wolfDamage: 7, wolfReach: 48, wolfArc: 1.5,
   wolfAtkCd: 950, wolfSpawnRadius: 48, wolfCd: 3000,
   wolfTrigRadius: 320, wolfTrigCount: 1,
-  // THE REVIVE CURVE. Base plus a per-animal term, measured against animals
-  // OWNED. A solo wolf is back fast; a pack of four is a real repair bill.
-  reviveBase: 2600, revivePerAnimal: 1400,
+  // THE REVIVE CURVE, from §8.5: 15000 + 4000 x (totalAnimals - 1), measured
+  // against animals OWNED. One animal is 15 s; three is 23 s; six is 35 s.
+  // Going wide has a price at the moment it matters.
+  reviveBase: 15000, revivePerAnimal: 4000,
   // tier 3 — Bramble
   brambleDamage: 5, brambleRadius: 130, brambleDuration: 4500, brambleTickMs: 500,
   brambleSlowMult: 0.6, brambleSlowDur: 1400, brambleCd: 6500, brambleTrigCount: 3,
   // tier 4 — Pack Bond (passive)
   bondPerPack: 0.05,
   // tier 5 — Call Bear
-  bearHp: 78, bearRadius: 15, bearDamage: 12, bearReach: 60, bearArc: 1.8,
+  bearHp: 130, bearRadius: 15, bearDamage: 12, bearReach: 60, bearArc: 1.8,
   bearAtkCd: 1500, bearSpawnRadius: 56, bearCd: 7000, bearTaunt: 2200,
   bearTrigRadius: 240, bearTrigCount: 3,
   // tier 6 — Maul
@@ -44,7 +51,7 @@ export const TUNING = {
   // tier 7 — Rejuvenate
   rejuvAmount: 16, rejuvRadius: 260, rejuvCd: 9000, rejuvPct: 55,
   // tier 8 — Call Hawk
-  hawkHp: 20, hawkRadius: 8, hawkDamage: 9, hawkSpeed: 520, hawkRange: 280,
+  hawkHp: 40, hawkRadius: 8, hawkDamage: 9, hawkSpeed: 520, hawkRange: 280,
   hawkAtkCd: 1000, hawkOrbit: 74, hawkCd: 6000, hawkTrigRange: 300,
   // tier 9 — Stampede
   stampedeDamage: 19, stampedeWidth: 66, stampedeLength: 340, stampedeCd: 8500,
@@ -62,6 +69,12 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 // Every animal shares the revive curve. Spread into each summon step so the
 // numbers still arrive as data on the step rather than being looked up by
 // archetype name inside the engine.
+//
+// ANIMALS ARE NOT SLOTTED (§8.5). The Druid's pack size is how many animal
+// skills it took — one wolf, one bear, one hawk — bounded by `maxAlive: 1` on
+// each, not by a shared capacity pool. The pool existed only in the earlier
+// implementation and is deleted; a Druid competing with a Necromancer for the
+// same slots would have coupled two engines the design keeps opposite.
 const REVIVES = { revives: true, reviveBase: T.reviveBase, revivePerAnimal: T.revivePerAnimal };
 
 export const DRUID_BEASTS = [
@@ -84,7 +97,7 @@ export const DRUID_BEASTS = [
     cooldown: T.wolfCd,
     compose: [{
       kind: 'summon', archetype: 'wolf', maxAlive: 1, move: 'chase',
-      count: 1, slotted: true, ...REVIVES,
+      count: 1, slotted: false, ...REVIVES,
       hp: T.wolfHp, radius: T.wolfRadius, spawnRadius: T.wolfSpawnRadius,
       duration: 0,
       attackCd: T.wolfAtkCd,
@@ -125,7 +138,7 @@ export const DRUID_BEASTS = [
     cooldown: T.bearCd,
     compose: [{
       kind: 'summon', archetype: 'bear', maxAlive: 1, move: 'chase',
-      count: 1, slotted: true, ...REVIVES,
+      count: 1, slotted: false, ...REVIVES,
       hp: T.bearHp, radius: T.bearRadius, spawnRadius: T.bearSpawnRadius,
       duration: 0,
       attackCd: T.bearAtkCd,
@@ -166,7 +179,7 @@ export const DRUID_BEASTS = [
     cooldown: T.hawkCd,
     compose: [{
       kind: 'summon', archetype: 'hawk', maxAlive: 1, move: 'orbit',
-      count: 1, slotted: true, ...REVIVES,
+      count: 1, slotted: false, ...REVIVES,
       hp: T.hawkHp, radius: T.hawkRadius, spawnRadius: T.hawkOrbit, orbitRadius: T.hawkOrbit,
       duration: 0,
       attackCd: T.hawkAtkCd,

@@ -18,11 +18,17 @@
 // and an attack cooldown — "something that kills" has to kill now.
 
 export const TUNING = {
+  // SKELETONS ARE DISPOSABLE AND WIPE EVERY ROOM (§8.5 row 5), so their HP is
+  // about surviving one fight rather than a map — but at the first guess they
+  // averaged under one standing, which is not an engine. Bone Shard was raised
+  // with them: the wide shape of this tree measured at 7.2 dps against the
+  // Druid's 18.0, and the tree's own direct damage is what a Necromancer has
+  // during the cold start §8.5 gives it.
   // tier 1 — Bone Shard
-  shardDamage: 7, shardSpeed: 520, shardRange: 240, shardCd: 900,
+  shardDamage: 11, shardSpeed: 520, shardRange: 240, shardCd: 900,
   // tier 2 — Raise Skeleton (the slot grant)
   skelSlotsPerRank: 1,          // one skeleton per point, capped by SUMMON_SLOT_CAP
-  skelHp: 26, skelRadius: 10, skelDamage: 5, skelReach: 46, skelArc: 1.6,
+  skelHp: 38, skelRadius: 10, skelDamage: 5, skelReach: 46, skelArc: 1.6,
   skelAtkCd: 1100, skelSpawnRadius: 44, skelCd: 2600,
   // ON_TOKEN: the range within which a soul token can be reached, and the
   // flight of the throw that reaches it. §8.5 row 4.
@@ -41,14 +47,14 @@ export const TUNING = {
   // tier 7 — Charnel Pact (ON_TOKEN → a cone)
   pactDamage: 15, pactAngle: 2.2, pactRange: 190, pactCd: 5200, pactTokenRange: 200,
   // tier 8 — Bone Golem
-  golemHp: 90, golemRadius: 15, golemDamage: 13, golemReach: 62, golemArc: 1.9,
+  golemHp: 150, golemRadius: 15, golemDamage: 13, golemReach: 62, golemArc: 1.9,
   golemAtkCd: 1600, golemSpawnRadius: 54, golemCd: 9000, golemKnock: 180,
   golemTrigRadius: 220, golemTrigCount: 4,
   // tier 9 — Dread Howl
   howlDamage: 14, howlAngle: 2.8, howlRange: 200, howlRadius: 200, howlCount: 3,
   howlCd: 7500, howlWeakenMult: 0.7, howlWeakenDur: 3200,
   // tier 10 — Army of the Dead
-  armyCount: 3, armyHp: 30, armyRadius: 10, armyDamage: 9, armyReach: 50, armyArc: 1.7,
+  armyCount: 3, armyHp: 44, armyRadius: 10, armyDamage: 9, armyReach: 50, armyArc: 1.7,
   armyAtkCd: 1000, armySpawnRadius: 66, armyDuration: 14000, armyCd: 16000,
   armyBurstDamage: 16, armyBurstAngle: 3.0, armyBurstRange: 210,
   // the burst rides the pack: more bodies standing, harder it lands. Same hook

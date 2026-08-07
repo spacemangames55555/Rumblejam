@@ -599,28 +599,45 @@ It is also why the Necromancer's cold start is a real cost rather than a tax. A 
 
 Mechanically this is a `deliver` block on the summon step — a property of the step, not of the skill — so any future summon can be thrown without the engine learning what a skeleton is. `claimToken()` returns the position rather than a boolean for the same reason; a boolean would reduce it back to a counter in the one function that decides.
 
-#### Divergence log — where the code disagrees with this section
+#### Divergence log — CLOSED
 
-**This is not a list of proposed values. It is a record of eight defects.** The summoning engine, both trees and the instrumentation were built from a brief citing a §8.5 that had not yet reached the repository, so the magnitudes and several mechanics were invented at the keyboard. **§8.5 wins on every row. The code changes to match, never the reverse.**
+All eight rows are closed. The summoning engine now matches this section; the log is kept because the shape of the mistake is worth remembering — the engine, both trees and the instrumentation were built from a brief citing a §8.5 that had not yet reached the repository, so the magnitudes and several mechanics were invented at the keyboard. §8.5 won on every row.
 
-| # | §8.5 says — **authoritative** | code currently does | verdict |
-|---|---|---|---|
-| 1 | **Every** enemy killed drops a soul token | `SOUL_TOKEN_CHANCE` 0.22 per death | spec wins — drop is certain, delete the roll |
-| 2 | Tokens are **visible only to Necromancers**; state on the wire, rendered per-player | rendered for every player | spec wins — per-player render |
-| 3 | Tokens expire after **30 s** | `SOUL_TOKEN_TTL` 8 s | spec wins — 30 s |
-| 4 | **Raise Skeleton is triggered by `ON_TOKEN`**, fires a projectile at the token, and the skeleton rises **where it lands** | ✅ **CLOSED** — `trigger: ON_TOKEN`, a `deliver` step throws the summon, and the skeleton rises at the impact point. Asserted spatially: staged 260u away, the skeleton lands 4u from the token and 264u from the caster | done |
-| 5 | Skeletons **wipe at the end of every room** | they persist across rooms | spec wins — every fight ramps from zero |
-| 6 | **No cap beyond rank.** Rank 20 means 20 skeletons | rank + a base allowance, hard-capped at 8 | spec wins — uncapped for first playtest |
-| 7 | All animals spawn **at the start of every map**, fully restored | spawned by `PROXIMITY` triggers mid-fight | spec wins — the pack is present, not summoned under fire |
-| 8 | `reviveMs = 15000 + 4000 × (totalAnimals − 1)` → 15 s at one animal | `2600 + 1400 × totalAnimals` → 4.0 s at one animal | spec wins — the shipped curve is roughly a quarter of the intended cost |
+| # | §8.5 | how it was closed, and what asserts it |
+|---|---|---|
+| 1 | **Every** kill drops a token | No roll, no cap. Asserted by counting: 40 kills, 40 tokens, exact equality — a rate looks identical to certainty on a lucky sample |
+| 2 | Visible only to classes that can read them | A **view** filter, not a wire filter — tokens stay on the snapshot for everyone because they are state. Derived from tree data (`readsTokens()`), so the Wizard's Soul tree inherits it with no code change |
+| 3 | Expire after 30 s | Read off a token dropped through the real kill path |
+| 4 | Thrown at the token; rises where it lands | See above. Asserted spatially: 4u from the token, 264u from the caster |
+| 5 | Skeletons wipe every room | Asserted across a **real node transition**, never a timer — a wipe that happened to look right because a duration expired would pass a timer check and fail a player walking through a door |
+| 6 | No cap beyond rank | `SUMMON_SLOTS_BASE` and `SUMMON_SLOT_CAP` deleted. Asserted at **rank 12**, chosen because the old ceiling of 8 would have bitten: 12 slots granted and 12 skeletons standing |
+| 7 | Animals present at map start, fully restored | Restored at the room-start HP restore, where this section puts it. Asserted by downing an animal, travelling, and checking it arrives standing at full HP |
+| 8 | `15000 + 4000 × (N−1)` | Asserted at **five** pack sizes with slope and intercept checked separately — one sample cannot see a wrong slope, and two cannot tell a wrong slope from a wrong intercept |
 
-Already agreeing, and not to be disturbed by the fix: `totalAnimals` counts animals **owned, not alive** (derived independently on both sides, same reasoning); revive at the Druid's current position; each dead animal on its own independent timer; one rank of Raise Skeleton grants one skeleton slot; one animal per animal skill; two Necromancers sharing one token per enemy, first fire claiming it.
+**`SUMMON_SLOTS_BASE` is gone and must not return.** It was invented to give the Druid somewhere to put an animal. This section solves that differently: a Druid's pack size is how many animal skills it took, its animals are **not slotted at all**, and the Necromancer's capacity is rank alone. A shared pool would couple two engines this section keeps deliberately opposite. If a future class needs standing capacity, it belongs to that class's own engine.
 
-**`SUMMON_SLOTS_BASE` is removed, not reconciled.** It was invented to fix a problem this section does not have. Keeping `rankGrants` unique to Raise Skeleton left the Druid unable to hold any animal at all — the instrument reported `spawned: 0, refused: 22` for a fully-armed Druid — and a shared base allowance was the quickest repair. **§8.5 has no slot pool.** The Druid's pack size is *how many animal skills it took*; the Necromancer's capacity is *rank-only*. There is nothing for a base allowance to be the base of, and a shared pool would silently couple two engines the table above exists to keep opposite. It must not come back: if a future class needs standing capacity, that capacity belongs to that class's own engine.
+#### Balance pass, and the two questions it could not answer
 
-**The balance pass waits for the code to match.** Every hp, damage and cooldown in both trees is still a first guess, and tuning them against the current mechanics would measure a game this section says should not exist — a certain 30-second token that plants a skeleton where it lands is a different economy from a 22% 8-second token, not a different number.
+Measured by `tools/balance_summoners.mjs` at level 12 — three slots, just past region 2's expected 10 — against the four already-tuned trees, at both build shapes, because §8.5 frames these engines as a depth-versus-breadth decision that one shape cannot see.
+
+| tree | shape | dps | avg minions |
+|---|---|---:|---:|
+| reference band (4 tuned trees) | — | 3.0 – 29.0 | — |
+| `necro_summons` | wide | 10.3 | 0.48 |
+| `necro_summons` | deep (rank 11) | 19.5 | 8.66 |
+| `druid_beasts` | wide | 18.0 | 3.00 |
+| `druid_beasts` | deep (rank 11) | 9.1 | 0.84 |
+
+Both trees sit inside the band at both shapes. One tuning round moved them there: animal and skeleton HP up, and Bone Shard up, because a Necromancer's own damage is what it has during the cold start this section gives it.
+
+**Two findings are structural, not magnitudes, and are NOT tuned around.**
+
+**A rank buys a minion's damage and not its life.** A rank-11 wolf has the same HP as a rank-1 wolf, so depth buys a pet that hits harder, dies just as fast, and then costs 15 seconds. It averaged 0.53 of an animal standing before the HP raise and 0.84 after — the dial moved the number and not the shape, which per §8.4's lesson means the dial is not what is wrong. §4.2 says ranks raise damage and duration only; whether a summon's HP counts as its duration is a **§9.5-shaped question this document has not answered**, and no amount of HP tuning will make depth a real choice for the Druid until it is.
+
+**Skeletons are uncapped by design and depth therefore dominates for the Necromancer** (deep/wide = 1.90, against 0.63 for the tuned Samurai trees, where wide normally wins). This section says "deliberately uncapped for first playtest; a cap may follow". This is that playtest reporting back: the cap is now the open question, and the number to set it against is 11 skeletons at rank 11.
 
 ---
+
 
 ## 9. Economy and Shop
 
@@ -831,11 +848,11 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**Almost none of the current red is a defect — but Group D is no longer empty.** `tools/sim_test.mjs` reports **16 failing checks**: 6 are content not authored, 3 await a design decision, 7 are a deferred subsystem. Alongside them, `tools/stat_gate.mjs` reports **3 real defects** (D-23): three of the ten stats are sold to players and do nothing. The counts sum to 16 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
+**Almost none of the current red is a defect — but Group D is no longer empty.** `tools/sim_test.mjs` reports **17 failing checks**: 7 are content not authored, 3 await a design decision, 7 are a deferred subsystem. Alongside them, `tools/stat_gate.mjs` reports **3 real defects** (D-23): three of the ten stats are sold to players and do nothing. The counts sum to 17 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
-### Group A — waiting on phase-5 trees (6)
+### Group A — waiting on phase-5 trees (7)
 
 Eleven classes have no trees. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
@@ -843,6 +860,7 @@ Eleven classes have no trees. Weapons are removed, so a class without a tree can
 |---|---:|---|
 | `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_bard`, `toh_mage` and `toh_sundian` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
+| `elite_arena (1p) never cleared` | 1 | **Back, and it is §8.5 working.** It left this group when the Summons tree landed and returned when that tree was made §8.5-conformant: skeletons now wipe every room and capacity is rank alone, so a solo Necromancer ramps from zero in every fight instead of arriving with a standing army. `offence_test` clears it at 4p. Solo is not the target party size for an objective node, and the cold start is the class's stated cost — not a defect, and not to be tuned away. |
 | `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; eleven score 0 because they cannot attack. |
 
 **Two entries left this group by being built.** `elite_arena (1p) never cleared` went green when the Necromancer's Summons tree landed — the class gained a third tree, the solo build got deeper, and the objective cleared with nothing tuned. `toh_druid` left with its own tree. That is the group working as labelled: it said "not built yet", something got built, and it closed.
@@ -967,8 +985,8 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** |
 | Classes 3–14 | **Not started** — 11 of 14 classes have no trees |
-| Summoning | **Built, diverging from §8.5 in 8 places** — engine, both trees, instrumented. Divergence log in §8.5; the code changes to match |
-| `ON_TOKEN` trigger | **Built** — in the taxonomy, world-resource pool, consumed on fire. Drop rate, TTL and Raise Skeleton's use of it all diverge from §8.5 |
+| Summoning | **Built and conformant** — all 8 divergence rows closed; balance pass run. Two structural questions open in §8.5 |
+| `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Economy | **Not started** |
 
 ---

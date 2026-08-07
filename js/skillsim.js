@@ -11,7 +11,7 @@ import { EnemyGrid, triggerHolds, triggerConsume, TRIGGER_TICK_MS, MAX_TRIGGER_E
 import { selectTarget } from './selectors.js';
 import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
-import { initMinionPlayer, summonSlotsFor, tickMinions } from './minions.js';
+import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
 import { TUNING as SAM } from './content/skills/samurai_armor.js';
 
@@ -45,6 +45,33 @@ export function initSkillPlayer(sim, p) {
 }
 
 export function treesFor(p) { return TREES_BY_CLASS[p.charId] || []; }
+
+// ROOM START, §8.5 rows 5 and 7. Lives here rather than in minions.js because
+// it needs the skill registry, and minions.js cannot import it — js/skills.js
+// imports MOVE_KINDS from minions.js, so the dependency only runs one way.
+//
+// Two halves of one rule. resetMinionsForRoom wipes what does not revive and
+// restores what does; this then fills in any animal the player has PAID FOR but
+// does not currently have standing. A Druid arrives with its pack, rather than
+// spending the opening seconds of every fight re-summoning what its points
+// already bought.
+export function startRoomMinions(sim, p) {
+  resetMinionsForRoom(sim, p);
+  for (const [id, rank] of Object.entries(p.skillRanks || {})) {
+    if (!(rank > 0)) continue;
+    const sk = SKILL_BY_ID[id];
+    if (!sk) continue;
+    for (const step of sk.compose || []) {
+      // Only persistent summons are restored. A timed extra is bought by firing
+      // its skill, and handing one out free at every door would make it a
+      // permanent that happens to expire.
+      if (step.kind !== 'summon' || !step.revives) continue;
+      const have = p.minions.filter(m => m.arch === step.archetype).length;
+      const want = step.maxAlive || 1;
+      for (let i = have; i < want; i++) spawnMinions(sim, p, sk, step, rank);
+    }
+  }
+}
 
 export function learnableSkills(p) {
   return treesFor(p).flatMap(t => TREES[t].skills).filter(s => canLearn(p, s));
@@ -286,7 +313,18 @@ function fireSkill(sim, p, sk) {
   // target position, so it takes the one this skill's own selector chose.
   const range = sk.trigger.range || sk.trigger.radius || 0;
   const tgt = range ? selectTarget(sk.select, sim.trigGrid, p.x, p.y, range) : null;
-  sim._selLedger(sk.id, tgt);
+  // Only computed when the ledger is on — this is a diagnostic scan, and a
+  // per-fire grid walk has no business in a normal run.
+  let markInRange = null;
+  if (sim.selLog && range) {
+    markInRange = false;
+    for (const e of sim.trigGrid.near(p.x, p.y, range)) {
+      if (!e.bounty) continue;
+      const dx = e.x - p.x, dy = e.y - p.y;
+      if (dx * dx + dy * dy <= range * range) { markInRange = true; break; }
+    }
+  }
+  sim._selLedger(sk.id, tgt, markInRange);
   sim.tohOnFire(p, { def: null, a: p.aimA, tx: tgt ? tgt.x : p.x, ty: tgt ? tgt.y : p.y });
   p.trigEvents.lastFired = sk.id;
   p.fireLog.push({ id: sk.id, trigger: sk.trigger.kind, t: sim.time, hits: out.hits });

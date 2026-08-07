@@ -229,9 +229,16 @@ console.log('\n--- an armed party against the three objectives that failed ---')
     // at three slots the party also fires densest_cluster skills, which pick
     // chaff BY DESIGN and correctly. Counting those as misses read as an 86%
     // "regression" in a selector that had not changed at all.
+    // SCOPED TWICE, and both scopes were learned the hard way. First to skills
+    // that actually declare `objective_target` — a densest_cluster skill
+    // correctly picking chaff is not a regression. Then to fires where a mark
+    // was IN RANGE: a selector cannot choose what it cannot see, and counting
+    // those fires made the ratio a measure of party positioning rather than of
+    // selection.
     const objFires = [...(sim.selLog || new Map())]
-      .filter(([k]) => (SKILL_BY_ID[k.split('->')[0]] || {}).select === 'objective_target');
-    const selMark = objFires.filter(([k]) => /->MARK$/.test(k)).reduce((n, [, v]) => n + v, 0);
+      .filter(([k]) => (SKILL_BY_ID[k.split('->')[0]] || {}).select === 'objective_target')
+      .filter(([k]) => k.endsWith('|markInRange'));
+    const selMark = objFires.filter(([k]) => /->MARK\|markInRange$/.test(k)).reduce((n, [, v]) => n + v, 0);
     const selTotal = objFires.reduce((n, [, v]) => n + v, 0);
     const progress = kind === 'nest' ? `${(o.total || 0) - (o.alive || 0)}/${o.total || 0} nests down`
       : kind === 'bounty' ? `${selMark}/${selTotal} objective-targeting fires chose the mark (kills: ${o.killed || 0}/${o.need || 0}, needs pierce)`

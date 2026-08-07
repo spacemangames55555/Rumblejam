@@ -73,18 +73,24 @@ export function initMinionPlayer(p) {
 // Footing stacks measured as seventeen — inflating every per-stack term with
 // it. A rank that buys a STRUCTURAL quantity has to be declared and unique, or
 // the next one arrives the same silent way.
+// CAPACITY IS RANK, AND NOTHING ELSE (§8.5). No base allowance and no ceiling:
+// a rank-20 Raise Skeleton means twenty skeletons, each one still earned by a
+// kill. Deliberately uncapped for first playtest.
+//
+// The earlier version added CONFIG.SUMMON_SLOTS_BASE and clamped to a cap of 8.
+// Both are gone. The base existed to give the Druid somewhere to put an animal,
+// which §8.5 solves differently — a Druid's pack size is how many animal skills
+// it took, so its animals are not slotted at all — and the cap silently
+// contradicted "no cap beyond rank" at exactly the ranks a summoner build is
+// aiming for.
 export function summonSlotsFor(p, skillRanks, SKILL_BY_ID) {
-  // The base allowance is not a grant — it is the floor every summoner stands
-  // on, so that keeping `rankGrants` unique to one skill does not silently
-  // leave every OTHER summoning class with nowhere to put its summons. See
-  // CONFIG.SUMMON_SLOTS_BASE for the run that found this.
-  let n = CONFIG.SUMMON_SLOTS_BASE;
+  let n = 0;
   for (const [id, rank] of Object.entries(skillRanks || {})) {
     const sk = SKILL_BY_ID[id];
     if (!sk || sk.rankGrants !== 'summonSlots') continue;
     n += (sk.rankGrantPer || 0) * rank;
   }
-  return Math.min(CONFIG.SUMMON_SLOT_CAP, Math.floor(n));
+  return Math.floor(n);
 }
 
 // Slotted minions occupy a slot whether they are standing or waiting to be
@@ -114,8 +120,15 @@ export function totalAnimals(p) {
 // rather than the cheapest. sim_test asserts this directly by wiping a pack and
 // reading the duration back — the failure mode is silent otherwise, because
 // both versions produce a plausible number.
+// §8.5: reviveMs = reviveBase + revivePerAnimal x (totalAnimals - 1). The
+// FIRST animal costs the base alone; each one after it adds the step. A pack of
+// one is 15 s, a pack of six is 35 s.
+//
+// The (total - 1) matters as much as the owned-not-alive rule above it: without
+// it a solo Druid paid the per-animal term for a pack it does not have, and the
+// curve started one step too high everywhere.
 export function reviveSeconds(step, total) {
-  return (step.reviveBase + step.revivePerAnimal * total) / MS;
+  return (step.reviveBase + step.revivePerAnimal * Math.max(0, total - 1)) / MS;
 }
 
 // ---------------------------------------------------------------- the actor
@@ -245,6 +258,41 @@ export function spawnMinions(sim, p, skill, step, rank, origin = null) {
   return made;
 }
 
+// ---------------------------------------------------------------- room reset
+//
+// §8.5 rows 5 and 7. Called from the room-start restore, which is where the
+// section puts it ("alongside the room-start HP restore in §10").
+//
+// The two engines part company here, and it is the sharpest expression of why
+// they are opposite:
+//
+//   Skeletons WIPE. They do not persist, so a Necromancer's count never
+//   compounds across a map and every fight ramps from zero. That is what makes
+//   the cold start a real cost rather than a one-off.
+//
+//   Animals PERSIST and are RESTORED — standing again, at full HP, with any
+//   revive timer cancelled. A Druid arrives with the pack it paid points for.
+//   Re-summoning them per room would make breadth free.
+//
+// The test is a ROOM TRANSITION, never a timer: a wipe that happened to look
+// right because a duration expired would pass a timer-based check and fail a
+// player walking through a door.
+export function resetMinionsForRoom(sim, p) {
+  if (!p.minions) return;
+  // Anything that does not revive is disposable and does not survive the room.
+  const wiped = p.minions.filter(m => !m.revives).length;
+  p.minions = p.minions.filter(m => m.revives);
+  p.minionStats.roomWiped = (p.minionStats.roomWiped || 0) + wiped;
+  for (const m of p.minions) {
+    m.down = false; m.downT = 0; m.downDur = 0;
+    m.hp = m.maxHp;
+    m.x = p.x; m.y = p.y;
+    m.cd = 0; m.contactCd = 0;
+    if (m.actor) { m.actor.x = m.x; m.actor.y = m.y; }
+  }
+  p.minionStats.roomRestored = (p.minionStats.roomRestored || 0) + p.minions.length;
+}
+
 // ---------------------------------------------------------------- the tick
 
 export function tickMinions(sim, dt) {
@@ -362,9 +410,11 @@ export function initTokens(sim) {
   sim.tokenStats = { dropped: 0, expired: 0, claimed: 0 };
 }
 
+// EVERY enemy death leaves one, with no roll and no cap (§8.5). The
+// Necromancer's cost is the cold start, not scarcity: a room begins with no
+// tokens because nothing has died in it yet, so a build with capacity and no
+// offence fills none of its slots.
 export function dropToken(sim, x, y) {
-  if (sim.tokens.length >= CONFIG.SOUL_TOKEN_MAX) return false;
-  if (sim.rng.float() >= CONFIG.SOUL_TOKEN_CHANCE) return false;
   sim.tokens.push({ id: ++sim.spawnCounter, x, y, ttl: CONFIG.SOUL_TOKEN_TTL });
   sim.tokenStats.dropped++;
   return true;

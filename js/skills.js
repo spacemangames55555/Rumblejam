@@ -79,6 +79,20 @@ export const RANK_GRANTS = {
   summonSlots: 'necro_raise_skeleton',
 };
 
+// WHO CAN SEE A SOUL TOKEN (§8.5 row 2). Tokens are state and ride the
+// snapshot for everyone — losing one would desync a Necromancer's fire — but
+// they RENDER per-player, and only for a class that can actually read them.
+//
+// Derived from tree data rather than named, exactly like selectability: any
+// class with an ON_TOKEN skill sees them. §8.5 says "visible only to
+// Necromancers" because the Necromancer is the only such class today; when the
+// Wizard's Soul tree lands it inherits the visibility with no code change,
+// which a hardcoded class id would not have given it.
+const TOKEN_READERS = new Set(
+  ALL_SKILLS.filter(s => s.trigger && s.trigger.kind === 'ON_TOKEN')
+    .map(s => TREES[s.tree] && TREES[s.tree].classId).filter(Boolean));
+export function readsTokens(charId) { return TOKEN_READERS.has(charId); }
+
 // A skill is "damaging" if any step deals damage. Used by the tier-1 assertion
 // and by the anti-softlock floor, so both read the same definition.
 const DAMAGING_KINDS = new Set(['strike', 'bolt', 'cone', 'line', 'hazard', 'drain', 'plague']);
@@ -140,10 +154,13 @@ function summonStepProblems(s, step) {
     if (!(step[k] > 0)) out.push(`${s.id}: summon step needs a positive "${k}"`);
   }
   if (step.slotted === undefined) out.push(`${s.id}: summon step must declare "slotted" — whether it occupies a summon slot or is a timed extra`);
-  // A permanent, unslotted summon is unbounded: nothing expires it and nothing
-  // caps it, so it accumulates for the length of the run.
-  if (!step.slotted && !(step.duration > 0)) {
-    out.push(`${s.id}: summon step is neither slotted nor timed — declare "slotted: true" or a duration, or it accumulates without limit`);
+  // EVERY SUMMON MUST BE BOUNDED BY SOMETHING. Three bounds are legitimate and
+  // they express three different engines: a slot (Necromancer capacity, bought
+  // by rank), a `maxAlive` ceiling (Druid pack, one per animal skill), or a
+  // duration (a timed extra). A summon with none of them accumulates for the
+  // length of the run.
+  if (!step.slotted && !(step.maxAlive > 0) && !(step.duration > 0)) {
+    out.push(`${s.id}: summon step is unbounded — it needs a slot, a maxAlive ceiling or a duration, or it accumulates without limit`);
   }
   // A DELIVERED SUMMON NEEDS A PLACE TO BE DELIVERED TO, and the only thing
   // that produces one is the ON_TOKEN trigger spending a token. Declaring
@@ -162,9 +179,6 @@ function summonStepProblems(s, step) {
   }
   if (step.revives && !(step.reviveBase > 0)) {
     out.push(`${s.id}: summon revives but declares no reviveBase — the revive would be instant`);
-  }
-  if (step.revives && !step.slotted) {
-    out.push(`${s.id}: summon revives but is not slotted — a reviving summon holds its slot while down, so an unslotted one would revive forever with no cost`);
   }
   const a = step.attack;
   if (!a) { out.push(`${s.id}: summon step has no attack — it would stand on the field and do nothing`); return out; }

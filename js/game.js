@@ -185,10 +185,19 @@ export class Sim {
 
   // What each skill fire SELECTED, before anything travelled. A projectile that
   // misses and a target never chosen look identical downstream.
-  _selLedger(skillId, target) {
+  // WHAT THE SELECTOR CHOSE, AND WHETHER IT HAD THE CHOICE.
+  //
+  // `available` says a mark was inside this fire's range. Without it the ledger
+  // cannot separate "the selector picked chaff over a mark" — a real defect —
+  // from "there was no mark in range, so it correctly picked the best thing
+  // present". The ratio of MARK to everything silently measures how much time
+  // the party spends near the mark, which moves whenever throughput changes:
+  // it read 93% and then 83% across a patch in which the selector did not
+  // change at all.
+  _selLedger(skillId, target, available = null) {
     if (!this.selLog) return;
     const k = target ? (target.bounty ? 'MARK' : target.isNest ? 'nest' : target.boss ? 'boss' : target.elite ? 'elite' : 'chaff') : 'none';
-    const key = `${skillId}->${k}`;
+    const key = `${skillId}->${k}${available === true ? '|markInRange' : ''}`;
     this.selLog.set(key, (this.selLog.get(key) || 0) + 1);
   }
 
@@ -692,6 +701,12 @@ export class Sim {
       p.firstHitUsed = false;
       p.pullX = p.pullY = 0;
       p.hp = p.stats.vitality;   // every room starts at full health
+      // §8.5, rows 5 and 7, and they are one moment because they are two halves
+      // of the same rule: the Necromancer's summons WIPE and the Druid's pack
+      // PERSISTS. Skeletons leave, so every fight ramps from zero and capacity
+      // never compounds across a map; animals are restored, so the pack is a
+      // standing commitment rather than something re-earned each room.
+      SK.startRoomMinions(this, p);
       // per-FIGHT trait state (the old per-room triggers)
       p.roomVitGain = 0;        // Vesper's overheal→Vitality cap
       p.roomFirstKillT = -10;

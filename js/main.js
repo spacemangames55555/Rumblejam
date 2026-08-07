@@ -3,6 +3,9 @@
 // sim events and UI/audio. Simulation (game.js) never touches the DOM.
 
 import { CONFIG, DEV, PALETTE } from './config.js';
+import { readsTokens } from './skills.js';
+// A player row's class, host-side. `char` is the def object; charId is the id.
+const myCharId = p => (p && p.char ? p.char.id : null);
 import { BIOMES, tileVariant } from './biomes.js';
 import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
@@ -1050,7 +1053,14 @@ function viewFromSim(sim) {
       hpP: m.maxHp > 0 ? Math.max(0, m.hp / m.maxHp) : 0,
       down: !!m.down, downP: m.down ? m.downT / Math.max(0.01, m.downDur) : 0,
     }))),
-    tokens: sim.tokens.map(t => ({ x: t.x, y: t.y, ttlP: Math.min(1, t.ttl / CONFIG.SOUL_TOKEN_TTL) })),
+    // §8.5 row 2: rendered only for a class that can read them. The list is
+    // still ON THE WIRE for everyone — it is state, not a cosmetic — this is a
+    // VIEW filter, so a Necromancer joining mid-fight sees the floor correctly.
+    // §8.5 row 2: rendered only for a class that can read them. The list is
+    // still ON THE WIRE for everyone — it is state, not a cosmetic — so this is
+    // a VIEW filter and a Necromancer joining mid-fight sees the floor at once.
+    tokens: readsTokens(myCharId(sim.players[app.myIdx]))
+      ? sim.tokens.map(t => ({ x: t.x, y: t.y, ttlP: Math.min(1, t.ttl / CONFIG.SOUL_TOKEN_TTL) })) : [],
     tele: sim.telegraphs.map(tg => tg.shape === 'circle'
       ? { shape: 'c', x: tg.x, y: tg.y, r: tg.r, prog: tg.t / tg.dur, spawnMark: !!tg.spawnMark }
       : { shape: 'b', x: tg.x, y: tg.y, a: tg.angle, w: tg.w, len: tg.len, prog: tg.t / tg.dur }),
@@ -1162,7 +1172,8 @@ function viewFromSnaps(dtFrame) {
     // different depending on who is looking at it.
     minions: (s1.minions || []).map(m => ({ owner: m[0], arch: m[1], x: m[2], y: m[3], hpP: m[4],
       down: (m[5] || 0) > 0, downP: m[5] || 0 })),
-    tokens: (s1.tokens || []).map(t => ({ x: t[0], y: t[1], ttlP: t[2] })),
+    tokens: readsTokens((players.find(q => q.idx === app.myIdx) || {}).charId)
+      ? (s1.tokens || []).map(t => ({ x: t[0], y: t[1], ttlP: t[2] })) : [],
     tele: s1.tele.map(tg => tg[0] === 'c'
       ? { shape: 'c', x: tg[1], y: tg[2], r: tg[3], prog: tg[4], spawnMark: !!tg[5] }
       : { shape: 'b', x: tg[1], y: tg[2], a: tg[3], w: tg[4], len: tg[5], prog: tg[6] }),

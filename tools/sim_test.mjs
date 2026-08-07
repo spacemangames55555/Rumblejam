@@ -4614,12 +4614,15 @@ try {
     else fail('player damageDealt did not move while minions were fighting — the actor facade is not crediting the owner');
     // Slots: filled versus granted, the counter the brief asked for.
     const filled = p.minions.filter(m => m.slotted).length;
-    if (p.summonSlots > 0 && filled <= p.summonSlots) ok(`skeleton slots: ${filled} filled of ${p.summonSlots} granted (base ${CFG.SUMMON_SLOTS_BASE} + rankGrants); refusals noSlot=${st.noSlot} dup=${st.dupArchetype} cap=${st.atCap}`);
+    if (p.summonSlots > 0 && filled <= p.summonSlots) ok(`skeleton slots: ${filled} filled of ${p.summonSlots} granted (rank only); refusals noSlot=${st.noSlot} dup=${st.dupArchetype} cap=${st.atCap}`);
     else fail(`slot accounting wrong: ${filled} filled, ${p.summonSlots} granted`);
     // Rank buys slots, and that is the ONLY thing it buys that is structural.
+    // §8.5 row 6: capacity is rank x grant, with no base and no ceiling. The
+    // previous form of this line read CONFIG.SUMMON_SLOTS_BASE and _CAP, which
+    // are deleted — it came back as "expected NaN", which is the good failure.
     const rank = p.skillRanks[RANK_GRANTS.summonSlots] || 0;
-    const want = Math.min(CFG.SUMMON_SLOT_CAP, CFG.SUMMON_SLOTS_BASE + rank * SK_BY_ID[RANK_GRANTS.summonSlots].rankGrantPer);
-    if (p.summonSlots === want) ok(`a rank of ${RANK_GRANTS.summonSlots} buys a slot: rank ${rank} → ${p.summonSlots} slots`);
+    const want = rank * SK_BY_ID[RANK_GRANTS.summonSlots].rankGrantPer;
+    if (p.summonSlots === want) ok(`a rank of ${RANK_GRANTS.summonSlots} buys a slot and nothing else does: rank ${rank} → ${p.summonSlots} slots`);
     else fail(`summonSlots ${p.summonSlots}, expected ${want} at rank ${rank}`);
   }
 
@@ -4666,6 +4669,134 @@ try {
     }
   }
 
+  // -- §8.5 rows 1, 3, 6, 5, 7, 8 — each in the situation that distinguishes it --
+  {
+    const { readsTokens } = await import('../js/skills.js');
+
+    // ROW 1: EVERY kill drops a token. A rate would look identical to certainty
+    // on a lucky sample, so this counts kills and demands exact equality.
+    {
+      const { g, p } = armTree('toh_necromancer', 'necro_summons');
+      g.tokens.length = 0;
+      g.tokenStats.dropped = 0;
+      const N = 40;
+      let killed = 0;
+      for (let i = 0; i < N; i++) {
+        const e = g.spawnEnemyById(ENEMY_BY_ID_T[Object.keys(ENEMY_BY_ID_T)[0]].id, p.x + 300, p.y);
+        if (!e) break;
+        e.maxHp = e.hp = 1;
+        g.damageEnemy(e, 99, { owner: p });
+        killed++;
+      }
+      if (killed > 0 && g.tokenStats.dropped === killed) ok(`every kill drops a soul token: ${killed} kills, ${g.tokenStats.dropped} tokens — no roll (§8.5 row 1)`);
+      else fail(`token drop is not certain: ${killed} kills produced ${g.tokenStats.dropped} tokens`);
+    }
+
+    // ROW 3: 30 s, not 8. Read off the live constant AND exercised, so a
+    // constant nobody applies cannot pass.
+    {
+      const { g, p } = armTree('toh_necromancer', 'necro_summons');
+      g.tokens.length = 0;
+      g._killEnemy(g.spawnEnemyById(ENEMY_BY_ID_T[Object.keys(ENEMY_BY_ID_T)[0]].id, p.x + 400, p.y), null);
+      const tk = g.tokens[g.tokens.length - 1];
+      if (tk && Math.abs(tk.ttl - 30) < 1e-6) ok(`a dropped token carries a 30 s life (§8.5 row 3)`);
+      else fail(`token ttl is ${tk ? tk.ttl : 'no token'}, want 30`);
+    }
+
+    // ROW 6: NO CAP BEYOND RANK. The old ceiling was 8, so the rank has to be
+    // high enough that it would have bitten — 12 skeletons is a number the
+    // previous implementation could not reach at any investment.
+    {
+      const { g, p } = armTree('toh_necromancer', 'necro_summons');
+      const sk = SK_BY_ID[RANK_GRANTS.summonSlots];
+      const RANK = 12;
+      p.skillRanks[sk.id] = RANK;
+      g.tick();                       // slots recompute on the skill tick
+      if (p.summonSlots === RANK * sk.rankGrantPer) {
+        ok(`capacity is rank and nothing else: rank ${RANK} → ${p.summonSlots} slots, past the old ceiling of 8 (§8.5 row 6)`);
+      } else {
+        fail(`rank ${RANK} gave ${p.summonSlots} slots, want ${RANK * sk.rankGrantPer} — a base or a cap has come back`);
+      }
+      // and the field honours it, not just the number
+      g.tokens.length = 0;
+      p.minions.length = 0;
+      for (let i = 0; i < RANK; i++) g.spawnMinions(p, sk, sk.compose[0], RANK);
+      if (p.minions.length === RANK) ok(`${RANK} skeletons stand at once — the old cap of 8 would have refused ${RANK - 8}`);
+      else fail(`only ${p.minions.length}/${RANK} skeletons spawned (noSlot ${p.minionStats.noSlot}, atCap ${p.minionStats.atCap})`);
+    }
+
+    // ROWS 5 + 7: A ROOM TRANSITION, NEVER A TIMER. A wipe that happened to
+    // look right because a duration expired would pass a timer-based check and
+    // fail a player walking through a door, so this travels between nodes.
+    {
+      const { g, p } = armTree('toh_druid', 'druid_beasts', { level: 31 });
+      const necroSk = SK_BY_ID['necro_raise_skeleton'];
+      // Fight first so the pack is in a REAL mid-run state, then stage the
+      // disposable minion. Staging it before the fight let it die inside the
+      // six seconds, and the wipe assertion then passed vacuously at 0 -> 0 —
+      // caught only because the fixture check below is a failure, not a note.
+      for (let i = 0; i < 60 * 6; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); if (!p.downed) p.hp = p.stats.vitality; }
+      p.summonSlots = 4;               // capacity is rank-only; this player has no rank in it
+      g.spawnMinions(p, necroSk, necroSk.compose[0], 1);
+      const beforeDisposable = p.minions.filter(m => !m.revives).length;
+      const beforeAnimals = p.minions.filter(m => m.revives).length;
+      if (beforeDisposable > 0 && beforeAnimals > 0) ok(`room-transition fixture staged both kinds: ${beforeDisposable} disposable, ${beforeAnimals} animal(s)`);
+      else fail(`fixture could not stage both kinds (disposable ${beforeDisposable}, animals ${beforeAnimals}) — the assertion below would be vacuous`);
+      // knock an animal down so the restore has something to undo
+      const victim = p.minions.find(m => m.revives);
+      if (victim) { const i = p.minions.indexOf(victim); const { killMinion } = await import('../js/minions.js'); killMinion(g, p, victim, i); }
+      const downedBefore = p.minions.filter(m => m.down).length;
+
+      // THE TRANSITION ITSELF — a real travel to another node, not a timer
+      const next = g.floor.nodes.find(n => n.id !== g.currentNode && !['shop', 'treasure', 'siege'].includes(n.kind));
+      g._travelTo(next.id);
+
+      const afterDisposable = p.minions.filter(m => !m.revives).length;
+      const animals = p.minions.filter(m => m.revives);
+      if (afterDisposable === 0) ok(`skeletons wipe at the room boundary: ${beforeDisposable} → 0 across a real node transition (§8.5 row 5)`);
+      else fail(`${afterDisposable} disposable minion(s) survived a room transition — capacity would compound across a map`);
+      if (animals.length >= beforeAnimals) ok(`the pack persists across the boundary: ${animals.length} animal(s) still owned (§8.5 row 7)`);
+      else fail(`pack shrank across a room: ${beforeAnimals} → ${animals.length}`);
+      const allUp = animals.every(m => !m.down && m.hp === m.maxHp);
+      if (downedBefore > 0 && allUp) ok(`animals arrive FULLY RESTORED: ${downedBefore} was down, all ${animals.length} are standing at full HP (§8.5 row 7)`);
+      else if (!downedBefore) fail('no animal was down before the transition, so "fully restored" was never tested');
+      else fail(`an animal arrived still down or hurt: ${JSON.stringify(animals.map(m => [m.arch, m.down, m.hp, m.maxHp]))}`);
+    }
+
+    // ROW 8: the revive curve, at THREE pack sizes. One sample cannot see a
+    // wrong slope and two cannot tell a wrong intercept from a wrong slope.
+    {
+      const step = SK_BY_ID['druid_call_wolf'].compose[0];
+      const want = n => (15000 + 4000 * Math.max(0, n - 1)) / 1000;
+      const rows = [1, 2, 3, 4, 6].map(n => [n, reviveSeconds(step, n)]);
+      const bad = rows.filter(([n, got]) => Math.abs(got - want(n)) > 1e-9);
+      if (!bad.length) {
+        ok(`revive curve matches §8.5 at ${rows.length} pack sizes: ${rows.map(([n, s]) => `${n}→${s}s`).join(', ')} (row 8)`);
+      } else {
+        fail(`revive curve is wrong at ${bad.map(([n, got]) => `pack ${n}: ${got}s want ${want(n)}s`).join('; ')}`);
+      }
+      // slope and intercept checked separately — a curve can have the right
+      // first point and the wrong step, which is exactly what one sample misses
+      const slope = rows[1][1] - rows[0][1];
+      if (Math.abs(slope - 4) < 1e-9) ok(`each animal past the first adds 4 s (slope from a 3+ point curve)`);
+      else fail(`per-animal step is ${slope}s, want 4s`);
+      if (Math.abs(rows[0][1] - 15) < 1e-9) ok('a lone animal costs the base 15 s, with no per-animal term applied');
+      else fail(`a pack of one costs ${rows[0][1]}s, want 15s — the (n-1) term is missing`);
+    }
+
+    // ROW 2: tokens render per-player, and the rule is derived from tree data
+    // rather than from a class name, so the Wizard's Soul tree inherits it.
+    {
+      if (readsTokens('toh_necromancer')) ok('a class with an ON_TOKEN skill can see soul tokens (§8.5 row 2)');
+      else fail('the Necromancer cannot see tokens — the visibility rule is inverted');
+      const blind = SELECTABLE.map(c => c.id).filter(id => !readsTokens(id));
+      if (blind.length) ok(`classes with no ON_TOKEN skill do not see them: ${blind.join(', ')}`);
+      else fail('every selectable class sees tokens — the filter is not filtering');
+      if (!readsTokens(null) && !readsTokens('not_a_class')) ok('an unknown or absent class sees nothing rather than throwing');
+      else fail('readsTokens() is permissive about unknown classes');
+    }
+  }
+
   // -- soul tokens: dropped, expired, claimed — all three, on one run --
   {
     const { g, p } = armTree('toh_necromancer', 'necro_summons');
@@ -4693,8 +4824,12 @@ try {
 
   // -- Druid: the pack, and THE REVIVE COST --
   {
+    // 150s, not 60. §8.5's revive curve is 15 s at one animal and 23 s at
+    // three, so a 60-second window could see two animals die and legitimately
+    // report "none revived" — the window was sized for the first-guess 4 s
+    // curve and became too short the moment the curve became correct.
     const { g, p } = armTree('toh_druid', 'druid_beasts', { level: 42 });
-    runFor(g, p, 60);
+    runFor(g, p, 150);
     const st = p.minionStats;
     if (st.spawned > 0) ok(`druid pack is live: ${st.spawned} animals called, ${st.died} died, ${st.revived} revived`);
     else fail(`druid summoned nothing in 60s (stats ${JSON.stringify(st)}) — the pack tree fields no pack`);
