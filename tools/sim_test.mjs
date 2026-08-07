@@ -399,6 +399,11 @@ function enterHorde(sim) {
 // permanently disqualified from carrying a combat result — see
 // assertPlayerCleared(). Offence is measured in tools/offence_test.mjs, which
 // never calls damageEnemy on the player's behalf at all.
+// Weapon-economy checks that cannot run while weapons are removed. Counted and
+// named, never silently passed — §15 defect #10 owns restoring them.
+const WEAPON_SKIPS = [];
+const skipWeapon = what => { WEAPON_SKIPS.push(what); console.log(`⊘ SKIPPED (weapons removed — §15 #10): ${what}`); };
+
 const SETUP_CLEARS = [];
 function clearFieldForSetup(sim, p, reason, { sparBoss = false } = {}) {
   if (!reason) throw new Error('clearFieldForSetup() needs a reason — an unexplained harness kill is exactly what nuke() was');
@@ -534,43 +539,10 @@ for (const charId of _SEL.map(c => c.id)) {
 
 // ---- 6. per-fight trigger mapping ----
 try {
-  // Rampart: +1 permanent Grit per FIGHT cleared
-  const rs = new Sim({ seed: 9, party: [{ idx: 0, key: 'k', name: 'R', charId: T1, color: '#fff' }] });
-  rs.uiAction(0, { kind: 'pickNode', nodeId: rs.reachableNodes()[0] });
-  clearArena(rs, false);
-  if ((rs.players[0].permStats.grit || 0) === 1) ok('Rampart: +1 permanent Grit per fight cleared');
-  else fail(`Rampart grit after one fight: ${rs.players[0].permStats.grit}`);
-
-  // Vesper: overheal → Vitality capped +3 per FIGHT, cap resets on the next fight
-  const vs = new Sim({ seed: 10, party: [{ idx: 0, key: 'k', name: 'V', charId: T1, color: '#fff' }] });
-  vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] });
-  const vp = vs.players[0];
-  vp.hp = vp.stats.vitality;
-  vs._heal(vp, 50);
-  if ((vp.permStats.vitality || 0) !== 3) fail(`Vesper first-fight overheal: ${vp.permStats.vitality} (want 3)`);
-  clearArena(vs, false);
-  vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] });
-  if (vs.phase !== 'arena') { // second pick may hit a stop node — walk until a fight
-    let g = 0;
-    while (vs.phase === 'map' && g++ < 5) { drain(vs, vp, false); vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] }); }
-  }
-  vp.hp = vp.stats.vitality; vp.healAcc = 0;
-  vs._heal(vp, 50);
-  if ((vp.permStats.vitality || 0) === 6) ok('Vesper: overheal cap +3 per fight, resets each fight');
-  else fail(`Vesper second-fight overheal total: ${vp.permStats.vitality} (want 6)`);
-
-  // Facet: boon offered on entering Combat/Elite/Siege nodes, not on stops
-  const fs = new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'F', charId: T1, color: '#fff' }] });
-  const fp = fs.players[0];
-  if (fp.boonOffer) fail('Facet had a boon before the first fight');
-  fs.uiAction(0, { kind: 'pickNode', nodeId: fs.reachableNodes()[0] });
-  if (fs.phase === 'arena' && fp.boonOffer) ok('Facet: boon offered on entering a fight node');
-  else fail(`Facet boon on arena entry: ${!!fp.boonOffer}`);
-  const boonStat = fp.boonOffer[0].stat;
-  fs.uiAction(0, { kind: 'boon', id: fp.boonOffer[0].id });
-  if (fp.boonTemp && fp.boonTemp[boonStat]) ok('Facet: boon applies for the fight');
-  clearArena(fs, false);
-  if (!fp.boonTemp) ok('Facet: boon expires when the fight ends'); else fail('boon survived extraction');
+  // DELETED: Rampart's per-fight Grit, Vesper's overheal cap and Facet's boon
+  // offer. All three were traits of retired classic characters (see
+  // archive/classic-roster/). Greed and level-up banking below are general
+  // mechanics and stay.
 
   // Greed: floor(G/2) materials at every fight clear
   const gs = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'G', charId: T2, color: '#fff' }] });
@@ -800,10 +772,8 @@ try {
   const pi = qp.weapons.map((w, i) => w.id === 'pebbleshot' ? i : -1).filter(i => i >= 0);
   qsim.uiAction(0, { kind: 'combine', a: pi[0], b: pi[1], id: 'pebbleshot', tier: 1 });
   const merged = qp.weapons.find(w => w.id === 'pebbleshot');
-  const qmats = qp.materials;
-  qsim.uiAction(0, { kind: 'sellWeapon', slot: qp.weapons.indexOf(merged), id: 'pebbleshot', tier: 2 });
-  if (qp.materials === qmats + 70) ok('Quartermaster sells for exact invested materials (70)');
-  else fail(`Quartermaster sell: +${qp.materials - qmats}`);
+  // DELETED: Quartermaster's sell-for-exact-invested trait — a retired classic
+  // character, and a weapon operation besides.
 } catch (err) { fail('build management crashed', err); }
 
 // ---- 9c. rebalance mechanics still hold ----
@@ -819,17 +789,8 @@ try {
   if (gained0 === 10 && rp.hp - 10 === 20) ok('Recovery amplifies healing (+100% → double heal)');
   else fail(`Recovery healing: ${gained0} / ${rp.hp - 10}`);
 
-  const bsim = new Sim({ seed: 44, party: [
-    { idx: 0, key: 'a', name: 'L', charId: T2, color: '#fff' },
-    { idx: 1, key: 'b', name: 'M', charId: T1, color: '#fff' }] });
-  bsim._travelTo(bsim.reachableNodes()[0]);
-  const [lp, mp] = bsim.players;
-  lp.invuln = 0; mp.invuln = 0;
-  const lHp = lp.hp, mHp = mp.hp;
-  lp.stats.reflex = 0;
-  bsim.hurtPlayer(lp, 30, null);
-  if (lp.hp < lHp && mp.hp < mHp) ok('Soulbond: partner soaks a share of incoming damage');
-  else fail(`Soulbond share: ${lHp}→${lp.hp}, ${mHp}→${mp.hp}`);
+  // DELETED: Soulbond (Lodestone's partner damage-share) — retired classic
+  // character. Recovery amplification above is a general stat and stays.
 } catch (err) { fail('rebalance mechanics crashed', err); }
 
 // ---- 9d. patch 8: shop economy — cadence, guarantees, auto-combine, swaps ----
@@ -980,14 +941,22 @@ try {
     const sp = ss.players[0];
     ss.currentNode = 0; ss._openShop(sp, 'clear');
     armBot(ss, sp);
-    sp.shop.stock[0] = { kind: 'weapon', id: 'rustcleaver', tier: 1, price: 30, sold: false, locked: false };
-    sp.materials = 28; // can't afford outright — the refund covers the difference
-    ss.uiAction(0, { kind: 'swapBuy', slot: 0, sell: 0, sellId: sp.weapons[0].id, sellTier: sp.weapons[0].tier });
-    if (sp.weapons.length === sp.weaponSlots && sp.weapons.some(w => w.id === 'rustcleaver') && sp.shop.stock[0].sold)
-      ok(`swap-buy executes atomically (refund funds the purchase, still ${sp.weaponSlots}/${sp.weaponSlots})`);
-    else fail(`swap: ${JSON.stringify(sp.weapons.map(w => w.id))} mats=${sp.materials}`);
+    // Weapons are removed, so there is nothing to swap OUT and sp.weapons[0]
+    // is undefined — which used to throw and end this whole section, taking
+    // the still-valid economy checks below it with it. §15 defect #10.
+    if (!sp.weapons.length) skipWeapon('swap-buy executes atomically');
+    else {
+      sp.shop.stock[0] = { kind: 'weapon', id: 'rustcleaver', tier: 1, price: 30, sold: false, locked: false };
+      sp.materials = 28; // can't afford outright — the refund covers the difference
+      ss.uiAction(0, { kind: 'swapBuy', slot: 0, sell: 0, sellId: sp.weapons[0].id, sellTier: sp.weapons[0].tier });
+      if (sp.weapons.length === sp.weaponSlots && sp.weapons.some(w => w.id === 'rustcleaver') && sp.shop.stock[0].sold)
+        ok(`swap-buy executes atomically (refund funds the purchase, still ${sp.weaponSlots}/${sp.weaponSlots})`);
+      else fail(`swap: ${JSON.stringify(sp.weapons.map(w => w.id))} mats=${sp.materials}`);
+    }
     // rejection: price beyond refund+mats leaves EVERYTHING untouched
     sp.materials = 0;
+    if (!sp.weapons.length) skipWeapon('a swap-buy the player cannot afford is refused whole');
+    else {
     sp.shop.stock[1] = { kind: 'weapon', id: 'longbarrel', tier: 4, price: 900, sold: false, locked: false };
     const snap = JSON.stringify([sp.weapons.map(w => [w.id, w.tier]), sp.materials]);
     ss.events.length = 0;
@@ -996,6 +965,7 @@ try {
     if (snap === JSON.stringify([sp.weapons.map(w => [w.id, w.tier]), sp.materials]) && !sp.shop.stock[1].sold && rbr && !rbr.ok)
       ok('unaffordable swap is rejected with both legs rolled back');
     else fail('poor swap mutated state');
+    }
   }
 
   // the two difficulty knobs: HP spot-checks and the ~1.25× density ratio
@@ -1042,67 +1012,11 @@ try {
   }
 } catch (err) { fail('shop economy tests crashed', err); }
 
-// ---- 9e. patch 8.1: the Gilded One rescue — finest-goods stock + Kegbomb ----
-try {
-  const { ITEM_BY_ID } = await import('../js/content/items.js');
-  const finest = (sim, s) => s.kind === 'weapon' ? s.tier === sim._topTier()
-    : ITEM_BY_ID[s.id].rarity === 'legendary';
-
-  // starts with the Kegbomb (Greed-scaled — its own statline powers it)
-  const ks = new Sim({ seed: 61, party: [{ idx: 0, key: 'k', name: 'G', charId: T2, color: '#fff' }] });
-  if (ks.players[0].weapons[0].id === 'kegbomb') ok('Gilded One starts with the Kegbomb');
-  else fail(`starting weapon: ${ks.players[0].weapons[0].id}`);
-
-  // stock rule across floors and 30 seeds: every slot is a legendary item or
-  // a top-tier weapon; 2 slots standard, 3 at the Black Market; rerolls too
-  let bad = 0, sawWeapon = 0;
-  for (let seed = 1; seed <= 30 && bad < 5; seed++) {
-    const gs = new Sim({ seed: seed * 101, party: [{ idx: 0, key: 'k', name: 'G', charId: T2, color: '#fff' }] });
-    const gp = gs.players[0];
-    gp.materials = 9999;
-    for (let f = 1; f <= 3; f++) {
-      if (f > 1) gs.debug('F4');
-      gs.currentNode = 0; gs._openShop(gp, 'clear');
-      for (let r = 0; r < 2; r++) {
-        if (gp.shop.stock.length !== 2) { bad++; fail(`seed ${seed * 101} f${f}: std slots ${gp.shop.stock.length}`); }
-        for (const s of gp.shop.stock) {
-          if (!finest(gs, s)) { bad++; fail(`seed ${seed * 101} f${f}: not finest — ${s.kind}:${s.id}/T${s.tier}`); }
-          if (s.kind === 'weapon') sawWeapon++;
-        }
-        gs.uiAction(0, { kind: 'reroll' });
-      }
-      gs._travelTo(gs.floor.nodes.find(n => n.kind === 'shop').id);
-      if (gp.shop.stock.length !== 3) { bad++; fail(`seed ${seed * 101} f${f}: BM slots ${gp.shop.stock.length}`); }
-      for (const s of gp.shop.stock) if (!finest(gs, s)) { bad++; fail(`seed ${seed * 101} f${f} BM: ${s.kind}:${s.id}`); }
-      gs.phase = 'map';
-    }
-  }
-  if (!bad) ok(`Gilded One stock: only legendary items / top-tier weapons, 2 std + 3 BM slots (30 seeds × 3 floors; ${sawWeapon} weapon offers seen)`);
-  if (sawWeapon > 20) ok('the finest-goods rack participates in the weapon economy'); else fail(`only ${sawWeapon} weapon offers across the sweep`);
-
-  // auto-combine, swap, and locks against the 2-slot trait stock
-  const cs = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: T2, color: '#fff' }] });
-  const cp = cs.players[0];
-  cp.materials = 2000;
-  cs.currentNode = 0; cs._openShop(cp, 'clear');
-  armBot(cs, cp);
-  cp.shop.stock[0] = { kind: 'weapon', id: 'kegbomb', tier: 2, price: 60, sold: false, locked: false };
-  cs.uiAction(0, { kind: 'buy', slot: 0 });
-  // the starting Kegbomb is tier I — the first TIER-II copy absorbs the buy
-  if (cp.weapons.some(w => w.id === 'kegbomb' && w.tier === 3) && cp.weapons.length === cp.weaponSlots)
-    ok('auto-combine works on the 2-slot trait stock');
-  else fail(`gilded auto-combine: ${JSON.stringify(cp.weapons.map(w => [w.id, w.tier]))}`);
-  cp.shop.stock[1] = { kind: 'weapon', id: 'longbarrel', tier: 2, price: 60, sold: false, locked: false };
-  cs.uiAction(0, { kind: 'swapBuy', slot: 1, sell: 5, sellId: cp.weapons[5].id, sellTier: cp.weapons[5].tier });
-  if (cp.weapons.some(w => w.id === 'longbarrel') && cp.weapons.length === cp.weaponSlots) ok('make-room swap works on the trait stock');
-  else fail('gilded swap failed');
-  cs.uiAction(0, { kind: 'reroll' }); // fresh unsold stock, then lock through a reroll
-  cs.uiAction(0, { kind: 'lock', slot: 0 });
-  const lockedId2 = cp.shop.stock[0].id;
-  cs.uiAction(0, { kind: 'reroll' });
-  if (cp.shop.stock.some(s => s.locked && s.id === lockedId2) && cp.shop.stock.length === 2) ok('locks survive rerolls in the 2-slot stock');
-  else fail(`gilded lock: ${JSON.stringify(cp.shop.stock.map(s => s.id + (s.locked ? '🔒' : '')))}`);
-} catch (err) { fail('Gilded One rescue tests crashed', err); }
+// ---- 9e. DELETED: the Gilded One rescue (finest-goods stock + Kegbomb) ----
+// The Gilded One is a retired classic character (archive/classic-roster/) and
+// the section measured its shop-stock trait against the weapon economy, which
+// is also gone. Nothing here survives the retirement; a replacement belongs
+// with whatever phase-4 stocking rule the ToH classes get.
 
 // ---- 9f. the airhorn: debounce, volumes, fallback (headless, no WebAudio) ----
 try {
@@ -1196,11 +1110,9 @@ try {
       else fail(`camper statue DIED in Bastion/${tmpl} at ${r.secs.toFixed(0)}s — camping must work where sanctioned`);
     }
     if (bok === TK9.length) ok('the Bastion camper statue survives in every template — camping has a sanctioned home');
-    // the Bulwark clause: paid-for identity, but not immortal
-    const med = statueRun(T1, 'mixed', 'open_expanse');
-    const bul = statueRun(T1, 'mixed', 'open_expanse', 400);
-    if (bul.died && bul.secs > med.secs * 1.5) ok(`the Bulwark clause: outlasts the median statue ${med.secs.toFixed(0)}s → ${bul.secs.toFixed(0)}s, still dies`);
-    else fail(`Bulwark clause: median ${med.secs.toFixed(0)}s bulwark ${bul.secs.toFixed(0)}s died=${bul.died}`);
+    // DELETED: the Bulwark clause. It compared a Bulwark statue against the
+    // median statue; Bulwark is retired, so both sides were the same class and
+    // the comparison could only ever be vacuous.
   }
 
   // ---- line of sight: a wall in a lab arena ----
@@ -1421,34 +1333,11 @@ try {
     else fail(`upload estimate breach: ${(upload / 1024).toFixed(0)} KB/s`);
   }
 
-  // party traits at 8: toll, aura, tether, drips
-  {
-    const g = new Sim({ seed: 737373, party: mkParty(pickN(8)) });
-    if (g.greedHp === 1.25 && g.greedMats === 2) ok("Tollkeeper's toll applies party-wide once at 8 players");
-    else fail(`toll at 8: hp×${g.greedHp} mats×${g.greedMats}`);
-    g._travelTo(g.reachableNodes()[0]);
-    const [ban, lode, saw, , c4, c5, c6] = g.players;
-    // aura: same-character allies inside vs outside the banner radius
-    ban.x = g.W / 2; ban.y = g.H / 2;
-    c4.x = ban.x + 60; c4.y = ban.y; c5.x = ban.x + 1600; c5.y = ban.y;
-    lode.x = ban.x - 900; lode.y = ban.y - 300; c6.x = lode.x + 40; c6.y = lode.y; // c6 = lodestone's nearest
-    saw.x = ban.x + 400; saw.y = ban.y + 300;
-    for (let i = 0; i < 40; i++) { g.tick(); for (const q of g.players) { q.hp = Math.min(q.hp, q.stats.vitality); q.invuln = 1; } }
-    if (c4.stats.ferocity > c5.stats.ferocity) ok(`Banneret's aura reaches allies in radius at 8 (${c4.stats.ferocity}% vs ${c5.stats.ferocity}% Ferocity)`);
-    else fail(`aura at 8: near ${c4.stats.ferocity} far ${c5.stats.ferocity}`);
-    const tether = g._snapTethers();
-    const hit = tether.some(t => Math.abs(t[2] - c6.x) < 60 && Math.abs(t[3] - c6.y) < 60);
-    if (hit) ok('Lodestone tethers the nearest of 7 allies');
-    else fail(`tether endpoints: ${JSON.stringify(tether)} (want near ${Math.round(c6.x)},${Math.round(c6.y)})`);
-    // sawbones drips: overheal reaches the nearest injured ally
-    c4.x = saw.x + 50; c4.y = saw.y; c4.hp = 10;
-    saw.hp = saw.stats.vitality;
-    const before = c4.hp;
-    g._heal(saw, 40);
-    for (let i = 0; i < 20; i++) { g.tick(); for (const q of g.players) q.invuln = 1; }
-    if (c4.hp > before) ok(`Sawbones' overheal drips to the nearest injured of 7 allies (+${Math.round(c4.hp - before)} HP)`);
-    else fail(`drip at 8: ${before} → ${c4.hp}`);
-  }
+  // DELETED: party traits at 8 — Tollkeeper's toll, Banneret's aura,
+  // Lodestone's tether and Sawbones' overheal drip. All four are traits of
+  // retired classic characters (archive/classic-roster/). The 8-player
+  // machinery they rode on — scaling, ring spawning, snapshot size — is
+  // exercised by the sections around this one and is unaffected.
 
   // merged ring spawning at 8 spread players
   {
@@ -1894,41 +1783,9 @@ try {
     else fail(`anti-farm: ${before} → ${mid} → ${after}`);
   }
 
-  // --- Pulsar: fixed radius, capped weapons, overheat, nova share ---
-  {
-    const g = new Sim({ seed: 3131, party: mk([T1]) });
-    const p = g.players[0];
-    const t = p.char.trait;
-    if (p.weaponSlots === 3) ok('Pulsar has 3 weapon slots'); else fail(`Pulsar slots ${p.weaponSlots}`);
-    // range cap survives every range modifier
-    g._applyPerm(p, { reach: 400 });
-    const longest = Math.max(...p.weapons.map(w => g._weaponRange(p, WEAPON_BY_ID[w.id])));
-    if (longest <= t.radius) ok(`Pulsar weapons stay capped at ${t.radius} even with +400 Reach (max ${Math.round(longest)})`);
-    else fail(`Pulsar range cap breached: ${longest}`);
-    // the nova radius itself ignores Reach
-    const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
-    node.kind = 'combat';
-    g._travelTo(node.id);
-    g.god = true;
-    for (let i = 0; i < 60 * 45; i++) { g.tick(); p.hp = p.stats.vitality; }
-    const share = p.damageDealt > 0 ? p.novaDamage / p.damageDealt : 0;
-    console.log(`  PULSAR nova share: ${(100 * share).toFixed(0)}% of total damage (tuning target ~50%), peak heat ${(100 * p.heat).toFixed(0)}%`);
-    if (share > 0.25 && share < 0.75) ok(`Pulsar's nova carries ${(100 * share).toFixed(0)}% of his damage (target ~50%)`);
-    else fail(`nova share ${(100 * share).toFixed(0)}% is far off the 50% target`);
-    // overheat stacks and decays
-    const g2 = new Sim({ seed: 3132, party: mk([T1]) });
-    const p2 = g2.players[0];
-    const n2 = g2.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
-    n2.kind = 'combat'; g2._travelTo(n2.id); g2.god = true;
-    for (let i = 0; i < 60 * 40; i++) { g2.tick(); p2.hp = p2.stats.vitality; }
-    const hot = p2.heat;
-    for (const e of [...g2.enemyPool]) g2._killEnemy(e, null);
-    g2.wave.done = true; g2.spawnQueue.length = 0;
-    for (let i = 0; i < 60 * 6; i++) { g2.tick(); for (const e of [...g2.enemyPool]) g2._killEnemy(e, null); }
-    if (hot > 0 && p2.heat === 0) ok(`Overheat builds (${(100 * hot).toFixed(0)}%) and the whole stack falls off after a pulse hits nothing`);
-    else fail(`overheat decay: ${hot} → ${p2.heat}`);
-    if (t.heatMax === 1.5 && t.heatPer === 0.15) ok('Overheat is +15% per pulse, capped at +150%');
-  }
+  // DELETED: Pulsar's fixed radius, weapon cap, overheat and nova share.
+  // Pulsar is a retired classic character and three of the four measurements
+  // were weapon-economy anyway.
 
   // --- boss HP doubled (and the Regent multiplied again in playtest 3) ---
   {
@@ -1948,14 +1805,8 @@ try {
     else fail(`2p scaling drifted: ${duo.coopSpawn}`);
   }
 
-  // --- Broker: 7 weapon slots, discount and free reroll intact ---
-  {
-    const g = new Sim({ seed: 707, party: mk([T2]) });
-    const p = g.players[0];
-    if (p.weaponSlots === 7) ok('Broker carries 7 weapon slots'); else fail(`Broker slots ${p.weaponSlots}`);
-    if (p.char.trait.discount === 25 && p.rerollFlat) ok('Broker keeps −25% prices and the non-compounding reroll');
-    else fail('Broker discount/reroll changed');
-  }
+  // DELETED: Broker's 7 weapon slots, discount and free reroll — retired
+  // classic character, and weapon slots are 0 for everyone.
 
   // --- cursed items: next round only, stacking, scope ---
   {
@@ -2997,8 +2848,12 @@ try {
     const { BEAST } = B;
     const src = readFileSync(new URL('../js/entities/beast.js', import.meta.url), 'utf8');
 
+    // allowUnplayable: the beast is toh_hunter's TRAIT and is fully
+    // implemented; only its skill tree is missing, so it cannot be started as
+    // a run. Substituting another class silently gave a party with no beast
+    // and a crash forty lines later on `beastOf(g)` being undefined.
     const hunter = (seed = 4242) => {
-      const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'H', charId: T2, color: '#fff' }] });
+      const g = new Sim({ seed, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'H', charId: 'toh_hunter', color: '#fff' }] });
       const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
       node.kind = 'combat'; g._travelTo(node.id); g.god = true;
       const p = g.players[0];
@@ -3699,35 +3554,42 @@ try {
   const tmp = mkdtempSync(nodePath.join(tmpdir(), 'uvart-'));
   try {
     const NAMES = ['east', 'south_east', 'south', 'south_west', 'west', 'north_west', 'north', 'north_east'];
+    // DERIVED FROM THE MANIFEST. This fixture hardcoded 32 and named char.pulsar,
+    // which was 32x32 only because it had no size override. Every surviving
+    // character is 128x128, so the hardcode turned a working pipeline into
+    // "grid is 128x1024, want 32x256" — the fixture's expectation was wrong,
+    // not the tool's output.
+    const ART_ID = 'char.toh_assassin';
+    const CELL = JSON.parse(rf(nodePath.join(REPO, 'assets', 'assets.json')).toString()).sprites[ART_ID].w;
     const src = nodePath.join(tmp, 'toh_assassin');
     mkdirSync(src, { recursive: true });
     for (let d = 0; d < 8; d++) {
-      const img = PK.blankImage(32, 32);
-      const ox = 1 + d * 2, oy = 18 - d * 2;   // deliberately all over the place
+      const img = PK.blankImage(CELL, CELL);
+      const ox = 1 + d * 2, oy = (CELL / 2 + 2) - d * 2;   // deliberately all over the place
       for (let y = 0; y < 8; y++) {
         for (let x = 0; x < 8; x++) {
-          const i = ((oy + y) * 32 + (ox + x)) * 4;
+          const i = ((oy + y) * CELL + (ox + x)) * 4;
           img.data[i] = 20 + d * 30; img.data[i + 1] = 200; img.data[i + 2] = 40; img.data[i + 3] = 255;
         }
       }
       writeFileSync(nodePath.join(src, `${NAMES[d]}.png`), PK.encodePng(img));
     }
     const outPng = nodePath.join(tmp, 'grid.png');
-    const log = run('process_sprite.mjs', ['char.toh_assassin', src, `--out=${outPng}`]);
+    const log = run('process_sprite.mjs', [ART_ID, src, `--out=${outPng}`]);
     const grid = PK.decodePng(rf(outPng));
     const problems = [];
-    if (grid.width !== 32 || grid.height !== 256) problems.push(`grid is ${grid.width}x${grid.height}, want 32x256`);
+    if (grid.width !== CELL || grid.height !== CELL * 8) problems.push(`grid is ${grid.width}x${grid.height}, want ${CELL}x${CELL * 8}`);
     for (let d = 0; d < 8; d++) {
-      const bb = PK.opaqueBounds(grid, 0, d * 32, 32, 32);
+      const bb = PK.opaqueBounds(grid, 0, d * CELL, CELL, CELL);
       if (!bb) { problems.push(`row ${d} is empty`); continue; }
       const i = (bb.y * grid.width + bb.x) * 4;
       const saysRow = Math.round((grid.data[i] - 20) / 30);
       if (saysRow !== d) problems.push(`row ${d} holds the direction generated as ${saysRow}`);
-      const cx = bb.x + bb.w / 2, cy = (bb.y - d * 32) + bb.h / 2;
-      if (Math.abs(cx - 16) > 0.5 || Math.abs(cy - 16) > 0.5) problems.push(`row ${d} centred at ${cx},${cy}`);
+      const cx = bb.x + bb.w / 2, cy = (bb.y - d * CELL) + bb.h / 2;
+      if (Math.abs(cx - CELL / 2) > 0.5 || Math.abs(cy - CELL / 2) > 0.5) problems.push(`row ${d} centred at ${cx},${cy}`);
     }
     if (problems.length) fail(`grid assembly: ${problems.slice(0, 4).join(' | ')}`);
-    else ok('process_sprite assembles 8 differently-padded directions into a 32x256 grid, in E SE S SW W NW N NE order, every row re-centred');
+    else ok(`process_sprite assembles 8 differently-padded directions into a ${CELL}x${CELL * 8} grid, in E SE S SW W NW N NE order, every row re-centred`);
     if (/row 0 E .*east\.png/.test(log)) ok('and it reports which naming convention each row matched');
     else fail('process_sprite did not report its row sources');
 
@@ -3740,8 +3602,8 @@ try {
       const dir = nodePath.join(src2, NAMES[d]);
       mkdirSync(dir, { recursive: true });
       for (let f = 0; f < 2; f++) {
-        const img = PK.blankImage(32, 32);
-        const oy = 16 - f * 6;   // frame 1 sits 6px higher: the bob
+        const img = PK.blankImage(CELL, CELL);
+        const oy = (CELL / 2) - f * 6;   // frame 1 sits 6px higher: the bob
         for (let y = 0; y < 8; y++) {
           for (let x = 0; x < 8; x++) {
             const i = ((oy + y) * 32 + (12 + x)) * 4;
@@ -3753,9 +3615,9 @@ try {
     }
     const rise = mode => {
       const p = nodePath.join(tmp, `walk-${mode}.png`);
-      run('process_sprite.mjs', ['char.toh_assassin', src2, `--out=${p}`, `--recenter=${mode}`]);
+      run('process_sprite.mjs', [ART_ID, src2, `--out=${p}`, `--recenter=${mode}`]);
       const g = PK.decodePng(rf(p));
-      const a = PK.opaqueBounds(g, 0, 0, 32, 32), b = PK.opaqueBounds(g, 32, 0, 32, 32);
+      const a = PK.opaqueBounds(g, 0, 0, CELL, CELL), b = PK.opaqueBounds(g, CELL, 0, CELL, CELL);
       return a.y - b.y;   // how much higher frame 1 sits
     };
     const rowRise = rise('row'), cellRise = rise('cell');
@@ -3772,12 +3634,12 @@ try {
       for (let i = 0; i < 32 * 32; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
       writeFileSync(nodePath.join(badDir, `${NAMES[d]}.png`), PK.encodePng(img));
     }
-    const matteErr = runFails('process_sprite.mjs', ['char.toh_assassin', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    const matteErr = runFails('process_sprite.mjs', [ART_ID, badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
     if (matteErr && /transparent pixel/.test(matteErr)) ok('a fully opaque sheet is refused — a baked matte never reaches the repo');
     else fail(`matte check did not fire: ${String(matteErr).slice(0, 120)}`);
 
     rmSync(nodePath.join(badDir, 'north.png'));
-    const missErr = runFails('process_sprite.mjs', ['char.toh_assassin', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    const missErr = runFails('process_sprite.mjs', [ART_ID, badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
     if (missErr && /row 6 \(N\)/.test(missErr)) ok('a missing direction is refused by name, not silently padded');
     else fail(`missing-direction check said: ${String(missErr).slice(0, 120)}`);
 
@@ -3786,7 +3648,7 @@ try {
     // 48 is not a multiple of the 32px cell, so it cannot be mistaken for a
     // 2-frame strip — this is unambiguously one oversized source.
     for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(48, 48)));
-    const bigErr = runFails('process_sprite.mjs', ['char.toh_assassin', oversizeDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    const bigErr = runFails('process_sprite.mjs', [ART_ID, oversizeDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
     if (bigErr && /48x48 source but the cell is 32x32/.test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
     else fail(`oversize check said: ${String(bigErr).slice(0, 140)}`);
   } finally { rmSync(tmp, { recursive: true, force: true }); }
@@ -4106,8 +3968,11 @@ try {
   snap = sim.getSnapshot();
   const json = JSON.stringify(snap);
   JSON.parse(json);
-  if (!snap.auras.length) fail('snapshot missing Banneret aura');
-  if (!snap.tethers.length) fail('snapshot missing Lodestone tether');
+  // DELETED: the aura/tether population assertions. They required a Banneret
+  // and a Lodestone in the party — both retired. The FIELDS still ride the
+  // snapshot and still round-trip through the codec (section 9L covers that);
+  // what is gone is a party that populates them. Re-assert when a ToH class
+  // has an aura or a tether.
   ok(`snapshots serialize in both phases (${json.length} bytes @ ${snap.enemies.length} enemies)`);
 } catch (err) { fail('snapshot serialization', err); }
 
@@ -4526,6 +4391,7 @@ try {
 // damage, and every fight here still "cleared" because the harness emptied the
 // field. Naming the count each run is cheap; discovering it from a browser log
 // two branches later was not.
+if (WEAPON_SKIPS.length) console.log(`\n${WEAPON_SKIPS.length} weapon-economy check(s) skipped: ${WEAPON_SKIPS.join('; ')}`);
 if (SETUP_CLEARS.length) {
   const byReason = new Map();
   for (const r of SETUP_CLEARS) byReason.set(r, (byReason.get(r) || 0) + 1);

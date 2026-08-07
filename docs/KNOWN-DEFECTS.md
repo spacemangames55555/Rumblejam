@@ -963,3 +963,73 @@ occurrence carries the failing expression on one line with it.
 **Recorded rather than chased** because #11 is the larger blocker and this may
 turn out to be downstream of it — an eval reading a position off an entity that
 a stalled fight never produced.
+
+---
+
+## 13. Skills cannot be aimed, and every objective assumes aimed damage
+
+**Where:** `js/triggers.js` `TRIGGER_KINDS`, against the objective designs in
+`js/objectives.js`.
+
+**This is the finding under #11's offence failures.** It is *not* a content gap
+waiting on phase-5 trees, and that distinction decides where the fix goes.
+
+### Measured
+
+A fully-armed necromancer — ten skill ranks spent, permanent stat grants applied
+— put into each objective with no harness kills:
+
+| objective | damage dealt | kills | objective progress |
+|---|---:|---:|---|
+| Nest Purge | 666 | 22 | `alive: 3` of 3 — **no nest ever damaged** |
+| Elite Arena | 4230 | **0** | 40 spawned, none killed |
+| Bounty Hunt | 8318 | 311 | `killed: 0` of 5 marks |
+
+It is killing plenty. It is killing *the wrong things*, and it cannot be told
+otherwise.
+
+### Why
+
+Every trigger selects by **position or health fraction**, never by role:
+
+```
+PROXIMITY  NEAREST  ISOLATED  TARGET_THRESHOLD  ON_KILL  ON_HIT_TAKEN
+ON_DODGE   SELF_THRESHOLD     ON_STATUS         MOVEMENT
+```
+
+There is no way to express *the nest*, *the mark*, *the elite* or *the boss*. A
+player with a weapon aimed at what they chose; a player with skills cannot
+choose at all. Chaff is always nearer, so chaff is always what dies.
+
+Elite Arena is the cleanest reading: **4230 damage, zero kills.** Elites carry
+`ELITE_HP_MULT` 3×, a single tier-1 skill cannot finish one, and the damage
+spreads across forty of them instead of concentrating on any. No kills means no
+XP, no XP means level 1, level 1 means **one loadout slot** — the party cannot
+grow its way out.
+
+### Why more trees will not fix it
+
+Phase 5 adds skills. Every one of them will still pick its target by proximity.
+More damage arriving at the nearest chaff does not kill a nest that nothing ever
+targets. The gap is between the objective designs, which were authored for aimed
+weapon fire, and the trigger vocabulary, which cannot name a target.
+
+Fixing it means one of:
+
+1. a trigger kind that selects by role (`OBJECTIVE`, `ELITE`, `BOSS`, `MARK`);
+2. a player-facing focus/target mechanism that the trigger core respects;
+3. redesigning the objectives so proximity-selected damage completes them.
+
+All three are design decisions and belong in the GDD before any of them is
+written. **Not attempted here.**
+
+### The five camper-statue failures are a different, smaller thing
+
+`statueRun()` never spends its skill point, so the "camper" is unarmed. That is
+a harness gap, not a defect — but it is not worth fixing until #13 is decided,
+because an armed statue still cannot aim.
+
+### Not to be counted as content
+
+Recorded separately from #11 precisely so it is not absorbed into "waiting on
+phase-5 trees". Trees are content. This is not.

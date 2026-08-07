@@ -499,6 +499,29 @@ clean play). They act on the **host's** simulation:
 Console helper: `uvSmoke()` runs every character through a scripted combat and
 reports failures (used for the automated character smoke check).
 
+## A test's negative case must be unreachable by search-and-replace
+
+**Whatever a test proves is impossible must be written so that a bulk edit over
+the thing under test cannot turn it into the possible case.** Assemble it,
+compute it, read it from a fixture — anything but a bare literal that looks like
+the values a rename would sweep.
+
+```js
+const RETIRED_ID = ['bul', 'wark'].join('');   // not 'bulwark'
+```
+
+This is the sixth check found passing while verifying nothing, and the first one
+*created by tooling rather than omission*. A pass replacing retired character ids
+across `sim_test.mjs` rewrote the literal inside the assertion that a retired id
+is rejected — into a live class. The test then asserted that a valid character is
+valid, still printed a tick, and had to be repaired twice because the second bulk
+pass did it again.
+
+The other five were things nobody wrote. This one was written correctly and then
+un-written by a tool that could not tell an assertion's subject from its
+scenery. Omission you catch by reading; this you only catch by making the
+negative case unreachable in the first place.
+
 ## Reference convention
 
 **A bare `§N` in this repository means [`docs/GDD.md`](docs/GDD.md).** The GDD
