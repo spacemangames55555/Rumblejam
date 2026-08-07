@@ -49,7 +49,19 @@ export function tohInitPlayer(sim, p) {
   p.voodooId = null; p.voodooDmg = 0; p.stitch = null;
   p.bloodHeat = 0; p.bloodHeatT = 0;   // NOT p.heat — Pulsar owns that name
   p.packMode = 0;                      // 0 none, 1 alpha, 2 marksman
-  if (t.key === 'bonelord') p.weaponSlots = t.mounts;
+  // The Bonelord's four mounts USED to be weapon slots. They are not any more:
+  // patch-trigger-core zeroes weaponSlots for the whole roster in _makePlayer,
+  // and this line ran afterwards and handed four of them back — the one hole in
+  // an otherwise total removal. Nothing depended on it. _startingGear is
+  // short-circuited so tohStartingGear never runs and the Necromancer starts
+  // with no weapon; the Marrownaut payoff reads sim.summons for a fused tier-IV
+  // summon, not a mount. The only surviving effect was that shops offered the
+  // Necromancer weapons that contribute nothing to a kit which is now two skill
+  // trees — 48 of 2256 sampled shops, all of them this class.
+  //
+  // Removing it makes "weapons are removed from the game" true for 47 of 47
+  // characters, which is what makes Sim._stocksWeapons() a reliable predicate
+  // rather than one with an exception nobody remembers.
   if (t.key === 'crystal_infusion') p.radius = CONFIG.PLAYER_RADIUS * t.hitbox;
 }
 
@@ -572,7 +584,7 @@ export function tohOnKill(sim, p, e) {
       p.contractT = t.remarkDelay;
       p.contractsDone++;
       const pay = Math.round(t.payoutBase + Math.max(0, p.stats.greed) * t.payoutGreedScale);
-      for (let i = 0; i < pay; i++) sim._dropMaterial(e.x + (Math.random() * 30 - 15), e.y + (Math.random() * 30 - 15));
+      for (let i = 0; i < pay; i++) sim._dropMaterial(e.x + (sim.rng.float() * 30 - 15), e.y + (sim.rng.float() * 30 - 15));
       sim._recomputeStats(p);
       sim.pushEvent({ k: 'toast', idx: p.idx, text: `CONTRACT CLOSED — +${pay} ⟡, +${t.ferPerContract}% Ferocity` });
     }

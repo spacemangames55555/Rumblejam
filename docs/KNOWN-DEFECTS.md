@@ -18,91 +18,39 @@ regression is findable by the same steps rather than rediscovered.
 
 ---
 
-## 1. `rushMove()` uses `Math.random()`, so a fight cannot be reproduced from its seed
+## 1. RESOLVED — `Math.random()` in the simulation broke same-seed reproduction
 
-**Where:** `js/entities/enemies.js`, `rushMove()` — the stall-detection detour.
+**Fixed 2026-08-06.** Moved out of the open list because it is fixed and gated,
+not because it was tolerated.
 
-```js
-if (moved < 24 * 24) { // barely moved: detour somewhere open at random
-  const a = Math.random() * Math.PI * 2;
-```
+**What it was.** This entry named `rushMove()`'s stall detour as the one call
+drawing from `Math.random()` instead of the seeded stream. It was **43 calls**
+across `js/game.js` (29), `js/entities/enemies.js` (15), `js/telegraphs.js` (1)
+and `js/traits-toh.js` (2) — spawn jitter, cooldown scatter, proc chances, the
+Reflex dodge roll, material scatter, wander points, boss teleport targets.
 
-**What is wrong.** Everything else in the sim derives from the run seed through
-named sub-streams (`js/rng.js`, `subRng`). This one call does not. It fires
-whenever a rushing enemy has moved less than 24u in 1.2s — which is common the
-moment `wave.done` flips and survivors start pressing — so **two runs of the
-same seed stop matching partway through the first real fight.**
+**What it cost, concretely.** Every A/B comparison in patch-region-shell needed
+three runs to say anything, because one run proved nothing. It produced at least
+two wrong conclusions in a single session: `elite_arena (1p)` was reported as a
+regression when it flips between runs on both branches, and a co-op fix was
+credited from one clean run out of three.
 
-**Reproduce — one command:**
+**The fix.** `Sim.rng`, a seeded stream created from the run seed, and every one
+of the 43 routed through it. One shared stream rather than named sub-streams:
+sub-streams stop systems perturbing each other, which matters for CONTENT rolls
+(layout, shop stock, offers) and those keep theirs — these are per-tick
+incidentals whose order is already fixed by tick order.
 
-```
-node tools/determinism_probe.mjs [seed] [charId] [ticks]
-```
+`initTelegraph(sim, e)` now takes `sim` as a REQUIRED first parameter rather
+than defaulting when a caller forgets, which is how this survived four patches.
 
-It builds two `Sim`s on the same seed, travels both to the same `open_expanse`
-combat node, ticks them side by side and reports the first tick where a
-positional hash of the enemy field disagrees. It exits 1 while the defect is
-live and 0 once the two runs match, so it can become a gate the day it starts
-passing.
+**What holds it now** — `node tools/determinism_test.mjs`:
 
-**Measured**, on a party with no Hunter and no beast in it, so none of this is
-the beast's RNG:
-
-| seed | character | diverged at |
-|---|---|---|
-| 4242 | `toh_druid` | tick **402** (6.70s) |
-| 777 | `bulwark` | tick **431** (7.18s) |
-
-Both land shortly after the wave-end rush begins, which is when `rushMove()`
-starts running.
-
-**What this does NOT break, and why it has survived this long:**
-
-- **It cannot desync co-op.** The sim is host-authoritative — clients render
-  snapshots and run no enemy logic — so both peers see the host's roll.
-
-**It does make the test suite flaky — this entry used to claim otherwise, and
-that was wrong.** The original wording said "nothing in `tools/sim_test.mjs`
-asserts tick-exact equality between two runs of one seed", which is true and
-beside the point: the **DPS gate** measures each character's damage in a live
-fight and asserts it lands within ±40% of the roster median. The fight is not
-reproducible, so neither is the measurement. On unchanged `origin/main`, two
-consecutive runs:
-
-| character | run 1 | run 2 |
-|---|---|---|
-| `jester` | 29.7 (+32%) | 28.4 (+26%) |
-| `voltaic` | 26.4 (+17%) | 27.0 (+20%) |
-
-`jester` and `gilded_one` sit in the low 30s against a 40% wall, so a run
-occasionally pushes one over. **Seen twice in 28 runs across two branches**
-(2026-08-05), always as `✗ DPS gate: 1 outlier(s)`, never the same character
-twice. Re-run before believing a lone DPS-gate failure; a real regression
-repeats.
-
-That makes this defect the answer to a question the suite will keep asking, and
-another reason to fix it rather than live with it.
-
-**What it does break:** seed-based bug reproduction. "It happened on seed
-ABCDEFG" is not currently a reproduction, and any future gate that wants
-tick-exact replay — desync detection, a recorded-input regression, netcode
-rollback — has to fix this first.
-
-**What a fix looks like.** A per-enemy sub-stream, the way
-`js/entities/beast.js` does it for wander points:
-`subRng(sim.seed, 'rush', e.id, e.rushN++)`. The enemy id is already stable and
-already deterministic, so the change is local. Check the other `Math.random()`
-sites in the sim at the same time — `Sim._spawnSummon` scatters new summons the
-same way (beasts already opt out of that in `initBeast`, deliberately, and the
-comment there explains why).
-
-**Not in scope for `patch-hunter-melee-beast`** (2026-08-05), which found it.
-The beast's own wander is seeded and gated; that gate has to clear the enemy
-field to isolate it, and the workaround is a marker pointing back here.
-
----
-
----
+| gate | asserts |
+|---|---|
+| six configurations | the WHOLE SNAPSHOT every 60 ticks is byte-identical across two runs — both rosters, region and non-region, two players with scripted but *different* inputs so movement and dodge paths actually run |
+| negative control | a *different* seed produces a *different* run, so the comparisons are not vacuously true |
+| the lint | zero `Math.random()` in any of the 13 simulation modules, comments stripped first — routing 43 calls is worth nothing if the 44th goes back in |
 
 ## 2. Regeneration scales off `maxHp`, so a high-HP entity can become unkillable
 
@@ -351,3 +299,309 @@ The overlay list is scraped from `index.html` and the open/close events from the
 written-down list is how the asset-loader namespace whitelist went stale and how
 the hitbox gate stopped catching things. If a new overlay can be added without
 the gate covering it, the gate will rot.
+
+---
+
+## 5. Every siege crashed the host the moment its boss spawned
+
+**Fixed 2026-08-06.** Introduced by `patch-telegraphs`, found by
+`patch-region-shell`, never merged to `main`.
+
+### What happened
+
+`js/telegraphs.js` read `e.def.telegraph` in five places without a guard. The
+siege boss does not have a `def`:
+
+```js
+// js/game.js, _spawnSiegeBoss()
+Object.assign(e, {
+  id: ++this.spawnCounter, def: null, typeIdx: -1, boss: true, bossDef: def, ...
+```
+
+So `tickTelegraphs()` threw `TypeError: Cannot read properties of null (reading
+'telegraph')` on the first tick after a boss existed — on **every siege, on
+every floor**. Not an edge case; the mid-siege boss is the point of the siege.
+
+### Why it survived a whole patch
+
+The legacy suite was hanging at §9i on seven `while (p.weapons.length < 3)`
+loops that could never terminate once `weaponSlots` was 0, so the only evidence
+anyone had was a **partial** log that stopped before the siege runs. The
+telegraph suite passed in full — it stages single enemies in cleared rooms and
+never reaches a boss. Two green-looking suites, neither of which had executed
+the failing line.
+
+*The lesson is not "add a boss test". It is that a suite which stops early is
+not a suite that passed, and a partial log must be read as unknown rather than
+as clean.*
+
+### The second instance of the same shape
+
+Enemy slots are **pooled**. `spawnEnemyById()` cleared the objective flags on
+reuse but not the telegraph fields, so a recycled chaff slot could inherit
+`telState: WINDUP` from the slabjaw that held it last. `tickTelegraphs` skips it
+(no `def.telegraph`) and it sits in WINDUP forever — until a stun rider calls
+`cancelTelegraph()` on it and dereferences the same missing block. Found by
+Unsheathed's stun landing on a recycled skulker.
+
+**Reproduce (pre-fix):**
+
+```
+node tools/telegraph_test.mjs
+```
+
+```
+✗ a siege boss crashed the tick: TypeError: Cannot read properties of null (reading 'telegraph')
+```
+
+### What holds it now
+
+| gate | where | asserts |
+|---|---|---|
+| boss ticks | `tools/telegraph_test.mjs` | a real siege is driven to a real boss spawn and ticked 4s **with it alive**, and the boss is confirmed outside the telegraph system rather than accidentally inside it |
+| pooled reset | `js/game.js`, `spawnEnemyById()` | `telState/telT/telZone/telCaught/telCd` are cleared on every spawn, beside the objective flags that taught the same lesson |
+| single reader | `js/telegraphs.js`, `telegraphOf()` | one helper answers "does this entity telegraph"; nothing in the file reads `e.def` directly, so a sixth call site cannot reintroduce the dereference |
+
+---
+
+## 6. The shop stocked weapons no character could equip
+
+**Where:** `js/config.js` `SHOP_WEAPON_CHANCE: 0.3`, and every shop-stock roll
+that reads it. Introduced by `patch-trigger-core`, which set `weaponSlots: 0`
+and removed weapons as a source of damage but left the shop generating them.
+
+**What is wrong.** Measured over 400 seeded shops on floor 1:
+
+```
+SHOP_WEAPON_CHANCE = 0.3
+slot 0 is a weapon in 128/400 shops (32.0%)
+at least one weapon in stock: 400/400 (100.0%)
+player weaponSlots at spawn: 0
+```
+
+**Every single shop** offers at least one card that cannot be bought by anybody.
+Tapping one spends nothing and prints `Can't buy: no weapon slots`. That is a
+live player-facing defect — materials are the run's only currency and a third of
+the storefront is inert — not merely a test artifact.
+
+**Reproduce — the observable a player sees:**
+
+```
+node tools/browser_test.mjs
+```
+
+Roughly one run in three:
+
+```
+✗ tap purchase failed (408 unchanged) — diag: {"shop":true,...,"stock0":{"kind":"weapon","id":"sparkbolt",
+  "tier":1,"price":22,...},"toasts":"...\nCan't buy: no weapon slots","weapons":0,"slots":0}
+```
+
+**This is what made the browser suite look flaky, and it is not defect #1.** The
+suite taps card 0 unconditionally; the roll decides whether that card is
+purchasable. Observed failing on `sparkbolt` and on `fanblade`, and passing on
+the runs where slot 0 rolled an item — a 32% failure rate against a 4↔5 failure
+count that flickered across four runs in two trees. Nothing about it is
+non-deterministic given the seed; the harness simply does not pin the stock.
+
+**What has been ruled out.** Not `rushMove()` (defect #1) — no enemy movement is
+involved, the shop is a map-phase overlay. Not a timing race — the 3s
+`waitFor` expires because the purchase is *refused*, and the refusal toast is
+already on screen when the diagnostic runs. Not a touch-input problem — the same
+tap succeeds whenever slot 0 is an item.
+
+**What a fix would have to do.** Decide what a shop sells now that weapons are
+gone. Either drop `SHOP_WEAPON_CHANCE` to 0 and backfill those slots with items,
+or make weapon cards unofferable while `weaponSlots` is 0 — the second keeps the
+code path alive for a future in which something can hold a weapon again. Whatever
+is chosen, the browser gate should pin the stock rather than tap whatever rolled,
+so that a real purchase regression is distinguishable from a stock composition.
+
+**FIXED 2026-08-06.** It was not a design question — weapons are removed from
+the game, so a shop stocking one is simply a bug. Shops stock stat items only,
+from the existing pool; no new item category was introduced, because the
+stat/modifier split is phase 4 and is not being pulled forward to paper over
+this.
+
+The gate is `Sim._stocksWeapons(p)`, which reads `p.weaponSlots > 0` — the
+player's real state, not a `WEAPONS_REMOVED` flag that could go stale. Every
+weapon branch consults it: the base roll, the per-shop weapon minimums, the
+Quartermaster's all-weapon rack, the Overseer's summon rack, the Gilded One's
+top-tier shelf. All fall through to items.
+
+One hole had to be closed for the predicate to be trustworthy: `js/traits-toh.js`
+handed the Necromancer four weapon slots back *after* `_makePlayer` zeroed them
+for the whole roster — the only exception in an otherwise total removal, and the
+source of all 48 remaining weapon-stocking shops in a 2256-shop sweep. Nothing
+depended on it: `_startingGear` is short-circuited so the Necromancer never
+receives a weapon, and the Marrownaut payoff reads `sim.summons` for a fused
+tier-IV summon, not a mount.
+
+Measured after the fix: **0 of 2256** shops stock a weapon, across 47 characters
+in both rosters, four floors, base roll plus three rerolls each. Held by
+`tools/sim_test.mjs` §16, which asserts the rule ("no stock entry may be a kind
+the player cannot hold") rather than the literal string `weapon`, so it survives
+the phase-4 category split.
+
+---
+
+## 7. RETRACTED — the browser suite was never destructive; I committed its fixtures
+
+**Retracted 2026-08-06, same day it was filed.** This entry claimed the suite
+deleted committed sprite art on every run. **It did not. There was no committed
+art at those paths, and there still isn't.**
+
+### What actually happened
+
+`tools/browser_test.mjs` writes three scratch fixtures — an 8-direction grid, a
+flat magenta square, a two-tone 32×32 — to `assets/sprites/enemy/skulker.png`,
+`assets/sprites/enemy/flit.png` and `assets/sprites/fx/material.png`, then
+removes them. The enemy and fx sheets **do not exist yet**; the manifest carries
+their ids and the tests assert they resolve to null. Creating and deleting
+scratch files at those paths is correct, and the original comment — *"Remove
+ONLY the files this test wrote"* — was accurate.
+
+I read that comment as wrong, swept the fixtures into the repository with
+`git add -A`, and then built machinery to preserve them as if they were art.
+
+The evidence I should have gathered before filing, not after:
+
+```
+$ git log --all --oneline -- assets/sprites/enemy/ assets/sprites/fx/
+bb99b9f Dump client state when the co-op map screen never appears   <- my own commit
+
+$ ls -l + PNG headers
+assets/sprites/enemy/skulker.png    128x1024   2512B  <- directionGrid(), the fixture
+assets/sprites/enemy/flit.png       128x128     356B  <- flat magenta, the fixture
+assets/sprites/fx/material.png       32x32      107B  <- flatAsymmetric(), the fixture
+```
+
+One `git log --diff-filter=A` would have shown the files entered the repository
+in my own commit, hours after I started calling their deletion a defect. Their
+dimensions and byte sizes are exactly what the generators produce.
+
+### What it broke
+
+Committing them made `enemy.skulker` resolve to a 2.5 KB synthetic grid, which
+broke two sprite tests that had been passing:
+
+```
+✗ registry state: {"size":304,"missing":281,"hit":1}     <- expects enemy.skulker to have NO file
+✗ sprites=off pixel [226,80,76] != baseline [80,200,40]  <- the "primitive" baseline drew the fixture
+```
+
+Confirmed by running the pre-change commit with the files present: both
+reproduce, so the cause is the files, not any code change.
+
+### What was kept
+
+- The fixture snapshot/restore, which is inert while nothing is committed at
+  those paths (records null, deletes — the original behaviour) and becomes
+  useful the day real art lands there.
+- The spanning `try/finally`, so cleanup runs on every exit path rather than
+  only the last inner `finally`.
+- `assertCleanTree()` at both suite exits. The gate is still right for its own
+  reasons — a suite that dirties the tree has failed — and it is what would have
+  caught the fixtures being left behind in the first place.
+
+The `restoreFromGit` helper was removed. It existed only to resurrect files that
+should never have been committed.
+
+### The lesson
+
+Three separate signals said "these are test fixtures" — the byte sizes, the
+dimensions matching `E_CELL`/`E_GRID` exactly, and the fact that no enemy art
+has ever been generated — and I read a stop-hook nag about uncommitted changes
+as proof of a destructive test instead. *Check whether a file is art before
+defending it as art.* `git log --diff-filter=A` is one command.
+
+---
+
+# Open
+
+## 8. Client input has no delivery guarantee, no repeating channel, and nothing to heal from
+
+**Where:** `js/net.js` `ClientTransport.send()`.
+
+**Scope corrected 2026-08-06.** This entry originally blamed host→client event
+delivery. Half of that is now fixed and the half that remains is the *other
+direction*, which the original diagnosis had backwards.
+
+### What was fixed
+
+In-run state (node map, arena geometry and obstacles, pending picks, boss phase,
+run-over, loadout) moved out of one-shot events and into `snap.st`, which
+repeats 15x/s and therefore heals on the next frame. Lobby state got a 3Hz
+heartbeat (`CONFIG.LOBBY_HEARTBEAT_HZ`) for the same reason — the lobby has no
+snapshot stream, so it needed a repeating channel of its own.
+
+Both are gated: `tools/snapstate_test.mjs` runs every case with `pushEvent`
+replaced by a sink, so **no event is delivered at all**, and the snapshot must
+still carry everything.
+
+### What is still broken, and why the first diagnosis was wrong
+
+`client ready` still fails intermittently in `browser_test.mjs --coop`, **with
+the drop counter reading zero**. That reading was true and useless: only
+`HostTransport` was instrumented, and the failing path is
+`ClientTransport.send` — the client clicks ready, the host never sees it.
+
+Everything a client does leaves by that method: character pick, ready, node tap,
+buy, loadout change. It has:
+
+- **no delivery guarantee** — a not-open channel or a throwing send is a
+  permanent loss (now logged and counted, previously silent);
+- **no repeating channel** — the lobby heartbeat repeats HOST state to clients
+  and does nothing for input travelling the other way;
+- **nothing to heal from** — snapshots are host-authored, so there is no stream
+  a client can re-derive its own unsent intent from.
+
+**Reproduce:**
+
+```
+node tools/browser_test.mjs --coop
+```
+
+Observed across three runs after the state fix and the heartbeat:
+
+| run | outcome |
+|---|---|
+| 1 | full co-op sequence to the end |
+| 2 | `room registration failed against local relay` (see #9) |
+| 3 | `timeout waiting for client ready` — this defect |
+
+**What a fix would have to do.** Give client input the property host state now
+has: repetition or acknowledgement. Either the client re-sends unacknowledged
+intent until the host confirms it, or intent becomes state the client repeats
+(a "my current pick/ready" beat) rather than an edge it fires once. The second
+matches the rule the rest of this patch follows — if losing it breaks the game,
+it repeats — and is probably the smaller change.
+
+**Not fixed here.** The instrument now covers both directions, which is what
+turns the next occurrence into evidence rather than another seven-run hunt.
+
+---
+
+## 9. Room registration fails against the local relay, before any peer exists
+
+**Where:** unknown. `js/net.js` `HostTransport` room creation, `tools/peer_relay.mjs`,
+or the harness's relay probe.
+
+**What is wrong.** One co-op run in three or four never gets a room code at all:
+
+```
+✗ room registration failed against local relay
+```
+
+The harness boots the relay, probes `/peerjs/id` until it answers, and only then
+opens the host browser — and it retries registration once before failing. So
+this is not a naive startup race, and it is not the retry being absent.
+
+**Separate from #8.** No peer exists yet, so nothing has been sent or dropped;
+the drop ledger is clean on these runs. Recorded as its own entry specifically
+so it stops being absorbed into "co-op is flaky", which is how it stayed
+invisible while two other distinct failures wore the same description.
+
+**Undiagnosed.** Nothing has been ruled out. The next step is logging the
+PeerJS error on the registration path, which currently reports only that the
+code never arrived.

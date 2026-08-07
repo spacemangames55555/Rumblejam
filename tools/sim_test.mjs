@@ -822,17 +822,24 @@ try {
       if (f === 2) s1.debug('F4');
       s1.currentNode = s1.floor.nodes.find(n => n.kind === 'combat').id;
       s1._openShop(p1, 'clear');
-      const needW = f === 1 ? 2 : 1;
+      // The old rule was ">=2 weapons on floor 1, >=1 after". With weapons
+      // removed that guaranteed unbuyable cards, so the guarantee inverts: a
+      // roll must be FULL and must contain nothing this player cannot hold.
+      // Written against p.weaponSlots, not against a hardcoded 0, so it states
+      // the real rule and follows the game if slots ever come back.
       for (let r = 0; r < 3; r++) {
         const w = p1.shop.stock.filter(s => s.kind === 'weapon').length;
-        if (w < needW) { rollBad++; fail(`seed ${seed * 7919} floor ${f} standard roll ${r}: ${w} weapons (< ${needW})`); }
+        if (!p1.weaponSlots && w) { rollBad++; fail(`seed ${seed * 7919} floor ${f} standard roll ${r}: ${w} unbuyable card(s) with 0 weapon slots`); }
+        if (!p1.shop.stock.length) { rollBad++; fail(`seed ${seed * 7919} floor ${f} standard roll ${r}: empty stock`); }
         s1.uiAction(0, { kind: 'reroll' });
       }
       s1._travelTo(s1.floor.nodes.find(n => n.kind === 'shop').id);
       for (let r = 0; r < 3; r++) {
         const st = p1.shop.stock;
         if (st.length !== 6) { rollBad++; fail(`seed ${seed * 7919} floor ${f} BM roll ${r}: ${st.length} slots`); }
-        if (st.filter(s => s.kind === 'weapon').length < 2) { rollBad++; fail(`seed ${seed * 7919} floor ${f} BM roll ${r}: <2 weapons`); }
+        // six slots is still the Black Market's identity; ">=2 weapons" was the
+        // other half and is now ">=2 cards nobody can buy"
+        if (!p1.weaponSlots && st.some(s => s.kind === 'weapon')) { rollBad++; fail(`seed ${seed * 7919} floor ${f} BM roll ${r}: stocks an unbuyable card`); }
         if (!st.some(rarePlus)) { rollBad++; fail(`seed ${seed * 7919} floor ${f} BM roll ${r}: no rare+ item`); }
         s1.uiAction(0, { kind: 'reroll' });
       }
@@ -900,13 +907,19 @@ try {
     const qp = qs.players[0];
     qp.materials = 5000;
     qs.currentNode = 0; qs._openShop(qp, 'clear');
-    let allW = qp.shop.stock.every(s => s.kind === 'weapon');
+    // The Quartermaster's rack was ALL weapons. With no weapon slots on the
+    // roster that is a rack of nothing purchasable, so the trait now falls
+    // through to items. What still has to hold is that the rack fills and the
+    // Black Market keeps its six slots — the trait's shape survives even though
+    // its stock does not.
+    const wanted = qp.weaponSlots ? 'weapon' : 'item';
+    let allW = qp.shop.stock.every(s => s.kind === wanted);
     qs.uiAction(0, { kind: 'reroll' });
-    allW = allW && qp.shop.stock.every(s => s.kind === 'weapon');
+    allW = allW && qp.shop.stock.every(s => s.kind === wanted);
     qs._travelTo(qs.floor.nodes.find(n => n.kind === 'shop').id);
-    allW = allW && qp.shop.stock.every(s => s.kind === 'weapon') && qp.shop.stock.length === 6;
-    if (allW) ok('Quartermaster stock is all weapons (standard + reroll + 6-slot Black Market)');
-    else fail(`QM stock: ${qp.shop.stock.map(s => s.kind)}`);
+    allW = allW && qp.shop.stock.every(s => s.kind === wanted) && qp.shop.stock.length === 6;
+    if (allW) ok(`Quartermaster stock is all ${wanted}s (standard + reroll + 6-slot Black Market)`);
+    else fail(`QM stock: ${qp.shop.stock.map(s => s.kind)} (wanted all ${wanted}, weaponSlots ${qp.weaponSlots})`);
   }
 
   // atomic swap-buy: both legs or neither; insufficient funds rejected cleanly
@@ -2824,8 +2837,12 @@ try {
       const g = one('toh_necromancer'); const p = g.players[0];
       if (!p.weapons.length || p.weapons.every(w => WBI[w.id].cls === 'summon')) ok('Necromancer holds only summons');
       else { bad++; fail(`Necromancer weapons: ${p.weapons.map(w => w.id).join(',')}`); }
-      if (p.weaponSlots === p.char.trait.mounts) ok(`and has exactly ${p.char.trait.mounts} mounts`);
-      else { bad++; fail(`mounts ${p.weaponSlots}`); }
+      // The Bonelord's four "mounts" were weapon slots, and weapons are removed
+      // — the trait keeps the number as data, but the player carries 0 slots
+      // like every other character. Marrownaut reads sim.summons for a fused
+      // tier-IV summon, not a mount, so nothing downstream needs them.
+      if (p.weaponSlots === 0) ok(`and carries 0 weapon slots like the rest of the roster (trait still declares ${p.char.trait.mounts} mounts as data)`);
+      else { bad++; fail(`Necromancer weaponSlots ${p.weaponSlots} — the weapon removal has a hole again`); }
       const s = g.summons.find(q => q.owner === 0);
       if (s) {
         s.hp = 1;
@@ -4410,6 +4427,53 @@ try {
   if (!aimDriftT) ok('the stoop locks its aim at windup and does not track — sidestepping it is a real answer, not a delay');
   else fail(`gyre aim drifted during ${aimDriftT} windup tick(s) — the telegraph would point somewhere it is not going`);
 } catch (err) { fail('gyre telegraph gate crashed', err); }
+
+// ---- 16. a shop never stocks something nobody can buy ----
+//
+// Weapons are removed. Before this gate, SHOP_WEAPON_CHANCE (0.3) plus the
+// "every shop guarantees 1-2 weapons" rule put a dead card in 400 of 400
+// measured shops, and made the first card unbuyable a third of the time. It
+// read as browser-suite flakiness for four runs across two branches.
+//
+// The gate is written against the RULE — "no stock entry may be a kind the
+// player cannot hold" — rather than against `kind === 'weapon'`, so it keeps
+// working when the phase-4 stat/modifier split adds categories.
+try {
+  const R = await import('../js/content/characters.js');
+  let shops = 0, bad = 0, kinds = new Set(), slotZeroBad = 0;
+  const offenders = {};
+  for (const roster of ['classic', 'toh']) {
+    R.setRoster(roster);
+    // every character in the ACTIVE roster, read from the registry rather than
+    // a list here — a new character must be covered without editing this gate
+    for (const c of R.CHARACTERS) {
+      for (let s = 0; s < 4; s++) {
+        const g = new Sim({ seed: 7000 + s, party: [{ idx: 0, key: 'k', name: 'T', charId: c.id, color: '#fff' }] });
+        for (let f = 1; f < 1 + (s % 4); f++) g._startFloor(f + 1);
+        const node = g.floor.nodes.find(n => n.kind === 'shop');
+        if (!node) continue;
+        g._travelTo(node.id);
+        const p = g.players[0];
+        if (!p.shop || !p.shop.stock.length) continue;
+        // base roll AND rerolls — the guarantees re-run on every reroll, which
+        // is exactly where a weapon minimum would sneak back in
+        for (let r = 0; r <= 3; r++) {
+          if (r) g.uiAction(0, { kind: 'reroll' });
+          shops++;
+          const st = p.shop.stock;
+          for (const x of st) kinds.add(x.kind);
+          const unbuyable = st.filter(x => x.kind === 'weapon' && p.weaponSlots === 0);
+          if (unbuyable.length) { bad++; offenders[p.char.trait.key] = (offenders[p.char.trait.key] || 0) + unbuyable.length; }
+          if (st[0] && st[0].kind === 'weapon' && p.weaponSlots === 0) slotZeroBad++;
+        }
+      }
+    }
+  }
+  R.setRoster('classic');
+  if (!shops) fail('shop stock gate sampled 0 shops — it proves nothing, restage it');
+  else if (!bad) ok(`no shop stocks an unbuyable card — ${shops} shops across both rosters, 4 floors, base roll + 3 rerolls (kinds seen: ${[...kinds].join(', ')})`);
+  else fail(`${bad}/${shops} shops stock a weapon no one can hold (first card in ${slotZeroBad}): ${JSON.stringify(offenders)}`);
+} catch (err) { fail('shop stock gate crashed', err); }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');
 process.exit(failures ? 1 : 0);

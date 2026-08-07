@@ -23,6 +23,8 @@
 // shape drives the silhouette in render.js; behavior keys are implemented in
 // entities/enemies.js.
 
+import { ALL_REGION_ENEMIES } from './regions-enemies.js';
+
 export const ENEMIES = [
   { id: 'skulker', domain: 'physical',   name: 'Skulker',   behavior: 'chaser',   hp: 8,  spd: 125, dmg: 4,  radius: 14, mats: 1,
     shape: 'circle',   color: '#e2504c', w: 3 },                                    // basic chaser
@@ -69,8 +71,16 @@ export const ENEMIES = [
     beam: { windup: 1.4, dmg: 11, width: 16, len: 900, cd: 3.2 } },                 // long windup beam
 ];
 
-export const ENEMY_BY_ID = Object.fromEntries(ENEMIES.map(e => [e.id, e]));
-export const ENEMY_INDEX = Object.fromEntries(ENEMIES.map((e, i) => [e.id, i]));
+// REGION POPULATIONS RIDE THE SAME REGISTRY. spawnEnemyById, the renderer and
+// the telegraph machine all look up by id, so a region type registered here is
+// spawnable everywhere with no call-site changes — and telegraphs.js's load
+// assertion covers it automatically, which is the point of not keeping a second
+// table. The base twelve keep index 0..11 so ENEMY_INDEX, which goes on the
+// wire as an i8, is unchanged for them.
+export const ALL_ENEMY_DEFS = [...ENEMIES, ...ALL_REGION_ENEMIES];
+
+export const ENEMY_BY_ID = Object.fromEntries(ALL_ENEMY_DEFS.map(e => [e.id, e]));
+export const ENEMY_INDEX = Object.fromEntries(ALL_ENEMY_DEFS.map((e, i) => [e.id, i]));
 
 // Elite modifiers: any base type can spawn elite (×3 HP, ×1.5 dmg, ×1.45 size)
 // plus exactly one of these.

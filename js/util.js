@@ -23,10 +23,34 @@ export class Pool {
     for (let i = capacity - 1; i >= 0; i--) this.free.push(i);
     this.live = new Set();
   }
+  // EXHAUSTIVE RESET, not an enumerated one.
+  //
+  // A recycled slot used to arrive carrying every field its previous occupant
+  // left on it, and each spawn path cleared the ones somebody had remembered.
+  // That produced two shipped bugs with the same shape and neither surfaced
+  // anywhere near its cause:
+  //
+  //   objective flags — a nest's invulnerability shield leaked onto ordinary
+  //     chaff, leaving six unkillable enemies standing in a later horde arena
+  //     so the fight could never end;
+  //   telegraph fields — a chaff slot inherited telState WINDUP from a slabjaw,
+  //     sat in it forever because it had no telegraph block to tick, and threw
+  //     when a stun rider called cancelTelegraph on it.
+  //
+  // Both were fixed by adding fields to a list. A list is the defect: it is
+  // correct exactly until the next field is added, and the failure mode is
+  // silent. So the slot is now WIPED here, and a spawn path can only produce
+  // state it actually sets. Anything forgotten reads `undefined` at the point
+  // of use instead of a plausible value from a different entity three rooms
+  // ago — a loud, local failure instead of a quiet, distant one.
+  //
+  // Assigned rather than deleted: `delete` churns the hidden class and would
+  // make every pooled object megamorphic. Keys keep their slots, values go.
   alloc() {
     if (!this.free.length) return null; // pool exhausted: caller skips spawn
     const i = this.free.pop();
     const o = this.items[i];
+    for (const k in o) { if (k !== '_pi') o[k] = undefined; }
     o.active = true;
     this.live.add(i);
     return o;

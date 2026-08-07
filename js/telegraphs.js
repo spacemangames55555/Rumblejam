@@ -16,7 +16,10 @@
 
 import { inZone } from './compose.js';
 import { domainMult } from './domains.js';
-import { ENEMIES } from './content/enemies.js';
+// ALL_ENEMY_DEFS, not ENEMIES: region populations are registered in the same
+// table and must be covered by the same assertions. Reading the base twelve
+// here would have let a region enemy ship with a 200ms wind-up unchecked.
+import { ALL_ENEMY_DEFS } from './content/enemies.js';
 
 // Below this a wind-up is not something a person can react to on a phone, with
 // a thumb, on a small screen. Asserted at load rather than trusted.
@@ -34,7 +37,7 @@ const SHAPE_PARAMS = {
 
 export function assertTelegraphs() {
   const problems = [];
-  for (const def of ENEMIES) {
+  for (const def of ALL_ENEMY_DEFS) {
     const t = def.telegraph;
     if (!t) continue;
     if (!(t.windupMs >= TELEGRAPH_MIN_WINDUP_MS)) {
@@ -67,7 +70,7 @@ export function assertTelegraphs() {
 
 assertTelegraphs();
 
-export const TELEGRAPHED_IDS = ENEMIES.filter(e => e.telegraph).map(e => e.id);
+export const TELEGRAPHED_IDS = ALL_ENEMY_DEFS.filter(e => e.telegraph).map(e => e.id);
 
 // ---------------------------------------------------------------- the zone
 
@@ -85,11 +88,26 @@ function buildZone(sim, e, t) {
 
 // ---------------------------------------------------------------- the machine
 
-export function initTelegraph(e) {
+// THE SIEGE BOSS HAS NO `def`. _spawnSiegeBoss builds its enemy slot with
+// `def: null` and a `bossDef` instead, so every `e.def.telegraph` in this file
+// is a null dereference the moment a siege boss exists — which is every siege
+// on every floor. It reached the branch because the legacy sim suite was
+// hanging before it got to the siege runs, so the only evidence was a shorter
+// partial run. This helper is now the single place that answers the question,
+// and nothing below reads e.def directly.
+function telegraphOf(e) {
+  return (e && e.def && e.def.telegraph) || null;
+}
+
+// `sim` is required, not optional: the initial cooldown scatter is a seeded
+// roll like every other, and defaulting it to Math.random() when a caller
+// forgets is how KNOWN-DEFECTS #1 stayed alive across four patches.
+export function initTelegraph(sim, e) {
+  const t = telegraphOf(e);
   e.telState = TELEGRAPH_STATES.IDLE;
   e.telT = 0;
   e.telZone = null;
-  e.telCd = (e.def.telegraph ? e.def.telegraph.cooldownMs / 1000 : 0) * Math.random();
+  e.telCd = (t ? t.cooldownMs / 1000 : 0) * sim.rng.float();
   e.telCaught = null;
 }
 
@@ -107,8 +125,10 @@ export function initTelegraph(e) {
 // block makes it a decision somebody has to actively reverse rather than a bug
 // somebody tidies away.
 export function telegraphBusy(e) {
+  const t = telegraphOf(e);
+  if (!t) return false;   // bosses (def: null) and every non-telegraphing type
   if (e.telState === TELEGRAPH_STATES.WINDUP) return true;
-  if (e.telState === TELEGRAPH_STATES.RECOVER) return !!(e.def.telegraph && e.def.telegraph.recoverFrozen);
+  if (e.telState === TELEGRAPH_STATES.RECOVER) return !!t.recoverFrozen;
   return false;
 }
 
@@ -116,9 +136,15 @@ export function telegraphBusy(e) {
 // to RECOVER. This is what makes Rebuke a counter-attack LOOP rather than a
 // one-off payout — break stance, dodge, stun, and the next wind-up dies too.
 export function cancelTelegraph(sim, e) {
+  // Guarded for two reasons at once: the boss has no def at all, and enemy
+  // slots are POOLED, so a recycled slot can still carry telState from whatever
+  // occupied it last. The caller is a stun rider that lands on ANY enemy and
+  // has no way to know whether that enemy telegraphs.
+  const t = telegraphOf(e);
+  if (!t) return false;
   if (e.telState !== TELEGRAPH_STATES.WINDUP) return false;
   e.telState = TELEGRAPH_STATES.RECOVER;
-  e.telT = (e.def.telegraph.recoverMs / 1000);
+  e.telT = (t.recoverMs / 1000);
   e.telZone = null;
   e.telCaught = null;
   sim.telStats.interrupted++;
@@ -128,9 +154,9 @@ export function cancelTelegraph(sim, e) {
 export function tickTelegraphs(sim, dt) {
   for (const e of sim.enemyPool) {
     if (!e.active) continue;
-    const t = e.def.telegraph;
+    const t = telegraphOf(e);
     if (!t) continue;
-    if (e.telState === undefined) initTelegraph(e);
+    if (e.telState === undefined) initTelegraph(sim, e);
 
     // a stun at any point during the wind-up kills the attack
     if (e.stunT > 0 && e.telState === TELEGRAPH_STATES.WINDUP) { cancelTelegraph(sim, e); continue; }
@@ -229,11 +255,11 @@ function resolveTelegraph(sim, e, t) {
 export function liveZones(sim) {
   const out = [];
   for (const e of sim.enemyPool) {
-    // e.def.telegraph guarded: enemy slots are POOLED, so a recycled slot can
-    // still carry telState from whatever occupied it last. The state machine
-    // resets it on spawn now, and this is the second line of defence.
-    if (!e.active || e.telState !== TELEGRAPH_STATES.WINDUP || !e.telZone || !e.def.telegraph) continue;
-    const t = e.def.telegraph;
+    // Guarded: enemy slots are POOLED, so a recycled slot can still carry
+    // telState from whatever occupied it last, and the boss has no def at all.
+    // The state machine resets it on spawn now; this is the second line.
+    const t = telegraphOf(e);
+    if (!e.active || e.telState !== TELEGRAPH_STATES.WINDUP || !e.telZone || !t) continue;
     out.push({ z: e.telZone, fill: 1 - e.telT / (t.windupMs / 1000), msLeft: Math.round(e.telT * 1000), id: e.id });
   }
   return out;

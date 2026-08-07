@@ -160,7 +160,14 @@ class Browser {
       if (!/peerjs|PeerJS|wss:|ERR_|Failed to fetch|NetworkError|WebSocket/i.test(line)) this.errorsList.push(line);
       this.consoleLines.push(line);
     } else if (m.method === 'Runtime.consoleAPICalled') {
-      this.consoleLines.push(m.params.args.map(a => a.value ?? '').join(' '));
+      const line = m.params.args.map(a => a.value ?? '').join(' ');
+      this.consoleLines.push(line);
+      // PIPE THE ONES THAT MATTER TO STDOUT. net.js logs every skipped send,
+      // and that log lived only in the page console — which this harness
+      // captured into an array nobody printed. A diagnostic whose output goes
+      // into a buffer no test reads is not a diagnostic. The drop counter is
+      // asserted at teardown; this is so the reason is on screen when it fires.
+      if (/^\[net\] DROPPED/.test(line)) { NET_DROPS.push(`[${this.label}] ${line}`); console.error(`  [${this.label}] ${line}`); }
     }
   }
 
@@ -222,6 +229,66 @@ process.on('exit', () => { httpd.kill(); });
 await sleep(900);
 
 const wantCoop = process.argv.includes('--coop');
+
+// Every `[net] DROPPED` line any browser emits, for the teardown assertion.
+// Counted AS IT ARRIVES rather than read off a live page at the end, because
+// the browsers are closed by then — and a drop that happened in a browser that
+// has since exited is exactly as bad as one in a browser still open.
+const NET_DROPS = [];
+
+// ---------- teardown gate: a suite that dirties the working tree has failed ----------
+//
+// This suite writes sprite fixtures over real paths. Three of them —
+// skulker.png, flit.png, material.png — are TRACKED, and the cleanup deleted
+// them on every run for as long as that test has existed. Nothing noticed,
+// because nothing looked. `git add -A` would have committed the deletion, which
+// is how committed art leaves a repository with nobody deciding to remove it.
+//
+// The restore is in place now, but a restore is a promise and this is the
+// check. It compares the dirty set BEFORE the suite against the dirty set
+// AFTER, so it fails on what THIS RUN changed and stays quiet about whatever
+// work in progress the person running it already had open. Tracked files only:
+// a tool that generates new art is a different conversation from a test that
+// destroys existing art.
+const gitDirty = () => {
+  try {
+    return new Map(execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' })
+      .split('\n').filter(Boolean).map(l => [l.slice(3).trim(), l.slice(0, 2)]));
+  } catch { return null; }   // not a git checkout: the gate reports that, it does not crash
+};
+const dirtyBefore = gitDirty();
+
+// EVERY DROPPED SEND FAILS THE SUITE. js/net.js counts skipped sends into
+// window.uvNet.drops with a 50-entry dropLog; before this, nothing anywhere
+// read either. An instrument no test consumes is not an instrument — it is a
+// line of code that makes you feel covered. A drop is now a loud failure with
+// the peer and message kind attached, which is exactly what seven runs of
+// hunting a silent one earned.
+//
+// Takes the live browsers so it can ask each of them; a drop on the HOST and a
+// drop on a CLIENT are different bugs and both matter.
+function assertNoNetDrops() {
+  if (!NET_DROPS.length) { ok('no peer send was skipped or swallowed all run — zero [net] DROPPED lines from any browser'); return; }
+  fail(`${NET_DROPS.length} SEND(S) DROPPED. Anything load-bearing in them is gone for that peer, silently — that is open defect #8, and it is why this assertion exists. `
+    + NET_DROPS.slice(0, 6).join(' | ') + (NET_DROPS.length > 6 ? ` (+${NET_DROPS.length - 6} more)` : ''));
+}
+
+function assertCleanTree() {
+  if (!dirtyBefore) { console.warn('⚠ working-tree gate skipped — not a git checkout'); return; }
+  const after = gitDirty();
+  if (!after) { fail('working-tree gate: git status failed after the run'); return; }
+  const caused = [...after].filter(([f, st]) => dirtyBefore.get(f) !== st);
+  if (!caused.length) {
+    ok(`the suite left the working tree as it found it (${after.size} pre-existing change(s) untouched)`);
+    return;
+  }
+  // ' D' is the shape that started this: a tracked file deleted by a test.
+  const deleted = caused.filter(([, st]) => st.trim() === 'D');
+  fail(`THE SUITE DIRTIED THE WORKING TREE — ${caused.length} tracked file(s) changed by this run`
+    + (deleted.length ? `, ${deleted.length} DELETED` : '')
+    + `: ${caused.map(([f, st]) => `${st.trim()} ${f}`).join(', ')}`
+    + '. A test that modifies committed files is destructive, not a test. Restore what you write.');
+}
 
 // ---------- shared Gauntlet-flow helpers ----------
 const measureFps = br => br.exec(`return new Promise(res => { let f = 0; const t0 = performance.now();
@@ -711,12 +778,24 @@ try {
   const exTitle = await A.exec(`return document.querySelector('#overlay-shop .ov-title').textContent`);
   if (exTitle === 'TRADER') ok('extraction shop opens at the fight clear (standard, not Black Market)');
   else fail(`extraction shop title: ${exTitle}`);
-  const exW = await A.exec(`return window.uv.sim.players[0].shop.stock.filter(s=>s.kind==='weapon').length`);
-  if (exW >= 2) ok(`floor-1 extraction stock guarantees weapons (${exW} in 4 slots)`); else fail(`floor-1 stock weapons: ${exW}`);
+  // The old assertion here was "floor-1 stock guarantees >=2 weapons". That
+  // guarantee is gone, because with weapons removed it guaranteed two cards
+  // nobody could buy. The rule now is the one the sim suite's §16 gates: every
+  // slot is filled, and nothing in it is a kind this player cannot hold.
+  const exStock = JSON.parse(await A.exec(`const p=window.uv.sim.players[0];
+    return JSON.stringify({n: p.shop.stock.length,
+      unbuyable: p.shop.stock.filter(s=>s.kind==='weapon').length, slots: p.weaponSlots})`));
+  if (exStock.n === 4 && exStock.unbuyable === 0) ok(`floor-1 extraction stock fills all ${exStock.n} slots with nothing unbuyable (weaponSlots ${exStock.slots})`);
+  else fail(`floor-1 extraction stock: ${JSON.stringify(exStock)}`);
   // buy + reroll right here
   await A.exec(`window.uv.sim.debug('F2'); return 1;`);
   const exM0 = await A.exec('return window.uv.sim.players[0].materials');
-  await A.exec(`const s=window.uv.sim,p=s.players[0]; const i=p.shop.stock.findIndex(x=>x.kind==='weapon'&&!x.sold); s.uiAction(0,{kind:'buy',slot:i}); s.uiAction(0,{kind:'reroll'}); return 1;`);
+  // buy the first AFFORDABLE unsold card, whatever kind it is — this hunted for
+  // a weapon specifically, and findIndex returning -1 made the buy a no-op that
+  // the reroll then covered for
+  await A.exec(`const s=window.uv.sim,p=s.players[0];
+    const i=p.shop.stock.findIndex(x=>!x.sold && x.price<=p.materials);
+    if (i>=0) s.uiAction(0,{kind:'buy',slot:i}); s.uiAction(0,{kind:'reroll'}); return 1;`);
   const exM1 = await A.exec('return window.uv.sim.players[0].materials');
   if (exM1 < exM0) ok('buy + reroll work at the extraction shop'); else fail('extraction shop buy/reroll no-op');
   // the F2 grant crossed level thresholds — the airhorn fires once the event
@@ -788,7 +867,9 @@ try {
   await A.waitFor(`return document.querySelector('#overlay-shop .ov-title').textContent === 'BLACK MARKET'`, 3000, 'Black Market banner');
   const bmInfo = JSON.parse(await A.exec(`const st=window.uv.sim.players[0].shop.stock;
     return JSON.stringify({slots: st.length, weapons: st.filter(s=>s.kind==='weapon').length})`));
-  if (bmInfo.slots === 6 && bmInfo.weapons >= 2) ok(`Black Market: ${bmInfo.slots} slots, ${bmInfo.weapons} weapons in stock`);
+  // Six slots is still the Black Market's identity; ">=2 weapons" was the other
+  // half and is now ">=2 cards nobody can buy", so the rule inverts.
+  if (bmInfo.slots === 6 && bmInfo.weapons === 0) ok(`Black Market: ${bmInfo.slots} slots, none of them unbuyable`);
   else fail(`Black Market stock: ${JSON.stringify(bmInfo)}`);
   // drain until the HOST says no level-ups remain
   async function clickAwayLevelups(br) {
@@ -802,7 +883,13 @@ try {
   await clickAwayLevelups(A);
   // duplicate pair (purchase mechanics covered elsewhere; the combine UI is under test)
   await A.exec(`const s=window.uv.sim, p=s.players[0]; s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); return 1;`);
-  await A.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'pair in meta');
+  // Labelled 'a matching pair of coilguns', not 'pair'. The old label read as a
+  // PEER pairing in a failure line — "timeout waiting for pair in meta" — and a
+  // room-code failure is the most alarming thing this game could report, so a
+  // weapon-combine timeout wearing that name cost real diagnosis time. A
+  // waitFor label is failure-message text; it should name the thing being
+  // waited for in words that cannot be read as a different subsystem.
+  await A.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'a matching pair of coilguns in meta');
   const slotsBefore = await A.exec('return window.uv.meta.weapons.length');
   // character sheet by C key: shows the pair, and solo PAUSES
   await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
@@ -830,7 +917,7 @@ try {
   await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
   await A.waitFor(`return document.querySelector('[data-combine]')!==null`, 3000, 'combine affordance on the match');
   await A.exec(`document.querySelector('[data-combine]').click(); return 1;`);
-  await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'combined pair');
+  await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'two coilguns fused into one tier-II');
   const slotsAfter = await A.exec('return window.uv.meta.weapons.length');
   if (slotsAfter === slotsBefore - 1) ok('combine via UI: pair → tier II, slot freed'); else fail(`slots ${slotsBefore}→${slotsAfter}`);
   await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
@@ -1140,17 +1227,48 @@ try {
   // left half red, right half blue — asymmetric, so rotation is visible
   const flatAsymmetric = () => png(FX_CELL, FX_CELL, x => (x < FX_CELL / 2 ? [255, 60, 60] : [60, 60, 255]));
 
+  // These three paths hold NO committed art. The enemy and fx sheets do not
+  // exist yet; the manifest carries their ids and expects them to resolve to
+  // null. This test creates them as scratch fixtures and removes them again,
+  // which is exactly right, and the original cleanup comment — "Remove ONLY the
+  // files this test wrote" — was accurate.
+  //
+  // DO NOT "fix" that into a git restore. I read the cleanup as destructive,
+  // swept the fixtures into the repo with `git add -A`, and then built
+  // machinery to preserve them as if they were art. That broke the two sprite
+  // tests below: `enemy.skulker` began resolving to a 2.5 KB synthetic grid, so
+  // the zero-file registry check saw a hit and the "primitive" baseline it
+  // captures stopped being a primitive.
+  //
+  // The snapshot/restore below is kept for the day REAL art lands here: it puts
+  // back whatever was present and removes what was not. With nothing committed
+  // at these paths it records null and deletes, which is the original
+  // behaviour.
+  const ART = [gridFile, badGridFile, flatFile];
+  const originals = new Map();
   const installArt = () => {
     fs.mkdirSync(enemyDir, { recursive: true });
     fs.mkdirSync(fxDir, { recursive: true });
+    for (const f of ART) {
+      if (!originals.has(f)) originals.set(f, fs.existsSync(f) ? fs.readFileSync(f) : null);
+    }
     fs.writeFileSync(gridFile, directionGrid());
     fs.writeFileSync(flatFile, flatAsymmetric());
     fs.writeFileSync(badGridFile, png(E_CELL, E_CELL, () => [255, 0, 255]));   // square, so deliberately not an 8-row grid
   };
-  // Remove ONLY the files this test wrote. A blanket rmSync of assets/sprites
-  // would delete committed art, which is a destructive test, not a cleanup.
+  // Restore what was there. A file this test genuinely created (no original) is
+  // removed; a file it clobbered is written back exactly as it was.
   const removeArt = () => {
-    for (const f of [gridFile, badGridFile, flatFile]) fs.rmSync(f, { force: true });
+    // ITERATE THE SNAPSHOT, NOT `ART`. With originals empty — removeArt called
+    // on a path where installArt never ran, which the spanning finally below
+    // makes reachable — `originals.get(f)` is undefined and the else branch
+    // deletes committed art. Restoring only what was actually recorded makes
+    // this safe to call unconditionally.
+    for (const [f, was] of originals) {
+      if (was) fs.writeFileSync(f, was);
+      else fs.rmSync(f, { force: true });
+    }
+    originals.clear();
     for (const d of [enemyDir, fxDir, spriteRoot]) { try { fs.rmdirSync(d); } catch { /* not empty: real art lives here */ } }
   };
 
@@ -1261,6 +1379,14 @@ try {
   //         reproduce the primitive exactly, art present or not ----
   // ---- 4. directional grids, on a live entity and cell by cell ----
   // ---- 5. a directions:1 entry still rotates, exactly as before ----
+  //
+  // installArt() and removeArt() are ~700 lines and several sibling blocks
+  // apart, and removeArt lived in the LAST inner finally. Anything throwing
+  // outside an inner try skipped the restore entirely and left three fixtures
+  // sitting on top of committed art. This try/finally spans every block that
+  // runs while the fixtures are installed, so the restore happens on exit
+  // paths nobody enumerated.
+  try {
   {
     installArt();
     const S3 = new Browser(), S4 = new Browser();
@@ -1971,9 +2097,9 @@ try {
       else ok('debug mode logs, it does not error');
     } catch (e) { fail(`sprites=debug test: ${e.message}`); } finally {
       await S5.close();
-      removeArt();
     }
   }
+  } finally { removeArt(); }
 }
 
 // ---------- tiled floors: the biome layer, which only a renderer can check ----------
@@ -2691,6 +2817,8 @@ if (wantCoop) {
   const PJS = process.env.PEERJS_LOCAL || '/tmp/peerjs.min.js';
   if (!existsSync(PJS)) {
     console.warn('⚠ COOP SKIPPED — no local peerjs.min.js (set PEERJS_LOCAL or place /tmp/peerjs.min.js)');
+    assertNoNetDrops();
+    assertCleanTree();
     console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL BROWSER TESTS PASSED');
     process.exit(failures ? 1 : 0);
   }
@@ -2803,7 +2931,21 @@ if (wantCoop) {
 
       // ---- DoD 6: contested node pick — consent countdown, one redirect, lock ----
       await A.waitFor(`return !document.getElementById('screen-map').classList.contains('hidden')`, 4000, 'host map screen');
-      await B.waitFor(`return !document.getElementById('screen-map').classList.contains('hidden')`, 5000, 'client map screen');
+      try {
+        await B.waitFor(`return !document.getElementById('screen-map').classList.contains('hidden')`, 5000, 'client map screen');
+      } catch (e) {
+        const d = await B.exec(`const g=id=>{const el=document.getElementById(id); return el?el.className:'MISSING'};
+          const s=window.uv.snaps||[]; const last=s[s.length-1];
+          return JSON.stringify({mode:window.uv.mode, map:g('screen-map'), game:g('screen-game'), title:g('screen-title'),
+            snaps:s.length, lastMode:last&&last.s&&last.s.mode, lastKeys:last&&last.s?Object.keys(last.s).slice(0,20):null,
+            nodes:document.querySelectorAll('.map-node').length})`).catch(x => 'diag failed: ' + x.message);
+        console.error('  CLIENT MAP DIAG:', d);
+        console.error('  CLIENT ERRORS:', (await B.errors()).join(' | ').slice(0, 800));
+        console.error('  CLIENT LOGS:', (await B.logs()).slice(-15).join(' | ').slice(0, 800));
+        const hd = await A.exec(`return JSON.stringify({mode:window.uv.mode, phase:window.uv.sim&&window.uv.sim.phase, cleared:window.uv.sim&&window.uv.sim.cleared})`).catch(x => 'x');
+        console.error('  HOST STATE:', hd);
+        throw e;
+      }
       ok('both players see the node map');
       const firstPick = await A.exec(`const b=document.querySelector('.map-node.reachable'); b.click(); return parseInt(b.dataset.node,10);`);
       await A.waitFor(`return window.uv.sim.nodeVote && window.uv.sim.nodeVote.nodeId===${firstPick}`, 3000, 'vote started');
@@ -2982,8 +3124,8 @@ if (wantCoop) {
       ok('both players get their own shop overlay at the Trader stop');
       const coopItem = JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.vitality>0&&!it.hooks); return JSON.stringify({id:it.id})`));
       await A.exec(`const s=window.uv.sim; for (const p of s.players){ s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); p.items.push(${JSON.stringify(coopItem.id)}); s._recomputeItems(p); s._recomputeStats(p); } return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'host pair');
-      await B.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 4000, 'client pair');
+      await A.waitFor(`return window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'a matching pair of coilguns in the host\'s meta');
+      await B.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 4000, 'a matching pair of coilguns in the client\'s meta');
       // interleave: host arms a combine while client arms a sell, then both confirm
       await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
       await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
@@ -3078,7 +3220,7 @@ if (wantCoop) {
         p0.shop.stock[0]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
         p0.shop.stock[1]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
         s._sendShop(p0); s._sendShop(p1); return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'host at cap');
+      await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'the host holding weapons equal to its weapon-slot cap');
       // simultaneous: client rerolls while the host's duplicate buy auto-combines
       await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
       await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
@@ -3578,5 +3720,7 @@ if (wantCoop) {
   }
 }
 
+assertNoNetDrops();
+assertCleanTree();
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL BROWSER TESTS PASSED');
 process.exit(failures ? 1 : 0);

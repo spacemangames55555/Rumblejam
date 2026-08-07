@@ -373,6 +373,118 @@ The tundra tiles on disk today are **placeholders** from
 `tools/gen_tundra_tiles.mjs`, built to the brief's numbers so the renderer
 could be verified before the art exists. Real art replaces the same five paths.
 
+## Regions, node trees and saves
+
+The run structure above (node map → arenas → Siege) is the **floor** layer. Above
+it sits the **world** layer: eight regions, played in order, each one a ten-node
+tree you pick five nodes through.
+
+- **`js/regions.js`** — a region is a tileset, a hazard, a population, a boss and
+  a set of numbers. Two are declared (Pacific Northwest, Central America); the
+  other six are named in `LOCKED_REGION_NAMES` and nothing more. Adding region
+  three is an entry in `REGIONS` and nothing else.
+- **`js/nodetree.js`** — five columns of two, ten nodes, mix fixed at
+  4 horde / 2 elite / 2 objective / 1 shrine / 1 cursed. Every node links to its
+  same-row successor and, at `CROSS_LINK_CHANCE` (0.45), to the other row's.
+  **Every path is exactly five nodes long by construction** — the shape cannot
+  produce a dead end or a short route, so there is nothing to validate. Shrine
+  and Cursed may not sit in column 1: the first choice should be between fights,
+  not between a fight and a free skill point.
+- **`js/saves.js`** — `localStorage`, one bundle, `SAVE_VERSION`-gated, with
+  export/import to a file. Characters carry level, points spent per skill, items,
+  their world **frontier**, and a **parked** region (the tree they were partway
+  through). `importBundle()` refuses a malformed bundle by name rather than
+  half-loading it.
+
+**The frontier rule.** A character advances only by clearing the region at their
+own frontier. Clearing *below* it is a replay and changes nothing; being carried
+*above* it by a friend grants loot and XP but no world progress. Tested from all
+three sides, because a rule tested from one side is a rule that holds in one
+direction.
+
+`DEPTH_MULT_PER_COLUMN` (0.08) escalates enemy stats across a region's five
+columns and resets each region — that is the map-depth axis, not the world axis.
+
+**Not built yet, deliberately:** the world-map screen, both regions' actual
+content (tilesets, twelve enemies, two hazards, two cursed modifiers, two
+bosses), the difficulty setting, and runtime behaviour for the Shrine and Cursed
+node types. Those are typed and reachable; they are not implemented. `contentReady`
+on each region says so in code rather than in a comment.
+
+## Skill trees
+
+Weapons are gone. A character's output is its **skill trees** — two per class,
+ten skills each, points spendable freely across both. Slots unlock by level at
+`SLOT_LEVELS` (1, 5, 12, 21, 31, 42, 54, 66) to a hard ceiling of eight.
+
+Skills are **auto-triggered**: each slotted skill has a trigger (`NEAREST`,
+`PROXIMITY`, `ON_DODGE`, `MOVEMENT`, `TARGET_THRESHOLD`, …) evaluated on a 10 Hz
+tick, and a body composed from ten primitives plus riders. There is no per-skill
+code: a new skill is a data entry.
+
+Four trees ship: Necromancer **Dark Matter** and **Marrow**, Samurai **Armor**
+and **Tactics**. `js/skills.js` asserts the tree invariants **at import and
+throws** — a tree that violates one is not a warning to triage, it is a build
+that cannot answer the design question.
+
+**Class engines.** A class exposes one number that its skills read:
+`scaleWith: '<engine>'` plus `scalePer`, resolved by `engineScale()` in
+`js/compose.js`, which knows no engine by name. The Samurai's is **Footing**.
+Marrow uses a second engine (`armor`) through the same hook with no new code.
+
+### Footing — the tuning constants
+
+Authoritative values live in `TUNING` in `js/content/skills/samurai_armor.js`.
+There is no GDD file in this repository — it is referenced by section number
+(§7.5.3, §2.2) but not tracked here, so this table is the in-repo record.
+
+| constant | value | what it is |
+|---|---|---|
+| `footingTickMs` | 500 | one stack per half-second stationary |
+| `FOOTING_MAX_STACKS` | 10 | **hard cap, and no skill may raise it** |
+| `footingShieldPerStack` | 4 | absorb pool per stack |
+| `footingGritPerStack` | 2 | Grit per stack |
+| `footingGraceMs` | **400** | movement shorter than this does not drop the stance |
+| `footingGraceRefill` | **1.0** | how fast standing still repays the grace budget |
+
+**Footing grants Grit and an absorb pool. Not Reflex, and not max Vitality.**
+Both were removed for the same class of reason. Vitality meant breaking stance
+clamped current HP down, so a Samurai lost health for dodging by an amount
+unrelated to the attack. Reflex meant the stance granted dodge *chance*, which
+contradicts the design outright — the Samurai has surrendered the ability to
+dodge anything telegraphed — and it was most of why holding beat sidestepping on
+both axes.
+
+The cap is enforced in the engine (`tickFooting`), not at the call site. It was
+previously a base of ten plus a rankable `+1 max stack`, which is how a designed
+ten was measured at **seventeen**, inflating every per-stack term by 70%. A cap
+a skill can raise is not a cap.
+
+### The grace window is a BUDGET, not a timer
+
+`footingGraceMs` is not a countdown reset by standing still. Movement time
+accumulates; standing still decays it at `footingGraceRefill × dt`. The stance
+drops when the budget is spent.
+
+**This distinction is the whole design.** A timer reset by standing still lets a
+player cross the entire map at full stance in 300 ms hops — move 300 ms, stop
+one frame, repeat — which defeats the instant drop's purpose by a different
+route. `tools/footing_grace_test.mjs` gates that case explicitly.
+
+400 ms is chosen against the attacks, not picked round: the shortest wind-up on
+the roster is 400 ms (Obsidian Lancer), so one sidestep out of the *fastest*
+committed zone fits inside the window. Crossing a room does not.
+
+Why it exists: criterion 13 measured a holder taking **×0.37–×0.40** the damage
+of a correct sidestepper, and that ratio did not move for any dial tried — per-
+stack Grit, removing Reflex entirely, tripling telegraph density. The
+insensitivity was the evidence. The problem was never the size of a stack; it
+was that a 200 ms sidestep cost the *whole* stance while the rebuild is slower
+than the next commit arrives, so a bot that dodged correctly lived permanently
+at 0–3 stacks and never had a stance to make a decision about. With the window,
+the sidestepper ends a 90 s fight at a **capped** stance having dodged 85
+attacks, and the gap is **×0.60**.
+
 ## Adding art (sprites)
 
 Every entity keeps its Canvas-primitive draw as a fallback, so the game runs
@@ -528,6 +640,34 @@ never loads them:
 - `node tools/gen_prompts.mjs [--check]` — assembles `docs/prompts.json` from
   `docs/silhouettes.json` and the style clause in `docs/STYLE_ANCHOR.md`.
   Refuses to emit while the anchor is `PENDING`.
+- `node tools/skill_sweep.mjs [--verbose]` — drives **every** skill through the
+  live sim: arranges the world so its trigger genuinely holds, runs real ticks,
+  and requires an observable effect. Also fails when a primitive or rider is
+  defined but unreachable. Confirming a skill exists in a data file proves
+  nothing; the source project shipped 19 skill kinds wired to nothing.
+- `node tools/telegraph_test.mjs` — the telegraph state machine through live
+  ticks, every case staged from four seeds at four positions. Includes the
+  siege-boss regression (known defect #5) and the `windupMs` reaction floor.
+- `node tools/region_test.mjs` — node-tree distribution over 1000 trees, the
+  frontier rule from three sides, cross-tree point spending down two full
+  prerequisite chains, and a save round trip **through a real file** plus five
+  malformed bundles that must be refused by name.
+- `node tools/phase2_gates.mjs` — the two gate criteria that ask for numbers
+  rather than pass/fail: trigger-tick cost at phase-2 loadout density (both
+  configurations measured in one process against an identical world), and
+  whether Footing's damage scaling makes holding stance dominant. Prints tables;
+  fails only on the eval budget and the frame share.
+- `node tools/determinism_test.mjs` — same seed, same run. Six configurations
+  compare the **whole snapshot** every 60 ticks across two runs; a negative
+  control proves a *different* seed differs; a lint keeps `Math.random()` out of
+  all 13 simulation modules. Was KNOWN-DEFECTS #1 — 43 calls, not the one the
+  entry named.
+- `node tools/footing_grace_test.mjs` — the movement grace window, five
+  behaviours: sidestep keeps the stance, reposition drops it, **wiggling drops
+  it**, settling recharges the window, and moving never grows the stance.
+- `node tools/snapstate_test.mjs` — every case runs with `pushEvent` replaced by
+  a sink, so **no event is delivered at all**, and the snapshot must still carry
+  everything a client cannot play without.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
@@ -538,21 +678,43 @@ never loads them:
 
 ## Known defects
 
-Three are recorded, reproducible where possible, and deliberately not fixed:
-[`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).
+Recorded, reproducible where possible, and deliberately not fixed:
+[`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md). Read the file before
+re-diagnosing any of them.
 
-1. **`rushMove()` draws from `Math.random()`**, so a fight cannot be reproduced
-   from its seed — two identical-seed runs part company around tick 400. It
-   cannot desync co-op (the sim is host-authoritative) but it means "it happened
-   on seed ABCDEFG" is not a reproduction.
+**Open — and two of the four touch co-op:**
+
 2. **Regeneration scales off `maxHp`**, so any entity carrying a large HP
    multiplier can heal faster than a party can damage it. The Bounty Hunt case
    is fixed with a damage lockout, but **the root cause is treated, not
-   removed** — read entry 2 before adding the next 10×-HP entity.
+   removed** — read the entry before adding the next 10×-HP entity.
 3. **A `shielded` bounty mark stalled at 4p, twice, unexplained.** Deliberately
    not folded into entry 2.
+8. **Client input has no delivery guarantee, no repeating channel, and nothing
+   to heal from.** Everything a client does — character pick, ready, node tap,
+   buy — leaves by `ClientTransport.send`. Host→client state was fixed (moved
+   onto the 15 Hz snapshot, plus a 3 Hz lobby heartbeat); **this is the other
+   direction**, and it is why `client ready` still fails intermittently in
+   `browser_test.mjs --coop`. Every skipped send is now logged and counted, so
+   the next occurrence is evidence rather than another seven-run hunt.
+9. **Room registration fails against the local relay**, before any peer exists —
+   roughly one co-op run in three or four never gets a room code. Undiagnosed;
+   nothing ruled out. Recorded separately so it stops being absorbed into "co-op
+   is flaky", which is how three distinct failures wore one description.
 
-Read the file before re-diagnosing any of them.
+**Resolved:**
+
+1. **`Math.random()` in the simulation** broke same-seed reproduction. The entry
+   named `rushMove()`; it was **43 calls** across four modules. All route
+   through `Sim.rng` now, and `node tools/determinism_test.mjs` proves six
+   configurations are byte-identical run to run, with a negative control and a
+   lint.
+
+Closed entries are kept when the failure shape recurs: the solo-touch boon
+softlock (#4), the null `def` that made every siege crash the host the moment
+its boss spawned (#5), and the shop stocking weapons after weapons were removed
+(#6). Entry **#7 is a retraction** — a "destructive test" that turned out to be
+me committing the test's own fixtures — kept because the mistake is instructive.
 
 ## Decisions (where the brief was silent or conflicted)
 

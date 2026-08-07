@@ -21,19 +21,61 @@
 // authored for this patch and is the most likely thing here to need revision.
 
 export const TUNING = {
-  // the engine
+  // ---- the engine ----
   footingTickMs: 500,          // one stack per half-second stationary
-  footingMaxStacks: 10,
+
+  // THE HARD CAP. Ten, and no skill may raise it. It was previously a base of
+  // ten plus a rankable "+1 max stack" from Set Stance, which is why criterion
+  // 13 measured a Samurai standing at SEVENTEEN stacks against a designed ten —
+  // and every per-stack term was therefore 70% larger than the design said. The
+  // clamp now lives in the engine (js/skillsim.js tickFooting) rather than at
+  // the call site, because a cap a skill can raise is not a cap.
+  FOOTING_MAX_STACKS: 10,
+
+  // THE MOVEMENT GRACE WINDOW. Movement shorter than this does not drop the
+  // stance; movement longer than it drops all of it.
+  //
+  // Criterion 13 measured the holder taking a THIRD of what a correct
+  // sidestepper takes — x0.37 to x0.40 — and that ratio did not move for any
+  // dial tried, including halving the per-stack grit, removing Reflex entirely
+  // and tripling telegraph density. That insensitivity is what identified the
+  // cause: it was never the size of a stack, it was that a 200ms sidestep cost
+  // the WHOLE stance and the rebuild is slower than the next commit arrives. A
+  // bot that dodges correctly lived permanently at 0-3 stacks — it never had a
+  // stance to make a decision about.
+  //
+  // 400ms is chosen against the attacks: the shortest wind-up on the roster is
+  // 400ms (obsidian lancer), so one sidestep out of the fastest committed zone
+  // fits inside the window. Crossing a room does not.
+  footingGraceMs: 400,
+
+  // ...AND THE GRACE IS A BUDGET, NOT A TIMER RESET BY STANDING STILL FOR ONE
+  // TICK. Accumulated movement decays while stationary at this multiple of real
+  // time. Without it, "move 300ms, stop one tick, move 300ms" keeps a full
+  // stance across the whole map, which is repositioning for free — the exact
+  // thing the instant drop existed to prevent.
+  footingGraceRefill: 1.0,
+
   // Absorb per stack, NOT max HP — see engineStatBonus in js/skillsim.js for
   // why. Roughly the old per-stack vitality, so a full stance is worth about
   // what it was worth before, without taking current HP when it breaks.
   footingShieldPerStack: 4,
   footingGritPerStack: 2,
-  footingDodgePerStack: 1.2,
+  // NO REFLEX TERM. Footing grants vitality and grit, and nothing else.
+  //
+  // It used to grant 1.2% dodge per stack, which at the measured 17 stacks was
+  // 20% Reflex — and that is most of why holding stance beat dodging on BOTH
+  // axes in criterion 13. It also directly contradicted the design: GDD §7.5.3
+  // says the Samurai "has surrendered his ability to dodge anything
+  // telegraphed", and a per-stack dodge chance is the exact opposite of
+  // surrendering it. A spec error, not a tuning value, so it is deleted rather
+  // than reduced.
+
   // tier 1 — Cross Guard Cut
   cutDamage: 9, cutReach: 90, cutArc: 1.6, cutCd: 800,
-  // tier 2 — Set Stance (passive)
-  stanceBonusStacks: 1, stanceAccrualPct: 0.20,
+  // tier 2 — Set Stance (passive). No max-stack bonus any more (see the cap
+  // above); it is now purely an accrual passive, and rank-1-only per §1.3.
+  stanceAccrualPct: 0.20,
   // tier 3 — Iron Sleeve
   sleeveAmount: 14, sleeveDuration: 4000, sleeveCd: 5000, sleevePerFooting: 0.12,
   // tier 4 — Sweeping Guard
@@ -79,7 +121,11 @@ export const SAMURAI_ARMOR = [
     desc: 'You settle faster, and hold more.',
     type: 'passive', domain: 'physical', prereq: 'sam_cross_guard',
     trigger: null, cooldown: 0, compose: [],
-    passive: { footingMaxBonus: T.stanceBonusStacks, footingAccrualPct: T.stanceAccrualPct },
+    passive: { footingAccrualPct: T.stanceAccrualPct },
+    // §1.3: a passive that grants neither damage nor duration is an UNLOCK, not
+    // an investment. Ranking this bought nothing but the max-stack bonus that
+    // §1.2 deleted, and the accrual percentage is not a ranked term.
+    maxRank: 1,
     ranks: R,
   },
   {
@@ -136,6 +182,8 @@ export const SAMURAI_ARMOR = [
     type: 'passive', domain: 'physical', prereq: 'sam_rebuke',
     trigger: null, cooldown: 0, compose: [],
     passive: { footingGritBonus: T.weightGritPerStack },
+    // §1.3: grants no damage and no duration, so a second point buys nothing.
+    maxRank: 1,
     ranks: R,
   },
   {

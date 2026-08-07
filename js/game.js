@@ -3,7 +3,7 @@
 // single source of truth. Solo play runs this exact code with one player.
 
 import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, SCALING_RATES } from './config.js';
-import { Rng, subRng } from './rng.js';
+import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
 import { buildArena, waveConfig, PROFILES } from './arenas.js';
@@ -19,6 +19,10 @@ import { EnemyGrid } from './triggers.js';
 import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES } from './content/enemies.js';
+import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
+import { nodePopulation, nodeModifiers } from './nodebehaviour.js';
+import { REGION_BY_INDEX, depthMult } from './regions.js';
+import { difficultyOf } from './worldmap.js';
 import { BOSS_BY_FLOOR } from './content/bosses.js';
 import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
@@ -49,6 +53,24 @@ const TIER_WEIGHTS = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 
 export class Sim {
   constructor({ seed, party }) {
     this.seed = seed >>> 0;
+
+    // THE SIM STREAM. Every incidental roll the simulation makes — spawn
+    // jitter, cooldown scatter, proc chances, dodge rolls, material scatter,
+    // wander points — comes from HERE, not from this.rng.float().
+    //
+    // KNOWN-DEFECTS #1 named rushMove() as the one offender. It was 43 of them
+    // across game.js, entities/enemies.js, telegraphs.js and traits-toh.js, and
+    // the consequence was not academic: every A/B comparison in this patch
+    // needed three runs to say anything, because two runs of the same seed
+    // stopped matching partway through the first fight. "It happened on seed
+    // ABCDEFG" was not a reproduction.
+    //
+    // One stream rather than named sub-streams on purpose. Sub-streams keep
+    // systems from perturbing each other, which matters for CONTENT rolls
+    // (layout, shop stock, offers) and those keep theirs. These are per-tick
+    // incidentals whose order is already fully determined by the tick order;
+    // a shared stream is both simpler and exactly as reproducible.
+    this.rng = new Rng(hashString(`sim:${this.seed}`));
     this.W = 1280; this.H = 720; // placeholder until the first arena sets real dims
     this.tickNum = 0;
     this.time = 0;
@@ -458,11 +480,24 @@ export class Sim {
     return [...this.floor.nodes[this.currentNode].edges];
   }
 
-  _mapEvent() {
-    this.pushEvent({
-      k: 'map', layout: serializeMap(this.floor), floorNum: this.floorNum,
+  // THE MAP IS STATE, NOT AN ANNOUNCEMENT. Built here and read by BOTH the
+  // event (which still fires, for the floor banner and the overlay-closing that
+  // are genuinely one-shot) and every snapshot while the party is on the map.
+  //
+  // The standing rule: if losing it breaks the game, it is state and rides the
+  // snapshot; if losing it is cosmetic, it is an event and may be dropped. This
+  // was delivered only as an event, so a client whose channel was not open at
+  // that instant sat on a blank screen forever — receiving 30 map-mode
+  // snapshots, with a clean console, while the host played on.
+  _mapState() {
+    return {
+      layout: serializeMap(this.floor), floorNum: this.floorNum,
       current: this.currentNode, visited: [...this.visited], reachable: this.reachableNodes(),
-    });
+    };
+  }
+
+  _mapEvent() {
+    this.pushEvent({ k: 'map', ...this._mapState() });
   }
 
   // Any player taps a reachable node → 4s consent countdown on every screen.
@@ -608,12 +643,31 @@ export class Sim {
       p.relocT = 0; p.carrying = null;
       this.relocateStructures(p, { all: true, instant: true });
     }
-    this.pushEvent({
-      k: 'arena', nodeId: node.id, kind: node.kind, template: node.template, biome: this.biome,
+    // Same rule as the map: the room a client is standing in is state. The
+    // event still fires for its banner; the geometry rides every snapshot.
+    // `obstacles` is rebuilt each call rather than cached, so the siege
+    // collapse — which used to need its own one-shot `obstacles` event to
+    // mutate the client's copy — is simply carried by the next snapshot.
+    // `biome` is deliberately NOT in this block. The block rides every snapshot;
+    // the biome is a static per-floor cosmetic, and by the standing rule — if
+    // losing it breaks the game it is state, if losing it is cosmetic it is an
+    // event — it is an event. A client that misses it draws the flat floor,
+    // which is degraded, not broken. Putting it in `st` cost per-frame
+    // bandwidth for a string that never changes, and sim_test caught it.
+    this._arena = {
+      nodeId: node.id, kind: node.kind, template: node.template,
       name: arena.name, w: arena.w, h: arena.h,
-      obstacles: this._snapObstacles(),
       hazards: this._serializeHazardDefs(),
-    });
+    };
+    this.pushEvent({ k: 'arena', ...this._arena, biome: this.biome, obstacles: this._snapObstacles() });
+  }
+
+  // The arena block for the snapshot. Obstacles are read live so a wall that
+  // changes mid-siege reaches every client on the next snapshot whether or not
+  // the `obstacles` event survived.
+  _arenaState() {
+    if (this.phase !== 'arena' || !this._arena) return null;
+    return { ...this._arena, obstacles: this._snapObstacles() };
   }
 
   _serializeHazardDefs() {
@@ -668,8 +722,22 @@ export class Sim {
       if (this.enemyPool.count + this.spawnQueue.length >= Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10)) break;
       w.acc -= 1;
       const prof = this.profile || {};
-      const table = FLOOR_TABLES[this.floorNum - 1];
-      let id = table[Math.floor(this.waveRng.float() * table.length)];
+      // REGION POPULATIONS OVERRIDE THE FLOOR TABLE. `this.region` is the
+      // region id the party entered from the world map; when it is set, waves
+      // draw from that region's weighted population — and from its HEAVY half
+      // on an elite node — instead of the base twelve. That is what makes a
+      // region a place rather than a skin, and it is what carries the 50%
+      // telegraph density into real rooms rather than only into the F7 pit.
+      // `table` stays in scope: the profile levers and the per-type spawn caps
+      // below both fall back to it. Scoping it inside the `if` compiled fine
+      // and threw `table is not defined` on the first capped spawn — caught by
+      // the telegraph suite, not by node --check, which is the whole argument
+      // for running the suites rather than the parser.
+      const regionPop = this._regionPick();
+      const table = regionPop
+        ? (REGION_ENEMIES[this.region] ? REGION_ENEMIES[this.region].enemies.map(e => e.id) : FLOOR_TABLES[this.floorNum - 1])
+        : FLOOR_TABLES[this.floorNum - 1];
+      let id = regionPop || table[Math.floor(this.waveRng.float() * table.length)];
       let mortar = false, puddle = false;
       // profile levers shape the roll: flankers become wave citizens,
       // artillery turns Lobbers into mortars, chaff picks up death-puddles
@@ -809,7 +877,7 @@ export class Sim {
   _openSpot(x, y) {
     // nudge a point out of any obstacle
     for (let tries = 0; tries < 20 && this._inObstacle(x, y, 60); tries++) {
-      x += (Math.random() - 0.5) * 300; y += (Math.random() - 0.5) * 300;
+      x += (this.rng.float() - 0.5) * 300; y += (this.rng.float() - 0.5) * 300;
       x = clamp(x, WALL + 80, this.W - WALL - 80); y = clamp(y, WALL + 80, this.H - WALL - 80);
     }
     return { x, y };
@@ -958,7 +1026,7 @@ export class Sim {
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       domain: def.domain || null,
       telState: 0, telT: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
-      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * Math.random() : 0,
+      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -1217,10 +1285,19 @@ export class Sim {
       mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
-      t: Math.random(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
+      t: this.rng.float(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
-      fireT: 0.8 + Math.random(), healTarget: null, brood: null, shape: def.shape, color: def.color,
+      fireT: 0.8 + this.rng.float(), healTarget: null, brood: null, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
+      // THE TELEGRAPH MACHINE, RESET. Same recycling hazard as the objective
+      // flags below, and it shipped: only the siege boss cleared these, so an
+      // ordinary chaff slot could inherit telState=WINDUP from the slabjaw that
+      // held it last. tickTelegraphs skips it (no def.telegraph) and it sits in
+      // WINDUP forever — until a stun rider calls cancelTelegraph on it, which
+      // reads e.def.telegraph.recoverMs and throws. Found by Unsheathed's stun
+      // landing on a recycled skulker.
+      telState: 0, telT: 0, telZone: null, telCaught: null,
+      telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       // pressure-profile variants (patch 9)
       mortar: !!opts.mortar,   // Lobber artillery: telegraphed shells on your position
       puddle: !!opts.puddle,   // chaff that leaves an acid puddle on death
@@ -1510,8 +1587,8 @@ export class Sim {
     const shells = 3 * this.curseBarrage;
     for (let i = 0; i < shells; i++) {
       const t = live[i % live.length];
-      const x = clamp(t.x + (Math.random() - 0.5) * 320, WALL + 40, this.W - WALL - 40);
-      const y = clamp(t.y + (Math.random() - 0.5) * 320, WALL + 40, this.H - WALL - 40);
+      const x = clamp(t.x + (this.rng.float() - 0.5) * 320, WALL + 40, this.W - WALL - 40);
+      const y = clamp(t.y + (this.rng.float() - 0.5) * 320, WALL + 40, this.H - WALL - 40);
       this.addTelegraph({
         shape: 'circle', x, y, r: 74, dur: 1.5 + i * 0.12,
         boom: { dmg: Math.round(12 * Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1)), radius: 74 },
@@ -1795,7 +1872,7 @@ export class Sim {
     if ((agg.critVsFullHp || t.key === 'executioner' || t.key === 'contract') && target.hp >= target.maxHp) crit = true;
     // Jester: trait-internal odds that ramp per attack and reset when a crit lands
     if (t.key === 'crit_ramp') {
-      if (!crit && Math.random() * 100 < p.jesterOdds) crit = true;
+      if (!crit && this.rng.float() * 100 < p.jesterOdds) crit = true;
       p.jesterOdds = crit ? 0 : Math.min(t.max, p.jesterOdds + t.per);
     }
     // Blood Dance rewards committing to a slow weapon
@@ -1940,13 +2017,13 @@ export class Sim {
     // character trait payloads
     if (t.key === 'burn_attacks') this._applyBurn(e, this._attuned(p, t.dps), t.dur, p);
     if (t.key === 'slow_attacks') this._applySlow(e, t.mult, t.dur, p);
-    if (t.key === 'chain_attacks' && Math.random() < t.chance) {
+    if (t.key === 'chain_attacks' && this.rng.float() < t.chance) {
       this._chainLightning(e, ctx, { count: 1, range: t.range, factor: t.factor });
     }
     // item payloads
-    for (const b of p.hookAgg.burnOnHit) if (Math.random() < b.chance) this._applyBurn(e, this._attuned(p, b.dps), b.duration, p);
-    for (const s of p.hookAgg.chillOnHit) if (Math.random() < s.chance) this._applySlow(e, s.mult, s.duration, p);
-    for (const c of p.hookAgg.chainOnHit) if (Math.random() < c.chance) {
+    for (const b of p.hookAgg.burnOnHit) if (this.rng.float() < b.chance) this._applyBurn(e, this._attuned(p, b.dps), b.duration, p);
+    for (const s of p.hookAgg.chillOnHit) if (this.rng.float() < s.chance) this._applySlow(e, s.mult, s.duration, p);
+    for (const c of p.hookAgg.chainOnHit) if (this.rng.float() < c.chance) {
       const near = this._nearestEnemyExcept(e.x, e.y, c.range, e);
       if (near) {
         this.fx.beams.push({ x1: e.x, y1: e.y, x2: near.x, y2: near.y, color: '#4fd8eb' });
@@ -2159,8 +2236,8 @@ export class Sim {
     if (killer && killer.stats) tohOnKill(this, killer, e);
     // drops
     let mats = objectiveKillPays(this, e) ? e.mats * this.greedMats : 0;
-    if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && Math.random() < killer.hookAgg.doubleMaterials) mats *= 2;
-    for (let i = 0; i < mats; i++) this._dropMaterial(x + (Math.random() * 30 - 15), y + (Math.random() * 30 - 15));
+    if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && this.rng.float() < killer.hookAgg.doubleMaterials) mats *= 2;
+    for (let i = 0; i < mats; i++) this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15));
     // killer hooks & traits
     if (killer && killer.stats) {
       killer.kills++;
@@ -2172,7 +2249,7 @@ export class Sim {
       if (killer.hookAgg.killHeal > 0) this._heal(killer, killer.hookAgg.killHeal);
       if (killer.hookAgg.critAfterKill) killer.critArmed = true;
       for (const ke of killer.hookAgg.killExplode) {
-        if (Math.random() < ke.chance) {
+        if (this.rng.float() < ke.chance) {
           this.fx.booms.push({ x, y, r: ke.radius });
           this._areaDamageEnemies(x, y, ke.radius, Math.max(1, Math.round(this._attuned(killer, ke.damage))), killer, { exclude: e });
           this.pushEvent({ k: 'sfx', s: 'boom' });
@@ -2203,7 +2280,7 @@ export class Sim {
       }
       if (e.def.behavior === 'splitter' && !e.mini) {
         for (let i = 0; i < e.def.splitInto; i++) {
-          this.spawnEnemyById(e.def.id, x + (i ? 18 : -18), y + (Math.random() * 20 - 10), { mini: true, noMats: false });
+          this.spawnEnemyById(e.def.id, x + (i ? 18 : -18), y + (this.rng.float() * 20 - 10), { mini: true, noMats: false });
         }
       }
       if (e.def.behavior === 'bomber' && !e.fusing) {
@@ -2266,7 +2343,7 @@ export class Sim {
     raw *= this.enemyBuff; // the siege's ward pylon empowers everything
     const t = p.char.trait;
     // Reflex: dodge chance (capped in recompute); every on-dodge effect keys off this
-    if (!opts.shared && Math.random() * 100 < p.stats.reflex) {
+    if (!opts.shared && this.rng.float() * 100 < p.stats.reflex) {
       this.fx.hits.push({ x: Math.round(p.x), y: Math.round(p.y - 24), a: 0, c: 2 }); // "dodge" popup
       if (t.key === 'slipstream') { p.tempoBuffT = t.dur; p.nextCrit = true; }
       if (t.key === 'afterimage') {
@@ -2663,7 +2740,7 @@ export class Sim {
 
   _dropMaterial(x, y, value = 1) {
     if (this.pickups.length >= 240) {
-      const m = this.pickups[(Math.random() * this.pickups.length) | 0];
+      const m = this.pickups[(this.rng.float() * this.pickups.length) | 0];
       m.v += value;
       return;
     }
@@ -2699,7 +2776,7 @@ export class Sim {
 
   _collectMaterial(p, v) {
     this.pushEvent({ k: 'sfx', s: 'pickup' });
-    if (p.hookAgg.pickupBonusChance > 0 && Math.random() < p.hookAgg.pickupBonusChance) v += 1;
+    if (p.hookAgg.pickupBonusChance > 0 && this.rng.float() < p.hookAgg.pickupBonusChance) v += 1;
     p.materials += v;
     p.matsCollected += v;
     const xpGain = v * (1 + p.hookAgg.xpBonus / 100);
@@ -2730,7 +2807,7 @@ export class Sim {
     for (const pt of p.hookAgg.pickupTempo) {
       if (p.frenzy.length < (pt.maxStacks || 5)) p.frenzy.push({ tempo: pt.tempo, t: pt.duration });
     }
-    for (const mh of p.hookAgg.materialHeal) if (Math.random() < mh.chance) this._heal(p, mh.amount);
+    for (const mh of p.hookAgg.materialHeal) if (this.rng.float() < mh.chance) this._heal(p, mh.amount);
     p.metaDirty = true;
   }
 
@@ -2973,7 +3050,14 @@ export class Sim {
     // rule, Quartermaster is all-weapon). Locked slots are never replaced.
     if (t.key === 'legendary_shop') return;
     const swappable = s => !s.locked && !s.sold;
-    const needW = t.key === 'arsenal_doctrine' ? 0 : (shop.black ? 2 : (this.floorNum === 1 ? 2 : 1));
+    // A GUARANTEE OF SOMETHING UNBUYABLE IS NOT A GUARANTEE. These minimums
+    // exist so a kit is never starved of weapons; with no weapon slots on the
+    // roster they instead forced 1-2 dead cards into every shop and 2 into
+    // every Black Market, which is how 400 of 400 measured shops ended up
+    // stocking at least one card nobody could buy.
+    const needW = !this._stocksWeapons(p) ? 0
+      : t.key === 'arsenal_doctrine' ? 0
+      : (shop.black ? 2 : (this.floorNum === 1 ? 2 : 1));
     let weapons = shop.stock.filter(s => s.kind === 'weapon').length;
     for (let i = shop.stock.length - 1; i >= 0 && weapons < needW; i--) {
       const s = shop.stock[i];
@@ -2991,6 +3075,50 @@ export class Sim {
     }
   }
 
+  // Weighted pick from the current region's population, honouring the node
+  // type. Returns null when the party is not in a region, so the base floor
+  // tables still drive everything that is not region play.
+  _regionPick() {
+    if (!this.region) return null;
+    const pop = nodePopulation(this.region, this.nodeType || 'horde');
+    if (!pop || !pop.length) return null;
+    const total = pop.reduce((a, x) => a + x.w, 0);
+    let roll = this.waveRng.float() * total;
+    for (const x of pop) { roll -= x.w; if (roll <= 0) return x.def.id; }
+    return pop[pop.length - 1].def.id;
+  }
+
+  // The combined multipliers for the room being fought: node type first, then
+  // the party's difficulty. Difficulty does NOT touch XP — see worldmap.js.
+  regionFightMods() {
+    const region = REGION_BY_INDEX[this.regionIndex] || null;
+    const n = nodeModifiers(this.nodeType || 'horde', region);
+    const d = difficultyOf(this.difficulty);
+    return {
+      count: n.count * d.density,
+      hp: n.hp * d.hp,
+      dmg: n.dmg * d.dmg,
+      gold: n.gold * d.gold,
+      cursed: n.cursed,
+      depth: depthMult(this.regionColumn || 1),
+    };
+  }
+
+  // CAN THIS PLAYER STOCK A WEAPON AT ALL? Derived from the player, never from
+  // a parallel flag. patch-trigger-core sets weaponSlots to 0 for everybody, so
+  // this is false for the whole roster today — and a shop offering a card that
+  // nobody can buy is a bug, not a design question. Reading the real number
+  // rather than a WEAPONS_REMOVED constant means the shop is automatically
+  // right again the day anything grants a slot back, with no second place to
+  // remember to update.
+  //
+  // Every weapon branch below consults this. Trait shops built entirely around
+  // weapons — the Quartermaster's all-weapon rack, the Overseer's summon rack,
+  // the Gilded One's top-tier shelf — fall through to items from the same pool.
+  // No new item category: the stat/modifier split is phase 4 and is not being
+  // pulled forward to paper over this.
+  _stocksWeapons(p) { return p.weaponSlots > 0; }
+
   // force: 'weapon' | 'rareplus' — used by the stock guarantees
   _rollStockEntry(p, rng, force = null) {
     const t = p.char.trait;
@@ -3001,7 +3129,8 @@ export class Sim {
     // goods (legendary items, or weapons at the floor's top tier); the
     // Overseer's weapon rolls come from the summon rack (turrets/drones)
     const weaponChance = t.key === 'overseer' ? 0.5 : CONFIG.SHOP_WEAPON_CHANCE;
-    const wantWeapon = force === 'weapon' ? true
+    const wantWeapon = !this._stocksWeapons(p) ? false
+      : force === 'weapon' ? true
       : force === 'rareplus' ? false
       : t.key === 'arsenal_doctrine' ? true
       : rng.chance(weaponChance);
@@ -3135,8 +3264,8 @@ export class Sim {
     const sd = def ? def.summon : { hp: 25, dmg: 0, cd: 1, range: 0 };
     this.summons.push({
       owner: p.idx, weaponId, weaponUid, tier, deployT: 0, type: forceType || (sd.type || 'turret'),
-      x: p.x + (Math.random() * 60 - 30), y: p.y + (Math.random() * 60 - 30),
-      hp: 1, maxHp: 1, cd: 0, orbitA: Math.random() * 6.28, dead: false, aimA: 0,
+      x: p.x + (this.rng.float() * 60 - 30), y: p.y + (this.rng.float() * 60 - 30),
+      hp: 1, maxHp: 1, cd: 0, orbitA: this.rng.float() * 6.28, dead: false, aimA: 0,
     });
     const s = this.summons[this.summons.length - 1];
     if (s.type === 'beast') initBeast(this, s);
@@ -3531,9 +3660,9 @@ export class Sim {
         if (this.phase !== 'arena') break;
         const table = FLOOR_TABLES[this.floorNum - 1];
         for (let i = 0; i < 50; i++) {
-          const pos = { x: WALL + 40 + Math.random() * (this.W - 2 * WALL - 80), y: WALL + 40 + Math.random() * (this.H - 2 * WALL - 80) };
+          const pos = { x: WALL + 40 + this.rng.float() * (this.W - 2 * WALL - 80), y: WALL + 40 + this.rng.float() * (this.H - 2 * WALL - 80) };
           if (this._inObstacle(pos.x, pos.y, 20)) continue;
-          this.spawnEnemyById(table[(Math.random() * table.length) | 0], pos.x, pos.y, { noMats: false });
+          this.spawnEnemyById(table[(this.rng.float() * table.length) | 0], pos.x, pos.y, { noMats: false });
         }
         break;
       }
@@ -3568,10 +3697,24 @@ export class Sim {
         const cx = live.reduce((a, q) => a + q.x, 0) / live.length;
         const cy = live.reduce((a, q) => a + q.y, 0) / live.length;
         const N = CONFIG.TELEGRAPH_PIT_COUNT;
+        // The pit draws from a REGION population now, weighted by encounter
+        // weight, rather than being all-heavies. All-heavies made every point of
+        // incoming damage dodgeable, which is as unrepresentative as the base
+        // roster's 21% is in the other direction — and criterion 13 was measured
+        // in it. `this.pitRegion` selects which; default region 1.
+        const pop = REGION_ENEMIES[this.pitRegion || 'pacific_northwest'];
+        const pool = pop ? pop.enemies : null;
+        const wTotal = pool ? pool.reduce((a, e) => a + e.w, 0) : 0;
         for (let i = 0; i < N; i++) {
           const a = i / N * Math.PI * 2;
           const r = CONFIG.TELEGRAPH_PIT_RING + (i % 2) * CONFIG.TELEGRAPH_PIT_STAGGER;
-          const id = i % 2 ? 'aegimand' : 'slabjaw';
+          // deterministic stratified pick: walk the weighted population so the
+          // realised mix matches the designed weights rather than sampling it
+          let id = 'slabjaw';
+          if (pool) {
+            let acc = 0; const target = ((i + 0.5) / N) * wTotal;
+            for (const e of pool) { acc += e.w; if (target <= acc) { id = e.id; break; } }
+          }
           this.spawnEnemyById(id, clamp(cx + Math.cos(a) * r, WALL + 40, this.W - WALL - 40),
             clamp(cy + Math.sin(a) * r, WALL + 40, this.H - WALL - 40), { noMats: true });
         }
@@ -3612,7 +3755,48 @@ export class Sim {
         tohState(this, p)]),
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
       beams: this.activeBeams,
-      boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp } : null,
+      // `phase2` rides here rather than only in the one-shot `bossPhase` event.
+      // The event still fires for the ENRAGED banner and the roar; the FACT of
+      // the enrage is state, and a client that missed it was fighting a boss it
+      // believed was still in phase 1.
+      boss: this.boss ? { name: this.boss.bossDef.name, hp: this.boss.hp, max: this.boss.maxHp, phase2: !!(this.boss.bs && this.boss.bs.phase2) } : null,
+
+      // ---- STATE THAT USED TO TRAVEL ONLY AS A ONE-SHOT EVENT ----
+      //
+      // The rule: if losing it breaks the game it is state and rides the
+      // snapshot; if losing it is cosmetic it is an event and may be dropped.
+      // Everything in `st` failed that test as an event — a peer whose channel
+      // was not open at the moment it fired lost it permanently, silently.
+      //
+      // Only the block for the CURRENT PHASE is carried, so the map costs
+      // nothing during a fight and the arena costs nothing on the map screen.
+      st: {
+        map: this.phase === 'map' ? this._mapState() : null,
+        arena: this._arenaState(),
+        // Pending picks. A lost `boon`/`offer`/`treasure` costs a player their
+        // progression; a lost `boonDone`/`offerDone`/`treasureDone` SOFTLOCKS
+        // them behind a panel with no exit — that is closed defect #4, and it
+        // was one dropped event away from happening again by a different route.
+        // Presence here is the truth: the client opens when a pick appears and
+        // closes when it goes away, instead of trusting two edges to arrive.
+        pend: this.players.filter(p => !p.gone).map(p => [
+          p.idx,
+          p.pendingOffer ? 1 : 0,
+          p.treasureOffer ? 1 : 0,
+          p.boonOffer ? 1 : 0,
+        ]),
+        // The run being over is the most load-bearing edge there is: a client
+        // that missed `end` sits in a dead run with no results and no way out.
+        over: this.over ? 1 : 0,
+        // LOADOUT AND UNSPENT POINTS. These were on no channel at all: getMeta
+        // still ships `weapons`, and patch-trigger-core replaced weapons with
+        // skills without ever putting the loadout on the wire. A client could
+        // not see what it had slotted, and a player who cannot see their skills
+        // cannot spend a point on one — progression, delivered by nothing.
+        // Slot ids are interned into `ldk` so eight players sharing an opener
+        // cost one copy of the string rather than eight.
+        ld: null, ldk: null,
+      },
       fx: this.fxBatch || this._emptyFx(),
       hazards: (this.hazards || []).map(h => h.type === 'spikes'
         ? ['s', r(h.x), r(h.y), r(h.w), r(h.h), h.state]
@@ -3627,6 +3811,22 @@ export class Sim {
       spirits: this.players.filter(q => !q.gone && q.spirit)
         .map(q => [r(q.spirit.x), r(q.spirit.y), +(q.spirit.t / q.spirit.dur).toFixed(2), q.idx]),
     };
+    // Loadout, interned. `ldk` is the id table for this snapshot; `ld` is one
+    // row per live player of [idx, unspentPoints, ...slotIndices], with -1 for
+    // an empty slot. Eight Samurai running the same opener pay for the string
+    // once. Measured cost of the whole `st` block is in the README.
+    {
+      const keys = [], byKey = new Map();
+      const intern = id => {
+        if (id == null) return -1;
+        let i = byKey.get(id);
+        if (i === undefined) { i = keys.length; byKey.set(id, i); keys.push(id); }
+        return i;
+      };
+      snap.st.ld = this.players.filter(p => !p.gone).map(p =>
+        [p.idx, p.skillPoints || 0, ...(p.loadout || []).map(intern)]);
+      snap.st.ldk = keys;
+    }
     // radius is derived client-side from type + elite/mini flags — not sent.
     // Interest culling: chaff farther than SNAP_CULL_R from EVERY live player
     // is off every screen (radar and edge arrows only track elites/bosses/

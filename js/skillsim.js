@@ -8,7 +8,7 @@
 // stream and render them; they never evaluate a trigger.
 
 import { EnemyGrid, triggerHolds, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
-import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage } from './compose.js';
+import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
 import { domainMult } from './domains.js';
 import { TUNING as SAM } from './content/skills/samurai_armor.js';
@@ -24,8 +24,12 @@ export function initSkillPlayer(sim, p) {
   p.skillCd = {};                    // id -> seconds remaining
   p.trigState = {};                  // id -> per-trigger memory (edge arming)
   p.trigEvents = { kill: 0, hitTaken: 0, dodgeT: -999, lastFired: null };
-  p.engines = { footing: 0 };        // readable resource state for other trees
+  // Readable resource state. Every engine in the game publishes here, and
+  // compose.js's engineScale() reads here — it knows no engine by name.
+  p.engines = { footing: 0, armor: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0 };   // passives that raise a stack's worth
   p.footingAcc = 0;
+  p.footingMove = 0;                  // grace budget: movement time, decays while still
   p.footingShield = 0;               // the stance's absorb pool (see engineStatBonus)
   p.movingT = 0;
   p.shieldT = 0; p.ward = 0; p.wardT = 0; p.wardReflect = 0; p.wardDomain = null;
@@ -85,20 +89,45 @@ export function grantSkillPoint(sim, p) {
 
 // ---------------------------------------------------------------- the engines
 
-// FOOTING. One stack per half-second stationary; the whole stack drops the
-// instant the player moves. No decay — a gradual falloff would let the Samurai
-// drift and keep the payoff, which erases the decision the engine exists for.
+// FOOTING. One stack per half-second stationary. Movement inside the grace
+// window (footingGraceMs) holds the stance without growing it; movement past it
+// drops the whole stack at once. No gradual decay — a falloff would let the
+// Samurai drift and keep most of the payoff, which erases the decision.
 function tickFooting(sim, p, dt) {
   if (!treesFor(p).includes('samurai_armor')) return;
+  // THE GRACE BUDGET. Movement time accumulates here and decays while standing
+  // still; the stance drops when the budget is spent, not the moment a key goes
+  // down. See footingGraceMs in the Armor tree's TUNING for why.
+  const grace = SAM.footingGraceMs / 1000;
+  if (p.moving) p.footingMove = (p.footingMove || 0) + dt;
+  else p.footingMove = Math.max(0, (p.footingMove || 0) - dt * SAM.footingGraceRefill);
+
   if (p.moving) {
-    // THE WHOLE STACK, INSTANTLY. No decay, no partial retention — a gradual
-    // falloff would let the Samurai drift and keep the payoff, which erases the
-    // decision. The absorb pool goes with it.
+    // Inside the window: the stance HOLDS but does not grow. A sidestep out of
+    // a committed zone keeps what you had; it does not pay you for moving.
+    if (p.footingMove < grace) { p.footingAcc = 0; return; }
+    // Past the window: the whole stack, at once. No partial falloff — a
+    // gradual decay would let the Samurai drift across a room and keep most of
+    // the payoff, which erases the decision. The absorb pool goes with it.
+    //
+    // WHY THE WINDOW EXISTS. Before it, criterion 13 at 50% telegraph density
+    // put the holder at x0.37-x0.40 damage taken against a correct sidestepper,
+    // and that ratio did not move for any dial tried. The insensitivity was the
+    // evidence: it was never the size of a stack, it was that a 200ms sidestep
+    // cost the entire stance and the rebuild is slower than the next commit
+    // arrives, so a bot that dodged correctly lived permanently at 0-3 stacks
+    // and never had a stance to make a decision about.
     if (p.engines.footing) { p.engines.footing = 0; p.footingShield = 0; sim._recomputeStats(p); }
     p.footingAcc = 0;
     return;
   }
-  const maxStacks = SAM.footingMaxStacks + passiveSum(p, 'footingMaxBonus');
+  // THE CAP IS THE ENGINE'S, AND NOTHING RAISES IT. This read
+  // `SAM.footingMaxStacks + passiveSum(p, 'footingMaxBonus')`, so Set Stance's
+  // rankable +1 pushed a designed ten to a measured seventeen and inflated
+  // every per-stack term with it. `footingMaxBonus` is deliberately not summed
+  // here any more: if a future skill declares one it does nothing, which is the
+  // correct outcome for a passive trying to raise a hard cap.
+  const maxStacks = SAM.FOOTING_MAX_STACKS;
   const rate = 1 + passiveSum(p, 'footingAccrualPct');
   p.footingAcc += dt * rate;
   const per = SAM.footingTickMs / 1000;
@@ -133,11 +162,16 @@ export function passiveSum(p, key) {
 // costs the same to break and takes nothing the player already had.
 export function engineStatBonus(p) {
   const f = (p.engines && p.engines.footing) || 0;
-  if (!f) return null;
-  return {
-    grit: f * (SAM.footingGritPerStack + passiveSum(p, 'footingGritBonus')),
-    reflex: f * SAM.footingDodgePerStack,
-  };
+  // Marrow's Calcify is a flat passive rather than an engine, but it lands in
+  // the same place so the two compose rather than racing.
+  const grit = f * (SAM.footingGritPerStack + passiveSum(p, 'footingGritBonus')) + passiveSum(p, 'armorGrit');
+  const vit = passiveSum(p, 'armorVit');
+  // NO REFLEX. Footing grants vitality and grit only — see the note in the
+  // Armor tree's TUNING. The Samurai has surrendered the ability to dodge
+  // anything telegraphed; paying him dodge chance for standing still was the
+  // opposite of that, and most of why holding beat dodging on both axes.
+  if (!grit && !vit) return null;
+  return { grit, vitality: vit };
 }
 
 // The pool itself. It reuses the shield mechanism — same absorb-then-carry
@@ -155,6 +189,9 @@ export function footingShieldFor(p) {
 export function tickSkills(sim, dt) {
   for (const p of sim.players) {
     if (p.gone) continue;
+    // publish the engines other trees read
+    p.engines.armor = Math.max(0, p.stats.grit);
+    p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
     p.movingT = p.moving ? (p.movingT || 0) + dt : 0;
     tickFooting(sim, p, dt);
     for (const id of Object.keys(p.skillCd)) {
@@ -267,7 +304,7 @@ export function spawnSkillProj(sim, p, skill, step, rank, angle, range) {
   Object.assign(pr, {
     id: ++sim.spawnCounter, x: p.x + Math.cos(angle) * 6, y: p.y + Math.sin(angle) * 6,
     vx: Math.cos(angle) * step.speed, vy: Math.sin(angle) * step.speed,
-    dmg: rankedDamage(step.damage, skill, rank), crit: false, friendly: true, lob: false,
+    dmg: stepDamage(step, skill, rank, p), crit: false, friendly: true, lob: false,   // engine scaling rides the projectile
     ttl: (range + 60) / step.speed, radius: 5, color: p.color, owner: p.idx,
     pierce: r.pierce || 0, hitIds: new Set(),
     weaponId: null, kind: 'skill', summonBurn: null, summonKnock: 0, fromSummon: false,
@@ -344,6 +381,10 @@ export function wardAbsorb(sim, p, amount, source) {
   if (!(p.ward > 0)) return amount;
   const eaten = Math.min(p.ward, amount);
   p.ward -= eaten;
+  // Marrow's Quill: reflect scales with armour. Applied here rather than at
+  // cast, so it tracks grit as it moves rather than freezing at cast time.
+  const quill = passiveSum(p, 'reflectPerGrit') * Math.max(0, p.stats.grit);
+  if (quill > 0) p.wardReflect = Math.min(1, (p.wardReflect || 0) + quill);
   if (p.wardReflect > 0 && source && source.active) {
     sim.damageEnemy(source, eaten * p.wardReflect * domainMult(p.wardDomain, source.domain), { owner: p });
   }
