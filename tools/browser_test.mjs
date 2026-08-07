@@ -3061,6 +3061,7 @@ if (wantCoop) {
             return JSON.stringify({ present: !!p, ready: !!(p && p.ready), charId: (p && p.charId) || null,
               n: (window.uv.lobby && window.uv.lobby.players || []).length,
               seen: [...(window.uv.uiSeen || new Map())].map(([k, v]) => k.slice(-6) + ':' + v).join(','),
+              applied: ((window.uvNet && window.uvNet.uiApplied) || []).join(' '),
               conns: window.uv.hostT ? window.uv.hostT.conns.size : -1 });`));
           if (st.present && st.ready && st.charId) break;
           if (Date.now() - t0 > 5000) break;
@@ -3071,6 +3072,7 @@ if (wantCoop) {
           const cst = await B.exec(`return JSON.stringify({ uiSeq: window.uv.uiSeq, pending: [...window.uv.uiPending.keys()],
             open: !!(window.uv.clientT && window.uv.clientT.conn && window.uv.clientT.conn.open),
             drops: (window.uvNet && window.uvNet.drops) || 0, resends: (window.uvNet && window.uvNet.uiResends) || 0,
+            sent: ((window.uvNet && window.uvNet.uiLog) || []).join(' '),
             myKey: (window.uv.myKey || '').slice(-6) })`).catch(() => '{}');
           const missing = !st.present ? 'the client is not in the host roster at all'
             : !st.charId ? 'the client is present and its PICK never applied'

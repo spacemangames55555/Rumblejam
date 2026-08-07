@@ -333,6 +333,13 @@ function hostHandleUi(key, msg) {
       return;
     }
     app.uiSeen.set(key, msg.useq);
+    // and what the HOST actually applied, in order. Paired with the client's
+    // uiLog these two answer the question outright: same length means the
+    // handler fired once per press, and a `ready` that appears twice explains
+    // a toggle that ended where it started.
+    const led = window.uvNet || (window.uvNet = {});
+    (led.uiApplied ||= []).push(`${key.slice(-6)}/${msg.useq}:${msg.kind}`);
+    if (led.uiApplied.length > 40) led.uiApplied.shift();
   }
   if (app.mode === 'lobby') {
     const p = app.lobby.players.find(q => q.key === key);
@@ -690,6 +697,16 @@ function sendUi(msg) {
   const useq = ++app.uiSeq;
   const full = { t: 'ui', useq, ...msg };
   app.uiPending.set(useq, { msg: full, firstAt: performance.now(), lastAt: performance.now(), tries: 1 });
+  // WHAT WAS SENT, IN ORDER. The ack ledger answers "did it arrive"; it cannot
+  // answer "how many times did the player's one click turn into a message",
+  // which is the open half of #8: a run ended with the host's high-water mark
+  // equal to the client's sequence counter — everything delivered, everything
+  // applied — and `ready` still false, meaning it was toggled an even number
+  // of times. Counting sends is the only way to tell a double-fired handler
+  // from a double-applied message.
+  const led = window.uvNet || (window.uvNet = {});
+  (led.uiLog ||= []).push(`${useq}:${msg.kind}`);
+  if (led.uiLog.length > 40) led.uiLog.shift();
   app.clientT.send(full);
 }
 
