@@ -841,15 +841,63 @@ downstream waits on a clear. Those three timeouts read as three flaky checks;
 they are one defect wearing three names, which is the conflation this file
 exists to stop.
 
-**Not diagnosed.** The obvious suspicion is the weapons-to-skills migration:
-weapons were the damage source and `weaponSlots` is 0, so if a co-op path does
-not grant or fire skills the party has no offence at all. That is a suspicion,
-not a finding — `sim_test`'s combat cases pass, so whatever this is, it is not
-simply "nothing deals damage anywhere".
+### Diagnosed: 2 of 47 characters have a skill tree, and neither is selectable by default
 
-**It outranks #8 and #9 for the next patch.** Both of those are intermittent
-failures of a lobby transition. This is the run itself being unplayable, and it
-reproduces every time.
+`tools/offence_test.mjs` puts each character in an arena, spends its opening
+skill point, ticks 20 real seconds and reads what the **player** dealt. It never
+calls `damageEnemy` on the player's behalf.
+
+| roster | characters | have any tree | can learn an active | deal aimed damage |
+|---|---|---|---|---|
+| `classic` (the default) | 33 | **0** | **0** | **0** |
+| `toh` | 14 | 2 | 2 | 2 |
+
+Weapons are removed — `CONFIG.WEAPONS_ENABLED` is false, `weaponSlots` is 0, and
+`_tickWeapons` is never called — so **skills are the only damage source.** Skills
+come from trees. `TREES_BY_CLASS` has exactly two entries, `toh_samurai` and
+`toh_necromancer`. Every other character in the game has no way to learn
+anything, and therefore no attack.
+
+The game boots on `classic`. **Not one of its 33 characters can deal a point of
+aimed damage.** That is the whole of the symptom: fights cannot be won, so they
+never clear, so everything waiting on a clear times out under a different name.
+
+**The engine is not broken, and that distinction decides where the fix goes.**
+Where a tree exists it works end to end — the character learns, `spendSkillPoint`
+auto-slots the active, and it kills:
+
+```
+toh_necromancer: learned necro_blip,      dealt 80,  4 kills
+toh_samurai:     learned sam_cross_guard, dealt 162, 4 kills
+```
+
+What is missing is content: 45 characters' worth of skill trees. That is GDD §14
+phase 5 work, not a bug fix.
+
+### Why nothing caught it
+
+- **`sim_test` clears every fight with `nuke()`** — `damageEnemy(e, 900, {owner: p})`
+  on every enemy every 240 ticks. A harness that kills the enemies for you cannot
+  answer whether the player can, so the suite stayed green against a party with
+  no offence at all. `tools/offence_test.mjs` exists because that gap did.
+- **A charId from the other roster resolved silently to `bulwark`.** Right stats,
+  right trait, wrong `charId` — and `treesFor(p)` keys off `charId`, so the
+  player got a character with no trees and nothing said so. Fixed: the fallback
+  still happens (a bad id must not crash a run) but it now names the id, the
+  active roster, and the fact that the trees do not follow.
+
+### Not fixed here
+
+Building 45 skill trees is phase-5 content and was not in scope for a defect
+patch. What is delivered is the diagnosis, the instrument that will fail loudly
+until the content exists, and the silenced-substitution fix.
+
+**One caution recorded against the instrument itself.** Its first default was 12
+seconds, at which the two characters that *can* fight scored zero, and it
+declared an engine failure. A threshold short enough to make a working thing
+look broken is the same defect as a missing counter — it nearly sent the fix at
+the trigger core. The default is 20s and the reason is written at the top of the
+file.
 
 ---
 

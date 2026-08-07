@@ -12,7 +12,7 @@ import {
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
   objectiveSpawnX,
 } from './objectives.js';
-import { CHAR_BY_ID } from './content/characters.js';
+import { CHAR_BY_ID, ROSTER_ID } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
 import { EnemyGrid } from './triggers.js';
@@ -159,7 +159,18 @@ export class Sim {
   // ---------------- player construction & stats ----------------
 
   _makePlayer(member, idx) {
-    const char = CHAR_BY_ID[member.charId] || CHAR_BY_ID.bulwark;
+    // LOUD, because this fallback hid §15 defect #11 for a whole patch. An id
+    // from the other roster resolved silently to bulwark — right stats, right
+    // trait, WRONG charId — and treesFor(p) keys off charId, so the player got
+    // a character with no skill trees and no way to attack, with nothing
+    // anywhere saying a substitution had happened. The fallback stays (a party
+    // member with a bad id must not crash the run) but it announces itself.
+    let char = CHAR_BY_ID[member.charId];
+    if (!char) {
+      char = CHAR_BY_ID.bulwark;
+      console.warn(`[sim] character "${member.charId}" is not in the active roster "${ROSTER_ID}" — `
+        + `falling back to ${char.id}. Its skill trees do NOT follow, so this player will have none.`);
+    }
     const p = {
       idx, name: member.name || `Player ${idx + 1}`, charId: char.id, char,
       color: member.color, gone: false,

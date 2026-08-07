@@ -653,6 +653,13 @@ never loads them:
 - `tools/cdp_harness.mjs` — the shared Chromium/CDP driver, local relay boot and
   static server used by the two tools above. `browser_test.mjs` keeps its own,
   larger `Browser`; these want a fraction of it and want to start in a second.
+- `node tools/offence_test.mjs [seconds]` — **can a player kill anything?**
+  Walks both rosters, spends each character's opening skill point, ticks real
+  seconds and reads what the *player* dealt. It never calls `damageEnemy` on the
+  player's behalf, which is exactly what `sim_test` does via `nuke()` — a
+  harness that kills the enemies for you cannot answer this, and that gap let
+  §15 defect #11 sit behind a green suite. Also asserts that a charId from the
+  wrong roster warns instead of silently becoming `bulwark` with no skill trees.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).
