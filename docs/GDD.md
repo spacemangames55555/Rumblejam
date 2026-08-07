@@ -1,6 +1,6 @@
 # Rumblejam — Game Design Document
 
-**Draft 9 · August 2026**
+**Draft 10 · August 2026**
 **Status: authoritative.** This file supersedes all prior drafts. Where this document and any other source disagree, this document wins — except for tuning constants, where the per-tree `TUNING` blocks in code are authoritative and this document records intent.
 
 **Reference convention:** a bare §N means this document. Any other source must be named inline.
@@ -180,6 +180,14 @@ This ruling exists because "ranks raise damage and duration only" said nothing a
 
 Enforced at import **and** in `canLearn`. A cap that lives only in a data file and an assertion is a label. Classification is a declared registry; an unclassified passive key fails the load.
 
+#### Engine capacity is a declared exception
+
+One skill in the game breaks "damage and duration only": **Raise Skeleton**, where each rank grants one summon slot (§8.5).
+
+It is written as an explicit declaration — `rankGrants: 'summonSlots'` — and asserted at load, so no other skill can acquire the behaviour by accident. This matters because the unstated version of exactly this already happened once: Set Stance granted max Footing stacks per rank, nothing in the rules covered it, and it silently breached a designed hard cap.
+
+**An engine capacity granted by rank must be declared. There is currently one, and adding a second is a design decision, not an implementation detail.**
+
 ### 4.3 Enemy scaling
 
 Authored per region band, not computed from a global curve. Expected player level on entry:
@@ -216,8 +224,11 @@ Every active declares exactly one trigger and one cooldown. Triggers evaluate **
 | `TARGET_THRESHOLD` | `pct`, `range` | An enemy within `range` drops below `pct` HP |
 | `ON_STATUS` | `status`, `range` | An enemy within `range` carries `status` |
 | `MOVEMENT` | `mode`, `seconds` | Moving or still, sustained |
+| `ON_TOKEN` | `range` | A soul token lies within `range` — see §8.5 |
 
 **No unconditional trigger.** There is no "fires when off cooldown" kind and none may be added. The moment one exists it becomes correct for every skill, positioning stops mattering, and the game is an idle auto-battler. Any trigger added later must still depend on a player-controllable condition.
+
+`ON_TOKEN` is the eleventh trigger and the only addition since the taxonomy was written. It qualifies because a token exists only where the player killed something — the condition is created by play, not by waiting.
 
 `ISOLATED` is true in an empty room — a skill rewarding solitude should not also require company. Steps needing a target no-op when there is none.
 
@@ -425,9 +436,9 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Sundian | **Drench stacks** — a stacking debuff spent by `ON_STATUS` triggers |
 | Mage | **Crystallize** |
 | Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
-| Druid | **Morph** — invest in animal DNA; the character visually mutates to match the build |
+| Druid | **The pack** — one summon per animal skill, revive timer scales with pack size (§8.5). Morph layers on top: animal DNA visibly mutates the character |
 | Blacksmith | **Crystal Forms** — timed transformations on `SELF_THRESHOLD` |
-| Necromancer | **Summons** that persist and scale |
+| Necromancer | **Soul tokens** — kills drop tokens, `ON_TOKEN` raises skeletons into rank-granted slots, all wiped at room end (§8.5) |
 | Bard | **Stances** — a stance multiplier gates other skills' output |
 | Wizard | **Domain shift** — the only class that changes its own damage domain mid-fight |
 | Priest | **Judgment marks** — marks detonate on the target's death, healing nearby allies |
@@ -489,6 +500,61 @@ Two earlier versions failed:
 
 The lesson generalises: **a measurement insensitive to every dial you try is measuring something other than what you think.**
 
+### 8.5 Summoning
+
+Summons were the largest bespoke category in the source project and are the largest untested area of the composed-action schema. Two classes use them, and they are deliberately opposite engines rather than one mechanic with different art.
+
+#### Druid — the pack
+
+- **One summon per animal skill.** Additional ranks make that animal stronger, not more numerous.
+- **All animals spawn at the start of every map**, fully restored, alongside the room-start HP restore in §10.
+- **A dead animal revives at the Druid's current position** after a timer.
+
+```
+reviveMs = 15000 + 4000 × (totalAnimals − 1)
+```
+
+| Animals | Revive |
+|---|---|
+| 1 | 15s |
+| 2 | 19s |
+| 3 | 23s |
+| 4 | 27s |
+| 5 | 31s |
+| 6 | 35s |
+
+**`totalAnimals` counts animals owned, not animals alive.** If it counted the living, losing the whole pack would make revives fastest — the cost would invert exactly when the player is most punished. Each dead animal runs its own independent timer at the same N-derived duration.
+
+**The engine's built-in cost is opportunity, not the timer.** Points spent on animals are points not spent on the Druid's own offence, so a Druid whose pack is down has to survive on badly reduced damage output. The revive scale exists so that going wide has a price at the moment it matters: a six-animal Druid waits more than twice as long as a one-animal Druid to get anything back.
+
+**Depth versus breadth, expressed as shape.** Six animal skills at rank 1 is six weak pets on a 35s revive. One animal at rank 20 is a single strong pet back in 15s. Neither is obviously correct, which is the test.
+
+#### Necromancer — soul tokens
+
+- **Every enemy killed drops a soul token** at the place it died.
+- **Tokens are visible only to Necromancers.** They are state and ride the snapshot per §12.1, but render per-player.
+- **Tokens expire after 30 seconds.**
+- **Raise Skeleton is triggered by `ON_TOKEN`** — a token within range. The skill fires a projectile at the token, and a skeleton rises where it lands.
+- **Each rank of Raise Skeleton grants one skeleton slot.** Ranks buy capacity; kills fill it.
+- **Skeletons are weak**, and they **wipe at the end of every room.**
+- With two Necromancers in a party, **one token drops per enemy and it is shared.** First to fire claims it.
+
+**No cap beyond rank.** A rank-20 Raise Skeleton means twenty skeletons, each earned by a kill. This is deliberately uncapped for first playtest; a cap may follow.
+
+**The built-in cost is the cold start.** A Necromancer begins every room with nothing and must kill with its own skills to get the first token, so points cannot all go into Raise Skeleton — a build with twenty slots and no offence fills none of them. And because skeletons wipe at room end, the count never compounds across a map: every fight ramps from zero.
+
+**Shared tokens make two Necromancers a weaker pairing** than two of any other class, since each token can only raise one skeleton. That is a known consequence rather than a defect.
+
+#### Why they are different engines
+
+| | Druid | Necromancer |
+|---|---|---|
+| What breadth buys | More pets | Nothing |
+| What depth buys | Stronger pets | More pet capacity |
+| Where pets come from | Free at map start | Earned by killing |
+| Across a room | Persist, revive on a timer | Wipe, rebuild from zero |
+| Cost | Offence forgone; revives slow as the pack grows | Cold start every room; capacity is useless without offence |
+
 ---
 
 ## 9. Economy and Shop
@@ -505,21 +571,39 @@ Two levers together: **slower income** and **escalating prices**. Price escalati
 
 | Tier | Changes | Rarity |
 |---|---|---|
-| Stat items | Flat + or +/− along opposing axes | Common |
+| Stat items | Flat + with a **randomly rolled** − on another stat | Common |
 | Magnitude | Splash radius, projectile count, **pierce**, chain jumps, duration | Common–Rare |
 | Rider | Adds an effect the skill did not have | Rare |
 | Domain swap | Changes one skill's damage domain | Rare–Legendary |
-| Trigger swap | Changes a skill's trigger type or threshold | Legendary only |
+| Selector add | The skill **also** hits what a second selector picks | Rare–Legendary |
 
 **Radius lives in magnitude items exclusively**, since ranks no longer grant it.
 
 **No cooldown reduction on any item.** Same reasoning as ranks: an item that shortens cooldowns lets a narrow build buy back its uptime and the depth-versus-breadth pressure disappears.
 
-Trigger swaps are the highest-upside and highest-risk item in the game — one that lands badly can invalidate a build mid-run. Gated to legendary; may be cut.
-
 **Pierce is the answer to escorted targets** (§5.9) and belongs in magnitude.
 
-**PROPOSED — a selector-swap tier.** Now that selection is a declared field, an item changing one skill's selector is the natural sibling of the trigger-swap tier and probably more useful, since it repurposes a skill without changing when it fires. Needs a ruling on rarity and on whether it displaces trigger swaps entirely.
+#### Items add, they never take away
+
+**Trigger-swap items are deleted from the design.** An item that changed *when* a skill fired could invalidate a build mid-run — a player who had spent forty points around a trigger could have it rewritten by a shop roll.
+
+The late-game power spike that tier was meant to deliver is better served by items that **add** to what a skill already does: hit the nearest two targets instead of one, add a little splash, add an effect it did not have. Those are the magnitude and rider tiers, which already exist and need no new machinery.
+
+The same principle governs selection. **Selector-add, not selector-swap.** An item does not change `nearest` to `highest_hp`; it makes the skill *also* strike the highest-HP target in range. A crowd-clearing build that finds one gains an elite-killer without losing its crowd clear and without spending a point.
+
+**The rule for every modifier tier: an item may add, never take away.** Finding a modifier should feel like a new capability arriving, never like a familiar one leaving.
+
+#### Late-game weighting
+
+Magnitude, rider, and selector-add items weight toward later regions. That is where an additive spike belongs — the maps are harder, and a build has settled enough by then for a new capability to read as a change rather than as noise. It is also the second reward curve in the game: §3.4's class unlocks pay off on the *next* character, while modifiers pay off on this one.
+
+#### Stat items and the random roll
+
+A stat item grants a flat bonus and rolls its penalty **randomly against another stat**. There is no fixed opposition table.
+
+A fixed table — damage always costs speed — is memorised after one run, and the shop stops being a gamble. Rolling the pairing keeps every offer a real question: sometimes the penalty lands somewhere the build does not care about, sometimes it lands on the stat the whole character rests on. That variance is the point, and it is the same lottery the reroll economy is built around.
+
+**OPEN — penalty weighting.** Fully random means an item can roll its penalty into a stat the build does not use at all, which makes it free. Roll enough offers and the correct play becomes shopping for the free one, and the trade-off stops existing. The candidate fix is to weight the penalty *lightly* toward stats the build actually uses — still random, still occasionally lucky, rarely free. Needs a ruling before the roll table is built.
 
 **Weapons are gone from the game. `SHOP_WEAPON_CHANCE = 0`.** A shop stocking unequippable items is a bug, not a design question.
 
@@ -691,9 +775,9 @@ Twelve classes have no trees. Failures here are classes that do not exist yet �
 |---|---|
 | **Throughput: Nest Purge** | A tier-1 skill at ten ranks makes progress but cannot finish 3 nests in budget. Are nests meant for a party, a deeper build, or is nest HP wrong? |
 | **Throughput: Bounty Hunt** | The same, for 5 marks — compounded by §5.9, since escorts are a deliberate wall |
-| **Summoner structure** | The summoner class has no structure to recall. A design gap, not a bug |
+| **Penalty weighting on stat items** | §9.2 — fully random penalties can roll free on stats a build does not use. Weight lightly toward used stats, or accept free rolls as luck? |
 | **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data |
-| **Selector-swap items** | §9.2 — build the tier or not |
+| **Summoner harness gap** | The summoner class has no structure to recall — a test fixture gap now that §8.5 defines the mechanic |
 | **§9.5 stats** | The stat system has no recorded intent, and phase 4's stat tier is defined in terms of opposing axes that are nowhere named |
 
 ### Group C — phase 4, the economy (7)
@@ -734,6 +818,8 @@ Empty. Every remaining failure is content not authored, a decision not taken, or
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** |
 | Classes 3–14 | **Not started** — 12 of 14 classes have no trees |
+| Summoning | **Designed, not built** — §8.5, both classes |
+| `ON_TOKEN` trigger | **Designed, not built** |
 | Economy | **Not started** |
 
 ---
@@ -744,7 +830,7 @@ Empty. Every remaining failure is content not authored, a decision not taken, or
 
 **Pending-pick and results screens are partial fixes.** Presence rides state so a lost close cannot softlock a panel open, but an offer's contents still ride the open event — a lost open is a missed level-up pick. Similarly `st.over` stops a client stranding in a dead world but the results payload still rides `end`. Both are noted in code where the next reader hits them.
 
-**Summons are the largest untested area of the composed-action schema.** Deliberately excluded from every patch so far, and the largest bespoke category in the source project. Test them in a patch where they are the subject.
+**Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
 
 **Twelve class engines exist only as design.** §8.3 specifies them; only Footing and Marrow's `armor` are implemented.
 
