@@ -28,6 +28,7 @@
 import { Sim } from '../js/game.js';
 import { CHARACTERS, SELECTABLE, isSelectable, unselectableReason } from '../js/content/characters.js';
 import { SKILL_BY_ID, TREES_BY_CLASS, canLearn } from '../js/skills.js';
+import { learnableSkills, spendSkillPoint } from '../js/skillsim.js';
 
 const SECONDS = parseInt(process.argv[2] || '20', 10);
 
@@ -151,6 +152,80 @@ console.log('\n--- an unknown or unplayable character throws instead of becoming
     else if (!pattern.test(threw)) fail(`${what} ("${id}") threw the wrong thing: ${threw.slice(0, 90)}`);
     else ok(`${what} ("${id}") is refused: ${threw.split('.')[0]}`);
   }
+}
+
+// ---------- 4: can an armed party finish an objective? (§15 defect #13) ----------
+// THE TABLE THAT FOUND IT. An armed necromancer scored 4230 damage and ZERO
+// kills in Elite Arena, 311 kills and 0 of 5 marks in Bounty Hunt, and 22 kills
+// with 3 of 3 nests untouched — because every trigger selected by position or
+// health fraction and chaff is always nearest. `select` is the fix; this is the
+// measurement that has to confirm it, in the same shape.
+//
+// The party is STEERED at the objective, because the harness that found this
+// steers and a bot standing still can never bring a nest into range no matter
+// what its skills select. Selection and reach are different questions.
+console.log('\n--- an armed party against the three objectives that failed ---');
+{
+  const steer = g => {
+    const o = g.obj;
+    if (!o) return;
+    for (const p of g.players) {
+      if (p.gone || p.downed) continue;
+      let goal = null;
+      if (o.type === 'bounty' && o.markId !== null) { const e = g.enemyById(o.markId); if (e) goal = [e.x, e.y]; }
+      else if (o.type === 'nest' && o.at && o.at.length) goal = [o.at[0][0], o.at[0][1]];
+      if (!goal) { g.setInput(p.idx, { mx: 0, my: 0 }); continue; }
+      const dx = goal[0] - p.x, dy = goal[1] - p.y, d = Math.hypot(dx, dy) || 1;
+      g.setInput(p.idx, d < 90 ? { mx: 0, my: 0 } : { mx: dx / d, my: dy / d });
+    }
+  };
+  const rows = [];
+  for (const kind of ['nest', 'elite_arena', 'bounty']) {
+    const sim = new Sim({ seed: 20250811 + kind.length * 31,
+      party: SELECTABLE.map((c, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: c.id, color: '#fff' })) });
+    const node = sim.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    node.kind = kind;
+    sim.god = true;   // survival is not the question; finishing the level is
+    for (const p of sim.players) {
+      for (let i = 0; i < 60; i++) {
+        const learnable = learnableSkills(p);
+        if (!learnable.length) break;
+        p.skillPoints++;
+        spendSkillPoint(sim, p, learnable.sort((a, b) => b.tier - a.tier)[0].id);
+      }
+      sim._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
+    }
+    sim._travelTo(node.id);
+    const budget = 60 * 60 * (kind === 'bounty' ? 20 : 6);
+    let t = 0;
+    while (!sim.cleared && !sim.over && t++ < budget) {
+      steer(sim); sim.tick();
+      for (const p of sim.players) if (!p.downed) p.hp = p.stats.vitality;
+    }
+    const o = sim.obj || {};
+    const progress = kind === 'nest' ? `${(o.total || 0) - (o.alive || 0)}/${o.total || 0} nests down`
+      : kind === 'bounty' ? `${o.killed || 0}/${o.need || 0} marks`
+        // NOT "kills of total": p.kills counts chaff too, and printing it against
+        // the elite count read as "78 of 52 elites", which is both impossible and
+        // exactly the kind of number a reader would quote back.
+        : (sim.cleared ? `all ${o.total || 0} elites` : `${o.total || 0} elites spawned, arena not cleared`);
+    const dealt = Math.round(sim.players.reduce((n, p) => n + p.damageDealt, 0));
+    const kills = sim.players.reduce((n, p) => n + p.kills, 0);
+    rows.push({ kind, dealt, kills, progress, cleared: sim.cleared });
+    console.log(`  ${kind.padEnd(12)} dealt ${String(dealt).padStart(6)}  kills ${String(kills).padStart(4)}  ${progress}${sim.cleared ? '  CLEARED' : ''}`);
+  }
+
+  // THE ASSERTION IS "SOMETHING GOT TARGETED", not "the level finished". Whether
+  // one tier-1 skill can chew through a 3x-HP elite inside six minutes is a
+  // question about elite HP, and answering it here would let a throughput
+  // change silently satisfy a targeting test.
+  const untouched = rows.filter(r => /^0\//.test(r.progress) || (!r.cleared && r.kind === 'elite_arena' && !r.kills));
+  if (untouched.length === rows.length) {
+    fail('not one objective target was damaged — `select` is not reaching the role-tagged entities at all');
+  } else if (untouched.length) {
+    fail(`${untouched.length}/${rows.length} objective(s) still show zero progress: ${untouched.map(r => r.kind).join(', ')} `
+      + '— report whether that is selection or throughput before changing either');
+  } else ok(`every objective shows progress: ${rows.map(r => `${r.kind} ${r.progress}`).join('; ')}`);
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall offence checks passed');

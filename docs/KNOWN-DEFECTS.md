@@ -1014,14 +1014,73 @@ More damage arriving at the nearest chaff does not kill a nest that nothing ever
 targets. The gap is between the objective designs, which were authored for aimed
 weapon fire, and the trigger vocabulary, which cannot name a target.
 
-Fixing it means one of:
+### Fixed: `select` is a field, not a new trigger kind
 
-1. a trigger kind that selects by role (`OBJECTIVE`, `ELITE`, `BOSS`, `MARK`);
-2. a player-facing focus/target mechanism that the trigger core respects;
-3. redesigning the objectives so proximity-selected damage completes them.
+The framing above was wrong and worth correcting, because it would have sent the
+fix to the wrong place. **The loss was variety in the selection rule, not
+aiming.** Weapons had varied targeting rules and the player chose the rule by
+choosing the weapon — a shotgun hit everything close, a sniper took the farthest
+or the fattest, a homing shot tracked one thing. Triggers collapsed all of that
+into position and health fraction.
 
-All three are design decisions and belong in the GDD before any of them is
-written. **Not attempted here.**
+So the two jobs a trigger was doing are split:
+
+```js
+trigger: { kind: 'PROXIMITY', radius: 140, count: 3 },   // when it fires
+select:  'highest_hp',                                    // what it hits
+```
+
+`js/selectors.js` ships six rules — `nearest`, `farthest`, `highest_hp`,
+`lowest_hp`, `densest_cluster`, `objective_target`. Every one is a rule over
+what is **already queryable**; none is a new player input. A selector re-ranks
+the candidates the grid returns for the skill's own range and never widens the
+search, because a selector that could reach past a skill's range would silently
+give every skill infinite reach.
+
+`objective_target` reads role tags the sim already sets — `isNest`, `bounty`,
+`boss`, `elite`/`mini` — in that priority order, with distance as the tiebreak
+so that with three nests on the field the near one is the right nest. It skips
+`nestShielded` nests: a shielded nest cannot be hurt at all, so preferring it
+would fire into a wall while the ring that drops the shield went unkilled.
+
+**`select` is required on every active, with no default.** Defaulting a missing
+one to `nearest` would silently reproduce this defect on every skill anyone
+forgot — which is exactly how it existed in the first place, as an unwritten
+universal default nobody had to opt into. All 34 actives now declare one, and a
+passive declaring a `select` is also an error: a passive hits nothing.
+
+### Confirmed, in the shape that found it
+
+An armed party (all ranks spent, permanent stats, steered at the objective):
+
+| objective | dealt | kills | progress | before |
+|---|---:|---:|---|---|
+| Nest Purge | 10394 | 244 | **1/3 nests down** | 0/3, none ever damaged |
+| Elite Arena | 53964 | 78 | **all 52 elites — CLEARED** | 0 kills |
+| Bounty Hunt | 54786 | 398 | **2/5 marks** | 0/5 |
+
+All three off zero; Elite Arena finishes. `sim_test` also drops one failure
+(`UNKILLABLE at 4p`, 13110 → 13110 becomes real damage), 39 → 38.
+
+### What is still short, and why it is a different question
+
+Nest Purge and Bounty Hunt make progress but do not finish inside the harness
+budget. That is **throughput, not selection** — the targets are being hit now,
+there is not enough damage arriving before the clock runs out. Whether one
+tier-1 skill at ten ranks should chew through a 3×-HP elite or a 10×-HP mark in
+six minutes is a question about elite and mark HP, and it is **deliberately not
+answered here**: retuning on the back of a targeting fix would let a throughput
+change silently satisfy a targeting test.
+
+The `offence_test` assertion is therefore "something got targeted", never "the
+level finished".
+
+### Still a harness gap: the 1p UNKILLABLE check
+
+`UNKILLABLE at 1p` survives because that harness parks a player 120u from the
+mark "in weapon range, firing" and never arms it — a weapons-era assumption. The
+4p variant now passes because its party is armed. Worth fixing, but it is a
+harness gap and not evidence about regeneration.
 
 ### The five camper-statue failures are a different, smaller thing
 

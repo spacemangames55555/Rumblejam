@@ -499,6 +499,21 @@ clean play). They act on the **host's** simulation:
 Console helper: `uvSmoke()` runs every character through a scripted combat and
 reports failures (used for the automated character smoke check).
 
+## A skill declares when it fires and what it hits, separately
+
+```js
+trigger: { kind: 'PROXIMITY', radius: 140, count: 3 },   // when
+select:  'highest_hp',                                    // what
+```
+
+`select` is **required on every active** — see `js/selectors.js` for the six
+rules and §15 defect #13 for why there is no default. Weapons carried varied
+targeting rules and the player chose the rule by choosing the weapon; triggers
+collapsed all of it into position and health fraction, so every skill converged
+on whatever was nearest and no objective target was ever hit. A selector re-ranks
+what the grid already returns for the skill's own range — it never widens the
+search, and it is never a new player input.
+
 ## A test's negative case must be unreachable by search-and-replace
 
 **Whatever a test proves is impossible must be written so that a bulk edit over
