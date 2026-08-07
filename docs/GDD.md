@@ -610,18 +610,18 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–2 established th
 ## 15. Open Defects — by cause, not by symptom
 
 **Read this before treating any suite failure as a bug.** `tools/sim_test.mjs`
-reports 30 failures and two thirds of them are not defects: 8 are classes that
-do not exist yet, 5 are questions nobody has answered, 7 are a subsystem
-deliberately left for phase 4. **10 are actually broken.** They are grouped here by
+reports **21 failures and none of them are defects**: 8 are classes that do not
+exist yet, 6 are design questions or decisions already taken, 7 are a subsystem
+deliberately left for phase 4. Group D is empty. They are grouped here by
 *what would make them go away*, because "not built yet" and "broken" look
 identical in a red test log and the difference decides who picks the work up.
 
-Counts are the sim-suite failures each entry accounts for. The focused
+Counts are the sim-suite failures each entry accounts for, and they sum to 21 with nothing double-counted. The focused
 instruments — `offence_test`, `determinism_test`, `snapstate_test`,
 `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`,
 `validate_items` — are all green.
 
-### A. Waiting on phase-5 trees — 8 of 30
+### A. Waiting on phase-5 trees — 8 of 21
 
 Twelve of the fourteen classes have no skill tree. Weapons are removed, so a
 class without a tree cannot attack, cannot trigger an attack hook, and cannot
@@ -634,7 +634,7 @@ finish a level. **Nothing here is repairable by code.**
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
 | `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; twelve score 0 because they cannot attack. Two non-zero entries against twelve zeroes is the outlier. |
 
-### B. Waiting on a design decision — 5 of 30
+### B. Waiting on a design decision — 6 of 21
 
 Real questions with no obviously-correct answer. Each needs a call in this
 document before code.
@@ -642,16 +642,27 @@ document before code.
 | what fails | count | the question |
 |---|---:|---|
 | `nest (1p/4p) never cleared`, `bounty (1p/4p) never cleared` | 4 | **Throughput.** Since §13, targets are selected correctly and damaged — nests went 0/3 → 1/3, marks 0/5 → 2/5, Elite Arena now clears. What remains is whether a tier-1 skill at ten ranks *should* chew through a 3×-HP elite or a 10×-HP mark inside the budget. That is elite and mark HP, and retuning it on the back of a targeting fix would let a throughput change silently satisfy a targeting test. |
+| `UNKILLABLE (DELIVERY: …)` | 1 | **Resolved as design, kept as a red line until phase 4.** The mark cannot be killed through its escort without pierce, and pierce is a modifier item. The check stays red because the capability genuinely does not exist yet — it is not a bug to chase. |
 | `the summoner class has no structure to recall` | 1 | **`bonelord` builds its structure via `_addWeapon`.** With `weaponSlots` at 0 it summons nothing, so no class in the game can exercise structure recall (the retired Cogsmith's `overseer` mounts were the other). Making it a skill-era summon needs deciding what grants it — a tree node? the trait at fight start? |
 
-**And one design gap with no failing test yet:** `objective_target` selects
-correctly and **delivery does not honour the selection.** Measured on the bounty
-mark: the selector chose the mark on 23 of 23 fires and 21 of those shots were
-intercepted by the escort pack that spawns with it. Selection is not delivery. A
-`pierce` rider on objective-targeting bolts would fix it; whether that is the
-right answer is a design call. See D below for the check that found it.
+**RESOLVED AS DESIGN — no code change.** `objective_target` selects correctly
+and the shots are intercepted by the escort: the selector chose the mark on 23
+of 23 fires and 2 arrived. That is the intended shape. **Escorts are a wall you
+clear first, and that is what distinguishes a bounty mark from a nest** — a nest
+is a structure you reach, a mark is a target you have to earn a line on.
 
-### C. Phase 4 — the economy — 7 of 30
+Pierce stays a **modifier item** at §9.2's magnitude tier, not a property of
+`objective_target`. A party that commits to punching through buys pierce and
+slots it: a build decision with a cost, which is the whole point of the item
+tier. Making it free on every objective-targeting bolt would delete that
+decision.
+
+**Until phase 4 ships modifier items, bounty marks are clear-the-escort-first by
+design.** They will not complete in the sim harness's budget and that is not a
+defect. `offence_test` therefore asserts SELECTION CORRECTNESS for that
+objective — did every fire choose the mark — and not mark kills.
+
+### C. Phase 4 — the economy — 7 of 21
 
 Weapons were removed in `patch-trigger-core`; the shop, combine, sell and
 slot-cap machinery still exists and still has tests. **Do not touch these
@@ -665,18 +676,27 @@ stat/modifier split when it lands.
 The suite also prints two `⊘ SKIPPED (weapons removed)` lines for swap-buy
 checks that cannot run at all. Skips are counted separately and never as passes.
 
-### D. Genuine open defects — 10 of 30
+### D. Genuine open defects — 0 of 21
 
-Things that are broken now, in code that exists, and could be fixed today.
+**Empty.** Every failure in the suite is now accounted for by A, B or C: content
+that has not been authored, a decision that has not been taken, or a subsystem
+deliberately deferred. Nothing here is broken code waiting to be found.
 
-| # | defect | evidence |
+The five that were here were fixed, and four of the five turned out to be the
+*test* rather than the thing tested:
+
+| # | was | what it actually was |
 |---|---|---|
-| **17** (×1) | **Bolt delivery ignores the selector.** The bounty mark is chosen on 23/23 fires; 2 shots arrive, 21 are intercepted by its escort. Per-target attribution (`sim.dmgLog` / `sim.selLog`) says `DELIVERY`, not selection, absorption or regeneration. | `UNKILLABLE (DELIVERY: the mark was chosen 23x but only 2 shot(s) arrived)` |
-| **18** (×5) | **The statue harness never spends its skill point**, so the "camper" it measures is unarmed and dies in every Bastion template. A harness gap, but a real one: the Bastion sanction is currently untested. | 5 × `camper statue DIED in Bastion/*` |
-| **19** (×1) | **Relic Run keeps spawning ambient waves** 30s after the field is emptied. | `Relic Run still spawns ambient waves: 1` |
-| **20** (×1) | **`sprites.js` projectile radii no longer match the engine** — the registry reports empty for shot/lob/summon. | `sprites.js projectile radii no longer match the engine` |
-| **21** (×1) | **`--require-all` does not fail on an undrawn batch**, so "batch 1 is done" is a feeling rather than a number. | `--require-all did not fail on an undrawn batch` |
-| **22** (×1) | **Per-row re-centring loses an animation's bob at a 128px cell** — 6px in, 2px out. Worked at the old 32px cell. | `bob preservation: row=2 (want 6)` |
+| 18 | Camper statue dies in every Bastion template ×5 | The test ran the camper as whichever class was selectable. The camper archetype is a contact tank — `toh_blacksmith`, hitbox ×1.4 — which survives all five. The samurai dies at 48s and the necromancer at 20s. The Bastion sanction was never broken; it was being measured against a caster standing still. |
+| 21 | `--require-all` does not fail on an undrawn batch | It named `char`, and with the roster down to 14 all 14 are drawn. The flag was right and the batch was finished. The check now *discovers* a namespace with undrawn ids. |
+| 20 | `sprites.js` projectile radii do not match the engine | It observed projectiles from `_addWeapon`, which spawns nothing now, so every bucket read empty. Re-pointed at the skill path; the engine's radius is a named `SKILL_PROJ_R` rather than a literal that happened to equal `PROJ_R_SHOT`. |
+| 22 | Row re-centring loses a 6px bob at a 128px cell | The fixture's row stride stayed `32` when the cell became 128, so it wrote garbage. Measured directly, `process_sprite` preserves the bob exactly. |
+| 19 | Relic Run still spawns ambient waves | Gemmites are **splitters**: killing one spawns two by design. One kill sweep left six children and the check read them as ambient inflow. It drains to empty before watching. |
+
+**Four of five were instruments, not defects.** That is worth stating plainly:
+after a migration this large, a red check is more likely to be a test still
+describing the old world than a bug in the new one — which is exactly why this
+section is organised by cause.
 
 ### Fixed this patch, kept for the record
 

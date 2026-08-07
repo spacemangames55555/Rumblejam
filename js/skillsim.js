@@ -308,6 +308,13 @@ export function skillSplash(sim, p, skill, x, y, radius, damage, exclude) {
   }
 }
 
+// The render radius a skill bolt carries. js/content/sprites.js mirrors this as
+// PROJ_R_SHOT and buckets sprites off it, so the two must agree — they were two
+// unlinked literals that happened to both be 5, and a change to either would
+// have silently picked the wrong projectile sprite. sim_test asserts they
+// match by observing a real skill fire.
+export const SKILL_PROJ_R = 5;
+
 export function spawnSkillProj(sim, p, skill, step, rank, angle, range) {
   const pr = sim.projPool.alloc();
   if (!pr) return;
@@ -316,7 +323,7 @@ export function spawnSkillProj(sim, p, skill, step, rank, angle, range) {
     id: ++sim.spawnCounter, x: p.x + Math.cos(angle) * 6, y: p.y + Math.sin(angle) * 6,
     vx: Math.cos(angle) * step.speed, vy: Math.sin(angle) * step.speed,
     dmg: stepDamage(step, skill, rank, p), crit: false, friendly: true, lob: false,   // engine scaling rides the projectile
-    ttl: (range + 60) / step.speed, radius: 5, color: p.color, owner: p.idx,
+    ttl: (range + 60) / step.speed, radius: step.radius || SKILL_PROJ_R, color: p.color, owner: p.idx,
     pierce: r.pierce || 0, hitIds: new Set(),
     weaponId: null, kind: 'skill', summonBurn: null, summonKnock: 0, fromSummon: false,
     skill: { id: skill.id, rank },

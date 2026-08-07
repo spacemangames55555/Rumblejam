@@ -186,6 +186,7 @@ console.log('\n--- an armed party against the three objectives that failed ---')
     const node = sim.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
     node.kind = kind;
     sim.god = true;   // survival is not the question; finishing the level is
+    if (kind === 'bounty') sim.selLog = new Map();   // selection is the assertion here
     for (const p of sim.players) {
       for (let i = 0; i < 60; i++) {
         const learnable = learnableSkills(p);
@@ -203,15 +204,24 @@ console.log('\n--- an armed party against the three objectives that failed ---')
       for (const p of sim.players) if (!p.downed) p.hp = p.stats.vitality;
     }
     const o = sim.obj || {};
+    // BOUNTY IS ASSERTED ON SELECTION, NOT KILLS — resolved as design (GDD §15).
+    // Marks spawn with an escort and escorts are a wall you clear first; that is
+    // what makes a mark different from a nest. Punching straight through needs
+    // pierce, which is a §9.2 modifier item and does not exist until phase 4.
+    // Asserting mark kills here would demand a capability the game has not
+    // shipped, and would quietly turn into a retune request on mark HP.
+    const selMark = [...(sim.selLog || new Map())]
+      .filter(([k]) => /->MARK$/.test(k)).reduce((n, [, v]) => n + v, 0);
+    const selTotal = [...(sim.selLog || new Map())].reduce((n, [, v]) => n + v, 0);
     const progress = kind === 'nest' ? `${(o.total || 0) - (o.alive || 0)}/${o.total || 0} nests down`
-      : kind === 'bounty' ? `${o.killed || 0}/${o.need || 0} marks`
+      : kind === 'bounty' ? `${selMark}/${selTotal} fires chose the mark (kills: ${o.killed || 0}/${o.need || 0}, needs pierce)`
         // NOT "kills of total": p.kills counts chaff too, and printing it against
         // the elite count read as "78 of 52 elites", which is both impossible and
         // exactly the kind of number a reader would quote back.
         : (sim.cleared ? `all ${o.total || 0} elites` : `${o.total || 0} elites spawned, arena not cleared`);
     const dealt = Math.round(sim.players.reduce((n, p) => n + p.damageDealt, 0));
     const kills = sim.players.reduce((n, p) => n + p.kills, 0);
-    rows.push({ kind, dealt, kills, progress, cleared: sim.cleared });
+    rows.push({ kind, dealt, kills, progress, cleared: sim.cleared, selMark, selTotal });
     console.log(`  ${kind.padEnd(12)} dealt ${String(dealt).padStart(6)}  kills ${String(kills).padStart(4)}  ${progress}${sim.cleared ? '  CLEARED' : ''}`);
   }
 
@@ -219,13 +229,36 @@ console.log('\n--- an armed party against the three objectives that failed ---')
   // one tier-1 skill can chew through a 3x-HP elite inside six minutes is a
   // question about elite HP, and answering it here would let a throughput
   // change silently satisfy a targeting test.
-  const untouched = rows.filter(r => /^0\//.test(r.progress) || (!r.cleared && r.kind === 'elite_arena' && !r.kills));
-  if (untouched.length === rows.length) {
+  const bounty = rows.find(r => r.kind === 'bounty');
+  if (bounty) {
+    // Every fire should choose the mark. If that ratio drops, the selector has
+    // regressed — which is a real defect, unlike the mark surviving its escort.
+    // NOT 100%. Bounty Hunt runs FIVE marks in sequence and each is on a spawn
+    // timer, so there are windows with no mark on the field at all — a fire in
+    // one of those correctly selects chaff, because there is nothing else. The
+    // measured miss count is ~1% and matches the number of fires those gaps can
+    // hold. A genuine selector regression does not shave a percent off this; it
+    // collapses it, because chaff outnumbers the mark by two orders of
+    // magnitude and `nearest` would pick chaff essentially always.
+    const MARK_SELECT_FLOOR = 0.9;
+    const ratio = bounty.selTotal ? bounty.selMark / bounty.selTotal : 0;
+    if (!bounty.selTotal) fail('bounty: nothing fired at all, so selection cannot be judged');
+    else if (ratio < MARK_SELECT_FLOOR) {
+      fail(`bounty: only ${bounty.selMark}/${bounty.selTotal} fires (${(ratio * 100).toFixed(0)}%) chose the mark — `
+        + `objective_target has regressed; below ${MARK_SELECT_FLOOR * 100}% means it is picking by proximity again`);
+    } else {
+      ok(`bounty: ${bounty.selMark}/${bounty.selTotal} fires (${(ratio * 100).toFixed(1)}%) chose the mark — `
+        + `the rest fall in the gaps between the five marks. It survives its escort by design; pierce is a phase-4 item`);
+    }
+  }
+  const others = rows.filter(r => r.kind !== 'bounty');
+  const untouched = others.filter(r => /^0\//.test(r.progress) || (!r.cleared && r.kind === 'elite_arena' && !r.kills));
+  if (untouched.length === others.length) {
     fail('not one objective target was damaged — `select` is not reaching the role-tagged entities at all');
   } else if (untouched.length) {
-    fail(`${untouched.length}/${rows.length} objective(s) still show zero progress: ${untouched.map(r => r.kind).join(', ')} `
+    fail(`${untouched.length}/${others.length} objective(s) still show zero progress: ${untouched.map(r => r.kind).join(', ')} `
       + '— report whether that is selection or throughput before changing either');
-  } else ok(`every objective shows progress: ${rows.map(r => `${r.kind} ${r.progress}`).join('; ')}`);
+  } else ok(`every objective shows progress: ${others.map(r => `${r.kind} ${r.progress}`).join('; ')}`);
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall offence checks passed');

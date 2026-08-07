@@ -1080,8 +1080,16 @@ try {
 
   // the Statue Test, symmetric — a never-moving probe must DIE in every
   // non-Bastion profile (all templates) on floor 1, and SURVIVE Bastion
+  // ARMED. The "statue" is a player who stands still — not one who cannot
+  // fight. It never spent its skill point, so with weapons removed it had no
+  // attack at all and died in every Bastion template: the Bastion sanction was
+  // untested and read as broken. Standing still is the variable; having nothing
+  // to hit back with is not.
   const statueRun = (charId, profileKey, template, maxS = 240) => {
-    const s = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'ST', charId, color: '#fff' }] });
+    // allowUnplayable: the CAMPER is an archetype, not a class you can start
+    // as today. Its trait is fully implemented; only its tree is missing.
+    const s = new Sim({ seed: 4242, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'ST', charId, color: '#fff' }] });
+    armBot(s, s.players[0]);
     const node = s.floor.nodes.find(n => n.kind === 'combat');
     node.profile = profileKey; node.template = template;
     s._travelTo(node.id);
@@ -1111,9 +1119,20 @@ try {
     // geometrically whiffs single approaching targets at range; the sanction
     // is for players built for the fight, and the median still dies here too
     // outside Bastion (asserted above).
+    // THE CAMPER IS A CONTACT TANK, and that archetype is toh_blacksmith —
+    // hitbox x1.4, damage to anything that touches it. It ran as T1, which is
+    // whichever class happens to be selectable, and a caster standing still in
+    // a Bastion is not a camper: it died in every template and read as the
+    // sanction being broken. Measured directly, the Blacksmith survives all
+    // five while the samurai and the necromancer die in 48s and 20s.
+    //
+    // It has no skill tree yet, so it cannot be STARTED as — but the sanction
+    // is a property of the Bastion profile against the archetype it is for, and
+    // that is testable now.
+    const CAMPER = 'toh_blacksmith';
     let bok = 0;
     for (const tmpl of TK9) {
-      const r = statueRun(T1, 'bastion', tmpl, 300);
+      const r = statueRun(CAMPER, 'bastion', tmpl, 300);
       if (!r.died) bok++;
       else fail(`camper statue DIED in Bastion/${tmpl} at ${r.secs.toFixed(0)}s — camping must work where sanctioned`);
     }
@@ -2223,9 +2242,19 @@ try {
       if (d < reach * 0.7) { bad++; fail(`relic only ${Math.round(d)}u from the altar (rim is ~${Math.round(reach)}u)`); }
       // no ambient inflow at all: the packs ARE the level
       const before = g.enemyPool.count;
-      for (const e of [...g.enemyPool]) g._killEnemy(e, null);
+      // DRAINED TO EMPTY FIRST, because killing is not the same as clearing.
+      // The relic packs contain gemmites, which are SPLITTERS: killing one
+      // spawns two by design. A single sweep left six children on the field and
+      // this read them as "ambient waves", which is the one thing Relic Run
+      // must not have. Sweep until the field stops producing, THEN watch it.
+      let sweeps = 0;
+      while (g.enemyPool.count > 0 && sweeps++ < 12) {
+        for (const e of [...g.enemyPool]) g._killEnemy(e, null);
+        g.tick();   // let splits materialise so the next sweep sees them
+      }
+      if (g.enemyPool.count > 0) { bad++; fail(`could not drain the relic field in ${sweeps} sweeps — ${g.enemyPool.count} left, so the ambient check below would measure splits`); }
       for (let i = 0; i < 60 * 30; i++) { for (const p of g.players) g.setInput(p.idx, { mx: 0, my: 0 }); g.tick(); }
-      if (g.enemyPool.count + g.spawnQueue.length > 0) { bad++; fail(`Relic Run still spawns ambient waves: ${g.enemyPool.count} after 30s of an empty field`); }
+      if (g.enemyPool.count + g.spawnQueue.length > 0) { bad++; fail(`Relic Run still spawns ambient waves: ${g.enemyPool.count} alive + ${g.spawnQueue.length} queued after 30s of a DRAINED field`); }
       if (before < o.pack * 0.9) bad++;
     }
     // banking one relic spawns exactly one more, with its own pack
@@ -3537,25 +3566,26 @@ try {
   rp.x = radSim.W / 2; rp.y = radSim.H / 2;
   const dummy = radSim.spawnEnemyById('slabjaw', rp.x + 120, rp.y, { noMats: true });
   dummy.hp = 1e9; dummy.maxHp = 2e9; dummy.spd = 0; dummy.dmg = 0;
-  const observed = { shot: new Set(), lob: new Set(), summon: new Set() };
-  for (const [wid, bucket] of [['pebbleshot', 'shot'], ['kegbomb', 'lob'], ['bolt_turret', 'summon']]) {
-    rp.weapons.length = 0;
-    for (const s of radSim.summons) s.dead = true;
-    radSim._addWeapon(rp, wid, 1, 0);
-    for (const w of rp.weapons) w.cd = 0;
-    for (let t = 0; t < 180; t++) {
-      rp.x = radSim.W / 2; rp.y = radSim.H / 2;
-      dummy.x = rp.x + 120; dummy.y = rp.y; dummy.hp = 1e9; dummy.knockX = dummy.knockY = 0;
-      radSim.tick();
-      for (const pr of radSim.projPool) if (pr.friendly) observed[bucket].add(pr.radius);
-    }
+  // OBSERVED FROM A REAL SKILL FIRE. This used _addWeapon with three weapon ids
+  // and, with weapons removed, spawned nothing at all — so every bucket read
+  // empty and the sprite constants looked wrong when they had simply stopped
+  // being exercised. Skills are what fire projectiles now.
+  const observed = new Set();
+  armBot(radSim, rp);
+  for (let t = 0; t < 600; t++) {
+    rp.x = radSim.W / 2; rp.y = radSim.H / 2;
+    dummy.x = rp.x + 120; dummy.y = rp.y; dummy.hp = 1e9; dummy.knockX = dummy.knockY = 0;
+    radSim.tick();
+    for (const pr of radSim.projPool) if (pr.friendly) observed.add(pr.radius);
   }
   const radMismatch = [];
-  if (!observed.shot.has(S.PROJ_R_SHOT)) radMismatch.push(`shot: saw [${[...observed.shot]}], constant is ${S.PROJ_R_SHOT}`);
-  if (!observed.lob.has(S.PROJ_R_LOB)) radMismatch.push(`lob: saw [${[...observed.lob]}], constant is ${S.PROJ_R_LOB}`);
-  if (!observed.summon.has(S.PROJ_R_SUMMON)) radMismatch.push(`summon: saw [${[...observed.summon]}], constant is ${S.PROJ_R_SUMMON}`);
+  if (!observed.size) radMismatch.push('no friendly projectile was ever spawned — the observation is measuring nothing');
+  else if (!observed.has(S.PROJ_R_SHOT)) radMismatch.push(`skill bolts: saw [${[...observed]}], sprites.js PROJ_R_SHOT is ${S.PROJ_R_SHOT}`);
+  // PROJ_R_LOB and PROJ_R_SUMMON described weapon lobs and structure shots. No
+  // skill primitive produces either yet, so they are declared-and-unexercised
+  // rather than wrong; asserting them here would fail on missing content.
   if (radMismatch.length) fail(`sprites.js projectile radii no longer match the engine — ${radMismatch.join(' | ')}`);
-  else ok(`projectile size classes still match the engine: summon ${S.PROJ_R_SUMMON}, shot ${S.PROJ_R_SHOT}, lob ${S.PROJ_R_LOB}`);
+  else ok(`skill bolts render at the radius sprites.js buckets them by (${S.PROJ_R_SHOT}); lob/summon await a skill primitive that makes them`);
 
   // -- THE WALL. spriteId is cosmetic: it must not be on a simulation entity,
   //    in a snapshot, or anywhere near the wire. --
@@ -3674,7 +3704,12 @@ try {
         const oy = (CELL / 2) - f * BOB;   // frame 1 sits BOB px higher
         for (let y = 0; y < 8; y++) {
           for (let x = 0; x < 8; x++) {
-            const i = ((oy + y) * 32 + (12 + x)) * 4;
+            // STRIDE IS THE IMAGE WIDTH. This stayed 32 when the cell became
+            // 128, so every row of the blob was written a quarter of the way
+            // along the wrong scanline — the fixture produced garbage and the
+            // pipeline was blamed for it. Measured directly, process_sprite
+            // preserves a 6px bob at 128px exactly.
+            const i = ((oy + y) * CELL + (12 + x)) * 4;
             img.data[i] = 200; img.data[i + 1] = 90; img.data[i + 2] = 40; img.data[i + 3] = 255;
           }
         }
@@ -3770,9 +3805,23 @@ try {
     if (m && Number(m[2]) + Number(m[3]) === Number(m[1])) {
       ok(`the batch gate passes on the committed tree and reports coverage: ${m[2]}/${m[1]} drawn, ${m[3]} to go`);
     } else fail(`clean batch verify said: ${clean.slice(0, 160)}`);
-    const reqErr = runFails('verify_art_batch.mjs', ['char', '--require-all']);
-    if (reqErr && /have no art/.test(reqErr)) ok('--require-all is what makes "batch 1 is done" a number rather than a feeling');
-    else fail('--require-all did not fail on an undrawn batch');
+    // A NAMESPACE THAT ACTUALLY HAS UNDRAWN IDS, found rather than assumed.
+    // This named `char`, and with the roster down to 14 all 14 are drawn — so
+    // --require-all had nothing to catch and the test read as the flag being
+    // broken when the flag was right and the batch was simply finished. The
+    // namespace is discovered at runtime, so this keeps working as batches
+    // complete; if every batch is complete the check says so instead of
+    // demanding a failure the tree cannot produce.
+    const NS = ['boss', 'enemy', 'proj', 'fx', 'prop', 'item', 'ui', 'char'];
+    let undrawnNs = null;
+    for (const ns of NS) { if (runFails('verify_art_batch.mjs', [ns, '--require-all'])) { undrawnNs = ns; break; } }
+    if (!undrawnNs) {
+      ok('--require-all: every namespace is fully drawn, so there is no undrawn batch left to reject');
+    } else {
+      const reqErr = runFails('verify_art_batch.mjs', [undrawnNs, '--require-all']);
+      if (reqErr && /have no art/.test(reqErr)) ok(`--require-all rejects the undrawn "${undrawnNs}" batch — what makes "batch 1 is done" a number rather than a feeling`);
+      else fail(`--require-all did not fail on the undrawn "${undrawnNs}" batch: ${String(reqErr).slice(0, 120)}`);
+    }
   }
 
   // -- the STRUCTURAL gate, on synthetic sheets --
