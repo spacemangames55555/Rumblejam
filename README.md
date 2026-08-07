@@ -634,6 +634,25 @@ never loads them:
   a sink, so **no event is delivered at all**, and the snapshot must still carry
   everything a client cannot play without. The state/event rule it enforces is
   GDD §12.1; the repeating-channel rule is §12.2.
+- `node tools/room_reg_test.mjs [trials]` — drives `HostTransport.createRoom()`
+  directly against the local relay, with no lobby, no Host button and **no cap
+  of its own**: it waits for the promise to settle and reports what it settled
+  as, with per-attempt type and elapsed ms. Also asserts that a taken room code
+  recovers on a fresh one, that the failure ledger is readable *mid*-flight
+  rather than only after every attempt is spent, that an unretryable error costs
+  one attempt, and that the co-op suite derives its registration wait from
+  `CONFIG.ROOM_REGISTER_BUDGET_MS` instead of restating it — which is how the
+  two drifted apart under §15 defect #9.
+- `node tools/uiack_test.mjs` — client→host input delivery (§15 defect #8).
+  Pairs two real pages over the local relay, drives the real `#btn-ready`
+  button, and **breaks the client's channel at the transport** mid-press: the
+  action must land after recovery with no second press, and the host must
+  acknowledge duplicates without re-applying them. `ready` is the probe
+  throughout because it *toggles* — an idempotent action would pass with or
+  without the dedupe and prove nothing about the hard part.
+- `tools/cdp_harness.mjs` — the shared Chromium/CDP driver, local relay boot and
+  static server used by the two tools above. `browser_test.mjs` keeps its own,
+  larger `Browser`; these want a fraction of it and want to start in a second.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).

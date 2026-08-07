@@ -17,8 +17,17 @@ import { execFileSync } from 'node:child_process';
 // a rejected sheet — a test that describes the art layout must read it, not
 // restate it.
 import { SPRITE_SIZE } from '../js/content/sprites.js';
+import { CONFIG } from '../js/config.js';
 const E_CELL = SPRITE_SIZE.enemy[0];
 const FX_CELL = SPRITE_SIZE.fx[0];
+
+// DERIVED, NEVER RESTATED. This was the literal 12000, and the transport's own
+// registration ceiling was a separate number in js/config.js. When retries were
+// added the ceiling went past 12s and this did not move, so the suite began
+// reporting "room registration failed" for registrations that had not finished
+// — and then read a ledger that is only complete once they have, printing `[]`.
+// Two numbers that must agree are one number.
+const REG_WAIT_MS = CONFIG.ROOM_REGISTER_BUDGET_MS + 3000;
 
 // A minimal RGBA PNG writer at module scope, for fixtures that need real
 // transparency — the sprite-pipeline block has its own opaque variant, and a
@@ -2847,31 +2856,46 @@ if (wantCoop) {
     await A2.open('A2', { peerjsB64 });
     await A2.goto(COOP_URL);
     const A = A2; // reuse flow variable name below
+    // EVERY WAY OF NOT GETTING A CODE IS A DIFFERENT DEFECT, so this returns
+    // which one it was. It used to return a bare null for three unrelated
+    // outcomes — no lobby object at all, registration settled as failed, and
+    // still-in-flight-when-we-gave-up — and the caller printed one message for
+    // all three. tools/room_reg_test.mjs then measured the transport at 12/12
+    // registrations in under 200ms, which means the message this suite prints
+    // ("room registration failed") has been describing something other than
+    // room registration failing.
     const tryRegister = async () => {
       await A.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title A');
       await A.exec(`document.getElementById('name-input').value='HOST'; document.getElementById('btn-host').click()`);
       const t0 = Date.now();
       for (;;) {
-        const c = await A.exec(`return window.uv.lobby && window.uv.lobby.code`);
-        if (c) return c;
-        const pending = await A.exec(`return window.uv.lobby && window.uv.lobby.codePending`);
-        if (!pending) return null;
-        if (Date.now() - t0 > 12000) return null;
+        const st = JSON.parse(await A.exec(`
+          const l = window.uv && window.uv.lobby;
+          return JSON.stringify({ has: !!l, code: (l && l.code) || null, pending: !!(l && l.codePending),
+                                  mode: window.uv && window.uv.mode });`));
+        if (st.code) return { code: st.code };
+        if (!st.has) return { why: `window.uv.lobby is null ${Date.now() - t0}ms after clicking Host — the host flow never started, so nothing was ever registered (mode=${st.mode})` };
+        if (!st.pending) {
+          const diag = await A.exec(`return JSON.stringify((window.uvNet && window.uvNet.regFailures) || [])`).catch(() => '[]');
+          return { why: `registration settled with no code after ${Date.now() - t0}ms — attempts: ${diag}` };
+        }
+        if (Date.now() - t0 > REG_WAIT_MS) {
+          const diag = await A.exec(`return JSON.stringify((window.uvNet && window.uvNet.regFailures) || [])`).catch(() => '[]');
+          return { why: `still pending after ${REG_WAIT_MS}ms (transport budget ${CONFIG.ROOM_REGISTER_BUDGET_MS}ms) — attempts so far: ${diag}` };
+        }
         await sleep(300);
       }
     };
-    let code = await tryRegister();
-    if (!code) { // the relay can be slow to bind under load — one clean retry
+    let reg = await tryRegister();
+    if (!reg.code) { // the relay can be slow to bind under load — one clean retry
       await sleep(1500);
       await A.goto(COOP_URL);
-      code = await tryRegister();
+      const again = await tryRegister();
+      reg = again.code ? again : { why: `${reg.why} | after page reload: ${again.why}` };
     }
+    const code = reg.code;
     if (!code) {
-      // WITH THE REASON. This reported only "failed" for a whole patch, which
-      // is exactly why defect #9 is still open — nothing in the log said what
-      // PeerJS objected to.
-      const diag = await A.exec(`return JSON.stringify((window.uvNet && window.uvNet.regFailures) || [])`).catch(() => '[]');
-      fail(`room registration failed against local relay — attempts: ${diag}`);
+      fail(`host never got a room code — ${reg.why}`);
     } else {
       ok(`room registered: ${code}`);
       await B.open('B', { peerjsB64 });
@@ -3373,7 +3397,7 @@ if (wantCoop) {
         for (;;) {
           const c = await B.exec(`return window.uv.lobby && window.uv.lobby.code`);
           if (c) return c;
-          if (Date.now() - t0 > 12000) return null;
+          if (Date.now() - t0 > REG_WAIT_MS) return null;
           await sleep(300);
         }
       })();
@@ -3451,7 +3475,7 @@ if (wantCoop) {
           for (;;) {
             const c = await D.exec(`return window.uv.lobby && window.uv.lobby.code`);
             if (c) return c;
-            if (Date.now() - t0 > 12000) return null;
+            if (Date.now() - t0 > REG_WAIT_MS) return null;
             await sleep(300);
           }
         })();
@@ -3546,7 +3570,7 @@ if (wantCoop) {
           for (;;) {
             const c = await W0.exec(`return window.uv.lobby && window.uv.lobby.code`);
             if (c) return c;
-            if (Date.now() - t0 > 15000) return null;
+            if (Date.now() - t0 > REG_WAIT_MS) return null;
             await sleep(300);
           }
         })();

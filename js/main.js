@@ -68,6 +68,11 @@ const app = {
   bossInfo: null,
   // client interpolation state
   snaps: [], predicted: null, lastSnapAt: 0, inputTimer: null, seqNo: 0,
+  // defect #8: client input is resent until acked, and applied once per
+  // sequence number. uiSeq/uiPending are the client's; uiSeen is the host's
+  // per-peer high-water mark. `seqNo` above is the movement stream's and is
+  // deliberately separate — movement is lossy on purpose, it repeats at 30 Hz.
+  uiSeq: 0, uiPending: new Map(), uiSeen: new Map(),
   fps: { frames: 0, t: 0, value: 60, show: false },
 };
 
@@ -310,7 +315,25 @@ function hostOnMessage(key, msg) {
   }
 }
 
+// APPLIED ONCE PER SEQUENCE NUMBER, ACKNOWLEDGED EVERY TIME. The client resends
+// until it hears back, so this sees duplicates by design — and `ready` toggles,
+// so applying a duplicate would undo the press that caused it.
+//
+// The ack is sent even for a duplicate, because a duplicate is what a LOST ACK
+// looks like from here: the action landed, our reply did not, and the client is
+// asking again. Staying quiet would leave it resending until it gave up on an
+// action the host had already carried out.
 function hostHandleUi(key, msg) {
+  if (msg.useq !== undefined && key !== '_local') {
+    const seen = app.uiSeen.get(key) || 0;
+    if (app.hostT) app.hostT.send(key, { t: 'uiack', useq: msg.useq });
+    if (msg.useq <= seen) {
+      const led = window.uvNet || (window.uvNet = {});
+      led.uiDuplicates = (led.uiDuplicates || 0) + 1;
+      return;
+    }
+    app.uiSeen.set(key, msg.useq);
+  }
   if (app.mode === 'lobby') {
     const p = app.lobby.players.find(q => q.key === key);
     if (!p) return;
@@ -325,6 +348,11 @@ function hostHandleUi(key, msg) {
 
 function hostDropPeer(key) {
   if (app.role !== 'host') return;
+  // Forget the sequence high-water mark with the peer. A client that rejoins
+  // starts counting from 1 again, and a stale mark would make the host discard
+  // its first actions as duplicates — a reconnect that lands in the lobby and
+  // then ignores every button the player presses.
+  app.uiSeen.delete(key);
   if (app.mode === 'lobby' && app.lobby) {
     const i = app.lobby.players.findIndex(p => p.key === key);
     if (i > 0) { app.lobby.players.splice(i, 1); refreshLobby(); broadcastLobby(); }
@@ -481,6 +509,7 @@ function joinGame(code) {
 
 function clientPump() {
   if (!app.clientT) return;
+  pumpUiAcks();
   if (app.mode === 'run') {
     const inp = sampleInput();
     app.clientT.send({ t: 'in', seq: ++app.seqNo, mx: +inp.mx.toFixed(3), my: +inp.my.toFixed(3), e: inp.interact ? 1 : 0 });
@@ -488,6 +517,26 @@ function clientPump() {
     if (app.lastSnapAt && performance.now() - app.lastSnapAt > CONFIG.DISCONNECT_TIMEOUT * 1000) clientLostHost();
   } else {
     app.clientT.send({ t: 'ping' });
+    // `hello` is the one client message that cannot be acked, because until it
+    // lands the host does not know this peer exists to ack to. It is sent from
+    // inside conn.on('open'), so the channel is open by definition — but "open"
+    // and "delivered" are the distinction this whole defect is about.
+    //
+    // The lobby heartbeat is the acknowledgement: it repeats the host's roster
+    // 3x a second, so a client that is missing from its own host's roster can
+    // see that and say hello again. That is self-healing off a channel that
+    // already exists, rather than a second ack protocol.
+    if (app.mode === 'lobby' && app.lobby && Array.isArray(app.lobby.players) && app.lobby.players.length) {
+      const listed = app.lobby.players.some(p => p.key === app.myKey);
+      const now = performance.now();
+      if (!listed && now - (app.helloAt || 0) > CONFIG.UI_ACK_RESEND_MS * 4) {
+        app.helloAt = now;
+        console.warn('[net] not in the host\'s roster — re-sending hello (the first one did not land)');
+        const led = window.uvNet || (window.uvNet = {});
+        led.helloResends = (led.helloResends || 0) + 1;
+        app.clientT.send({ t: 'hello', name: currentName() });
+      }
+    }
   }
 }
 
@@ -515,6 +564,12 @@ function sanitizeLobby(lobby) {
 function clientOnMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
   switch (msg.t) {
+    case 'uiack':
+      // The host has this action. Stop resending it. An ack for a sequence
+      // already forgotten is normal and means nothing went wrong: the ack
+      // crossed a resend, or arrived twice.
+      app.uiPending.delete(msg.useq);
+      break;
     case 'lobby': {
       // the host's roster wins, always — before sanitizeLobby resolves charIds
       applyHostRoster(msg.lobby && msg.lobby.roster, msg.lobby && msg.lobby.players);
@@ -597,13 +652,67 @@ function clientCleanup() {
   if (app.clientT) { app.clientT.close(); app.clientT = null; }
   app.role = null;
   app.snaps = [];
+  // Unacked actions belong to the connection that is going away. Carrying them
+  // into a later session would replay a node tap from a run that has ended,
+  // against sequence numbers a new host has never seen.
+  app.uiSeq = 0;
+  app.uiPending.clear();
+  app.uiSeen.clear();
+  app.helloAt = 0;
 }
 
 // ---------------- shared plumbing ----------------
 
+// CLIENT INPUT IS RESENT UNTIL THE HOST ACKNOWLEDGES IT (defect #8). Every
+// action a client takes — pick, ready, node tap, buy, stance — leaves through
+// here, and it used to leave once. `ClientTransport.send` skips a channel that
+// is not open, so an action taken in that window was gone with nothing to heal
+// it: host state repeats on the snapshot stream and the lobby heartbeat, but
+// there is no repeating channel in this direction at all.
+//
+// Each message carries a sequence number and stays in `app.uiPending` until
+// the host acks that number. The host applies each number ONCE — see
+// hostHandleUi — so resending is safe for actions that are not idempotent.
+// `ready` is the one that proves the point: it toggles, so a plain repeat
+// would un-ready the player who pressed it.
+//
+// The host's own input does not go near any of this. It is applied inline.
 function sendUi(msg) {
-  if (app.role === 'host') hostHandleUi('_local', { t: 'ui', ...msg });
-  else if (app.clientT) app.clientT.send({ t: 'ui', ...msg });
+  if (app.role === 'host') { hostHandleUi('_local', { t: 'ui', ...msg }); return; }
+  if (!app.clientT) return;
+  // A pending list that grows without bound is a memory leak wearing a
+  // reliability costume — if this many actions are unacked the link is gone,
+  // and the disconnect path is what should handle it.
+  if (app.uiPending.size >= CONFIG.UI_ACK_MAX_PENDING) {
+    console.warn(`[net] ${app.uiPending.size} unacknowledged client actions — dropping "${msg.kind}" rather than queueing further`);
+    return;
+  }
+  const useq = ++app.uiSeq;
+  const full = { t: 'ui', useq, ...msg };
+  app.uiPending.set(useq, { msg: full, firstAt: performance.now(), lastAt: performance.now(), tries: 1 });
+  app.clientT.send(full);
+}
+
+// Called from clientPump (30 Hz); resends on its own cadence, not the pump's.
+function pumpUiAcks() {
+  if (!app.clientT || !app.uiPending.size) return;
+  const now = performance.now();
+  for (const [useq, rec] of app.uiPending) {
+    if (now - rec.firstAt > CONFIG.UI_ACK_GIVEUP_MS) {
+      app.uiPending.delete(useq);
+      // LOUD. The whole defect was that this case had no sound at all.
+      console.warn(`[net] GAVE UP on client action "${rec.msg.kind}" (seq ${useq}) after ${rec.tries} attempts over ${Math.round(now - rec.firstAt)}ms — the host never acknowledged it`);
+      const led = window.uvNet || (window.uvNet = {});
+      led.uiGaveUp = (led.uiGaveUp || 0) + 1;
+      continue;
+    }
+    if (now - rec.lastAt < CONFIG.UI_ACK_RESEND_MS) continue;
+    rec.lastAt = now;
+    rec.tries++;
+    const led = window.uvNet || (window.uvNet = {});
+    led.uiResends = (led.uiResends || 0) + 1;
+    app.clientT.send(rec.msg);
+  }
 }
 
 function leaveToTitle() {

@@ -570,15 +570,68 @@ Observed across three runs after the state fix and the heartbeat:
 | 2 | `room registration failed against local relay` (see #9) |
 | 3 | `timeout waiting for client ready` — this defect |
 
-**What a fix would have to do.** Give client input the property host state now
-has: repetition or acknowledgement. Either the client re-sends unacknowledged
-intent until the host confirms it, or intent becomes state the client repeats
-(a "my current pick/ready" beat) rather than an edge it fires once. The second
-matches the rule the rest of this patch follows — if losing it breaks the game,
-it repeats — and is probably the smaller change.
+### Fixed: resent until acknowledged, applied once per sequence number
 
-**Not fixed here.** The instrument now covers both directions, which is what
-turns the next occurrence into evidence rather than another seven-run hunt.
+The heartbeat pattern does not transfer to this direction, and the reason is
+worth stating because it decided the shape of the fix. Host state repeats
+safely because repeating it is **idempotent** — the same roster applied twice is
+the same roster. Input is not. `ready` toggles, so a second delivery of one
+press un-readies the player who made it. Repetition alone would trade a lost
+action for a phantom one.
+
+So the two halves are split:
+
+- **The client repeats.** Every `ui` message carries `useq`, a per-connection
+  sequence number, and stays in `app.uiPending` until the host acks that number.
+  `clientPump` (already running at 30 Hz) resends anything unacked for
+  `UI_ACK_RESEND_MS`, gives up loudly after `UI_ACK_GIVEUP_MS`, and refuses to
+  queue past `UI_ACK_MAX_PENDING` — an unbounded pending list is a memory leak
+  wearing a reliability costume.
+- **The host does not repeat the effect.** `hostHandleUi` keeps a per-peer
+  high-water mark and applies a sequence number once. A duplicate is
+  **acknowledged and discarded**, because from the host's side a duplicate is
+  what a *lost ack* looks like: the action landed, the reply did not, and the
+  client is asking again. Staying quiet would leave it resending until it gave
+  up on something already done.
+- **A departing peer's mark is forgotten** in `hostDropPeer`. A reconnecting
+  client counts from 1 again; a stale mark would have the host discard its first
+  actions as duplicates — a lobby that lets you in and then ignores every button
+  you press.
+- **`hello` self-heals off the lobby heartbeat.** It is the one client message
+  that cannot be acked, because until it lands the host does not know the peer
+  exists. Instead the client watches the heartbeat's roster for itself and says
+  hello again if it is missing — reusing a channel that already exists rather
+  than inventing a second protocol.
+
+The host's own input never touches any of this; it is applied inline.
+
+Counters: `window.uvNet.uiResends`, `.uiDuplicates`, `.uiGaveUp`,
+`.helloResends`.
+
+### Verified
+
+`node tools/uiack_test.mjs` — two real pages over the local relay, driving the
+real `#btn-ready` button, with the client's channel broken at the transport:
+
+| check | result |
+|---|---|
+| an acknowledged action leaves nothing pending | pass |
+| a press during a broken channel does **not** reach the host | pass (the failure is real, so what follows means something) |
+| it lands after the channel recovers, **with no second press** | pass — 2 resends |
+| 8 swallowed acks → 8 duplicates at the host, `ready` toggles **once** | pass |
+| a replayed old sequence is acked and not re-applied | pass |
+| a real disconnect clears the host's high-water mark | pass |
+
+`ready` is the probe throughout precisely because it toggles: an idempotent
+action would pass with or without the dedupe and prove nothing about the part
+that is hard.
+
+**What this does not prove.** The original symptom was intermittent
+`timeout waiting for client ready` in the full co-op suite, and that suite
+cannot currently reach its co-op phase reliably for an unrelated reason (see
+the note on dead weapon tests in §9). The failure mode is reproduced and fixed
+under deliberate injection; it has not been observed absent in the wild,
+because the wild run is blocked.
 
 ---
 
@@ -602,6 +655,111 @@ the drop ledger is clean on these runs. Recorded as its own entry specifically
 so it stops being absorbed into "co-op is flaky", which is how it stayed
 invisible while two other distinct failures wore the same description.
 
-**Undiagnosed.** Nothing has been ruled out. The next step is logging the
-PeerJS error on the registration path, which currently reports only that the
-code never arrived.
+### What was measured
+
+`tools/room_reg_test.mjs` drives `HostTransport.createRoom()` directly against
+the local relay, with no lobby, no Host button, and no cap of its own — it waits
+for the promise to settle and reports what it settled as.
+
+| trials | registered | min | median | max | retries needed |
+|---|---|---|---|---|---|
+| 20 | 20 / 20 | 3 ms | 3 ms | 8 ms | 0 |
+
+**Room registration was not what was failing.** Twenty for twenty, in single-digit
+milliseconds, on the same relay the suite boots. Whatever made one co-op run in
+three or four report `room registration failed against local relay`, it was not
+`createRoom()` failing to register a room.
+
+### What the message was actually reporting
+
+The suite's `tryRegister()` returned a bare `null` for three unrelated outcomes
+and the caller printed one sentence for all of them:
+
+1. `window.uv.lobby` null — the host flow never started, so nothing was ever
+   registered;
+2. registration settled as failed — the real case the message described;
+3. still in flight when the poll gave up.
+
+Case 3 was guaranteed for a while. The suite polled for a hardcoded `12000` ms;
+the transport's own ceiling is `ROOM_REGISTER_ATTEMPTS x ROOM_REGISTER_TIMEOUT_MS`
+plus backoff, in a different file. Adding retries pushed that to 16200 ms without
+moving the suite's number, so any first-attempt timeout guaranteed the suite
+reported failure while registration was still running.
+
+And the diagnostic printed with it was structurally empty: `main.js` published
+`window.uvNet.regFailures` only from its terminal `.catch()`, so a registration
+still retrying and a registration with nothing wrong both read `[]`.
+
+### Fixed
+
+- **Registration is budget-bounded, not just attempt-bounded.**
+  `ROOM_REGISTER_BUDGET_MS` (11000) caps the whole sequence on wall clock. A
+  collision fails instantly and keeps all its retries; a relay that has gone
+  quiet stops costing attempts. Per-attempt timeout dropped 8000 -> 5000.
+- **The suite derives its wait from that constant** (`REG_WAIT_MS`) instead of
+  restating it. Four separate hardcoded literals across the file — three at
+  12000 and one at 15000 — are gone. Two numbers that must agree are one number.
+- **The ledger is written per attempt, in `net.js`, where the failure happens** —
+  not by whoever catches the final rejection. "Still retrying" and "nothing has
+  gone wrong" are no longer the same reading.
+- **`tryRegister()` reports which of the three outcomes ended it**, with elapsed
+  ms and the ledger contents.
+- **Unretryable failures cost one attempt.** `peerjs-missing` will still be
+  missing in 400 ms; it was being retried three times on every page in the suite
+  that isn't testing co-op.
+- **A taken room code now recovers.** `unavailable-id` means that exact code is
+  registered, and the original code retried nothing at all — one collision ended
+  the session. Verified on the runtime path: `Math.random` is pinned so the first
+  code drawn is one already squatted on the relay, then released; the transport
+  collides, redraws, and registers, and the ledger records
+  `unavailable-id` on the taken code.
+
+### Still open
+
+**The original symptom is not confirmed fixed, and no root cause is claimed.**
+Registration measures healthy, so the fixes above are for real defects found by
+reading the code and by instrumenting the harness — not for a cause anyone
+observed. Cases 1 and 2 remain live possibilities and neither has been seen
+since the instrument was fixed. What has changed is that the next occurrence
+names which one it was; before, all three printed the same sentence.
+
+**Not to be closed on an absence of failures.** With a 1-in-3-or-4 rate, a
+couple of clean runs is not evidence. It closes when a run reproduces it and
+the new diagnostic says what it was, or when enough co-op runs accumulate to
+put that rate out of reach.
+
+---
+
+## 10. The browser suite gates co-op behind tests for content that was removed
+
+**Where:** `tools/browser_test.mjs`, the shop/meta phases and the co-op phase.
+
+**What is wrong.** Weapons were removed from the game — `js/game.js` sets
+`p.weaponSlots = 0` unconditionally, and `_addWeapon` refuses when
+`p.weapons.length >= p.weaponSlots`, which `0 >= 0` always is. Several suite
+checks still wait for weapons to appear:
+
+```
+✗ browser test crashed: timeout waiting for a matching pair of coilguns in meta
+✗ coop test: timeout waiting for a matching pair of coilguns in the host's meta
+✗ mobile test crashed: tap: no element [data-wchip="0"] .wsym
+✗ mobile combine badge: null
+```
+
+None of these can pass. They are not reporting a defect in the game; they are
+tests for content that no longer exists.
+
+**Why it matters beyond the noise.** These `waitFor`s **throw**, and a throw
+ends the phase. So a co-op run can abort before it reaches the co-op sequence at
+all, which means "co-op failed" and "co-op never ran" look similar in the log —
+the same conflation that kept #9 undiagnosed one level down. It also makes the
+suite an unreliable instrument for exactly the two defects that most need it.
+
+**Not fixed here.** Deleting or rewriting these belongs with the phase-4 economy
+work that owns the weapon removal, and pulling that forward was explicitly
+out of scope. Recorded so the failures are attributed rather than re-diagnosed.
+
+**Note the interaction with #8's verification.** `tools/uiack_test.mjs` exists
+partly because of this: it pairs two real pages directly and never touches a
+shop, so it can verify client input delivery without depending on a suite that
+cannot reliably get there.

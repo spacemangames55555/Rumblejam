@@ -121,9 +121,36 @@ export const CONFIG = {
   // retry meant any transient signalling failure — or a room-code collision,
   // which can NEVER succeed on a retry of the same code — cost the whole
   // session. Each attempt draws a fresh code; the backoff is per-attempt.
+  //
+  // THE BUDGET IS THE REAL CEILING, and it exists because the retry is not
+  // free. Attempts x timeout is 15s of a player watching "registering room…",
+  // and it is 15s the co-op suite has to be told to wait for. The retry earns
+  // its keep on FAST failures — a taken code errors immediately, so all three
+  // attempts finish inside a second. It earns nothing on slow ones: if the
+  // relay did not answer in 5s it will not answer in 5s more. The budget stops
+  // the sequence on wall clock so the collision case keeps its retries and the
+  // dead-relay case still gives up promptly.
   ROOM_REGISTER_ATTEMPTS: 3,
-  ROOM_REGISTER_TIMEOUT_MS: 8000,
+  ROOM_REGISTER_TIMEOUT_MS: 5000,
   ROOM_REGISTER_BACKOFF_MS: 400,
+  ROOM_REGISTER_BUDGET_MS: 11000,
+
+  // Client -> host input delivery (defect #8). Character pick, ready, node tap,
+  // buy and stance all leave by one method and used to leave exactly once; if
+  // the channel was not open at that instant the action was simply gone.
+  //
+  // The heartbeat pattern does not transfer here. Host state repeats because
+  // repeating it is idempotent — the same roster applied twice is the same
+  // roster. Input is not: `ready` TOGGLES, so a second delivery of one press
+  // un-readies the player. So the client repeats until acknowledged and the
+  // host applies each sequence number once, which is repetition without
+  // re-firing.
+  //
+  // Resend is 4 Hz against a 30 Hz pump, so a lost action costs a quarter
+  // second rather than the session. Giving up is loud, not silent.
+  UI_ACK_RESEND_MS: 250,
+  UI_ACK_GIVEUP_MS: 8000,
+  UI_ACK_MAX_PENDING: 64,
 
   DISCONNECT_TIMEOUT: 5,   // s of silence before a client is dropped
   MAX_PLAYERS: 8,
