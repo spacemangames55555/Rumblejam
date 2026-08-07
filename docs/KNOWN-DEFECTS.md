@@ -626,12 +626,49 @@ real `#btn-ready` button, with the client's channel broken at the transport:
 action would pass with or without the dedupe and prove nothing about the part
 that is hard.
 
-**What this does not prove.** The original symptom was intermittent
-`timeout waiting for client ready` in the full co-op suite, and that suite
-cannot currently reach its co-op phase reliably for an unrelated reason (see
-the note on dead weapon tests in §9). The failure mode is reproduced and fixed
-under deliberate injection; it has not been observed absent in the wild,
-because the wild run is blocked.
+### The wild run says the ack is not the cause of this symptom
+
+Once §10 stopped ending the co-op phase early, eleven full co-op runs became
+possible. `timeout waiting for client ready` reproduced, and the ledger read:
+
+```
+host:   {present:true, ready:false, charId:"lodestone", n:2, seen:"c6bcc6:4", conns:1}
+client: {uiSeq:4, pending:[], open:true, drops:0, resends:0, myKey:"c6bcc6"}
+```
+
+The host's per-peer high-water mark is **4** and the client's sequence counter
+is **4**. Nothing pending, zero drops, zero resends, zero duplicates, channel
+open, and the pick applied. **Every message the client sent was delivered and
+applied** — and `ready` is still false.
+
+`hostHandleUi` does `p.ready = !p.ready`, so it was toggled an EVEN number of
+times. That is not a lost message, which is the only thing the ack addresses.
+The fix above is correct for what it covers and `uiack_test.mjs` proves it
+under injection, but **it does not explain this symptom and must not be
+credited with it.**
+
+Two mechanisms remain, and they want opposite fixes:
+
+1. **One press became two messages** — a double-fired handler on the client.
+   The toggle would not be the cause, and making `ready` idempotent would hide
+   a UI bug rather than fix it.
+2. **A second, distinct `ready` arrived from somewhere else.** Not a duplicate
+   delivery: `uiDuplicates` is 0, so the dedupe never saw a repeated sequence
+   number.
+
+Neither ledger can separate them — the ack answers "did it arrive", not "how
+many times did one click become a message". `window.uvNet.uiLog` (every `ui`
+the client sends, in order) and `window.uvNet.uiApplied` (every one the host
+applies) now record exactly that, and the failure dump prints both. It has not
+reproduced since they were added: 1 failure in the 7 runs after the assertion
+was split, against 3 in the 4 runs before it. **That spread means the rate
+itself is not measurable at these sample sizes, and no conclusion should be
+drawn from a quiet run.**
+
+**Do not "fix" the toggle yet.** Sending an explicit `ready` value instead of
+flipping is the obvious change and may well be right, but two diagnoses of this
+defect have already been overturned by the next measurement, and both times the
+cause was choosing the fix before the data.
 
 ---
 
@@ -714,19 +751,34 @@ still retrying and a registration with nothing wrong both read `[]`.
   collides, redraws, and registers, and the ledger records
   `unavailable-id` on the taken code.
 
-### Still open
+### Still open — this is a negative result, not a fix
 
-**The original symptom is not confirmed fixed, and no root cause is claimed.**
-Registration measures healthy, so the fixes above are for real defects found by
-reading the code and by instrumenting the harness — not for a cause anyone
-observed. Cases 1 and 2 remain live possibilities and neither has been seen
-since the instrument was fixed. What has changed is that the next occurrence
-names which one it was; before, all three printed the same sentence.
+**20/20 at 3–8 ms does not explain failures that were happening 1 run in 3–4.**
+That is the whole finding. A healthy measurement of the component named in the
+defect is evidence that the name was wrong; it is not evidence that anything
+was repaired. Everything fixed above was found by *reading* — a collision that
+could never recover, a ledger written too late, a suite wait that had drifted —
+and none of it was implicated by an observation.
 
-**Not to be closed on an absence of failures.** With a 1-in-3-or-4 rate, a
-couple of clean runs is not evidence. It closes when a run reproduces it and
-the new diagnostic says what it was, or when enough co-op runs accumulate to
-put that rate out of reach.
+So the honest position is that **the failure stopped reproducing and nobody
+knows why.** A defect that stops reproducing without a known cause is not a
+fixed defect; it is a defect that is currently quiet. The two live
+possibilities are unchanged and both remain untested:
+
+1. `window.uv.lobby` was null when the poll started — the host flow never began,
+   and nothing was ever registered;
+2. registration genuinely settled as failed, for a reason the old ledger could
+   not have recorded.
+
+What actually changed is the *resolution* of the next occurrence. The suite used
+to print one sentence for three outcomes; it now names which one, with elapsed
+ms and the ledger contents attached.
+
+**Closing conditions.** Either a run reproduces it and the new diagnostic says
+what it was, or enough clean full co-op runs accumulate that a 1-in-3-or-4 rate
+is statistically out of reach. Neither has happened. A handful of quiet runs is
+not the second condition — at that rate, four clean runs in a row is roughly a
+1-in-4 coincidence on its own.
 
 ---
 
@@ -763,3 +815,58 @@ out of scope. Recorded so the failures are attributed rather than re-diagnosed.
 partly because of this: it pairs two real pages directly and never touches a
 shop, so it can verify client input delivery without depending on a suite that
 cannot reliably get there.
+
+---
+
+## 11. Players deal no damage in the co-op run, and take it normally
+
+**Where:** unknown. Surfaced by every full co-op run once §10 stopped ending the
+phase early.
+
+**What is wrong.** Two checks fail together in run after run:
+
+```
+✗ no organic damage dealt on touch within 15s
+✗ damage tallies: {"d0":0,"d1":0,"hurt":true}
+```
+
+`hurt: true` means enemies are damaging players. `d0: 0, d1: 0` means neither
+player has dealt a single point in return.
+
+**Why it is recorded separately.** It is almost certainly why the phase then
+dies in three different places across three runs — `timeout waiting for host
+run`, `timeout waiting for host extraction shop`, `timeout waiting for a fight
+to clear` — because a fight that cannot be won never clears, and everything
+downstream waits on a clear. Those three timeouts read as three flaky checks;
+they are one defect wearing three names, which is the conflation this file
+exists to stop.
+
+**Not diagnosed.** The obvious suspicion is the weapons-to-skills migration:
+weapons were the damage source and `weaponSlots` is 0, so if a co-op path does
+not grant or fire skills the party has no offence at all. That is a suspicion,
+not a finding — `sim_test`'s combat cases pass, so whatever this is, it is not
+simply "nothing deals damage anywhere".
+
+**It outranks #8 and #9 for the next patch.** Both of those are intermittent
+failures of a lobby transition. This is the run itself being unplayable, and it
+reproduces every time.
+
+---
+
+## 12. A client-page eval dies on an undefined `.x` mid co-op
+
+**Where:** the client page, during the co-op phase.
+
+```
+✗ coop test: page eval failed on [B]: TypeError: Cannot read properties of undefined (reading 'x')
+```
+
+**Status.** Intermittent — 2 of the last 7 runs. The message named neither the
+page nor the expression until `Browser.exec` was changed to report both, and
+even then the exception's multi-line stack pushed the script snippet onto a
+later line where every run-log grep dropped it. Both are fixed; the next
+occurrence carries the failing expression on one line with it.
+
+**Recorded rather than chased** because #11 is the larger blocker and this may
+turn out to be downstream of it — an eval reading a position off an entity that
+a stalled fight never produced.

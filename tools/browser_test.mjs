@@ -221,8 +221,12 @@ class Browser {
       // located nothing and the phase it ended stayed unexplained across three
       // runs. Same rule as every other diagnostic here: name what you assert.
       const snippet = script.replace(/\s+/g, ' ').trim().slice(0, 160);
-      throw new Error(`page eval failed on [${this.label}]: `
-        + ((d.exception && d.exception.description) || d.text).slice(0, 300)
+      // The description is a multi-line stack. Left as-is it pushes the snippet
+      // onto a later line, where every grep in every run log drops it — which
+      // is how "page eval failed ... reading 'x'" survived four runs naming
+      // nothing. Collapsed to one line so the whole message travels together.
+      const desc = String((d.exception && d.exception.description) || d.text).replace(/\s+/g, ' ').slice(0, 220);
+      throw new Error(`page eval failed on [${this.label}]: ${desc}`
         + ` — while evaluating: ${snippet}${script.length > 160 ? '…' : ''}`);
     }
     return r.result ? r.result.value : undefined;
