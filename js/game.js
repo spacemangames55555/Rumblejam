@@ -2,7 +2,7 @@
 // rendering. Clients only ever send inputs/UI intents; everything here is the
 // single source of truth. Solo play runs this exact code with one player.
 
-import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, SCALING_RATES } from './config.js';
+import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT } from './config.js';
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
@@ -12,7 +12,7 @@ import {
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
   objectiveSpawnX,
 } from './objectives.js';
-import { CHAR_BY_ID } from './content/characters.js';
+import { CHAR_BY_ID, isSelectable, unselectableReason } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
 import { EnemyGrid } from './triggers.js';
@@ -51,7 +51,10 @@ const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', domain: 'mental', behavior
 const TIER_WEIGHTS = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 40, 20]];
 
 export class Sim {
-  constructor({ seed, party }) {
+  constructor({ seed, party, allowUnplayable = false }) {
+    // see _makePlayer: an explicit, named opt-out for tests that measure a
+    // class's TRAIT rather than whether it can win a fight
+    this.allowUnplayable = allowUnplayable;
     this.seed = seed >>> 0;
 
     // THE SIM STREAM. Every incidental roll the simulation makes — spawn
@@ -158,12 +161,72 @@ export class Sim {
 
   // ---------------- player construction & stats ----------------
 
+  // The skill path calls this; see fireSkill() in skillsim.js. Exposed on the
+  // Sim rather than imported there because traits-toh.js already imports from
+  // the sim side and a second edge would close a cycle.
+  tohOnFire(p, ctx) { tohOnFire(this, p, ctx); }
+
+  // PER-TARGET DAMAGE ATTRIBUTION, opt-in. "The player is armed and firing and
+  // the mark's HP does not move" has three causes that want three different
+  // fixes — the selector chose something else, the selector chose the mark and
+  // the projectile missed, or the mark absorbed the hit — and a total-damage
+  // counter cannot tell them apart. A harness sets sim.dmgLog = new Map() and
+  // reads it at teardown; nothing is recorded when it is absent, so live play
+  // pays one property check.
+  _dmgLedger(e, owner, amount, outcome) {
+    if (!this.dmgLog || !owner || !owner.stats) return;
+    const k = e.id;
+    let r = this.dmgLog.get(k);
+    if (!r) { r = { id: k, tag: e.bounty ? 'MARK' : e.isNest ? 'nest' : e.boss ? 'boss' : e.elite ? 'elite' : 'chaff', landed: 0, hits: 0, blocked: 0 }; this.dmgLog.set(k, r); }
+    if (outcome === 'landed') { r.landed += amount; r.hits++; } else r.blocked++;
+  }
+
+  // What each skill fire SELECTED, before anything travelled. A projectile that
+  // misses and a target never chosen look identical downstream.
+  _selLedger(skillId, target) {
+    if (!this.selLog) return;
+    const k = target ? (target.bounty ? 'MARK' : target.isNest ? 'nest' : target.boss ? 'boss' : target.elite ? 'elite' : 'chaff') : 'none';
+    const key = `${skillId}->${k}`;
+    this.selLog.set(key, (this.selLog.get(key) || 0) + 1);
+  }
+
   _makePlayer(member, idx) {
-    const char = CHAR_BY_ID[member.charId] || CHAR_BY_ID.bulwark;
+    // NO SILENT SUBSTITUTION. This used to be
+    //   CHAR_BY_ID[member.charId] || CHAR_BY_ID.bulwark
+    // and that single `||` is most of why §15 defect #11 survived a patch: an
+    // id from the other roster resolved to bulwark with the right stats and the
+    // WRONG charId, treesFor(p) keys off charId, and the player got a character
+    // with no skill trees and no way to attack — silently.
+    //
+    // There is one roster now, so there is nothing to fall back FROM. An
+    // unknown id is a bug in whoever built the party, and it throws.
+    const char = CHAR_BY_ID[member.charId];
+    if (!char) {
+      throw new Error(`[sim] unknown character "${member.charId}". There is one roster and this is not in it. `
+        + `Known: ${Object.keys(CHAR_BY_ID).join(', ')}`);
+    }
+    // SELECTABILITY IS ABOUT STARTING A RUN. A class with no tree cannot fight,
+    // so a lobby must not offer it and a client must not be able to force it.
+    // But its TRAIT may be fully implemented and worth testing, and refusing to
+    // construct a Sim at all would block those tests — so the escape hatch is
+    // explicit and named, never a default. `allowUnplayable` says: I know this
+    // class cannot win a fight, I am measuring something else.
+    if (!isSelectable(char.id) && !this.allowUnplayable) {
+      throw new Error(`[sim] "${char.id}" has no skill tree, so it has no way to deal damage — `
+        + `${unselectableReason(char.id)} A run started with it could never clear a fight. `
+        + `If you are testing something other than whether it can fight, pass allowUnplayable: true.`);
+    }
     const p = {
       idx, name: member.name || `Player ${idx + 1}`, charId: char.id, char,
       color: member.color, gone: false,
-      x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.key === 'immovable' ? char.trait.hitbox : 1),
+      // HONOURED BY PRESENCE, not by trait name. This read
+      //   char.trait.key === 'immovable' ? char.trait.hitbox : 1
+      // and `immovable` was a RETIRED classic trait, so the Blacksmith's
+      // crystal_infusion carried a hitbox of 1.4 that the sim ignored entirely
+      // — a bigger target that was only bigger on screen. js/main.js already
+      // special-cased both names; a data field should not need the engine to
+      // know who owns it.
+      x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.hitbox || 1),
       mx: 0, my: 0, interact: false, moving: false, aimA: 0, stillT: 0,
       hp: 1, shield: 0, downed: false, reviveP: 0, invuln: 0, pullX: 0, pullY: 0,
       level: 1, xp: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
@@ -206,7 +269,11 @@ export class Sim {
     // patch-trigger-core: weapons are gone. Skills replace them entirely, with
     // no toggle and no compatibility layer — a half-migrated combat model would
     // not answer the gate question, and this branch is disposable if it fails.
-    p.weaponSlots = 0;
+    //
+    // The CONDITION moved to CONFIG so it is stated once. It used to be this
+    // bare assignment, which meant nothing outside the engine could ask whether
+    // weapons existed — and the browser suite went on asserting they did.
+    if (!CONFIG.WEAPONS_ENABLED) p.weaponSlots = 0;
     SK.initSkillPlayer(this, p);
     this._recomputeItems(p);
     this._recomputeStats(p);
@@ -1805,16 +1872,6 @@ export class Sim {
     return this.time - p.lastFireT >= t.idle + cdMax;
   }
 
-  // Weapon damage: base × tier × (1 + Ferocity/100) × (1 + scaling-tag bonus/100).
-  // Percent scaling tags contribute their value; flat tags convert via SCALING_RATES.
-  _scalingBonus(p, def) {
-    let bonus = 0;
-    for (const key of def.scaling) {
-      bonus += STAT_IS_PCT[key] ? p.stats[key] : p.stats[key] * (SCALING_RATES[key] || 1);
-    }
-    return Math.max(-60, bonus);
-  }
-
   _fireWeapon(p, w, widx, opts = {}) {
     const def = WEAPON_BY_ID[w.id];
     const range = this._weaponRange(p, def);
@@ -1845,7 +1902,9 @@ export class Sim {
 
     // damage: base × tier × (1 + Ferocity/100) × (1 + scaling-tag bonus/100)
     let dmg = def.dmg * TIER_MULT[w.tier - 1];
-    let mult = (1 + p.stats.ferocity / 100) * (1 + this._scalingBonus(p, def) / 100);
+    // scaling tags are gone with SCALING_RATES; Ferocity is the only multiplier
+    // left on this path, which is itself only reachable from a line-of-sight test
+    let mult = (1 + p.stats.ferocity / 100);
     if (t.key === 'glass') mult *= t.dealMult;
     // Onrush: consume the movement meter (+60% at full charge)
     if (t.key === 'momentum_meter' && p.meter > 0.05) { mult *= 1 + t.bonus * p.meter; p.meter = 0; }
@@ -2183,7 +2242,7 @@ export class Sim {
     // Sight and projectiles already stop at the barricades; this makes the
     // rule absolute, so novas and other line-of-sight-ignoring damage do
     // not quietly skip the part of the level that IS the level.
-    if (e.nestShielded) { this.fx.blocks.push({ x: e.x, y: e.y }); return; }
+    if (e.nestShielded) { this.fx.blocks.push({ x: e.x, y: e.y }); this._dmgLedger(e, opts.owner, 0, 'nest-shielded'); return; }
     // warden allies shield: 50% reduction if a living warden is nearby (not self)
     if (!e.boss && e.def.behavior !== 'warden') {
       for (const w of this.enemyPool) {
@@ -2193,7 +2252,11 @@ export class Sim {
     }
     // shielded elite: eats one hit periodically
     if (e.eliteMod && e.eliteMod.blockCd && !opts.noEffects) {
-      if ((e.blockT || 0) <= 0) { e.blockT = e.eliteMod.blockCd; this.fx.blocks.push({ x: e.x, y: e.y }); return; }
+      if ((e.blockT || 0) <= 0) {
+        e.blockT = e.eliteMod.blockCd; this.fx.blocks.push({ x: e.x, y: e.y });
+        this._dmgLedger(e, opts.owner, 0, 'blocked');
+        return;
+      }
     }
     amount = Math.max(1, Math.round(amount));
     e.hp -= amount;
@@ -2202,6 +2265,7 @@ export class Sim {
     if (e.eliteMod && e.eliteMod.regenLockS) e.regenLock = e.eliteMod.regenLockS;
     if (!opts.silent) this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: opts.crit ? 1 : 0 });
     const p = opts.owner;
+    this._dmgLedger(e, p, amount, 'landed');
     if (p && p.stats) {
       p.damageDealt += amount;
       // lifesteal is a healing SOURCE (items + innate traits), amplified by Recovery in _heal

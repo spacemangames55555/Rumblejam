@@ -13,6 +13,7 @@ import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samu
 import { TRIGGER_KINDS, TRIGGER_PARAMS } from './triggers.js';
 import { PRIMITIVE_KINDS, RIDERS_BY_PRIMITIVE } from './compose.js';
 import { isDomain } from './domains.js';
+import { SELECT_KINDS } from './selectors.js';
 
 export const TREES = {
   necro_dark_matter: { id: 'necro_dark_matter', name: 'Dark Matter', classId: 'toh_necromancer', skills: NECRO_DARK_MATTER, tuning: NECRO_TUNING },
@@ -108,6 +109,7 @@ function assertTrees() {
       if (!isDomain(s.domain)) problems.push(`${s.id}: domain ${JSON.stringify(s.domain)} is not one of physical/mental/spiritual`);
       if (s.prereq && !ids.has(s.prereq)) problems.push(`${s.id}: prereq ${s.prereq} is not in tree ${tree.id} — cross-tree prerequisites are not allowed`);
       if (s.prereq === s.id) problems.push(`${s.id}: prereq points at itself`);
+      if (s.type !== 'active' && s.select) problems.push(`${s.id}: passive declares select ${JSON.stringify(s.select)} — a passive hits nothing`);
 
       if (s.type === 'active') {
         const tg = s.trigger;
@@ -119,6 +121,17 @@ function assertTrees() {
           for (const k of TRIGGER_PARAMS[tg.kind]) {
             if (tg[k] === undefined || tg[k] === null) problems.push(`${s.id}: ${tg.kind} needs param "${k}"`);
           }
+        }
+        // REQUIRED, NEVER DEFAULTED. `select` is what the skill hits; the
+        // trigger is only when it fires. Defaulting a missing one to 'nearest'
+        // would silently reproduce §15 defect #13 on every skill anyone forgot
+        // — which is precisely how the bug existed in the first place, as an
+        // unwritten universal default nobody had to opt into.
+        if (!s.select) {
+          problems.push(`${s.id}: active with no "select" — declare what it hits, one of ${SELECT_KINDS.join('/')}. `
+            + 'There is no default: "nearest" is a choice like any other and has to be made.');
+        } else if (!SELECT_KINDS.includes(s.select)) {
+          problems.push(`${s.id}: select ${JSON.stringify(s.select)} is not one of ${SELECT_KINDS.join('/')}`);
         }
         if (!(s.cooldown > 0)) problems.push(`${s.id}: active with no cooldown`);
         if (!s.compose || !s.compose.length) problems.push(`${s.id}: active with an empty compose`);

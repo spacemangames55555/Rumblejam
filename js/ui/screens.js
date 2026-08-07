@@ -1,7 +1,7 @@
 // Title, lobby, results and settings screens (DOM). Pure view layer — all
 // state lives in main.js / the sim; this module renders and forwards clicks.
 
-import { CHARACTERS, CHAR_BY_ID, ROSTERS, ROSTER_IDS, ROSTER_ID } from '../content/characters.js';
+import { CHARACTERS, CHAR_BY_ID, isSelectable, unselectableReason } from '../content/characters.js';
 import { PALETTE, STAT_IS_PCT } from '../config.js';
 import { ITEM_BY_ID } from '../content/items.js';
 import { WEAPON_BY_ID } from '../content/weapons.js';
@@ -105,15 +105,6 @@ export function showLobby(lobby, isHost, myKey) {
         <div style="font-size:24px; letter-spacing:3px; color:var(--gold);">LOBBY</div>
         <div>${codeHtml}</div>
       </div>
-      <div class="roster-bar">
-        <span class="dim small">roster</span>
-        ${ROSTER_IDS.map(id => `<button class="roster-btn ${id === ROSTER_ID ? 'on' : ''}"
-            data-roster="${id}" ${isHost ? '' : 'disabled'}
-            title="${escapeHtml(ROSTERS[id].blurb)}">${escapeHtml(ROSTERS[id].name)}</button>`).join('')}
-        <span class="dim small">${isHost
-          ? 'switching clears everyone&rsquo;s pick'
-          : 'the host chooses &mdash; everyone plays the same roster'}</span>
-      </div>
       <div class="lobby-players">${lobby.players.map(p => `
         <div class="lobby-player ${p.ready || p.isHost ? 'ready' : ''}">
           <div class="dot" style="background:${p.color}"></div>
@@ -126,12 +117,22 @@ export function showLobby(lobby, isHost, myKey) {
       <div class="char-grid" id="char-grid">${CHARACTERS.map(c => {
         const takenBy = lobby.players.filter(p => p.charId === c.id).map(p => p.name);
         const mine = me && me.charId === c.id;
+        // SHOWN, NOT HIDDEN. A class with no skill tree cannot fight, so it
+        // cannot be picked — but a roster that silently shrinks to the two
+        // finished classes reads as a broken game rather than an unfinished
+        // one, and a player who cannot see what is coming cannot look forward
+        // to it. The card stays, greyed, saying why.
+        const locked = !isSelectable(c.id);
+        const why = locked ? unselectableReason(c.id) : '';
         return `
-        <div class="char-card ${mine ? 'selected' : ''} ${takenBy.length && !mine ? 'taken' : ''}" data-char="${c.id}" title="${escapeHtml(c.desc)}">
+        <div class="char-card ${mine ? 'selected' : ''} ${takenBy.length && !mine ? 'taken' : ''} ${locked ? 'locked' : ''}"
+             data-char="${c.id}" ${locked ? 'data-locked="1" aria-disabled="true"' : ''}
+             title="${escapeHtml(locked ? why : c.desc)}">
           <svg class="cicon" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="${me ? me.color : PALETTE.players[0]}" stroke="#0b0c12" stroke-width="3"/><text x="20" y="26" text-anchor="middle" font-size="17" fill="#0b0c12" font-weight="bold">${c.sym}</text></svg>
           <div class="cname">${c.name}</div>
           <div class="ctrait">${glossify(c.desc)}</div>
           <div class="cstats">${statSummary(c.stats)}</div>
+          ${locked ? `<div class="clocked">${escapeHtml(why)}</div>` : ''}
           ${takenBy.length ? `<div class="towner">✔ ${escapeHtml(takenBy.join(','))}</div>` : ''}
         </div>`;
       }).join('')}
@@ -144,10 +145,11 @@ export function showLobby(lobby, isHost, myKey) {
         </div>
       </div>
     </div>`;
-  el.querySelectorAll('.roster-btn').forEach(btn => {
-    btn.onclick = () => { sfx.click(); A.pickRoster(btn.dataset.roster); };
-  });
   el.querySelectorAll('.char-card').forEach(card => {
+    // A locked card is inert. Gating only the click would still let the host
+    // start a run with a class that cannot attack, so the sim rejects the pick
+    // too — this is the affordance, not the enforcement.
+    if (card.dataset.locked) return;
     card.onclick = () => { sfx.click(); A.pickChar(card.dataset.char); };
   });
   $('btn-leave').onclick = () => { sfx.click(); A.leave(); };

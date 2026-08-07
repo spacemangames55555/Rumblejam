@@ -47,6 +47,7 @@ export const NECRO_MARROW = [
     id: 'necro_bone_dart', tree: 'necro_marrow', tier: 1, name: 'Bone Dart',
     desc: 'A splinter of your own frame, thrown hard.',
     type: 'active', domain: 'physical', prereq: null,
+    select: 'objective_target',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'NEAREST', range: T.dartRange },
     cooldown: T.dartCd,
     compose: [{ kind: 'bolt', damage: T.dartDamage, speed: T.dartSpeed, range: T.dartRange, riders: {} }],
@@ -66,6 +67,7 @@ export const NECRO_MARROW = [
     id: 'necro_spiked_punch', tree: 'necro_marrow', tier: 3, name: 'Spiked Punch',
     desc: 'Close enough to be hit, which is where this tree wants you.',
     type: 'active', domain: 'physical', prereq: 'necro_calcify',
+    select: 'nearest',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'NEAREST', range: T.punchReach },
     cooldown: T.punchCd,
     compose: [{
@@ -78,6 +80,7 @@ export const NECRO_MARROW = [
     id: 'necro_bone_spur', tree: 'necro_marrow', tier: 4, name: 'Bone Spur',
     desc: 'Spurs stand out of the skin. Hitting you costs something.',
     type: 'active', domain: 'physical', prereq: 'necro_spiked_punch',
+    select: 'nearest',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'ON_HIT_TAKEN' },
     cooldown: T.spurCd,
     compose: [{ kind: 'ward', amount: T.spurAmount, duration: T.spurDuration, reflectPct: T.spurReflect }],
@@ -87,6 +90,7 @@ export const NECRO_MARROW = [
     id: 'necro_stake', tree: 'necro_marrow', tier: 5, name: 'Stake',
     desc: 'Pins a wounded thing in place for a long, long moment.',
     type: 'active', domain: 'physical', prereq: 'necro_bone_spur',
+    select: 'lowest_hp',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.stakePct, range: T.stakeRange },
     cooldown: T.stakeCd,
     compose: [{
@@ -107,6 +111,7 @@ export const NECRO_MARROW = [
     id: 'necro_bone_nova', tree: 'necro_marrow', tier: 7, name: 'Bone Nova',
     desc: 'Everything within arm\'s reach goes somewhere else.',
     type: 'active', domain: 'physical', prereq: 'necro_quill',
+    select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.novaRadius, count: T.novaCount },
     cooldown: T.novaCd,
     compose: [{
@@ -119,6 +124,7 @@ export const NECRO_MARROW = [
     id: 'necro_banshee', tree: 'necro_marrow', tier: 8, name: "Banshee's Wail",
     desc: 'A sound out of the marrow. What hears it hits softer.',
     type: 'active', domain: 'spiritual', prereq: 'necro_bone_nova',
+    select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.wailRadius, count: T.wailCount },
     cooldown: T.wailCd,
     compose: [{
@@ -131,6 +137,7 @@ export const NECRO_MARROW = [
     id: 'necro_wrecking_ball', tree: 'necro_marrow', tier: 9, name: 'Wrecking Ball',
     desc: 'You become the thing that goes through the room.',
     type: 'active', domain: 'physical', prereq: 'necro_banshee',
+    select: 'farthest',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'ISOLATED', radius: T.ballRadius, count: T.ballCount },
     cooldown: T.ballCd,
     compose: [{
@@ -143,6 +150,7 @@ export const NECRO_MARROW = [
     id: 'necro_marrownaut', tree: 'necro_marrow', tier: 10, name: 'Marrownaut',
     desc: 'The frame closes over you. Whatever is left outside can try.',
     type: 'active', domain: 'spiritual', prereq: 'necro_wrecking_ball',
+    select: 'objective_target',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'SELF_THRESHOLD', pct: T.marrowPct },
     cooldown: T.marrowCd,
     compose: [

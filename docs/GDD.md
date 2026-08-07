@@ -607,16 +607,90 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–2 established th
 
 ---
 
-## 15. Open Defects
+## 15. Open Defects — by cause, not by symptom
 
-| # | Defect | Status |
+**Read this before treating any suite failure as a bug.** `tools/sim_test.mjs`
+reports 30 failures and two thirds of them are not defects: 8 are classes that
+do not exist yet, 5 are questions nobody has answered, 7 are a subsystem
+deliberately left for phase 4. **10 are actually broken.** They are grouped here by
+*what would make them go away*, because "not built yet" and "broken" look
+identical in a red test log and the difference decides who picks the work up.
+
+Counts are the sim-suite failures each entry accounts for. The focused
+instruments — `offence_test`, `determinism_test`, `snapstate_test`,
+`region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`,
+`validate_items` — are all green.
+
+### A. Waiting on phase-5 trees — 8 of 30
+
+Twelve of the fourteen classes have no skill tree. Weapons are removed, so a
+class without a tree cannot attack, cannot trigger an attack hook, and cannot
+finish a level. **Nothing here is repairable by code.**
+
+| what fails | count | why |
+|---|---:|---|
+| `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is now correctly wired to `fireSkill` — but `toh_bard`, `toh_mage`, `toh_sundian` and `toh_druid` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. |
+| `elite_arena (1p/4p) never cleared` | 2 | One tier-1 skill in the single loadout slot a level-1 character has cannot finish a 3×-HP elite before the budget. More tiers and more slots are trees. |
+| `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
+| `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; twelve score 0 because they cannot attack. Two non-zero entries against twelve zeroes is the outlier. |
+
+### B. Waiting on a design decision — 5 of 30
+
+Real questions with no obviously-correct answer. Each needs a call in this
+document before code.
+
+| what fails | count | the question |
+|---|---:|---|
+| `nest (1p/4p) never cleared`, `bounty (1p/4p) never cleared` | 4 | **Throughput.** Since §13, targets are selected correctly and damaged — nests went 0/3 → 1/3, marks 0/5 → 2/5, Elite Arena now clears. What remains is whether a tier-1 skill at ten ranks *should* chew through a 3×-HP elite or a 10×-HP mark inside the budget. That is elite and mark HP, and retuning it on the back of a targeting fix would let a throughput change silently satisfy a targeting test. |
+| `the summoner class has no structure to recall` | 1 | **`bonelord` builds its structure via `_addWeapon`.** With `weaponSlots` at 0 it summons nothing, so no class in the game can exercise structure recall (the retired Cogsmith's `overseer` mounts were the other). Making it a skill-era summon needs deciding what grants it — a tree node? the trait at fight start? |
+
+**And one design gap with no failing test yet:** `objective_target` selects
+correctly and **delivery does not honour the selection.** Measured on the bounty
+mark: the selector chose the mark on 23 of 23 fires and 21 of those shots were
+intercepted by the escort pack that spawns with it. Selection is not delivery. A
+`pierce` rider on objective-targeting bolts would fix it; whether that is the
+right answer is a design call. See D below for the check that found it.
+
+### C. Phase 4 — the economy — 7 of 30
+
+Weapons were removed in `patch-trigger-core`; the shop, combine, sell and
+slot-cap machinery still exists and still has tests. **Do not touch these
+outside the phase-4 economy work** — they are the acceptance tests for the
+stat/modifier split when it lands.
+
+`below-max duplicate` · `combine result wrong` · `manual combine broke` ·
+`extraction shop buy failed` · `sell weapon: mats 0→0` ·
+`toh_samurai weapon cap 0` · `toh_necromancer weapon cap 0`.
+
+The suite also prints two `⊘ SKIPPED (weapons removed)` lines for swap-buy
+checks that cannot run at all. Skips are counted separately and never as passes.
+
+### D. Genuine open defects — 10 of 30
+
+Things that are broken now, in code that exists, and could be fixed today.
+
+| # | defect | evidence |
 |---|---|---|
-| **8** | **Client→host input has no delivery guarantee.** Character pick, ready, node tap, and buy leave by `ClientTransport.send` with no repetition, no ack, nothing to heal from. `client ready` fails intermittently | **Open — player-facing.** The heartbeat pattern does not transfer; repeating input would re-fire actions. Likely fix: ack with resend-until-acked, which is cheap because client input is small and infrequent |
-| **9** | **Room registration fails before any peer exists.** ~1 co-op run in 3–4 never gets a code | **Open — player-facing, undiagnosed.** Split from #8 deliberately: three distinct failures wore "co-op is flaky" as one description |
-| 2 | Regeneration off `maxHp` — root cause treated, not removed | Open |
-| 3 | Shielded bounty mark stalling at 4p | Open, unexplained |
+| **17** (×1) | **Bolt delivery ignores the selector.** The bounty mark is chosen on 23/23 fires; 2 shots arrive, 21 are intercepted by its escort. Per-target attribution (`sim.dmgLog` / `sim.selLog`) says `DELIVERY`, not selection, absorption or regeneration. | `UNKILLABLE (DELIVERY: the mark was chosen 23x but only 2 shot(s) arrived)` |
+| **18** (×5) | **The statue harness never spends its skill point**, so the "camper" it measures is unarmed and dies in every Bastion template. A harness gap, but a real one: the Bastion sanction is currently untested. | 5 × `camper statue DIED in Bastion/*` |
+| **19** (×1) | **Relic Run keeps spawning ambient waves** 30s after the field is emptied. | `Relic Run still spawns ambient waves: 1` |
+| **20** (×1) | **`sprites.js` projectile radii no longer match the engine** — the registry reports empty for shot/lob/summon. | `sprites.js projectile radii no longer match the engine` |
+| **21** (×1) | **`--require-all` does not fail on an undrawn batch**, so "batch 1 is done" is a feeling rather than a number. | `--require-all did not fail on an undrawn batch` |
+| **22** (×1) | **Per-row re-centring loses an animation's bob at a 128px cell** — 6px in, 2px out. Worked at the old 32px cell. | `bob preservation: row=2 (want 6)` |
 
----
+### Fixed this patch, kept for the record
+
+| # | was | now |
+|---|---|---|
+| 8 | Client→host input had no delivery guarantee | Ack with resend-until-acked; **but the wild `client ready` failure is NOT explained by it** — see `docs/KNOWN-DEFECTS.md` |
+| 9 | Room registration failing ~1 run in 3–4 | **A negative result, not a fix.** 20/20 direct trials at 3–8 ms, 8/8 co-op runs. It stopped reproducing and nobody knows why |
+| 10 | Suite gated co-op behind tests for removed weapons | Skipped, named, counted; co-op reaches its phase every run |
+| 11 | Only 2 of 47 characters could deal damage | Classic roster retired to `archive/classic-roster/`; selection gated on having a tree |
+| 13 | Skills converged on "whatever is nearest" | `select` is a required field on every active |
+| 14 | `tohOnFire` orphaned on a dead `_tickWeapons` | Called from `fireSkill` |
+| 15 | `hitbox` honoured by trait *name* (`immovable`, retired) | Read by presence |
+| 16 | Art style anchor hardcoded retired `char.pulsar` | `STYLE_ANCHOR_ID`, named and live |
+
 
 ## 16. Implementation Status
 

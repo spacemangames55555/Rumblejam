@@ -13,18 +13,16 @@
 //
 // Compared: the WHOLE SNAPSHOT every 60 ticks, not just the enemy field, so a
 // divergence anywhere in players, projectiles, fx, objectives or trait state
-// counts. Both rosters, region and non-region play, two players with scripted
+// counts. Region and non-region play, two players with scripted
 // but DIFFERENT inputs so movement and dodge paths actually run.
 
-import { setRoster } from '../js/content/characters.js';
 const { Sim } = await import('../js/game.js');
 
 let failures = 0;
 const ok = m => console.log(`✓ ${m}`);
 const fail = m => { failures++; console.error(`✗ ${m}`); };
 
-function run(seed, charId, roster, region, ticks) {
-  setRoster(roster);
+function run(seed, charId, _roster, region, ticks) {
   const g = new Sim({ seed, party: [
     { idx: 0, key: 'a', name: 'A', charId, color: '#fff' },
     { idx: 1, key: 'b', name: 'B', charId, color: '#fff' }] });
@@ -48,8 +46,10 @@ const CASES = [
   { seed: 90210, charId: 'toh_necromancer', roster: 'toh', region: null, ticks: 1800 },
   { seed: 13337, charId: 'toh_samurai', roster: 'toh', region: 'pacific_northwest', ticks: 1800 },
   { seed: 55555, charId: 'toh_necromancer', roster: 'toh', region: 'central_america', ticks: 1800 },
-  { seed: 7, charId: 'bulwark', roster: 'classic', region: null, ticks: 1800 },
-  { seed: 31337, charId: 'onrush', roster: 'classic', region: null, ticks: 2400 },
+  // was bulwark + onrush on the retired classic roster; re-seeded onto the two
+  // selectable classes so the six configurations still cover distinct RNG paths
+  { seed: 7, charId: 'toh_necromancer', roster: 'toh', region: 'pacific_northwest', ticks: 1800 },
+  { seed: 31337, charId: 'toh_samurai', roster: 'toh', region: 'central_america', ticks: 2400 },
 ];
 
 for (const c of CASES) {

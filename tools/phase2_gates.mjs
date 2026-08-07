@@ -17,8 +17,6 @@
 // its owner — and not from p.damageDealt, which is an accumulator that has no
 // idea which of eight skills produced it.
 
-import * as CH from '../js/content/characters.js';
-CH.setRoster('toh');
 const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
 const { SKILL_BY_ID, TREES_BY_CLASS, slotsAtLevel } = await import('../js/skills.js');

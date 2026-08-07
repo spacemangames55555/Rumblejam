@@ -16,13 +16,11 @@
 // Exit code is 0 when the two runs match and 1 when they diverge, so it can be
 // dropped straight into a gate the day it starts passing.
 
-import { setRoster } from '../js/content/characters.js';
 
 const SEED = Number(process.argv[2]) || 4242;
 const CHAR = process.argv[3] || 'toh_druid';
 const TICKS = Number(process.argv[4]) || 900;
 
-if (CHAR.startsWith('toh_')) setRoster('toh');
 const { Sim } = await import('../js/game.js');
 
 function arena(seed, charId) {

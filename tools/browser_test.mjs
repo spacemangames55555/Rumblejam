@@ -17,8 +17,17 @@ import { execFileSync } from 'node:child_process';
 // a rejected sheet — a test that describes the art layout must read it, not
 // restate it.
 import { SPRITE_SIZE } from '../js/content/sprites.js';
+import { CONFIG } from '../js/config.js';
 const E_CELL = SPRITE_SIZE.enemy[0];
 const FX_CELL = SPRITE_SIZE.fx[0];
+
+// DERIVED, NEVER RESTATED. This was the literal 12000, and the transport's own
+// registration ceiling was a separate number in js/config.js. When retries were
+// added the ceiling went past 12s and this did not move, so the suite began
+// reporting "room registration failed" for registrations that had not finished
+// — and then read a ledger that is only complete once they have, printing `[]`.
+// Two numbers that must agree are one number.
+const REG_WAIT_MS = CONFIG.ROOM_REGISTER_BUDGET_MS + 3000;
 
 // A minimal RGBA PNG writer at module scope, for fixtures that need real
 // transparency — the sprite-pipeline block has its own opaque variant, and a
@@ -63,6 +72,13 @@ const URL = `http://localhost:${PORT}/index.html`;
 const CHROME = '/opt/pw-browsers/chromium';
 let failures = 0;
 const ok = m => console.log(`✓ ${m}`);
+// SKIPPED IS NOT PASSED. Prints, does not count as a failure, and names the
+// reason — a check silently deleted is a check nobody remembers to restore.
+let skipped = 0;
+const skip = m => { skipped++; console.log(`⊘ SKIPPED (weapons removed — §15 defect #10): ${m}`); };
+// Derived from the engine's own condition, never restated. When phase 4 flips
+// CONFIG.WEAPONS_ENABLED these checks come back on their own.
+const WEAPONS = CONFIG.WEAPONS_ENABLED;
 const fail = m => { failures++; console.error(`✗ ${m}`); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let nextDebugPort = 9411;
@@ -167,7 +183,13 @@ class Browser {
       // captured into an array nobody printed. A diagnostic whose output goes
       // into a buffer no test reads is not a diagnostic. The drop counter is
       // asserted at teardown; this is so the reason is on screen when it fires.
+      if (/^\[net\] (ROOM REGISTRATION|room registration)/.test(line)) console.error(`  [${this.label}] ${line}`);
       if (/^\[net\] DROPPED/.test(line)) { NET_DROPS.push(`[${this.label}] ${line}`); console.error(`  [${this.label}] ${line}`); }
+      // A GIVE-UP is defect #8 reproducing: the client resent until the budget
+      // ran out and the host never acknowledged. A DROPPED `ui` is not — it is
+      // the ack doing its job. The teardown has to tell them apart or it will
+      // keep calling a working mechanism a failure.
+      if (/^\[net\] GAVE UP on client action/.test(line)) { NET_GAVEUP.push(`[${this.label}] ${line}`); console.error(`  [${this.label}] ${line}`); }
     }
   }
 
@@ -193,7 +215,19 @@ class Browser {
     const r = await this.cdp('Runtime.evaluate', { expression: wrapped, awaitPromise: true, returnByValue: true });
     if (r.exceptionDetails) {
       const d = r.exceptionDetails;
-      throw new Error('page eval failed: ' + ((d.exception && d.exception.description) || d.text).slice(0, 300));
+      // WITH THE SCRIPT THAT FAILED. "page eval failed: TypeError: Cannot read
+      // properties of undefined (reading 'x')" names neither the page nor the
+      // expression, and this file contains hundreds of evals — so the message
+      // located nothing and the phase it ended stayed unexplained across three
+      // runs. Same rule as every other diagnostic here: name what you assert.
+      const snippet = script.replace(/\s+/g, ' ').trim().slice(0, 160);
+      // The description is a multi-line stack. Left as-is it pushes the snippet
+      // onto a later line, where every grep in every run log drops it — which
+      // is how "page eval failed ... reading 'x'" survived four runs naming
+      // nothing. Collapsed to one line so the whole message travels together.
+      const desc = String((d.exception && d.exception.description) || d.text).replace(/\s+/g, ' ').slice(0, 220);
+      throw new Error(`page eval failed on [${this.label}]: ${desc}`
+        + ` — while evaluating: ${snippet}${script.length > 160 ? '…' : ''}`);
     }
     return r.result ? r.result.value : undefined;
   }
@@ -235,6 +269,22 @@ const wantCoop = process.argv.includes('--coop');
 // the browsers are closed by then — and a drop that happened in a browser that
 // has since exited is exactly as bad as one in a browser still open.
 const NET_DROPS = [];
+const NET_GAVEUP = [];
+// Live counters scraped from window.uvNet before a page closes. The console
+// lines above survive the browser; the counters do not, and the counters are
+// what say whether a resend RECOVERED — a drop followed by a successful resend
+// leaves two very different records and only one of them is a defect.
+const NET_LEDGERS = [];
+async function captureLedger(br, when) {
+  try {
+    const raw = await br.exec(`return JSON.stringify(window.uvNet ? {
+      drops: window.uvNet.drops || 0, uiResends: window.uvNet.uiResends || 0,
+      uiDuplicates: window.uvNet.uiDuplicates || 0, uiGaveUp: window.uvNet.uiGaveUp || 0,
+      helloResends: window.uvNet.helloResends || 0, regFailures: (window.uvNet.regFailures || []).length,
+      dropLog: (window.uvNet.dropLog || []).slice(-8) } : null)`);
+    if (raw && raw !== 'null') NET_LEDGERS.push({ page: `${br.label}@${when}`, ...JSON.parse(raw) });
+  } catch { /* page already gone; the console lines still stand */ }
+}
 
 // ---------- teardown gate: a suite that dirties the working tree has failed ----------
 //
@@ -267,10 +317,41 @@ const dirtyBefore = gitDirty();
 //
 // Takes the live browsers so it can ask each of them; a drop on the HOST and a
 // drop on a CLIENT are different bugs and both matter.
+// CLASSIFIED, because "a send was dropped" stopped being one thing when the ack
+// landed. Three categories, and only two of them are defects:
+//   ui        — resent until acknowledged. A drop is a delay. Reported, not failed.
+//   in / ping — movement and keepalive, lossy by design at 30 Hz. Reported.
+//   anything else — no repetition and no ack. Still simply lost. FAILS.
+// A GAVE UP line fails regardless of kind: that is an action the client tried
+// to deliver for the whole budget and never got acknowledged, which is defect
+// #8 reproducing rather than defect #8 being handled.
 function assertNoNetDrops() {
+  const kindOf = l => (l.match(/DROPPED (\S+) for peer/) || [])[1] || '?';
+  const byKind = new Map();
+  for (const l of NET_DROPS) { const k = kindOf(l); byKind.set(k, (byKind.get(k) || 0) + 1); }
+  const hard = NET_DROPS.filter(l => !['ui', 'in', 'ping'].includes(kindOf(l)));
+  const summary = [...byKind].map(([k, n]) => `${k} x${n}`).join(', ') || 'none';
+
+  if (NET_LEDGERS.length) {
+    for (const L of NET_LEDGERS) {
+      console.log(`  LEDGER ${L.page}: drops ${L.drops}, uiResends ${L.uiResends}, uiDuplicates ${L.uiDuplicates}, `
+        + `uiGaveUp ${L.uiGaveUp}, helloResends ${L.helloResends}, regFailures ${L.regFailures}`);
+    }
+  } else {
+    console.log('  LEDGER: none captured — no co-op page reached the capture point');
+  }
+
+  if (NET_GAVEUP.length) {
+    fail(`${NET_GAVEUP.length} CLIENT ACTION(S) GIVEN UP ON — resent for the whole budget and never acknowledged. `
+      + `This is defect #8 reproducing, not the ack working. ` + NET_GAVEUP.slice(0, 4).join(' | '));
+  } else if (NET_DROPS.some(l => kindOf(l) === 'ui')) {
+    ok(`defect #8 exercised in the wild: ${byKind.get('ui')} ui send(s) dropped, every one recovered by resend (0 given up)`);
+  }
+
   if (!NET_DROPS.length) { ok('no peer send was skipped or swallowed all run — zero [net] DROPPED lines from any browser'); return; }
-  fail(`${NET_DROPS.length} SEND(S) DROPPED. Anything load-bearing in them is gone for that peer, silently — that is open defect #8, and it is why this assertion exists. `
-    + NET_DROPS.slice(0, 6).join(' | ') + (NET_DROPS.length > 6 ? ` (+${NET_DROPS.length - 6} more)` : ''));
+  if (!hard.length) { ok(`${NET_DROPS.length} drop(s), all on covered channels (${summary}) — ui resends, in/ping repeat by nature`); return; }
+  fail(`${hard.length} SEND(S) DROPPED ON A CHANNEL WITH NO RECOVERY (${summary}). Anything load-bearing in them is gone for that peer, silently. `
+    + hard.slice(0, 6).join(' | ') + (hard.length > 6 ? ` (+${hard.length - 6} more)` : ''));
 }
 
 function assertCleanTree() {
@@ -882,20 +963,23 @@ try {
   }
   await clickAwayLevelups(A);
   // duplicate pair (purchase mechanics covered elsewhere; the combine UI is under test)
-  await A.exec(`const s=window.uv.sim, p=s.players[0]; s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); return 1;`);
+  if (WEAPONS) await A.exec(`const s=window.uv.sim, p=s.players[0]; s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); return 1;`);
   // Labelled 'a matching pair of coilguns', not 'pair'. The old label read as a
   // PEER pairing in a failure line — "timeout waiting for pair in meta" — and a
   // room-code failure is the most alarming thing this game could report, so a
   // weapon-combine timeout wearing that name cost real diagnosis time. A
   // waitFor label is failure-message text; it should name the thing being
   // waited for in words that cannot be read as a different subsystem.
-  await A.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'a matching pair of coilguns in meta');
+  if (WEAPONS) await A.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'a matching pair of coilguns in meta');
   const slotsBefore = await A.exec('return window.uv.meta.weapons.length');
   // character sheet by C key: shows the pair, and solo PAUSES
   await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
   await A.waitFor(`return !document.getElementById('overlay-sheet').classList.contains('hidden')`, 3000, 'sheet via C');
-  const sheetHasPair = await A.exec(`return document.getElementById('overlay-sheet').innerText.includes('Coilgun')`);
-  if (sheetHasPair) ok('character sheet lists the owned weapons'); else fail('sheet missing weapons');
+  if (!WEAPONS) skip('character sheet lists the owned weapons');
+  else {
+    const sheetHasPair = await A.exec(`return document.getElementById('overlay-sheet').innerText.includes('Coilgun')`);
+    if (sheetHasPair) ok('character sheet lists the owned weapons'); else fail('sheet missing weapons');
+  }
   // ---- glossary: hover a stat row in the sheet (desktop) ----
   const sheetHover = await A.exec(`const r=document.querySelector('[data-glossrow="tempo"]');
     r.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
@@ -914,19 +998,22 @@ try {
   const tick2 = await A.exec('return window.uv.sim.tickNum');
   if (tick2 > tick1) ok('closing the sheet resumes the solo sim'); else fail('sim did not resume after sheet close');
   // combine via the arsenal UI: select one, match highlights, confirm
-  await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
-  await A.waitFor(`return document.querySelector('[data-combine]')!==null`, 3000, 'combine affordance on the match');
-  await A.exec(`document.querySelector('[data-combine]').click(); return 1;`);
-  await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'two coilguns fused into one tier-II');
-  const slotsAfter = await A.exec('return window.uv.meta.weapons.length');
-  if (slotsAfter === slotsBefore - 1) ok('combine via UI: pair → tier II, slot freed'); else fail(`slots ${slotsBefore}→${slotsAfter}`);
-  await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
-  await A.waitFor(`return document.getElementById('overlay-sheet').innerText.includes('II')`, 3000, 'sheet shows the new tier');
-  await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
-  ok('character sheet reflects the combine immediately');
-  // weapon tooltips list their scaling stats
-  const scalingShown = await A.exec(`return document.getElementById('overlay-shop').innerText.includes('scales with:') || document.getElementById('overlay-shop').innerText.includes('scales:') || /Ferocity|Tempo|Vitality|Attunement/.test(document.getElementById('overlay-shop').innerText)`);
-  if (scalingShown) ok('shop shows weapon scaling stats'); else fail('weapon scaling stats missing from shop UI');
+  if (!WEAPONS) { skip('combine via UI: pair → tier II, slot freed'); skip('character sheet reflects the combine immediately'); skip('shop shows weapon scaling stats'); }
+  else {
+    await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
+    await A.waitFor(`return document.querySelector('[data-combine]')!==null`, 3000, 'combine affordance on the match');
+    await A.exec(`document.querySelector('[data-combine]').click(); return 1;`);
+    await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'two coilguns fused into one tier-II');
+    const slotsAfter = await A.exec('return window.uv.meta.weapons.length');
+    if (slotsAfter === slotsBefore - 1) ok('combine via UI: pair → tier II, slot freed'); else fail(`slots ${slotsBefore}→${slotsAfter}`);
+    await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
+    await A.waitFor(`return document.getElementById('overlay-sheet').innerText.includes('II')`, 3000, 'sheet shows the new tier');
+    await A.exec(`window.dispatchEvent(new KeyboardEvent('keydown',{code:'KeyC'})); return 1;`);
+    ok('character sheet reflects the combine immediately');
+    // weapon tooltips list their scaling stats
+    const scalingShown = await A.exec(`return document.getElementById('overlay-shop').innerText.includes('scales with:') || document.getElementById('overlay-shop').innerText.includes('scales:') || /Ferocity|Tempo|Vitality|Attunement/.test(document.getElementById('overlay-shop').innerText)`);
+    if (scalingShown) ok('shop shows weapon scaling stats'); else fail('weapon scaling stats missing from shop UI');
+  }
   // ---- glossary: hover a stat named inside a shop tooltip (desktop) ----
   const shopHover = await A.exec(`const t=document.querySelector('#overlay-shop .gloss-term'); if(!t) return '';
     t.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));
@@ -963,84 +1050,96 @@ try {
   ok('sold mechanical item is unregistered — its effect can never fire again');
   // ---- full-slot flows (patch 8): combine badge, auto-combine, tier-IV
   // reason, and the make-room swap picker ----
-  await A.exec(`const s=window.uv.sim,p=s.players[0]; while (p.weapons.length < p.weaponSlots) s._addWeapon(p,'pebbleshot',1); return 1;`);
-  await A.waitFor(`return window.uv.meta.weapons.length === window.uv.meta.weaponSlots`, 3000, 'slots full');
-  const notice = await A.exec(`return document.getElementById('overlay-shop').innerText.includes('sell or combine to make room')`);
-  if (notice) ok('6/6 notice: "sell or combine to make room"'); else fail('full-slots notice missing');
-  // deterministic stock: a duplicate, a non-duplicate, and later a tier-IV trap
-  await A.exec(`const s=window.uv.sim,p=s.players[0];
-    p.shop.stock[0]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
-    p.shop.stock[1]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
-    s._sendShop(p); return 1;`);
-  await A.waitFor(`return document.querySelector('.offer-card[data-slot="0"] .wpn-upg') !== null`, 3000, 'combine badge');
-  const badgeTxt = await A.exec(`return document.querySelector('.offer-card[data-slot="0"] .wpn-upg').textContent`);
-  if (/⇑/.test(badgeTxt) && /combines with your Pebbleshot I/.test(badgeTxt)) ok(`combine badge shows the outcome before purchase ("${badgeTxt.trim().slice(0, 60)}…")`);
-  else fail(`badge text: ${badgeTxt}`);
-  // buying the duplicate at 6/6 auto-combines in place, charged once
-  const acM0 = await A.exec('return window.uv.meta.materials');
-  await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
-  await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='pebbleshot'&&w.tier===2)`, 4000, 'auto-combined tier-up');
-  const acAfter = JSON.parse(await A.exec(`return JSON.stringify({n:window.uv.meta.weapons.length, m:window.uv.meta.materials, sold:window.uv.sim.players[0].shop.stock[0].sold})`));
-  if (acAfter.n === await A.exec('return window.uv.meta.weaponSlots') && acAfter.m === acM0 - 12 && acAfter.sold)
-    ok(`full-slot duplicate purchase auto-combines (still ${acAfter.n}/${acAfter.n}, charged ◆12 once)`);
-  else fail(`auto-combine state: ${JSON.stringify(acAfter)} (mats ${acM0}→)`);
-  // a tier-IV match shows why it can't be bought, and tapping it changes nothing
-  await A.exec(`const s=window.uv.sim,p=s.players[0]; p.weapons.find(w=>w.id==='pebbleshot').tier=4; p.metaDirty=true;
-    p.shop.stock[2]={kind:'weapon',id:'pebbleshot',tier:4,price:12,sold:false,locked:false}; s._sendShop(p); return 1;`);
-  await A.waitFor(`return document.querySelector('.offer-card[data-slot="2"] .wpn-blocked') !== null`, 3000, 'tier-IV blocked reason');
-  ok('tier-IV match shows its blocked reason on the card');
-  const t4W = await A.exec('return JSON.stringify(window.uv.meta.weapons)');
-  await A.exec(`document.querySelector('.offer-card[data-slot="2"]').click(); return 1;`);
-  await sleep(600);
-  if (t4W === await A.exec('return JSON.stringify(window.uv.meta.weapons)')) ok('tapping the tier-IV card leaves the build unchanged');
-  else fail('tier-IV tap mutated the build');
-  // the make-room picker: non-duplicate at full slots
-  await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
-  await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'make-room picker');
-  const pickerCards = JSON.parse(await A.exec(`const cards=[...document.querySelectorAll('.swap-card')];
-    return JSON.stringify({ n: cards.length, detailed: cards.filter(c=>c.querySelector('.wdetail .wd-dps')).length,
-      withNet: cards.filter(c=>/net [+\\-−]?\\d+/.test(c.textContent)).length })`));
-  if (pickerCards.n === await A.exec('return window.uv.meta.weapons.length') && pickerCards.detailed === pickerCards.n && pickerCards.withNet === pickerCards.n)
-    ok(`picker lists every owned weapon as a full detail card with its net cost (${pickerCards.n})`);
-  else fail(`picker cards: ${JSON.stringify(pickerCards)}`);
-  // cancel returns to the shop unchanged
-  const preCancel = await A.exec('return JSON.stringify([window.uv.meta.weapons, window.uv.meta.materials])');
-  await A.exec(`document.getElementById('swap-cancel').click(); return 1;`);
-  await A.waitFor(`return document.querySelector('.swap-card') === null && document.querySelector('.offer-card[data-slot="1"]') !== null`, 3000, 'picker cancelled');
-  if (preCancel === await A.exec('return JSON.stringify([window.uv.meta.weapons, window.uv.meta.materials])')) ok('cancel returns to the shop with nothing changed');
-  else fail('cancel mutated state');
-  // run the swap: arm (net shown), confirm → atomic sell+buy
-  await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
-  await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'picker again');
-  await A.exec(`document.querySelector('.swap-card:not(.cantafford)').click(); return 1;`);
-  const armedNet = await A.exec(`return document.querySelector('.swap-card.armed') ? document.querySelector('.swap-card.armed .oprice').textContent : ''`);
-  if (/sell \+\d+ ⟡ → buy −14 ⟡ · net [+\-−]?\d+ ⟡ — tap again/.test(armedNet)) ok(`swap arms with the full net line ("${armedNet.trim()}")`);
-  else fail(`armed net line: "${armedNet}"`);
-  const swM0 = await A.exec('return window.uv.meta.materials');
-  await A.exec(`document.querySelector('.swap-card.armed').click(); return 1;`);
-  await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='rustcleaver')`, 4000, 'swap executed');
-  const swAfter = JSON.parse(await A.exec(`return JSON.stringify({n:window.uv.meta.weapons.length, m:window.uv.meta.materials})`));
-  const netShown = parseInt((armedNet.match(/net ([+\-−]?\d+)/) || [])[1], 10);
-  if (swAfter.n === await A.exec('return window.uv.meta.weaponSlots') && swAfter.m === swM0 + netShown)
-    ok(`swap executes atomically at the shown net (${netShown} ⟡, still ${swAfter.n} weapons)`);
-  else fail(`swap result: ${JSON.stringify(swAfter)} net shown ${netShown} from ${swM0}`);
+  // EVERY CHECK BELOW NEEDS A WEAPON IN A SLOT, and weaponSlots is 0. These
+  // are skipped as a block rather than deleted: they are the acceptance tests
+  // for the full-slot economy, and phase 4 needs them back verbatim.
+  if (!WEAPONS) {
+    for (const m of ['6/6 notice: "sell or combine to make room"', 'combine badge shows the outcome before purchase',
+      'full-slot duplicate purchase auto-combines', 'tier-IV match shows its blocked reason on the card',
+      'tapping the tier-IV card leaves the build unchanged', 'picker lists every owned weapon as a full detail card',
+      'cancel returns to the shop with nothing changed', 'swap arms with the full net line',
+      'swap executes atomically at the shown net', 'owned chip expands: scaling contribution + est. DPS shown',
+      'est. DPS is live', 'stock weapon cards show est.-DPS-if-bought']) skip(m);
+  } else {
+    await A.exec(`const s=window.uv.sim,p=s.players[0]; while (p.weapons.length < p.weaponSlots) s._addWeapon(p,'pebbleshot',1); return 1;`);
+    await A.waitFor(`return window.uv.meta.weapons.length === window.uv.meta.weaponSlots`, 3000, 'slots full');
+    const notice = await A.exec(`return document.getElementById('overlay-shop').innerText.includes('sell or combine to make room')`);
+    if (notice) ok('6/6 notice: "sell or combine to make room"'); else fail('full-slots notice missing');
+    // deterministic stock: a duplicate, a non-duplicate, and later a tier-IV trap
+    await A.exec(`const s=window.uv.sim,p=s.players[0];
+      p.shop.stock[0]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
+      p.shop.stock[1]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
+      s._sendShop(p); return 1;`);
+    await A.waitFor(`return document.querySelector('.offer-card[data-slot="0"] .wpn-upg') !== null`, 3000, 'combine badge');
+    const badgeTxt = await A.exec(`return document.querySelector('.offer-card[data-slot="0"] .wpn-upg').textContent`);
+    if (/⇑/.test(badgeTxt) && /combines with your Pebbleshot I/.test(badgeTxt)) ok(`combine badge shows the outcome before purchase ("${badgeTxt.trim().slice(0, 60)}…")`);
+    else fail(`badge text: ${badgeTxt}`);
+    // buying the duplicate at 6/6 auto-combines in place, charged once
+    const acM0 = await A.exec('return window.uv.meta.materials');
+    await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
+    await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='pebbleshot'&&w.tier===2)`, 4000, 'auto-combined tier-up');
+    const acAfter = JSON.parse(await A.exec(`return JSON.stringify({n:window.uv.meta.weapons.length, m:window.uv.meta.materials, sold:window.uv.sim.players[0].shop.stock[0].sold})`));
+    if (acAfter.n === await A.exec('return window.uv.meta.weaponSlots') && acAfter.m === acM0 - 12 && acAfter.sold)
+      ok(`full-slot duplicate purchase auto-combines (still ${acAfter.n}/${acAfter.n}, charged ◆12 once)`);
+    else fail(`auto-combine state: ${JSON.stringify(acAfter)} (mats ${acM0}→)`);
+    // a tier-IV match shows why it can't be bought, and tapping it changes nothing
+    await A.exec(`const s=window.uv.sim,p=s.players[0]; p.weapons.find(w=>w.id==='pebbleshot').tier=4; p.metaDirty=true;
+      p.shop.stock[2]={kind:'weapon',id:'pebbleshot',tier:4,price:12,sold:false,locked:false}; s._sendShop(p); return 1;`);
+    await A.waitFor(`return document.querySelector('.offer-card[data-slot="2"] .wpn-blocked') !== null`, 3000, 'tier-IV blocked reason');
+    ok('tier-IV match shows its blocked reason on the card');
+    const t4W = await A.exec('return JSON.stringify(window.uv.meta.weapons)');
+    await A.exec(`document.querySelector('.offer-card[data-slot="2"]').click(); return 1;`);
+    await sleep(600);
+    if (t4W === await A.exec('return JSON.stringify(window.uv.meta.weapons)')) ok('tapping the tier-IV card leaves the build unchanged');
+    else fail('tier-IV tap mutated the build');
+    // the make-room picker: non-duplicate at full slots
+    await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
+    await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'make-room picker');
+    const pickerCards = JSON.parse(await A.exec(`const cards=[...document.querySelectorAll('.swap-card')];
+      return JSON.stringify({ n: cards.length, detailed: cards.filter(c=>c.querySelector('.wdetail .wd-dps')).length,
+        withNet: cards.filter(c=>/net [+\\-−]?\\d+/.test(c.textContent)).length })`));
+    if (pickerCards.n === await A.exec('return window.uv.meta.weapons.length') && pickerCards.detailed === pickerCards.n && pickerCards.withNet === pickerCards.n)
+      ok(`picker lists every owned weapon as a full detail card with its net cost (${pickerCards.n})`);
+    else fail(`picker cards: ${JSON.stringify(pickerCards)}`);
+    // cancel returns to the shop unchanged
+    const preCancel = await A.exec('return JSON.stringify([window.uv.meta.weapons, window.uv.meta.materials])');
+    await A.exec(`document.getElementById('swap-cancel').click(); return 1;`);
+    await A.waitFor(`return document.querySelector('.swap-card') === null && document.querySelector('.offer-card[data-slot="1"]') !== null`, 3000, 'picker cancelled');
+    if (preCancel === await A.exec('return JSON.stringify([window.uv.meta.weapons, window.uv.meta.materials])')) ok('cancel returns to the shop with nothing changed');
+    else fail('cancel mutated state');
+    // run the swap: arm (net shown), confirm → atomic sell+buy
+    await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
+    await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'picker again');
+    await A.exec(`document.querySelector('.swap-card:not(.cantafford)').click(); return 1;`);
+    const armedNet = await A.exec(`return document.querySelector('.swap-card.armed') ? document.querySelector('.swap-card.armed .oprice').textContent : ''`);
+    if (/sell \+\d+ ⟡ → buy −14 ⟡ · net [+\-−]?\d+ ⟡ — tap again/.test(armedNet)) ok(`swap arms with the full net line ("${armedNet.trim()}")`);
+    else fail(`armed net line: "${armedNet}"`);
+    const swM0 = await A.exec('return window.uv.meta.materials');
+    await A.exec(`document.querySelector('.swap-card.armed').click(); return 1;`);
+    await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='rustcleaver')`, 4000, 'swap executed');
+    const swAfter = JSON.parse(await A.exec(`return JSON.stringify({n:window.uv.meta.weapons.length, m:window.uv.meta.materials})`));
+    const netShown = parseInt((armedNet.match(/net ([+\-−]?\d+)/) || [])[1], 10);
+    if (swAfter.n === await A.exec('return window.uv.meta.weaponSlots') && swAfter.m === swM0 + netShown)
+      ok(`swap executes atomically at the shown net (${netShown} ⟡, still ${swAfter.n} weapons)`);
+    else fail(`swap result: ${JSON.stringify(swAfter)} net shown ${netShown} from ${swM0}`);
 
-  // ---- detail cards: owned chips expand; est. DPS is live ----
-  await A.exec(`const s=window.uv.sim,p=s.players[0]; p.weapons.length=0; s._addWeapon(p,'gravemaul',1); p.metaDirty=true; return 1;`);
-  await A.waitFor(`return window.uv.meta.weapons.length===1 && window.uv.meta.weapons[0].id==='gravemaul'`, 3000, 'gravemaul only');
-  await A.exec(`document.querySelector('[data-wchip="0"]').click(); return 1;`);
-  await A.waitFor(`return document.querySelector('.wchip.expanded .wdetail .wd-dps') !== null`, 3000, 'owned detail card');
-  const detTxt0 = await A.exec(`return document.querySelector('.wchip.expanded .wdetail').textContent`);
-  if (/scales:/.test(detTxt0) && /Vitality \+\d+%/.test(detTxt0) && /est\./.test(detTxt0)) ok('owned chip expands: scaling contribution + est. DPS shown');
-  else fail(`owned detail: "${detTxt0.slice(0, 120)}"`);
-  const dps0 = parseFloat(await A.exec(`return document.querySelector('.wchip.expanded .wd-dps b').textContent`));
-  // buying (granting) Vitality must immediately raise a Vitality-scaler's DPS
-  await A.exec(`const s=window.uv.sim,p=s.players[0]; p.boosts.vitality=(p.boosts.vitality||0)+40; s._recomputeStats(p); p.metaDirty=true; return 1;`);
-  await A.waitFor(`const el=document.querySelector('.wchip.expanded .wd-dps b'); return el && parseFloat(el.textContent) > ${dps0} ? 1 : 0`, 4000, 'live DPS update');
-  const dps1 = parseFloat(await A.exec(`return document.querySelector('.wchip.expanded .wd-dps b').textContent`));
-  ok(`est. DPS is live: +40 Vitality moved Gravemaul ${dps0} → ${dps1}`);
-  const stockDps = await A.exec(`return document.querySelector('.offer-card .wd-dps') !== null`);
-  if (stockDps) ok('stock weapon cards show est.-DPS-if-bought'); else fail('stock cards missing est. DPS');
+    // ---- detail cards: owned chips expand; est. DPS is live ----
+    await A.exec(`const s=window.uv.sim,p=s.players[0]; p.weapons.length=0; s._addWeapon(p,'gravemaul',1); p.metaDirty=true; return 1;`);
+    await A.waitFor(`return window.uv.meta.weapons.length===1 && window.uv.meta.weapons[0].id==='gravemaul'`, 3000, 'gravemaul only');
+    await A.exec(`document.querySelector('[data-wchip="0"]').click(); return 1;`);
+    await A.waitFor(`return document.querySelector('.wchip.expanded .wdetail .wd-dps') !== null`, 3000, 'owned detail card');
+    const detTxt0 = await A.exec(`return document.querySelector('.wchip.expanded .wdetail').textContent`);
+    if (/scales:/.test(detTxt0) && /Vitality \+\d+%/.test(detTxt0) && /est\./.test(detTxt0)) ok('owned chip expands: scaling contribution + est. DPS shown');
+    else fail(`owned detail: "${detTxt0.slice(0, 120)}"`);
+    const dps0 = parseFloat(await A.exec(`return document.querySelector('.wchip.expanded .wd-dps b').textContent`));
+    // buying (granting) Vitality must immediately raise a Vitality-scaler's DPS
+    await A.exec(`const s=window.uv.sim,p=s.players[0]; p.boosts.vitality=(p.boosts.vitality||0)+40; s._recomputeStats(p); p.metaDirty=true; return 1;`);
+    await A.waitFor(`const el=document.querySelector('.wchip.expanded .wd-dps b'); return el && parseFloat(el.textContent) > ${dps0} ? 1 : 0`, 4000, 'live DPS update');
+    const dps1 = parseFloat(await A.exec(`return document.querySelector('.wchip.expanded .wd-dps b').textContent`));
+    ok(`est. DPS is live: +40 Vitality moved Gravemaul ${dps0} → ${dps1}`);
+    const stockDps = await A.exec(`return document.querySelector('.offer-card .wd-dps') !== null`);
+    if (stockDps) ok('stock weapon cards show est.-DPS-if-bought'); else fail('stock cards missing est. DPS');
+  }
   // close the shop → the map screen offers a reopen button while parked here
   await A.exec(`document.getElementById('shop-close') && document.getElementById('shop-close').click(); return 1;`);
   await A.waitFor(`return document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'shop closed');
@@ -2727,26 +2826,31 @@ try {
     ok('map "Reopen shop" button works by touch');
 
     // ---- touch detail cards, combine badge, and the swap picker (≥44px) ----
-    await M.exec(`const s=window.uv.sim,p=s.players[0]; while (p.weapons.length < p.weaponSlots) s._addWeapon(p,'pebbleshot',1);
-      p.shop.stock[0]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
-      p.shop.stock[1]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
-      s._sendShop(p); return 1;`);
-    await M.waitFor(`return window.uv.meta.weapons.length === window.uv.meta.weaponSlots`, 3000, 'mobile slots full');
-    const mbadge = JSON.parse(await M.exec(`const b=document.querySelector('.offer-card[data-slot="1"] .wpn-upg');
-      if (!b) return 'null'; const r=b.getBoundingClientRect(); return JSON.stringify({h:Math.round(r.height), len:b.textContent.trim().length})`) || 'null');
-    if (mbadge && mbadge.h >= 14 && mbadge.len > 20) ok(`combine badge is readable on touch (${mbadge.h}px tall)`);
-    else fail(`mobile combine badge: ${JSON.stringify(mbadge)}`);
-    await M.tap('[data-wchip="0"] .wsym'); // the symbol — a chip-center tap can land on the sell button
-    await M.waitFor(`return document.querySelector('.wchip.expanded .wdetail .wd-dps') !== null`, 3000, 'mobile owned detail');
-    ok('touch: owned chip expands to the full detail card');
-    await M.tap('.offer-card[data-slot="0"] .oname'); // non-duplicate at cap → picker
-    await M.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'mobile swap picker');
-    const mswap = JSON.parse(await M.exec(`const c=document.querySelector('.swap-card'); const r=c.getBoundingClientRect();
-      return JSON.stringify({h:Math.round(r.height), scroll:getComputedStyle(document.querySelector('.swap-row')).overflowY})`));
-    if (mswap.h >= 44 && mswap.scroll === 'auto') ok(`swap picker cards ≥44px and the list scrolls (${mswap.h}px)`);
-    else fail(`mobile picker: ${JSON.stringify(mswap)}`);
-    await M.tap('#swap-cancel');
-    await M.waitFor(`return document.querySelector('.swap-card') === null`, 3000, 'mobile picker cancelled');
+    if (!WEAPONS) {
+      for (const m of ['combine badge is readable on touch', 'touch: owned chip expands to the full detail card',
+        'swap picker cards >=44px and the list scrolls']) skip(m);
+    } else {
+      await M.exec(`const s=window.uv.sim,p=s.players[0]; while (p.weapons.length < p.weaponSlots) s._addWeapon(p,'pebbleshot',1);
+        p.shop.stock[0]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
+        p.shop.stock[1]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
+        s._sendShop(p); return 1;`);
+      await M.waitFor(`return window.uv.meta.weapons.length === window.uv.meta.weaponSlots`, 3000, 'mobile slots full');
+      const mbadge = JSON.parse(await M.exec(`const b=document.querySelector('.offer-card[data-slot="1"] .wpn-upg');
+        if (!b) return 'null'; const r=b.getBoundingClientRect(); return JSON.stringify({h:Math.round(r.height), len:b.textContent.trim().length})`) || 'null');
+      if (mbadge && mbadge.h >= 14 && mbadge.len > 20) ok(`combine badge is readable on touch (${mbadge.h}px tall)`);
+      else fail(`mobile combine badge: ${JSON.stringify(mbadge)}`);
+      await M.tap('[data-wchip="0"] .wsym'); // the symbol — a chip-center tap can land on the sell button
+      await M.waitFor(`return document.querySelector('.wchip.expanded .wdetail .wd-dps') !== null`, 3000, 'mobile owned detail');
+      ok('touch: owned chip expands to the full detail card');
+      await M.tap('.offer-card[data-slot="0"] .oname'); // non-duplicate at cap → picker
+      await M.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'mobile swap picker');
+      const mswap = JSON.parse(await M.exec(`const c=document.querySelector('.swap-card'); const r=c.getBoundingClientRect();
+        return JSON.stringify({h:Math.round(r.height), scroll:getComputedStyle(document.querySelector('.swap-row')).overflowY})`));
+      if (mswap.h >= 44 && mswap.scroll === 'auto') ok(`swap picker cards ≥44px and the list scrolls (${mswap.h}px)`);
+      else fail(`mobile picker: ${JSON.stringify(mswap)}`);
+      await M.tap('#swap-cancel');
+      await M.waitFor(`return document.querySelector('.swap-card') === null`, 3000, 'mobile picker cancelled');
+    }
     await M.tap('#shop-close');
 
     // ---- perf gate: mobile emulation at the new siege crest (≥40 fps at ~200) ----
@@ -2846,27 +2950,46 @@ if (wantCoop) {
     await A2.open('A2', { peerjsB64 });
     await A2.goto(COOP_URL);
     const A = A2; // reuse flow variable name below
+    // EVERY WAY OF NOT GETTING A CODE IS A DIFFERENT DEFECT, so this returns
+    // which one it was. It used to return a bare null for three unrelated
+    // outcomes — no lobby object at all, registration settled as failed, and
+    // still-in-flight-when-we-gave-up — and the caller printed one message for
+    // all three. tools/room_reg_test.mjs then measured the transport at 12/12
+    // registrations in under 200ms, which means the message this suite prints
+    // ("room registration failed") has been describing something other than
+    // room registration failing.
     const tryRegister = async () => {
       await A.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')`, 8000, 'title A');
       await A.exec(`document.getElementById('name-input').value='HOST'; document.getElementById('btn-host').click()`);
       const t0 = Date.now();
       for (;;) {
-        const c = await A.exec(`return window.uv.lobby && window.uv.lobby.code`);
-        if (c) return c;
-        const pending = await A.exec(`return window.uv.lobby && window.uv.lobby.codePending`);
-        if (!pending) return null;
-        if (Date.now() - t0 > 12000) return null;
+        const st = JSON.parse(await A.exec(`
+          const l = window.uv && window.uv.lobby;
+          return JSON.stringify({ has: !!l, code: (l && l.code) || null, pending: !!(l && l.codePending),
+                                  mode: window.uv && window.uv.mode });`));
+        if (st.code) return { code: st.code };
+        if (!st.has) return { why: `window.uv.lobby is null ${Date.now() - t0}ms after clicking Host — the host flow never started, so nothing was ever registered (mode=${st.mode})` };
+        if (!st.pending) {
+          const diag = await A.exec(`return JSON.stringify((window.uvNet && window.uvNet.regFailures) || [])`).catch(() => '[]');
+          return { why: `registration settled with no code after ${Date.now() - t0}ms — attempts: ${diag}` };
+        }
+        if (Date.now() - t0 > REG_WAIT_MS) {
+          const diag = await A.exec(`return JSON.stringify((window.uvNet && window.uvNet.regFailures) || [])`).catch(() => '[]');
+          return { why: `still pending after ${REG_WAIT_MS}ms (transport budget ${CONFIG.ROOM_REGISTER_BUDGET_MS}ms) — attempts so far: ${diag}` };
+        }
         await sleep(300);
       }
     };
-    let code = await tryRegister();
-    if (!code) { // the relay can be slow to bind under load — one clean retry
+    let reg = await tryRegister();
+    if (!reg.code) { // the relay can be slow to bind under load — one clean retry
       await sleep(1500);
       await A.goto(COOP_URL);
-      code = await tryRegister();
+      const again = await tryRegister();
+      reg = again.code ? again : { why: `${reg.why} | after page reload: ${again.why}` };
     }
+    const code = reg.code;
     if (!code) {
-      fail('room registration failed against local relay');
+      fail(`host never got a room code — ${reg.why}`);
     } else {
       ok(`room registered: ${code}`);
       await B.open('B', { peerjsB64 });
@@ -2923,7 +3046,44 @@ if (wantCoop) {
       await B.exec(`document.querySelector('.char-card[data-char="lodestone"]').click()`);
       await sleep(400);
       await B.exec(`document.getElementById('btn-ready').click()`);
-      await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready && window.uv.lobby.players[1].charId`, 5000, 'client ready');
+      // THREE CONDITIONS, ONE LABEL. This was a single waitFor for "the client
+      // exists AND is ready AND has picked", reported as 'client ready' — so a
+      // pick that never landed and a ready that never landed printed the same
+      // sentence, and #8 was diagnosed off that sentence. The four-run ledger
+      // then read uiResends 0 / drops 0 / uiGaveUp 0 on every page, meaning
+      // NOTHING was ever queued for resend: the ack path was not involved at
+      // all, so whatever fails here is not the transport losing a message.
+      //
+      // This reports which condition is false, and what both ends believe about
+      // delivery, so the next occurrence is a diagnosis instead of a rerun.
+      {
+        const t0 = Date.now();
+        let st = null;
+        for (;;) {
+          st = JSON.parse(await A.exec(`
+            const p = window.uv.lobby && window.uv.lobby.players && window.uv.lobby.players[1];
+            return JSON.stringify({ present: !!p, ready: !!(p && p.ready), charId: (p && p.charId) || null,
+              n: (window.uv.lobby && window.uv.lobby.players || []).length,
+              seen: [...(window.uv.uiSeen || new Map())].map(([k, v]) => k.slice(-6) + ':' + v).join(','),
+              applied: ((window.uvNet && window.uvNet.uiApplied) || []).join(' '),
+              conns: window.uv.hostT ? window.uv.hostT.conns.size : -1 });`));
+          if (st.present && st.ready && st.charId) break;
+          if (Date.now() - t0 > 5000) break;
+          await sleep(200);
+        }
+        if (st.present && st.ready && st.charId) ok(`client picked ${st.charId} and readied`);
+        else {
+          const cst = await B.exec(`return JSON.stringify({ uiSeq: window.uv.uiSeq, pending: [...window.uv.uiPending.keys()],
+            open: !!(window.uv.clientT && window.uv.clientT.conn && window.uv.clientT.conn.open),
+            drops: (window.uvNet && window.uvNet.drops) || 0, resends: (window.uvNet && window.uvNet.uiResends) || 0,
+            sent: ((window.uvNet && window.uvNet.uiLog) || []).join(' '),
+            myKey: (window.uv.myKey || '').slice(-6) })`).catch(() => '{}');
+          const missing = !st.present ? 'the client is not in the host roster at all'
+            : !st.charId ? 'the client is present and its PICK never applied'
+            : 'the client is present with a pick and its READY never applied';
+          fail(`client ready: ${missing}. host: ${JSON.stringify(st)} | client: ${cst}`);
+        }
+      }
       await A.exec(`document.getElementById('btn-start').click()`);
       await A.waitFor(`return window.uv.mode==='run'`, 5000, 'host run');
       await B.waitFor(`return window.uv.mode==='run'`, 5000, 'client run');
@@ -3123,18 +3283,44 @@ if (wantCoop) {
       await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'client shop (mgmt)');
       ok('both players get their own shop overlay at the Trader stop');
       const coopItem = JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.vitality>0&&!it.hooks); return JSON.stringify({id:it.id})`));
+      // THE INTERLEAVE IS THE POINT, not the combine. Two players acting at the
+      // same instant, host-authoritative, each seeing only their own result.
+      // The host's half used to be a weapon combine; with weapons removed that
+      // check could not pass and it THREW, ending this phase before anything
+      // below it ran — which is why co-op could not be observed at all
+      // (§15 defect #10). The host now sells an item instead: same shape, same
+      // simultaneity, and it exercises the live economy rather than a dead one.
+      const hostSellItem = WEAPONS ? null : JSON.parse(await A.exec(`const it=window.uvContent.ITEMS.find(it=>it.stats&&it.stats.ferocity>0&&!it.hooks); return JSON.stringify({id:it.id})`));
       await A.exec(`const s=window.uv.sim; for (const p of s.players){ s._addWeapon(p,'coilgun',1); s._addWeapon(p,'coilgun',1); p.items.push(${JSON.stringify(coopItem.id)}); s._recomputeItems(p); s._recomputeStats(p); } return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'a matching pair of coilguns in the host\'s meta');
-      await B.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 4000, 'a matching pair of coilguns in the client\'s meta');
-      // interleave: host arms a combine while client arms a sell, then both confirm
-      await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
-      await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
-      await A.waitFor(`return document.querySelector('[data-combine]')!==null`, 3000, 'host combine affordance');
-      const bMats0 = await B.exec('return window.uv.meta.materials');
-      await A.exec(`document.querySelector('[data-combine]').click(); return 1;`);
-      await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
-      await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'host combined');
-      await B.waitFor(`return window.uv.meta.materials > ${bMats0} && !window.uv.meta.items.includes(${JSON.stringify(coopItem.id)})`, 4000, 'client sold');
+      if (WEAPONS) {
+        await A.waitFor(`return window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 3000, 'a matching pair of coilguns in the host\'s meta');
+        await B.waitFor(`return window.uv.meta && window.uv.meta.weapons.filter(w=>w.id==='coilgun').length===2`, 4000, 'a matching pair of coilguns in the client\'s meta');
+        // interleave: host arms a combine while client arms a sell, then both confirm
+        await A.exec(`const i=window.uv.meta.weapons.findIndex(w=>w.id==='coilgun'); document.querySelector('[data-wchip="'+i+'"]').click(); return 1;`);
+        await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
+        await A.waitFor(`return document.querySelector('[data-combine]')!==null`, 3000, 'host combine affordance');
+        const bMats0 = await B.exec('return window.uv.meta.materials');
+        await A.exec(`document.querySelector('[data-combine]').click(); return 1;`);
+        await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
+        await A.waitFor(`const w=window.uv.meta.weapons.filter(w=>w.id==='coilgun'); return w.length===1 && w[0].tier===2`, 4000, 'host combined');
+        await B.waitFor(`return window.uv.meta.materials > ${bMats0} && !window.uv.meta.items.includes(${JSON.stringify(coopItem.id)})`, 4000, 'client sold');
+      } else {
+        skip('host-side interleave uses a weapon combine — substituting an item sell');
+        await A.exec(`const s=window.uv.sim, p=s.players[0]; p.items.push(${JSON.stringify(hostSellItem.id)}); s._recomputeItems(p); s._recomputeStats(p); return 1;`);
+        await A.waitFor(`return document.querySelector('[data-selli="${hostSellItem.id}"]') !== null`, 4000, 'host sell chip');
+        await B.waitFor(`return document.querySelector('[data-selli="${coopItem.id}"]') !== null`, 4000, 'client sell chip');
+        // both arm, then both confirm — the two-step means the armed states
+        // genuinely overlap rather than merely being adjacent
+        await A.exec(`document.querySelector('[data-selli="${hostSellItem.id}"]').click(); return 1;`);
+        await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
+        const aMats0 = await A.exec('return window.uv.meta.materials');
+        const bMats0 = await B.exec('return window.uv.meta.materials');
+        await A.exec(`document.querySelector('[data-selli="${hostSellItem.id}"]').click(); return 1;`);
+        await B.exec(`document.querySelector('[data-selli="${coopItem.id}"]').click(); return 1;`);
+        await A.waitFor(`return window.uv.meta.materials > ${aMats0} && !window.uv.meta.items.includes(${JSON.stringify(hostSellItem.id)})`, 4000, 'host sold');
+        await B.waitFor(`return window.uv.meta.materials > ${bMats0} && !window.uv.meta.items.includes(${JSON.stringify(coopItem.id)})`, 4000, 'client sold');
+        ok('simultaneous sells: both players act at once, each sees only their own result');
+      }
       // authoritative builds match what each client displays
       const hostView = await A.exec(`const s=window.uv.sim; return JSON.stringify(s.players.map(p=>({w:p.weapons.map(w=>[w.id,w.tier]), it:p.items.length})))`);
       const bMetaView = await B.exec(`return JSON.stringify({w:window.uv.meta.weapons.map(w=>[w.id,w.tier]), it:window.uv.meta.items.length})`);
@@ -3220,26 +3406,43 @@ if (wantCoop) {
         p0.shop.stock[0]={kind:'weapon',id:'pebbleshot',tier:1,price:12,sold:false,locked:false};
         p0.shop.stock[1]={kind:'weapon',id:'rustcleaver',tier:1,price:14,sold:false,locked:false};
         s._sendShop(p0); s._sendShop(p1); return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'the host holding weapons equal to its weapon-slot cap');
-      // simultaneous: client rerolls while the host's duplicate buy auto-combines
-      await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
-      await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='pebbleshot'&&w.tier===2)`, 4000, 'co-op auto-combine');
-      await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===1`, 4000, 'client reroll validated');
-      ok('client rerolls while the host auto-combines at full slots — host validates both');
+      // The CLIENT half of every pair below is live and is the co-op content:
+      // the client acts while the host acts, and the host validates both. Only
+      // the host's half was a weapon operation, so only that is skipped.
+      if (WEAPONS) {
+        await A.waitFor(`return window.uv.meta.weapons.length===window.uv.meta.weaponSlots`, 4000, 'the host holding weapons equal to its weapon-slot cap');
+        // simultaneous: client rerolls while the host's duplicate buy auto-combines
+        await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
+        await A.exec(`document.querySelector('.offer-card[data-slot="0"]').click(); return 1;`);
+        await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='pebbleshot'&&w.tier===2)`, 4000, 'co-op auto-combine');
+        await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===1`, 4000, 'client reroll validated');
+        ok('client rerolls while the host auto-combines at full slots — host validates both');
+      } else {
+        skip("host's half of the simultaneous pair is a weapon auto-combine");
+        await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
+        await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===1`, 4000, 'client reroll validated');
+        ok('client reroll is validated by the host while the host works its own shop');
+      }
       // simultaneous: client rerolls again while the host runs a make-room swap
       await B.exec(`document.getElementById('shop-reroll').click(); return 1;`);
-      await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
-      await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'co-op swap picker');
-      await A.exec(`document.querySelector('.swap-card:not(.cantafford)').click(); return 1;`);
-      await A.exec(`const c=document.querySelector('.swap-card.armed'); if (c) c.click(); return 1;`);
-      await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='rustcleaver')`, 4000, 'co-op swap executed');
+      if (WEAPONS) {
+        await A.exec(`document.querySelector('.offer-card[data-slot="1"]').click(); return 1;`);
+        await A.waitFor(`return document.querySelector('.swap-card') !== null`, 3000, 'co-op swap picker');
+        await A.exec(`document.querySelector('.swap-card:not(.cantafford)').click(); return 1;`);
+        await A.exec(`const c=document.querySelector('.swap-card.armed'); if (c) c.click(); return 1;`);
+        await A.waitFor(`return window.uv.meta.weapons.some(w=>w.id==='rustcleaver')`, 4000, 'co-op swap executed');
+      } else skip("host's make-room swap needs a weapon to swap out");
       await A.waitFor(`return window.uv.sim.players[1].shop.rerolls===2`, 4000, 'client second reroll validated');
-      const coopSlots = await A.exec('return window.uv.meta.weaponSlots');
-      const coopN = await A.exec('return window.uv.meta.weapons.length');
-      if (coopN === coopSlots) ok(`swap + parallel rerolls: host still at ${coopN}/${coopSlots}, no desync`);
-      else fail(`co-op swap count: ${coopN}/${coopSlots}`);
-      // client display agrees with the authoritative build
+      if (!WEAPONS) skip('swap + parallel rerolls: host slot count unchanged');
+      else {
+        const coopSlots = await A.exec('return window.uv.meta.weaponSlots');
+        const coopN = await A.exec('return window.uv.meta.weapons.length');
+        if (coopN === coopSlots) ok(`swap + parallel rerolls: host still at ${coopN}/${coopSlots}, no desync`);
+        else fail(`co-op swap count: ${coopN}/${coopSlots}`);
+      }
+      // client display agrees with the authoritative build. Still worth running
+      // with weapons gone: both sides serialise an empty list, so a mismatch
+      // here would mean the client is showing a build the host never sent.
       const cv = await B.exec(`return JSON.stringify(window.uv.meta.weapons.map(w=>[w.id,w.tier]))`);
       const hv2 = await A.exec(`return JSON.stringify(window.uv.sim.players[1].weapons.map(w=>[w.id,w.tier]))`);
       if (cv === hv2) ok('client build display matches the host after the parallel session');
@@ -3368,7 +3571,7 @@ if (wantCoop) {
         for (;;) {
           const c = await B.exec(`return window.uv.lobby && window.uv.lobby.code`);
           if (c) return c;
-          if (Date.now() - t0 > 12000) return null;
+          if (Date.now() - t0 > REG_WAIT_MS) return null;
           await sleep(300);
         }
       })();
@@ -3446,7 +3649,7 @@ if (wantCoop) {
           for (;;) {
             const c = await D.exec(`return window.uv.lobby && window.uv.lobby.code`);
             if (c) return c;
-            if (Date.now() - t0 > 12000) return null;
+            if (Date.now() - t0 > REG_WAIT_MS) return null;
             await sleep(300);
           }
         })();
@@ -3541,7 +3744,7 @@ if (wantCoop) {
           for (;;) {
             const c = await W0.exec(`return window.uv.lobby && window.uv.lobby.code`);
             if (c) return c;
-            if (Date.now() - t0 > 15000) return null;
+            if (Date.now() - t0 > REG_WAIT_MS) return null;
             await sleep(300);
           }
         })();
@@ -3716,11 +3919,18 @@ if (wantCoop) {
   } catch (e) {
     fail(`coop test: ${e.message}`);
   } finally {
+    // BEFORE THE PAGES GO. The counters live in the page; the console lines
+    // outlive it. Read on the way out so the teardown has both, and read it in
+    // `finally` so a phase that threw still reports what its network did —
+    // a crashed phase is exactly when you most want to know.
+    await captureLedger(A2, 'coop-host');
+    await captureLedger(B, 'coop-client');
     await A2.close(); await B.close();
   }
 }
 
 assertNoNetDrops();
 assertCleanTree();
+if (skipped) console.log(`\n${skipped} check(s) SKIPPED — weapons are removed (§15 defect #10); they return when CONFIG.WEAPONS_ENABLED does`);
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL BROWSER TESTS PASSED');
 process.exit(failures ? 1 : 0);

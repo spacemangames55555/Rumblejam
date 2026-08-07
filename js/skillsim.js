@@ -8,6 +8,7 @@
 // stream and render them; they never evaluate a trigger.
 
 import { EnemyGrid, triggerHolds, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
+import { selectTarget } from './selectors.js';
 import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
 import { domainMult } from './domains.js';
@@ -264,6 +265,16 @@ function fireSkill(sim, p, sk) {
   const rank = skillRank(p, sk.id);
   p.skillCd[sk.id] = sk.cooldown / 1000;
   const out = runCompose(sim, p, sk, rank, sim.trigGrid);
+  // THE ToH TRAIT LAYER OBSERVES ATTACKS, and this is what an attack is now.
+  // tohOnFire() was called from _tickWeapons() and nothing else — and
+  // _tickWeapons has not run since weapons were removed. So Rhythm never built
+  // a stack, the Mage's every-Nth singularity never counted, and the Sundian
+  // never planted coral: the hook was orphaned, not broken. It needs only a
+  // target position, so it takes the one this skill's own selector chose.
+  const range = sk.trigger.range || sk.trigger.radius || 0;
+  const tgt = range ? selectTarget(sk.select, sim.trigGrid, p.x, p.y, range) : null;
+  sim._selLedger(sk.id, tgt);
+  sim.tohOnFire(p, { def: null, a: p.aimA, tx: tgt ? tgt.x : p.x, ty: tgt ? tgt.y : p.y });
   p.trigEvents.lastFired = sk.id;
   p.fireLog.push({ id: sk.id, trigger: sk.trigger.kind, t: sim.time, hits: out.hits });
   if (p.fireLog.length > 20) p.fireLog.shift();

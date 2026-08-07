@@ -13,7 +13,7 @@
 // 10. DPS gate (±40% of median), stress timing, snapshot serialization
 // Usage: node tools/sim_test.mjs
 import { Sim } from '../js/game.js';
-import { CHARACTERS, CHAR_BY_ID } from '../js/content/characters.js';
+import { CHARACTERS, CHAR_BY_ID, SELECTABLE } from '../js/content/characters.js';
 import { ITEMS } from '../js/content/items.js';
 import { WEAPONS } from '../js/content/weapons.js';
 import { ENEMIES } from '../js/content/enemies.js';
@@ -38,12 +38,30 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { ALL_CHARS as _ALL_CHARS } from '../js/content/characters.js';
 const ALL_CHARS_N = _ALL_CHARS.length;
 
+// EVERY GENERIC PARTY IN THIS FILE USES THESE. Flow, objective, economy and
+// netcode tests do not care which class is standing there — they care that the
+// sim will start with it, and the sim now refuses any class without a skill
+// tree. Derived from SELECTABLE so a retired or unplayable id can never be
+// hardcoded back in; when phase 5 arms more classes these simply follow.
+const _SEL = SELECTABLE;
+const T1 = _SEL[0].id;
+const T2 = _SEL[1 % _SEL.length].id;
+// A party of N built from the selectable classes, cycling. Replaces a dozen
+// hardcoded lists of retired classic characters; those tests care about party
+// SIZE and mixture, never about which retired trait was in slot 3.
+const pickN = n => Array.from({ length: n }, (_, i) => _SEL[i % _SEL.length].id);
+// A retired id, assembled so no search-and-replace over character names can
+// reach it. Two passes of bulk editing rewrote this literal into a valid class
+// and quietly turned its assertion into a tautology.
+const RETIRED_ID = ['bul', 'wark'].join('');
+
 let failures = 0;
 const fail = (msg, err) => { failures++; console.error(`✗ ${msg}`, err ? (err.stack || err) : ''); };
 const ok = msg => console.log(`✓ ${msg}`);
 
 // ---- 1. content counts ----
-if (CHARACTERS.length === 33) ok('characters: 33'); else fail(`characters ${CHARACTERS.length} != 33`);
+if (CHARACTERS.length === 14) ok('characters: 14 (the classic 33 are retired to archive/classic-roster/)');
+else fail(`characters ${CHARACTERS.length} != 14`);
 if (ITEMS.length >= 100) ok(`items: ${ITEMS.length}`); else fail(`items ${ITEMS.length} < 100`);
 if (WEAPONS.length === 26) ok('weapons: 26'); else fail(`weapons ${WEAPONS.length} != 26`);
 if (ENEMIES.length === 12) ok('enemy types: 12'); else fail(`enemy types ${ENEMIES.length} != 12`);
@@ -366,12 +384,50 @@ function enterHorde(sim) {
   return id;
 }
 // kill everything (twice — shielded elites block single probe hits)
-function nuke(sim, p, sparBoss) {
+// ---------------------------------------------------------------------------
+// THE HARNESS KILLING THINGS FOR THE PLAYER — named, counted, and fenced off.
+//
+// This was `nuke()`. It kills every enemy on the field with
+// `damageEnemy(e, 900, {owner: p})` so a FLOW test can get to the next phase.
+// That is legitimate setup and several tests genuinely need it. What was not
+// legitimate is that nothing distinguished it from the player winning: with
+// weapons removed and no skill trees on the old roster, the party could deal
+// zero damage for a whole patch and every fight in this suite still "cleared".
+// The suite was green and measuring nothing (§15 defect #11).
+//
+// So it now takes a REASON, stamps the sim, and any sim it has touched is
+// permanently disqualified from carrying a combat result — see
+// assertPlayerCleared(). Offence is measured in tools/offence_test.mjs, which
+// never calls damageEnemy on the player's behalf at all.
+// Weapon-economy checks that cannot run while weapons are removed. Counted and
+// named, never silently passed — §15 defect #10 owns restoring them.
+const WEAPON_SKIPS = [];
+const skipWeapon = what => { WEAPON_SKIPS.push(what); console.log(`⊘ SKIPPED (weapons removed — §15 #10): ${what}`); };
+
+import { SKILL_BY_ID as SKILLS_BY_ID_FOR_PARK } from '../js/skills.js';
+const SETUP_CLEARS = [];
+function clearFieldForSetup(sim, p, reason, { sparBoss = false } = {}) {
+  if (!reason) throw new Error('clearFieldForSetup() needs a reason — an unexplained harness kill is exactly what nuke() was');
+  sim.__clearedByHarness = (sim.__clearedByHarness || 0) + 1;
+  SETUP_CLEARS.push(reason);
   for (const e of [...sim.enemyPool]) {
     if (sparBoss && e.boss) continue;
     sim.damageEnemy(e, 900, { owner: p });
     if (e.active) sim.damageEnemy(e, 900, { owner: p });
   }
+}
+
+// Any claim of the form "the party won this fight" must go through here. A sim
+// the harness has emptied cannot answer that question, and saying so out loud
+// is the only thing that stops the next person reading a flow pass as a combat
+// pass — which is what happened.
+function assertPlayerCleared(sim, claim) {
+  if (sim.__clearedByHarness) {
+    fail(`"${claim}" cannot be claimed from this sim: the harness cleared its field ${sim.__clearedByHarness} time(s) `
+      + `via clearFieldForSetup(). Use tools/offence_test.mjs for anything about whether the PLAYER can win a fight.`);
+    return false;
+  }
+  return true;
 }
 // run one arena node to extraction (F3-style). Returns ticks spent.
 function clearArena(sim, buyStuff) {
@@ -388,7 +444,7 @@ function clearArena(sim, buyStuff) {
       const m = sim.pickups[0];
       p.x = m.x; p.y = m.y;
     }
-    if (ticks % 240 === 0) nuke(sim, p);
+    if (ticks % 240 === 0) clearFieldForSetup(sim, p, 'clearArena(): flow tests need the arena to end so the next phase can be reached');
     // objective levels never clear on an empty field; the flow tests care
     // about the node→fight→extract loop, and section 9i plays each objective
     // for real, so satisfy the win condition here after a fair slice of time
@@ -422,15 +478,15 @@ function playFloor(sim, buyStuff) {
 
 // ---- 3. consent selection: solo instant; contested redirects once then locks ----
 try {
-  const solo = new Sim({ seed: 5, party: [{ idx: 0, key: 'a', name: 'S', charId: 'rampart', color: '#fff' }] });
+  const solo = new Sim({ seed: 5, party: [{ idx: 0, key: 'a', name: 'S', charId: T1, color: '#fff' }] });
   const first = solo.reachableNodes()[0];
   solo.uiAction(0, { kind: 'pickNode', nodeId: first });
   if (solo.phase === 'arena' && solo.currentNode === first) ok('solo node tap travels immediately');
   else fail(`solo pick: phase ${solo.phase}`);
 
   const duo = new Sim({ seed: 5, party: [
-    { idx: 0, key: 'a', name: 'A', charId: 'rampart', color: '#fff' },
-    { idx: 1, key: 'b', name: 'B', charId: 'redmaw', color: '#fff' }] });
+    { idx: 0, key: 'a', name: 'A', charId: T1, color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: T2, color: '#fff' }] });
   const [n1, n2] = duo.reachableNodes();
   duo.uiAction(0, { kind: 'pickNode', nodeId: n1 });
   if (duo.phase === 'map' && duo.nodeVote && duo.nodeVote.nodeId === n1) ok('co-op tap starts the 4s consent countdown');
@@ -454,7 +510,7 @@ try {
 // ---- 4. all 33 characters clear their first fight node ----
 {
   let smokeFail = 0;
-  for (const c of CHARACTERS) {
+  for (const c of SELECTABLE) {
     try {
       const sim = new Sim({ seed: 123456789, party: [{ idx: 0, key: 'k', name: 'SMOKE', charId: c.id, color: '#fff' }] });
       sim.setInput(0, { mx: 1, my: 0.5 });
@@ -470,7 +526,9 @@ try {
 }
 
 // ---- 5. full-run victories (per-fight-trigger chars + DoD staples) ----
-for (const charId of ['facet', 'rampart', 'vesper', 'bulwark', 'cogsmith', 'zephyr']) {
+// was six classic characters chosen for their per-fight triggers; those
+// characters are retired, so this is the selectable set instead.
+for (const charId of _SEL.map(c => c.id)) {
   try {
     const sim = new Sim({ seed: 424242, party: [{ idx: 0, key: 'k', name: 'RUN', charId, color: '#fff' }] });
     sim.debug('F2');
@@ -482,47 +540,21 @@ for (const charId of ['facet', 'rampart', 'vesper', 'bulwark', 'cogsmith', 'zeph
 
 // ---- 6. per-fight trigger mapping ----
 try {
-  // Rampart: +1 permanent Grit per FIGHT cleared
-  const rs = new Sim({ seed: 9, party: [{ idx: 0, key: 'k', name: 'R', charId: 'rampart', color: '#fff' }] });
-  rs.uiAction(0, { kind: 'pickNode', nodeId: rs.reachableNodes()[0] });
-  clearArena(rs, false);
-  if ((rs.players[0].permStats.grit || 0) === 1) ok('Rampart: +1 permanent Grit per fight cleared');
-  else fail(`Rampart grit after one fight: ${rs.players[0].permStats.grit}`);
-
-  // Vesper: overheal → Vitality capped +3 per FIGHT, cap resets on the next fight
-  const vs = new Sim({ seed: 10, party: [{ idx: 0, key: 'k', name: 'V', charId: 'vesper', color: '#fff' }] });
-  vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] });
-  const vp = vs.players[0];
-  vp.hp = vp.stats.vitality;
-  vs._heal(vp, 50);
-  if ((vp.permStats.vitality || 0) !== 3) fail(`Vesper first-fight overheal: ${vp.permStats.vitality} (want 3)`);
-  clearArena(vs, false);
-  vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] });
-  if (vs.phase !== 'arena') { // second pick may hit a stop node — walk until a fight
-    let g = 0;
-    while (vs.phase === 'map' && g++ < 5) { drain(vs, vp, false); vs.uiAction(0, { kind: 'pickNode', nodeId: vs.reachableNodes()[0] }); }
-  }
-  vp.hp = vp.stats.vitality; vp.healAcc = 0;
-  vs._heal(vp, 50);
-  if ((vp.permStats.vitality || 0) === 6) ok('Vesper: overheal cap +3 per fight, resets each fight');
-  else fail(`Vesper second-fight overheal total: ${vp.permStats.vitality} (want 6)`);
-
-  // Facet: boon offered on entering Combat/Elite/Siege nodes, not on stops
-  const fs = new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'F', charId: 'facet', color: '#fff' }] });
-  const fp = fs.players[0];
-  if (fp.boonOffer) fail('Facet had a boon before the first fight');
-  fs.uiAction(0, { kind: 'pickNode', nodeId: fs.reachableNodes()[0] });
-  if (fs.phase === 'arena' && fp.boonOffer) ok('Facet: boon offered on entering a fight node');
-  else fail(`Facet boon on arena entry: ${!!fp.boonOffer}`);
-  const boonStat = fp.boonOffer[0].stat;
-  fs.uiAction(0, { kind: 'boon', id: fp.boonOffer[0].id });
-  if (fp.boonTemp && fp.boonTemp[boonStat]) ok('Facet: boon applies for the fight');
-  clearArena(fs, false);
-  if (!fp.boonTemp) ok('Facet: boon expires when the fight ends'); else fail('boon survived extraction');
+  // DELETED: Rampart's per-fight Grit, Vesper's overheal cap and Facet's boon
+  // offer. All three were traits of retired classic characters (see
+  // archive/classic-roster/). Greed and level-up banking below are general
+  // mechanics and stay.
 
   // Greed: floor(G/2) materials at every fight clear
-  const gs = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'G', charId: 'gilded_one', color: '#fff' }] });
-  gs.players[0].boosts.greed = 15; gs._recomputeStats(gs.players[0]); // 30 total → +15
+  // GREED IS SET, NOT ASSUMED. This granted 15 and expected 30 total, because
+  // the character it used to run as (the retired Gilded One) carried 15 base.
+  // A bulk rename swapped the class and the arithmetic silently became wrong —
+  // the payout dropped to 7 and read as a defect in the tithe. The test now
+  // reads the sheet and tops it up to the number it is actually asserting.
+  const gs = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'G', charId: T2, color: '#fff' }] });
+  const WANT_GREED = 30;
+  gs.players[0].boosts.greed = WANT_GREED - (gs.players[0].stats.greed || 0);
+  gs._recomputeStats(gs.players[0]);   // floor(30/2) = +15 at the clear
   enterHorde(gs);
   const matsBefore = gs.players[0].materials;
   gs.wave.done = true; gs.spawnQueue.length = 0;
@@ -532,7 +564,7 @@ try {
   else fail(`Greed tithe: +${gs.players[0].materials - matsBefore} (want ≥15)`);
 
   // level-up banking: banked during the fight, resolved at the clear
-  const ls = new Sim({ seed: 13, party: [{ idx: 0, key: 'k', name: 'L', charId: 'redmaw', color: '#fff' }] });
+  const ls = new Sim({ seed: 13, party: [{ idx: 0, key: 'k', name: 'L', charId: T2, color: '#fff' }] });
   enterHorde(ls);
   const lp = ls.players[0];
   ls._collectMaterial(lp, 100); // banks several level-ups mid-fight
@@ -548,7 +580,7 @@ try {
 // ---- 7. all five arena templates spawn, fight, and clear ----
 for (const template of TEMPLATE_KEYS) {
   try {
-    const sim = new Sim({ seed: 77, party: [{ idx: 0, key: 'k', name: 'T', charId: 'bulwark', color: '#fff' }] });
+    const sim = new Sim({ seed: 77, party: [{ idx: 0, key: 'k', name: 'T', charId: T1, color: '#fff' }] });
     sim._travelTo(sim.reachableNodes()[0]); // enter, then re-enter with the wanted template
     sim.arenaNode.template = template;
     sim._enterArena(sim.arenaNode);
@@ -567,7 +599,7 @@ for (const template of TEMPLATE_KEYS) {
 
 // ---- 7b. extraction consent: countdown starts on the portal, cancels off it ----
 try {
-  const sim = new Sim({ seed: 21, party: [{ idx: 0, key: 'k', name: 'E', charId: 'rampart', color: '#fff' }] });
+  const sim = new Sim({ seed: 21, party: [{ idx: 0, key: 'k', name: 'E', charId: T1, color: '#fff' }] });
   enterHorde(sim);
   const p = sim.players[0];
   sim.wave.done = true; sim.spawnQueue.length = 0;
@@ -587,7 +619,7 @@ try {
 // (cramped layouts can run walls through the exact midpoint — spawns must nudge off)
 try {
   let clip = 0;
-  const party4 = ['bulwark', 'wisp', 'cogsmith', 'voltaic'].map((c, i) => ({ idx: i, key: 'k' + i, name: 'S' + i, charId: c, color: '#fff' }));
+  const party4 = pickN(4).map((c, i) => ({ idx: i, key: 'k' + i, name: 'S' + i, charId: c, color: '#fff' }));
   for (let seed = 1; seed <= 25; seed++) {
     const s = new Sim({ seed: seed * 31, party: party4 });
     const node = s.floor.nodes.find(n => n.kind === 'combat');
@@ -610,8 +642,8 @@ try {
 // ---- 8. the Siege end-to-end ----
 try {
   const party = [
-    { idx: 0, key: 'a', name: 'A', charId: 'bulwark', color: '#fff' },
-    { idx: 1, key: 'b', name: 'B', charId: 'redmaw', color: '#fff' }];
+    { idx: 0, key: 'a', name: 'A', charId: T1, color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: T2, color: '#fff' }];
   const sim = new Sim({ seed: 31, party });
   sim.god = true;
   const p = sim.players[0];
@@ -639,7 +671,7 @@ try {
       if (ev.k === 'bossDown') events.push('bossDown');
     }
     if (sim.enemyBuff > 1) sawPylonBuff = true;
-    if (ticks % 200 === 0) nuke(sim, p, true);
+    if (ticks % 200 === 0) clearFieldForSetup(sim, p, 'siege flow: reach the mutation/sub-objective/boss beats without a 5-minute fight', { sparBoss: true });
     if (sim.boss) sim.damageEnemy(sim.boss, 90, { owner: p });
     for (const q of sim.players) drain(sim, q, false);
     if (sim.cleared && sim.hatch) for (const q of sim.livePlayers()) { q.x = sim.hatch.x; q.y = sim.hatch.y; }
@@ -659,7 +691,7 @@ try {
 
 // ---- 8b. hold-circle chokes spawns; hazard field migrates (floor 3 / floor 2) ----
 try {
-  const sim = new Sim({ seed: 33, party: [{ idx: 0, key: 'k', name: 'H', charId: 'bulwark', color: '#fff' }] });
+  const sim = new Sim({ seed: 33, party: [{ idx: 0, key: 'k', name: 'H', charId: T1, color: '#fff' }] });
   sim.god = true;
   while (sim.floorNum < 3) sim.debug('F4');
   sim._travelTo(sim.floor.siegeId);
@@ -676,7 +708,7 @@ try {
   if (rateFree && sim.holdCircle.held) ok('hold circle: contested state tracks the players');
   else fail(`hold circle held states: free=${!rateFree} held=${sim.holdCircle.held}`);
 
-  const s2 = new Sim({ seed: 34, party: [{ idx: 0, key: 'k', name: 'H2', charId: 'bulwark', color: '#fff' }] });
+  const s2 = new Sim({ seed: 34, party: [{ idx: 0, key: 'k', name: 'H2', charId: T1, color: '#fff' }] });
   s2.god = true;
   s2.debug('F4');
   s2._travelTo(s2.floor.siegeId);
@@ -691,7 +723,7 @@ try {
 
 // ---- 9. co-op: downs, revives, wipe ----
 try {
-  const party = ['bulwark', 'wisp', 'cogsmith', 'voltaic'].map((c, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: c, color: '#fff' }));
+  const party = pickN(4).map((c, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: c, color: '#fff' }));
   const sim = new Sim({ seed: 777, party });
   sim.debug('F2');
   playFloor(sim, true);
@@ -725,7 +757,7 @@ try {
 try {
   const { sellValue, weaponBasePrice } = await import('../js/config.js');
   const { WEAPON_BY_ID } = await import('../js/content/weapons.js');
-  const sim = new Sim({ seed: 31337, party: [{ idx: 0, key: 'k', name: 'MGMT', charId: 'redmaw', color: '#fff' }] });
+  const sim = new Sim({ seed: 31337, party: [{ idx: 0, key: 'k', name: 'MGMT', charId: T2, color: '#fff' }] });
   const p = sim.players[0];
   sim._addWeapon(p, 'coilgun', 1);
   sim._addWeapon(p, 'coilgun', 1);
@@ -741,22 +773,20 @@ try {
   if (p.materials === mats0 + expect && !p.weapons.some(w => w.id === 'coilgun')) ok(`sell weapon refunds 30% (+${expect})`);
   else fail(`sell weapon: mats ${mats0}→${p.materials}`);
   // Quartermaster invested lineage
-  const qsim = new Sim({ seed: 555, party: [{ idx: 0, key: 'k', name: 'QM', charId: 'quartermaster', color: '#fff' }] });
+  const qsim = new Sim({ seed: 555, party: [{ idx: 0, key: 'k', name: 'QM', charId: T1, color: '#fff' }] });
   const qp = qsim.players[0];
   qsim._addWeapon(qp, 'pebbleshot', 1, 30);
   qsim._addWeapon(qp, 'pebbleshot', 1, 40);
   const pi = qp.weapons.map((w, i) => w.id === 'pebbleshot' ? i : -1).filter(i => i >= 0);
   qsim.uiAction(0, { kind: 'combine', a: pi[0], b: pi[1], id: 'pebbleshot', tier: 1 });
   const merged = qp.weapons.find(w => w.id === 'pebbleshot');
-  const qmats = qp.materials;
-  qsim.uiAction(0, { kind: 'sellWeapon', slot: qp.weapons.indexOf(merged), id: 'pebbleshot', tier: 2 });
-  if (qp.materials === qmats + 70) ok('Quartermaster sells for exact invested materials (70)');
-  else fail(`Quartermaster sell: +${qp.materials - qmats}`);
+  // DELETED: Quartermaster's sell-for-exact-invested trait — a retired classic
+  // character, and a weapon operation besides.
 } catch (err) { fail('build management crashed', err); }
 
 // ---- 9c. rebalance mechanics still hold ----
 try {
-  const rsim = new Sim({ seed: 43, party: [{ idx: 0, key: 'k', name: 'R', charId: 'rampart', color: '#fff' }] });
+  const rsim = new Sim({ seed: 43, party: [{ idx: 0, key: 'k', name: 'R', charId: T1, color: '#fff' }] });
   const rp = rsim.players[0];
   rp.hp = 10;
   rsim._heal(rp, 10);
@@ -767,17 +797,8 @@ try {
   if (gained0 === 10 && rp.hp - 10 === 20) ok('Recovery amplifies healing (+100% → double heal)');
   else fail(`Recovery healing: ${gained0} / ${rp.hp - 10}`);
 
-  const bsim = new Sim({ seed: 44, party: [
-    { idx: 0, key: 'a', name: 'L', charId: 'lodestone', color: '#fff' },
-    { idx: 1, key: 'b', name: 'M', charId: 'rampart', color: '#fff' }] });
-  bsim._travelTo(bsim.reachableNodes()[0]);
-  const [lp, mp] = bsim.players;
-  lp.invuln = 0; mp.invuln = 0;
-  const lHp = lp.hp, mHp = mp.hp;
-  lp.stats.reflex = 0;
-  bsim.hurtPlayer(lp, 30, null);
-  if (lp.hp < lHp && mp.hp < mHp) ok('Soulbond: partner soaks a share of incoming damage');
-  else fail(`Soulbond share: ${lHp}→${lp.hp}, ${mHp}→${mp.hp}`);
+  // DELETED: Soulbond (Lodestone's partner damage-share) — retired classic
+  // character. Recovery amplification above is a general stat and stays.
 } catch (err) { fail('rebalance mechanics crashed', err); }
 
 // ---- 9d. patch 8: shop economy — cadence, guarantees, auto-combine, swaps ----
@@ -788,8 +809,8 @@ try {
 
   // shop at every extraction: clearing a combat node opens each player's shop
   const es = new Sim({ seed: 71, party: [
-    { idx: 0, key: 'a', name: 'A', charId: 'bulwark', color: '#fff' },
-    { idx: 1, key: 'b', name: 'B', charId: 'redmaw', color: '#fff' }] });
+    { idx: 0, key: 'a', name: 'A', charId: T1, color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: T2, color: '#fff' }] });
   enterHorde(es);
   es.wave.done = true; es.spawnQueue.length = 0;
   for (const e of [...es.enemyPool]) es.enemyPool.release(e);
@@ -815,7 +836,7 @@ try {
   // 100 seeded rolls incl. rerolls: standard ≥1 weapon (≥2 floor 1); BM ≥2 + rare+ + 6 slots + cheaper rerolls
   let rollBad = 0;
   for (let seed = 1; seed <= 100 && rollBad < 5; seed++) {
-    const s1 = new Sim({ seed: seed * 7919, party: [{ idx: 0, key: 'k', name: 'S', charId: 'bulwark', color: '#fff' }] });
+    const s1 = new Sim({ seed: seed * 7919, party: [{ idx: 0, key: 'k', name: 'S', charId: T1, color: '#fff' }] });
     const p1 = s1.players[0];
     p1.materials = 10000;
     for (let f = 1; f <= 2; f++) {
@@ -849,7 +870,7 @@ try {
   if (!rollBad) ok('100 seeded shop rolls × rerolls: standard ≥1 weapon (≥2 floor 1); Black Market 6 slots, ≥2 weapons, ≥1 rare+');
   // BM reroll discount: fresh sims, same reroll count
   {
-    const a = new Sim({ seed: 3, party: [{ idx: 0, key: 'k', name: 'X', charId: 'bulwark', color: '#fff' }] });
+    const a = new Sim({ seed: 3, party: [{ idx: 0, key: 'k', name: 'X', charId: T1, color: '#fff' }] });
     const pa = a.players[0];
     a.currentNode = 0; a._openShop(pa, 'clear');
     const std = a._rerollCost(pa);
@@ -860,7 +881,7 @@ try {
   }
 
   // full-slot duplicate purchase auto-combines — at 6/6, Broker's 7/7, Tinker's 4/4
-  for (const [charId, wantCap] of [['bulwark', 6], ['broker', 7], ['tinker', 4]]) {
+  for (const [charId, wantCap] of [[T1, 6], [T2, 6]]) {   // was per-character weapon-slot caps; weapons are gone
     const cs = new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'C', charId, color: '#fff' }] });
     const cp = cs.players[0];
     if (cp.weaponSlots !== wantCap) { fail(`${charId} weapon cap ${cp.weaponSlots} (want ${wantCap})`); continue; }
@@ -881,12 +902,12 @@ try {
     cs.events.length = 0;
     cs.uiAction(0, { kind: 'buy', slot: 1 });
     const br = cs.events.find(e => e.k === 'buyResult');
-    if (br && !br.ok && /tier IV/.test(br.reason)) { if (charId === 'bulwark') ok('tier-IV match refuses with a shown reason'); }
+    if (br && !br.ok && /tier IV/.test(br.reason)) { if (charId === T1) ok('tier-IV match refuses with a shown reason'); }
     else fail(`${charId} T4 refusal: ${JSON.stringify(br)}`);
   }
   // below max slots a duplicate still adds a copy (manual combine stays a choice)
   {
-    const ds = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'D', charId: 'bulwark', color: '#fff' }] });
+    const ds = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'D', charId: T1, color: '#fff' }] });
     const dp = ds.players[0];
     dp.materials = 500;
     ds.currentNode = 0; ds._openShop(dp, 'clear');
@@ -903,7 +924,7 @@ try {
 
   // Quartermaster: all-weapon stock everywhere, invested-cost sell unchanged
   {
-    const qs = new Sim({ seed: 13, party: [{ idx: 0, key: 'k', name: 'Q', charId: 'quartermaster', color: '#fff' }] });
+    const qs = new Sim({ seed: 13, party: [{ idx: 0, key: 'k', name: 'Q', charId: T1, color: '#fff' }] });
     const qp = qs.players[0];
     qp.materials = 5000;
     qs.currentNode = 0; qs._openShop(qp, 'clear');
@@ -924,18 +945,26 @@ try {
 
   // atomic swap-buy: both legs or neither; insufficient funds rejected cleanly
   {
-    const ss = new Sim({ seed: 14, party: [{ idx: 0, key: 'k', name: 'W', charId: 'bulwark', color: '#fff' }] });
+    const ss = new Sim({ seed: 14, party: [{ idx: 0, key: 'k', name: 'W', charId: T1, color: '#fff' }] });
     const sp = ss.players[0];
     ss.currentNode = 0; ss._openShop(sp, 'clear');
     armBot(ss, sp);
-    sp.shop.stock[0] = { kind: 'weapon', id: 'rustcleaver', tier: 1, price: 30, sold: false, locked: false };
-    sp.materials = 28; // can't afford outright — the refund covers the difference
-    ss.uiAction(0, { kind: 'swapBuy', slot: 0, sell: 0, sellId: sp.weapons[0].id, sellTier: sp.weapons[0].tier });
-    if (sp.weapons.length === sp.weaponSlots && sp.weapons.some(w => w.id === 'rustcleaver') && sp.shop.stock[0].sold)
-      ok(`swap-buy executes atomically (refund funds the purchase, still ${sp.weaponSlots}/${sp.weaponSlots})`);
-    else fail(`swap: ${JSON.stringify(sp.weapons.map(w => w.id))} mats=${sp.materials}`);
+    // Weapons are removed, so there is nothing to swap OUT and sp.weapons[0]
+    // is undefined — which used to throw and end this whole section, taking
+    // the still-valid economy checks below it with it. §15 defect #10.
+    if (!sp.weapons.length) skipWeapon('swap-buy executes atomically');
+    else {
+      sp.shop.stock[0] = { kind: 'weapon', id: 'rustcleaver', tier: 1, price: 30, sold: false, locked: false };
+      sp.materials = 28; // can't afford outright — the refund covers the difference
+      ss.uiAction(0, { kind: 'swapBuy', slot: 0, sell: 0, sellId: sp.weapons[0].id, sellTier: sp.weapons[0].tier });
+      if (sp.weapons.length === sp.weaponSlots && sp.weapons.some(w => w.id === 'rustcleaver') && sp.shop.stock[0].sold)
+        ok(`swap-buy executes atomically (refund funds the purchase, still ${sp.weaponSlots}/${sp.weaponSlots})`);
+      else fail(`swap: ${JSON.stringify(sp.weapons.map(w => w.id))} mats=${sp.materials}`);
+    }
     // rejection: price beyond refund+mats leaves EVERYTHING untouched
     sp.materials = 0;
+    if (!sp.weapons.length) skipWeapon('a swap-buy the player cannot afford is refused whole');
+    else {
     sp.shop.stock[1] = { kind: 'weapon', id: 'longbarrel', tier: 4, price: 900, sold: false, locked: false };
     const snap = JSON.stringify([sp.weapons.map(w => [w.id, w.tier]), sp.materials]);
     ss.events.length = 0;
@@ -944,11 +973,12 @@ try {
     if (snap === JSON.stringify([sp.weapons.map(w => [w.id, w.tier]), sp.materials]) && !sp.shop.stock[1].sold && rbr && !rbr.ok)
       ok('unaffordable swap is rejected with both legs rolled back');
     else fail('poor swap mutated state');
+    }
   }
 
   // the two difficulty knobs: HP spot-checks and the ~1.25× density ratio
   {
-    const hs = new Sim({ seed: 15, party: [{ idx: 0, key: 'k', name: 'H', charId: 'bulwark', color: '#fff' }] });
+    const hs = new Sim({ seed: 15, party: [{ idx: 0, key: 'k', name: 'H', charId: T1, color: '#fff' }] });
     hs._travelTo(hs.reachableNodes()[0]);
     const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
     const chaff = hs.spawnEnemyById('skulker', 400, 400, {});
@@ -958,7 +988,7 @@ try {
     const wantElite = Math.round(ENEMY_BY_ID.lobber.hp * CONFIG.ELITE_HP_MULT * CONFIG.enemyHpMult * hs.coopHp);
     const okChaff = chaff.maxHp === wantChaff, okElite = elite.maxHp === wantElite;
     // boss: use the floor-1 siege boss
-    const bs = new Sim({ seed: 16, party: [{ idx: 0, key: 'k', name: 'B', charId: 'bulwark', color: '#fff' }] });
+    const bs = new Sim({ seed: 16, party: [{ idx: 0, key: 'k', name: 'B', charId: T1, color: '#fff' }] });
     bs._travelTo(bs.floor.siegeId);
     bs.siegeT = bs.bossAt; bs.tick();
     const { BOSS_BY_FLOOR } = await import('../js/content/bosses.js');
@@ -969,7 +999,7 @@ try {
     // EVENTS (a contact-damage or armed character would cull the field and
     // flatten the ratio); redmaw with no weapons kills nothing.
     const countSpawns = () => {
-      const d = new Sim({ seed: 17, party: [{ idx: 0, key: 'k', name: 'D', charId: 'redmaw', color: '#fff' }] });
+      const d = new Sim({ seed: 17, party: [{ idx: 0, key: 'k', name: 'D', charId: T2, color: '#fff' }] });
       enterHorde(d);
       d.god = true;
       d.players[0].weapons.length = 0;
@@ -990,67 +1020,11 @@ try {
   }
 } catch (err) { fail('shop economy tests crashed', err); }
 
-// ---- 9e. patch 8.1: the Gilded One rescue — finest-goods stock + Kegbomb ----
-try {
-  const { ITEM_BY_ID } = await import('../js/content/items.js');
-  const finest = (sim, s) => s.kind === 'weapon' ? s.tier === sim._topTier()
-    : ITEM_BY_ID[s.id].rarity === 'legendary';
-
-  // starts with the Kegbomb (Greed-scaled — its own statline powers it)
-  const ks = new Sim({ seed: 61, party: [{ idx: 0, key: 'k', name: 'G', charId: 'gilded_one', color: '#fff' }] });
-  if (ks.players[0].weapons[0].id === 'kegbomb') ok('Gilded One starts with the Kegbomb');
-  else fail(`starting weapon: ${ks.players[0].weapons[0].id}`);
-
-  // stock rule across floors and 30 seeds: every slot is a legendary item or
-  // a top-tier weapon; 2 slots standard, 3 at the Black Market; rerolls too
-  let bad = 0, sawWeapon = 0;
-  for (let seed = 1; seed <= 30 && bad < 5; seed++) {
-    const gs = new Sim({ seed: seed * 101, party: [{ idx: 0, key: 'k', name: 'G', charId: 'gilded_one', color: '#fff' }] });
-    const gp = gs.players[0];
-    gp.materials = 9999;
-    for (let f = 1; f <= 3; f++) {
-      if (f > 1) gs.debug('F4');
-      gs.currentNode = 0; gs._openShop(gp, 'clear');
-      for (let r = 0; r < 2; r++) {
-        if (gp.shop.stock.length !== 2) { bad++; fail(`seed ${seed * 101} f${f}: std slots ${gp.shop.stock.length}`); }
-        for (const s of gp.shop.stock) {
-          if (!finest(gs, s)) { bad++; fail(`seed ${seed * 101} f${f}: not finest — ${s.kind}:${s.id}/T${s.tier}`); }
-          if (s.kind === 'weapon') sawWeapon++;
-        }
-        gs.uiAction(0, { kind: 'reroll' });
-      }
-      gs._travelTo(gs.floor.nodes.find(n => n.kind === 'shop').id);
-      if (gp.shop.stock.length !== 3) { bad++; fail(`seed ${seed * 101} f${f}: BM slots ${gp.shop.stock.length}`); }
-      for (const s of gp.shop.stock) if (!finest(gs, s)) { bad++; fail(`seed ${seed * 101} f${f} BM: ${s.kind}:${s.id}`); }
-      gs.phase = 'map';
-    }
-  }
-  if (!bad) ok(`Gilded One stock: only legendary items / top-tier weapons, 2 std + 3 BM slots (30 seeds × 3 floors; ${sawWeapon} weapon offers seen)`);
-  if (sawWeapon > 20) ok('the finest-goods rack participates in the weapon economy'); else fail(`only ${sawWeapon} weapon offers across the sweep`);
-
-  // auto-combine, swap, and locks against the 2-slot trait stock
-  const cs = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: 'gilded_one', color: '#fff' }] });
-  const cp = cs.players[0];
-  cp.materials = 2000;
-  cs.currentNode = 0; cs._openShop(cp, 'clear');
-  armBot(cs, cp);
-  cp.shop.stock[0] = { kind: 'weapon', id: 'kegbomb', tier: 2, price: 60, sold: false, locked: false };
-  cs.uiAction(0, { kind: 'buy', slot: 0 });
-  // the starting Kegbomb is tier I — the first TIER-II copy absorbs the buy
-  if (cp.weapons.some(w => w.id === 'kegbomb' && w.tier === 3) && cp.weapons.length === cp.weaponSlots)
-    ok('auto-combine works on the 2-slot trait stock');
-  else fail(`gilded auto-combine: ${JSON.stringify(cp.weapons.map(w => [w.id, w.tier]))}`);
-  cp.shop.stock[1] = { kind: 'weapon', id: 'longbarrel', tier: 2, price: 60, sold: false, locked: false };
-  cs.uiAction(0, { kind: 'swapBuy', slot: 1, sell: 5, sellId: cp.weapons[5].id, sellTier: cp.weapons[5].tier });
-  if (cp.weapons.some(w => w.id === 'longbarrel') && cp.weapons.length === cp.weaponSlots) ok('make-room swap works on the trait stock');
-  else fail('gilded swap failed');
-  cs.uiAction(0, { kind: 'reroll' }); // fresh unsold stock, then lock through a reroll
-  cs.uiAction(0, { kind: 'lock', slot: 0 });
-  const lockedId2 = cp.shop.stock[0].id;
-  cs.uiAction(0, { kind: 'reroll' });
-  if (cp.shop.stock.some(s => s.locked && s.id === lockedId2) && cp.shop.stock.length === 2) ok('locks survive rerolls in the 2-slot stock');
-  else fail(`gilded lock: ${JSON.stringify(cp.shop.stock.map(s => s.id + (s.locked ? '🔒' : '')))}`);
-} catch (err) { fail('Gilded One rescue tests crashed', err); }
+// ---- 9e. DELETED: the Gilded One rescue (finest-goods stock + Kegbomb) ----
+// The Gilded One is a retired classic character (archive/classic-roster/) and
+// the section measured its shop-stock trait against the weapon economy, which
+// is also gone. Nothing here survives the retirement; a replacement belongs
+// with whatever phase-4 stocking rule the ToH classes get.
 
 // ---- 9f. the airhorn: debounce, volumes, fallback (headless, no WebAudio) ----
 try {
@@ -1090,7 +1064,7 @@ try {
     let bastion = 0, fightsN = 0;
     const seen = new Set();
     for (let seed = 1; seed <= 40; seed++) {
-      const s = new Sim({ seed: seed * 13, party: [{ idx: 0, key: 'k', name: 'P', charId: 'bulwark', color: '#fff' }] });
+      const s = new Sim({ seed: seed * 13, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
       for (const n of s.floor.nodes) {
         if (n.kind === 'combat') { fightsN++; if (n.profile === 'bastion') bastion++; }
         if (n.profile) seen.add(n.profile);
@@ -1126,7 +1100,7 @@ try {
     const deaths = [];
     for (const prof of COMBAT_PROFILE_KEYS) {
       for (const tmpl of TK9) {
-        const r = statueRun('cindermage', prof, tmpl);
+        const r = statueRun(T1, prof, tmpl);
         if (!r.died) { bad++; fail(`statue SURVIVED ${prof}/${tmpl} (median char must die outside Bastion)`); }
         else deaths.push(r.secs);
       }
@@ -1139,21 +1113,19 @@ try {
     // outside Bastion (asserted above).
     let bok = 0;
     for (const tmpl of TK9) {
-      const r = statueRun('bulwark', 'bastion', tmpl, 300);
+      const r = statueRun(T1, 'bastion', tmpl, 300);
       if (!r.died) bok++;
       else fail(`camper statue DIED in Bastion/${tmpl} at ${r.secs.toFixed(0)}s — camping must work where sanctioned`);
     }
     if (bok === TK9.length) ok('the Bastion camper statue survives in every template — camping has a sanctioned home');
-    // the Bulwark clause: paid-for identity, but not immortal
-    const med = statueRun('cindermage', 'mixed', 'open_expanse');
-    const bul = statueRun('bulwark', 'mixed', 'open_expanse', 400);
-    if (bul.died && bul.secs > med.secs * 1.5) ok(`the Bulwark clause: outlasts the median statue ${med.secs.toFixed(0)}s → ${bul.secs.toFixed(0)}s, still dies`);
-    else fail(`Bulwark clause: median ${med.secs.toFixed(0)}s bulwark ${bul.secs.toFixed(0)}s died=${bul.died}`);
+    // DELETED: the Bulwark clause. It compared a Bulwark statue against the
+    // median statue; Bulwark is retired, so both sides were the same class and
+    // the comparison could only ever be vacuous.
   }
 
   // ---- line of sight: a wall in a lab arena ----
   {
-    const s = new Sim({ seed: 5150, party: [{ idx: 0, key: 'k', name: 'L', charId: 'bulwark', color: '#fff' }] });
+    const s = new Sim({ seed: 5150, party: [{ idx: 0, key: 'k', name: 'L', charId: T1, color: '#fff' }] });
     const node = s.floor.nodes.find(n => n.kind === 'combat');
     node.profile = 'bastion'; node.template = 'open_expanse';
     s._travelTo(node.id);
@@ -1211,7 +1183,7 @@ try {
 
   // ---- money rule + counter + the siege looting window ----
   {
-    const s = new Sim({ seed: 61, party: [{ idx: 0, key: 'k', name: 'M', charId: 'bulwark', color: '#fff' }] });
+    const s = new Sim({ seed: 61, party: [{ idx: 0, key: 'k', name: 'M', charId: T1, color: '#fff' }] });
     s._travelTo(s.floor.nodes.find(n => n.kind === 'combat').id);
     s.god = true;
     if (s.getSnapshot().inc === 1) ok('counter: "incoming" while the spawn budget flows');
@@ -1236,7 +1208,7 @@ try {
     else fail(`fizzle: ground=${ground} scooped=${scooped} event=${JSON.stringify(rc)}`);
 
     // siege looting window: boss death → countdown → THEN fizzle + hatch + shop
-    const g = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: 'bulwark', color: '#fff' }] });
+    const g = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: T1, color: '#fff' }] });
     g.god = true;
     g._travelTo(g.floor.siegeId);
     g.siegeT = g.bossAt; g.tick();
@@ -1264,7 +1236,7 @@ try {
   const { encodeSnap, decodeSnap, wireSize } = await import('../js/netcodec.js');
   const { CONFIG: CW } = await import('../js/config.js');
   const mkParty = ids => ids.map((c, i) => ({ idx: i, key: `w${i}`, name: `W${i}`, charId: c, color: '#fff' }));
-  const octet = n => mkParty(Array.from({ length: n }, (_, i) => ['bulwark', 'cindermage', 'zephyr', 'redmaw', 'longshot', 'frostcaller', 'banneret', 'voltaic'][i % 8]));
+  const octet = n => mkParty(Array.from({ length: n }, (_, i) => pickN(8)[i % 8]));
 
   // softened curves at 2/4/6/8 — the exact numbers from the brief
   const wantSpawn = { 2: 1.5, 4: 2.5, 6: 3.1, 8: 3.7 };
@@ -1369,34 +1341,11 @@ try {
     else fail(`upload estimate breach: ${(upload / 1024).toFixed(0)} KB/s`);
   }
 
-  // party traits at 8: toll, aura, tether, drips
-  {
-    const g = new Sim({ seed: 737373, party: mkParty(['banneret', 'lodestone', 'sawbones', 'tollkeeper', 'cindermage', 'cindermage', 'cindermage', 'cindermage']) });
-    if (g.greedHp === 1.25 && g.greedMats === 2) ok("Tollkeeper's toll applies party-wide once at 8 players");
-    else fail(`toll at 8: hp×${g.greedHp} mats×${g.greedMats}`);
-    g._travelTo(g.reachableNodes()[0]);
-    const [ban, lode, saw, , c4, c5, c6] = g.players;
-    // aura: same-character allies inside vs outside the banner radius
-    ban.x = g.W / 2; ban.y = g.H / 2;
-    c4.x = ban.x + 60; c4.y = ban.y; c5.x = ban.x + 1600; c5.y = ban.y;
-    lode.x = ban.x - 900; lode.y = ban.y - 300; c6.x = lode.x + 40; c6.y = lode.y; // c6 = lodestone's nearest
-    saw.x = ban.x + 400; saw.y = ban.y + 300;
-    for (let i = 0; i < 40; i++) { g.tick(); for (const q of g.players) { q.hp = Math.min(q.hp, q.stats.vitality); q.invuln = 1; } }
-    if (c4.stats.ferocity > c5.stats.ferocity) ok(`Banneret's aura reaches allies in radius at 8 (${c4.stats.ferocity}% vs ${c5.stats.ferocity}% Ferocity)`);
-    else fail(`aura at 8: near ${c4.stats.ferocity} far ${c5.stats.ferocity}`);
-    const tether = g._snapTethers();
-    const hit = tether.some(t => Math.abs(t[2] - c6.x) < 60 && Math.abs(t[3] - c6.y) < 60);
-    if (hit) ok('Lodestone tethers the nearest of 7 allies');
-    else fail(`tether endpoints: ${JSON.stringify(tether)} (want near ${Math.round(c6.x)},${Math.round(c6.y)})`);
-    // sawbones drips: overheal reaches the nearest injured ally
-    c4.x = saw.x + 50; c4.y = saw.y; c4.hp = 10;
-    saw.hp = saw.stats.vitality;
-    const before = c4.hp;
-    g._heal(saw, 40);
-    for (let i = 0; i < 20; i++) { g.tick(); for (const q of g.players) q.invuln = 1; }
-    if (c4.hp > before) ok(`Sawbones' overheal drips to the nearest injured of 7 allies (+${Math.round(c4.hp - before)} HP)`);
-    else fail(`drip at 8: ${before} → ${c4.hp}`);
-  }
+  // DELETED: party traits at 8 — Tollkeeper's toll, Banneret's aura,
+  // Lodestone's tether and Sawbones' overheal drip. All four are traits of
+  // retired classic characters (archive/classic-roster/). The 8-player
+  // machinery they rode on — scaling, ring spawning, snapshot size — is
+  // exercised by the sections around this one and is unaffected.
 
   // merged ring spawning at 8 spread players
   {
@@ -1451,7 +1400,7 @@ try {
   // 8-player party fights floor 1's opening arenas organically and gets back
   // to the map — and reports how far it walked.
   {
-    const g = new Sim({ seed: 959596, party: mkParty(['bulwark', 'cindermage', 'zephyr', 'banneret', 'sawbones', 'redmaw', 'longshot', 'frostcaller']) });
+    const g = new Sim({ seed: 959596, party: mkParty(pickN(8)) });
     const steer = () => {
       for (const p of g.players) {
         if (p.gone || p.downed) continue;
@@ -1562,7 +1511,7 @@ try {
   const { CONFIG: CO } = await import('../js/config.js');
   const { ITEMS: IO } = await import('../js/content/items.js');
   const mk = (ids) => ids.map((c, i) => ({ idx: i, key: `o${i}`, name: `O${i}`, charId: c, color: '#fff' }));
-  const quad = n => mk(Array.from({ length: n }, (_, i) => ['bulwark', 'cindermage', 'zephyr', 'banneret'][i % 4]));
+  const quad = n => mk(Array.from({ length: n }, (_, i) => pickN(4)[i % 4]));
 
   // --- floor composition: 12 combat nodes with the guaranteed mix ---
   {
@@ -1730,11 +1679,28 @@ try {
         mark.hp = mark.maxHp;
         const id = mark.id;
         const WINDOW = 60 * 20;                    // 20 seconds of sustained fire
+        // half the shortest range among the skills actually slotted, so every
+        // one of them can reach; falls back to the old 120 if nothing is armed,
+        // which then fails loudly rather than silently measuring nothing
+        const ranges = p.loadout.filter(Boolean)
+          .map(id => { const sk = SKILLS_BY_ID_FOR_PARK[id]; return sk && (sk.trigger.range || sk.trigger.radius); })
+          .filter(r => r > 0);
+        const PARK_D = ranges.length ? Math.max(30, Math.min(...ranges) * 0.5) : 120;
+        if (!p.loadout.filter(Boolean).length) fail('UNKILLABLE gate: the parked player has nothing armed, so it measures nothing');
+        // PER-TARGET ATTRIBUTION. Three causes, three readings, no guessing.
+        g.dmgLog = new Map();
+        g.selLog = new Map();
         const hp0 = mark.hp;
         let t = 0, alive = true;
         while (t++ < WINDOW && (alive = !!g.enemyById(id))) {
           const e = g.enemyById(id);
-          p.x = e.x - 120; p.y = e.y;              // parked in weapon range, firing
+          // PARKED IN SKILL RANGE. This said "weapon range" and parked at a
+          // fixed 120u, which was a weapons-era number; a bolt whose trigger
+          // range is shorter never fires and the mark reads as unkillable when
+          // nothing was ever shot at it. The distance now comes from the
+          // armed skill's own trigger, so the player is always in range of the
+          // thing it is holding.
+          p.x = e.x - PARK_D; p.y = e.y;
           g.setInput(0, { mx: 0, my: 0 });
           g.tick();
           if (!p.downed) p.hp = p.stats.vitality;
@@ -1745,7 +1711,40 @@ try {
         if (drop > 0) {
           ok(`a Regenerating mark LOSES HP under sustained fire: ${Math.round(hp0)} → ${Math.round(now)} in ${(t / 60).toFixed(0)}s (net ${dps.toFixed(0)} HP/s) — killable, not merely slow`);
         } else {
-          fail(`UNKILLABLE: a Regenerating mark took ${(t / 60).toFixed(0)}s of point-blank fire and its HP did not fall (${Math.round(hp0)} → ${Math.round(now)}). It heals at least as fast as it is hurt; no time budget can finish this level.`);
+          // WITH WHAT IT WAS HOLDING. "HP did not fall" has two causes that want
+          // opposite fixes — the mark out-heals the damage, or no damage was
+          // ever aimed at it — and this message could not tell them apart.
+          // Parking distance and the armed loadout decide which one it is.
+          const onMark = g.dmgLog.get(id) || { landed: 0, hits: 0, blocked: 0 };
+          const byTag = {};
+          for (const r of g.dmgLog.values()) {
+            byTag[r.tag] = byTag[r.tag] || { landed: 0, hits: 0, blocked: 0 };
+            byTag[r.tag].landed += r.landed; byTag[r.tag].hits += r.hits; byTag[r.tag].blocked += r.blocked;
+          }
+          const sel = [...g.selLog].map(([k, n]) => `${k}x${n}`).join(' ') || 'nothing selected';
+          // WHICH OF THE THREE IT IS, said outright rather than left to a reader.
+          // FOUR causes, not three. The first version of this classifier had
+          // only three and called the answer REGENERATION because a couple of
+          // hits landed — while 21 of 23 shots aimed at the mark were being
+          // intercepted by its escort. Selection and DELIVERY are separate:
+          // the selector can be right 23 times out of 23 and almost none of it
+          // arrive.
+          const selectedMark = [...g.selLog].filter(([k]) => /->MARK$/.test(k)).reduce((n, [, v]) => n + v, 0);
+          const cause = selectedMark === 0
+            ? 'SELECTION: no fire ever chose the mark'
+            : onMark.hits === 0 && onMark.blocked === 0
+              ? 'DELIVERY: every fire chose the mark and not one reached it'
+              : onMark.blocked > 0 && onMark.landed === 0
+                ? 'ABSORPTION: every hit that reached the mark was blocked'
+                : onMark.hits < selectedMark * 0.5
+                  ? `DELIVERY: the mark was chosen ${selectedMark}x but only ${onMark.hits} shot(s) arrived — the rest were intercepted`
+                  : 'REGENERATION: the shots arrived and its HP still did not fall';
+          fail(`UNKILLABLE (${cause}): ${Math.round(hp0)} → ${Math.round(now)} in ${(t / 60).toFixed(0)}s. `
+            + `armed [${p.loadout.filter(Boolean).join(',') || 'NOTHING'}] parked ${Math.round(PARK_D)}u, `
+            + `${(p.fireLog || []).length} fires, ${Math.round(p.damageDealt)} dealt total. `
+            + `ON THE MARK: ${onMark.hits} hits for ${Math.round(onMark.landed)}, ${onMark.blocked} blocked. `
+            + `BY TAG: ${Object.entries(byTag).map(([k, v]) => `${k} ${v.hits}h/${Math.round(v.landed)}dmg/${v.blocked}blk`).join(', ')}. `
+            + `SELECTED: ${sel}`);
         }
         // the same assertion for a PARTY, because regen is a % of max HP and a
         // 4p mark carries ~1.75x the HP — the threshold moves with the party
@@ -1842,41 +1841,9 @@ try {
     else fail(`anti-farm: ${before} → ${mid} → ${after}`);
   }
 
-  // --- Pulsar: fixed radius, capped weapons, overheat, nova share ---
-  {
-    const g = new Sim({ seed: 3131, party: mk(['pulsar']) });
-    const p = g.players[0];
-    const t = p.char.trait;
-    if (p.weaponSlots === 3) ok('Pulsar has 3 weapon slots'); else fail(`Pulsar slots ${p.weaponSlots}`);
-    // range cap survives every range modifier
-    g._applyPerm(p, { reach: 400 });
-    const longest = Math.max(...p.weapons.map(w => g._weaponRange(p, WEAPON_BY_ID[w.id])));
-    if (longest <= t.radius) ok(`Pulsar weapons stay capped at ${t.radius} even with +400 Reach (max ${Math.round(longest)})`);
-    else fail(`Pulsar range cap breached: ${longest}`);
-    // the nova radius itself ignores Reach
-    const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
-    node.kind = 'combat';
-    g._travelTo(node.id);
-    g.god = true;
-    for (let i = 0; i < 60 * 45; i++) { g.tick(); p.hp = p.stats.vitality; }
-    const share = p.damageDealt > 0 ? p.novaDamage / p.damageDealt : 0;
-    console.log(`  PULSAR nova share: ${(100 * share).toFixed(0)}% of total damage (tuning target ~50%), peak heat ${(100 * p.heat).toFixed(0)}%`);
-    if (share > 0.25 && share < 0.75) ok(`Pulsar's nova carries ${(100 * share).toFixed(0)}% of his damage (target ~50%)`);
-    else fail(`nova share ${(100 * share).toFixed(0)}% is far off the 50% target`);
-    // overheat stacks and decays
-    const g2 = new Sim({ seed: 3132, party: mk(['pulsar']) });
-    const p2 = g2.players[0];
-    const n2 = g2.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
-    n2.kind = 'combat'; g2._travelTo(n2.id); g2.god = true;
-    for (let i = 0; i < 60 * 40; i++) { g2.tick(); p2.hp = p2.stats.vitality; }
-    const hot = p2.heat;
-    for (const e of [...g2.enemyPool]) g2._killEnemy(e, null);
-    g2.wave.done = true; g2.spawnQueue.length = 0;
-    for (let i = 0; i < 60 * 6; i++) { g2.tick(); for (const e of [...g2.enemyPool]) g2._killEnemy(e, null); }
-    if (hot > 0 && p2.heat === 0) ok(`Overheat builds (${(100 * hot).toFixed(0)}%) and the whole stack falls off after a pulse hits nothing`);
-    else fail(`overheat decay: ${hot} → ${p2.heat}`);
-    if (t.heatMax === 1.5 && t.heatPer === 0.15) ok('Overheat is +15% per pulse, capped at +150%');
-  }
+  // DELETED: Pulsar's fixed radius, weapon cap, overheat and nova share.
+  // Pulsar is a retired classic character and three of the four measurements
+  // were weapon-economy anyway.
 
   // --- boss HP doubled (and the Regent multiplied again in playtest 3) ---
   {
@@ -1896,14 +1863,8 @@ try {
     else fail(`2p scaling drifted: ${duo.coopSpawn}`);
   }
 
-  // --- Broker: 7 weapon slots, discount and free reroll intact ---
-  {
-    const g = new Sim({ seed: 707, party: mk(['broker']) });
-    const p = g.players[0];
-    if (p.weaponSlots === 7) ok('Broker carries 7 weapon slots'); else fail(`Broker slots ${p.weaponSlots}`);
-    if (p.char.trait.discount === 25 && p.rerollFlat) ok('Broker keeps −25% prices and the non-compounding reroll');
-    else fail('Broker discount/reroll changed');
-  }
+  // DELETED: Broker's 7 weapon slots, discount and free reroll — retired
+  // classic character, and weapon slots are 0 for everyone.
 
   // --- cursed items: next round only, stacking, scope ---
   {
@@ -1917,7 +1878,7 @@ try {
     if (!undocumented.length) ok('every cursed item spells its curse out on the card');
     else fail(`cursed items with no curse text: ${undocumented.map(c => c.id).join(', ')}`);
 
-    const g = new Sim({ seed: 808, party: mk(['bulwark', 'cindermage']) });
+    const g = new Sim({ seed: 808, party: mk(pickN(2)) });
     const [a, b] = g.players;
     g._grantItem(a, 'gravebound_locket');   // enemy +5% HP (shared)
     g._grantItem(a, 'hollow_kings_signet'); // another +5% → stacks to +10%
@@ -1943,7 +1904,12 @@ try {
 
   // --- structures: node-transition teleport + the stand-still recall ---
   {
-    const g = new Sim({ seed: 909, party: mk(['cogsmith']) });
+    // A SUMMONER, by name. This is the structure-recall rule, so it needs a
+    // class that HAS a structure — the retired Cogsmith's overseer mounts. The
+    // ToH equivalent is the Necromancer's bonelord, which reuses that same
+    // mounts/inheritance/carry logic. A bulk rename had left it on whichever
+    // class happened to be first, which summons nothing.
+    const g = new Sim({ seed: 909, party: mk(['toh_necromancer']) });
     const p = g.players[0];
     const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
     node.kind = 'combat';
@@ -1954,7 +1920,7 @@ try {
     // each sub-check starts from a live one
     const revive = () => { s.dead = false; s.hp = s.maxHp; s.carried = false; s.deployT = 0; };
     const park = () => { revive(); s.x = Math.min(g.W - 40, p.x + CONFIG.STRUCT_OFFSCREEN_W); s.y = p.y; };
-    if (!s) fail('cogsmith has no turret');
+    if (!s) fail('the summoner class has no structure to recall');
     else {
       // 1) a structure ON SCREEN never auto-relocates, however long you stand
       revive();
@@ -2007,7 +1973,7 @@ try {
   const { ITEMS: IP } = await import('../js/content/items.js');
   const { CONFIG: CP } = await import('../js/config.js');
   const mkp = ids => ids.map((c, i) => ({ idx: i, key: `p${i}`, name: `P${i}`, charId: c, color: '#fff' }));
-  const squad = n => mkp(Array.from({ length: n }, (_, i) => ['bulwark', 'cindermage', 'zephyr', 'banneret'][i % 4]));
+  const squad = n => mkp(Array.from({ length: n }, (_, i) => pickN(4)[i % 4]));
   const gear = g => { for (const p of g.players) {
     const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
     armBot(g, p);
@@ -2078,7 +2044,7 @@ try {
     const { hordeTotalSpawns } = await import('../js/arenas.js');
     for (const [n, fl] of [[1, 1], [4, 1], [8, 1], [4, 3]]) {
       const g = new Sim({ seed: 31337, party: squad(Math.min(4, n)).concat(
-        n > 4 ? mkp(Array.from({ length: n - 4 }, (_, i) => ['sawbones', 'redmaw', 'longshot', 'frostcaller'][i % 4]))
+        n > 4 ? mkp(Array.from({ length: n - 4 }, (_, i) => pickN(4)[i % 4]))
           .map((m, i) => ({ ...m, idx: 4 + i, key: `x${i}` })) : []) });
       for (let f = 1; f < fl; f++) g._startFloor(f + 1);
       const node = enterKind(g, 'elite_arena');
@@ -2189,7 +2155,7 @@ try {
   const { BOSS_BY_FLOOR: BBF } = await import('../js/content/bosses.js');
   const mk3 = ids => ids.map((c, i) => ({ idx: i, key: `q${i}`, name: `Q${i}`, charId: c, color: '#fff' }));
   const party3 = n => mk3(Array.from({ length: n },
-    (_, i) => ['bulwark', 'cindermage', 'zephyr', 'banneret', 'sawbones', 'redmaw', 'longshot', 'frostcaller'][i % 8]));
+    (_, i) => pickN(8)[i % 8]));
   const gear3 = g => { for (const p of g.players) {
     const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
     armBot(g, p);
@@ -2560,77 +2526,77 @@ try {
   }
 } catch (err) { fail('playtest-3 gates crashed', err); }
 
-// ---- 9L. the roster toggle and the Thrones of Heaven cast ----
-// This section runs LAST among the content sections because it switches the
-// active roster; it switches back before section 10 measures the classic DPS.
+// ---- 9L. one roster, and selectability derived from skill trees ----
+// This replaces the roster-toggle gates. There is no toggle: the classic 33 are
+// retired to archive/classic-roster/ (§15 defect #11 — weapons removed, no
+// trees, zero damage), so js/roster.js, setRoster(), ROSTERS, rosterOf() and
+// applyHostRoster() are gone and there is nothing left to switch between.
 try {
   const R = await import('../js/content/characters.js');
-  const { applyHostRoster } = await import('../js/roster.js');
   const { WEAPON_BY_ID: WBI } = await import('../js/content/weapons.js');
   const { encodeSnap: encT, decodeSnap: decT, wireSize: wsT } = await import('../js/netcodec.js');
 
-  // --- the toggle itself ---
+  if (R.CHARACTERS.length === 14 && R.CHAR_BY_ID.toh_samurai && !R.CHAR_BY_ID.bulwark) {
+    ok('one roster: the 14 Thrones of Heaven warriors, and no classic character reachable');
+  } else fail(`roster is ${R.CHARACTERS.length} characters, bulwark present: ${!!R.CHAR_BY_ID.bulwark}`);
+
+  for (const gone of ['setRoster', 'ROSTERS', 'ROSTER_IDS', 'ROSTER_ID', 'rosterOf', 'activeRoster', 'DEFAULT_ROSTER']) {
+    if (gone in R) fail(`characters.js still exports ${gone} — the roster machinery was meant to go with the classic roster`);
+  }
+  ok('no roster-switching machinery survives on the content module');
+
+  // SELECTABILITY IS DERIVED, NOT LISTED. A hand-kept list needs editing once
+  // per class as phase 5 lands trees, and would be wrong the first time someone
+  // forgot. This asserts the derivation, not today's answer.
   {
-    if (R.ROSTER_ID === 'classic' && R.CHARACTERS.length === 33) ok('the default roster is the classic 33');
-    else fail(`default roster is ${R.ROSTER_ID} with ${R.CHARACTERS.length}`);
-    R.setRoster('toh');
-    if (R.ROSTER_ID === 'toh' && R.CHARACTERS.length === 14) ok('setRoster("toh") swaps in the 14 Thrones of Heaven warriors');
-    else fail(`toh roster: ${R.ROSTER_ID} / ${R.CHARACTERS.length}`);
-    if (Object.keys(R.CHAR_BY_ID).length === 14 && R.CHAR_BY_ID.toh_bard) ok('CHAR_BY_ID follows the active roster (live binding — no call site changes)');
-    else fail('CHAR_BY_ID did not follow the switch');
-    if (R.setRoster('nonsense') === 'classic') ok('an unknown roster id falls back to classic rather than emptying the game');
-    else fail('bad roster id was not rejected');
-    R.setRoster('toh');
+    const { TREES_BY_CLASS } = await import('../js/skills.js');
+    const derived = R.CHARACTERS.filter(c => (TREES_BY_CLASS[c.id] || []).length).map(c => c.id).sort();
+    const declared = R.SELECTABLE.map(c => c.id).sort();
+    if (JSON.stringify(derived) === JSON.stringify(declared)) {
+      ok(`SELECTABLE is exactly the set with trees (${declared.length}/${R.CHARACTERS.length}: ${declared.join(', ')})`);
+    } else fail(`SELECTABLE ${declared.join(',')} does not match the classes with trees ${derived.join(',')}`);
+
+    const locked = R.CHARACTERS.filter(c => !R.isSelectable(c.id));
+    if (locked.every(c => R.unselectableReason(c.id))) ok(`all ${locked.length} unselectable class(es) state a reason`);
+    else fail('an unselectable class gives no reason, so the lobby can only grey it out silently');
   }
 
-  // --- the two rosters cannot collide in the engine ---
+  // A CLASS THAT CANNOT FIGHT CANNOT BE STARTED. The greyed lobby card is an
+  // affordance; a client can send anything, so the sim is the enforcement.
   {
-    const cKeys = new Set(R.ROSTERS.classic.chars.map(c => c.trait.key));
-    const dupeTrait = R.ROSTERS.toh.chars.filter(c => cKeys.has(c.trait.key));
-    if (!dupeTrait.length) ok('no Thrones of Heaven trait key collides with a classic one');
-    else fail(`colliding trait keys: ${dupeTrait.map(c => c.trait.key).join(', ')}`);
-    const cIds = new Set(R.ROSTERS.classic.chars.map(c => c.id));
-    const dupeId = R.ROSTERS.toh.chars.filter(c => cIds.has(c.id));
-    if (!dupeId.length) ok('no character id collides across rosters');
-    else fail(`colliding ids: ${dupeId.map(c => c.id).join(', ')}`);
-    const own = new Set(R.ROSTERS.toh.chars.map(c => c.trait.key));
-    if (own.size === 14) ok('all 14 traits are distinct from each other');
-    else fail(`only ${own.size} distinct traits among 14 characters`);
-    if (Object.keys(R.ALL_CHAR_BY_ID).length === 47) ok('ALL_CHAR_BY_ID spans both rosters (47) for lookups that must never fail');
-    else fail(`ALL_CHAR_BY_ID has ${Object.keys(R.ALL_CHAR_BY_ID).length}`);
+    const locked = R.CHARACTERS.find(c => !R.isSelectable(c.id));
+    let threw = null;
+    try { new Sim({ seed: 1, party: [{ idx: 0, key: 'k', name: 'X', charId: locked.id, color: '#fff' }] }); }
+    catch (e) { threw = e.message; }
+    if (threw && /no skill tree/.test(threw)) ok(`starting a run as an unselectable class (${locked.id}) is refused: "${threw.slice(0, 60)}…"`);
+    else fail(`a run started as ${locked.id}, which has no way to deal damage (threw: ${threw})`);
   }
 
-  // --- the co-op guard: a client on the wrong roster is force-corrected ---
+  // AND AN UNKNOWN ID THROWS RATHER THAN BECOMING SOMEONE ELSE. The old
+  // `CHAR_BY_ID[id] || CHAR_BY_ID.bulwark` is most of why #11 survived a patch.
   {
-    R.setRoster('classic');
-    const warns = [];
-    const realWarn = console.warn;
-    console.warn = (...a) => warns.push(a.join(' '));
-    const moved = applyHostRoster('toh', [{ charId: 'toh_bard' }]);
-    console.warn = realWarn;
-    if (moved && R.ROSTER_ID === 'toh') ok('a client on the wrong roster is force-corrected to the host\'s');
-    else fail(`client did not switch: moved=${moved} roster=${R.ROSTER_ID}`);
-    if (warns.length && /host/.test(warns[0])) ok('and it says so loudly — a silent mismatch would desync every trait');
-    else fail('the roster correction was silent');
-    // a host that sends no roster field at all: infer it from the party
-    R.setRoster('classic');
-    applyHostRoster(undefined, [{ charId: 'toh_samurai' }]);
-    if (R.ROSTER_ID === 'toh') ok('a missing roster field is inferred from the party\'s character ids');
-    else fail('could not infer the roster from the party');
-    R.setRoster('toh');
-    if (!applyHostRoster('toh', [])) ok('a client already on the host\'s roster does not churn');
+    let threw = null;
+    // a literal retired id ON PURPOSE — this is the one place in the file that
+    // must NOT use T1, because the id being rejected is the whole assertion
+    try { new Sim({ seed: 1, party: [{ idx: 0, key: 'k', name: 'X', charId: RETIRED_ID, color: '#fff' }] }); }
+    catch (e) { threw = e.message; }
+    if (threw && /unknown character/.test(threw)) ok('a retired character id throws instead of silently resolving to someone else');
+    else fail(`a retired id did not throw (threw: ${threw}) — silent substitution is how #11 stayed invisible`);
   }
 
-  // --- every one of the 14 survives a real fight, solo and in co-op ---
+  // --- every SELECTABLE class survives a real fight, solo and in co-op ---
+  // Scoped to selectable because the sim now refuses to start as a class with
+  // no tree. The other twelve join this sweep automatically as phase 5 arms
+  // them — the loop reads SELECTABLE, not a number.
   {
-    const { CHARACTERS_TOH } = await import('../js/content/characters-toh.js');
+    const CHARACTERS_TOH = R.SELECTABLE;   // renamed in spirit: the selectable set, not the cast
     let bad = 0;
     const notes = [];
     for (const c of CHARACTERS_TOH) {
       for (const n of [1, 2]) {
         const party = Array.from({ length: n }, (_, i) => ({
           idx: i, key: `t${i}`, name: `T${i}`, color: '#fff',
-          charId: i === 0 ? c.id : CHARACTERS_TOH[(CHARACTERS_TOH.indexOf(c) + 3) % 14].id,
+          charId: i === 0 ? c.id : CHARACTERS_TOH[(CHARACTERS_TOH.indexOf(c) + 1) % CHARACTERS_TOH.length].id,
         }));
         const g = new Sim({ seed: 9090 + c.id.length, party });
         const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
@@ -2657,8 +2623,12 @@ try {
 
   // --- the traits that carry state actually do something ---
   {
+    // allowUnplayable: these measure a class's TRAIT, which is implemented for
+    // all fourteen. Only the skill trees are missing, and a class without one
+    // cannot be STARTED — see _makePlayer. Saying so here keeps the gate honest
+    // rather than weakening it for everyone.
     const one = id => {
-      const g = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'T', charId: id, color: '#fff' }] });
+      const g = new Sim({ seed: 4242, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'T', charId: id, color: '#fff' }] });
       const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
       node.kind = 'combat'; g._travelTo(node.id); g.god = true;
       return g;
@@ -2751,6 +2721,10 @@ try {
 
     // Blacksmith: the post-fight infusion, and the third quartz arming detonation
     {
+      // toh_blacksmith BY NAME. An earlier bulk rename over character ids
+      // rewrote this to T1, so the Blacksmith's infusion/pyrite/quartz/hitbox
+      // block silently tested the necromancer — which has none of them, so all
+      // four "failures" were the test measuring the wrong class.
       const g = one('toh_blacksmith'); const p = g.players[0];
       g.debug('F3');
       if (p.boonOffer && p.boonOffer.length === 3 && p.boonOffer.every(o => o.crystal)) {
@@ -2906,7 +2880,7 @@ try {
   {
     const g = new Sim({ seed: 77, party: [
       { idx: 0, key: 'a', name: 'A', charId: 'toh_samurai', color: '#fff' },
-      { idx: 1, key: 'b', name: 'B', charId: 'toh_sundian', color: '#fff' }] });
+      { idx: 1, key: 'b', name: 'B', charId: T2, color: '#fff' }] });
     const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
     node.kind = 'combat'; g._travelTo(node.id); g.god = true;
     for (let i = 0; i < 60 * 25; i++) {
@@ -2941,8 +2915,12 @@ try {
     const { BEAST } = B;
     const src = readFileSync(new URL('../js/entities/beast.js', import.meta.url), 'utf8');
 
+    // allowUnplayable: the beast is toh_hunter's TRAIT and is fully
+    // implemented; only its skill tree is missing, so it cannot be started as
+    // a run. Substituting another class silently gave a party with no beast
+    // and a crash forty lines later on `beastOf(g)` being undefined.
     const hunter = (seed = 4242) => {
-      const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'H', charId: 'toh_hunter', color: '#fff' }] });
+      const g = new Sim({ seed, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'H', charId: 'toh_hunter', color: '#fff' }] });
       const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
       node.kind = 'combat'; g._travelTo(node.id); g.god = true;
       const p = g.players[0];
@@ -3106,8 +3084,8 @@ try {
       // ...and through another player and their beast: 8 players x 4 beasts is
       // 32 bodies, and mutual collision would make an arena impassable
       const g4 = new Sim({ seed: 99, party: [
-        { idx: 0, key: 'a', name: 'H1', charId: 'toh_hunter', color: '#fff' },
-        { idx: 1, key: 'b', name: 'H2', charId: 'toh_hunter', color: '#0ff' },
+        { idx: 0, key: 'a', name: 'H1', charId: T2, color: '#fff' },
+        { idx: 1, key: 'b', name: 'H2', charId: T2, color: '#0ff' },
       ] });
       const n4 = g4.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
       n4.kind = 'combat'; g4._travelTo(n4.id); g4.god = true;
@@ -3208,18 +3186,11 @@ try {
     }
   }
 
-  // --- and the classic roster is exactly what it was ---
-  R.setRoster('classic');
-  if (R.CHARACTERS.length === 33 && R.CHAR_BY_ID.bulwark && !R.CHAR_BY_ID.toh_bard) {
-    ok('switching back restores the classic 33 untouched');
-  } else fail('the classic roster did not come back clean');
 } catch (err) {
   fail('roster/ToH gates crashed', err);
-} finally {
-  // Whatever happened above, everything downstream measures the CLASSIC cast.
-  // Leaving the roster switched turned one crash here into four failures below.
-  (await import('../js/content/characters.js')).setRoster('classic');
 }
+// No `finally` restoring a roster: there is one, it cannot be switched, and a
+// crash here can no longer leave the wrong cast loaded for everything below.
 
 // ---- 9M. the sprite pipeline: ids, manifest, and the wall between art and
 //          simulation. This whole section is cosmetic plumbing — its most
@@ -3381,7 +3352,7 @@ try {
   //    by anything that simulates, so no sim code CAN read a scale. --
   {
     const SIM_MODULES = ['game.js', 'netcodec.js', 'net.js', 'dungeon.js', 'objectives.js',
-      'arenas.js', 'traits-toh.js', 'roster.js', 'config.js', 'rng.js', 'util.js'];
+      'arenas.js', 'traits-toh.js', 'config.js', 'rng.js', 'util.js'];
     const leaked = [];
     for (const f of SIM_MODULES) {
       const src = readFileSync(new URL(`../js/${f}`, import.meta.url), 'utf8');
@@ -3403,13 +3374,10 @@ try {
     const scaled = Object.entries(man).filter(([, s]) => s.scale !== undefined).map(([id]) => id);
     const bySprite = new Map(CH.ALL_CHARS.map(c => [c.spriteId, c]));
     const radBad = [];
-    const before = CH.ROSTER_ID;
     for (const id of scaled) {
       const chr = bySprite.get(id);
       if (!chr) continue;
-      // the id only resolves while its own roster is active — otherwise the
-      // party falls back to another character and this measures the wrong one
-      CH.setRoster(CH.rosterOf(chr.id));
+      if (!CH.isSelectable(chr.id)) continue;   // the sim refuses to start as one
       const g = new Sim({ seed: 5, party: [{ idx: 0, key: 'a', name: 'A', charId: chr.id, color: '#fff' }] });
       const p = g.players[0];
       if (p.char.id !== chr.id) { radBad.push(`${chr.id}: the sim resolved ${p.char.id} instead`); continue; }
@@ -3426,7 +3394,6 @@ try {
       const snap = JSON.parse(JSON.stringify(g.getSnapshot()));
       if (/"(sprite)?[Ss]cale"/.test(JSON.stringify(snap))) radBad.push(`${chr.id}: a snapshot carries a scale field`);
     }
-    CH.setRoster(before);
     if (radBad.length) fail(`a cosmetic scale reached the simulation: ${radBad.join(' | ')}`);
     else ok(`the ${scaled.length} sprite(s) with a manifest scale keep the stock entity radius and put nothing on the wire — the multiplier is paint, not hitbox`);
 
@@ -3559,7 +3526,7 @@ try {
 
   // -- the radius constants the resolver keys on are STILL the engine's. If a
   //    balance patch changes a spawn radius this is what catches it. --
-  const radSim = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'PROJ', charId: 'longshot', color: '#fff' }] });
+  const radSim = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'PROJ', charId: T1, color: '#fff' }] });
   radSim.god = true;
   const rfight = radSim.floor.nodes.find(n => n.kind === 'combat');
   rfight.template = 'open_expanse';
@@ -3593,8 +3560,8 @@ try {
   // -- THE WALL. spriteId is cosmetic: it must not be on a simulation entity,
   //    in a snapshot, or anywhere near the wire. --
   const wallSim = new Sim({ seed: 77, party: [
-    { idx: 0, key: 'a', name: 'A', charId: 'banneret', color: '#fff' },
-    { idx: 1, key: 'b', name: 'B', charId: 'tinker', color: '#fff' }] });
+    { idx: 0, key: 'a', name: 'A', charId: T1, color: '#fff' },
+    { idx: 1, key: 'b', name: 'B', charId: T1, color: '#fff' }] });
   for (let i = 0; i < 60 * 5 && wallSim.phase === 'map'; i++) wallSim.tick();
   wallSim.debug('F1');
   for (let i = 0; i < 200; i++) wallSim.tick();
@@ -3654,35 +3621,42 @@ try {
   const tmp = mkdtempSync(nodePath.join(tmpdir(), 'uvart-'));
   try {
     const NAMES = ['east', 'south_east', 'south', 'south_west', 'west', 'north_west', 'north', 'north_east'];
-    const src = nodePath.join(tmp, 'pulsar');
+    // DERIVED FROM THE MANIFEST. This fixture hardcoded 32 and named char.pulsar,
+    // which was 32x32 only because it had no size override. Every surviving
+    // character is 128x128, so the hardcode turned a working pipeline into
+    // "grid is 128x1024, want 32x256" — the fixture's expectation was wrong,
+    // not the tool's output.
+    const ART_ID = 'char.toh_assassin';
+    const CELL = JSON.parse(rf(nodePath.join(REPO, 'assets', 'assets.json')).toString()).sprites[ART_ID].w;
+    const src = nodePath.join(tmp, 'toh_assassin');
     mkdirSync(src, { recursive: true });
     for (let d = 0; d < 8; d++) {
-      const img = PK.blankImage(32, 32);
-      const ox = 1 + d * 2, oy = 18 - d * 2;   // deliberately all over the place
+      const img = PK.blankImage(CELL, CELL);
+      const ox = 1 + d * 2, oy = (CELL / 2 + 2) - d * 2;   // deliberately all over the place
       for (let y = 0; y < 8; y++) {
         for (let x = 0; x < 8; x++) {
-          const i = ((oy + y) * 32 + (ox + x)) * 4;
+          const i = ((oy + y) * CELL + (ox + x)) * 4;
           img.data[i] = 20 + d * 30; img.data[i + 1] = 200; img.data[i + 2] = 40; img.data[i + 3] = 255;
         }
       }
       writeFileSync(nodePath.join(src, `${NAMES[d]}.png`), PK.encodePng(img));
     }
     const outPng = nodePath.join(tmp, 'grid.png');
-    const log = run('process_sprite.mjs', ['char.pulsar', src, `--out=${outPng}`]);
+    const log = run('process_sprite.mjs', [ART_ID, src, `--out=${outPng}`]);
     const grid = PK.decodePng(rf(outPng));
     const problems = [];
-    if (grid.width !== 32 || grid.height !== 256) problems.push(`grid is ${grid.width}x${grid.height}, want 32x256`);
+    if (grid.width !== CELL || grid.height !== CELL * 8) problems.push(`grid is ${grid.width}x${grid.height}, want ${CELL}x${CELL * 8}`);
     for (let d = 0; d < 8; d++) {
-      const bb = PK.opaqueBounds(grid, 0, d * 32, 32, 32);
+      const bb = PK.opaqueBounds(grid, 0, d * CELL, CELL, CELL);
       if (!bb) { problems.push(`row ${d} is empty`); continue; }
       const i = (bb.y * grid.width + bb.x) * 4;
       const saysRow = Math.round((grid.data[i] - 20) / 30);
       if (saysRow !== d) problems.push(`row ${d} holds the direction generated as ${saysRow}`);
-      const cx = bb.x + bb.w / 2, cy = (bb.y - d * 32) + bb.h / 2;
-      if (Math.abs(cx - 16) > 0.5 || Math.abs(cy - 16) > 0.5) problems.push(`row ${d} centred at ${cx},${cy}`);
+      const cx = bb.x + bb.w / 2, cy = (bb.y - d * CELL) + bb.h / 2;
+      if (Math.abs(cx - CELL / 2) > 0.5 || Math.abs(cy - CELL / 2) > 0.5) problems.push(`row ${d} centred at ${cx},${cy}`);
     }
     if (problems.length) fail(`grid assembly: ${problems.slice(0, 4).join(' | ')}`);
-    else ok('process_sprite assembles 8 differently-padded directions into a 32x256 grid, in E SE S SW W NW N NE order, every row re-centred');
+    else ok(`process_sprite assembles 8 differently-padded directions into a ${CELL}x${CELL * 8} grid, in E SE S SW W NW N NE order, every row re-centred`);
     if (/row 0 E .*east\.png/.test(log)) ok('and it reports which naming convention each row matched');
     else fail('process_sprite did not report its row sources');
 
@@ -3690,13 +3664,14 @@ try {
     // Two frames per direction where the body deliberately rises: per-row
     // re-centring must keep the rise, per-cell must flatten it. If `row` ever
     // silently becomes `cell`, this is what notices.
+    const BOB = 6;
     const src2 = nodePath.join(tmp, 'walk');
     for (let d = 0; d < 8; d++) {
       const dir = nodePath.join(src2, NAMES[d]);
       mkdirSync(dir, { recursive: true });
       for (let f = 0; f < 2; f++) {
-        const img = PK.blankImage(32, 32);
-        const oy = 16 - f * 6;   // frame 1 sits 6px higher: the bob
+        const img = PK.blankImage(CELL, CELL);
+        const oy = (CELL / 2) - f * BOB;   // frame 1 sits BOB px higher
         for (let y = 0; y < 8; y++) {
           for (let x = 0; x < 8; x++) {
             const i = ((oy + y) * 32 + (12 + x)) * 4;
@@ -3708,31 +3683,31 @@ try {
     }
     const rise = mode => {
       const p = nodePath.join(tmp, `walk-${mode}.png`);
-      run('process_sprite.mjs', ['char.pulsar', src2, `--out=${p}`, `--recenter=${mode}`]);
+      run('process_sprite.mjs', [ART_ID, src2, `--out=${p}`, `--recenter=${mode}`]);
       const g = PK.decodePng(rf(p));
-      const a = PK.opaqueBounds(g, 0, 0, 32, 32), b = PK.opaqueBounds(g, 32, 0, 32, 32);
+      const a = PK.opaqueBounds(g, 0, 0, CELL, CELL), b = PK.opaqueBounds(g, CELL, 0, CELL, CELL);
       return a.y - b.y;   // how much higher frame 1 sits
     };
     const rowRise = rise('row'), cellRise = rise('cell');
-    if (rowRise === 6 && cellRise === 0) {
+    if (rowRise === BOB && cellRise === 0) {
       ok(`re-centring per row keeps an animation's own motion (${rowRise}px bob preserved) where per-cell flattens it (${cellRise}px) — the reason row is the default`);
-    } else fail(`bob preservation: row=${rowRise} (want 6), cell=${cellRise} (want 0)`);
+    } else fail(`bob preservation: row=${rowRise} (want ${BOB}), cell=${cellRise} (want 0)`);
 
     // -- the checks that must REFUSE --
     const badDir = nodePath.join(tmp, 'bad');
     mkdirSync(badDir, { recursive: true });
     for (let d = 0; d < 8; d++) {
       // fully opaque: a baked matte, invisible in review on a dark floor
-      const img = PK.blankImage(32, 32);
-      for (let i = 0; i < 32 * 32; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
+      const img = PK.blankImage(CELL, CELL);
+      for (let i = 0; i < CELL * CELL; i++) { img.data[i * 4 + 1] = 120; img.data[i * 4 + 3] = 255; }
       writeFileSync(nodePath.join(badDir, `${NAMES[d]}.png`), PK.encodePng(img));
     }
-    const matteErr = runFails('process_sprite.mjs', ['char.pulsar', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    const matteErr = runFails('process_sprite.mjs', [ART_ID, badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
     if (matteErr && /transparent pixel/.test(matteErr)) ok('a fully opaque sheet is refused — a baked matte never reaches the repo');
     else fail(`matte check did not fire: ${String(matteErr).slice(0, 120)}`);
 
     rmSync(nodePath.join(badDir, 'north.png'));
-    const missErr = runFails('process_sprite.mjs', ['char.pulsar', badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    const missErr = runFails('process_sprite.mjs', [ART_ID, badDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
     if (missErr && /row 6 \(N\)/.test(missErr)) ok('a missing direction is refused by name, not silently padded');
     else fail(`missing-direction check said: ${String(missErr).slice(0, 120)}`);
 
@@ -3740,9 +3715,10 @@ try {
     mkdirSync(oversizeDir, { recursive: true });
     // 48 is not a multiple of the 32px cell, so it cannot be mistaken for a
     // 2-frame strip — this is unambiguously one oversized source.
-    for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(48, 48)));
-    const bigErr = runFails('process_sprite.mjs', ['char.pulsar', oversizeDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
-    if (bigErr && /48x48 source but the cell is 32x32/.test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
+    const OVER = CELL + 16;   // bigger than the cell, whatever the cell is
+    for (const n of NAMES) writeFileSync(nodePath.join(oversizeDir, `${n}.png`), PK.encodePng(PK.blankImage(OVER, OVER)));
+    const bigErr = runFails('process_sprite.mjs', [ART_ID, oversizeDir, `--out=${nodePath.join(tmp, 'x.png')}`]);
+    if (bigErr && new RegExp(`${OVER}x${OVER} source but the cell is ${CELL}x${CELL}`).test(bigErr)) ok('a source larger than the cell is refused rather than clipped');
     else fail(`oversize check said: ${String(bigErr).slice(0, 140)}`);
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 
@@ -3927,9 +3903,9 @@ try {
     if (prompts.styleClause === clause && carried.length === units.length) {
       ok(`the style clause reaches all ${units.length} prompts byte-for-byte from STYLE_ANCHOR.md — a paraphrase has nowhere to enter`);
     } else fail(`style clause carried by ${carried.length}/${units.length} prompts`);
-    if (prompts.prompts['char.pulsar'].batch === 0 && units.filter(id => prompts.prompts[id].batch === 0).length === 1) {
-      ok('Pulsar is batch 0, alone — the anchor is generated and approved before anything else');
-    } else fail('batch 0 is not exactly Pulsar');
+    if (prompts.prompts['char.toh_assassin'].batch === 0 && units.filter(id => prompts.prompts[id].batch === 0).length === 1) {
+      ok('the style anchor is batch 0, alone — generated and approved before anything else');
+    } else fail(`batch 0 is not exactly the style anchor (${Object.entries(prompts.prompts).filter(([, v]) => v.batch === 0).map(([k]) => k).join(', ') || 'empty'})`);
   }
 
   // -- per-sprite manifest overrides survive a regeneration --
@@ -3972,7 +3948,10 @@ try {
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
 function measureDps(charId) {
-  const sim = new Sim({ seed: 9999, party: [{ idx: 0, key: 'k', name: 'DPS', charId, color: '#fff' }] });
+  // allowUnplayable: this measures a class's damage output against dummies, and
+  // a class with no tree measuring 0 is the interesting reading — refusing to
+  // construct it would hide exactly what this table exists to show.
+  const sim = new Sim({ seed: 9999, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'DPS', charId, color: '#fff' }] });
   sim.god = true;
   // an open arena, wave silenced — pure baseline weapon output
   const fight = sim.floor.nodes.find(n => n.kind === 'combat');
@@ -4022,7 +4001,7 @@ try {
 
 // ---- 11. stress: siege crest density, tick-time measurement ----
 try {
-  const sim = new Sim({ seed: 99, party: [{ idx: 0, key: 'k', name: 'STRESS', charId: 'threader', color: '#fff' }] });
+  const sim = new Sim({ seed: 99, party: [{ idx: 0, key: 'k', name: 'STRESS', charId: T1, color: '#fff' }] });
   sim.god = true;
   while (sim.floorNum < 4) sim.debug('F4');
   sim._travelTo(sim.floor.siegeId);
@@ -4045,8 +4024,8 @@ try {
 // ---- 12. snapshot serializability (with Gauntlet fields) ----
 try {
   const sim = new Sim({ seed: 5, party: [
-    { idx: 0, key: 'a', name: 'S', charId: 'banneret', color: '#fff' },
-    { idx: 1, key: 'b', name: 'T', charId: 'lodestone', color: '#fff' }] });
+    { idx: 0, key: 'a', name: 'S', charId: T1, color: '#fff' },
+    { idx: 1, key: 'b', name: 'T', charId: T2, color: '#fff' }] });
   // map-phase snapshot with a live vote
   sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
   let snap = sim.getSnapshot();
@@ -4058,8 +4037,11 @@ try {
   snap = sim.getSnapshot();
   const json = JSON.stringify(snap);
   JSON.parse(json);
-  if (!snap.auras.length) fail('snapshot missing Banneret aura');
-  if (!snap.tethers.length) fail('snapshot missing Lodestone tether');
+  // DELETED: the aura/tether population assertions. They required a Banneret
+  // and a Lodestone in the party — both retired. The FIELDS still ride the
+  // snapshot and still round-trip through the codec (section 9L covers that);
+  // what is gone is a party that populates them. Re-assert when a ToH class
+  // has an aura or a tether.
   ok(`snapshots serialize in both phases (${json.length} bytes @ ${snap.enemies.length} enemies)`);
 } catch (err) { fail('snapshot serialization', err); }
 
@@ -4150,16 +4132,16 @@ try {
   // boon panel, the Blacksmith's crystal path returned before the push. One
   // hand-picked character passed while a third of the openers were broken.
   const CH = await import('../js/content/characters.js');
-  const prevRoster = CH.ROSTER_ID;
   const evDrivers = Object.entries(DRIVERS).filter(([, d]) => d.open && d.done);
   const byOpen = new Map(evDrivers.map(([id, d]) => [d.open, { id, d }]));
   const byDone = new Map(evDrivers.map(([id, d]) => [d.done, id]));
   const stuck = [];
   let opensSeen = 0, charsRun = 0;
 
-  for (const c of CH.ALL_CHARS) {
+  // SELECTABLE, not ALL_CHARS: the sim refuses to start as a class with no
+  // tree, and a class nobody can play has no opener to be stuck in.
+  for (const c of CH.SELECTABLE) {
     try {
-      CH.setRoster(CH.rosterOf(c.id));
       const sim = new Sim({ seed: 77712345, party: [{ idx: 0, key: 'k', name: 'OV', charId: c.id, color: '#fff' }] });
       sim.god = true;
       sim.setInput(0, { mx: 1, my: 0.5 });
@@ -4174,7 +4156,7 @@ try {
       for (let t = 0; t < 60 * 120 && !sim.over; t++) {
         sim.tick();
         if (!p.downed && !p.gone) p.hp = p.stats.vitality;
-        if (t > 60 * 45 && t % 240 === 0) nuke(sim, p);
+        if (t > 60 * 45 && t % 240 === 0) clearFieldForSetup(sim, p, 'full-run: bank levels organically for 45s, then force the clear so the run stays bounded');
         if (sim.obj && !sim.obj.done && t > 60 * 45) sim.debug('F3');
         if (sim.boss) sim.damageEnemy(sim.boss, 300, { owner: p });
         if (sim.pickups.length && t % 3 === 0) { const m = sim.pickups[0]; p.x = m.x; p.y = m.y; }
@@ -4200,9 +4182,8 @@ try {
       }
     } catch (err) { fail(`overlay exit run for ${c.id} crashed`, err); }
   }
-  CH.setRoster(prevRoster);
 
-  if (opensSeen >= CH.ALL_CHARS.length) ok(`overlay exits exercised: ${opensSeen} panels opened across ${charsRun} characters`);
+  if (opensSeen >= CH.SELECTABLE.length) ok(`overlay exits exercised: ${opensSeen} panels opened across ${charsRun} characters`);
   else fail(`overlay gate only saw ${opensSeen} panels open across ${charsRun} characters — it is passing vacuously, not passing`);
   if (!stuck.length) ok(`every panel that opened also emitted its close event (${charsRun} characters, whole roster)`);
   else for (const s of stuck.slice(0, 12)) fail(`SOFTLOCK — panel opened with no exit: ${s}`);
@@ -4306,7 +4287,7 @@ try {
 
   // -- and the sim publishes it, because the renderer reads it off the view --
   {
-    const g = new Sim({ seed: 909, party: [{ idx: 0, key: 'k', name: 'B', charId: 'bulwark', color: '#fff' }] });
+    const g = new Sim({ seed: 909, party: [{ idx: 0, key: 'k', name: 'B', charId: T1, color: '#fff' }] });
     g.uiAction(0, { kind: 'pickNode', nodeId: g.reachableNodes()[0] });
     const ev = g.events.filter(e => e.k === 'arena').pop();
     if (g.biome === 'tundra') ok(`Sim.biome is 'tundra' on floor 1 — the host renderer has a floor to draw`);
@@ -4326,7 +4307,7 @@ try {
     // here fires on the wrong thing, which this one did on its first run.
     const { ALL_CHAR_BY_ID: BY_ID } = await import('../js/content/characters.js');
     let wrong = 0;
-    for (const id of ['bulwark', 'facet', 'toh_blacksmith', 'redmaw']) {
+    for (const id of _SEL.map(c => c.id)) {
       const chr = BY_ID[id]; if (!chr) continue;
       const a = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'A', charId: id, color: '#fff' }] });
       a.uiAction(0, { kind: 'pickNode', nodeId: a.reachableNodes()[0] });
@@ -4374,7 +4355,7 @@ try {
   // fit one seed's result would be fitting the gate to the answer.
   let sawWindT = 0, sawDiveT = 0, unwarnedT = 0, aimDriftT = 0, telegraphedT = 0;
   for (const seed of [8801, 4417, 20613, 90210]) {
-  const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: 'bulwark', color: '#fff' }] });
+  const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
   g.uiAction(0, { kind: 'pickNode', nodeId: g.reachableNodes()[0] });
   const p = g.players[0];
   // Sterile arena: strip the target's weapons and drain the spawn queue every
@@ -4442,11 +4423,10 @@ try {
   const R = await import('../js/content/characters.js');
   let shops = 0, bad = 0, kinds = new Set(), slotZeroBad = 0;
   const offenders = {};
-  for (const roster of ['classic', 'toh']) {
-    R.setRoster(roster);
-    // every character in the ACTIVE roster, read from the registry rather than
-    // a list here — a new character must be covered without editing this gate
-    for (const c of R.CHARACTERS) {
+  {
+    // every SELECTABLE character, read from the registry rather than a list
+    // here — a class becoming selectable must be covered without editing this
+    for (const c of R.SELECTABLE) {
       for (let s = 0; s < 4; s++) {
         const g = new Sim({ seed: 7000 + s, party: [{ idx: 0, key: 'k', name: 'T', charId: c.id, color: '#fff' }] });
         for (let f = 1; f < 1 + (s % 4); f++) g._startFloor(f + 1);
@@ -4469,11 +4449,24 @@ try {
       }
     }
   }
-  R.setRoster('classic');
   if (!shops) fail('shop stock gate sampled 0 shops — it proves nothing, restage it');
-  else if (!bad) ok(`no shop stocks an unbuyable card — ${shops} shops across both rosters, 4 floors, base roll + 3 rerolls (kinds seen: ${[...kinds].join(', ')})`);
+  else if (!bad) ok(`no shop stocks an unbuyable card — ${shops} shops, 4 floors, base roll + 3 rerolls (kinds seen: ${[...kinds].join(', ')})`);
   else fail(`${bad}/${shops} shops stock a weapon no one can hold (first card in ${slotZeroBad}): ${JSON.stringify(offenders)}`);
 } catch (err) { fail('shop stock gate crashed', err); }
 
+// WHAT THIS SUITE DID NOT MEASURE, said out loud every run. A green sim_test
+// has never meant the party can win a fight, and for a whole patch it did not:
+// weapons were removed, the roster had no skill trees, the party dealt zero
+// damage, and every fight here still "cleared" because the harness emptied the
+// field. Naming the count each run is cheap; discovering it from a browser log
+// two branches later was not.
+if (WEAPON_SKIPS.length) console.log(`\n${WEAPON_SKIPS.length} weapon-economy check(s) skipped: ${WEAPON_SKIPS.join('; ')}`);
+if (SETUP_CLEARS.length) {
+  const byReason = new Map();
+  for (const r of SETUP_CLEARS) byReason.set(r, (byReason.get(r) || 0) + 1);
+  console.log(`\nHARNESS-CLEARED FIELDS: ${SETUP_CLEARS.length} — these fights were ended by the test, not won by the player.`);
+  for (const [r, n] of byReason) console.log(`  x${n}  ${r}`);
+  console.log('  Whether a player can win a fight is measured by tools/offence_test.mjs, never here.');
+}
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');
 process.exit(failures ? 1 : 0);

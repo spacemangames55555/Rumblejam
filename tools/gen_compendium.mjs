@@ -10,7 +10,7 @@ import { CHARACTERS } from '../js/content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from '../js/content/weapons.js';
 import { ITEMS } from '../js/content/items.js';
 import { STAT_GLOSS } from '../js/content/glossary.js';
-import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, SCALING_RATES, TIER_MULT, TIER_PRICE_MULT, TIER_NAMES, CONFIG } from '../js/config.js';
+import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_PRICE_MULT, TIER_NAMES, CONFIG } from '../js/config.js';
 
 const out = [];
 const w = (...lines) => out.push(...lines);
@@ -274,7 +274,6 @@ w('',
   '',
   '| Stat | Damage per point |',
   '|---|---|');
-for (const [k, v] of Object.entries(SCALING_RATES)) w(`| ${STAT_NAME[k]} | ${n(v * 100)}% |`);
 w('');
 
 // stat census — which stats the catalog actually supports

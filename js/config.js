@@ -117,6 +117,51 @@ export const CONFIG = {
   // invisible and slow enough to be free — nothing else is on the wire pre-run.
   LOBBY_HEARTBEAT_HZ: 3,
 
+  // Room registration (defect #9). One attempt with a bare 8s timeout and no
+  // retry meant any transient signalling failure — or a room-code collision,
+  // which can NEVER succeed on a retry of the same code — cost the whole
+  // session. Each attempt draws a fresh code; the backoff is per-attempt.
+  //
+  // THE BUDGET IS THE REAL CEILING, and it exists because the retry is not
+  // free. Attempts x timeout is 15s of a player watching "registering room…",
+  // and it is 15s the co-op suite has to be told to wait for. The retry earns
+  // its keep on FAST failures — a taken code errors immediately, so all three
+  // attempts finish inside a second. It earns nothing on slow ones: if the
+  // relay did not answer in 5s it will not answer in 5s more. The budget stops
+  // the sequence on wall clock so the collision case keeps its retries and the
+  // dead-relay case still gives up promptly.
+  ROOM_REGISTER_ATTEMPTS: 3,
+  ROOM_REGISTER_TIMEOUT_MS: 5000,
+  ROOM_REGISTER_BACKOFF_MS: 400,
+  ROOM_REGISTER_BUDGET_MS: 11000,
+
+  // Client -> host input delivery (defect #8). Character pick, ready, node tap,
+  // buy and stance all leave by one method and used to leave exactly once; if
+  // the channel was not open at that instant the action was simply gone.
+  //
+  // The heartbeat pattern does not transfer here. Host state repeats because
+  // repeating it is idempotent — the same roster applied twice is the same
+  // roster. Input is not: `ready` TOGGLES, so a second delivery of one press
+  // un-readies the player. So the client repeats until acknowledged and the
+  // host applies each sequence number once, which is repetition without
+  // re-firing.
+  //
+  // Resend is 4 Hz against a 30 Hz pump, so a lost action costs a quarter
+  // second rather than the session. Giving up is loud, not silent.
+  UI_ACK_RESEND_MS: 250,
+  UI_ACK_GIVEUP_MS: 8000,
+  UI_ACK_MAX_PENDING: 64,
+
+  // WEAPONS ARE GONE (patch-trigger-core). Skills replace them entirely. This
+  // is the single place that says so: js/game.js forces weaponSlots to 0 from
+  // it, and tools/browser_test.mjs skips the checks that cannot pass because
+  // of it. It was previously an unconditional assignment buried in game.js,
+  // which left a dozen suite checks asserting on content that no longer
+  // existed — dead code failing live, and throwing hard enough to end whole
+  // suite phases (§15 defect #10). Flipping this back is the phase-4 economy
+  // work; the checks come back with it.
+  WEAPONS_ENABLED: false,
+
   DISCONNECT_TIMEOUT: 5,   // s of silence before a client is dropped
   MAX_PLAYERS: 8,
 
@@ -183,17 +228,16 @@ export const STAT_NAME = Object.fromEntries(STATS.map(s => [s.key, s.name]));
 export const STAT_IS_PCT = Object.fromEntries(STATS.map(s => [s.key, s.pct]));
 export const STAT_BASE = Object.fromEntries(STATS.map(s => [s.key, s.base]));
 
-// Weapon-scaling conversion: how much +damage% one point of a FLAT stat gives
-// when that stat is one of the weapon's scaling tags. Percent stats contribute
-// their percentage directly. Crit is not a stat: crits exist only as granted
-// effects (default ×2).
-export const SCALING_RATES = {
-  vitality: 1 / 4,   // 1% per 4 Vitality
-  grit: 1,           // 1% per point
-  ingenuity: 1,
-  greed: 1,
-  reach: 1 / 12,     // 1% per 12 Reach
-};
+// SCALING_RATES USED TO LIVE HERE and is deleted, not deprecated.
+//
+// It converted a flat stat into a weapon-damage percentage for the weapon's
+// scaling tags. Weapons were removed in patch-trigger-core: _tickWeapons is
+// never called, so _fireWeapon -> _scalingBonus -> SCALING_RATES was reachable
+// only from a test that calls _fireWeapon directly to check line of sight.
+//
+// A dead constant that LOOKS live is how the README drifted — it documented
+// weapon scaling as a live rule for four patches after the rule stopped
+// existing. The fix for that is removal, not a comment saying "unused".
 
 // Weapon tier multipliers (I–IV): damage etc. scale, price scales.
 export const TIER_MULT = [1, 1.6, 2.5, 3.9];

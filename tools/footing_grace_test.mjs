@@ -13,8 +13,6 @@
 // Five behaviours, not one. A window that only protects the sidestep is a
 // window that also hands out free room crossings.
 
-import * as CH from '../js/content/characters.js';
-CH.setRoster('toh');
 const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
 const { TUNING: SAM } = await import('../js/content/skills/samurai_armor.js');

@@ -11,6 +11,7 @@
 // each one is marked. A magnitude literal in this file is a bug.
 
 import { domainMult } from './domains.js';
+import { selectTarget, selectTargets } from './selectors.js';
 
 // Rank scaling. LINEAR against base, never compounding: `damage *= 1.04` per
 // rank is 4.8x at rank 40 and is the single most likely way to break the patch.
@@ -107,8 +108,11 @@ export function inZone(z, x, y, pad = 0) {
 
 function aimAt(p, e) { return Math.atan2(e.y - p.y, e.x - p.x); }
 
-function facing(sim, p, grid, range) {
-  const t = grid.nearest(p.x, p.y, range);
+// The aim direction follows the SKILL'S OWN selector. It used to be
+// grid.nearest() unconditionally, which meant a reach build's cone still
+// pointed at whatever was standing on the player (§15 defect #13).
+function facing(sim, p, grid, range, select) {
+  const t = selectTarget(select, grid, p.x, p.y, range);
   if (t) return aimAt(p, t);
   const d = grid.densestAngle(p.x, p.y, range);
   return d !== null ? d : p.aimA;
@@ -125,7 +129,7 @@ export const PRIMITIVES = {
     const dmg = stepDamage(step, skill, rank, p);
     const r = step.riders || {};
     const pulses = r.multiPulse || 1;
-    const a0 = facing(sim, p, grid, reach);
+    const a0 = facing(sim, p, grid, reach, skill.select);
     // windUp delays the whole step; the sim re-enters it when the timer expires
     if (r.windUp && !step._wound) {
       sim.queueSkillStep(p, skill, { ...step, _wound: true }, rank, r.windUp / MS);
@@ -152,8 +156,8 @@ export const PRIMITIVES = {
     const range = step.range || skill.trigger.range || skill.trigger.radius;
     const count = step.count || 1;
     const targets = count > 1
-      ? grid.nearestN(p.x, p.y, range, count)
-      : [grid.nearest(p.x, p.y, range)].filter(Boolean);
+      ? selectTargets(skill.select, grid, p.x, p.y, range, count)
+      : [selectTarget(skill.select, grid, p.x, p.y, range)].filter(Boolean);
     if (!targets.length) return;
     for (const t of targets) {
       sim.spawnSkillProj(p, skill, step, rank, aimAt(p, t), range);
@@ -165,7 +169,7 @@ export const PRIMITIVES = {
   // crowd answer rather than a wide single-target hit.
   cone(sim, p, skill, step, rank, grid, out) {
     const dmg = stepDamage(step, skill, rank, p);
-    const a0 = grid.densestAngle(p.x, p.y, step.range) ?? facing(sim, p, grid, step.range);
+    const a0 = grid.densestAngle(p.x, p.y, step.range) ?? facing(sim, p, grid, step.range, skill.select);
     for (const e of grid.near(p.x, p.y, step.range)) {
       const dx = e.x - p.x, dy = e.y - p.y;
       if (dx * dx + dy * dy > step.range * step.range) continue;
@@ -182,7 +186,7 @@ export const PRIMITIVES = {
     const dmg = stepDamage(step, skill, rank, p);
     const r = step.riders || {};
     const pulses = r.multiPulse || 1;
-    const a0 = facing(sim, p, grid, step.length);
+    const a0 = facing(sim, p, grid, step.length, skill.select);
     const len = sim.losClipLen(p.x, p.y, a0, step.length);
     const half = step.width / 2;
     const ca = Math.cos(a0), sa = Math.sin(a0);
@@ -203,7 +207,7 @@ export const PRIMITIVES = {
   // Ground pool that ticks. Routed through the triangle like everything else —
   // hazard ticks are exactly the kind of damage that quietly escapes a rule.
   hazard(sim, p, skill, step, rank, grid, out) {
-    const target = grid.nearest(p.x, p.y, skill.trigger.radius || skill.trigger.range || step.radius);
+    const target = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.radius || skill.trigger.range || step.radius);
     const x = target ? target.x : p.x, y = target ? target.y : p.y;
     const r = step.riders || {};
     sim.addZone({
@@ -252,7 +256,7 @@ export const PRIMITIVES = {
   // Damage that returns a fraction as healing. Unused in phase 1.
   drain(sim, p, skill, step, rank, grid, out) {
     const dmg = stepDamage(step, skill, rank, p);
-    const t = grid.nearest(p.x, p.y, step.range);
+    const t = selectTarget(skill.select, grid, p.x, p.y, step.range);
     if (!t) return;
     const dealt = sim.skillDamage(t, dmg, p, skill);
     p.hp = Math.min(p.stats.vitality, p.hp + dealt * step.healPct);
@@ -262,7 +266,7 @@ export const PRIMITIVES = {
   // A spreading damage-over-time. Stacks rather than refreshing, which is what
   // makes Internal Collapse a payoff for a tree that already applies dots.
   plague(sim, p, skill, step, rank, grid, out) {
-    const seed = grid.nearest(p.x, p.y, skill.trigger.range || skill.trigger.radius || step.spreadRadius);
+    const seed = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.spreadRadius);
     if (!seed) return;
     sim.applyPlague(seed, rankedDamage(step.damage, skill, rank), rankedDuration(step.duration, skill, rank) / MS, p, skill);
     out.statuses++;

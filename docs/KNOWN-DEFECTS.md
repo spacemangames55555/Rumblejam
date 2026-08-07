@@ -570,15 +570,105 @@ Observed across three runs after the state fix and the heartbeat:
 | 2 | `room registration failed against local relay` (see #9) |
 | 3 | `timeout waiting for client ready` — this defect |
 
-**What a fix would have to do.** Give client input the property host state now
-has: repetition or acknowledgement. Either the client re-sends unacknowledged
-intent until the host confirms it, or intent becomes state the client repeats
-(a "my current pick/ready" beat) rather than an edge it fires once. The second
-matches the rule the rest of this patch follows — if losing it breaks the game,
-it repeats — and is probably the smaller change.
+### Fixed: resent until acknowledged, applied once per sequence number
 
-**Not fixed here.** The instrument now covers both directions, which is what
-turns the next occurrence into evidence rather than another seven-run hunt.
+The heartbeat pattern does not transfer to this direction, and the reason is
+worth stating because it decided the shape of the fix. Host state repeats
+safely because repeating it is **idempotent** — the same roster applied twice is
+the same roster. Input is not. `ready` toggles, so a second delivery of one
+press un-readies the player who made it. Repetition alone would trade a lost
+action for a phantom one.
+
+So the two halves are split:
+
+- **The client repeats.** Every `ui` message carries `useq`, a per-connection
+  sequence number, and stays in `app.uiPending` until the host acks that number.
+  `clientPump` (already running at 30 Hz) resends anything unacked for
+  `UI_ACK_RESEND_MS`, gives up loudly after `UI_ACK_GIVEUP_MS`, and refuses to
+  queue past `UI_ACK_MAX_PENDING` — an unbounded pending list is a memory leak
+  wearing a reliability costume.
+- **The host does not repeat the effect.** `hostHandleUi` keeps a per-peer
+  high-water mark and applies a sequence number once. A duplicate is
+  **acknowledged and discarded**, because from the host's side a duplicate is
+  what a *lost ack* looks like: the action landed, the reply did not, and the
+  client is asking again. Staying quiet would leave it resending until it gave
+  up on something already done.
+- **A departing peer's mark is forgotten** in `hostDropPeer`. A reconnecting
+  client counts from 1 again; a stale mark would have the host discard its first
+  actions as duplicates — a lobby that lets you in and then ignores every button
+  you press.
+- **`hello` self-heals off the lobby heartbeat.** It is the one client message
+  that cannot be acked, because until it lands the host does not know the peer
+  exists. Instead the client watches the heartbeat's roster for itself and says
+  hello again if it is missing — reusing a channel that already exists rather
+  than inventing a second protocol.
+
+The host's own input never touches any of this; it is applied inline.
+
+Counters: `window.uvNet.uiResends`, `.uiDuplicates`, `.uiGaveUp`,
+`.helloResends`.
+
+### Verified
+
+`node tools/uiack_test.mjs` — two real pages over the local relay, driving the
+real `#btn-ready` button, with the client's channel broken at the transport:
+
+| check | result |
+|---|---|
+| an acknowledged action leaves nothing pending | pass |
+| a press during a broken channel does **not** reach the host | pass (the failure is real, so what follows means something) |
+| it lands after the channel recovers, **with no second press** | pass — 2 resends |
+| 8 swallowed acks → 8 duplicates at the host, `ready` toggles **once** | pass |
+| a replayed old sequence is acked and not re-applied | pass |
+| a real disconnect clears the host's high-water mark | pass |
+
+`ready` is the probe throughout precisely because it toggles: an idempotent
+action would pass with or without the dedupe and prove nothing about the part
+that is hard.
+
+### The wild run says the ack is not the cause of this symptom
+
+Once §10 stopped ending the co-op phase early, eleven full co-op runs became
+possible. `timeout waiting for client ready` reproduced, and the ledger read:
+
+```
+host:   {present:true, ready:false, charId:"lodestone", n:2, seen:"c6bcc6:4", conns:1}
+client: {uiSeq:4, pending:[], open:true, drops:0, resends:0, myKey:"c6bcc6"}
+```
+
+The host's per-peer high-water mark is **4** and the client's sequence counter
+is **4**. Nothing pending, zero drops, zero resends, zero duplicates, channel
+open, and the pick applied. **Every message the client sent was delivered and
+applied** — and `ready` is still false.
+
+`hostHandleUi` does `p.ready = !p.ready`, so it was toggled an EVEN number of
+times. That is not a lost message, which is the only thing the ack addresses.
+The fix above is correct for what it covers and `uiack_test.mjs` proves it
+under injection, but **it does not explain this symptom and must not be
+credited with it.**
+
+Two mechanisms remain, and they want opposite fixes:
+
+1. **One press became two messages** — a double-fired handler on the client.
+   The toggle would not be the cause, and making `ready` idempotent would hide
+   a UI bug rather than fix it.
+2. **A second, distinct `ready` arrived from somewhere else.** Not a duplicate
+   delivery: `uiDuplicates` is 0, so the dedupe never saw a repeated sequence
+   number.
+
+Neither ledger can separate them — the ack answers "did it arrive", not "how
+many times did one click become a message". `window.uvNet.uiLog` (every `ui`
+the client sends, in order) and `window.uvNet.uiApplied` (every one the host
+applies) now record exactly that, and the failure dump prints both. It has not
+reproduced since they were added: 1 failure in the 7 runs after the assertion
+was split, against 3 in the 4 runs before it. **That spread means the rate
+itself is not measurable at these sample sizes, and no conclusion should be
+drawn from a quiet run.**
+
+**Do not "fix" the toggle yet.** Sending an explicit `ready` value instead of
+flipping is the obvious change and may well be right, but two diagnoses of this
+defect have already been overturned by the next measurement, and both times the
+cause was choosing the fix before the data.
 
 ---
 
@@ -602,6 +692,526 @@ the drop ledger is clean on these runs. Recorded as its own entry specifically
 so it stops being absorbed into "co-op is flaky", which is how it stayed
 invisible while two other distinct failures wore the same description.
 
-**Undiagnosed.** Nothing has been ruled out. The next step is logging the
-PeerJS error on the registration path, which currently reports only that the
-code never arrived.
+### What was measured
+
+`tools/room_reg_test.mjs` drives `HostTransport.createRoom()` directly against
+the local relay, with no lobby, no Host button, and no cap of its own — it waits
+for the promise to settle and reports what it settled as.
+
+| trials | registered | min | median | max | retries needed |
+|---|---|---|---|---|---|
+| 20 | 20 / 20 | 3 ms | 3 ms | 8 ms | 0 |
+
+**Room registration was not what was failing.** Twenty for twenty, in single-digit
+milliseconds, on the same relay the suite boots. Whatever made one co-op run in
+three or four report `room registration failed against local relay`, it was not
+`createRoom()` failing to register a room.
+
+### What the message was actually reporting
+
+The suite's `tryRegister()` returned a bare `null` for three unrelated outcomes
+and the caller printed one sentence for all of them:
+
+1. `window.uv.lobby` null — the host flow never started, so nothing was ever
+   registered;
+2. registration settled as failed — the real case the message described;
+3. still in flight when the poll gave up.
+
+Case 3 was guaranteed for a while. The suite polled for a hardcoded `12000` ms;
+the transport's own ceiling is `ROOM_REGISTER_ATTEMPTS x ROOM_REGISTER_TIMEOUT_MS`
+plus backoff, in a different file. Adding retries pushed that to 16200 ms without
+moving the suite's number, so any first-attempt timeout guaranteed the suite
+reported failure while registration was still running.
+
+And the diagnostic printed with it was structurally empty: `main.js` published
+`window.uvNet.regFailures` only from its terminal `.catch()`, so a registration
+still retrying and a registration with nothing wrong both read `[]`.
+
+### Fixed
+
+- **Registration is budget-bounded, not just attempt-bounded.**
+  `ROOM_REGISTER_BUDGET_MS` (11000) caps the whole sequence on wall clock. A
+  collision fails instantly and keeps all its retries; a relay that has gone
+  quiet stops costing attempts. Per-attempt timeout dropped 8000 -> 5000.
+- **The suite derives its wait from that constant** (`REG_WAIT_MS`) instead of
+  restating it. Four separate hardcoded literals across the file — three at
+  12000 and one at 15000 — are gone. Two numbers that must agree are one number.
+- **The ledger is written per attempt, in `net.js`, where the failure happens** —
+  not by whoever catches the final rejection. "Still retrying" and "nothing has
+  gone wrong" are no longer the same reading.
+- **`tryRegister()` reports which of the three outcomes ended it**, with elapsed
+  ms and the ledger contents.
+- **Unretryable failures cost one attempt.** `peerjs-missing` will still be
+  missing in 400 ms; it was being retried three times on every page in the suite
+  that isn't testing co-op.
+- **A taken room code now recovers.** `unavailable-id` means that exact code is
+  registered, and the original code retried nothing at all — one collision ended
+  the session. Verified on the runtime path: `Math.random` is pinned so the first
+  code drawn is one already squatted on the relay, then released; the transport
+  collides, redraws, and registers, and the ledger records
+  `unavailable-id` on the taken code.
+
+### Still open — this is a negative result, not a fix
+
+**20/20 at 3–8 ms does not explain failures that were happening 1 run in 3–4.**
+That is the whole finding. A healthy measurement of the component named in the
+defect is evidence that the name was wrong; it is not evidence that anything
+was repaired. Everything fixed above was found by *reading* — a collision that
+could never recover, a ledger written too late, a suite wait that had drifted —
+and none of it was implicated by an observation.
+
+So the honest position is that **the failure stopped reproducing and nobody
+knows why.** A defect that stops reproducing without a known cause is not a
+fixed defect; it is a defect that is currently quiet. The two live
+possibilities are unchanged and both remain untested:
+
+1. `window.uv.lobby` was null when the poll started — the host flow never began,
+   and nothing was ever registered;
+2. registration genuinely settled as failed, for a reason the old ledger could
+   not have recorded.
+
+What actually changed is the *resolution* of the next occurrence. The suite used
+to print one sentence for three outcomes; it now names which one, with elapsed
+ms and the ledger contents attached.
+
+**Closing conditions.** Either a run reproduces it and the new diagnostic says
+what it was, or enough clean full co-op runs accumulate that a 1-in-3-or-4 rate
+is statistically out of reach. Neither has happened. A handful of quiet runs is
+not the second condition — at that rate, four clean runs in a row is roughly a
+1-in-4 coincidence on its own.
+
+---
+
+## 10. The browser suite gates co-op behind tests for content that was removed
+
+**Where:** `tools/browser_test.mjs`, the shop/meta phases and the co-op phase.
+
+**What is wrong.** Weapons were removed from the game — `js/game.js` sets
+`p.weaponSlots = 0` unconditionally, and `_addWeapon` refuses when
+`p.weapons.length >= p.weaponSlots`, which `0 >= 0` always is. Several suite
+checks still wait for weapons to appear:
+
+```
+✗ browser test crashed: timeout waiting for a matching pair of coilguns in meta
+✗ coop test: timeout waiting for a matching pair of coilguns in the host's meta
+✗ mobile test crashed: tap: no element [data-wchip="0"] .wsym
+✗ mobile combine badge: null
+```
+
+None of these can pass. They are not reporting a defect in the game; they are
+tests for content that no longer exists.
+
+**Why it matters beyond the noise.** These `waitFor`s **throw**, and a throw
+ends the phase. So a co-op run can abort before it reaches the co-op sequence at
+all, which means "co-op failed" and "co-op never ran" look similar in the log —
+the same conflation that kept #9 undiagnosed one level down. It also makes the
+suite an unreliable instrument for exactly the two defects that most need it.
+
+**Not fixed here.** Deleting or rewriting these belongs with the phase-4 economy
+work that owns the weapon removal, and pulling that forward was explicitly
+out of scope. Recorded so the failures are attributed rather than re-diagnosed.
+
+**Note the interaction with #8's verification.** `tools/uiack_test.mjs` exists
+partly because of this: it pairs two real pages directly and never touches a
+shop, so it can verify client input delivery without depending on a suite that
+cannot reliably get there.
+
+---
+
+## 11. Players deal no damage in the co-op run, and take it normally
+
+**Where:** unknown. Surfaced by every full co-op run once §10 stopped ending the
+phase early.
+
+**What is wrong.** Two checks fail together in run after run:
+
+```
+✗ no organic damage dealt on touch within 15s
+✗ damage tallies: {"d0":0,"d1":0,"hurt":true}
+```
+
+`hurt: true` means enemies are damaging players. `d0: 0, d1: 0` means neither
+player has dealt a single point in return.
+
+**Why it is recorded separately.** It is almost certainly why the phase then
+dies in three different places across three runs — `timeout waiting for host
+run`, `timeout waiting for host extraction shop`, `timeout waiting for a fight
+to clear` — because a fight that cannot be won never clears, and everything
+downstream waits on a clear. Those three timeouts read as three flaky checks;
+they are one defect wearing three names, which is the conflation this file
+exists to stop.
+
+### Diagnosed: 2 of 47 characters have a skill tree, and neither is selectable by default
+
+`tools/offence_test.mjs` puts each character in an arena, spends its opening
+skill point, ticks 20 real seconds and reads what the **player** dealt. It never
+calls `damageEnemy` on the player's behalf.
+
+| roster | characters | have any tree | can learn an active | deal aimed damage |
+|---|---|---|---|---|
+| `classic` (the default) | 33 | **0** | **0** | **0** |
+| `toh` | 14 | 2 | 2 | 2 |
+
+Weapons are removed — `CONFIG.WEAPONS_ENABLED` is false, `weaponSlots` is 0, and
+`_tickWeapons` is never called — so **skills are the only damage source.** Skills
+come from trees. `TREES_BY_CLASS` has exactly two entries, `toh_samurai` and
+`toh_necromancer`. Every other character in the game has no way to learn
+anything, and therefore no attack.
+
+The game boots on `classic`. **Not one of its 33 characters can deal a point of
+aimed damage.** That is the whole of the symptom: fights cannot be won, so they
+never clear, so everything waiting on a clear times out under a different name.
+
+**The engine is not broken, and that distinction decides where the fix goes.**
+Where a tree exists it works end to end — the character learns, `spendSkillPoint`
+auto-slots the active, and it kills:
+
+```
+toh_necromancer: learned necro_blip,      dealt 80,  4 kills
+toh_samurai:     learned sam_cross_guard, dealt 162, 4 kills
+```
+
+What is missing is content: 45 characters' worth of skill trees. That is GDD §14
+phase 5 work, not a bug fix.
+
+### Why nothing caught it
+
+- **`sim_test` clears every fight with `nuke()`** — `damageEnemy(e, 900, {owner: p})`
+  on every enemy every 240 ticks. A harness that kills the enemies for you cannot
+  answer whether the player can, so the suite stayed green against a party with
+  no offence at all. `tools/offence_test.mjs` exists because that gap did.
+- **A charId from the other roster resolved silently to `bulwark`.** Right stats,
+  right trait, wrong `charId` — and `treesFor(p)` keys off `charId`, so the
+  player got a character with no trees and nothing said so. Fixed: the fallback
+  still happens (a bad id must not crash a run) but it now names the id, the
+  active roster, and the fact that the trees do not follow.
+
+### Resolved by retiring the classic roster
+
+The 33 were never waiting for trees — they are pre-overhaul content the GDD's
+14-class design replaces. Building trees for them would have been authoring
+content the design had already removed. So:
+
+- **One roster.** The ToH 14 are the roster. The classic 33 are preserved,
+  unimported, in `archive/classic-roster/` with a README on what to mine from
+  them. `js/roster.js`, `setRoster()`, `ROSTERS`, `rosterOf()`,
+  `applyHostRoster()` and the lobby roster picker are gone — with one roster
+  there is nothing to resolve, guard or switch.
+- **The silent fallback is gone.** `CHAR_BY_ID[id] || CHAR_BY_ID.bulwark` threw
+  away the distinction between "this character" and "some character", which is
+  most of why this defect survived a patch. An unknown id now throws.
+- **Selection is gated on having a tree, derived from the tree data.** Today
+  that is `toh_samurai` and `toh_necromancer`. The other twelve are *visible*
+  and greyed with the reason on the card — a roster that silently shrinks to
+  two reads as broken rather than unfinished. As phase 5 lands trees they
+  become selectable with **no code change**.
+- **A load assertion** refuses any selectable class without a damaging tier-1
+  active. Tier 1 is all a level-1 character can reach, and "has a tree" is not
+  enough — a tree of passives arms nobody.
+- **`tools/offence_test.mjs` walks every selectable class**, never a sample, so
+  a class that becomes selectable without offence fails the moment it does.
+
+Twelve of fourteen classes still need trees. That is phase-5 content and is not
+attempted here; what changed is that it is now a *stated, gated, asserted* gap
+rather than a game that boots into a roster that cannot fight.
+
+### And `nuke()` is gone
+
+It was `damageEnemy(e, 900, {owner: p})` on every enemy every 240 ticks. It is
+now `clearFieldForSetup(sim, p, reason)`: it demands a reason, stamps the sim,
+and `assertPlayerCleared()` refuses to let any sim it has touched carry a combat
+result. Every run prints how many fights the harness ended and why.
+
+**The suite went from 30 failures to 58, and that is the deliverable.** The
+previous green was measured through the nuke. Classified:
+
+| class | count | what it is |
+|---|---|---|
+| offence, newly visible | 14 | objectives never clearing, `UNKILLABLE` regenerating marks, camper statues dying, per-class first fights |
+| retired-character trait tests | 20 | Rampart/Vesper/Facet/Broker/Pulsar/Gilded One/Quartermaster/Bulwark/Soulbond/aura/drip/toll — testing characters that no longer exist. **Delete next.** |
+| weapon leftovers | 10 | pre-existing, §15 defect #10 territory |
+| crashes | 5 | same two causes as the above two rows |
+| other | 9 | ToH trait gaps (Bard rhythm, infusion, hitbox), sprite/grid plumbing |
+
+The 20 retired-trait tests are noise that should be deleted rather than fixed —
+they assert on traits of archived characters. The 14 in the first row are the
+signal this whole change was for.
+
+**One caution recorded against the instrument itself.** Its first default was 12
+seconds, at which the two characters that *can* fight scored zero, and it
+declared an engine failure. A threshold short enough to make a working thing
+look broken is the same defect as a missing counter — it nearly sent the fix at
+the trigger core. The default is 20s and the reason is written at the top of the
+file.
+
+---
+
+## 12. A client-page eval dies on an undefined `.x` mid co-op
+
+**Where:** the client page, during the co-op phase.
+
+```
+✗ coop test: page eval failed on [B]: TypeError: Cannot read properties of undefined (reading 'x')
+```
+
+**Status.** Intermittent — 2 of the last 7 runs. The message named neither the
+page nor the expression until `Browser.exec` was changed to report both, and
+even then the exception's multi-line stack pushed the script snippet onto a
+later line where every run-log grep dropped it. Both are fixed; the next
+occurrence carries the failing expression on one line with it.
+
+**Recorded rather than chased** because #11 is the larger blocker and this may
+turn out to be downstream of it — an eval reading a position off an entity that
+a stalled fight never produced.
+
+---
+
+## 13. Skills cannot be aimed, and every objective assumes aimed damage
+
+**Where:** `js/triggers.js` `TRIGGER_KINDS`, against the objective designs in
+`js/objectives.js`.
+
+**This is the finding under #11's offence failures.** It is *not* a content gap
+waiting on phase-5 trees, and that distinction decides where the fix goes.
+
+### Measured
+
+A fully-armed necromancer — ten skill ranks spent, permanent stat grants applied
+— put into each objective with no harness kills:
+
+| objective | damage dealt | kills | objective progress |
+|---|---:|---:|---|
+| Nest Purge | 666 | 22 | `alive: 3` of 3 — **no nest ever damaged** |
+| Elite Arena | 4230 | **0** | 40 spawned, none killed |
+| Bounty Hunt | 8318 | 311 | `killed: 0` of 5 marks |
+
+It is killing plenty. It is killing *the wrong things*, and it cannot be told
+otherwise.
+
+### Why
+
+Every trigger selects by **position or health fraction**, never by role:
+
+```
+PROXIMITY  NEAREST  ISOLATED  TARGET_THRESHOLD  ON_KILL  ON_HIT_TAKEN
+ON_DODGE   SELF_THRESHOLD     ON_STATUS         MOVEMENT
+```
+
+There is no way to express *the nest*, *the mark*, *the elite* or *the boss*. A
+player with a weapon aimed at what they chose; a player with skills cannot
+choose at all. Chaff is always nearer, so chaff is always what dies.
+
+Elite Arena is the cleanest reading: **4230 damage, zero kills.** Elites carry
+`ELITE_HP_MULT` 3×, a single tier-1 skill cannot finish one, and the damage
+spreads across forty of them instead of concentrating on any. No kills means no
+XP, no XP means level 1, level 1 means **one loadout slot** — the party cannot
+grow its way out.
+
+### Why more trees will not fix it
+
+Phase 5 adds skills. Every one of them will still pick its target by proximity.
+More damage arriving at the nearest chaff does not kill a nest that nothing ever
+targets. The gap is between the objective designs, which were authored for aimed
+weapon fire, and the trigger vocabulary, which cannot name a target.
+
+### Fixed: `select` is a field, not a new trigger kind
+
+The framing above was wrong and worth correcting, because it would have sent the
+fix to the wrong place. **The loss was variety in the selection rule, not
+aiming.** Weapons had varied targeting rules and the player chose the rule by
+choosing the weapon — a shotgun hit everything close, a sniper took the farthest
+or the fattest, a homing shot tracked one thing. Triggers collapsed all of that
+into position and health fraction.
+
+So the two jobs a trigger was doing are split:
+
+```js
+trigger: { kind: 'PROXIMITY', radius: 140, count: 3 },   // when it fires
+select:  'highest_hp',                                    // what it hits
+```
+
+`js/selectors.js` ships six rules — `nearest`, `farthest`, `highest_hp`,
+`lowest_hp`, `densest_cluster`, `objective_target`. Every one is a rule over
+what is **already queryable**; none is a new player input. A selector re-ranks
+the candidates the grid returns for the skill's own range and never widens the
+search, because a selector that could reach past a skill's range would silently
+give every skill infinite reach.
+
+`objective_target` reads role tags the sim already sets — `isNest`, `bounty`,
+`boss`, `elite`/`mini` — in that priority order, with distance as the tiebreak
+so that with three nests on the field the near one is the right nest. It skips
+`nestShielded` nests: a shielded nest cannot be hurt at all, so preferring it
+would fire into a wall while the ring that drops the shield went unkilled.
+
+**`select` is required on every active, with no default.** Defaulting a missing
+one to `nearest` would silently reproduce this defect on every skill anyone
+forgot — which is exactly how it existed in the first place, as an unwritten
+universal default nobody had to opt into. All 34 actives now declare one, and a
+passive declaring a `select` is also an error: a passive hits nothing.
+
+### Confirmed, in the shape that found it
+
+An armed party (all ranks spent, permanent stats, steered at the objective):
+
+| objective | dealt | kills | progress | before |
+|---|---:|---:|---|---|
+| Nest Purge | 10394 | 244 | **1/3 nests down** | 0/3, none ever damaged |
+| Elite Arena | 53964 | 78 | **all 52 elites — CLEARED** | 0 kills |
+| Bounty Hunt | 54786 | 398 | **2/5 marks** | 0/5 |
+
+All three off zero; Elite Arena finishes. `sim_test` also drops one failure
+(`UNKILLABLE at 4p`, 13110 → 13110 becomes real damage), 39 → 38.
+
+### What is still short, and why it is a different question
+
+Nest Purge and Bounty Hunt make progress but do not finish inside the harness
+budget. That is **throughput, not selection** — the targets are being hit now,
+there is not enough damage arriving before the clock runs out. Whether one
+tier-1 skill at ten ranks should chew through a 3×-HP elite or a 10×-HP mark in
+six minutes is a question about elite and mark HP, and it is **deliberately not
+answered here**: retuning on the back of a targeting fix would let a throughput
+change silently satisfy a targeting test.
+
+The `offence_test` assertion is therefore "something got targeted", never "the
+level finished".
+
+### Still a harness gap: the 1p UNKILLABLE check
+
+`UNKILLABLE at 1p` survives because that harness parks a player 120u from the
+mark "in weapon range, firing" and never arms it — a weapons-era assumption. The
+4p variant now passes because its party is armed. Worth fixing, but it is a
+harness gap and not evidence about regeneration.
+
+### The five camper-statue failures are a different, smaller thing
+
+`statueRun()` never spends its skill point, so the "camper" is unarmed. That is
+a harness gap, not a defect — but it is not worth fixing until #13 is decided,
+because an armed statue still cannot aim.
+
+### Not to be counted as content
+
+Recorded separately from #11 precisely so it is not absorbed into "waiting on
+phase-5 trees". Trees are content. This is not.
+
+---
+
+## 14. The ToH trait layer is wired to two subsystems that were deleted
+
+**Where:** `js/traits-toh.js`, against `js/game.js` `_tickWeapons` and
+`_addWeapon`.
+
+All fourteen trait keys are implemented. Several of them are nonetheless inert,
+because they hang off hooks that stopped being called when weapons were removed.
+
+### `tohOnFire` was orphaned — FIXED
+
+`tohOnFire(sim, p, ctx)` is the "an attack happened" hook. Its only caller was
+`_tickWeapons()`, which has not run since `weaponSlots` went to 0. So the Bard's
+Rhythm never built a stack, the Mage's every-Nth-attack singularity never
+counted, and the Sundian never planted coral — **the hook was orphaned, not
+broken.**
+
+It needs only a target position, so it is now called from `fireSkill()` with the
+position the skill's own selector chose. Skills are what attacks are now.
+
+### `bonelord` builds its structure out of a weapon — OPEN
+
+```js
+if (has(p, 'bonelord')) { sim._addWeapon(p, 'bolt_turret', 1); return true; }
+```
+
+`_addWeapon` refuses when `p.weapons.length >= p.weaponSlots`, and `weaponSlots`
+is 0, so the Necromancer's bonelord summons nothing. The structure-recall gate
+(off-screen packing, redeploy, carry) therefore has **no class in the game that
+can exercise it** — the retired Cogsmith's `overseer` mounts were the other.
+
+This is a design decision, not a repair: the bonelord's structure has to become
+a skill-era summon, and what grants it (a tree node? the trait at fight start?)
+is a GDD question. **Not attempted.**
+
+### What is still inert, and why the tests cannot pass yet
+
+`Bard rhythm`, `no singularity in 30s`, `no coral planted`, `toh blob` — these
+run as `toh_bard`, `toh_mage`, `toh_sundian`, `toh_druid`, all of which have **no
+skill tree**. With `tohOnFire` now on the skill path, a class that cannot fire a
+skill still cannot trigger an attack hook. They resolve when phase 5 arms those
+classes, and not before. Content gap, not defect.
+
+`expected 2 beasts across 2 Hunters` is the same shape: the Hunter's beast is
+granted at fight start by `pack_tactics`, but the test constructs Hunters through
+a path that only runs for a started run.
+
+---
+
+## 15. `hitbox` was honoured by trait NAME, not by presence — FIXED
+
+`js/game.js` computed a player's radius as
+
+```js
+CONFIG.PLAYER_RADIUS * (char.trait.key === 'immovable' ? char.trait.hitbox : 1)
+```
+
+`immovable` is a **retired classic trait**. The Blacksmith's `crystal_infusion`
+carries `hitbox: 1.4` and the sim ignored it entirely — a bigger target that was
+only bigger on screen, because `js/main.js` special-cased both names and the sim
+special-cased one. A data field should not need the engine to know who owns it;
+both now read `trait.hitbox || 1`.
+
+---
+
+## 16. The style anchor pointed at a retired character — FIXED
+
+`tools/gen_prompts.mjs` hardcoded `char.pulsar` as batch 0. Pulsar retired with
+the classic roster, so **batch 0 became empty** and the gate it exists to be
+stopped gating: `--require-all` had nothing to require. It is now
+`STYLE_ANCHOR_ID`, a named constant, pointing at `char.toh_assassin` — which
+unit carries the style is a decision someone should be able to find and change.
+
+---
+
+## 17. UNKILLABLE bounty mark — reclassified, still open
+
+Was "a Regenerating mark took 20s of point-blank fire and its HP did not fall
+(7354 → 7354)". Two causes want opposite fixes — the mark out-heals the damage,
+or nothing was ever aimed at it — and the message could not tell them apart.
+
+Instrumented, it now reports:
+
+```
+armed: [necro_blip] parked 130u, player dealt 260 total, level 1, fires 20
+```
+
+So the player **is** armed, **is** firing, and **is** dealing damage — and none
+of it reaches the mark, whose HP is unchanged to the point. The harness gap is
+closed (it parks at half the armed skill's own trigger range now, not a
+weapons-era literal 120u). What remains is: where did the 260 go — the escort
+pack, or projectiles missing a moving stalker at range?
+
+### Resolved by per-target attribution: it is DELIVERY, not any of the three
+
+`sim.dmgLog` (every damage event, by target, with `landed`/`blocked`) and
+`sim.selLog` (what each fire selected) are opt-in ledgers — a harness sets them,
+nothing records when they are absent. Read at teardown:
+
+```
+SELECTED:    necro_blip->MARK x23
+ON THE MARK: 2 hits for 10, 0 blocked
+BY TAG:      MARK 2h/10dmg/0blk, chaff 21h/120dmg/0blk
+```
+
+**The selector is right 23 times out of 23.** Nothing was blocked. Of 23 shots
+aimed at the mark, **2 arrived** — the other 21 were intercepted by the escort
+pack that spawns with every bounty mark by design.
+
+So it was a fourth cause, and none of the three I had listed. **Selection is not
+delivery.** `objective_target` picks the correct entity and the bolt primitive
+stops at the first body it meets, so a deliberately-escorted target cannot be
+focused at all. A `pierce` rider on objective-targeting bolts would fix it;
+whether that is the right answer — or whether escorts are supposed to be a wall
+you clear first — is a design question. Recorded as §15 defect #17.
+
+**A note against my own instrument.** The first classifier had three branches
+and reported `REGENERATION` here, because two hits did land. Two hits out of
+twenty-three is not regeneration; the branch was too coarse and would have sent
+the fix at the elite mod. It now compares hits-on-target against
+selections-of-target and names `DELIVERY` when the gap is wide.

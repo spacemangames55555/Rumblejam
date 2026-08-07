@@ -20,8 +20,7 @@ import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon } from './ui/overlays.js';
-import { CHARACTERS, CHAR_BY_ID, ROSTER_ID, ROSTERS, ROSTER_IDS } from './content/characters.js';
-import { resolveInitialRoster, chooseRoster, applyHostRoster } from './roster.js';
+import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
 import { tohSnapshot, tohMarks, tohState, TOH_STANCE_NAMES } from './traits-toh.js';
 import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
@@ -68,6 +67,11 @@ const app = {
   bossInfo: null,
   // client interpolation state
   snaps: [], predicted: null, lastSnapAt: 0, inputTimer: null, seqNo: 0,
+  // defect #8: client input is resent until acked, and applied once per
+  // sequence number. uiSeq/uiPending are the client's; uiSeen is the host's
+  // per-peer high-water mark. `seqNo` above is the movement stream's and is
+  // deliberately separate — movement is lossy on purpose, it repeats at 30 Hz.
+  uiSeq: 0, uiPending: new Map(), uiSeen: new Map(),
   fps: { frames: 0, t: 0, value: 60, show: false },
 };
 
@@ -79,7 +83,6 @@ const actions = {
   pickChar: charId => sendUi({ kind: 'pick', charId }),
   toggleReady: () => sendUi({ kind: 'ready' }),
   startGame: hostStartRun,
-  pickRoster: hostPickRoster,
 };
 // Sprites start loading NOW, at page load, while the player is still reading
 // the title and picking a character — not at game start, where a stall would
@@ -88,9 +91,6 @@ const actions = {
 // state the project ships in today.
 Assets.load('assets/assets.json');
 
-// Roster first: every screen that lists characters reads the active roster,
-// so this has to settle before the first render.
-resolveInitialRoster();
 initScreens(actions);
 initGloss(); // stat-glossary popover + document-level term handling
 initMapScreen({
@@ -253,7 +253,16 @@ function hostGame() {
     app.lobby.codePending = false;
     refreshLobby();
   }).catch(err => {
-    console.warn('PeerJS room registration failed — offline solo mode', err);
+    // The reason, not just the fact. Defect #9 was "undiagnosed" for a patch
+    // because this line said "failed" and threw the cause away.
+    const reg = err && err.reg;
+    const tried = (t.regFailures || []).map(f => `${f.type}(${f.code || '-'})`).join(', ');
+    console.warn(`[net] ROOM REGISTRATION FAILED after ${(t.regFailures || []).length} attempt(s) — offline solo mode. `
+      + `last: ${reg ? `${reg.type} — ${reg.detail}` : (err && err.message) || err}. all attempts: ${tried || 'none recorded'}`);
+    if (typeof window !== 'undefined') {
+      window.uvNet = window.uvNet || {};
+      window.uvNet.regFailures = t.regFailures || [];
+    }
     if (app.role !== 'host' || app.hostT !== t || !app.lobby) return;
     app.lobby.codePending = false;
     app.lobby.code = null;
@@ -301,11 +310,42 @@ function hostOnMessage(key, msg) {
   }
 }
 
+// APPLIED ONCE PER SEQUENCE NUMBER, ACKNOWLEDGED EVERY TIME. The client resends
+// until it hears back, so this sees duplicates by design — and `ready` toggles,
+// so applying a duplicate would undo the press that caused it.
+//
+// The ack is sent even for a duplicate, because a duplicate is what a LOST ACK
+// looks like from here: the action landed, our reply did not, and the client is
+// asking again. Staying quiet would leave it resending until it gave up on an
+// action the host had already carried out.
 function hostHandleUi(key, msg) {
+  if (msg.useq !== undefined && key !== '_local') {
+    const seen = app.uiSeen.get(key) || 0;
+    if (app.hostT) app.hostT.send(key, { t: 'uiack', useq: msg.useq });
+    if (msg.useq <= seen) {
+      const led = window.uvNet || (window.uvNet = {});
+      led.uiDuplicates = (led.uiDuplicates || 0) + 1;
+      return;
+    }
+    app.uiSeen.set(key, msg.useq);
+    // and what the HOST actually applied, in order. Paired with the client's
+    // uiLog these two answer the question outright: same length means the
+    // handler fired once per press, and a `ready` that appears twice explains
+    // a toggle that ended where it started.
+    const led = window.uvNet || (window.uvNet = {});
+    (led.uiApplied ||= []).push(`${key.slice(-6)}/${msg.useq}:${msg.kind}`);
+    if (led.uiApplied.length > 40) led.uiApplied.shift();
+  }
   if (app.mode === 'lobby') {
     const p = app.lobby.players.find(q => q.key === key);
     if (!p) return;
-    if (msg.kind === 'pick' && CHAR_BY_ID[msg.charId]) p.charId = msg.charId;
+    // The host validates the pick. The greyed card in the client's lobby is an
+    // affordance; this is the enforcement, and it has to be here because a
+    // client can send whatever it likes.
+    if (msg.kind === 'pick') {
+      if (CHAR_BY_ID[msg.charId] && isSelectable(msg.charId)) p.charId = msg.charId;
+      else console.warn(`[lobby] refused pick "${msg.charId}" from ${key} — unknown or not selectable`);
+    }
     if (msg.kind === 'ready') p.ready = !p.ready;
     refreshLobby(); broadcastLobby();
   } else if (app.sim) {
@@ -316,6 +356,11 @@ function hostHandleUi(key, msg) {
 
 function hostDropPeer(key) {
   if (app.role !== 'host') return;
+  // Forget the sequence high-water mark with the peer. A client that rejoins
+  // starts counting from 1 again, and a stale mark would make the host discard
+  // its first actions as duplicates — a reconnect that lands in the lobby and
+  // then ignores every button the player presses.
+  app.uiSeen.delete(key);
   if (app.mode === 'lobby' && app.lobby) {
     const i = app.lobby.players.findIndex(p => p.key === key);
     if (i > 0) { app.lobby.players.splice(i, 1); refreshLobby(); broadcastLobby(); }
@@ -341,7 +386,7 @@ function broadcastLobby() {
 // In-run state was moved onto the snapshot stream, which repeats 15 times a
 // second and therefore heals a dropped message on the next frame. The lobby has
 // no snapshot stream — it is not simulating anything — so lobby state travelled
-// only as edges: a `lobby` broadcast on join, on pick, on ready, on roster
+// only as edges: a `lobby` broadcast on join, on pick and on ready
 // switch. A peer whose channel was not open for one of those was left showing a
 // stale lobby with no way to notice, which is how a co-op run failed at
 // `client ready` with the party visibly assembled on the host's screen.
@@ -361,8 +406,9 @@ function startLobbyHeartbeat() {
 }
 
 function publicLobby() {
-  // `roster` is host-authoritative: it rides every lobby broadcast so a client
-  // is on the host's roster before it ever renders a character grid.
+  // There is ONE roster now, so nothing about which characters exist has to
+  // travel. This used to carry `roster`, and a joining client force-corrected
+  // itself onto the host's before rendering a single character grid.
   //
   // players[] carries key, name, colour, charId (the class pick), ready and
   // isHost — so peers, ready flags, picks and which character the host is on
@@ -371,21 +417,12 @@ function publicLobby() {
   // now is that when it does exist it rides this heartbeat rather than being
   // announced once and lost.
   return {
-    code: app.lobby.code, codePending: app.lobby.codePending, roster: ROSTER_ID,
+    code: app.lobby.code, codePending: app.lobby.codePending,
     difficulty: app.lobby.difficulty || null,
     players: app.lobby.players.map(p => ({ ...p })),
   };
 }
 
-// Host-only. Switching rosters clears everyone's character pick, because the
-// ids in the old roster do not exist in the new one.
-function hostPickRoster(id) {
-  if (app.role === 'client' || !app.lobby || !ROSTERS[id] || id === ROSTER_ID) return;
-  chooseRoster(id);
-  for (const p of app.lobby.players) { p.charId = null; p.ready = false; }
-  if (app.hostT) app.hostT.broadcast({ t: 'lobby', lobby: publicLobby() });
-  refreshLobby();
-}
 function refreshLobby() {
   if (app.mode === 'lobby') showLobby(app.lobby, app.role === 'host', app.myKey);
 }
@@ -398,7 +435,7 @@ function hostStartRun() {
     const seed = randomRunSeed();
     app.party = app.lobby.players.map((p, i) => ({ idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color }));
     app.myIdx = 0;
-    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, roster: ROSTER_ID, party: app.party });
+    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, party: app.party });
     startRunCommon();
     app.sim = new Sim({ seed, party: app.party });
     drainSimOutputs(true); // deliver initial floor/room events
@@ -472,6 +509,7 @@ function joinGame(code) {
 
 function clientPump() {
   if (!app.clientT) return;
+  pumpUiAcks();
   if (app.mode === 'run') {
     const inp = sampleInput();
     app.clientT.send({ t: 'in', seq: ++app.seqNo, mx: +inp.mx.toFixed(3), my: +inp.my.toFixed(3), e: inp.interact ? 1 : 0 });
@@ -479,6 +517,26 @@ function clientPump() {
     if (app.lastSnapAt && performance.now() - app.lastSnapAt > CONFIG.DISCONNECT_TIMEOUT * 1000) clientLostHost();
   } else {
     app.clientT.send({ t: 'ping' });
+    // `hello` is the one client message that cannot be acked, because until it
+    // lands the host does not know this peer exists to ack to. It is sent from
+    // inside conn.on('open'), so the channel is open by definition — but "open"
+    // and "delivered" are the distinction this whole defect is about.
+    //
+    // The lobby heartbeat is the acknowledgement: it repeats the host's PLAYER
+    // LIST 3x a second, so a client missing from that list can
+    // see that and say hello again. That is self-healing off a channel that
+    // already exists, rather than a second ack protocol.
+    if (app.mode === 'lobby' && app.lobby && Array.isArray(app.lobby.players) && app.lobby.players.length) {
+      const listed = app.lobby.players.some(p => p.key === app.myKey);
+      const now = performance.now();
+      if (!listed && now - (app.helloAt || 0) > CONFIG.UI_ACK_RESEND_MS * 4) {
+        app.helloAt = now;
+        console.warn('[net] not in the host\'s player list — re-sending hello (the first one did not land)');
+        const led = window.uvNet || (window.uvNet = {});
+        led.helloResends = (led.helloResends || 0) + 1;
+        app.clientT.send({ t: 'hello', name: currentName() });
+      }
+    }
   }
 }
 
@@ -494,11 +552,10 @@ function sanitizeMember(p, i) {
   };
 }
 function sanitizeLobby(lobby) {
-  if (!lobby || !Array.isArray(lobby.players)) return { code: null, codePending: false, roster: ROSTER_ID, players: [] };
+  if (!lobby || !Array.isArray(lobby.players)) return { code: null, codePending: false, players: [] };
   return {
     code: /^[A-Z2-9]{5}$/.test(String(lobby.code)) ? lobby.code : null,
     codePending: !!lobby.codePending,
-    roster: ROSTER_IDS.includes(lobby.roster) ? lobby.roster : ROSTER_ID,
     players: lobby.players.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember),
   };
 }
@@ -506,9 +563,13 @@ function sanitizeLobby(lobby) {
 function clientOnMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
   switch (msg.t) {
+    case 'uiack':
+      // The host has this action. Stop resending it. An ack for a sequence
+      // already forgotten is normal and means nothing went wrong: the ack
+      // crossed a resend, or arrived twice.
+      app.uiPending.delete(msg.useq);
+      break;
     case 'lobby': {
-      // the host's roster wins, always — before sanitizeLobby resolves charIds
-      applyHostRoster(msg.lobby && msg.lobby.roster, msg.lobby && msg.lobby.players);
       app.lobby = sanitizeLobby(msg.lobby);
       // REDRAW ONLY ON CHANGE. This now arrives as a 3Hz heartbeat rather than
       // only on edges, and re-rendering the lobby three times a second would
@@ -528,7 +589,6 @@ function clientOnMessage(msg) {
       break;
     case 'start': {
       if (!Array.isArray(msg.party)) break;
-      applyHostRoster(msg.roster, msg.party);   // again: sanitizeMember drops unknown charIds
       const party = msg.party.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember);
       const me = party.find(p => p.key === app.myKey);
       if (!me || !me.charId) { // raced the host's START before our hello landed — bail cleanly
@@ -558,7 +618,6 @@ function clientOnMessage(msg) {
     case 'ev': for (const ev of msg.list) handleEvent(ev); break;
     case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); updateSheetMeta(app.meta); } break;
     case 'abandon': // host ended the run for everyone — back to the lobby together
-      applyHostRoster(msg.lobby && msg.lobby.roster, msg.lobby && msg.lobby.players);
       app.lobby = sanitizeLobby(msg.lobby);
       app.mode = 'lobby';
       app.snaps = [];
@@ -588,13 +647,77 @@ function clientCleanup() {
   if (app.clientT) { app.clientT.close(); app.clientT = null; }
   app.role = null;
   app.snaps = [];
+  // Unacked actions belong to the connection that is going away. Carrying them
+  // into a later session would replay a node tap from a run that has ended,
+  // against sequence numbers a new host has never seen.
+  app.uiSeq = 0;
+  app.uiPending.clear();
+  app.uiSeen.clear();
+  app.helloAt = 0;
 }
 
 // ---------------- shared plumbing ----------------
 
+// CLIENT INPUT IS RESENT UNTIL THE HOST ACKNOWLEDGES IT (defect #8). Every
+// action a client takes — pick, ready, node tap, buy, stance — leaves through
+// here, and it used to leave once. `ClientTransport.send` skips a channel that
+// is not open, so an action taken in that window was gone with nothing to heal
+// it: host state repeats on the snapshot stream and the lobby heartbeat, but
+// there is no repeating channel in this direction at all.
+//
+// Each message carries a sequence number and stays in `app.uiPending` until
+// the host acks that number. The host applies each number ONCE — see
+// hostHandleUi — so resending is safe for actions that are not idempotent.
+// `ready` is the one that proves the point: it toggles, so a plain repeat
+// would un-ready the player who pressed it.
+//
+// The host's own input does not go near any of this. It is applied inline.
 function sendUi(msg) {
-  if (app.role === 'host') hostHandleUi('_local', { t: 'ui', ...msg });
-  else if (app.clientT) app.clientT.send({ t: 'ui', ...msg });
+  if (app.role === 'host') { hostHandleUi('_local', { t: 'ui', ...msg }); return; }
+  if (!app.clientT) return;
+  // A pending list that grows without bound is a memory leak wearing a
+  // reliability costume — if this many actions are unacked the link is gone,
+  // and the disconnect path is what should handle it.
+  if (app.uiPending.size >= CONFIG.UI_ACK_MAX_PENDING) {
+    console.warn(`[net] ${app.uiPending.size} unacknowledged client actions — dropping "${msg.kind}" rather than queueing further`);
+    return;
+  }
+  const useq = ++app.uiSeq;
+  const full = { t: 'ui', useq, ...msg };
+  app.uiPending.set(useq, { msg: full, firstAt: performance.now(), lastAt: performance.now(), tries: 1 });
+  // WHAT WAS SENT, IN ORDER. The ack ledger answers "did it arrive"; it cannot
+  // answer "how many times did the player's one click turn into a message",
+  // which is the open half of #8: a run ended with the host's high-water mark
+  // equal to the client's sequence counter — everything delivered, everything
+  // applied — and `ready` still false, meaning it was toggled an even number
+  // of times. Counting sends is the only way to tell a double-fired handler
+  // from a double-applied message.
+  const led = window.uvNet || (window.uvNet = {});
+  (led.uiLog ||= []).push(`${useq}:${msg.kind}`);
+  if (led.uiLog.length > 40) led.uiLog.shift();
+  app.clientT.send(full);
+}
+
+// Called from clientPump (30 Hz); resends on its own cadence, not the pump's.
+function pumpUiAcks() {
+  if (!app.clientT || !app.uiPending.size) return;
+  const now = performance.now();
+  for (const [useq, rec] of app.uiPending) {
+    if (now - rec.firstAt > CONFIG.UI_ACK_GIVEUP_MS) {
+      app.uiPending.delete(useq);
+      // LOUD. The whole defect was that this case had no sound at all.
+      console.warn(`[net] GAVE UP on client action "${rec.msg.kind}" (seq ${useq}) after ${rec.tries} attempts over ${Math.round(now - rec.firstAt)}ms — the host never acknowledged it`);
+      const led = window.uvNet || (window.uvNet = {});
+      led.uiGaveUp = (led.uiGaveUp || 0) + 1;
+      continue;
+    }
+    if (now - rec.lastAt < CONFIG.UI_ACK_RESEND_MS) continue;
+    rec.lastAt = now;
+    rec.tries++;
+    const led = window.uvNet || (window.uvNet = {});
+    led.uiResends = (led.uiResends || 0) + 1;
+    app.clientT.send(rec.msg);
+  }
 }
 
 function leaveToTitle() {
@@ -894,7 +1017,7 @@ function viewFromSim(sim) {
       trait: p.char.trait.key,
       spriteId: p.char.spriteId,   // cosmetic; resolved from the def, never networked
     })),
-    // Thrones of Heaven world layer (null/empty on the classic roster)
+    // Thrones of Heaven world layer
     toh: tohSnapshot(sim),
     tohMarks: tohMarks(sim),
     spirits: sim.players.filter(q => !q.gone && q.spirit)
@@ -992,7 +1115,7 @@ function viewFromSnaps(dtFrame) {
       name: member ? member.name : '?', color: member ? member.color : '#fff', charId: member ? member.charId : null,
       sym: chr ? chr.sym : '●',
       spriteId: chr ? chr.spriteId : null,   // cosmetic; from the def, never on the wire
-      radius: chr && (chr.trait.key === 'immovable' || chr.trait.key === 'crystal_infusion') ? 16 * chr.trait.hitbox : 16,
+      radius: chr ? 16 * (chr.trait.hitbox || 1) : 16,   // by presence, not by trait name — see _makePlayer
     });
   }
   // projectiles ride the same delayed timeline as enemies (bounded extrapolation)
@@ -1051,7 +1174,7 @@ function viewFromSnaps(dtFrame) {
 }
 
 function predictSelf(dtFrame, serverP, chr) {
-  const radius = chr && (chr.trait.key === 'immovable' || chr.trait.key === 'crystal_infusion') ? 16 * chr.trait.hitbox : 16;
+  const radius = chr ? 16 * (chr.trait.hitbox || 1) : 16;   // by presence, not by trait name
   if (!app.predicted) app.predicted = { x: serverP[1], y: serverP[2] };
   const pr = app.predicted;
   const tempo = app.meta ? app.meta.stats.tempo : 0;

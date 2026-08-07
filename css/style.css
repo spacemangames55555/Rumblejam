@@ -50,11 +50,12 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 .lobby-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; flex-wrap:wrap; gap:8px;}
 .room-code{font-size:26px; letter-spacing:6px; color:var(--gold); background:#12141f; border:2px dashed var(--line); border-radius:8px; padding:4px 16px;}
 /* Roster switch — host-only, and a 44px tap target like every other control */
-.roster-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
-.roster-btn{min-height:44px; padding:6px 14px; background:var(--panel2); border:2px solid var(--line); border-radius:8px; color:var(--ink); font:inherit;}
-.roster-btn.on{border-color:var(--gold); color:var(--gold);}
-.roster-btn[disabled]{opacity:0.55;}
-.roster-btn[disabled].on{opacity:1;}
+/* A class with no skill tree is shown and not offered — see the char-grid
+   comment in js/ui/screens.js. Dimmed rather than hidden, with the reason on
+   the card, so an unfinished roster reads as unfinished and not as broken. */
+.char-card.locked{opacity:0.42; cursor:not-allowed; filter:saturate(0.35);}
+.char-card.locked:hover{transform:none; border-color:var(--line);}
+.clocked{margin-top:6px; font-size:11px; line-height:1.35; color:var(--gold); opacity:0.85;}
 
 /* 8 seats wrap into a grid — readable on a phone without scrolling the panel away */
 .lobby-players{display:grid; grid-template-columns:repeat(auto-fill, minmax(168px, 1fr)); gap:8px; margin-bottom:14px;}
