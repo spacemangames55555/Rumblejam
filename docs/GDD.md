@@ -513,15 +513,36 @@ Every class has a mechanical engine no other class has. Each must interact with 
 
 The eleven unbuilt classes sort into three shapes. **The sort is the batch plan.**
 
-**RESOURCE-SHAPED — two per patch.** The engine is a number something already maintains, published into `p.engines` from an existing site. No new tick.
+**CORRECTION, made before authoring the first pair.** This sort had two categories and the real answer needs three. The missing question is not "does it need a tick" but **"can content write it at all"** — and for most of these the answer is no.
+
+`engineScale()` reads `p.engines[name]` generically. **Nothing publishes generically.** All three live engines are written by hand in shared code: `tickFooting()` is a function, `armor` is one line in `tickSkills`, `pack` is one line in `tickMinions`. The `scaleWith` generality is entirely on the READ side. So *every* engine costs at least a publish line — the cheap ones cost one line, not zero.
+
+Worse for two of the six below, the class needs a **write path that does not exist**:
+
+| Class | What it needs | Where |
+|---|---|---|
+| Wizard — domain shift | a per-player domain field; `bestDomainMult` extended to read it; **a way for a skill to set it** | `skillsim.js` + a new primitive or rider in `compose.js` |
+| Priest — judgment marks | a mark on an enemy; a detonation branch on death | a new rider + a new enemy field + `_killEnemy` |
+
+`bestDomainMult` reads `p.hookAgg.domainAdd` and nothing else — an **item** aggregate, which no skill can write. The only primitive that writes a domain to the player is `ward`, and it writes `p.wardDomain` for the ward's reflect, which is a different mechanism. A rider may write exactly eight enemy fields (`stunT`, `rootT`, `tauntT`, `tauntIdx`, `weakDmgT`, `weakDmgMult`, `defDownT`, `defDownMult`) and none of them is a mark. Every death hook in `_killEnemy` reads `killer.hookAgg` — the item aggregate again — so a skill-placed mark has nowhere to live.
+
+**The Wizard's cost is the sharpest.** Setting a domain from a skill means a **twelfth primitive**, and the set has been closed at eleven since phase 1. That is a design decision of the same weight as `rankGrants` — a declared exception with a registry — not an implementation detail, and it should be ruled on before a tree is written against it.
+
+So the three real categories are:
+
+- **CONTENT-SHAPED** — the engine derives from a quantity the sim already maintains, in one publish line. Batchable two per patch.
+- **WRITE-PATH — a new primitive or rider.** Alone, and the write path lands and passes `engine_gate` before any tree is authored against it.
+- **TICK-SHAPED** — a stateful accumulator or decay, like `tickFooting`. Alone, same rule.
+
+**RESOURCE-SHAPED — two per patch,** *provided the class clears the write-path question above.* The engine is a number something already maintains, published into `p.engines` from an existing site. No new tick.
 
 | Class | Engine | Fills from |
 |---|---|---|
-| Wizard | Domain shift | a declared field on the player, read by `bestDomainMult` — the site exists (§9.2's domain add) |
-| Priest | Judgment marks | a per-enemy mark count, the same shape as an existing status |
+| ~~Wizard~~ | Domain shift | **WRITE-PATH, not resource.** `bestDomainMult` reads an item aggregate only; no skill can set a domain. Needs a 12th primitive or a new rider — rule first |
+| ~~Priest~~ | Judgment marks | **WRITE-PATH, not resource.** No rider writes a mark, and every death hook reads the item aggregate. Needs a rider, an enemy field and a `_killEnemy` branch |
 | Witch Doctor | Voodoo doll | a link target, already prototyped in `traits-toh.js` as `voodoo_link` |
 | Sundian | Drench stacks | a stacking debuff — `ON_STATUS` already reads statuses |
-| Bard | Stances | a stance index; the Samurai's `three_stances` trait already keeps one |
+| Bard | Stances | a stance index. `three_stances` exists in `traits-toh.js`, but there is no `p.stance` on the player — verify before batching |
 | Mage | Crystallize | a counter incremented by `tohOnFire`, which is live |
 
 **TICK-SHAPED — one per patch, and the tick lands before the content.** The engine accumulates or decays on its own schedule, which means a new function called from `tickSkills` — the same shape as `tickFooting`, and the same failure mode.
@@ -1093,6 +1114,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 27. **A new stochastic mechanic gets its own RNG stream, or it silently reprices every measurement taken before it existed.** §4.2's deep-versus-wide sweep moved when the difficulty gold multiplier started drawing from the shared `rng` — not because build shapes changed, but because extra material drops consumed floats and every downstream roll shifted. The sweep had to be re-measured and the old number retired. Crit and the economy's penalty roll both arrived after that lesson and both got their own streams (`sim.critRng`, `sim.econRng`), which buys two things: a gate can compare exact numbers from one seed instead of averaging variance out of a variance mechanic, and adding the feature does not invalidate the balance table. The cost is one line at construction. **`econ_gate` asserts the isolation by effect** — twenty penalty rolls must leave the shared stream in the same place — because "it has its own stream" is a declaration, and rule 24 applies to this rule too.
 
 28. **An anchor derived from the population it measures cannot detect a bad population.** The DPS gate compared every class against the median of every class, which is a tautology at scale: author twelve mediocre classes together and they become the median, and the one check that would catch a systematically weak batch reports "all within band". Worse, it had been measuring the wrong thing entirely — the harness was weapon-era and spent no skill points, so after weapons were removed every BUILT class read 0.0 while two classes with no tree read 3.2 and 16.2 off trait damage alone. The table was upside down for months and the median hid it, because the median was computed from the same broken numbers. **Anchor a band to a declared reference set, not to a live aggregate** — a constant list of things that have actually been balanced, which a new entry joins by an edit rather than by existing. And exclude the unbuilt: "has no tree yet" and "is badly tuned" are different findings (rule 11), and averaging them together produces neither.
+
+29. **A generic READ is not a generic WRITE, and only one of them makes something content.** `engineScale()` reads `p.engines[name]` knowing no engine by name, and that read-side generality was mistaken for the whole story when phase 5 was scoped: the batch sort promised six "resource-shaped" classes that could be authored two per patch with no engine code. Checking before authoring found that nothing publishes into `p.engines` generically — all three live engines are hand-written in shared code — and that two of the six needed a write path the engine does not have at all, one of them a twelfth entry in a primitive set closed since phase 1. **The question that decides whether a feature is content is not "is there a generic reader" but "can content produce the value the reader wants".** Ask it of the write side, per feature, before estimating anything.
 
 ### 13.1 The through-line
 
