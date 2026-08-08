@@ -4214,6 +4214,22 @@ function measureDps(charId) {
   }
   const cx = sim.W / 2, cy = sim.H / 2;
   p.x = cx; p.y = cy;
+  // AN ENGINE THE FIXTURE CANNOT FILL MUST BE STAGED, or the class is measured
+  // in a state it never plays in.
+  //
+  // Most engines fill themselves here: footing accrues because the harness pins
+  // the player still, rhythm and shift accrue because it casts, marks accrue
+  // because it marks. `crystal` is the exception and it is the exception BY
+  // DESIGN — it is the one engine filled by the enemy (§8.3), and this fixture's
+  // dummies deal no damage on purpose, because it measures output rather than
+  // survival. So a Mage would be scored forever at an empty pool: measured, that
+  // is 30.3 against 37.5 with the pool full, and only the second number is the
+  // class anyone plays.
+  //
+  // Named rather than inferred. A future engine of the same kind gets a line
+  // here; the alternative is a silent zero, which is the whole failure mode
+  // `engine_gate` exists to prevent.
+  if (p.char.trait.key === 'singularity') p.crystal = p.char.trait.crystalCap;
   const dummies = [];
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2;

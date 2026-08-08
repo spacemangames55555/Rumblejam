@@ -42,6 +42,7 @@ export function tohInitPlayer(sim, p) {
   p.decreeT = 0; p.decreeIsCalamity = true;
   p.tohAtk = 0;                 // nth-attack counter (Mage, Sundian)
   p.rhythm = 0; p.rhythmT = 0;
+  p.crystal = 0;
   p.stance = 0; p.stanceCd = 0; p.ironBank = 0; p.flowStacks = 0; p.flowLast = -1;
   p.karma = 0; p.spirit = null;
   p.contractId = null; p.contractsDone = 0; p.contractT = 0; p.vanishT = 0;
@@ -535,6 +536,12 @@ function spiritEcho(sim, p, e, dmg, t) {
 export function tohOnHurt(sim, p, raw, mitigated) {
   const t = p.char.trait;
   if (t.key === 'karma') p.karma = Math.min(t.karmaCap, p.karma + mitigated);
+  // CRYSTALLIZE (§8.3), the Mage's engine and the only one in the game FILLED BY
+  // THE ENEMY. It reads `mitigated` rather than `raw` deliberately: the crystal
+  // is what actually got through, so Grit is ANTI-SYNERGISTIC with it — armour
+  // means less damage taken means less crystal. That is the class's built-in
+  // cost, not an oversight to tune out later.
+  if (t.key === 'singularity') p.crystal = Math.min(t.crystalCap, p.crystal + mitigated * t.crystalPer);
   if (t.key === 'three_stances' && p.stance === 0) {
     p.ironBank += Math.max(0, raw - mitigated) * t.ironRefundPct;
   }

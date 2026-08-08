@@ -170,6 +170,22 @@ const PROBES = {
     // (§13 rule 12).
     fills: sk => sk.cooldown > 0 && sk.cooldown < RHYTHM_WINDOW_MS,
   },
+  crystal: {
+    what: 'crystal absorbed from damage taken',
+    char: 'toh_mage',
+    // THE ONLY ENGINE THE ENEMY FILLS, so it is the only one whose staging has
+    // to keep happening. `high` runs once and the dummies here are inert by
+    // construction (speed 0, dmg 0) — nothing in this fixture would ever hit the
+    // player. `each` runs every tick, on BOTH runs, and hurts the Mage through
+    // `hurtPlayer` itself rather than by writing the field: that is the whole
+    // path under test, Grit and shields and `tohOnHurt` included.
+    //
+    // The HP is restored immediately afterwards. The gate is measuring whether
+    // absorbed damage becomes crystal, not whether a Mage standing in a fire
+    // survives it, and a probe that lets its subject die measures the death.
+    each: (g, p) => { p.invuln = 0; g.hurtPlayer(p, 8, null); p.hp = p.stats.vitality; },
+    low: (g, p) => { p.crystal = 0; p.engines.crystal = 0; },
+  },
   pack: {
     what: 'animals standing',
     char: 'toh_druid',
@@ -253,6 +269,7 @@ function measure(key) {
   const e0 = target(g, p.x + 60, p.y);
   for (let i = 0; i < 60 * SECONDS; i++) {
     g.setInput(0, { mx: 0, my: 0 });
+    if (pr.each) pr.each(g, p);
     g.tick();
     if (e0) { e0.x = e0.spawnX; e0.y = e0.spawnY; }
     peak = Math.max(peak, p.engines[key] || 0);
@@ -293,6 +310,11 @@ function measure(key) {
     let shieldPeak = 0;
     for (let i = 0; i < 60 * SECONDS; i++) {
       g2.setInput(0, { mx: 0, my: 0 });
+      // `each` runs on BOTH runs, unlike `high`. It is not the thing that makes
+      // the engine big — `low` still starves that — it is the thing that makes
+      // the engine possible at all, so removing it would change the room rather
+      // than the resource.
+      if (pr.each) pr.each(g2, p2);
       if (arms.hurt) p2.hp = Math.max(1, p2.stats.vitality * arms.hurt);
       if (arms.kill) p2.trigEvents.kill++;
       if (starve && pr.low) pr.low(g2, p2);
@@ -402,6 +424,47 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
     SKROOM.startRoomMinions(g, p);
     if (p.domainShift === null) ok('a shift does not survive a room transition — which is what lets the primitive avoid a decay tick');
     else fail(`the shift persisted across a room start (${p.domainShift}) — a state with no decay and no reset is permanent`);
+  }
+
+  // --- crystallize: GRIT IS ANTI-SYNERGISTIC, and that is a design property
+  //     rather than a side effect, so it is asserted rather than described.
+  //
+  // §8.3 gives the Mage the only engine in the game filled by the enemy, and its
+  // built-in cost is that armour fights it: crystal accrues off MITIGATED damage
+  // — what actually got through — so every point of Grit is crystal not earned.
+  // §13 rule 24 says a claim of the form "X reduces Y" is not real until
+  // something moves X and reads Y. This does. Two identical Mages eat identical
+  // damage through `hurtPlayer`; one of them is wearing armour.
+  {
+    // TWELVE HITS, NOT SIX SECONDS. The first version ran the fixture long
+    // enough that both Mages pinned the cap at 10.0 and the gate reported no
+    // difference — a saturated instrument reads identical for a working engine
+    // and a broken one. The window is sized to stay under `crystalCap`, which is
+    // the only region where the ratio is observable at all.
+    const HITS = 12, BLOW = 8;
+    const run = (grit) => {
+      const { g, p } = stage('toh_mage');
+      if (grit) g._applyPerm(p, { grit });
+      for (let i = 0; i < HITS; i++) {
+        p.invuln = 0;
+        g.hurtPlayer(p, BLOW, null);
+        p.hp = p.stats.vitality;
+        g.tick();
+      }
+      return p.crystal;
+    };
+    const bare = run(0), armoured = run(40);
+    if (armoured < bare) {
+      ok(`Grit is ANTI-SYNERGISTIC with crystallize, measured: ${HITS} identical blows yield ${bare.toFixed(1)} crystal bare and ${armoured.toFixed(1)} at 40 Grit (−${Math.round((1 - armoured / bare) * 100)}%) — the Mage is the one class punished for playing safely, by construction`);
+    } else {
+      fail(`armour did not cost the Mage crystal (${bare.toFixed(1)} bare vs ${armoured.toFixed(1)} at 40 Grit) — §8.3's built-in cost for crystallize is asserted and not happening, which means the engine reads RAW damage somewhere it should read mitigated`);
+    }
+    // And it must not survive a door, for the same reason a shift must not.
+    const { g, p } = stage('toh_mage');
+    p.crystal = 7;
+    SKROOM.startRoomMinions(g, p);
+    if (p.crystal === 0) ok('crystal does not survive a room transition — damage taken in the last fight is not credit in the next one');
+    else fail(`crystal persisted across a room start (${p.crystal}) — a state with no decay and no reset is permanent`);
   }
 }
 
