@@ -335,6 +335,28 @@ export const PRIMITIVES = {
 
   // A spreading damage-over-time. Stacks rather than refreshing, which is what
   // makes Internal Collapse a payoff for a tree that already applies dots.
+  // THE TWELFTH PRIMITIVE, and the first addition to a set closed since phase 1.
+  //
+  // It is here because the Wizard's engine — "the only class that changes its
+  // own damage domain mid-fight" (§8.3) — needs a write path no existing
+  // primitive provides. `bestDomainMult` read `p.hookAgg.domainAdd` and nothing
+  // else, which is an ITEM aggregate no skill can reach, and the only primitive
+  // that wrote a domain at all was `ward`, which writes `p.wardDomain` for the
+  // ward's reflect. See §5.7 for what admits a twelfth: a class engine needing
+  // a write path nothing provides, ruled before the tree and never during.
+  //
+  // NO DURATION, DELIBERATELY. A shift persists until the next shift or the end
+  // of the room, so this primitive needs no decay and therefore no tick. A timed
+  // shift would have made the Wizard tick-shaped, which is a heavier class of
+  // change for a difference the design does not ask for: §8.3 says the Wizard
+  // changes domain mid-fight, not that it holds one briefly.
+  shift(sim, p, skill, step, rank, grid, out) {
+    p.domainShift = step.domain;
+    p.domainShifts = (p.domainShifts || 0) + 1;
+    sim.pushEvent({ k: 'toast', idx: p.idx, text: `Attuned: ${step.domain}` });
+    out.states++;
+  },
+
   plague(sim, p, skill, step, rank, grid, out) {
     const seed = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.spreadRadius);
     if (!seed) return;
@@ -376,6 +398,19 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
   if (r.weakenDamage) { e.weakDmgT = r.weakenDamage.dur / MS; e.weakDmgMult = r.weakenDamage.mult; out.statuses++; }
   if (r.weakenDefense) { e.defDownT = r.weakenDefense.dur / MS; e.defDownMult = r.weakenDefense.mult; out.statuses++; }
   if (r.healPerHit) { p.hp = Math.min(p.stats.vitality, p.hp + r.healPerHit); out.states++; }
+  // JUDGMENT MARK. The mark is state on the ENEMY and it names its owner, its
+  // payout and its reach, because the thing that reads it is `_killEnemy` —
+  // which runs long after this step, possibly from somebody else's killing blow.
+  // Carrying the numbers on the mark rather than looking them back up means a
+  // mark detonates as the skill that placed it specified, even if the Priest is
+  // dead by then.
+  if (r.mark) {
+    e.markT = Math.max(e.markT || 0, r.mark.dur / MS);
+    e.markBy = p.idx;
+    e.markHeal = r.mark.heal;
+    e.markRadius = r.mark.radius;
+    out.statuses++;
+  }
 }
 
 // Projectile-only riders — the ones that need a flight or an impact point.
@@ -414,7 +449,11 @@ export function runCompose(sim, p, skill, rank, grid) {
 export const PRIMITIVE_KINDS = Object.keys(PRIMITIVES);
 
 // Riders that resolve on a hit enemy — valid anywhere damage lands.
-export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit'];
+// `mark` is the Priest's write path (§8.3 judgment marks). A rider could write
+// exactly eight enemy fields before it and none of them was a mark, so a
+// skill-placed mark had nowhere to live and no detonation site — every death
+// hook in `_killEnemy` read `killer.hookAgg`, the ITEM aggregate.
+export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mark'];
 // Riders that shape the swing itself rather than the target.
 export const SHAPE_RIDERS = ['windUp', 'multiPulse'];
 // Riders that need a projectile: a flight to pierce, an impact point to splash.
@@ -431,5 +470,7 @@ export const RIDERS_BY_PRIMITIVE = {
   // declared on the attack step, and is validated against that step's own
   // primitive — see assertTrees().
   summon: [],
-  heal: [], shield: [], ward: [], drain: [], plague: [],
+  // `shift` takes no riders for the same reason `summon` takes none: riders
+  // resolve on a target at the moment of impact, and a shift has no target.
+  heal: [], shield: [], ward: [], drain: [], plague: [], shift: [],
 };

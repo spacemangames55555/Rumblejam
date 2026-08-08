@@ -369,6 +369,22 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Result:** 40 skills across 4 trees, zero bespoke handlers. Summons remain untested and were the largest bespoke category in the source project — expect the rate to rise there, but not enough to threaten the schema.
 
+#### The primitive set is OPEN, and what admits a twelfth
+
+The set was eleven from phase 1 to phase 5 and the discipline that kept it there is worth stating, because it is now twelve and will not stop on its own.
+
+**A primitive is admitted when a class engine needs a WRITE PATH no existing primitive provides.** Not when a skill would read nicely as one, not when a class has a distinctive verb — those are compose steps, and the whole point of the schema is that a distinctive verb is a list of existing steps. The bar is that content cannot produce the state at all.
+
+**Ruled before the tree, never during.** This carries the same weight as `rankGrants` and is enforced the same way: `rankGrants` is a declared, asserted-at-load exception because the unstated version of it silently breached a hard cap once. A primitive added while authoring a tree is a design decision made by whoever happened to be writing content that afternoon.
+
+**Three conditions, all of them:**
+
+1. **No existing primitive writes the state.** Demonstrated, not asserted — `bestDomainMult` read `p.hookAgg.domainAdd` and nothing else, and the only primitive writing a domain at all was `ward`, writing `p.wardDomain` for the ward's reflect.
+2. **A rider will not do.** Riders resolve on a target at the moment of impact. State on the *caster* has no impact to resolve on, which is why the Priest's mark is a rider and the Wizard's shift is a primitive: one writes the enemy, the other writes the player.
+3. **The write path passes its gate before a single tree is authored against it.** `engine_gate` for a caster-state primitive, `rider_gate` for a rider — and `rider_gate` now probes riders no content declares yet on a synthetic host, precisely so a write path can be proven in the window between ruling and authoring.
+
+**The twelfth is `shift`** (§8.3, the Wizard). Recorded here rather than in a commit message so the thirteenth has to argue against the same three conditions.
+
 ### 5.8 Engine scaling — `scaleWith`
 
 A step may declare `scaleWith: '<engine>'` and `scalePer`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
@@ -513,50 +529,39 @@ Every class has a mechanical engine no other class has. Each must interact with 
 
 The eleven unbuilt classes sort into three shapes. **The sort is the batch plan.**
 
-**CORRECTION, made before authoring the first pair.** This sort had two categories and the real answer needs three. The missing question is not "does it need a tick" but **"can content write it at all"** — and for most of these the answer is no.
+#### Phase 5 batch order — the write-path audit, run
 
-`engineScale()` reads `p.engines[name]` generically. **Nothing publishes generically.** All three live engines are written by hand in shared code: `tickFooting()` is a function, `armor` is one line in `tickSkills`, `pack` is one line in `tickMinions`. The `scaleWith` generality is entirely on the READ side. So *every* engine costs at least a publish line — the cheap ones cost one line, not zero.
+The first sort asked "does it need a tick" and that was the wrong question. `engineScale()` reads `p.engines[name]` knowing no engine by name, and that read-side generality was mistaken for the whole story. **Nothing publishes into the bag generically** — `tickFooting()` is a function, `armor` is one line in `tickSkills`, `pack` is one line in `tickMinions` — so every engine costs at least a publish line, and two classes needed a write path the engine did not have at all.
 
-Worse for two of the six below, the class needs a **write path that does not exist**:
+Both of those are now built and gated: the `shift` primitive (§5.7) and the `mark` rider. **The audit below was then run across the remaining nine**, asking of each: what state must a skill produce, and can content produce it today?
 
-| Class | What it needs | Where |
+**CONTENT-SHAPED — a publish line, batchable two per patch.**
+
+| Class | Engine | What exists | Cost |
+|---|---|---|---|
+| **Wizard** | domain shift | `shift` primitive, `p.domainShift`, read by `bestDomainMult` — **built and gated this patch** | 2 tree files + `p.engines.shift = p.domainShifts` |
+| **Priest** | judgment marks | `mark` rider, `e.markT/markBy/markHeal/markRadius`, `_killEnemy` detonation — **built and gated this patch** | 2 tree files + a publish line counting marked enemies |
+| **Bard** | stances | **`p.stance` EXISTS** (verified: initialised to 0, with `stanceCd` and `tohSwapStance` live from the Samurai's `three_stances`) | 2 tree files + `p.engines.stance = p.stance` |
+| **Mage** | crystallize | `tohOnFire` is live and fires from `fireSkill`; `singularity` already counts fires off it | 2 tree files + a per-fire counter and a publish line |
+
+**WRITE-PATH — a new primitive or rider first, alone, gated before any tree.**
+
+| Class | Engine | What is missing |
 |---|---|---|
-| Wizard — domain shift | a per-player domain field; `bestDomainMult` extended to read it; **a way for a skill to set it** | `skillsim.js` + a new primitive or rider in `compose.js` |
-| Priest — judgment marks | a mark on an enemy; a detonation branch on death | a new rider + a new enemy field + `_killEnemy` |
+| **Witch Doctor** | voodoo doll | `voodooMirror` already mirrors 35% of damage to a linked target — **the mirror exists, the designation does not.** A skill needs to name the doll, which is a rider (it writes an enemy) |
+| **Sundian** | drench stacks | `ON_STATUS` reads exactly four statuses — `dot`, `slow`, `plague`, `weakened` — and none is a stack count. Either drench IS one of those (content-shaped, and a design decision) or it needs a rider and an enemy field |
+| **Assassin** | killbox | a trap placed inert and detonated by a later skill is neither a `hazard` (which ticks damage) nor a `summon` (which acts). New primitive, plus lifetime state |
+| **Hunter** | two bodies | "skills may trigger off the pet's position" is a change to `triggers.js`, not to `p.engines` — the evaluation origin is the player throughout |
 
-`bestDomainMult` reads `p.hookAgg.domainAdd` and nothing else — an **item** aggregate, which no skill can write. The only primitive that writes a domain to the player is `ward`, and it writes `p.wardDomain` for the ward's reflect, which is a different mechanism. A rider may write exactly eight enemy fields (`stunT`, `rootT`, `tauntT`, `tauntIdx`, `weakDmgT`, `weakDmgMult`, `defDownT`, `defDownMult`) and none of them is a mark. Every death hook in `_killEnemy` reads `killer.hookAgg` — the item aggregate again — so a skill-placed mark has nowhere to live.
+**TICK-SHAPED — a stateful accumulator or decay, alone.**
 
-**The Wizard's cost is the sharpest.** Setting a domain from a skill means a **twelfth primitive**, and the set has been closed at eleven since phase 1. That is a design decision of the same weight as `rankGrants` — a declared exception with a registry — not an implementation detail, and it should be ruled on before a tree is written against it.
-
-So the three real categories are:
-
-- **CONTENT-SHAPED** — the engine derives from a quantity the sim already maintains, in one publish line. Batchable two per patch.
-- **WRITE-PATH — a new primitive or rider.** Alone, and the write path lands and passes `engine_gate` before any tree is authored against it.
-- **TICK-SHAPED** — a stateful accumulator or decay, like `tickFooting`. Alone, same rule.
-
-**RESOURCE-SHAPED — two per patch,** *provided the class clears the write-path question above.* The engine is a number something already maintains, published into `p.engines` from an existing site. No new tick.
-
-| Class | Engine | Fills from |
+| Class | Engine | Why |
 |---|---|---|
-| ~~Wizard~~ | Domain shift | **WRITE-PATH, not resource.** `bestDomainMult` reads an item aggregate only; no skill can set a domain. Needs a 12th primitive or a new rider — rule first |
-| ~~Priest~~ | Judgment marks | **WRITE-PATH, not resource.** No rider writes a mark, and every death hook reads the item aggregate. Needs a rider, an enemy field and a `_killEnemy` branch |
-| Witch Doctor | Voodoo doll | a link target, already prototyped in `traits-toh.js` as `voodoo_link` |
-| Sundian | Drench stacks | a stacking debuff — `ON_STATUS` already reads statuses |
-| Bard | Stances | a stance index. `three_stances` exists in `traits-toh.js`, but there is no `p.stance` on the player — verify before batching |
-| Mage | Crystallize | a counter incremented by `tohOnFire`, which is live |
+| **Monk** | Chi loop | accrues from damage dealt, drains on spend — neither is a derivation of an existing field |
+| **Savage** | cascade | banked ranks decay out of combat, and §8.3's asymptotic cooldown floor is bespoke arithmetic |
+| **Blacksmith** | Crystal Forms | timed transformations; `crystal_infusion` is live but the forms decay, and a decay is a tick |
 
-**TICK-SHAPED — one per patch, and the tick lands before the content.** The engine accumulates or decays on its own schedule, which means a new function called from `tickSkills` — the same shape as `tickFooting`, and the same failure mode.
-
-| Class | Engine | Why it needs a tick |
-|---|---|---|
-| Monk | Chi loop | Chi accrues from damage dealt and drains on spend; neither is a derivation of an existing field |
-| Assassin | Killbox | traps persist inert across seconds and detonate on a later condition — lifetime state with its own update |
-| Savage | Cascade | banked ranks decay out of combat, and the asymptotic cooldown floor is bespoke arithmetic |
-| Hunter | Two bodies | a second position that triggers evaluate against; touches `triggers.js`, not just a number |
-
-**NEITHER — the Blacksmith is a transformation, not a resource.** Crystal Forms are timed states that change what other skills do, closest to a status on the player. It is the one class where the engine question should be answered before the trees are written rather than during, because "a form" may want a field on the player rather than a slot in `p.engines` at all.
-
-**The rule this produces:** a resource-shaped class is authoring and can be batched; a tick-shaped class is engineering and goes alone, with `engine_gate` run before its content exists — the fill probe fails loudly on a tick nobody calls, which is precisely the signal a batch would bury.
+**So the first pair is the Wizard and the Priest** — their write paths landed and passed their gates this patch, which makes them the only two classes whose remaining cost is content alone. **Bard and Mage are the second pair**, each needing one publish line and no new mechanism. That is four content-shaped classes; the other seven are one at a time.
 
 **The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat sequencing rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor.
 

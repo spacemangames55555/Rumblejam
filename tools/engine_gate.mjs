@@ -38,6 +38,7 @@ import { Sim } from '../js/game.js';
 import { SELECTABLE } from '../js/content/characters.js';
 import { TREES, SKILL_BY_ID } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
+import * as SKROOM from '../js/skillsim.js';
 import { ENEMIES } from '../js/content/enemies.js';
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -125,7 +126,7 @@ const PROBES = {
 
 // ------------------------------------------------------------- 1. coverage
 
-console.log(`engine gate — ${ENGINE_KEYS.length} engines in \`p.engines\`, each asked three questions\n`);
+console.log(`engine gate — ${ENGINE_KEYS.length} engines in \`p.engines\`, each asked three questions, plus the write paths that feed them\n`);
 
 const holes = ENGINE_KEYS.filter(k => !PROBES[k]);
 if (!holes.length) ok(`every engine in the bag has a probe (${ENGINE_KEYS.join(', ')}) — the gate has no blind spot to hide in`);
@@ -298,5 +299,49 @@ for (const r of rows) {
 const live = rows.filter(r => !r.err && r.peak > 0 && r.live !== r.zeroed).length;
 if (live === rows.length && !failures) ok(`every class engine is filled by play and read by a skill — ${live} of ${rows.length}`);
 
-console.log(failures ? `\n${failures} ENGINE GATE FAILURE(S)` : '\nEVERY CLASS ENGINE IS FILLED BY PLAY AND MULTIPLIES SOMETHING');
+// ------------------------------------------------------------ 4. write paths
+//
+// An engine is a number a skill READS. A write path is how a skill PRODUCES
+// player state in the first place, and §13 rule 29 is the lesson that they are
+// not the same question: `engineScale` reads `p.engines[name]` knowing no engine
+// by name, and phase 5's scoping mistook that read-side generality for the whole
+// story. Two classes needed a write path the engine did not have.
+//
+// These are asserted here rather than in `skill_sweep` because a write path is
+// proven BEFORE the tree that uses it exists (§5.7), so there is no skill to
+// sweep. The probe builds one.
+{
+  const { PRIMITIVES } = await import('../js/compose.js');
+  const { bestDomainMult } = await import('../js/skillsim.js');
+
+  // --- the `shift` primitive: does a shift change which multiplier a skill
+  // --- resolves at? Measured on the TRIANGLE, in the matchup that distinguishes
+  // --- it: a target the caster's own domain does not beat.
+  {
+    const { g, p } = stage(SELECTABLE[0].id);
+    const e = target(g, p.x + 60, p.y);
+    e.domain = 'spiritual';
+    const skill = { id: '__probe__', domain: 'mental' };   // mental loses to nothing here; spiritual beats mental
+    const before = bestDomainMult(p, skill.domain, e.domain);
+    PRIMITIVES.shift(g, p, skill, { kind: 'shift', domain: 'physical' }, 1, g.trigGrid, { states: 0 });
+    const after = bestDomainMult(p, skill.domain, e.domain);
+    if (p.domainShift === 'physical') ok(`\`shift\` writes the player's domain (null → ${p.domainShift}) — the write path the Wizard needed, and the twelfth primitive (§5.7)`);
+    else fail(`\`shift\` did not write p.domainShift (${p.domainShift}) — the primitive exists and produces nothing`);
+    if (after > before) ok(`and the shift CHANGES WHICH MULTIPLIER A SKILL RESOLVES AT: ×${before} → ×${after} into a spiritual target — asserted on the triangle, not on the field`);
+    else fail(`the shift left the resolved multiplier at ×${before} — p.domainShift is written and bestDomainMult does not read it`);
+    // It must never make a matchup WORSE — same rule as §9.2's domain add.
+    const e2 = target(g, p.x - 60, p.y);
+    e2.domain = 'physical';
+    const own = bestDomainMult({ }, 'mental', 'physical');
+    const shifted = bestDomainMult(p, 'mental', 'physical');
+    if (shifted >= own) ok(`a shift never reduces a matchup the skill already had (×${own} → ×${shifted} for mental into physical) — add, never take away`);
+    else fail(`a shift made a matchup worse: ×${own} → ×${shifted}. A mistimed cast must not punish a build`);
+    // And it must not survive a door.
+    SKROOM.startRoomMinions(g, p);
+    if (p.domainShift === null) ok('a shift does not survive a room transition — which is what lets the primitive avoid a decay tick');
+    else fail(`the shift persisted across a room start (${p.domainShift}) — a state with no decay and no reset is permanent`);
+  }
+}
+
+console.log(failures ? `\n${failures} ENGINE GATE FAILURE(S)` : '\nEVERY CLASS ENGINE IS FILLED BY PLAY AND MULTIPLIES SOMETHING, AND EVERY WRITE PATH PRODUCES IT');
 process.exit(failures ? 1 : 0);

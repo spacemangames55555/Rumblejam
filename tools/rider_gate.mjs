@@ -27,6 +27,7 @@ import { SELECTABLE } from '../js/content/characters.js';
 import { TREES, SKILL_BY_ID } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
 import { ENEMIES } from '../js/content/enemies.js';
+import { IMPACT_RIDERS, SHAPE_RIDERS, BOLT_RIDERS } from '../js/compose.js';
 
 const VERBOSE = process.argv.includes('--verbose');
 let failures = 0;
@@ -42,10 +43,12 @@ const SECONDS = 6;
 // a rider landing is only attributable if nothing else in the loadout could
 // have landed it — §13 rule 20's other half: the fixture must also not contain
 // what it is not measuring.
-function stage(skillId) {
+function stage(skillId, twoPlayer = false) {
   const sk = SKILL_BY_ID[skillId];
   const tree = Object.values(TREES).find(t => t.skills.some(s => s.id === skillId));
-  const g = new Sim({ seed: SEED, party: [{ idx: 0, key: 'k', name: 'P', charId: tree.classId, color: '#fff' }] });
+  const party = [{ idx: 0, key: 'k', name: 'P', charId: tree.classId, color: '#fff' }];
+  if (twoPlayer) party.push({ idx: 1, key: 'k2', name: 'Q', charId: tree.classId, color: '#0ff' });
+  const g = new Sim({ seed: SEED, party });
   const p = g.players[0];
   p.level = 40;
   // Learn the prerequisite chain, then rank the subject up.
@@ -161,7 +164,14 @@ const OBSERVERS = {
   knockback:     { what: 'an enemy is pushed further than collision alone',
                    displacement: true, stripped: true },
   splash:        { what: 'a bystander takes damage',       bystander: true },
-  healPerHit:    { what: 'the player heals on hit',        player: (g, p) => p.hp },
+  // THE JUDGMENT MARK IS TWO CLAIMS, and the second is the one that matters.
+  // "An enemy carries a mark" is a flag; "the mark detonates on death and heals
+  // nearby allies" is the mechanic. Watching only the flag would be the trap
+  // this gate exists to avoid, so the observer is the ALLY'S HP after the marked
+  // enemy dies — the mark's whole purpose, measured where it lands.
+  mark:          { what: 'an ally is healed when the marked enemy dies', markHeal: true },
+  healPerHit:    { what: 'the player heals on hit',        player: (g, p) => p.hp, hurtSelf: true },
+  pierce:        { what: 'total damage across three targets in a line', pierceLine: true },
   // multiPulse and windUp are SHAPE riders read inside the primitive rather than
   // applied to an enemy: multiPulse repeats the hit loop, windUp defers the step
   // by a timer. Both are measured as damage against the same skill with the
@@ -172,8 +182,17 @@ const OBSERVERS = {
 
 // Fire the staged skill for `SECONDS`, tracking the peak of whatever the
 // observer watches.
-function run(skillId, obs, strip = null) {
-  const { g, p, sk } = stage(skillId);
+function run(skillId, obs, strip = null, add = null) {
+  const { g, p, sk } = stage(skillId, !!obs.markHeal);
+  if (add) {
+    const clone = { ...sk, compose: sk.compose.map(c => ({ ...c, riders: { ...(c.riders || {}) } })) };
+    for (const c of clone.compose) if (['strike', 'cone', 'line', 'bolt'].includes(c.kind)) c.riders[add.rider] = add.payload;
+    SKILL_BY_ID[skillId] = clone;
+    for (const t of Object.values(TREES)) {
+      const i = t.skills.findIndex(x => x.id === skillId);
+      if (i >= 0) t.skills[i] = clone;
+    }
+  }
   if (strip) {
     // A per-run copy of the step with one rider removed. The registry object is
     // never mutated — a gate that edited live content would poison every test
@@ -188,6 +207,19 @@ function run(skillId, obs, strip = null) {
   }
   const { es, arm } = stageFor(g, p, sk);
   if (!es.length) return NaN;
+  // The mark's observable is an ALLY'S HP after the marked enemy dies, so the
+  // ally is placed in reach and hurt first — a heal on a full-HP player moves
+  // nothing and would read as a mark that never detonated.
+  // `healPerHit` heals the caster, and a heal on a full-HP player moves nothing.
+  if (obs.hurtSelf) p.hp = Math.max(1, Math.round(p.stats.vitality * 0.25));
+  // `pierce` needs bodies BEHIND the first one: a projectile that stops at the
+  // first target is exactly what pierce changes, so the observable has to
+  // contain something the first body was shielding.
+  const line = obs.pierceLine ? [target(g, p.x + 90, p.y), target(g, p.x + 150, p.y), target(g, p.x + 210, p.y)] : null;
+  const lineHp0 = line ? line.reduce((a, e) => a + (e ? e.hp : 0), 0) : 0;
+  const ally = obs.markHeal ? g.players[1] : null;
+  if (ally) { ally.x = p.x + 40; ally.y = p.y; ally.hp = Math.max(1, Math.round(ally.stats.vitality * 0.3)); }
+  const allyHp0 = ally ? ally.hp : 0;
   const from = es.map(e => ({ x: e.x, y: e.y }));
   const bystander = obs.bystander ? target(g, p.x + 120, p.y) : null;
   let peak = 0, firstDamageT = -1;
@@ -203,8 +235,14 @@ function run(skillId, obs, strip = null) {
   if (obs.displacement) peak = es.reduce((a, e, i) => a + Math.hypot(e.x - from[i].x, e.y - from[i].y), 0);
   if (obs.bystander) peak = bystander ? Math.round(1e9 - bystander.hp) : NaN;
   if (obs.player) peak = obs.player(g, p);
+  if (obs.pierceLine) peak = Math.round(lineHp0 - line.reduce((a, e) => a + (e ? e.hp : 0), 0));
+  if (obs.markHeal) {
+    // Kill the marked enemies through the real path and read what the ally got.
+    for (const e of es) if (e.active) g.damageEnemy(e, 1e13, { owner: p });
+    peak = Math.round((ally ? ally.hp : 0) - allyHp0);
+  }
   if (obs.stripped && !obs.displacement) peak = obs.timing ? firstDamageT : Math.round(hp0 - es.reduce((a, e) => a + e.hp, 0));
-  if (strip) { SKILL_BY_ID[skillId] = sk; for (const t of Object.values(TREES)) { const i = t.skills.findIndex(s => s.id === skillId); if (i >= 0) t.skills[i] = sk; } }
+  if (strip || add) { SKILL_BY_ID[skillId] = sk; for (const t of Object.values(TREES)) { const i = t.skills.findIndex(s => s.id === skillId); if (i >= 0) t.skills[i] = sk; } }
   return peak;
 }
 
@@ -219,22 +257,73 @@ for (const t of Object.values(TREES)) {
   }
 }
 
-console.log(`rider gate — ${CASES.length} declared riders across ${new Set(CASES.map(c => c.skill)).size} skills\n`);
+// A RIDER NO CONTENT DECLARES YET IS STILL A RIDER THE ENGINE PROMISES.
+//
+// The gate walked authored content only, so a rider added to `IMPACT_RIDERS`
+// ahead of the tree that will use it went untested — which is exactly the
+// window a write path lives in: the Priest's `mark` exists before the Priest's
+// trees, on purpose, because §5.7 says the write path is ruled and proven
+// BEFORE the tree is authored against it.
+//
+// So an unclaimed rider is probed on a SYNTHETIC skill: a real one of a
+// compatible primitive, cloned with the rider added. Same machinery the
+// `stripped` observers already use in reverse, and the registry is restored
+// afterwards — a gate that left a mutated skill behind would poison every test
+// that ran after it.
+const DECLARED = new Set(CASES.map(c => c.rider));
+const ALL_RIDERS = [...new Set([...IMPACT_RIDERS, ...SHAPE_RIDERS, ...BOLT_RIDERS])];
+const SYNTH_PAYLOAD = {
+  mark: { dur: 8000, heal: 25, radius: 300 },
+  // Two more the coverage layer turned up the moment it started asking: both
+  // have been in the rider tables since phase 1 with no skill declaring either.
+  // `pierce` is §5.9's answer to escorted targets and reaches the game only
+  // through a §9.2 magnitude ITEM today; `healPerHit` has simply never been
+  // authored. Neither is a defect — a rider the engine offers and content has
+  // not taken up yet is a capability, not a corpse — but an unexercised one is
+  // how the cone/line gap survived three patches.
+  pierce: 6,
+  healPerHit: 25,
+};
+const UNCLAIMED = ALL_RIDERS.filter(r => !DECLARED.has(r));
+
+console.log(`rider gate — ${CASES.length} declared riders across ${new Set(CASES.map(c => c.skill)).size} skills, plus ${UNCLAIMED.length} declared by the engine and not yet by content\n`);
+if (UNCLAIMED.length) {
+  const noPayload = UNCLAIMED.filter(r => !SYNTH_PAYLOAD[r]);
+  if (!noPayload.length) ok(`${UNCLAIMED.join(', ')} — in the rider tables with no content using them yet, each probed on a synthetic skill so the write path is proven before a tree is authored against it (§5.7)`);
+  else fail(`${noPayload.join(', ')} are in the rider tables with no content and no synthetic payload — a rider the engine promises and the gate cannot exercise`);
+}
 
 const holes = [...new Set(CASES.filter(c => !OBSERVERS[c.rider]).map(c => c.rider))];
 if (!holes.length) ok(`every rider kind declared in content has an observer — the gate has no blind spot to hide in`);
 else fail(`${holes.length} rider kind(s) have NO OBSERVER (${holes.join(', ')}) — a declared capability with no gate is how five skills went three patches doing less than they said`);
 
 const rows = [];
+for (const u of UNCLAIMED) {
+  if (SYNTH_PAYLOAD[u]) CASES.push({ skill: null, kind: 'synthetic', rider: u, cls: '(engine)', synth: true });
+}
 for (const c of CASES) {
   const obs = OBSERVERS[c.rider];
   if (!obs) continue;
   let got = NaN, without = null, err = null;
   try {
-    got = run(c.skill, obs);
-    if (obs.stripped) without = run(c.skill, obs, c.rider);
+    if (c.synth) {
+      // A real strike skill of a class that has one, cloned with the rider on.
+      // The host primitive follows the rider's own table: a BOLT rider needs a
+      // projectile to ride, and hanging one on a strike would test nothing.
+      const wantKind = BOLT_RIDERS.includes(c.rider) ? 'bolt' : 'strike';
+      const host = Object.values(TREES).flatMap(t => t.skills)
+        .find(x => (x.compose || []).some(y => y.kind === wantKind) && x.trigger.kind === 'PROXIMITY')
+        || Object.values(TREES).flatMap(t => t.skills).find(x => (x.compose || []).some(y => y.kind === wantKind));
+      if (!host) throw new Error(`no ${wantKind} skill to host a synthetic ${c.rider} on`);
+      c.skill = host.id;
+      got = run(host.id, obs, null, { rider: c.rider, payload: SYNTH_PAYLOAD[c.rider] });
+      without = run(host.id, obs, null, null);
+    } else {
+      got = run(c.skill, obs);
+      if (obs.stripped) without = run(c.skill, obs, c.rider);
+    }
   } catch (e) { err = e; }
-  const lands = obs.stripped
+  const lands = (obs.stripped || c.synth)
     ? Number.isFinite(got) && Number.isFinite(without) && got !== without
     : Number.isFinite(got) && got > 0;
   rows.push({ ...c, obs, got, without, err, lands });

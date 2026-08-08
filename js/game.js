@@ -1156,6 +1156,7 @@ export class Sim {
       mats: PYLON_DEF.mats, mini: false, elite: false, eliteMod: null,
       domain: PYLON_DEF.domain,
       t: 0, phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
+      markT: 0, markBy: -1, markHeal: 0, markRadius: 0,   // §13 rule 8: pooled slots inherit nothing
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0, healTarget: null, brood: null, shape: PYLON_DEF.shape, color: PYLON_DEF.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -1182,6 +1183,7 @@ export class Sim {
       telState: 0, telT: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
+      markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
     });
@@ -1442,6 +1444,7 @@ export class Sim {
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
       t: this.rng.float(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
+      markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0.8 + this.rng.float(), healTarget: null, brood: null, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -2438,6 +2441,29 @@ export class Sim {
       this.enemyBuff = 1;
       this.pushEvent({ k: 'toast', idx: -1, text: 'The ward pylon shatters — the empowerment ends' });
       this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
+    }
+    // §8.3 JUDGMENT MARK DETONATION. It fires on the mark, not on the killer:
+    // a Priest's mark pays out when the marked thing dies, whoever killed it and
+    // whether or not the Priest is still standing. Every other death hook here
+    // reads `killer.hookAgg`, which is the item aggregate and is why a
+    // skill-placed mark had nowhere to live before this.
+    //
+    // The heal routes through `_heal`, so Recovery amplifies it like every other
+    // source, and it reaches ALLIES — the mark is the Priest's contribution to a
+    // party, and a version that healed only the caster would be a lifesteal item.
+    if (e.markT > 0 && e.markHeal > 0) {
+      const owner = this.players[e.markBy];
+      let healed = 0;
+      for (const q of this.livePlayers()) {
+        if (dist2(x, y, q.x, q.y) > e.markRadius * e.markRadius) continue;
+        this._heal(q, e.markHeal, { by: owner });
+        healed++;
+      }
+      if (healed) {
+        this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: e.markRadius });
+        this.pushEvent({ k: 'sfx', s: 'revive' });
+      }
+      e.markT = 0;
     }
     tohEnemyDied(this, e);              // Necromancer bone-dust — any kill, anywhere
     // A soul token, from ANY death, for ANY party. It is a world resource read

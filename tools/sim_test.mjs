@@ -4645,8 +4645,21 @@ try {
   // -- the taxonomy additions are in the taxonomies, not beside them --
   if (TK.includes('ON_TOKEN') && TK.length === 11) ok(`ON_TOKEN is in TRIGGER_KINDS — 11 triggers, not a Necromancer special case`);
   else fail(`ON_TOKEN missing from TRIGGER_KINDS or count wrong: ${TK.length} kinds, ${JSON.stringify(TK)}`);
-  if (PK.includes('summon') && PK.length === 11) ok(`summon is the 11th primitive in PRIMITIVES`);
-  else fail(`summon missing from PRIMITIVE_KINDS or count wrong: ${PK.length}`);
+  // THE SET IS OPEN NOW, so this asserts the RULE rather than the number.
+  //
+  // It pinned 11 and went red the moment `shift` was admitted, which is a check
+  // that just gets bumped — §13's own complaint about the telegraph count. What
+  // must hold is §5.7's contract: every primitive is in the taxonomy rather than
+  // beside it, and each one exists because a class engine needed a write path
+  // nothing else provided. `shift` is named here because naming the exception is
+  // the mechanism — the same shape as `rankGrants` having a registry rather than
+  // a convention.
+  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift'];
+  const missing = EXPECTED_PRIMS.filter(k => !PK.includes(k));
+  const extra = PK.filter(k => !EXPECTED_PRIMS.includes(k));
+  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, admitted under §5.7's three conditions`);
+  else if (missing.length) fail(`primitives missing from PRIMITIVES: ${missing.join(', ')}`);
+  else fail(`UNDECLARED PRIMITIVE(S): ${extra.join(', ')} — §5.7 admits a twelfth only for a class engine needing a write path nothing else provides, ruled before the tree. A primitive that arrives without being listed here arrived while somebody was authoring content`);
   if (MOVE_KINDS.length >= 2) ok(`MOVE_KINDS is a declared, closed taxonomy: ${MOVE_KINDS.join('/')}`);
   else fail(`MOVE_KINDS is not a usable taxonomy: ${JSON.stringify(MOVE_KINDS)}`);
   // NO ENUM ENTRY WIRED TO NOTHING. The source project shipped 19 skill kinds

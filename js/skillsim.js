@@ -27,6 +27,10 @@ export function initSkillPlayer(sim, p) {
   p.skillCd = {};                    // id -> seconds remaining
   p.trigState = {};                  // id -> per-trigger memory (edge arming)
   p.trigEvents = { kill: 0, hitTaken: 0, dodgeT: -999, lastFired: null };
+  // The Wizard's domain shift: null until a `shift` step writes one, then it
+  // persists until the next shift or the end of the room. `domainShifts` counts
+  // them, which is what a future `scaleWith: 'shift'` engine would read.
+  p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
   p.engines = { footing: 0, armor: 0, pack: 0 };
@@ -57,6 +61,12 @@ export function treesFor(p) { return TREES_BY_CLASS[p.charId] || []; }
 // spending the opening seconds of every fight re-summoning what its points
 // already bought.
 export function startRoomMinions(sim, p) {
+  // A DOMAIN SHIFT DOES NOT SURVIVE A DOOR. It persists until the next shift or
+  // the end of the room, which is what lets the `shift` primitive avoid a decay
+  // tick — but "until the end of the room" only means something if something
+  // ends it. Reset here rather than in a new room hook, so the one function the
+  // sim already calls per room start owns both per-room resets a class needs.
+  p.domainShift = null;
   resetMinionsForRoom(sim, p);
   for (const [id, rank] of Object.entries(p.skillRanks || {})) {
     if (!(rank > 0)) continue;
@@ -456,6 +466,13 @@ export function skillDamage(sim, e, amount, p, skill) {
 // trigger-swap items from the design.
 export function bestDomainMult(p, atk, def) {
   let best = domainMult(atk, def);
+  // THE WIZARD'S SHIFT (§8.3), written by the `shift` primitive. It is the
+  // player's own state rather than an item aggregate, and it composes with the
+  // item grants the same way: best of everything available, never worse than
+  // the skill's own domain. A shift that could make a matchup WORSE would let a
+  // mistimed cast punish a build, and §9.2's governing rule — add, never take
+  // away — is the right shape here too even though this arrives from a skill.
+  if (p && p.domainShift) best = Math.max(best, domainMult(p.domainShift, def));
   const adds = p && p.hookAgg ? p.hookAgg.domainAdd : null;
   if (adds && adds.length) for (const d of adds) best = Math.max(best, domainMult(d, def));
   return best;
@@ -588,6 +605,10 @@ export function tickSkillStatuses(sim, dt) {
     if (e.tauntT > 0) e.tauntT -= dt;
     if (e.weakDmgT > 0) e.weakDmgT -= dt;
     if (e.defDownT > 0) e.defDownT -= dt;
+    // The judgment mark expires on the same block every other rider-applied
+    // status does. One line in an existing loop rather than a decay function of
+    // its own, which is what keeps the Priest content-shaped from here on.
+    if (e.markT > 0) e.markT -= dt;
     if (e.plagueT > 0) {
       e.plagueT -= dt;
       e.plagueAcc = (e.plagueAcc || 0) + e.plagueDps * dt;
