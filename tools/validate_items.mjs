@@ -28,7 +28,22 @@ const HOOKS = {
   xpBonus: ['percent'], extraChoice: ['n'],
   levelStats: ['stats'], floorStats: ['stats'], vitalityOnKill: ['amount', 'cap'],
   summonBoost: ['damage', 'hp'],
+  // ---- phase 4: the four modifier tiers (§9.2) ----
+  critChance: ['percent'], critMult: ['add'],
+  selectorAdd: ['select'], domainAdd: ['domain'],
 };
+// §9.2's tier assignment, enforced rather than described. `radius` lives in
+// magnitude EXCLUSIVELY (ranks no longer grant it), and the rider tier is the
+// one that adds an effect a skill did not have.
+const MAGNITUDE_HOOKS = new Set(['extraPierce', 'extraProjectiles', 'knockbackBoost',
+  'eliteBossDamage', 'critChance', 'critMult', 'summonBoost']);
+const RIDER_HOOKS = new Set(['burnOnHit', 'chillOnHit', 'chainOnHit']);
+const SELECTORS = new Set(['nearest', 'farthest', 'highest_hp', 'lowest_hp', 'densest_cluster', 'objective_target']);
+const DOMAINS = new Set(['physical', 'mental', 'spiritual']);
+// NO COOLDOWN REDUCTION ON ANY ITEM (§9.2), and no reaching one by proxy. This
+// is a name check on top of the effect check in `econ_gate` — cheap, and it
+// fails at authoring time rather than at measurement time.
+const COOLDOWN_WORDS = /cooldown|cd_|_cd\b|recharge|haste|attackspeed|attack_speed|fire_rate|firerate/i;
 const FLAG_HOOKS = new Set(['critAfterKill', 'critVsChilled', 'critVsBurning', 'critVsFullHp', 'firstHitCrit']);
 const COND_KINDS = new Set(['enemyNear', 'noEnemyNear', 'hpAbove', 'hpBelow', 'afterKill',
   'firstKill', 'moving', 'still', 'roomEntry', 'bossRoom', 'allyNear', 'onMaterials']);
@@ -68,6 +83,22 @@ items.forEach((it, i) => {
     const [lo, hi] = PRICE_RANGE[it.rarity];
     if (typeof it.price !== 'number' || it.price < lo || it.price > hi) errs.push(`${w}: price ${it.price} outside ${lo}-${hi} for ${it.rarity}`);
   }
+  // ---- phase 4 item fields ----
+  if (COOLDOWN_WORDS.test(it.id) || COOLDOWN_WORDS.test(it.name || '')) {
+    errs.push(`${w}: names a cooldown. §9.2 bans cooldown reduction on every item — no item may reach one, directly or by proxy`);
+  }
+  if ('penalty' in it) {
+    if (!Number.isInteger(it.penalty) || it.penalty <= 0) errs.push(`${w}: penalty must be a positive integer (the magnitude; the STAT is rolled)`);
+    if (!it.stats || !Object.keys(it.stats).length) errs.push(`${w}: penalty without stats — §9.2's stat items are "flat + with a randomly rolled −", so there must be a + to trade against`);
+    if (Object.values(it.stats || {}).some(v => v < 0)) errs.push(`${w}: a rolled-penalty item must not also hard-code a negative stat — one trade-off per item, and the roll is the trade-off`);
+  }
+  if ('lateWeight' in it && (typeof it.lateWeight !== 'number' || it.lateWeight < 0 || it.lateWeight > 1)) {
+    errs.push(`${w}: lateWeight must be 0..1 (0 = as likely in region 1 as region 8)`);
+  }
+  if (it.perLevel && !it.perLevel.hooks && !it.stats) {
+    errs.push(`${w}: perLevel with neither hooks nor stats — an upgrade that changes nothing is the shop version of a dead stat`);
+  }
+
   const hasStats = it.stats && Object.keys(it.stats).length > 0;
   const hasHooks = it.hooks && Object.keys(it.hooks).length > 0;
   if (!hasStats && !hasHooks) errs.push(`${w}: needs stats or hooks`);
@@ -97,10 +128,20 @@ items.forEach((it, i) => {
         else if (p === 'stats') checkStats(hv[p], `${w}.${hk}`, errs);
         else if (p === 'cond') {
           if (!hv.cond || !COND_KINDS.has(hv.cond.kind)) errs.push(`${w}: condStats.cond.kind '${hv.cond && hv.cond.kind}' unknown`);
+        // `select` and `domain` are enumerated STRINGS, not magnitudes — they
+        // are checked against the live §5.3 and triangle lists further down.
+        } else if (p === 'select' || p === 'domain') {
+          if (typeof hv[p] !== 'string') errs.push(`${w}: hook ${hk}.${p} must be a string`);
         } else if (typeof hv[p] !== 'number' || !Number.isFinite(hv[p])) errs.push(`${w}: hook ${hk}.${p} must be number`);
       }
       for (const p of Object.keys(hv)) if (!spec.includes(p)) errs.push(`${w}: hook ${hk} unknown param '${p}'`);
       if (hk === 'extraProjectiles' && it.rarity !== 'legendary') errs.push(`${w}: extraProjectiles must be legendary`);
+      if (hk === 'selectorAdd' && !SELECTORS.has(hv.select)) errs.push(`${w}: selectorAdd.select '${hv.select}' is not a §5.3 selector`);
+      if (hk === 'domainAdd' && !DOMAINS.has(hv.domain)) errs.push(`${w}: domainAdd.domain '${hv.domain}' is not a domain`);
+      // §9.2: radius lives in magnitude only, since ranks no longer grant it.
+      if ('radius' in hv && !MAGNITUDE_HOOKS.has(hk) && !RIDER_HOOKS.has(hk) && hk !== 'pickupBlast' && hk !== 'contactAura' && hk !== 'onHurtRetaliate' && hk !== 'killExplode' && hk !== 'allyAura') {
+        errs.push(`${w}: hook ${hk} carries a radius, and radius lives in magnitude items only (§9.2)`);
+      }
       for (const p of ['chance', 'mult', 'healPercent']) {
         if (p in hv && (hv[p] <= 0 || hv[p] > 1)) errs.push(`${w}: hook ${hk}.${p}=${hv[p]} must be in (0,1]`);
       }

@@ -79,6 +79,16 @@ function stage(charId, claim, opts = {}) {
     }
   }
   if (claim) g._grantItem(p, probeItem(claim));
+  // LEARNED IS NOT SLOTTED (§13 rule 20). `spendSkillPoint` auto-slots only into
+  // an already-unlocked slot, and a level-12 character has three — so a fixture
+  // that learns thirty skills still fights with the first three it bought. A
+  // probe whose claim rides a specific skill must SLOT that skill, the way the
+  // player who wanted it would. `knockbackBoost` read DEAD for exactly this: no
+  // skill in the default loadout carries a knockback rider.
+  if (opts.slot) {
+    p.loadout = new Array(8).fill(null);
+    opts.slot.forEach((id, i) => { p.loadout[i] = id; });
+  }
   const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
   g._travelTo(node.id);
   // Every probe stages its own targets; ambient spawns would add noise the
@@ -171,6 +181,10 @@ const HOOKS = {
   },
   critHeal: {
     what: 'HP regained from crits while firing skills for 8 s at 1 HP',
+    // A guaranteed crit source in BOTH runs. Without it the fixture's Reflex is
+    // near zero, no crit ever lands, and a working heal reads dead — the same
+    // shape as Ingenuity's probe measuring a field with no minion on it.
+    with: { critEveryN: { n: 1 } },
     payload: { amount: 40 },
     run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; p.hp = 1; tickFor(g, 8, [e]); return Math.round(p.hp); },
   },
@@ -369,7 +383,11 @@ const HOOKS = {
     run: ({ g, p }) => { const e = target(g, p.x + 60, p.y, { elite: true }); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
   },
   extraPierce: {
+    // ONLY THE NECROMANCER HAS `bolt` SKILLS. A samurai fixture would measure a
+    // pierce item in a class with no projectile and report a working item dead
+    // — the same shape as Ingenuity's probe measuring the player's own damage.
     what: 'total damage across three targets standing in a line',
+    char: NECRO,
     payload: { add: 6 },
     run: ({ g, p }) => {
       const es = [target(g, p.x + 60, p.y), target(g, p.x + 120, p.y), target(g, p.x + 180, p.y)];
@@ -380,21 +398,45 @@ const HOOKS = {
     },
   },
   extraProjectiles: {
-    what: 'damage to a pinned target over 8 s',
+    // THREE TARGETS, NOT ONE. Extra projectiles fan across a target LIST, so a
+    // probe with a single pinned dummy measures a fan that has nowhere to go and
+    // reports the same number either way. The claim is "hits more things", and
+    // the observable has to contain more things.
+    what: 'total damage across three separated targets over 8 s',
+    char: NECRO,
     payload: { add: 8 },
-    run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
-  },
-  knockbackBoost: {
-    what: 'how far an unpinned enemy is pushed over 6 s of fire',
-    payload: { mult: 30 },
     run: ({ g, p }) => {
-      const e = target(g, p.x + 60, p.y); if (!e) return NaN;
-      e.hp = e.maxHp = 1e9;
-      const x0 = e.x, y0 = e.y;
-      for (let i = 0; i < 360; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
-      return Math.round(Math.hypot(e.x - x0, e.y - y0));
+      const es = [target(g, p.x + 70, p.y - 70), target(g, p.x + 90, p.y), target(g, p.x + 70, p.y + 70)];
+      if (es.some(e => !e)) return NaN;
+      const before = es.reduce((a, e) => a + e.hp, 0);
+      tickFor(g, 8, es);
+      return Math.round(before - es.reduce((a, e) => a + e.hp, 0));
     },
   },
+  knockbackBoost: {
+    what: 'how far a cluster of four is pushed over 6 s of fire',
+    // THE PROBE MUST SATISFY THE TRIGGER, not just slot the skill. `necro_bone_nova`
+    // is PROXIMITY radius 140 count 4 — it does not fire until FOUR enemies are
+    // inside 140 units. A single pinned dummy never armed it, the skill never
+    // swung, and the 58 units of drift the probe was reading was collision
+    // separation from the player's own body. Staging the loadout was necessary
+    // and not sufficient; staging the CONDITION is the rest of §13 rule 20.
+    slot: ['necro_bone_nova'],
+    payload: { mult: 30 },
+    run: ({ g, p }) => {
+      const es = [];
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const e = target(g, p.x + Math.cos(a) * 60, p.y + Math.sin(a) * 60);
+        if (!e) return NaN;
+        es.push(e);
+      }
+      const from = es.map(e => ({ x: e.x, y: e.y }));
+      tickFor(g, 6);                       // NOT pinned — displacement is the point
+      return Math.round(es.reduce((a, e, i) => a + Math.hypot(e.x - from[i].x, e.y - from[i].y), 0));
+    },
+  },
+
   summonBoost: {
     what: 'damage a summoned minion deals, and its max HP',
     payload: { damage: 900, hp: 900 },
@@ -410,6 +452,68 @@ const HOOKS = {
       const before = e.hp;
       tickFor(g, 8, [e]);
       return Math.round(before - e.hp) + hp * 100000;
+    },
+  },
+
+  // ---- the two crit TERMS (§9.5) ----
+  //
+  // No item grants either yet. They are probed anyway, because these are the
+  // sites phase 4's magnitude tier writes into and rule 24 says a declared
+  // capability is worth less than nothing until something measures it. An item
+  // priced against an unproven site is the shop version of Ferocity.
+  critChance: {
+    what: 'damage to a pinned target over 8 s with crit chance forced to 100%',
+    char: NECRO,
+    payload: { percent: 100 },
+    run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
+  },
+  critMult: {
+    what: 'damage to a pinned target over 8 s with every hit critting',
+    char: NECRO,
+    with: { critEveryN: { n: 1 } },
+    payload: { add: 20 },
+    run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
+  },
+
+  // ---- the two remaining §9.2 tiers ----
+  domainAdd: {
+    // The triangle, not a damage number. A `physical` grant must beat a
+    // SPIRITUAL target, and the fixture's own skills must not already beat it —
+    // otherwise the probe measures a matchup the player already had and the
+    // grant looks dead. The target's domain is set explicitly for that reason.
+    what: 'damage to a target the skill\'s own domain does NOT beat',
+    char: NECRO,
+    payload: { domain: 'physical' },
+    run: ({ g, p }) => {
+      const e = target(g, p.x + 60, p.y);
+      if (!e) return NaN;
+      e.domain = 'spiritual';           // physical beats spiritual; spiritual does not
+      const b = e.hp;
+      tickFor(g, 8, [e]);
+      return Math.round(b - e.hp);
+    },
+  },
+  selectorAdd: {
+    // TWO TARGETS, AND THE OBSERVABLE IS THE ONE THE SKILL WOULD NOT PICK.
+    // Measuring total damage would pass on a selector that added nothing, since
+    // the bolts still land somewhere. The claim is "it ALSO strikes what a
+    // second selector picks", so the probe watches the target the skill's own
+    // selector ranks last and the added one ranks first.
+    what: 'damage to the target the skill\'s own selector would not choose',
+    char: NECRO,
+    payload: { select: 'highest_hp' },
+    run: ({ g, p }) => {
+      // PERPENDICULAR, NOT COLLINEAR. §5.9: selection is not delivery. Placed on
+      // one ray, the bolt aimed at the far target is intercepted by the near one
+      // — `bolt` stops at the first body it meets — and the probe reads zero on
+      // a selector that chose correctly. The gate spent a run reporting that as
+      // a dead item.
+      const near = target(g, p.x + 50, p.y, { hp: 4000 });
+      const fat = target(g, p.x, p.y + 150);          // 1e9 HP: highest_hp picks this
+      if (!near || !fat) return NaN;
+      const before = fat.hp;
+      tickFor(g, 8, [near, fat]);
+      return Math.round(before - fat.hp);
     },
   },
 
@@ -501,8 +605,14 @@ for (const key of Object.keys(HOOKS).filter(k => usedHooks.has(k)).sort()) {
   const claim = { hooks: { [key]: h.payload } };
   let base, granted, err = null;
   try {
-    base = h.run(stage(charId, null, { twoPlayer: !!h.two }));
-    granted = h.run(stage(charId, claim, { twoPlayer: !!h.two }));
+    const so = { twoPlayer: !!h.two, slot: h.slot };
+    // `with` is a PRECONDITION, not a claim: hooks granted in both runs so a
+    // probe can stage the situation its own hook needs without the comparison
+    // crediting the precondition. `critHeal` fires only on a crit, so measuring
+    // it requires a crit source present on both sides of the diff.
+    const pre = h.with ? { hooks: { ...h.with } } : null;
+    base = h.run(stage(charId, pre, so));
+    granted = h.run(stage(charId, h.with ? { hooks: { ...h.with, [key]: h.payload } } : claim, so));
   } catch (e) { err = e; }
   const usable = !err && Number.isFinite(base) && Number.isFinite(granted);
   results.push({ key, what: h.what, base, granted, usable, err, live: usable && base !== granted, items: usedHooks.get(key) });

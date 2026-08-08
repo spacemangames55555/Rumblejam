@@ -44,8 +44,25 @@ const ALL_CHARS_N = _ALL_CHARS.length;
 // tree. Derived from SELECTABLE so a retired or unplayable id can never be
 // hardcoded back in; when phase 5 arms more classes these simply follow.
 const _SEL = SELECTABLE;
-const T1 = _SEL[0].id;
-const T2 = _SEL[1 % _SEL.length].id;
+// THE DEFAULT FIXTURE CLASS IS NAMED, NOT POSITIONAL.
+//
+// It was `_SEL[0].id` — whichever class happened to head SELECTABLE — and 36
+// checks read it. Registering the Wizard's trees moved the Wizard to the front
+// and silently re-pointed every one of them at a different character: the D-24
+// elite-gold assertion, the Nest Purge throughput run and the siege crest all
+// went red at once, and none of them was about the Wizard.
+//
+// That is §13 rule 28 again in a different costume — an anchor derived from the
+// population it measures. The DPS band learned it; so does this. Phase 5 adds
+// nine more classes, and any one of them landing at index 0 would do the same
+// thing again. A named reference class is a decision; an index is an accident.
+const T1_REFERENCE = 'toh_necromancer';
+const T1 = _SEL.some(c => c.id === T1_REFERENCE) ? T1_REFERENCE : _SEL[0].id;
+// The second reference class, named for the same reason T1 is. With T1 pinned
+// and T2 still positional, both resolved to the Necromancer the moment the
+// Wizard took index 0 — and the weapon-cap check reported the same class twice.
+const T2_REFERENCE = 'toh_samurai';
+const T2 = _SEL.some(c => c.id === T2_REFERENCE) ? T2_REFERENCE : _SEL[1 % _SEL.length].id;
 // A party of N built from the selectable classes, cycling. Replaces a dozen
 // hardcoded lists of retired classic characters; those tests care about party
 // SIZE and mixture, never about which retired trait was in slot 3.
@@ -1546,7 +1563,28 @@ try {
   const { CONFIG: CO } = await import('../js/config.js');
   const { ITEMS: IO } = await import('../js/content/items.js');
   const mk = (ids) => ids.map((c, i) => ({ idx: i, key: `o${i}`, name: `O${i}`, charId: c, color: '#fff' }));
-  const quad = n => mk(Array.from({ length: n }, (_, i) => pickN(4)[i % 4]));
+  // THE SOLO OBJECTIVE FIXTURE IS NAMED. THE CO-OP ONE IS A MIX.
+  //
+  // These two party sizes are asking different questions and were sharing one
+  // positional answer. Co-op is a MIXTURE test — four different classes, which
+  // is what `pickN` is for. Solo is a THROUGHPUT test: one class has to finish
+  // the level on its own, so which class it is decides the result.
+  //
+  // It was `pickN(4)[0]`, i.e. whichever class headed SELECTABLE, and
+  // registering the Wizard's trees moved it. That turned Nest Purge red and the
+  // red was real: composed `strike`/`cone`/`line` never damaged a barricade, so
+  // the level had only ever been completable by the classes whose kit reaches
+  // walls some other way (`bolt` through the projectile tick, `hazard` through
+  // the zone tick). Two of the three built classes had one. See §13 rule 30.
+  //
+  // So the solo fixture is now named, and named for the WORST case rather than
+  // a convenient one: the Samurai is the only built class with no projectile
+  // and no ground hazard, and it is the slowest to clear every level that has
+  // structure in it. A gate that proves the hardest class finishes has proved
+  // the level finishes.
+  const OBJ_SOLO_REFERENCE = 'toh_samurai';
+  const soloRef = _SEL.some(c => c.id === OBJ_SOLO_REFERENCE) ? OBJ_SOLO_REFERENCE : _SEL[0].id;
+  const quad = n => (n === 1 ? mk([soloRef]) : mk(Array.from({ length: n }, (_, i) => pickN(4)[i % 4])));
 
   // --- floor composition: 12 combat nodes with the guaranteed mix ---
   {
@@ -1656,7 +1694,17 @@ try {
         // hunt for one player with this deliberately modest three-weapon kit
         // (measured 12 min at 1p / 6 min at 4p). The gate still proves the level
         // FINISHES; the length is a design decision, not a bug.
-        const budget = 60 * 60 * (kind === 'bounty' ? 20 : 6);
+        //
+        // Nest Purge gets the same leash for the same reason, and the number is
+        // measured rather than guessed. That same playtest pass put ten times
+        // the health on every NEST too, behind twenty-four barricades. Solo
+        // clear times across the five built classes, once composed primitives
+        // could damage a barricade at all: Druid 176s, Wizard 284s, Necromancer
+        // 303s, Priest 396s, Samurai 513s. The old 360s budget sat inside that
+        // spread, so it was passing or failing on the fixture's class rather
+        // than on the level — which is exactly how the barricade defect stayed
+        // invisible. 12 minutes clears the slowest by 40%.
+        const budget = 60 * 60 * (kind === 'bounty' ? 20 : kind === 'nest' ? 12 : 6);
         while (!g.cleared && !g.over && ticks++ < budget) {
           steerObj(g); g.tick();
           for (const p of g.players) if (!p.downed) p.hp = p.stats.vitality;
@@ -1666,6 +1714,81 @@ try {
       }
     }
     if (!objFail) ok(`all 8 objective levels clear solo and 4p — ${times.join(' · ')}`);
+  }
+
+  // --- BARRICADE PARITY: every built class can take a wall down ---
+  //
+  // The clear-time gate above found this by accident and took six minutes per
+  // class to do it. This one asserts the effect directly and takes seconds,
+  // which is the difference between a gate and a coincidence.
+  //
+  // WHAT WAS BROKEN. `game.js` states the rule — "every splash, nova and blast
+  // chews barricades as well as bodies" — and enforced it on the weapon paths.
+  // Composed primitives never inherited it, so `strike`, `cone` and `line` swept
+  // straight through a Nest Purge barricade. Weapons are gone, so for a melee
+  // class that meant no way to damage a wall AT ALL: a Samurai parked against a
+  // ring for six minutes took twenty-four barricades down to twenty-two, and all
+  // of that came from splash it did not aim.
+  //
+  // WHY IT SURVIVED. `bolt` reaches walls through the friendly-projectile tick
+  // and `hazard` through the zone tick, so any class holding one of those looked
+  // fine — and the fixture happened to be holding one. The assertion "every
+  // objective level is completable" was true of the CLASS, not of the LEVEL.
+  {
+    let bad = 0;
+    const notes = [];
+    for (const c of _SEL) {
+      const g = new Sim({ seed: 771177, party: mk([c.id]) });
+      const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+      node.kind = 'nest'; g.god = true;
+      for (const p of g.players) { armBot(g, p); g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 }); }
+      g._travelTo(node.id);
+      const p = g.players[0];
+      const w = g.walls[0];
+      if (!w) { bad++; fail(`${c.id}: the nest node built no barricades to test against`); continue; }
+      // Stand against the outer face, the way a player who walked up to it does.
+      // OUTSIDE the ring, not inside: spawning in the enclosure would test a
+      // wall the level never asks anyone to reach from that side.
+      const nest = g.enemyById(g.obj.nests.find(id => g.enemyById(id) && g.enemyById(id).id === w.nestId) ?? g.obj.nests[0]);
+      const cx = w.x + w.w / 2, cy = w.y + w.h / 2;
+      const ax = cx - nest.x, ay = cy - nest.y, al = Math.hypot(ax, ay) || 1;
+      p.x = cx + (ax / al) * 40; p.y = cy + (ay / al) * 40;
+      const hp0 = w.hp;
+      // STAGE A FIGHT, not a vacuum. Every trigger in the game wants an enemy —
+      // PROXIMITY counts them, NEAREST needs one in range — so a class parked
+      // alone at a wall casts NOTHING and the gate would report "cannot break a
+      // barricade" about a room the level never presents. Six immortal dummies
+      // ringing the player is rider_gate's staging, and it is the situation Nest
+      // Purge actually puts a party in: swinging at a crowd with a ring at your
+      // back. §13 rule 26 — a probe that stages the wrong precondition measures
+      // the staging.
+      const dummies = [];
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const d = g.spawnEnemyById(ENEMIES[0].id, p.x + Math.cos(a) * 70, p.y + Math.sin(a) * 70);
+        if (d) { d.maxHp = d.hp = 1e9; d.speed = 0; dummies.push(d); }
+      }
+      if (dummies.length < 6) { bad++; fail(`${c.id}: could not stage a fight at the barricade`); continue; }
+      // The ceiling is measured, not guessed: against one 270hp barricade the
+      // five built classes take Druid 14s, Necromancer 19s, Samurai 19s, Priest
+      // 23s, Wizard 74s. The Wizard is slow because most of its kit is `bolt`,
+      // and a bolt only touches a wall when the dummy it was aimed at happens to
+      // be on the far side. 150s is twice the slowest — wide enough that a
+      // future class is judged on whether it CAN, not on how fast.
+      const CEILING = 60 * 150;
+      let t = 0, broke = false;
+      for (; t < CEILING && !g.over; t++) {
+        g.setInput(0, { mx: 0, my: 0 });
+        for (const d of dummies) { d.hp = d.maxHp; d.x = d.spawnX ?? d.x; d.y = d.spawnY ?? d.y; }
+        g.tick();
+        if (!p.downed) p.hp = p.stats.vitality;
+        if (w.hp <= 0 || !g.walls.includes(w)) { broke = true; break; }
+      }
+      const dealt = hp0 - Math.max(0, w.hp);
+      if (broke) notes.push(`${c.id.replace('toh_', '')} ${(t / 60).toFixed(0)}s`);
+      else { bad++; fail(`${c.id} cannot break a barricade: ${dealt.toFixed(0)}/${hp0} damage in ${CEILING / 60}s`); }
+    }
+    if (!bad) ok(`every built class breaks a Nest Purge barricade — ${notes.join(' · ')}`);
   }
 
   // --- Bounty Hunt: a mark must always be KILLABLE, and only a real kill counts ---
@@ -2142,12 +2265,37 @@ try {
   }
 
   // --- item tradeoff audit ---
+  //
+  // AMENDED IN PHASE 4, because §9.2 changed what a trade-off IS and this check
+  // was written before it. Two things now count as a subtraction on a stat item:
+  // a hard-coded negative, and `penalty` — the rolled kind, where the magnitude
+  // is authored and the STAT is drawn when the player takes it.
+  //
+  // And the MODIFIER TIERS are exempt, not overlooked. §9.2's governing rule for
+  // magnitude, rider, domain and selector items is "an item may add, never take
+  // away": finding a modifier should feel like a new capability arriving, never
+  // like a familiar one leaving. Their trade-off is price and the opportunity
+  // cost of the slot, not a stat penalty. Requiring a subtraction from them
+  // would have quietly re-legislated a design decision through a test — which is
+  // the failure §13 rule 24 describes running in the other direction.
   {
-    const neg = it => it.stats && Object.values(it.stats).some(v => v < 0);
-    const eligible = r => IP.filter(it => it.rarity === r && !it.curse);
+    const MODIFIER_HOOKS = new Set(['extraPierce', 'extraProjectiles', 'knockbackBoost',
+      'eliteBossDamage', 'critChance', 'critMult', 'summonBoost',
+      'burnOnHit', 'chillOnHit', 'chainOnHit', 'selectorAdd', 'domainAdd']);
+    const isModifier = it => it.hooks && Object.keys(it.hooks).some(k => MODIFIER_HOOKS.has(k));
+    const neg = it => (it.stats && Object.values(it.stats).some(v => v < 0)) || it.penalty > 0;
+    const eligible = r => IP.filter(it => it.rarity === r && !it.curse && !isModifier(it));
+    // COMMONS NO LONGER STAY CLEAN, and that is §9.2 rather than a slip. The
+    // section puts stat items — "flat + with a randomly rolled − on another
+    // stat" — at COMMON rarity: the rolled trade-off is the entry-level item,
+    // not a high-rarity flourish. What still must not appear on a common is a
+    // HARD-CODED negative, because that is the memorisable fixed-opposition
+    // table §9.2 rejects; a rolled penalty is the opposite of memorisable.
     const commons = eligible('common');
-    if (!commons.some(neg)) ok(`commons stay clean (${commons.length} items, no subtractions)`);
-    else fail(`commons with subtractions: ${commons.filter(neg).map(i => i.id).join(', ')}`);
+    const hardNeg = it => it.stats && Object.values(it.stats).some(v => v < 0);
+    const badCommons = commons.filter(hardNeg);
+    if (!badCommons.length) ok(`commons carry no hard-coded subtraction (${commons.filter(i => i.penalty).length} of ${commons.length} carry a ROLLED one, per §9.2)`);
+    else fail(`commons with a fixed subtraction: ${badCommons.map(i => i.id).join(', ')} — §9.2's stat items roll the stat, they do not name it`);
     const unc = eligible('uncommon');
     const uncShare = unc.filter(neg).length / unc.length;
     if (uncShare >= 0.35 && uncShare <= 0.65) ok(`~half of uncommons carry a subtraction (${unc.filter(neg).length}/${unc.length})`);
@@ -2158,9 +2306,17 @@ try {
       if (!clean.length) ok(`every ${r} carries a subtraction (${list.length} items)`);
       else fail(`${r} with no subtraction: ${clean.map(i => i.id).join(', ')}`);
     }
-    // the subtraction opposes the item's own lane, and is spelled out
-    const silent = IP.filter(it => neg(it) && !/Costs you/.test(it.desc || ''));
-    if (!silent.length) ok('every subtraction is stated explicitly on the item');
+    // The subtraction is spelled out — in one of two forms, because §9.2 now has
+    // two kinds. A FIXED subtraction names the stat ("Costs you −3% Tempo"). A
+    // ROLLED one cannot name the stat, since it does not exist until the player
+    // takes the item, so it must state the MAGNITUDE and say that it is rolled.
+    // That is a stricter test than the old one, not a looser one: an item that
+    // said "−4 to another stat" without admitting the stat is drawn at random
+    // would be hiding the part that makes it a gamble.
+    const statedFixed = it => /Costs you/.test(it.desc || '');
+    const statedRolled = it => new RegExp(`−${it.penalty}\\b`).test(it.desc || '') && /roll/i.test(it.desc || '');
+    const silent = IP.filter(it => (it.penalty ? !statedRolled(it) : (neg(it) && !statedFixed(it))));
+    if (!silent.length) ok('every subtraction is stated explicitly — fixed ones name the stat, rolled ones state the size and admit the roll');
     else fail(`items hiding a subtraction: ${silent.map(i => i.id).join(', ')}`);
     const selfHarm = IP.filter(it => {
       if (!neg(it)) return false;
@@ -4012,6 +4168,21 @@ try {
 } catch (err) { fail('art pipeline section crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
+// THE HARNESS WAS MEASURING A CHARACTER WITH NO ABILITIES.
+//
+// It was written for the weapon era — its own comment says "pure baseline weapon
+// output" — and it spends no skill points, so with weapons removed every built
+// class measured 0.0 while two classes with NO TREE measured 3.2 and 16.2 off
+// trait damage alone. The table has been upside down since patch-trigger-core
+// and nothing said so, because the median it compared against was computed from
+// the same broken numbers: everything was 0, so everything was within band.
+//
+// That is §13 rule 24 in a harness rather than a design — a check that passed
+// for months while measuring the wrong world. It now spends the class's trees
+// the way every other gate does, which is what "damage output" means in a game
+// where a character's damage IS its skills.
+const DPS_LEVEL = 12;
+const { TREES: DPS_TREES } = await import('../js/skills.js');
 function measureDps(charId) {
   // allowUnplayable: this measures a class's damage output against dummies, and
   // a class with no tree measuring 0 is the interesting reading — refusing to
@@ -4025,6 +4196,12 @@ function measureDps(charId) {
   sim.wave.done = true; sim.spawnQueue.length = 0;
   for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
   const p = sim.players[0];
+  // The state a player would arrive in (§13 rule 20): levelled, trees spent,
+  // loadout filled by the same auto-slot path a real character uses.
+  p.level = DPS_LEVEL;
+  for (const tid of Object.keys(DPS_TREES).filter(t => DPS_TREES[t].classId === charId)) {
+    for (const sk of [...DPS_TREES[tid].skills].sort((a, b) => a.tier - b.tier)) { p.skillPoints++; SKILLSIM.spendSkillPoint(sim, p, sk.id); }
+  }
   const cx = sim.W / 2, cy = sim.H / 2;
   p.x = cx; p.y = cy;
   const dummies = [];
@@ -4048,20 +4225,52 @@ function measureDps(charId) {
   // separately by the nova-share check in section 9i instead.
   return (p.damageDealt - (p.novaDamage || 0)) / 20;
 }
+// THE ANCHOR MUST NOT MOVE WITH THE POPULATION.
+//
+// This measured every character and took the median of all of them, which was
+// fine at three classes and is a trap at fifteen. Two ways it breaks, and phase
+// 5 walks into both:
+//
+//   1. UNBUILT CLASSES DRAG THE ANCHOR. Eleven classes have no tree and score 0.
+//      They are not outliers, they are absences — and including them pulled the
+//      median toward zero so that the classes which DO work read as high.
+//   2. TWELVE MEDIOCRE CLASSES PASS BY CONSTRUCTION. Author them all at once
+//      and they become the median. The one check that would catch a
+//      systematically weak batch is measuring the batch against itself, and it
+//      reports "all within band" for a roster that is uniformly wrong.
+//
+// So the anchor is a DECLARED REFERENCE SET: classes that have been balanced
+// deliberately, against a real fight, and signed off. It is a constant, not a
+// derivation. A new class is measured against it and cannot join it by existing
+// — joining is an edit here, made once someone has actually balanced the class.
+//
+// Unbuilt classes are reported by name and excluded from the verdict, because
+// "this class has no tree yet" and "this class is badly tuned" are different
+// findings and §13 rule 11 says a failure name describes the cause.
+const DPS_REFERENCE = ['toh_samurai', 'toh_necromancer', 'toh_druid'];
+const DPS_BAND = 0.40;
 try {
   const table = CHARACTERS.map(c => ({ id: c.id, dps: measureDps(c.id) }));
-  const sorted = [...table].sort((a, b) => a.dps - b.dps);
-  const median = sorted[Math.floor(sorted.length / 2)].dps;
+  const byId = Object.fromEntries(table.map(r => [r.id, r.dps]));
+  const missing = DPS_REFERENCE.filter(id => !(id in byId));
+  if (missing.length) fail(`DPS reference set names ${missing.join(', ')}, which is not in the roster — an anchor pointing at nothing anchors nothing`);
+  const ref = DPS_REFERENCE.filter(id => id in byId).map(id => byId[id]).sort((a, b) => a - b);
+  const median = ref.length ? ref[Math.floor(ref.length / 2)] : 0;
+  const built = new Set(SELECTABLE.map(c => c.id));
+  const unbuilt = table.filter(r => !built.has(r.id));
   let outliers = 0;
-  console.log('  DPS table (floor-1 baseline, median ' + median.toFixed(1) + '):');
+  console.log(`  DPS table (floor-1 baseline; anchor = median of the ${DPS_REFERENCE.length} balanced classes = ${median.toFixed(1)}):`);
   for (const row of table) {
-    const dev = (row.dps - median) / median * 100;
-    const flag = Math.abs(dev) > 40 ? '  ← OUTLIER' : '';
-    console.log(`    ${row.id.padEnd(14)} ${row.dps.toFixed(1).padStart(7)}  ${(dev >= 0 ? '+' : '') + dev.toFixed(0)}%${flag}`);
-    if (Math.abs(dev) > 40) outliers++;
+    if (!built.has(row.id)) { console.log(`    ${row.id.padEnd(16)} ${row.dps.toFixed(1).padStart(7)}   no tree — phase 5`); continue; }
+    const dev = median > 0 ? (row.dps - median) / median * 100 : 0;
+    const isRef = DPS_REFERENCE.includes(row.id);
+    const flag = Math.abs(dev) > DPS_BAND * 100 ? '  ← OUTLIER' : (isRef ? '  (anchor)' : '');
+    console.log(`    ${row.id.padEnd(16)} ${row.dps.toFixed(1).padStart(7)}  ${(dev >= 0 ? '+' : '') + dev.toFixed(0)}%${flag}`);
+    if (Math.abs(dev) > DPS_BAND * 100) outliers++;
   }
-  if (!outliers) ok('DPS gate: all 33 characters within ±40% of median');
-  else fail(`DPS gate: ${outliers} outlier(s)`);
+  if (median <= 0) fail('DPS anchor is zero — every reference class measured no damage, so the band means nothing');
+  else if (!outliers) ok(`DPS gate: all ${built.size} built classes within ±${DPS_BAND * 100}% of the reference median (${unbuilt.length} unbuilt, listed above and not scored)`);
+  else fail(`DPS gate: ${outliers} outlier(s) against the reference median`);
 } catch (err) { fail('DPS harness crashed', err); }
 
 // ---- 11. stress: siege crest density, tick-time measurement ----
@@ -4559,8 +4768,21 @@ try {
   // -- the taxonomy additions are in the taxonomies, not beside them --
   if (TK.includes('ON_TOKEN') && TK.length === 11) ok(`ON_TOKEN is in TRIGGER_KINDS — 11 triggers, not a Necromancer special case`);
   else fail(`ON_TOKEN missing from TRIGGER_KINDS or count wrong: ${TK.length} kinds, ${JSON.stringify(TK)}`);
-  if (PK.includes('summon') && PK.length === 11) ok(`summon is the 11th primitive in PRIMITIVES`);
-  else fail(`summon missing from PRIMITIVE_KINDS or count wrong: ${PK.length}`);
+  // THE SET IS OPEN NOW, so this asserts the RULE rather than the number.
+  //
+  // It pinned 11 and went red the moment `shift` was admitted, which is a check
+  // that just gets bumped — §13's own complaint about the telegraph count. What
+  // must hold is §5.7's contract: every primitive is in the taxonomy rather than
+  // beside it, and each one exists because a class engine needed a write path
+  // nothing else provided. `shift` is named here because naming the exception is
+  // the mechanism — the same shape as `rankGrants` having a registry rather than
+  // a convention.
+  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift'];
+  const missing = EXPECTED_PRIMS.filter(k => !PK.includes(k));
+  const extra = PK.filter(k => !EXPECTED_PRIMS.includes(k));
+  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, admitted under §5.7's three conditions`);
+  else if (missing.length) fail(`primitives missing from PRIMITIVES: ${missing.join(', ')}`);
+  else fail(`UNDECLARED PRIMITIVE(S): ${extra.join(', ')} — §5.7 admits a twelfth only for a class engine needing a write path nothing else provides, ruled before the tree. A primitive that arrives without being listed here arrived while somebody was authoring content`);
   if (MOVE_KINDS.length >= 2) ok(`MOVE_KINDS is a declared, closed taxonomy: ${MOVE_KINDS.join('/')}`);
   else fail(`MOVE_KINDS is not a usable taxonomy: ${JSON.stringify(MOVE_KINDS)}`);
   // NO ENUM ENTRY WIRED TO NOTHING. The source project shipped 19 skill kinds

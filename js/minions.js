@@ -141,6 +141,15 @@ export function ingenuityMult(p) {
   return Math.max(0.2, 1 + (p && p.stats ? Math.max(-8, p.stats.ingenuity) : 0) * ING_PER_POINT);
 }
 
+// §9.2 magnitude, the summoner's half: `summonBoost` items. Ingenuity is the
+// STAT that scales a minion and this is the ITEM that does, and they are kept
+// as separate terms rather than folded together so a report can say which one
+// moved. Both were read only by `_summonStats` — the weapon-era structure path
+// — so an item promising stronger summons did nothing for a skill-era summon
+// (D-25).
+export function summonDmgMult(p) { return 1 + ((p && p.hookAgg ? p.hookAgg.summonDmg : 0) || 0) / 100; }
+export function summonHpMult(p) { return 1 + ((p && p.hookAgg ? p.hookAgg.summonHp : 0) || 0) / 100; }
+
 // ---------------------------------------------------------------- the actor
 //
 // A minion presented in the shape the primitives read. Identity fields (idx,
@@ -159,9 +168,21 @@ function makeActor(sim, m) {
     // Ingenuity change reaches a minion already standing, the same way the
     // owner's stats do.
     get ingMult() { return ingenuityMult(p); },
+    // The item term, beside the stat term rather than inside it (§9.2).
+    get summonMult() { return summonDmgMult(p); },
     x: m.x, y: m.y, radius: m.radius, color: m.color, aimA: 0,
     idx: p.idx, stats: p.stats, hookAgg: p.hookAgg, char: p.char,
     engines: p.engines, engineScaleBonus: p.engineScaleBonus,
+    // `curses` and the healing accumulator are identity too (§13 rule 23), and
+    // they were missing until a summoner bought a lifesteal item: the minion
+    // hit something, the hit healed the OWNER through `_heal`, and `_heal` read
+    // `p.curses` off a facade that had none. The facade is an ALLOWLIST, so
+    // every owner field a new engine path touches has to arrive here — which is
+    // the standing cost of the pattern and worth paying, because the
+    // alternative is a minion with its own copy of the owner's state.
+    curses: p.curses, downed: false, gone: false,
+    get healAcc() { return p.healAcc; }, set healAcc(v) { p.healAcc = v; },
+    get roomVitGain() { return p.roomVitGain; }, set roomVitGain(v) { p.roomVitGain = v; },
     // The engine writes these through the actor during a swing; they must land
     // on the owner, not on a copy that is discarded when the swing ends.
     get hp() { return p.hp; }, set hp(v) { p.hp = v; },
@@ -251,8 +272,8 @@ export function spawnMinions(sim, p, skill, step, rank, origin = null) {
       // instead moved the number and not the shape — a rank-11 wolf still died
       // as fast as a rank-1 one, which is what made depth strictly worse than
       // breadth for the Druid. Ingenuity multiplies the same term.
-      hp: rankedDuration(step.hp, skill, rank) * ingenuityMult(p),
-      maxHp: rankedDuration(step.hp, skill, rank) * ingenuityMult(p),
+      hp: rankedDuration(step.hp, skill, rank) * ingenuityMult(p) * summonHpMult(p),
+      maxHp: rankedDuration(step.hp, skill, rank) * ingenuityMult(p) * summonHpMult(p),
       ttl: step.duration ? step.duration / MS : 0,     // 0 = permanent
       slotted: !!step.slotted,
       revives: !!step.revives,

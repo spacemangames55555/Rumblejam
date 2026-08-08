@@ -13,6 +13,7 @@ import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamag
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
 import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
+import { CONFIG } from './config.js';
 import { TUNING as SAM } from './content/skills/samurai_armor.js';
 
 const S = TRIGGER_TICK_MS / 1000;
@@ -26,10 +27,14 @@ export function initSkillPlayer(sim, p) {
   p.skillCd = {};                    // id -> seconds remaining
   p.trigState = {};                  // id -> per-trigger memory (edge arming)
   p.trigEvents = { kill: 0, hitTaken: 0, dodgeT: -999, lastFired: null };
+  // The Wizard's domain shift: null until a `shift` step writes one, then it
+  // persists until the next shift or the end of the room. `domainShifts` counts
+  // them, which is what a future `scaleWith: 'shift'` engine would read.
+  p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
@@ -56,6 +61,12 @@ export function treesFor(p) { return TREES_BY_CLASS[p.charId] || []; }
 // spending the opening seconds of every fight re-summoning what its points
 // already bought.
 export function startRoomMinions(sim, p) {
+  // A DOMAIN SHIFT DOES NOT SURVIVE A DOOR. It persists until the next shift or
+  // the end of the room, which is what lets the `shift` primitive avoid a decay
+  // tick — but "until the end of the room" only means something if something
+  // ends it. Reset here rather than in a new room hook, so the one function the
+  // sim already calls per room start owns both per-room resets a class needs.
+  p.domainShift = null; p.domainShifts = 0;
   resetMinionsForRoom(sim, p);
   for (const [id, rank] of Object.entries(p.skillRanks || {})) {
     if (!(rank > 0)) continue;
@@ -221,8 +232,21 @@ export function tickSkills(sim, dt) {
     if (p.gone) continue;
     // publish the engines other trees read
     p.engines.armor = Math.max(0, p.stats.grit);
+    // THE WIZARD'S SHIFT ENGINE (§8.3): attunements banked this room, written by
+    // the `shift` primitive and reset at every door. One publish line, beside
+    // armor's, which is what "content-shaped" was supposed to mean.
+    p.engines.shift = p.domainShifts || 0;
+    // THE PRIEST'S MARK ENGINE: how many enemies are currently carrying THIS
+    // player's judgment. A count of standing debt rather than a rate — a Priest
+    // who has marked the room is at their strongest in the moment before it
+    // breaks, and killing the marks spends the power along with the heal.
+    let marked = 0;
+    for (const e of sim.enemyPool) if (e.active && e.markT > 0 && e.markBy === p.idx) marked++;
+    p.engines.marks = marked;
     p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
     p.engineScaleBonus.pack = passiveSum(p, 'packDamageBonus');
+    p.engineScaleBonus.shift = passiveSum(p, 'shiftDamageBonus');
+    p.engineScaleBonus.marks = passiveSum(p, 'marksDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
     // holding slots no skill still pays for.
@@ -304,7 +328,15 @@ function fireSkill(sim, p, sk) {
   // by the skill that read it — the same shape as ON_KILL's counter being
   // cleared by the tick that saw it. Keyed by trigger kind in triggers.js.
   triggerConsume(sim, p, sk);
+  // §9.2 magnitude, timed: the post-dodge damage buff is armed in `hurtPlayer`
+  // and was CONSUMED in `_fireWeapon`, which stopped running with weapons — so
+  // dodging armed a bonus that nothing ever spent (D-25). It is consumed here,
+  // once per fire and for the whole fire, exactly as the weapon path spent it:
+  // "next attack" means the next skill, not the next enemy in an arc.
+  p._atkBuff = 1;
+  if (p.dmgBuffT > 0 && p.dmgBuffAmt > 0) { p._atkBuff = 1 + p.dmgBuffAmt / 100; p.dmgBuffT = 0; }
   const out = runCompose(sim, p, sk, rank, sim.trigGrid);
+  p._atkBuff = 1;
   // THE ToH TRAIT LAYER OBSERVES ATTACKS, and this is what an attack is now.
   // tohOnFire() was called from _tickWeapons() and nothing else — and
   // _tickWeapons has not run since weapons were removed. So Rhythm never built
@@ -353,14 +385,144 @@ export function ferocityMult(p) {
   return Math.max(0, 1 + (p && p.stats ? p.stats.ferocity : 0) / 100);
 }
 
+// ------------------------------------------------------------------- crit
+//
+// §9.5: CRIT IS A ROLL INSIDE `skillDamage`. One roll, one path — the same
+// single site that made Ferocity work, so every composed source inherits crit
+// without a per-primitive decision and phase 5's twelve classes get it free.
+// Before this it existed only in `_fireWeapon`: six items sold it and no skill
+// in the game could crit (D-25).
+//
+// TWO TERMS IN ONE FORMULA, not two definitions of one thing:
+//   chance     = Reflex × CRIT_CHANCE_PER_REFLEX + item chance
+//   multiplier = the player's base (CONFIG.CRIT_MULT_BASE, or a trait's) + item
+// Splitting a mechanic across two sources is what rule 25 warns about; splitting
+// one formula across two terms is arithmetic.
+
+export function critChance(p) {
+  const stat = (p && p.stats ? p.stats.reflex : 0) * CONFIG.CRIT_CHANCE_PER_REFLEX;
+  const item = (p && p.hookAgg ? p.hookAgg.critChance : 0) || 0;
+  return Math.max(0, stat + item);
+}
+
+export function critMultOf(p) {
+  const base = (p && p.critMult) || CONFIG.CRIT_MULT_BASE;
+  return base + ((p && p.hookAgg ? p.hookAgg.critMult : 0) || 0);
+}
+
+// The six conditional GRANTS resolve before the roll and do not consume it: an
+// item promising "every 10th hit crits" must deliver on the 10th hit whether or
+// not the dice agreed. Order matters only in that a guarantee should not burn a
+// one-shot flag the roll would have covered — `firstHitCrit` and `critAfterKill`
+// are one-shot, so they are tested first and spent when they fire.
+export function rollCrit(sim, p, e) {
+  const agg = p && p.hookAgg;
+  if (!agg) return false;
+  let crit = false;
+  if (p.nextCrit) { p.nextCrit = false; crit = true; }                  // Slipstream
+  else if (agg.firstHitCrit && !p.firstHitUsed) crit = true;
+  else if (agg.critAfterKill && p.critArmed) { p.critArmed = false; crit = true; }
+  else if (agg.critEveryN > 0 && ++p.critCounter >= agg.critEveryN) { p.critCounter = 0; crit = true; }
+  else if (agg.critVsChilled && e.slowT > 0) crit = true;
+  else if (agg.critVsBurning && e.burnT > 0) crit = true;
+  else if (agg.critVsFullHp && e.hp >= e.maxHp) crit = true;
+  // SEEDED STREAM, not `sim.rng` — see the note where `critRng` is built.
+  else crit = sim.critRng.float() * 100 < critChance(p);
+  p.firstHitUsed = true;
+  return crit;
+}
+
 export function skillDamage(sim, e, amount, p, skill) {
-  let amt = amount * domainMult(skill.domain, e.domain) * ferocityMult(p);
+  let amt = amount * bestDomainMult(p, skill.domain, e.domain) * ferocityMult(p);
   if (e.defDownT > 0) amt /= e.defDownMult;         // defense down = takes more
+  amt *= eliteBossMult(p, e);                       // §9.2 magnitude, item-granted
+  // Crit multiplies LAST, on top of every other term, so "×2 on a crit" means
+  // twice the hit the player would otherwise have landed.
+  const crit = rollCrit(sim, p, e);
+  if (crit) amt *= critMultOf(p);
   const before = e.hp;
-  sim.damageEnemy(e, amt, { owner: p });
+  sim.damageEnemy(e, amt, { owner: p, crit });
   const dealt = before - e.hp;
   p.damageDealt += Math.max(0, dealt);
+  // §9.2 RIDER TIER — "adds an effect the skill did not have". This is the one
+  // path every composed impact takes, which is the same reason Ferocity works
+  // here and nowhere else: no primitive has to know a rider exists.
+  //
+  // ONLY IMPACTS, NEVER TICKS. Zones, burn and plague damage through
+  // `_areaDamageEnemies` and direct HP subtraction, not through this function —
+  // so a 15%-chance proc rolls on hits and not sixty times a second inside a
+  // hazard. That is a property of the call graph, and `item_gate` measures it
+  // rather than trusting it.
+  if (dealt > 0) applyOnHitRiders(sim, p, skill, e);
+  // `critHeal` is a healing SOURCE, so it goes through `_heal` and Recovery
+  // amplifies it like every other. It was the seventh hook blocked on this
+  // ruling and the one whose name hid the dependency: it grants no crit, it
+  // only fires on one.
+  if (crit && p.hookAgg && p.hookAgg.critHeal) sim._heal(p, p.hookAgg.critHeal);
   return Math.max(0, dealt);
+}
+
+// §9.2 magnitude: bonus damage to elites and bosses. Read here rather than in
+// `_hitEnemy`, where it lived and where nothing has called it since weapons were
+// removed (D-25).
+// §9.2 DOMAIN SWAP, implemented as a domain ADD. The tier is named "swap" in
+// the table and the section's governing rule is "an item may add, never take
+// away", so the two have to be reconciled: this resolves the triangle as the
+// BEST of the skill's own domain and any the player's items grant. A crowd
+// build that finds a spiritual grant gains the matchup it lacked and keeps
+// every matchup it had.
+//
+// RULED, not assumed. §9.2's table now reads "domain add" rather than "domain
+// swap": the governing rule — an item may add, never take away — wins over the
+// label the tier was drafted with. A literal replacement would let one shop roll
+// invert a build's whole triangle position, which is the failure that deleted
+// trigger-swap items from the design.
+export function bestDomainMult(p, atk, def) {
+  let best = domainMult(atk, def);
+  // THE WIZARD'S SHIFT (§8.3), written by the `shift` primitive. It is the
+  // player's own state rather than an item aggregate, and it composes with the
+  // item grants the same way: best of everything available, never worse than
+  // the skill's own domain. A shift that could make a matchup WORSE would let a
+  // mistimed cast punish a build, and §9.2's governing rule — add, never take
+  // away — is the right shape here too even though this arrives from a skill.
+  if (p && p.domainShift) best = Math.max(best, domainMult(p.domainShift, def));
+  const adds = p && p.hookAgg ? p.hookAgg.domainAdd : null;
+  if (adds && adds.length) for (const d of adds) best = Math.max(best, domainMult(d, def));
+  return best;
+}
+
+export function eliteBossMult(p, e) {
+  if (!p || !p.hookAgg || !p.hookAgg.eliteBossDamage) return 1;
+  if (!(e.elite || e.boss)) return 1;
+  return 1 + p.hookAgg.eliteBossDamage / 100;
+}
+
+// The rider tier, applied where damage actually lands.
+//
+// A MINION'S HIT PROCS ITS OWNER'S RIDERS, and that is deliberate: §13 rule 23
+// makes `hookAgg` the owner's field by reference on the actor facade, so a
+// skeleton carrying its summoner's burn is the same statement as a skeleton's
+// kill being its summoner's kill. Attribution never has to be forwarded because
+// it never diverged.
+export function applyOnHitRiders(sim, p, skill, e) {
+  const agg = p && p.hookAgg;
+  if (!agg || !e.active) return;
+  for (const b of agg.burnOnHit) {
+    if (sim.rng.float() < b.chance) sim._applyBurn(e, sim._attuned(p, b.dps), b.duration, p);
+  }
+  for (const s of agg.chillOnHit) {
+    if (sim.rng.float() < s.chance) applySlow(sim, e, s.mult, s.duration, p);
+  }
+  for (const c of agg.chainOnHit) {
+    if (sim.rng.float() >= c.chance) continue;
+    const near = sim._nearestEnemyExcept(e.x, e.y, c.range, e);
+    if (!near) continue;
+    sim.fx.beams.push({ x1: e.x, y1: e.y, x2: near.x, y2: near.y, color: '#4fd8eb' });
+    // The chain damages DIRECTLY, not through skillDamage — a chain that
+    // re-entered the rider path would chain off its own chain, and three items
+    // stacked would recurse until the pool emptied.
+    sim.damageEnemy(near, Math.max(1, Math.round(sim._attuned(p, c.damage))), { owner: p });
+  }
 }
 
 export function skillSplash(sim, p, skill, x, y, radius, damage, exclude) {
@@ -388,7 +550,12 @@ export function spawnSkillProj(sim, p, skill, step, rank, angle, range) {
     vx: Math.cos(angle) * step.speed, vy: Math.sin(angle) * step.speed,
     dmg: stepDamage(step, skill, rank, p), crit: false, friendly: true, lob: false,   // engine scaling rides the projectile
     ttl: (range + 60) / step.speed, radius: step.radius || SKILL_PROJ_R, color: p.color, owner: p.idx,
-    pierce: r.pierce || 0, hitIds: new Set(),
+    // §9.2 magnitude: PIERCE IS AN ITEM, NOT A SKILL PROPERTY. No skill in the
+    // game declares a `pierce` rider, so this term is the whole of it — §5.9
+    // names pierce as the answer to escorted targets and puts it deliberately
+    // in the shop rather than in a tree, so buying it is a build decision with
+    // a cost. It was read only in `_fireWeapon` until D-25.
+    pierce: (r.pierce || 0) + ((p.hookAgg && p.hookAgg.extraPierce) || 0), hitIds: new Set(),
     weaponId: null, kind: 'skill', summonBurn: null, summonKnock: 0, fromSummon: false,
     skill: { id: skill.id, rank },
   });
@@ -451,6 +618,10 @@ export function tickSkillStatuses(sim, dt) {
     if (e.tauntT > 0) e.tauntT -= dt;
     if (e.weakDmgT > 0) e.weakDmgT -= dt;
     if (e.defDownT > 0) e.defDownT -= dt;
+    // The judgment mark expires on the same block every other rider-applied
+    // status does. One line in an existing loop rather than a decay function of
+    // its own, which is what keeps the Priest content-shaped from here on.
+    if (e.markT > 0) e.markT -= dt;
     if (e.plagueT > 0) {
       e.plagueT -= dt;
       e.plagueAcc = (e.plagueAcc || 0) + e.plagueDps * dt;

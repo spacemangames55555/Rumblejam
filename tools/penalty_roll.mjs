@@ -24,6 +24,7 @@ import { SELECTABLE } from '../js/content/characters.js';
 import { STATS, STAT_KEYS } from '../js/config.js';
 import { STAT_BOOSTS } from '../js/content/statboosts.js';
 import { TREES, SKILL_BY_ID as SK_ALL } from '../js/skills.js';
+import { ITEMS } from '../js/content/items.js';
 import { spendSkillPoint } from '../js/skillsim.js';
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -47,7 +48,33 @@ const PENALTY = Object.fromEntries(
 // STAT_BOOSTS through the sim's own seeded rng, not hand-picked. Hand-picking
 // the boosts would decide the answer in advance, since the question is exactly
 // "does the roll land on something the build cares about".
-function build(charId, level, seed, penalty = null) {
+// A REAL ITEM POOL, DRAWN THE WAY THE SHOP DRAWS IT. The first run of this
+// harness measured a character with skills and level-up boosts and NO ITEMS, and
+// reported 28% free rolls. That number was inflated by exactly one thing: with
+// no items, `druid_rejuvenate` is the only healing source in the game, so
+// Recovery read free in every build that was not a Druid. A player who has
+// cleared four regions is holding a dozen items, several of which are healing
+// sources, crit grants and status riders — and a stat with a source is a stat
+// the build can feel.
+//
+// Items are drawn through the sim's own rarity roll and the shop's own
+// late-weighted picker, not hand-chosen: hand-picking would decide the answer,
+// since the question is precisely whether a real inventory closes the gaps.
+const ITEMS_AT = level => Math.max(2, Math.round(level / 3));
+function buyItems(g, p, n) {
+  const got = [];
+  for (let i = 0; i < n; i++) {
+    const rarity = g._rollRarity(g.rng, p.stats.greed);
+    const pool = ITEMS.filter(it => it.rarity === rarity && !p.items.includes(it.id));
+    if (!pool.length) continue;
+    const it = g._pickWeighted(g.rng, pool);
+    g._grantItem(p, it.id);
+    got.push(it.id);
+  }
+  return got;
+}
+
+function build(charId, level, seed, penalty = null, withItems = false) {
   const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }] });
   const p = g.players[0];
   p.level = level;
@@ -65,11 +92,12 @@ function build(charId, level, seed, penalty = null) {
     picks.push(b.stat);
     g._applyPerm(p, { [b.stat]: b.amount });
   }
+  const items = withItems ? buyItems(g, p, ITEMS_AT(level)) : [];
   if (penalty) g._applyPerm(p, { [penalty]: PENALTY[penalty] });
   p.hp = p.stats.vitality;
   const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
   g._travelTo(node.id);
-  return { g, p, picks };
+  return { g, p, picks, items };
 }
 
 // Everything a player could notice. Identical vectors from one seed mean the
@@ -158,7 +186,8 @@ console.log(`  penalty size = the medium boost, negated: ${STATS.map(s => `${s.k
 const summary = [];
 for (const level of ANCHORS) {
   for (const c of SELECTABLE) {
-    const base = build(c.id, level, SEED);
+   for (const withItems of [false, true]) {
+    const base = build(c.id, level, SEED, null, withItems);
     const b = play(base.g, base.p);
     const baseline = b.vec;
     // §9.5's constraint: only stats the character actually HAS are eligible.
@@ -167,7 +196,7 @@ for (const level of ANCHORS) {
 
     const free = [], felt = [], untested = [];
     for (const k of eligible) {
-      const t = build(c.id, level, SEED, k);
+      const t = build(c.id, level, SEED, k, withItems);
       const out = play(t.g, t.p);
       const [why, met, owns] = CHANNEL[k];
       const hasSource = owns(base.p, SK_ALL);
@@ -186,14 +215,21 @@ for (const level of ANCHORS) {
       if (free.includes(pick)) freeRolls++;
     }
     const rate = eligible.length ? freeRolls / ROLLS : 0;
-    summary.push({ charId: c.id, level, eligible, ineligible, free, felt, untested, rate });
-    console.log(`  ${c.id.padEnd(18)} L${String(level).padEnd(3)} eligible ${String(eligible.length).padStart(2)}/10   free-roll ${(rate * 100).toFixed(1).padStart(5)}%   free: ${free.join(',') || '—'}${untested.length ? `   UNTESTED: ${untested.join(',')}` : ''}`);
+    summary.push({ charId: c.id, level, withItems, items: base.items.length, eligible, ineligible, free, felt, untested, rate });
+    console.log(`  ${c.id.padEnd(18)} L${String(level).padEnd(3)} ${(withItems ? `${base.items.length} items` : 'no items').padEnd(9)} eligible ${String(eligible.length).padStart(2)}/10   free-roll ${(rate * 100).toFixed(1).padStart(5)}%   free: ${free.join(',') || '—'}${untested.length ? `   UNTESTED: ${untested.join(',')}` : ''}`);
+   }
   }
 }
 
 console.log('');
+const grp = w => summary.filter(s => s.withItems === w).map(s => s.rate);
+const mm = r => ({ mean: r.reduce((a, b) => a + b, 0) / r.length, worst: Math.max(...r) });
+const bare = mm(grp(false)), real = mm(grp(true));
 const rates = summary.map(s => s.rate);
-const worst = Math.max(...rates), mean = rates.reduce((a, b) => a + b, 0) / rates.length;
-console.log(`  mean free-roll rate ${(mean * 100).toFixed(1)}%, worst build ${(worst * 100).toFixed(1)}%`);
+const worst = real.worst, mean = real.mean;
+console.log(`  NO ITEMS      mean ${(bare.mean * 100).toFixed(1)}%, worst ${(bare.worst * 100).toFixed(1)}%   <- the old measurement`);
+console.log(`  REAL POOL     mean ${(real.mean * 100).toFixed(1)}%, worst ${(real.worst * 100).toFixed(1)}%   <- a build holding what a run gives it`);
+console.log(`  The gap is the measurement's own bias: with no items, one healing skill in the game`);
+console.log(`  means Recovery reads free in every build that is not a Druid.`);
 console.log(`  §9.5's zero-stat constraint alone removes ${(summary.reduce((a, s) => a + s.ineligible.length, 0) / summary.length).toFixed(1)} of 10 stats from the pool on average`);
 console.log('');

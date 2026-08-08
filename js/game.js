@@ -2,7 +2,7 @@
 // rendering. Clients only ever send inputs/UI intents; everything here is the
 // single source of truth. Solo play runs this exact code with one player.
 
-import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT } from './config.js';
+import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, ROLL_TABLE } from './config.js';
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
@@ -75,6 +75,20 @@ export class Sim {
     // incidentals whose order is already fully determined by the tick order;
     // a shared stream is both simpler and exactly as reproducible.
     this.rng = new Rng(hashString(`sim:${this.seed}`));
+    // CRIT ROLLS GET THEIR OWN SEEDED STREAM, for two reasons that both matter.
+    // Determinism: same seed, same crits, so a gate comparing two runs sees
+    // exact numbers instead of averaging variance out over samples. And
+    // isolation: crit rolls do not consume from `rng`, so adding crit to the
+    // game does not shift the sequence every existing balance measurement was
+    // taken against — §4.2's sweep moved once already when a gold multiplier
+    // started drawing from the shared stream, and once was enough.
+    this.critRng = subRng(this.seed, 'crit');
+    // THE ECONOMY'S OWN STREAM, for the same two reasons crit has one: the
+    // penalty roll must be reproducible from a seed, and it must not consume
+    // from `rng` — §9.2's roll fires on every stat-item grant, which would
+    // otherwise reprice every balance number ever measured against a run that
+    // bought something. See §13 rule 27.
+    this.econRng = subRng(this.seed, 'econ');
     this.W = 1280; this.H = 720; // placeholder until the first arena sets real dims
     this.tickNum = 0;
     this.time = 0;
@@ -249,11 +263,17 @@ export class Sim {
       // the bar reports a smaller number the better the player did.
       level: 1, xp: 0, xpEarned: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
       materials: 0, matsCollected: 0, banked: 0,
+      // PER-INSTANCE ITEM STATE, beside `items` rather than inside it, because
+      // `items` is a flat id array on the meta packet and every reader expects
+      // that shape. id -> { pen, lvl }: `pen` is the stat §9.2's penalty rolled
+      // into on the grant that created it, `lvl` is how many copies have been
+      // bought into it (§9.3 item upgrades).
+      itemState: {}, respecs: 0,
       weapons: [], items: [],
       boosts: {}, permStats: {}, tempStats: {},
       stats: null, hookAgg: null,
       weaponSlots: CONFIG.WEAPON_SLOT_MAX,
-      reflexCap: CONFIG.DODGE_CAP, critMult: 2,
+      reflexCap: CONFIG.DODGE_CAP, critMult: CONFIG.CRIT_MULT_BASE,
       firstHitUsed: false, nextCrit: false,
       tempoBuffT: 0, dmgBuffT: 0, dmgBuffAmt: 0,
       frenzy: [], secondWindUsed: false, blockT: 0,
@@ -335,6 +355,20 @@ export class Sim {
       // crit grants (crit is not a stat)
       critAfterKill: false, critEveryN: 0, critVsChilled: false, critVsBurning: false,
       critVsFullHp: false, firstHitCrit: false,
+      // The two crit TERMS, as opposed to the six conditional GRANTS above.
+      // §9.5: chance is Reflex plus items, multiplier is CONFIG.CRIT_MULT_BASE
+      // plus items. No item in the catalog grants either yet — they are the
+      // sites phase 4's magnitude tier writes into, and `item_gate` carries a
+      // probe for each so the site is proven before an item is priced.
+      critChance: 0, critMult: 0,
+      // §9.2's last two tiers. Both are ADDITIVE by design and the field names
+      // say so: `selectorAdd` makes a skill ALSO strike what a second selector
+      // picks, `domainAdd` lets a skill resolve the triangle as the BEST of its
+      // own domain and the granted one. "The rule for every modifier tier: an
+      // item may add, never take away" — an item that rewrote a selector or a
+      // domain outright could invalidate forty points of build with one shop
+      // roll, which is exactly why trigger-swap items were deleted.
+      selectorAdd: [], domainAdd: [],
       // pickup procs
       pickupBlast: [], pickupTempo: [], pickupBonusChance: 0,
       // status spreaders (attuned)
@@ -349,10 +383,21 @@ export class Sim {
       extraChoice: 0, levelStats: [], floorStats: [], vitalityOnKill: [],
       summonDmg: 0, summonHp: 0,
     };
+    // HOOK BLOCKS, NOT ITEMS. An upgraded item applies its `perLevel.hooks`
+    // block once per level past the first. Levels are NOT a blanket multiplier
+    // over hook payloads: "stronger" is not the same direction for every field
+    // — a lower `critEveryN` is stronger, a lower `chillOnHit.mult` is stronger
+    // — and a generic ×1.5 would have quietly weakened three of them. An
+    // explicit per-level block has no direction to get wrong.
+    const blocks = [];
     for (const id of p.items) {
       const it = ITEM_BY_ID[id];
-      if (!it || !it.hooks) continue;
-      const h = it.hooks;
+      if (!it) continue;
+      if (it.hooks) blocks.push(it.hooks);
+      const lvl = (p.itemState[id] && p.itemState[id].lvl) || 1;
+      if (it.perLevel && it.perLevel.hooks) for (let i = 1; i < lvl; i++) blocks.push(it.perLevel.hooks);
+    }
+    for (const h of blocks) {
       if (h.regen) agg.regen += h.regen.hps;
       if (h.lifesteal) agg.lifesteal += h.lifesteal.pct;
       if (h.killHeal) agg.killHeal += h.killHeal.amount;
@@ -370,6 +415,10 @@ export class Sim {
       if (h.critVsBurning) agg.critVsBurning = true;
       if (h.critVsFullHp) agg.critVsFullHp = true;
       if (h.firstHitCrit) agg.firstHitCrit = true;
+      if (h.critChance) agg.critChance += h.critChance.percent;
+      if (h.critMult) agg.critMult += h.critMult.add;
+      if (h.selectorAdd) agg.selectorAdd.push(h.selectorAdd.select);
+      if (h.domainAdd) agg.domainAdd.push(h.domainAdd.domain);
       if (h.pickupBlast) agg.pickupBlast.push(h.pickupBlast);
       if (h.pickupTempo) agg.pickupTempo.push(h.pickupTempo);
       if (h.pickupBonusChance) agg.pickupBonusChance = Math.min(1, agg.pickupBonusChance + h.pickupBonusChance.chance);
@@ -440,7 +489,10 @@ export class Sim {
     for (const st of STATS) s[st.key] = STAT_BASE[st.key];
     const add = mods => { for (const k in mods) if (k in s) s[k] += mods[k]; };
     add(p.char.stats);
-    for (const id of p.items) { const it = ITEM_BY_ID[id]; if (it && it.stats) add(it.stats); }
+    // §9.2: an item's contribution is per-instance now — its level scales the
+    // bonus and the rolled penalty rides with it — so the sheet asks the player
+    // what the item is worth rather than asking the catalog what it says.
+    for (const id of p.items) { const m = this._itemStats(p, id); if (m) add(m); }
     add(p.boosts);
     add(p.permStats);
     // Engines are readable resources that feed stats — Footing's per-stack
@@ -1104,6 +1156,7 @@ export class Sim {
       mats: PYLON_DEF.mats, mini: false, elite: false, eliteMod: null,
       domain: PYLON_DEF.domain,
       t: 0, phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
+      markT: 0, markBy: -1, markHeal: 0, markRadius: 0,   // §13 rule 8: pooled slots inherit nothing
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0, healTarget: null, brood: null, shape: PYLON_DEF.shape, color: PYLON_DEF.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -1130,6 +1183,7 @@ export class Sim {
       telState: 0, telT: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
+      markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
     });
@@ -1390,6 +1444,7 @@ export class Sim {
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
       t: this.rng.float(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
+      markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0.8 + this.rng.float(), healTarget: null, brood: null, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -1638,8 +1693,20 @@ export class Sim {
   // when that arena starts and are gone when the next one does — a cursed
   // buy is a loan against exactly one fight.
   _grantItem(p, id) {
-    p.items.push(id);
     const it = ITEM_BY_ID[id];
+    const owned = p.items.includes(id);
+    if (owned && this._itemUpgradable(p, id)) {
+      // §9.3 ITEM UPGRADES. A second copy deepens the one you have instead of
+      // stacking a duplicate — the same shape weapons used, kept because it is
+      // the shape players already learned. Level scales the bonus AND the rolled
+      // penalty, so an upgrade is never a way to buy the upside alone.
+      const st = p.itemState[id];
+      st.lvl = Math.min(CONFIG.ITEM_MAX_LEVEL, (st.lvl || 1) + 1);
+      this.pushEvent({ k: 'toast', idx: p.idx, text: `${it.name} upgraded to level ${st.lvl}` });
+    } else {
+      p.items.push(id);
+      p.itemState[id] = { lvl: 1, pen: this._rollPenalty(p, it) };
+    }
     if (it) {
       for (const c of [it.curse, it.curse2]) {
         if (c) p.pendingCurses.push({ ...c, from: it.name });
@@ -1647,6 +1714,47 @@ export class Sim {
     }
     this._recomputeItems(p);
     this._recomputeStats(p);
+  }
+
+  // Upgradable means "level does something": a `stats` block to deepen, or an
+  // explicit `perLevel.hooks` block. An item with neither would take the money
+  // and change nothing, which is the shop version of the defect `item_gate`
+  // exists to reject.
+  _itemUpgradable(p, id) {
+    const it = ITEM_BY_ID[id];
+    if (!it || !p.itemState[id]) return false;
+    if ((p.itemState[id].lvl || 1) >= CONFIG.ITEM_MAX_LEVEL) return false;
+    return !!(it.stats || (it.perLevel && it.perLevel.hooks));
+  }
+
+  // §9.2 THE PENALTY ROLL. Returns the stat this instance's penalty landed on,
+  // or null for an item that declares no penalty.
+  //
+  // ELIGIBILITY IS AGAINST THE LIVE SHEET, not the catalog: "a penalty may not
+  // roll into a stat the character has none of" is a property of the character
+  // buying it. Reducing a stat already at zero is free, and a shop full of free
+  // items has no trade-offs left. With nothing eligible the item rolls no
+  // penalty at all and is honestly cheaper for it — that case is reported by
+  // `econ_gate`, never silently converted into a free bonus at full price.
+  _rollPenalty(p, it) {
+    if (!it || !it.penalty) return null;
+    const granted = Object.keys(it.stats || {});
+    const pool = ROLL_TABLE.filter(k => !granted.includes(k) && (p.stats ? p.stats[k] : STAT_BASE[k]) > 0);
+    if (!pool.length) return null;
+    return pool[Math.floor(this.econRng.float() * pool.length)];
+  }
+
+  // What an item is worth to THIS player right now: base times its level, with
+  // the rolled penalty folded in at the same scale.
+  _itemStats(p, id) {
+    const it = ITEM_BY_ID[id];
+    if (!it) return null;
+    const st = p.itemState[id] || { lvl: 1, pen: null };
+    const mult = 1 + CONFIG.ITEM_LEVEL_MULT * ((st.lvl || 1) - 1);
+    const out = {};
+    for (const k in (it.stats || {})) out[k] = it.stats[k] * mult;
+    if (it.penalty && st.pen) out[st.pen] = (out[st.pen] || 0) - it.penalty * mult;
+    return out;
   }
 
   // sum of one curse key across a player's ACTIVE curses (they stack)
@@ -2334,6 +2442,36 @@ export class Sim {
       this.pushEvent({ k: 'toast', idx: -1, text: 'The ward pylon shatters — the empowerment ends' });
       this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
     }
+    // §8.3 JUDGMENT MARK DETONATION. It fires on the mark, not on the killer:
+    // a Priest's mark pays out when the marked thing dies, whoever killed it and
+    // whether or not the Priest is still standing. Every other death hook here
+    // reads `killer.hookAgg`, which is the item aggregate and is why a
+    // skill-placed mark had nowhere to live before this.
+    //
+    // The heal routes through `_heal`, so Recovery amplifies it like every other
+    // source, and it reaches ALLIES — the mark is the Priest's contribution to a
+    // party, and a version that healed only the caster would be a lifesteal item.
+    if (e.markT > 0 && e.markHeal > 0) {
+      // THE MARK IS SPENT BEFORE IT PAYS, and that ordering is load-bearing.
+      // The Priest's own `grace_and_judgment` trait turns healing into damage
+      // through `tohOnHeal`, so a detonation that healed while still marked went
+      // heal -> damage -> kill the same enemy -> detonate -> heal, and blew the
+      // stack. Clearing first makes it one bounce, never a loop — the same
+      // guarantee `voodooMirror` gets from its `mirrored` flag, and the same
+      // class of defect: a payout that re-enters the path that triggered it.
+      const heal = e.markHeal, radius = e.markRadius, owner = this.players[e.markBy];
+      e.markT = 0; e.markHeal = 0;
+      let healed = 0;
+      for (const q of this.livePlayers()) {
+        if (dist2(x, y, q.x, q.y) > radius * radius) continue;
+        this._heal(q, heal, { by: owner });
+        healed++;
+      }
+      if (healed) {
+        this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: radius });
+        this.pushEvent({ k: 'sfx', s: 'revive' });
+      }
+    }
     tohEnemyDied(this, e);              // Necromancer bone-dust — any kill, anywhere
     // A soul token, from ANY death, for ANY party. It is a world resource read
     // by the ON_TOKEN trigger, not a Necromancer counter — so the Wizard's Soul
@@ -2801,6 +2939,22 @@ export class Sim {
         if (z.hurts === 'enemies') {
           const owner = z.owner !== undefined ? this.players[z.owner] : null;
           this._areaDamageEnemies(z.x, z.y, z.r, z.dps * mul, owner, { silent: true });
+          // THE HAZARD'S `slow` RIDER, which was carried here and dropped.
+          // `PRIMITIVES.hazard` has always passed `slowMult`/`slowDur` into the
+          // zone and this loop read only `z.dps`, so Blight, Gravechill and
+          // Bramble declared a chill that never once landed. Same shape as the
+          // cone/line gap (§13 rule 25): a value plumbed to a consumer that
+          // ignores it, validated by a table that only checks the declaration.
+          if (z.slowMult && z.slowDur) {
+            const src = z.ownerIdx !== undefined ? this.players[z.ownerIdx] : owner;
+            const seen = new Set();
+            this.grid.query(z.x, z.y, z.r + 40, e => {
+              if (!e.active || seen.has(e.id)) return;
+              seen.add(e.id);
+              if (dist2(z.x, z.y, e.x, e.y) > (z.r + e.radius) * (z.r + e.radius)) return;
+              this.applySlow(e, z.slowMult, z.slowDur, src);
+            });
+          }
         } else {
           for (const p of this.livePlayers()) {
             if (!p.downed && dist2(z.x, z.y, p.x, p.y) <= z.r * z.r) this.hurtPlayer(p, z.dps * mul, null);
@@ -3308,9 +3462,43 @@ export class Sim {
     let rarity = t.key === 'legendary_shop' ? 'legendary' : this._rollRarity(rng, p.stats.greed);
     if (force === 'rareplus' && rarity !== 'rare' && rarity !== 'legendary') rarity = 'rare';
     const pool = ITEMS.filter(it => it.rarity === rarity);
-    const it = rng.pick(pool);
+    const it = this._pickWeighted(rng, pool);
     const price = Math.max(1, Math.round(it.price * floorScale * discount));
     return { kind: 'item', id: it.id, price, sold: false, locked: false };
+  }
+
+  // §9.2 LATE-GAME WEIGHTING, AND THE COUPLING IT COSTS.
+  //
+  // The weighting lives on the ITEM: `lateWeight` is 0 for "as likely in region
+  // 1 as region 8" and 1 for "strongly a late find". The shop does not know
+  // which items belong to which region and holds no region table — it passes
+  // ONE normalised scalar it already has, and the item's own data decides.
+  //
+  // That one number is the whole coupling, and it is worth naming rather than
+  // pretending it is zero: weighting is a function of the item AND the position
+  // in the run, so something has to know the position. The choice is whether
+  // the shop knows *region semantics* — which items appear where, a table that
+  // grows with every region and every item — or a single progress float. It is
+  // the float. Adding region 5 changes no shop code.
+  _runProgress() {
+    const perRegion = Math.max(1, CONFIG.FLOORS);
+    const region = (this.regionIndex || 0);
+    const within = (this.floorNum - 1) / perRegion;
+    return Math.min(1, (region + within) / 8);      // 0 at the first door, 1 at the last
+  }
+
+  _pickWeighted(rng, pool) {
+    const prog = this._runProgress();
+    let total = 0;
+    const w = pool.map(it => {
+      const lw = it.lateWeight || 0;
+      const v = 1 + lw * prog * CONFIG.LATE_WEIGHT_MAX;
+      total += v;
+      return v;
+    });
+    let roll = rng.float() * total;
+    for (let i = 0; i < pool.length; i++) { roll -= w[i]; if (roll <= 0) return pool[i]; }
+    return pool[pool.length - 1];
   }
 
   _rollTier(rng) {
@@ -3328,6 +3516,32 @@ export class Sim {
     return 1;
   }
 
+  // §9.3 RESPEC. 1000 gold base, ×2.5 per use, NEVER RESETTING — not per floor,
+  // not per region, not per run-restart of the same character. The cost is the
+  // whole mechanic: one correction mid-run is affordable, a habit of rebuilding
+  // at every region is not.
+  _respecCost(p) {
+    return Math.round(CONFIG.RESPEC_BASE * Math.pow(CONFIG.RESPEC_GROWTH, p.respecs || 0));
+  }
+
+  // ALL POINTS AT ONCE. Per-point respec would let a player micro-optimise
+  // between every map, which is the opposite of committing to a build.
+  _respec(p) {
+    const cost = this._respecCost(p);
+    if (p.materials < cost) return { ok: false, reason: 'not enough gold' };
+    const spent = Object.values(p.skillRanks || {}).reduce((a, b) => a + b, 0);
+    if (spent <= 0) return { ok: false, reason: 'nothing to refund' };
+    p.materials -= cost;
+    p.respecs = (p.respecs || 0) + 1;
+    p.skillPoints += spent;
+    p.skillRanks = {};
+    p.loadout = new Array(8).fill(null);
+    this._recomputeStats(p);
+    this.pushEvent({ k: 'toast', idx: p.idx, text: `Respec — ${spent} points refunded. Next costs ${this._respecCost(p)}` });
+    p.metaDirty = true;
+    return { ok: true, refunded: spent };
+  }
+
   _rerollCost(p) {
     const base = CONFIG.REROLL_BASE + CONFIG.REROLL_PER_FLOOR * (this.floorNum - 1);
     if (p.shop.freeLeft > 0) return 0;
@@ -3342,6 +3556,11 @@ export class Sim {
       k: 'shop', idx: p.idx,
       stock: p.shop.stock.map(s => ({ kind: s.kind, id: s.id, tier: s.tier, price: s.price, sold: s.sold, locked: s.locked })),
       rerollCost: this._rerollCost(p),
+      respecCost: this._respecCost(p),
+      // Per-slot: is buying this an UPGRADE of something owned, and what does
+      // that cost? Surfaced so the shop UI can say so before the money moves.
+      upgrades: p.shop.stock.map(s2 => (s2.kind === 'item' && this._itemUpgradable(p, s2.id))
+        ? { lvl: (p.itemState[s2.id] || {}).lvl || 1, price: Math.round(s2.price * CONFIG.ITEM_UPGRADE_PRICE_MULT) } : null),
       weaponsOnly: p.char.trait.key === 'arsenal_doctrine',
       black: !!p.shop.black,
       floor: this.floorNum, // sell values shown in the UI derive from this
@@ -3696,10 +3915,22 @@ export class Sim {
             const ok = this._addWeapon(p, s.id, s.tier, s.price);
             if (!ok) return this._buyResult(p, msg.slot, false, 'weapons full — sell or combine');
           }
-        } else {
+        }
+        // §9.3: a copy of something you own is an UPGRADE, and it is priced as
+        // one. Charged before the grant, because `_grantItem` is what decides
+        // whether this purchase deepened an item or added one, and asking after
+        // the fact would read the state the grant just changed.
+        let paid = s.price;
+        if (s.kind === 'item') {
+          if (this._itemUpgradable(p, s.id)) {
+            paid = Math.round(s.price * CONFIG.ITEM_UPGRADE_PRICE_MULT);
+            if (p.materials < paid) return this._buyResult(p, msg.slot, false, 'not enough for the upgrade');
+          } else if (p.items.includes(s.id)) {
+            return this._buyResult(p, msg.slot, false, 'already owned at max level');
+          }
           this._grantItem(p, s.id);
         }
-        p.materials -= s.price;
+        p.materials -= paid;
         s.sold = true;
         p.metaDirty = true;
         this.pushEvent({ k: 'sfx', s: 'buy' });
@@ -3742,6 +3973,14 @@ export class Sim {
         this._fillStock(p);
         this.pushEvent({ k: 'sfx', s: 'reroll' });
         p.metaDirty = true;
+        this._sendShop(p);
+        break;
+      }
+      case 'respec': {
+        // Between rooms only, for the same reason a loadout change is: a build
+        // rewritten mid-fight is a different party than the one that entered.
+        if (this.phase === 'arena' && !this.cleared) return;
+        this._respec(p);
         this._sendShop(p);
         break;
       }
@@ -3810,6 +4049,7 @@ export class Sim {
         mats: p.matsCollected, gone: p.gone,
         weapons: p.weapons.map(w => ({ id: w.id, tier: w.tier })),
         items: [...p.items],
+      itemState: JSON.parse(JSON.stringify(p.itemState || {})),
       })),
     };
     this.pushEvent({ k: 'end', result: this.result });
@@ -4103,6 +4343,7 @@ export class Sim {
       materials: p.materials, banked: p.banked,
       weapons: p.weapons.map(w => ({ id: w.id, tier: w.tier, invested: w.invested })),
       items: [...p.items],
+      itemState: JSON.parse(JSON.stringify(p.itemState || {})),
       stats: { ...p.stats }, weaponSlots: p.weaponSlots,
       boonCounts: ['prism', 'wildshape'].includes(p.char.trait.key) ? { ...p.boonCounts } : undefined,
       // run-long, changes a few times a floor — the meta channel, not the 15Hz snapshot

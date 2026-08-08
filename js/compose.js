@@ -51,8 +51,16 @@ export function stepDamage(step, skill, rank, p) {
   // applies to a summon's swing, never to the summoner's own skills, and this
   // is the one place the two can be told apart. A player has no such field, so
   // the term is exactly 1 for every non-minion caster.
-  return rankedDamage(step.damage, skill, rank) * engineScale(step, p) * (p.ingMult || 1);
+  // `_atkBuff` is the post-dodge one-shot buff (§9.2), set and cleared around a
+  // single fire in `fireSkill`. A minion's facade does not carry it, which is
+  // correct — the player dodged, not the skeleton.
+  return rankedDamage(step.damage, skill, rank) * engineScale(step, p)
+    * (p.ingMult || 1) * (p.summonMult || 1) * (p._atkBuff || 1);
 }
+
+// §9.2 magnitude: item-granted knockback scaling. A player with no such item
+// has `knockMult === 1`, and a minion reads its owner's by reference.
+export function knockMult(p) { return (p && p.hookAgg && p.hookAgg.knockMult) || 1; }
 
 const TAU = Math.PI * 2;          // structural
 const MS = 1000;                  // structural: step params are milliseconds
@@ -122,6 +130,44 @@ function facing(sim, p, grid, range, select) {
   return d !== null ? d : p.aimA;
 }
 
+// A SWEEP CHEWS BARRICADES. `game.js` has always stated the rule — "every
+// splash, nova and blast chews barricades as well as bodies" — and enforced it
+// on the weapon paths: melee arcs called `_sweepWalls`, blasts went through
+// `_areaDamageEnemies`, and a straight shot damaged the wall that absorbed it.
+// Composed primitives inherited none of that, and weapons are gone, so in the
+// skill era `strike`, `cone` and `line` passed through a Nest Purge barricade
+// without scratching it.
+//
+// THE GATE SAID THE LEVEL WAS COMPLETABLE BECAUSE ONE CLASS STOOD IN IT.
+// `bolt` reaches walls through the projectile tick and `hazard` through the
+// zone tick, so the Necromancer and the Druid cleared Nest Purge and the gate
+// was green. Measured across the built five, a melee class made ZERO progress
+// on twenty-four barricades in six minutes. That is §13 rule 28's shape a third
+// time: a claim about a LEVEL, decided by whichever class the fixture happened
+// to be holding.
+//
+// `drain` is deliberately not here. It is single-target on a living thing and
+// pays the caster back out of what it took; there is nothing to drain from a
+// barricade, and giving it one would be inventing a behaviour rather than
+// restoring one.
+//
+// A BARRICADE IN REACH IS STRUCK REGARDLESS OF WHICH WAY THE SWING AIMED, and
+// that is a ruling, not a shortcut. A weapon arc tested facing against walls
+// because the PLAYER aimed it — `p.aimA` pointed wherever they were looking.
+// A composed skill aims itself: `facing()` follows the skill's own selector to
+// an ENEMY (§15 defect #13, fixed deliberately). Keeping the arc test would
+// therefore mean the skill era quietly removed the player's ability to choose
+// to hit a wall, and the measurement says exactly that — a Samurai standing
+// against a barricade for six minutes took 24 of them down to 22.
+//
+// A barricade is not a body. It does not dodge, it fills the space it occupies,
+// and a person swinging a sword inside arm's reach of one hits it. So the sweep
+// passes the full circle: range still matters, facing does not.
+function chewWalls(sim, p, range, dmg) {
+  if (!sim.walls.length) return;
+  sim._sweepWalls(p.x, p.y, 0, range, Math.PI * 2, dmg, p);
+}
+
 // ---------------------------------------------------------------- primitives
 
 export const PRIMITIVES = {
@@ -151,6 +197,7 @@ export const PRIMITIVES = {
         applyImpactRiders(sim, p, skill, r, e, rank, Math.atan2(dy, dx), out);
         out.hits++;
       }
+      chewWalls(sim, p, reach, dmg);
     }
     sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: reach, color: p.color });
   },
@@ -158,10 +205,28 @@ export const PRIMITIVES = {
   // Travelling projectile. Riders ride the projectile and resolve on impact.
   bolt(sim, p, skill, step, rank, grid, out) {
     const range = step.range || skill.trigger.range || skill.trigger.radius;
-    const count = step.count || 1;
+    // §9.2 magnitude: projectile count. This is the tier's headline shape —
+    // "hit the nearest two targets instead of one" — and it needs no new
+    // machinery because `bolt` already fans to a target list. Read only in
+    // `_fireWeapon` until D-25.
+    const count = (step.count || 1) + ((p.hookAgg && p.hookAgg.extraProjectiles) || 0);
     const targets = count > 1
       ? selectTargets(skill.select, grid, p.x, p.y, range, count)
       : [selectTarget(skill.select, grid, p.x, p.y, range)].filter(Boolean);
+    // §9.2 SELECTOR-ADD. The skill ALSO strikes what a second selector picks —
+    // it does not stop striking what its own picked. A crowd-clearing build
+    // that finds one gains an elite-killer without losing its crowd clear and
+    // without spending a point.
+    //
+    // Range is the SKILL'S, not the selector's: §5.3 rule 1 says a selector
+    // re-ranks only what the skill's own range already returns, and a selector
+    // arriving on an item must obey that too or every shop roll would be a
+    // silent range upgrade.
+    const adds = (p.hookAgg && p.hookAgg.selectorAdd) || [];
+    for (const sel of adds) {
+      const extra = selectTarget(sel, grid, p.x, p.y, range);
+      if (extra && !targets.includes(extra)) targets.push(extra);
+    }
     if (!targets.length) return;
     for (const t of targets) {
       sim.spawnSkillProj(p, skill, step, rank, aimAt(p, t), range);
@@ -173,6 +238,7 @@ export const PRIMITIVES = {
   // crowd answer rather than a wide single-target hit.
   cone(sim, p, skill, step, rank, grid, out) {
     const dmg = stepDamage(step, skill, rank, p);
+    const r = step.riders || {};
     const a0 = grid.densestAngle(p.x, p.y, step.range) ?? facing(sim, p, grid, step.range, skill.select);
     for (const e of grid.near(p.x, p.y, step.range)) {
       const dx = e.x - p.x, dy = e.y - p.y;
@@ -180,8 +246,15 @@ export const PRIMITIVES = {
       if (Math.abs(angleDelta(Math.atan2(dy, dx), a0)) > step.angle / 2) continue;
       if (sim.losBlocked(p.x, p.y, e.x, e.y)) continue;
       sim.skillDamage(e, dmg, p, skill);
+      // RIDER_TABLE has always said `cone: [...IMPACT_RIDERS]` and this
+      // primitive applied none of them. Bone Nova's knockback 300, and the
+      // Banshee's and Dread Howl's weakenDamage, were declared and dropped.
+      // Found while measuring `knockbackBoost` — the item had nothing to scale
+      // because the rider it scales was never applied.
+      applyImpactRiders(sim, p, skill, r, e, rank, Math.atan2(dy, dx), out);
       out.hits++;
     }
+    chewWalls(sim, p, step.range, dmg);
     sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: step.range, color: p.color });
   },
 
@@ -202,8 +275,18 @@ export const PRIMITIVES = {
         const off = Math.abs(-dx * sa + dy * ca);
         if (off > half + e.radius) continue;
         sim.skillDamage(e, dmg, p, skill);
+        // Same gap as `cone`: Wrecking Ball's knockback and stun, and
+        // Stampede's knockback, were declared on a primitive that applied
+        // nothing. A beam knocks along its own axis, not away from the caster.
+        applyImpactRiders(sim, p, skill, r, e, rank, a0, out);
         out.hits++;
       }
+      // The beam STOPS at a barricade (losClipLen above), so the barricade is
+      // what it stopped on and takes the hit — the same rule the friendly
+      // projectile tick states as "a DESTRUCTIBLE wall takes the hit rather
+      // than merely eating the shot". Measured at the clipped end, half-width
+      // plus the sweep's own slack, so a beam grazing a corner still bites.
+      if (sim.walls.length) sim._areaDamageWalls(p.x + ca * len, p.y + sa * len, half + 12, dmg, p);
     }
     sim.fx.beams.push({ x1: p.x, y1: p.y, x2: p.x + ca * len, y2: p.y + sa * len, color: p.color, w: step.width });
   },
@@ -298,6 +381,28 @@ export const PRIMITIVES = {
 
   // A spreading damage-over-time. Stacks rather than refreshing, which is what
   // makes Internal Collapse a payoff for a tree that already applies dots.
+  // THE TWELFTH PRIMITIVE, and the first addition to a set closed since phase 1.
+  //
+  // It is here because the Wizard's engine — "the only class that changes its
+  // own damage domain mid-fight" (§8.3) — needs a write path no existing
+  // primitive provides. `bestDomainMult` read `p.hookAgg.domainAdd` and nothing
+  // else, which is an ITEM aggregate no skill can reach, and the only primitive
+  // that wrote a domain at all was `ward`, which writes `p.wardDomain` for the
+  // ward's reflect. See §5.7 for what admits a twelfth: a class engine needing
+  // a write path nothing provides, ruled before the tree and never during.
+  //
+  // NO DURATION, DELIBERATELY. A shift persists until the next shift or the end
+  // of the room, so this primitive needs no decay and therefore no tick. A timed
+  // shift would have made the Wizard tick-shaped, which is a heavier class of
+  // change for a difference the design does not ask for: §8.3 says the Wizard
+  // changes domain mid-fight, not that it holds one briefly.
+  shift(sim, p, skill, step, rank, grid, out) {
+    p.domainShift = step.domain;
+    p.domainShifts = (p.domainShifts || 0) + 1;
+    sim.pushEvent({ k: 'toast', idx: p.idx, text: `Attuned: ${step.domain}` });
+    out.states++;
+  },
+
   plague(sim, p, skill, step, rank, grid, out) {
     const seed = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.spreadRadius);
     if (!seed) return;
@@ -331,11 +436,27 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
   }
   if (r.root) { e.rootT = Math.max(e.rootT || 0, r.root / MS); out.statuses++; }
   if (r.taunt) { e.tauntT = Math.max(e.tauntT || 0, r.taunt / MS); e.tauntIdx = p.idx; out.statuses++; }
-  if (r.knockback) { e.knockX += Math.cos(angle) * r.knockback; e.knockY += Math.sin(angle) * r.knockback; out.statuses++; }
+  if (r.knockback) {
+    const k = r.knockback * knockMult(p);           // §9.2 magnitude (D-25)
+    e.knockX += Math.cos(angle) * k; e.knockY += Math.sin(angle) * k; out.statuses++;
+  }
   if (r.slow) { sim.applySlow(e, r.slow.mult, r.slow.dur / MS, p); out.statuses++; }
   if (r.weakenDamage) { e.weakDmgT = r.weakenDamage.dur / MS; e.weakDmgMult = r.weakenDamage.mult; out.statuses++; }
   if (r.weakenDefense) { e.defDownT = r.weakenDefense.dur / MS; e.defDownMult = r.weakenDefense.mult; out.statuses++; }
   if (r.healPerHit) { p.hp = Math.min(p.stats.vitality, p.hp + r.healPerHit); out.states++; }
+  // JUDGMENT MARK. The mark is state on the ENEMY and it names its owner, its
+  // payout and its reach, because the thing that reads it is `_killEnemy` —
+  // which runs long after this step, possibly from somebody else's killing blow.
+  // Carrying the numbers on the mark rather than looking them back up means a
+  // mark detonates as the skill that placed it specified, even if the Priest is
+  // dead by then.
+  if (r.mark) {
+    e.markT = Math.max(e.markT || 0, r.mark.dur / MS);
+    e.markBy = p.idx;
+    e.markHeal = r.mark.heal;
+    e.markRadius = r.mark.radius;
+    out.statuses++;
+  }
 }
 
 // Projectile-only riders — the ones that need a flight or an impact point.
@@ -374,7 +495,11 @@ export function runCompose(sim, p, skill, rank, grid) {
 export const PRIMITIVE_KINDS = Object.keys(PRIMITIVES);
 
 // Riders that resolve on a hit enemy — valid anywhere damage lands.
-export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit'];
+// `mark` is the Priest's write path (§8.3 judgment marks). A rider could write
+// exactly eight enemy fields before it and none of them was a mark, so a
+// skill-placed mark had nowhere to live and no detonation site — every death
+// hook in `_killEnemy` read `killer.hookAgg`, the ITEM aggregate.
+export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mark'];
 // Riders that shape the swing itself rather than the target.
 export const SHAPE_RIDERS = ['windUp', 'multiPulse'];
 // Riders that need a projectile: a flight to pierce, an impact point to splash.
@@ -391,5 +516,7 @@ export const RIDERS_BY_PRIMITIVE = {
   // declared on the attack step, and is validated against that step's own
   // primitive — see assertTrees().
   summon: [],
-  heal: [], shield: [], ward: [], drain: [], plague: [],
+  // `shift` takes no riders for the same reason `summon` takes none: riders
+  // resolve on a target at the moment of impact, and a shift has no target.
+  heal: [], shield: [], ward: [], drain: [], plague: [], shift: [],
 };
