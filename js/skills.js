@@ -11,6 +11,8 @@ import { WIZARD_ATTUNEMENT, TUNING as WIZ_ATT_TUNING } from './content/skills/wi
 import { WIZARD_ARCANA, TUNING as WIZ_ARC_TUNING } from './content/skills/wizard_arcana.js';
 import { PRIEST_JUDGMENT, TUNING as PRI_JUD_TUNING } from './content/skills/priest_judgment.js';
 import { PRIEST_GRACE, TUNING as PRI_GRA_TUNING } from './content/skills/priest_grace.js';
+import { BARD_CADENCE, TUNING as BARD_CAD_TUNING } from './content/skills/bard_cadence.js';
+import { BARD_ENSEMBLE, TUNING as BARD_ENS_TUNING } from './content/skills/bard_ensemble.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
@@ -28,6 +30,8 @@ export const TREES = {
   wizard_arcana: { id: 'wizard_arcana', name: 'Arcana', classId: 'toh_wizard', skills: WIZARD_ARCANA, tuning: WIZ_ARC_TUNING },
   priest_judgment: { id: 'priest_judgment', name: 'Judgment', classId: 'toh_priest', skills: PRIEST_JUDGMENT, tuning: PRI_JUD_TUNING },
   priest_grace: { id: 'priest_grace', name: 'Grace', classId: 'toh_priest', skills: PRIEST_GRACE, tuning: PRI_GRA_TUNING },
+  bard_cadence: { id: 'bard_cadence', name: 'Cadence', classId: 'toh_bard', skills: BARD_CADENCE, tuning: BARD_CAD_TUNING },
+  bard_ensemble: { id: 'bard_ensemble', name: 'Ensemble', classId: 'toh_bard', skills: BARD_ENSEMBLE, tuning: BARD_ENS_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
@@ -64,6 +68,7 @@ export const PASSIVE_EFFECT = {
   packDamageBonus: 'damage',      // Pack Bond: more damage per standing animal
   shiftDamageBonus: 'damage',     // Sympathetic Resonance: more per attunement banked
   marksDamageBonus: 'damage',     // Attend the Fallen: more per mark standing
+  rhythmDamageBonus: 'damage',    // Perfect Time: more per stack held
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the

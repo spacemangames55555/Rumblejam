@@ -35,7 +35,7 @@
 // Usage: node tools/engine_gate.mjs [--verbose]
 
 import { Sim } from '../js/game.js';
-import { SELECTABLE } from '../js/content/characters.js';
+import { SELECTABLE, CHAR_BY_ID } from '../js/content/characters.js';
 import { TREES, SKILL_BY_ID } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
 import * as SKROOM from '../js/skillsim.js';
@@ -97,6 +97,10 @@ const ENGINE_KEYS = Object.keys(stage(SELECTABLE[0].id).p.engines);
 //
 // So each probe names its own high and low staging, and the low one takes away
 // whatever fills the resource.
+// The Bard's rhythm window, read off the trait rather than restated — the gate's
+// filler predicate below is only correct relative to whatever the trait says.
+const RHYTHM_WINDOW_MS = (CHAR_BY_ID['toh_bard'].trait.windowSec) * 1000;
+
 const PROBES = {
   footing: {
     what: 'stacks accumulated standing still',
@@ -139,6 +143,32 @@ const PROBES = {
     // changes between the two runs is the count the engine publishes.
     low: (g, p) => { for (const e of g.enemyPool) if (e.active) e.markT = 0; p.engines.marks = 0; },
     fills: sk => (sk.compose || []).some(c => c.riders && c.riders.mark),
+  },
+  rhythm: {
+    what: 'stacks held in the beat',
+    char: 'toh_bard',
+    // THE ONLY ENGINE WITH A LOSS CONDITION, and the staging is the loss.
+    // `tohOnFire` builds a stack on every cast and `tohTick` wipes the whole
+    // stack when the window lapses, so the low run does not need to remove a
+    // SOURCE the way `shift` and `marks` do — it drops the chain, which is what
+    // a player who stops casting suffers. Zeroing both the stack and its timer
+    // each frame is exactly "the window lapsed", stated in the engine's own
+    // terms rather than by starving the thing that fills it.
+    low: (g, p) => { p.rhythm = 0; p.rhythmT = 0; p.engines.rhythm = 0; },
+    // EVERY skill fills it — the hook is on the cast, not on the effect — but
+    // that is not the same as every skill SUSTAINING it, and the gate's first
+    // run made the difference concrete. Slotted alone, `bard_quickstep` reached
+    // exactly ONE stack: its 2000 ms cooldown is longer than the 1.5 s window,
+    // so the chain lapsed between every cast and the engine read 1 forever.
+    //
+    // That is the class working as designed, not a fixture bug — a Cadence node
+    // slower than the window cannot hold its own chain, which is precisely why
+    // the tree opens with a metronome. So the filler is derived the same way
+    // `shift` and `marks` derive theirs: any active whose cooldown fits inside
+    // the window. Named by the PROPERTY rather than by the skill, so retuning a
+    // cooldown past the window shows up here instead of silently going quiet
+    // (§13 rule 12).
+    fills: sk => sk.cooldown > 0 && sk.cooldown < RHYTHM_WINDOW_MS,
   },
   pack: {
     what: 'animals standing',

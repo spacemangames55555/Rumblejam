@@ -2828,10 +2828,20 @@ try {
     // all fourteen. Only the skill trees are missing, and a class without one
     // cannot be STARTED — see _makePlayer. Saying so here keeps the gate honest
     // rather than weakening it for everyone.
+    //
+    // AND THE FIXTURE HAS TO ATTACK. Half the traits below key off `tohOnFire`,
+    // which used to run from `_tickWeapons` and now runs only from `fireSkill` —
+    // so a bot that spends no skill points never attacks, and every one of those
+    // traits reads dead for a reason that has nothing to do with the trait. That
+    // is §13 rule 20: the harness must arrive in the state a player would arrive
+    // in, and in the skill era that state includes a spent tree and a filled
+    // loadout. `armBot` no-ops for a class with no trees, so the nine unbuilt
+    // classes still fail here — correctly, and for the reason Group A gives.
     const one = id => {
       const g = new Sim({ seed: 4242, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'T', charId: id, color: '#fff' }] });
       const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
       node.kind = 'combat'; g._travelTo(node.id); g.god = true;
+      armBot(g, g.players[0]);
       return g;
     };
     const run = (g, ticks, each) => {

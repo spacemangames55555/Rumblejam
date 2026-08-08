@@ -367,7 +367,7 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 100 skills across 10 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 120 skills across 12 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
 #### The primitive set is OPEN, and what admits a twelfth
 
@@ -524,12 +524,12 @@ Every class has a mechanical engine no other class has. Each must interact with 
 |---|---|
 | Savage | **Cascade** — an ordered 3-skill sequence banks uncapped ranks; each grants +8% damage and removes 8% of *remaining* reducible cooldown, floored at 50% of base |
 | Sundian | **Drench stacks** — a stacking debuff spent by `ON_STATUS` triggers |
-| Mage | **Crystallize** |
+| Mage | **Crystallize** — damage TAKEN accumulates crystal; crystal drives melee output. The only engine filled by the enemy rather than by the player's own action |
 | Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
 | Druid | **The pack** — one summon per animal skill, revive timer scales with pack size (§8.5). Morph layers on top: animal DNA visibly mutates the character |
 | Blacksmith | **Crystal Forms** — timed transformations on `SELF_THRESHOLD` |
 | Necromancer | **Soul tokens** — kills drop tokens, `ON_TOKEN` raises skeletons into rank-granted slots, all wiped at room end (§8.5) |
-| Bard | **Stances** — a stance multiplier gates other skills' output |
+| Bard | **Rhythm** — attacking without a gap builds stacks; missing the window drops every one of them at once. **The only engine with a loss condition** |
 | Wizard | **Domain shift** — the only class that changes its own damage domain mid-fight |
 | Priest | **Judgment marks** — marks detonate on the target's death, healing nearby allies |
 | Samurai | **Footing** — see §8.4 |
@@ -555,8 +555,8 @@ Both of those are now built and gated: the `shift` primitive (§5.7) and the `ma
 |---|---|---|---|
 | **Wizard** | domain shift | `shift` primitive, `p.domainShift`, read by `bestDomainMult` — **built, gated and AUTHORED** | 2 tree files + `p.engines.shift = p.domainShifts` |
 | **Priest** | judgment marks | `mark` rider, `e.markT/markBy/markHeal/markRadius`, `_killEnemy` detonation — **built, gated and AUTHORED** | 2 tree files + a publish line counting marked enemies |
-| **Bard** | ~~stances~~ **rhythm** | **REFILED — the first entry was a false positive, and the correction makes the class cheaper.** See below | 2 tree files + `p.engines.rhythm = p.rhythm`, **and a ruling on the engine's name** |
-| **Mage** | crystallize | **REFILED — crystallize does not exist as a design.** See below | blocked on a design decision, not on code |
+| **Bard** | **rhythm** *(ruled)* | `tohOnFire` writes `p.rhythm` on every cast, `tohTick` runs the decay — **built, gated and AUTHORED** | 2 tree files + `p.engines.rhythm = p.rhythm` |
+| **Mage** | **crystallize** *(defined)* | the accumulate half passes; **the spend half does not** — see the rule-29 result below | blocked on one more ruling, not on content |
 
 #### The second pair, checked before authoring — and only one of them survived
 
@@ -574,32 +574,65 @@ And sharing the field would be wrong even if it were writable. `p.stance` is 0/1
 
 **But the Bard has a real engine, and it is Rhythm.** `p.rhythm` is written by `tohOnFire`, which `fireSkill` calls on **every** skill cast (unconditionally — see `skillsim.js`, the hook that was orphaned when weapons were removed and has been reconnected since). The decay is already live too: `tohTick` drops every stack the moment the window lapses. Measured by lending the Bard a tree so it could cast at all — **`p.rhythm` 0 → 3 in thirty seconds of play, with no engine code of any kind.**
 
-So the Bard is content-shaped — **cheaper than the Wizard or the Priest, both of which needed a write path built first** — but under a different engine name than §8.3's table gives it. That is a ruling, not a rename: traits and engines are deliberately different layers here (the Samurai's engine is Footing while its trait is Three Stances), so "the Bard's engine is Stances" *could* mean a second resource distinct from its trait. **The recommendation is that it should not.** The Bard's whole identity in the character sheet is Rhythm — stacks, a window, ensemble sharing, solo doubling — and Group A's red check is literally named `Bard rhythm never built`. A second resource on top would be one more than the class needs, and the name "Stances" has already produced one false positive by colliding with the Samurai's trait. Rhythm also passes §8.3's own test that every engine interact with the trigger system differently: **it is the first engine with a loss condition.** Footing is stationary time, `armor` a stat derivation, `pack` a count of standing summons, `shift` a count of casts, `marks` a count of live debuffs — none of them can be dropped by playing badly.
+So the Bard is content-shaped — **cheaper than the Wizard or the Priest, both of which needed a write path built first** — under Rhythm rather than under Stances.
 
-**The Mage: crystallize is one word.** It appears exactly twice in the entire project — the §8.3 table row, and the audit line derived from it. There is no mechanic in the GDD, no spec in the compendium, and nothing in the sim: a Mage's player object and the sim object carry **no field matching `/cryst/i` at all**. (`crystal_infusion` is the **Blacksmith's** trait, and `crystal_pyrite`/`quartz`/`calcite` are its post-fight boons. Different class.)
+#### RULED: the Bard's engine is Rhythm
 
-The first audit's proposed write path — "`tohOnFire` is live and `singularity` already counts fires off it" — was describing the Mage's **trait**, not its engine, and then offering the trait's fire counter as crystallize. That counter is real and live (`p.tohAtk` 0 → 25 in thirty seconds, measured the same way), but **a fire counter is a fire counter.** Publishing it as `p.engines.crystal` would give the Mage the Bard's engine with a different label — both would be "casts made" — and §8.3's one structural test is that no two engines are the same shape.
+"Stances" was written into the table before any engine existed, and it has since collided with the Samurai's `three_stances` trait — a collision that has already produced one false positive in an audit, which is a cost the name was never going to stop paying.
 
-**The Mage is therefore blocked on a design decision, not on code.** Rule 29 cannot be run against it, because the thing to run it against has never been specified. Once crystallize has a mechanic, the check is minutes: what state must a skill produce, and can content produce it today?
+Rhythm is right on identity: the Bard's entire character sheet is Rhythm — stacks, a window, ensemble sharing, solo doubling — and Group A's red check is named `Bard rhythm never built` after it.
 
-**WRITE-PATH — a new primitive or rider first, alone, gated before any tree.**
+**And it passes §8.3's structural test in a way nothing else does: it is the first engine with a LOSS CONDITION.** Record that as the distinguishing property, because it is what makes the engine a different *kind* of thing rather than a differently-named counter:
 
-| Class | Engine | What is missing |
+| engine | how it is produced | can play lose it? |
 |---|---|---|
-| **Witch Doctor** | voodoo doll | `voodooMirror` already mirrors 35% of damage to a linked target — **the mirror exists, the designation does not.** A skill needs to name the doll, which is a rider (it writes an enemy) |
-| **Sundian** | drench stacks | `ON_STATUS` reads exactly four statuses — `dot`, `slow`, `plague`, `weakened` — and none is a stack count. **Ruled: drench is not one of the four.** See below; the Sundian stays write-path with its own status |
-| **Assassin** | killbox | a trap placed inert and detonated by a later skill is neither a `hazard` (which ticks damage) nor a `summon` (which acts). New primitive, plus lifetime state |
-| **Hunter** | two bodies | "skills may trigger off the pet's position" is a change to `triggers.js`, not to `p.engines` — the evaluation origin is the player throughout |
+| footing | stationary time | drops on movement past the grace budget — but the budget is a **defended** loss, not a missed one |
+| armor | derived from Grit | no — it is a stat reading |
+| pack | count of standing animals | only by the animals dying |
+| shift | count of casts this room | no — monotonic until the door |
+| marks | count of live marked enemies | only by the marks being paid out |
+| **rhythm** | **casts inside a rolling window** | **yes — one gap longer than the window drops every stack at once** |
 
-**TICK-SHAPED — a stateful accumulator or decay, alone.**
+Every other engine is *spent* or *reset*; rhythm is the only one a player can simply **drop**. That gives it a different relationship to the trigger system: a Bard is not choosing when to cash a resource in, it is choosing whether to keep the chain alive at all, and every cooldown in the build is a threat to it. **That is the property the class is designed around, and it is what a Rhythm tree must be authored against.**
 
-| Class | Engine | Why |
+#### What authoring against a loss condition actually cost — measured
+
+The trees are **Cadence** (the engine tree, scaling `scaleWith: 'rhythm'`) and **Ensemble** (support, mostly flat, one node reading the engine — the heal). Two findings came out of tuning them, and both are the kind that only a measurement produces.
+
+**The trait was ALREADY a damage engine, and the tree charged for it twice.** Rhythm grants +3% Ferocity per stack, doubled when solo, and Ferocity multiplies all composed damage (§9.5). At ten stacks that is +60 Ferocity — measured, an average sheet of 56.1 against 2.3 with the chain suppressed. A Cadence tree that ALSO scales damage by the same stacks is billing one resource on two lines. First measurement: **137.5 DPS against a 29.5 anchor, +366%**, and the anchor did not move — which is the pinned reference set (§13 rule 28) doing exactly the job it was pinned for.
+
+**And the cooldowns were the real culprit, not the damage.** "Cadence has the shortest cooldowns in the game" is right for the *metronome* nodes and wrong applied across a tree: the AoE and multi-target nodes were priced at 2–4× the cast rate of comparable Wizard nodes at similar damage. Corrected against Arcana as the reference — Ley Surge's cone at 5400 ms, Starfall's three bolts at 6200 — and then damage trimmed to pay for the trait's multiplier, which no other class carries.
+
+**The curve that came out is the class:**
+
+| | DPS | vs anchor |
 |---|---|---|
-| **Monk** | Chi loop | accrues from damage dealt, drains on spend — neither is a derivation of an existing field |
-| **Savage** | cascade | banked ranks decay out of combat, and §8.3's asymptotic cooldown floor is bespoke arithmetic |
-| **Blacksmith** | Crystal Forms | timed transformations; `crystal_infusion` is live but the forms decay, and a decay is a tick |
+| chain held, ten stacks | **36.9** | +25% |
+| chain dropped | **20.7** | −30% |
 
-**So the first pair was the Wizard and the Priest** — their write paths landed, passed their gates, and their four trees are authored. **The second pair did not survive its own check**: the Bard is content-shaped under a corrected engine name, and the Mage is blocked on a design decision. That leaves **three** content-shaped classes, not four.
+Both ends inside the ±40% band, which is the property worth having: the Bard is balanced **at both extremes** rather than on average, and the loss condition costs 44% of output. Opening Note keeps the shortest cooldown in the game (900 ms) and is single-target and cheap *because* it is — a node that comes up that often cannot also hit the room.
+
+**One more thing the gate found, and it is content rather than harness.** Slotted alone, `bard_quickstep` reached exactly **one** stack: its 2000 ms cooldown is longer than the 1.5 s window, so the chain lapsed between every cast. **A Cadence node slower than the window cannot hold its own chain** — which is precisely why the tree opens with a metronome, and why `engine_gate`'s filler for rhythm is derived as "any active whose cooldown fits inside the window" rather than by naming a skill. Retune a cooldown past that line and the gate says so.
+
+#### DEFINED, and then checked: crystallize
+
+The engine had been one word in a table — no mechanic in the GDD, none in the compendium, and no field matching `/cryst/i` anywhere in a Mage's player object or in the sim. (`crystal_infusion` is the **Blacksmith's** trait; `crystal_pyrite`/`quartz`/`calcite` are its post-fight boons. Different class.) That is §13 rule 33, and the definition below closes it.
+
+**CRYSTALLIZE. The Mage accumulates crystal on damage TAKEN, and spends it on melee output.** It is the only engine in the game filled by the enemy rather than by the player's own action, and that is what makes the class the Arcane Warrior: it rewards standing in melee and eating hits, and converts absorbed damage into dealt damage. Every other engine is paid for in the player's own initiative — time stood still, casts made, animals kept alive, marks placed. This one is paid for in health, by someone else's decision.
+
+**The rule-29 result: the accumulate half passes, the spend half does not.**
+
+**A — accumulation. PASSES, with one line, in a hook `hurtPlayer` already calls.** `hurtPlayer` calls `tohOnHurt(this, p, raw, dmg)` — both the pre-mitigation and post-mitigation amounts, which is exactly what "converts absorbed damage into dealt damage" needs. **The pattern is not hypothetical: `karma` already accumulates on damage taken through that hook**, measured live at `p.karma` 0 → 40.0 over 45 s. A Mage standing in a fight took 40 damage events in 36 s — 259 raw, 238 actually taken — from both enemy-attributed and unattributed sources, all of them reaching the hook. Four paths bypass it and each is correct to: `opts.trueDamage` (objective hazards are the level, not an attacker), a Reflex dodge, the auto-block item, and a ward that absorbs to zero. **Damage that was avoided should not crystallize.**
+
+**B — the spend. FAILS, and for two independent reasons.**
+
+1. **Nothing writes an engine value down.** All five live engines are either recomputed from a source every tick (`footing`, `armor`, `pack`, `marks`) or a monotonic counter reset at the door (`shift`). `engineScale()` reads; no primitive, rider or step field in `compose.js` decrements. A genuinely consumed pool is a **write-down**, and it is the first one.
+2. **The trait layer cannot tell a melee cast from a ranged one.** `tohOnFire`'s only call site passes `{ def: null, a: p.aimA, tx, ty }` — a position and an angle, no skill, no step, no primitive kind. "Melee" is a property of the **step** (`strike`), which lives in `compose.js`, not in the trait layer. So "spend on melee output" cannot be expressed where the accumulation is expressed.
+
+**So it needs more, and per the batching rule the Bard goes alone this patch.** Two ways forward, and the choice is a design decision rather than an engineering one:
+
+- **Non-consuming (recommended).** Crystal ramps within a room and resets at the door, the way `shift` does; melee steps read it through `scaleWith: 'crystal'`. **The health is the spend** — the player already pays for every point, in the only currency that matters, at the moment it accrues. Charging again at the point of use taxes one decision twice, and the room reset already gives the ramp an end. This makes the Mage content-shaped immediately: one line in `tohOnHurt`, one field, one room reset, one publish line.
+- **Truly consumed.** A generic step-level spend hook in `compose.js` — the symmetric write-down to `scaleWith` — ruled and gated before any tree, exactly as `shift` and `mark` were. That is a write-path patch and the Mage moves groups until it lands.
 
 #### The test for content-shaped, stated so the sort stops producing false positives
 
@@ -1194,6 +1227,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 33. **An engine that is one word in a table cannot be audited, and auditing it anyway invents one.** The Mage's engine is listed as "Crystallize" and that word appears exactly twice in the project — the table row, and the audit line derived from it. No mechanic in the GDD, none in the compendium, and no field matching `/cryst/i` anywhere in a Mage's player object or in the sim. Asked "does it have a write path", the first audit found the nearest live counter — the `singularity` trait's per-fire tally — and proposed it, which would have given the Mage the **Bard's** engine (casts made) under a different label, breaking §8.3's one structural test that no two engines share a shape. Every other row in that table carries a clause saying what the engine *does*; the ones that do not are not scoped, they are named. **Before estimating a feature, check that the feature has a definition, and treat a bare name as an open design question rather than as a specification with the details omitted.**
 
+34. **A trait that grants a damage stat is already an engine, and a tree that scales off the same resource bills it twice.** The Bard's Rhythm grants +3% Ferocity per stack (doubled solo), and Ferocity multiplies all composed damage — so a Cadence tree that also read `scaleWith: 'rhythm'` charged one resource on two lines and measured **137.5 DPS against a 29.5 anchor, +366%**. This is the compounding argument that disqualified Ferocity from driving crit (§9.5), arriving from the other direction: there the worry was one stat buying two kinds of damage, here it was one resource paying out through two systems. **Before authoring a tree against an engine, check what the class's TRAIT already converts that engine into.** The trait layer and the skill layer are different files, different eras, and nothing joins them but a measurement.
+
+35. **A cast rate is a damage number.** The same tree's real fault was not its damage values, it was pricing AoE and multi-target nodes at 2–4× the cast rate of comparable nodes elsewhere while giving them comparable damage. "This class has the shortest cooldowns" is a legitimate identity and it belongs on the *single-target metronome* nodes that justify it; applied across a tree it silently multiplies everything. Tune a new tree against a NAMED existing tree node-for-node by shape — cone against cone, multi-bolt against multi-bolt — rather than against a feeling about the class, because a cooldown is the one number whose effect on output is invisible in the table it lives in.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1218,7 +1255,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **14 failing checks**: 5 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 14 with nothing double-counted, and all seventeen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, plus `validate_items`.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **13 failing checks**: 4 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 13 with nothing double-counted, and all seventeen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, plus `validate_items`.
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
@@ -1226,17 +1263,18 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
-### Group A — waiting on phase-5 trees (5)
+### Group A — waiting on phase-5 trees (4)
 
 Eleven classes have no trees. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
-| `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_bard`, `toh_mage` and `toh_sundian` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
+| `no singularity in 30s`, `no coral planted`, `toh blob` | 3 | These traits key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_mage` and `toh_sundian` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
+| ~~`Bard rhythm never built`~~ | 0 | **LEFT THIS GROUP — half by gaining content, half by rule 20.** The Bard's trees landed, and the check still read 0 because the trait fixture spent no skill points: `tohOnFire` runs only from `fireSkill` now, so a bot with a tree it never learned still never attacks. Arming the fixture the way a player arrives (§13 rule 20) closes it at **10 stacks, +60% Ferocity, +95% Tempo solo**. The remaining three stay red for the reason this group gives — those classes genuinely have no tree. |
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
 | ~~`DPS gate`~~ | 0 | **LEFT THIS GROUP, and not by gaining content.** The harness was weapon-era: it spent no skill points, so with weapons removed every BUILT class measured 0.0 while two classes with no tree measured 3.2 and 16.2 off trait damage alone. The table was upside down since `patch-trigger-core` and nothing said so, because the median it compared against came from the same broken numbers. It now spends the class's trees, and the anchor is a declared reference set rather than a live median. |
 
-**Two entries left this group by being built.** `elite_arena (1p) never cleared` went green when the Necromancer's Summons tree landed — the class gained a third tree, the solo build got deeper, and the objective cleared with nothing tuned. `toh_druid` left with its own tree. That is the group working as labelled: it said "not built yet", something got built, and it closed.
+**Three entries have now left this group.** `elite_arena (1p) never cleared` went green when the Necromancer's Summons tree landed — the class gained a third tree, the solo build got deeper, and the objective cleared with nothing tuned. `toh_druid` left with its own tree. That is the group working as labelled: it said "not built yet", something got built, and it closed.
 
 ### Group B — waiting on a design decision (2 failing, 3 open questions)
 
@@ -1460,7 +1498,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
 | Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **47 of 47 land across 6 classes** (D-26 closed) |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **5 of 5** — `footing`, `armor`, `pack`, `shift`, `marks` |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **6 of 6** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm` |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1469,7 +1507,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard and Priest built (10 trees, 100 skills, 5 selectable); 9 of 14 classes have no trees. Bard is content-shaped pending an engine-name ruling; **Mage is blocked on a design decision** — crystallize has never been specified |
+| Classes 3–14 | **In progress** — Wizard, Priest and Bard built (12 trees, 120 skills, 6 selectable); 8 of 14 classes have no trees. **Mage is blocked on one more ruling** — crystallize is now defined, and its spend half needs a write path |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1488,6 +1526,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
 
-**Nine class engines exist only as design, and one of them is not even that.** §8.3 specifies eight of the nine; Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift` and the Priest's `marks` are implemented and gated. **The Mage's "Crystallize" is a name with no mechanic behind it anywhere in the project** — it cannot be estimated, audited or built until somebody says what it does (§13 rule 33).
+**Eight class engines exist only as design.** §8.3 specifies all eight now — crystallize was a bare name until this patch and is written up in full (§13 rule 33). Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks` and the Bard's `rhythm` are implemented and gated at 6 of 6.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.

@@ -33,8 +33,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
@@ -243,10 +243,17 @@ export function tickSkills(sim, dt) {
     let marked = 0;
     for (const e of sim.enemyPool) if (e.active && e.markT > 0 && e.markBy === p.idx) marked++;
     p.engines.marks = marked;
+    // THE BARD'S RHYTHM ENGINE (§8.3): stacks held right now. Unlike every other
+    // engine here this one can be DROPPED — `tohOnFire` builds it on each cast
+    // and `tohTick` wipes the whole stack the moment the window lapses. Both
+    // halves were already live, so the Bard is the cheapest engine in the game:
+    // this line and nothing else.
+    p.engines.rhythm = p.rhythm || 0;
     p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
     p.engineScaleBonus.pack = passiveSum(p, 'packDamageBonus');
     p.engineScaleBonus.shift = passiveSum(p, 'shiftDamageBonus');
     p.engineScaleBonus.marks = passiveSum(p, 'marksDamageBonus');
+    p.engineScaleBonus.rhythm = passiveSum(p, 'rhythmDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
     // holding slots no skill still pays for.
