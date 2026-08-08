@@ -53,6 +53,11 @@ export const CHARACTERS_TOH = [
     trait: {
       key: 'singularity', everyNth: 9, pullDur: 1.5, pullRadius: 110, pullSpd: 200,
       burstBase: 16, vulnPct: 25, vulnDur: 1.5, crystalRange: 90, crystalGrit: 5,
+      // CRYSTALLIZE (§8.3): damage TAKEN accumulates crystal, capped like every
+      // other engine, and reset at the door. `crystalPer` is crystal per point
+      // of post-mitigation damage — 0.06 puts a Mage near the cap after eating
+      // roughly 170, which is about a room's worth of standing in it.
+      crystalPer: 0.06, crystalCap: 10,
     },
     desc: 'Singularity: every 9th attack collapses a singularity where it lands — enemies within 110 + half your Reach are dragged in for 1.5s, then it bursts for 16 attuned damage. Anything caught inside takes +25% damage from every source, allies included. Crystalblade: while an enemy is within 90 you gain +5 Grit and singularities form on you instead of on the target.' },
 

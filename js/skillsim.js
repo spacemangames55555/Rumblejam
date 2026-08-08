@@ -33,8 +33,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
@@ -67,6 +67,11 @@ export function startRoomMinions(sim, p) {
   // ends it. Reset here rather than in a new room hook, so the one function the
   // sim already calls per room start owns both per-room resets a class needs.
   p.domainShift = null; p.domainShifts = 0;
+  // AND NEITHER DOES CRYSTAL. Same reason and the same shape: the Mage's engine
+  // ramps inside a room and is banked by nothing across the door, which is what
+  // lets it avoid a decay tick of its own. Damage taken in the last fight is not
+  // credit in the next one.
+  p.crystal = 0;
   resetMinionsForRoom(sim, p);
   for (const [id, rank] of Object.entries(p.skillRanks || {})) {
     if (!(rank > 0)) continue;
@@ -249,11 +254,17 @@ export function tickSkills(sim, dt) {
     // halves were already live, so the Bard is the cheapest engine in the game:
     // this line and nothing else.
     p.engines.rhythm = p.rhythm || 0;
+    // THE MAGE'S CRYSTAL ENGINE (§8.3): crystal accumulated from damage TAKEN,
+    // written in `tohOnHurt` off the amount that actually got through. The only
+    // engine in the game the enemy fills — every other one is paid for in the
+    // player's own initiative.
+    p.engines.crystal = p.crystal || 0;
     p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
     p.engineScaleBonus.pack = passiveSum(p, 'packDamageBonus');
     p.engineScaleBonus.shift = passiveSum(p, 'shiftDamageBonus');
     p.engineScaleBonus.marks = passiveSum(p, 'marksDamageBonus');
     p.engineScaleBonus.rhythm = passiveSum(p, 'rhythmDamageBonus');
+    p.engineScaleBonus.crystal = passiveSum(p, 'crystalDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
     // holding slots no skill still pays for.

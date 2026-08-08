@@ -13,6 +13,8 @@ import { PRIEST_JUDGMENT, TUNING as PRI_JUD_TUNING } from './content/skills/prie
 import { PRIEST_GRACE, TUNING as PRI_GRA_TUNING } from './content/skills/priest_grace.js';
 import { BARD_CADENCE, TUNING as BARD_CAD_TUNING } from './content/skills/bard_cadence.js';
 import { BARD_ENSEMBLE, TUNING as BARD_ENS_TUNING } from './content/skills/bard_ensemble.js';
+import { MAGE_CRYSTALBLADE, TUNING as MAGE_CRY_TUNING } from './content/skills/mage_crystalblade.js';
+import { MAGE_COLLAPSE, TUNING as MAGE_COL_TUNING } from './content/skills/mage_collapse.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
@@ -32,6 +34,8 @@ export const TREES = {
   priest_grace: { id: 'priest_grace', name: 'Grace', classId: 'toh_priest', skills: PRIEST_GRACE, tuning: PRI_GRA_TUNING },
   bard_cadence: { id: 'bard_cadence', name: 'Cadence', classId: 'toh_bard', skills: BARD_CADENCE, tuning: BARD_CAD_TUNING },
   bard_ensemble: { id: 'bard_ensemble', name: 'Ensemble', classId: 'toh_bard', skills: BARD_ENSEMBLE, tuning: BARD_ENS_TUNING },
+  mage_crystalblade: { id: 'mage_crystalblade', name: 'Crystalblade', classId: 'toh_mage', skills: MAGE_CRYSTALBLADE, tuning: MAGE_CRY_TUNING },
+  mage_collapse: { id: 'mage_collapse', name: 'Collapse', classId: 'toh_mage', skills: MAGE_COLLAPSE, tuning: MAGE_COL_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
@@ -69,6 +73,7 @@ export const PASSIVE_EFFECT = {
   shiftDamageBonus: 'damage',     // Sympathetic Resonance: more per attunement banked
   marksDamageBonus: 'damage',     // Attend the Fallen: more per mark standing
   rhythmDamageBonus: 'damage',    // Perfect Time: more per stack held
+  crystalDamageBonus: 'damage',   // Lattice: more per crystal carried
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the

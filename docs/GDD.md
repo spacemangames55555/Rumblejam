@@ -367,7 +367,7 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 120 skills across 12 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 140 skills across 14 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
 #### The primitive set is OPEN, and what admits a twelfth
 
@@ -524,7 +524,7 @@ Every class has a mechanical engine no other class has. Each must interact with 
 |---|---|
 | Savage | **Cascade** — an ordered 3-skill sequence banks uncapped ranks; each grants +8% damage and removes 8% of *remaining* reducible cooldown, floored at 50% of base |
 | Sundian | **Drench stacks** — a stacking debuff spent by `ON_STATUS` triggers |
-| Mage | **Crystallize** — damage TAKEN accumulates crystal; crystal drives melee output. The only engine filled by the enemy rather than by the player's own action |
+| Mage | **Crystallize** — damage TAKEN accumulates crystal; crystal drives melee output. The only engine filled by the enemy rather than by the player's own action, and **the only one Grit fights** |
 | Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
 | Druid | **The pack** — one summon per animal skill, revive timer scales with pack size (§8.5). Morph layers on top: animal DNA visibly mutates the character |
 | Blacksmith | **Crystal Forms** — timed transformations on `SELF_THRESHOLD` |
@@ -556,7 +556,7 @@ Both of those are now built and gated: the `shift` primitive (§5.7) and the `ma
 | **Wizard** | domain shift | `shift` primitive, `p.domainShift`, read by `bestDomainMult` — **built, gated and AUTHORED** | 2 tree files + `p.engines.shift = p.domainShifts` |
 | **Priest** | judgment marks | `mark` rider, `e.markT/markBy/markHeal/markRadius`, `_killEnemy` detonation — **built, gated and AUTHORED** | 2 tree files + a publish line counting marked enemies |
 | **Bard** | **rhythm** *(ruled)* | `tohOnFire` writes `p.rhythm` on every cast, `tohTick` runs the decay — **built, gated and AUTHORED** | 2 tree files + `p.engines.rhythm = p.rhythm` |
-| **Mage** | **crystallize** *(defined)* | the accumulate half passes; **the spend half does not** — see the rule-29 result below | blocked on one more ruling, not on content |
+| **Mage** | **crystallize** *(ruled non-consuming)* | one line in `tohOnHurt`, which `hurtPlayer` already called — **built, gated and AUTHORED** | 2 tree files + `p.engines.crystal = p.crystal` |
 
 #### The second pair, checked before authoring — and only one of them survived
 
@@ -620,19 +620,36 @@ The engine had been one word in a table — no mechanic in the GDD, none in the 
 
 **CRYSTALLIZE. The Mage accumulates crystal on damage TAKEN, and spends it on melee output.** It is the only engine in the game filled by the enemy rather than by the player's own action, and that is what makes the class the Arcane Warrior: it rewards standing in melee and eating hits, and converts absorbed damage into dealt damage. Every other engine is paid for in the player's own initiative — time stood still, casts made, animals kept alive, marks placed. This one is paid for in health, by someone else's decision.
 
-**The rule-29 result: the accumulate half passes, the spend half does not.**
+**The rule-29 result: the accumulate half passed, the spend half did not — and the spend was then ruled away.**
 
 **A — accumulation. PASSES, with one line, in a hook `hurtPlayer` already calls.** `hurtPlayer` calls `tohOnHurt(this, p, raw, dmg)` — both the pre-mitigation and post-mitigation amounts, which is exactly what "converts absorbed damage into dealt damage" needs. **The pattern is not hypothetical: `karma` already accumulates on damage taken through that hook**, measured live at `p.karma` 0 → 40.0 over 45 s. A Mage standing in a fight took 40 damage events in 36 s — 259 raw, 238 actually taken — from both enemy-attributed and unattributed sources, all of them reaching the hook. Four paths bypass it and each is correct to: `opts.trueDamage` (objective hazards are the level, not an attacker), a Reflex dodge, the auto-block item, and a ward that absorbs to zero. **Damage that was avoided should not crystallize.**
 
-**B — the spend. FAILS, and for two independent reasons.**
+**B — the spend. FAILED, for two independent reasons.** Nothing writes an engine value down: all five engines at the time were either recomputed from a source every tick or a monotonic counter reset at the door, and `engineScale()` reads. And the trait layer cannot tell a melee cast from a ranged one — `tohOnFire`'s only call site passes `{ def: null, a, tx, ty }`, no skill, no step, no primitive kind, while "melee" is a property of the **step** (`strike`) in `compose.js`.
 
-1. **Nothing writes an engine value down.** All five live engines are either recomputed from a source every tick (`footing`, `armor`, `pack`, `marks`) or a monotonic counter reset at the door (`shift`). `engineScale()` reads; no primitive, rider or step field in `compose.js` decrements. A genuinely consumed pool is a **write-down**, and it is the first one.
-2. **The trait layer cannot tell a melee cast from a ranged one.** `tohOnFire`'s only call site passes `{ def: null, a: p.aimA, tx, ty }` — a position and an angle, no skill, no step, no primitive kind. "Melee" is a property of the **step** (`strike`), which lives in `compose.js`, not in the trait layer. So "spend on melee output" cannot be expressed where the accumulation is expressed.
+#### RULED: crystallize is NON-CONSUMING, and the health is the spend
 
-**So it needs more, and per the batching rule the Bard goes alone this patch.** Two ways forward, and the choice is a design decision rather than an engineering one:
+Crystal ramps within a room and resets at the door, the same shape as the Wizard's shift. Melee steps read it through `scaleWith: 'crystal'`. **There is no consumption step and no step-level spend hook**, and that is a design decision rather than a concession to the engineering.
 
-- **Non-consuming (recommended).** Crystal ramps within a room and resets at the door, the way `shift` does; melee steps read it through `scaleWith: 'crystal'`. **The health is the spend** — the player already pays for every point, in the only currency that matters, at the moment it accrues. Charging again at the point of use taxes one decision twice, and the room reset already gives the ramp an end. This makes the Mage content-shaped immediately: one line in `tohOnHurt`, one field, one room reset, one publish line.
-- **Truly consumed.** A generic step-level spend hook in `compose.js` — the symmetric write-down to `scaleWith` — ruled and gated before any tree, exactly as `shift` and `mark` were. That is a write-path patch and the Mage moves groups until it lands.
+**The player has already paid.** Every point of crystal was bought in health, in the only currency that matters, at the moment it accrued. Charging again at the point of use taxes one decision twice — and the room reset already gives the ramp an end, so nothing runs away. The Mage becomes content-shaped and needs no new machinery: one line in `tohOnHurt`, one field, one room reset, one publish line.
+
+**AND THE BUILT-IN COST §8.3 REQUIRES IS GRIT.** Crystal is written off `mitigated` — what actually got through — so **armour is anti-synergistic with the engine**. Mitigation means less damage taken means less crystal. The Mage is **the only class in the game punished for playing safely**, and that is the tension the engine exists to create rather than a bug to tune out later. Every other class's engine is paid for in the player's own initiative — time stood still, casts made, animals kept alive, marks placed; this one is paid for in health, by someone else's decision, and the obvious defensive answer makes it worse.
+
+**Asserted, not described.** §13 rule 24 says a claim of the form "X reduces Y" is not real until something moves X and reads Y, so `engine_gate` does: two identical Mages eat twelve identical blows through `hurtPlayer`, one of them wearing armour. **5.8 crystal bare, 1.4 at 40 Grit — a 75% cut.** The gate also asserts that crystal does not survive a door, for the same reason a shift must not.
+
+**Melee only, and that is also a ruling.** Every `scaleWith: 'crystal'` step in Crystalblade is a `strike`. A crystal-scaled bolt would let the Mage bank the engine at the back of the room and spend it from safety, which is the exact play the class exists to refuse — so the ranged half lives in Collapse and is paid in flat numbers. The depth-versus-breadth decision §4.2 wants is therefore a decision about **distance** on this class: deep in Crystalblade and the Mage has to be hit to be strong, wide into Collapse and it does not, and the crystal it never earns is the price.
+
+**Measured at both ends, per rule 34:**
+
+| | DPS | vs anchor |
+|---|---|---|
+| pool full (10 crystal) | **37.5** | +27% |
+| pool empty, straight through the door | **30.3** | +3% |
+
+#### The DPS gate could not fill this one, and that was a real blind spot
+
+Every other engine fills itself in `measureDps`: footing accrues because the harness pins the player still, rhythm and shift accrue because it casts, marks accrue because it marks. **`crystal` is the exception, and it is the exception by design** — the fixture's dummies deal no damage on purpose, because the gate measures output rather than survival. So the Mage would have been scored forever at an empty pool: **30.3 against 37.5 with the pool full, and only the second number is the class anyone plays.**
+
+The first tuning pass proved the cost of that. At the numbers the tree was authored with, the Mage read **34.9 at an empty pool (+18%, in band) and 45.2 with the pool full (+53%, OUT)** — a class that passes its own gate and is out of band in every fight it has ever been in. The harness now stages any engine it cannot fill, **named rather than inferred**, because the alternative is a silent zero and that is the whole failure mode `engine_gate` exists to prevent.
 
 #### The test for content-shaped, stated so the sort stops producing false positives
 
@@ -1231,6 +1248,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 35. **A cast rate is a damage number.** The same tree's real fault was not its damage values, it was pricing AoE and multi-target nodes at 2–4× the cast rate of comparable nodes elsewhere while giving them comparable damage. "This class has the shortest cooldowns" is a legitimate identity and it belongs on the *single-target metronome* nodes that justify it; applied across a tree it silently multiplies everything. Tune a new tree against a NAMED existing tree node-for-node by shape — cone against cone, multi-bolt against multi-bolt — rather than against a feeling about the class, because a cooldown is the one number whose effect on output is invisible in the table it lives in.
 
+36. **An engine the fixture cannot fill must be STAGED, or the class is measured in a state it never plays in.** The DPS gate fills most engines for free — footing because it pins the player still, rhythm and shift because it casts, marks because it marks — and `crystal` not at all, because its fixture's dummies deal no damage *on purpose*: the gate measures output, not survival. So the one engine filled by the enemy was the one engine the gate could never see, and the Mage would have been scored forever at an empty pool. The cost was concrete: at the numbers its trees were first authored with, the Mage read **+18% in band at an empty pool and +53% out of band with the pool full** — passing its own gate while being out of band in every fight it had ever been in. This is rule 28's family (a fixture deciding a claim it was never meant to decide) and rule 20's (arrive in the state a player arrives in) meeting on one line. Stage it, and **name the staging rather than inferring it** — a list of "engines this harness cannot fill" is reviewable, and a silent zero is exactly what `engine_gate` exists to prevent.
+
+37. **A saturated instrument reads identical for a working mechanism and a broken one.** The probe asserting Grit's anti-synergy with crystallize first ran for six seconds and reported **10.0 crystal bare and 10.0 at 40 Grit** — no difference, because both had pinned `crystalCap` long before the window closed. The engine was working perfectly; the measurement had run off the end of its own scale. Sized to twelve blows, comfortably under the cap, the same probe reads **5.8 against 1.4, a 75% cut**. Any probe measuring a RATIO has to stay inside the region where the quantity can still move, and a capped resource makes that region finite — so check the cap before choosing the window, not after reading a null result.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1255,7 +1276,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **13 failing checks**: 4 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 13 with nothing double-counted, and all seventeen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, plus `validate_items`.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **12 failing checks**: 3 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 12 with nothing double-counted, and all seventeen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, plus `validate_items`.
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
@@ -1263,13 +1284,14 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
-### Group A — waiting on phase-5 trees (4)
+### Group A — waiting on phase-5 trees (3)
 
 Eleven classes have no trees. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
-| `no singularity in 30s`, `no coral planted`, `toh blob` | 3 | These traits key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_mage` and `toh_sundian` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
+| `no coral planted`, `toh blob` | 2 | These key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_sundian` has no tree, so it never fires a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
+| ~~`no singularity in 30s`~~ | 0 | **LEFT THIS GROUP by gaining content.** The Mage's trees landed, so it casts, so `tohOnFire` counts to nine and the singularity forms. Nothing about the trait changed. |
 | ~~`Bard rhythm never built`~~ | 0 | **LEFT THIS GROUP — half by gaining content, half by rule 20.** The Bard's trees landed, and the check still read 0 because the trait fixture spent no skill points: `tohOnFire` runs only from `fireSkill` now, so a bot with a tree it never learned still never attacks. Arming the fixture the way a player arrives (§13 rule 20) closes it at **10 stacks, +60% Ferocity, +95% Tempo solo**. The remaining three stay red for the reason this group gives — those classes genuinely have no tree. |
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
 | ~~`DPS gate`~~ | 0 | **LEFT THIS GROUP, and not by gaining content.** The harness was weapon-era: it spent no skill points, so with weapons removed every BUILT class measured 0.0 while two classes with no tree measured 3.2 and 16.2 off trait damage alone. The table was upside down since `patch-trigger-core` and nothing said so, because the median it compared against came from the same broken numbers. It now spends the class's trees, and the anchor is a declared reference set rather than a live median. |
@@ -1498,7 +1520,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
 | Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **47 of 47 land across 6 classes** (D-26 closed) |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **6 of 6** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm` |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **7 of 7** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1507,7 +1529,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard, Priest and Bard built (12 trees, 120 skills, 6 selectable); 8 of 14 classes have no trees. **Mage is blocked on one more ruling** — crystallize is now defined, and its spend half needs a write path |
+| Classes 3–14 | **In progress** — Wizard, Priest, Bard and Mage built (14 trees, 140 skills, 7 selectable); 7 of 14 classes have no trees. All four content-shaped classes are done; the remaining seven are write-path or tick-shaped, one at a time |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1526,6 +1548,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
 
-**Eight class engines exist only as design.** §8.3 specifies all eight now — crystallize was a bare name until this patch and is written up in full (§13 rule 33). Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks` and the Bard's `rhythm` are implemented and gated at 6 of 6.
+**Seven class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm` and the Mage's `crystal` are implemented and gated at **7 of 7**. The remaining seven — cascade, drench, voodoo doll, Chi, Crystal Forms, killbox, two bodies — are specified in §8.3 and unbuilt.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.
