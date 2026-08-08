@@ -1287,6 +1287,12 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 38. **Retiring a subsystem orphans every hook it was the sole caller of, and the hooks do not announce it.** `tohOnFire` was found and reconnected when weapons were removed; its two siblings — `tohHitDamage` and `tohOnHit` — were not, and stayed dead for the whole skill era, taking four traits with them across three classes including one shipped as BUILT (§15, D-28). Each was a live function, exported, imported, and referenced in `game.js`; a grep for any of their names finds them and finds them "used". **What makes a hook orphaned is not the absence of a reference but the absence of a CALLER THAT STILL RUNS**, and that is invisible to every check the project had. Two habits follow. When a subsystem is removed, enumerate the functions it was the sole caller of and re-home each one deliberately — the same discipline rule 30 asks for capabilities. And prefer gates that assert a trait's EFFECT over gates that assert its existence, because the only reason this was ever found is that a write path was gated before the content that would have quietly absorbed the loss.
 
+    **The audit that followed found two more, and a gate now stands where the audit was.** All fourteen roster traits were walked: which hook handles each, who calls that hook, whether any caller still runs, and — the question the static answers cannot reach — whether the trait's own observable moves in a real fight. Two were dead, both through `sim.summons` rather than through a function (§15, D-29). `tools/trait_gate.mjs` is the standing version of that walk, and it is the shape every future subsystem removal should be checked against.
+
+39. **The control for "does this feature do anything" should be the feature's own switch, not a hand-built neutral fixture.** Every branch in `traits-toh.js` is guarded by `t.key === '<name>'`, so `trait_gate` runs each probe twice on the same seed, the same room and the same tree, swapping only the trait key for a sentinel. That is a starve with no teardown, no per-trait neutral variant to maintain, and no risk of the control differing in some second way — the failure mode that made the first knockback probe pass on collision drift. Look for the guard the code already branches on; it is usually a better control than anything a gate can construct.
+
+40. **A gate's first red is a claim about the FIXTURE until proven otherwise, and the message should say so.** `trait_gate`'s first run reported five traits dead. **All five were staging.** The voodoo mirror banked nothing because a symmetric ring made every selector pick the same dummy the doll was pinned to — measured, 10 hits out of 10 landed on the doll, and `voodooMirror` skips the bound target by design. Bone dust read zero because a greedy deepest-first spender put all sixty points into the Necromancer's own trees and never reached the lent one that carries the summons. The Hunter's pack read alive-when-dead because the observable added a beast count the staging provided either way. Each looked exactly like a finding. **Write the failure message to name both hypotheses and their order** — "either its hook has no caller that still runs, or this probe stages the wrong situation; check the caller before the trait" — because a red gate reads as evidence, and the harness is the more likely author of it. §13 rule 26 is the same lesson; this is the instruction that follows from it.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1311,11 +1317,11 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **12 failing checks**: 3 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 12 with nothing double-counted, and all seventeen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, plus `validate_items`.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **12 failing checks**: 3 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 12 with nothing double-counted, and all eighteen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, plus `validate_items`.
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
-**Group D is empty.** D-23, D-24, D-25, D-26, D-27 and D-28 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
+**Group D is empty.** D-23, D-24, D-25, D-26, D-27, D-28 and D-29 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1381,6 +1387,23 @@ That is the guard working exactly as §5.9 describes it, not failing. **Escorts 
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-29 — CLOSED: two more traits reading a data structure the weapon removal emptied
+
+**Found by the audit D-28 called for**, which is the point of doing the audit rather than declaring the class of defect closed after one example.
+
+`sim.summons` is annotated in `game.js` as *"weapon-era structures; phase 4, untouched"* and is pushed to from exactly one weapon path. Skill-era units live on `p.minions`. **Two traits read the empty array:**
+
+| trait | class | what stopped |
+|---|---|---|
+| `bonelord` | Necromancer | bone dust — a dying enemy repairs the most-hurt summon — repaired nothing |
+| `pack_tactics` | Hunter | Alpha and Marksman modes counted an empty pack, so `packMode` never left 0 |
+
+**This is D-28's shape through a DATA STRUCTURE rather than a function.** The hooks had live callers, the callers ran, the code executed — and read an array that a migration had quietly stopped filling. A grep finds `sim.summons` used in five places and all five look healthy.
+
+Both now read `ownedUnits(sim, p)`, which returns the player's live minions **and** any weapon-era structures they own. The old array is not deleted: if structure recall survives Group B's ruling, these traits should count it.
+
+**Neither reconnection moved a number.** sim_test set diff 12 → 12, zero fixed, zero new — the Necromancer's bone dust repairs summons it only fields through the token loop, and the Hunter has no tree to field beasts with at all. That is the honest reading: **both were dead, both are now live, and neither has content standing on it yet** — which is precisely why they could stay dead. The next patch to build either class inherits a working trait instead of a silent one.
 
 #### D-28 — CLOSED: two trait hooks orphaned by the weapon removal, taking four traits with them
 
@@ -1576,6 +1599,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
 | Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **70 of 70 land across 8 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
+| Trait gate | Built **after** D-28, which is the wrong order and is why it exists — `trait_gate.mjs`: every trait on the roster reached by the live path and moving its own observable, against a control with the trait key switched off. **14 of 14** |
 | Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **8 of 8** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |

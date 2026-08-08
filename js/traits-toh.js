@@ -30,6 +30,25 @@ import { clamp, dist2, angleTo } from './util.js';
 const D2 = (ax, ay, bx, by) => dist2(ax, ay, bx, by);
 const has = (p, key) => p.char.trait.key === key;
 
+// EVERY UNIT THIS PLAYER OWNS, ACROSS BOTH ERAS.
+//
+// `sim.summons` is annotated in game.js as "weapon-era structures; phase 4,
+// untouched" and is pushed to from one weapon path — so in the skill era it is
+// permanently empty, while live minions sit on `p.minions` (js/minions.js).
+// Two traits read the old array and therefore read nothing: the Necromancer's
+// bone dust, which repairs a summon when anything dies, and the Hunter's pack
+// modes, which count beasts standing near their owner. Both were dead for the
+// whole skill era for the same reason D-28's hooks were — a migration left the
+// consumer pointing at something that no longer fills. See §15, D-29.
+//
+// Reading BOTH is deliberate: the weapon-era array is not deleted, and if
+// structure recall ever returns (Group B) these traits should count it.
+function ownedUnits(sim, p) {
+  const mine = (p.minions || []).filter(m => !m.dead);
+  if (!sim.summons || !sim.summons.length) return mine;
+  return mine.concat(sim.summons.filter(s => s.owner === p.idx && !s.dead));
+}
+
 // ---------------------------------------------------------------- init
 
 export function tohInitPlayer(sim, p) {
@@ -324,7 +343,7 @@ function beastWeight(b) { return Math.max(1, b.tier || 1) >= 2 ? 2 : 1; }
 // beast". It DOES keep its Pack Tactics slot — that count is taken from
 // sim.summons directly in game.js and reads `dead`, not `down`, so a knockdown
 // never earns the Hunter a replacement.
-function beastsOf(sim, p) { return sim.summons.filter(s => s.owner === p.idx && !s.dead && !s.carried && !s.down); }
+function beastsOf(sim, p) { return ownedUnits(sim, p).filter(s => !s.carried && !s.down); }
 
 function marrownaut(sim, p) {
   const mine = sim.summons.filter(s => s.owner === p.idx && !s.dead);
@@ -616,8 +635,7 @@ export function tohEnemyDied(sim, e) {
     const t = p.char.trait;
     if (D2(e.x, e.y, p.x, p.y) > t.boneDustRadius * t.boneDustRadius) continue;
     let hurt = null, worst = 1;
-    for (const s of sim.summons) {
-      if (s.owner !== p.idx || s.dead) continue;
+    for (const s of ownedUnits(sim, p)) {
       const frac = s.hp / Math.max(1, s.maxHp);
       if (frac < worst) { worst = frac; hurt = s; }
     }
