@@ -359,7 +359,7 @@ Any active is data: an ordered list of steps from twelve primitives plus riders.
 
 **Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `heal` · `shield` · `ward` · `drain` · `summon` · `plague` · `shift`
 
-**Impact riders** (land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mark` · `doll`
+**Impact riders** (land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mark` · `doll` · `drench` · `sluice`
 **Shape riders** (shape a swing): `arc` · `windUp` · `multiPulse`
 **Projectile riders:** `pierce` · `splash` · `impactDot` · `defenseDown`
 
@@ -367,7 +367,7 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 140 skills across 14 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 180 skills across 18 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
 #### The primitive set is OPEN, and what admits a twelfth
 
@@ -523,7 +523,7 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Class | Engine |
 |---|---|
 | Savage | **Cascade** — an ordered 3-skill sequence banks uncapped ranks; each grants +8% damage and removes 8% of *remaining* reducible cooldown, floored at 50% of base |
-| Sundian | **Drench stacks** — a stacking debuff spent by `ON_STATUS` triggers |
+| Sundian | **Drench stacks** — its own status, applied by `drench` and cashed by `sluice`. The engine counts STACKS across the room, and spending them is the class's own best move |
 | Mage | **Crystallize** — damage TAKEN accumulates crystal; crystal drives melee output. The only engine filled by the enemy rather than by the player's own action, and **the only one Grit fights** |
 | Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
 | Druid | **The pack** — one summon per animal skill, revive timer scales with pack size (§8.5). Morph layers on top: animal DNA visibly mutates the character |
@@ -660,7 +660,7 @@ The first tuning pass proved the cost of that. At the numbers the tree was autho
 | Class | Engine | What is missing |
 |---|---|---|
 | ~~**Witch Doctor**~~ | voodoo doll | **BUILT, GATED AND AUTHORED.** The `doll` rider — see below. It was the cheapest write path yet, because the mirror was already live and only the DESIGNATION was missing |
-| **Sundian** | drench stacks | Ruled: drench is not one of `ON_STATUS`'s four (above). Needs a rider and an enemy field of its own |
+| ~~**Sundian**~~ | drench stacks | **BUILT, GATED AND AUTHORED.** Two riders, not one — see below |
 | **Assassin** | killbox | a trap placed inert and detonated by a later skill is neither a `hazard` (which ticks damage) nor a `summon` (which acts). New primitive, plus lifetime state |
 | **Hunter** | two bodies | "skills may trigger off the pet's position" is a change to `triggers.js`, not to `p.engines` — the evaluation origin is the player throughout |
 
@@ -707,6 +707,25 @@ The cheap reading of the Sundian was to fold drench into `weakened` and call the
 The cost of folding them is not local. `ON_STATUS` reads the four generically, so admitting drench as `weakened` would make **every `ON_STATUS` skill in the game fire on drench** — and the Sundian's engine would then be coupled to the whole status taxonomy, in both directions, forever. A later change to what counts as `weakened` would silently reprice the Sundian, and a change to drench would silently reprice every other class's `ON_STATUS` node.
 
 **The Sundian therefore keeps its own status, and stays WRITE-PATH: a rider plus an enemy field, ruled and gated before its trees, exactly like the Priest's `mark`.** This is settled; it is not to be reopened as a scoping shortcut when the Sundian comes up for batching.
+
+#### BUILT: two riders, because a counter and its payout are one mechanic
+
+The ruling said "a rider plus an enemy field". Building it found that **it is two riders**, and the pair is the mechanic:
+
+| rider | what it does |
+|---|---|
+| `drench` | adds stacks to the enemy, capped, with a clock. Writes `e.drench` / `e.drenchT` / `e.drenchBy` |
+| `sluice` | reads what the target was carrying, turns it into burst damage, and **clears it** |
+
+**A counter with no payout is a number, and a payout with no counter is a multiplier.** Neither half can be gated alone — which the rider gate proved twice, once on each path. The synthetic probe adds one rider at a time and read `sluice` DROPPED because it found an empty counter; the declared-content probe stages a skill ALONE, by design, and read the Sundian's two sluice skills DROPPED for the same reason. Both are now staged with the precondition: `SYNTH_WITH` names companion riders for the synthetic path, and the counter is pre-staged **on the targets** for the content path — on the targets rather than by slotting a second skill, so the burst stays attributable to the skill under test.
+
+**Ordering inside `sluice` is load-bearing, and it is the mark's lesson reused.** The stacks are cleared *before* the burst damage lands, because `damageEnemy` can kill and a death that re-entered the rider while it still held its stacks would pay twice — the same recursion the Priest's `grace_and_judgment` produced through `_killEnemy`.
+
+**The engine counts STACKS, not enemies.** `p.engines.drench` sums across every enemy this player has soaked, in the same tick sweep that counts the Priest's marks. A Sundian who has soaked one body four times has four times the payout waiting, and a counter that measured bodies would price that identically to four bodies at one stack each.
+
+**And that makes it the only engine whose loss condition is the player's own best move.** The Bard drops rhythm by playing badly; the Sundian spends drench by playing well. Every `scaleWith: 'drench'` skill in the build reads the room-wide count, so sluicing pays out on one target and makes everything else weaker in the same instant. The tree is authored against exactly that: spread versus cash.
+
+Measured in the DPS harness, which soaks its own dummies: **24 stacks standing, 33.7 DPS, +14% against the anchor.**
 
 The general form is §13 rule 25's neighbour: **a taxonomy read generically is a contract with everything that reads it. Adding a member is not a local decision.**
 
@@ -1293,6 +1312,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 40. **A gate's first red is a claim about the FIXTURE until proven otherwise, and the message should say so.** `trait_gate`'s first run reported five traits dead. **All five were staging.** The voodoo mirror banked nothing because a symmetric ring made every selector pick the same dummy the doll was pinned to — measured, 10 hits out of 10 landed on the doll, and `voodooMirror` skips the bound target by design. Bone dust read zero because a greedy deepest-first spender put all sixty points into the Necromancer's own trees and never reached the lent one that carries the summons. The Hunter's pack read alive-when-dead because the observable added a beast count the staging provided either way. Each looked exactly like a finding. **Write the failure message to name both hypotheses and their order** — "either its hook has no caller that still runs, or this probe stages the wrong situation; check the caller before the trait" — because a red gate reads as evidence, and the harness is the more likely author of it. §13 rule 26 is the same lesson; this is the instruction that follows from it.
 
+41. **A mechanic that is a PAIR cannot be gated one half at a time, and a gate that stages one skill alone will say the second half is dead.** The Sundian's `drench` puts a counter on an enemy and `sluice` cashes it; each is useless without the other, and the rider gate reported `sluice` DROPPED twice — once on the synthetic path, which adds one rider at a time, and once on the declared path, whose whole idiom is a skill staged ALONE so that a landing rider is attributable. Both reds were the fixture. The fix is not to relax the isolation, which is what makes the gate trustworthy, but to **stage the precondition rather than a second actor**: companion riders are named per-rider for the synthetic host, and for real content the counter is written directly onto the targets. The measured skill stays the only thing in the room that could have produced the observable. Ask of any new rider whether it READS state something else writes; if it does, its probe needs that state staged, not inferred.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1317,7 +1338,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **12 failing checks**: 3 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 12 with nothing double-counted, and all eighteen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, plus `validate_items`.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **10 failing checks**: 1 is content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 10 with nothing double-counted, and all eighteen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, plus `validate_items`.
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
@@ -1325,13 +1346,13 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
-### Group A — waiting on phase-5 trees (3)
+### Group A — waiting on phase-5 trees (1)
 
 Eleven classes have no trees. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
-| `no coral planted`, `toh blob` | 2 | These key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_sundian` has no tree, so it never fires a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
+| ~~`no coral planted`~~, ~~`toh blob`~~ | 0 | **BOTH LEFT THIS GROUP.** `no coral planted` closed by content: the Sundian has trees, so it casts, so `tohOnFire` plants coral every fourth cast. `toh blob` needed one more thing — the snapshot fixture seated a Samurai beside a Samurai, so no class present could produce the coral the check asserts rides the wire. `toh blob: null` was a statement about the fixture (§13 rule 20). It now seats a Sundian and reads 3 nodes. |
 | ~~`no singularity in 30s`~~ | 0 | **LEFT THIS GROUP by gaining content.** The Mage's trees landed, so it casts, so `tohOnFire` counts to nine and the singularity forms. Nothing about the trait changed. |
 | ~~`Bard rhythm never built`~~ | 0 | **LEFT THIS GROUP — half by gaining content, half by rule 20.** The Bard's trees landed, and the check still read 0 because the trait fixture spent no skill points: `tohOnFire` runs only from `fireSkill` now, so a bot with a tree it never learned still never attacks. Arming the fixture the way a player arrives (§13 rule 20) closes it at **10 stacks, +60% Ferocity, +95% Tempo solo**. The remaining three stay red for the reason this group gives — those classes genuinely have no tree. |
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
@@ -1598,9 +1619,9 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
-| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **70 of 70 land across 8 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
+| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **91 of 91 land across 10 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
 | Trait gate | Built **after** D-28, which is the wrong order and is why it exists — `trait_gate.mjs`: every trait on the roster reached by the live path and moving its own observable, against a control with the trait key switched off. **14 of 14** |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **8 of 8** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **9 of 9** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1609,7 +1630,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage and Witch Doctor built (16 trees, 160 skills, 8 selectable); 6 of 14 classes have no trees. All four content-shaped classes are done, plus the first write-path one; the remaining six are write-path or tick-shaped, one at a time |
+| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor and Sundian built (18 trees, 180 skills, 9 selectable); 5 of 14 classes have no trees. All four content-shaped classes are done, plus two write-path ones; the remaining five are write-path (Assassin, Hunter) or tick-shaped (Monk, Savage, Blacksmith) |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1628,6 +1649,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
 
-**Six class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal` and the Witch Doctor's `doll` are implemented and gated at **8 of 8**. The remaining six — cascade, drench, Chi, Crystal Forms, killbox, two bodies — are specified in §8.3 and unbuilt.
+**Five class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll` and the Sundian's `drench` are implemented and gated at **9 of 9**. The remaining five — cascade, Chi, Crystal Forms, killbox, two bodies — are specified in §8.3 and unbuilt.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.

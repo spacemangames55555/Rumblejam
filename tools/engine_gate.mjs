@@ -229,6 +229,25 @@ const PROBES = {
     // must survive the eight-slot truncation whatever else is in the tree.
     fillsFirst: sk => (sk.compose || []).some(c => c.riders && c.riders.doll),
   },
+  drench: {
+    what: 'drench stacks standing across the room',
+    char: 'toh_sundian',
+    // A ROOM-WIDE COUNT, so it needs a room. The engine sums stacks across every
+    // enemy this player has soaked, which means one dummy measures a twelfth of
+    // what the tree is authored against.
+    bodies: 5,
+    // The counter IS the resource, so the starve clears it off the enemies each
+    // frame — the same shape as removing the Priest's marks. `drenchBy` goes with
+    // it, or the next application would top up a stack the gate thinks is gone.
+    low: (g, p) => {
+      for (const e of g.enemyPool) if (e.active) { e.drench = 0; e.drenchT = 0; e.drenchBy = -1; }
+      p.engines.drench = 0;
+    },
+    // Filled by any skill carrying the counter. Derived from the rider rather
+    // than named, so a content rename cannot turn this into a silent zero.
+    fills: sk => (sk.compose || []).some(c => c.riders && c.riders.drench),
+    fillsFirst: sk => (sk.compose || []).some(c => c.riders && c.riders.drench),
+  },
   pack: {
     what: 'animals standing',
     char: 'toh_druid',

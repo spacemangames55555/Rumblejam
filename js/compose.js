@@ -486,6 +486,43 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
   // own SELECTOR — a designating skill that picks `highest_hp` pins the elite
   // the moment the last doll dies, which is the whole class fantasy. What it
   // cannot do is thrash.
+  // DRENCH — the Sundian's engine, and §8.3 rules it a status of its own rather
+  // than a fifth member of `ON_STATUS`'s four. The reason is a category error,
+  // not a tuning one: `dot`, `slow`, `plague` and `weakened` are EFFECTS, each
+  // describing something happening to the enemy right now. Drench is a COUNTER
+  // that pays out in burst — it does nothing while it sits there. Folding it in
+  // would make every `ON_STATUS` skill in the game fire on drench and couple the
+  // Sundian's engine to the whole taxonomy in both directions, forever.
+  //
+  // So it is two riders, not one. `drench` puts stacks on; `sluice` takes them
+  // off and turns them into damage. A counter with no payout is a number, and a
+  // payout with no counter is a multiplier — the pair IS the mechanic, which is
+  // why both are ruled and gated together before a single Sundian tree exists.
+  if (r.drench) {
+    // Capped, and the cap is data. An uncapped counter that any AoE refreshes is
+    // an unbounded multiplier on the burst, which is the one shape §4.2 will not
+    // survive.
+    if (e.drenchBy !== p.idx) { e.drench = 0; e.drenchBy = p.idx; }
+    e.drench = Math.min(r.drench.cap, (e.drench || 0) + r.drench.stacks);
+    e.drenchT = Math.max(e.drenchT || 0, r.drench.dur / MS);
+    out.statuses++;
+  }
+  if (r.sluice) {
+    // THE PAYOUT, AND IT SPENDS WHAT IT PAYS. Damage already landed above at the
+    // step's own magnitude; this is the burst on top, sized by what the target
+    // was carrying, and the stacks are cleared in the same breath. Clearing
+    // BEFORE the damage lands is deliberate — the same ordering the Priest's
+    // mark needs, because `damageEnemy` can kill, and a death that re-entered a
+    // rider still holding its stacks would pay twice.
+    const stacks = e.drenchBy === p.idx ? (e.drench || 0) : 0;
+    if (stacks > 0) {
+      e.drench = 0; e.drenchT = 0; e.drenchBy = -1;
+      const burst = Math.max(1, Math.round(stacks * r.sluice.per));
+      sim.damageEnemy(e, burst, { owner: p, silent: true });
+      sim.fx.booms.push({ x: Math.round(e.x), y: Math.round(e.y), r: r.sluice.radius || 24 });
+      out.statuses++;
+    }
+  }
   if (r.doll) {
     const live = p.voodooId !== null ? sim.enemyById(p.voodooId) : null;
     if (!live || !live.active) {
@@ -537,7 +574,7 @@ export const PRIMITIVE_KINDS = Object.keys(PRIMITIVES);
 // exactly eight enemy fields before it and none of them was a mark, so a
 // skill-placed mark had nowhere to live and no detonation site — every death
 // hook in `_killEnemy` read `killer.hookAgg`, the ITEM aggregate.
-export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mark', 'doll'];
+export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mark', 'doll', 'drench', 'sluice'];
 // Riders that shape the swing itself rather than the target.
 export const SHAPE_RIDERS = ['windUp', 'multiPulse'];
 // Riders that need a projectile: a flight to pierce, an impact point to splash.
