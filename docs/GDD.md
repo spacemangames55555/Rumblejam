@@ -507,6 +507,36 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Assassin | **Killbox** — traps placed inert, detonating when other skills fire nearby |
 | Hunter | **Two bodies** — skills may trigger off the pet's position |
 
+#### Batch order for phase 5 — engine shape decides it
+
+`p.engines` is a bag of readable numbers and `engineScale()` reads it by name, knowing none of them. That is why a class costs two content files and one registration line — **as long as its engine is a resource something already computes.** A class whose engine needs a new per-tick behaviour costs a function in `skillsim.js` alongside the content, and that function is the one thing `engine_gate` was built to catch: an engine tick written and never called returns exactly 1.0 through `engineScale`, so the class plays slightly weak rather than broken.
+
+The eleven unbuilt classes sort into three shapes. **The sort is the batch plan.**
+
+**RESOURCE-SHAPED — two per patch.** The engine is a number something already maintains, published into `p.engines` from an existing site. No new tick.
+
+| Class | Engine | Fills from |
+|---|---|---|
+| Wizard | Domain shift | a declared field on the player, read by `bestDomainMult` — the site exists (§9.2's domain add) |
+| Priest | Judgment marks | a per-enemy mark count, the same shape as an existing status |
+| Witch Doctor | Voodoo doll | a link target, already prototyped in `traits-toh.js` as `voodoo_link` |
+| Sundian | Drench stacks | a stacking debuff — `ON_STATUS` already reads statuses |
+| Bard | Stances | a stance index; the Samurai's `three_stances` trait already keeps one |
+| Mage | Crystallize | a counter incremented by `tohOnFire`, which is live |
+
+**TICK-SHAPED — one per patch, and the tick lands before the content.** The engine accumulates or decays on its own schedule, which means a new function called from `tickSkills` — the same shape as `tickFooting`, and the same failure mode.
+
+| Class | Engine | Why it needs a tick |
+|---|---|---|
+| Monk | Chi loop | Chi accrues from damage dealt and drains on spend; neither is a derivation of an existing field |
+| Assassin | Killbox | traps persist inert across seconds and detonate on a later condition — lifetime state with its own update |
+| Savage | Cascade | banked ranks decay out of combat, and the asymptotic cooldown floor is bespoke arithmetic |
+| Hunter | Two bodies | a second position that triggers evaluate against; touches `triggers.js`, not just a number |
+
+**NEITHER — the Blacksmith is a transformation, not a resource.** Crystal Forms are timed states that change what other skills do, closest to a status on the player. It is the one class where the engine question should be answered before the trees are written rather than during, because "a form" may want a field on the player rather than a slot in `p.engines` at all.
+
+**The rule this produces:** a resource-shaped class is authoring and can be batched; a tick-shaped class is engineering and goes alone, with `engine_gate` run before its content exists — the fill probe fails loudly on a tick nobody calls, which is precisely the signal a batch would bury.
+
 **The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat sequencing rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor.
 
 ### 8.4 Footing
@@ -1062,6 +1092,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 27. **A new stochastic mechanic gets its own RNG stream, or it silently reprices every measurement taken before it existed.** §4.2's deep-versus-wide sweep moved when the difficulty gold multiplier started drawing from the shared `rng` — not because build shapes changed, but because extra material drops consumed floats and every downstream roll shifted. The sweep had to be re-measured and the old number retired. Crit and the economy's penalty roll both arrived after that lesson and both got their own streams (`sim.critRng`, `sim.econRng`), which buys two things: a gate can compare exact numbers from one seed instead of averaging variance out of a variance mechanic, and adding the feature does not invalidate the balance table. The cost is one line at construction. **`econ_gate` asserts the isolation by effect** — twenty penalty rolls must leave the shared stream in the same place — because "it has its own stream" is a declaration, and rule 24 applies to this rule too.
 
+28. **An anchor derived from the population it measures cannot detect a bad population.** The DPS gate compared every class against the median of every class, which is a tautology at scale: author twelve mediocre classes together and they become the median, and the one check that would catch a systematically weak batch reports "all within band". Worse, it had been measuring the wrong thing entirely — the harness was weapon-era and spent no skill points, so after weapons were removed every BUILT class read 0.0 while two classes with no tree read 3.2 and 16.2 off trait damage alone. The table was upside down for months and the median hid it, because the median was computed from the same broken numbers. **Anchor a band to a declared reference set, not to a live aggregate** — a constant list of things that have actually been balanced, which a new entry joins by an edit rather than by existing. And exclude the unbuilt: "has no tree yet" and "is badly tuned" are different findings (rule 11), and averaging them together produces neither.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1086,13 +1118,13 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem. The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `stat_gate`, `difficulty_gate`, `validate_items` — are all green.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **14 failing checks**: 5 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 14 with nothing double-counted, and all sixteen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, plus `validate_items`.
 
 **Group D is empty.** D-23, D-24, D-25 and D-26 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
-### Group A — waiting on phase-5 trees (6)
+### Group A — waiting on phase-5 trees (5)
 
 Eleven classes have no trees. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
@@ -1100,7 +1132,7 @@ Eleven classes have no trees. Weapons are removed, so a class without a tree can
 |---|---:|---|
 | `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_bard`, `toh_mage` and `toh_sundian` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
 | `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
-| `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; eleven score 0 because they cannot attack. |
+| ~~`DPS gate`~~ | 0 | **LEFT THIS GROUP, and not by gaining content.** The harness was weapon-era: it spent no skill points, so with weapons removed every BUILT class measured 0.0 while two classes with no tree measured 3.2 and 16.2 off trait damage alone. The table was upside down since `patch-trigger-core` and nothing said so, because the median it compared against came from the same broken numbers. It now spends the class's trees, and the anchor is a declared reference set rather than a live median. |
 
 **Two entries left this group by being built.** `elite_arena (1p) never cleared` went green when the Necromancer's Summons tree landed — the class gained a third tree, the solo build got deeper, and the objective cleared with nothing tuned. `toh_druid` left with its own tree. That is the group working as labelled: it said "not built yet", something got built, and it closed.
 
@@ -1133,9 +1165,11 @@ Measured twice so nobody re-derives it: per-target attribution on the 1p mark sh
 
 **WARNING — the guard's condition has moved, and the next patch could trip it.** The old line said "if the solo row goes green before pierce exists, that IS the tuning failure". Pierce now exists: `extraPierce` is live on the skill path (D-25) and reads a real projectile. It is not *sold* — no item pool is authored — so nothing has been tuned and the row is still red. But it is much closer: across the crit ruling and the rider fixes the solo mark went from **20.5% HP remaining to 0.4%**, on 159 stream kills against 108. If it clears in a later patch, the question to ask is not "did we tune the mark" but "is the party carrying pierce yet" — and if the answer is no, the wall has been eroded by throughput after all.
 
-### Group C — phase 4, the economy (7)
+### Group C — weapon leftovers, waiting on the structure-recall ruling (7)
 
-Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, counted, and reported separately so a skip never reads as a pass, and restored by flipping `CONFIG.WEAPONS_ENABLED`.
+**REFILED.** This group was labelled "phase 4, the economy" and phase 4 has shipped — stat items, four modifier tiers, upgrades, respec, weighting, all gated. None of these seven has anything to do with that economy. They are **weapon** checks: combine, sell, extraction-shop buy, weapon caps. They are skipped rather than deleted — named, counted, and reported separately so a skip never reads as a pass — and restored by flipping `CONFIG.WEAPONS_ENABLED`.
+
+**What they are actually waiting on is Group B's summoner-structure question**: whether structure recall survives the removal of weapons at all. `bonelord` builds its structure through `_addWeapon` and `weaponSlots` is 0 for the whole roster, so the answer to that one decides whether these seven get restored or deleted together. **Nothing in phase 5 will close them**, and scoping phase 5 as if it might is the mistake this refiling exists to prevent.
 
 `below-max duplicate` · `combine result wrong` · `manual combine broke` · `extraction shop buy failed` · `sell weapon: mats 0→0` · `toh_druid weapon cap 0` · `toh_necromancer weapon cap 0`.
 
@@ -1248,6 +1282,16 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | 15 | `hitbox` honoured by trait *name* (`immovable`, retired) | Read by presence |
 | 16 | Art style anchor hardcoded a retired character | `STYLE_ANCHOR_ID`, named and live |
 
+### External dependencies
+
+**Regions 3–8 are blocked on art, not code.** Every system a region needs is generic across all eight already: `REGION_BY_INDEX`, `nodeModifiers()`, node-tree generation, floor composition, difficulty scaling and the objective set all run off `js/regions.js` with no per-region branches. A region costs one entry in `js/content/regions-enemies.js` — six enemies and a two-phase boss — and no engine code at all.
+
+What it also costs is **36 enemy sprites, 6 boss sprites and 6 tilesets**, and those need `PIXELLAB_API_KEY`. The key has been **absent from the working environment for every recent session**, so no art can be generated here at all. `assets/assets.json` carries 298 entries against 3 sprite files and 1 tile directory on disk.
+
+Recorded here so it is not rediscovered as a code problem three regions into the phase. **The correct scoping question for regions 3–8 is not "how long does the content take" but "when does the key come back"** — and until it does, region work is authoring enemy stat blocks and telegraph timings against placeholder art.
+
+Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all eight; the table has the two that are built. `telegraph_test` now iterates that table rather than the populations that happen to exist, so region 3 fails by name the moment it is declared without a population — which is the guard that stops one shipping unchecked.
+
 ### Recorded negatives
 
 **#9 — room registration.** Failed roughly 1 co-op run in 3–4. Now 8/8 full runs and 20/20 direct trials at 3–8 ms with zero `regFailures`. **It stopped reproducing and nobody knows why.** A healthy measurement of the component a defect *names* is evidence the name was wrong, not that anything was repaired. Closing conditions are recorded; the entry stays open.
@@ -1263,7 +1307,7 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Composed-action schema | Built, 11 primitives, **zero bespoke handlers across 60 skills** — scanned, with a negative control |
 | `scaleWith` engine hook | Built, generalised across three engines — footing, armor, pack |
 | Damage triangle | Built, all damage routed |
-| Telegraphs | Built, 9 telegraphing types, ≥50% density both regions |
+| Telegraphs | Built, 9 telegraphing types, density floor enforced over the REGION TABLE so an undeclared population fails by name |
 | Footing | Built, three-way measured, decision live |
 | Skill points, ranks, loadout | Built, rank-1 passive rule enforced |
 | Node trees, node types | Built, runtime behaviour for Shrine/Cursed/Elite |
@@ -1276,6 +1320,7 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
 | Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **30 of 30 land** (D-26 closed) |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **3 of 3** |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |

@@ -4045,6 +4045,21 @@ try {
 } catch (err) { fail('art pipeline section crashed', err); }
 
 // ---- 10. DPS gate: ±40% of the roster median at floor-1 baseline ----
+// THE HARNESS WAS MEASURING A CHARACTER WITH NO ABILITIES.
+//
+// It was written for the weapon era — its own comment says "pure baseline weapon
+// output" — and it spends no skill points, so with weapons removed every built
+// class measured 0.0 while two classes with NO TREE measured 3.2 and 16.2 off
+// trait damage alone. The table has been upside down since patch-trigger-core
+// and nothing said so, because the median it compared against was computed from
+// the same broken numbers: everything was 0, so everything was within band.
+//
+// That is §13 rule 24 in a harness rather than a design — a check that passed
+// for months while measuring the wrong world. It now spends the class's trees
+// the way every other gate does, which is what "damage output" means in a game
+// where a character's damage IS its skills.
+const DPS_LEVEL = 12;
+const { TREES: DPS_TREES } = await import('../js/skills.js');
 function measureDps(charId) {
   // allowUnplayable: this measures a class's damage output against dummies, and
   // a class with no tree measuring 0 is the interesting reading — refusing to
@@ -4058,6 +4073,12 @@ function measureDps(charId) {
   sim.wave.done = true; sim.spawnQueue.length = 0;
   for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
   const p = sim.players[0];
+  // The state a player would arrive in (§13 rule 20): levelled, trees spent,
+  // loadout filled by the same auto-slot path a real character uses.
+  p.level = DPS_LEVEL;
+  for (const tid of Object.keys(DPS_TREES).filter(t => DPS_TREES[t].classId === charId)) {
+    for (const sk of [...DPS_TREES[tid].skills].sort((a, b) => a.tier - b.tier)) { p.skillPoints++; SKILLSIM.spendSkillPoint(sim, p, sk.id); }
+  }
   const cx = sim.W / 2, cy = sim.H / 2;
   p.x = cx; p.y = cy;
   const dummies = [];
@@ -4081,20 +4102,52 @@ function measureDps(charId) {
   // separately by the nova-share check in section 9i instead.
   return (p.damageDealt - (p.novaDamage || 0)) / 20;
 }
+// THE ANCHOR MUST NOT MOVE WITH THE POPULATION.
+//
+// This measured every character and took the median of all of them, which was
+// fine at three classes and is a trap at fifteen. Two ways it breaks, and phase
+// 5 walks into both:
+//
+//   1. UNBUILT CLASSES DRAG THE ANCHOR. Eleven classes have no tree and score 0.
+//      They are not outliers, they are absences — and including them pulled the
+//      median toward zero so that the classes which DO work read as high.
+//   2. TWELVE MEDIOCRE CLASSES PASS BY CONSTRUCTION. Author them all at once
+//      and they become the median. The one check that would catch a
+//      systematically weak batch is measuring the batch against itself, and it
+//      reports "all within band" for a roster that is uniformly wrong.
+//
+// So the anchor is a DECLARED REFERENCE SET: classes that have been balanced
+// deliberately, against a real fight, and signed off. It is a constant, not a
+// derivation. A new class is measured against it and cannot join it by existing
+// — joining is an edit here, made once someone has actually balanced the class.
+//
+// Unbuilt classes are reported by name and excluded from the verdict, because
+// "this class has no tree yet" and "this class is badly tuned" are different
+// findings and §13 rule 11 says a failure name describes the cause.
+const DPS_REFERENCE = ['toh_samurai', 'toh_necromancer', 'toh_druid'];
+const DPS_BAND = 0.40;
 try {
   const table = CHARACTERS.map(c => ({ id: c.id, dps: measureDps(c.id) }));
-  const sorted = [...table].sort((a, b) => a.dps - b.dps);
-  const median = sorted[Math.floor(sorted.length / 2)].dps;
+  const byId = Object.fromEntries(table.map(r => [r.id, r.dps]));
+  const missing = DPS_REFERENCE.filter(id => !(id in byId));
+  if (missing.length) fail(`DPS reference set names ${missing.join(', ')}, which is not in the roster — an anchor pointing at nothing anchors nothing`);
+  const ref = DPS_REFERENCE.filter(id => id in byId).map(id => byId[id]).sort((a, b) => a - b);
+  const median = ref.length ? ref[Math.floor(ref.length / 2)] : 0;
+  const built = new Set(SELECTABLE.map(c => c.id));
+  const unbuilt = table.filter(r => !built.has(r.id));
   let outliers = 0;
-  console.log('  DPS table (floor-1 baseline, median ' + median.toFixed(1) + '):');
+  console.log(`  DPS table (floor-1 baseline; anchor = median of the ${DPS_REFERENCE.length} balanced classes = ${median.toFixed(1)}):`);
   for (const row of table) {
-    const dev = (row.dps - median) / median * 100;
-    const flag = Math.abs(dev) > 40 ? '  ← OUTLIER' : '';
-    console.log(`    ${row.id.padEnd(14)} ${row.dps.toFixed(1).padStart(7)}  ${(dev >= 0 ? '+' : '') + dev.toFixed(0)}%${flag}`);
-    if (Math.abs(dev) > 40) outliers++;
+    if (!built.has(row.id)) { console.log(`    ${row.id.padEnd(16)} ${row.dps.toFixed(1).padStart(7)}   no tree — phase 5`); continue; }
+    const dev = median > 0 ? (row.dps - median) / median * 100 : 0;
+    const isRef = DPS_REFERENCE.includes(row.id);
+    const flag = Math.abs(dev) > DPS_BAND * 100 ? '  ← OUTLIER' : (isRef ? '  (anchor)' : '');
+    console.log(`    ${row.id.padEnd(16)} ${row.dps.toFixed(1).padStart(7)}  ${(dev >= 0 ? '+' : '') + dev.toFixed(0)}%${flag}`);
+    if (Math.abs(dev) > DPS_BAND * 100) outliers++;
   }
-  if (!outliers) ok('DPS gate: all 33 characters within ±40% of median');
-  else fail(`DPS gate: ${outliers} outlier(s)`);
+  if (median <= 0) fail('DPS anchor is zero — every reference class measured no damage, so the band means nothing');
+  else if (!outliers) ok(`DPS gate: all ${built.size} built classes within ±${DPS_BAND * 100}% of the reference median (${unbuilt.length} unbuilt, listed above and not scored)`);
+  else fail(`DPS gate: ${outliers} outlier(s) against the reference median`);
 } catch (err) { fail('DPS harness crashed', err); }
 
 // ---- 11. stress: siege crest density, tick-time measurement ----

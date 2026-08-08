@@ -16,6 +16,7 @@ const { inZone } = await import('../js/compose.js');
 const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
 const { REGION_ENEMIES, REGION_ENEMY_BY_ID, telegraphWeight, MIN_TELEGRAPH_WEIGHT } = await import('../js/content/regions-enemies.js');
 const { CONFIG } = await import('../js/config.js');
+const { REGIONS } = await import('../js/regions.js');
 
 let failures = 0;
 const ok = m => console.log(`✓ ${m}`);
@@ -313,13 +314,33 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
   const base = TELEGRAPHED_IDS.filter(id => !REGION_ENEMY_BY_ID[id]);
   if (base.length === 3) ok(`the base roster still telegraphs on exactly 3 of 12 (${base.join(', ')}) — regions raise density, they do not change the base mix`);
   else fail(`base telegraph count drifted to ${base.length}: ${base.join(', ')}`);
-  const bad = [];
-  for (const [rid, pop] of Object.entries(REGION_ENEMIES)) {
+  // ITERATE THE REGION TABLE, NOT THE POPULATIONS THAT HAPPEN TO EXIST.
+  //
+  // This walked `REGION_ENEMIES` and checked the density of every population it
+  // found — which is every population somebody wrote. A region declared in
+  // `js/regions.js` with no enemies yet contributed no entry, so it was not
+  // under the floor, it was not measured at all, and the check went green.
+  // Regions 3 through 8 could each have shipped that way one at a time.
+  //
+  // `js/regions.js` is the authoritative list of what the game claims to have,
+  // so it is the list the floor is enforced over. A region with no population
+  // is now a NAMED failure rather than a silent absence — which is the whole
+  // difference between "not built yet" and "built wrong", and phase 5 needs to
+  // be told which one it is looking at.
+  const bad = [], empty = [];
+  for (const r of REGIONS) {
+    const pop = REGION_ENEMIES[r.id];
+    if (!pop || !pop.enemies || !pop.enemies.length) { empty.push(r.id); continue; }
     const { share } = telegraphWeight(pop.enemies);
-    if (share < MIN_TELEGRAPH_WEIGHT) bad.push(`${rid} ${(100 * share).toFixed(0)}%`);
+    if (share < MIN_TELEGRAPH_WEIGHT) bad.push(`${r.id} ${(100 * share).toFixed(0)}%`);
   }
-  if (!bad.length) ok(`every region clears the ${(100 * MIN_TELEGRAPH_WEIGHT).toFixed(0)}% telegraph-density floor: ${Object.entries(REGION_ENEMIES).map(([r, p]) => `${r} ${(100 * telegraphWeight(p.enemies).share).toFixed(0)}%`).join(', ')}`);
-  else fail(`under the density floor: ${bad.join(', ')}`);
+  const built = REGIONS.filter(r => REGION_ENEMIES[r.id] && REGION_ENEMIES[r.id].enemies && REGION_ENEMIES[r.id].enemies.length);
+  if (!bad.length && !empty.length) {
+    ok(`all ${REGIONS.length} regions in the table clear the ${(100 * MIN_TELEGRAPH_WEIGHT).toFixed(0)}% telegraph-density floor: ${built.map(r => `${r.id} ${(100 * telegraphWeight(REGION_ENEMIES[r.id].enemies).share).toFixed(0)}%`).join(', ')}`);
+  } else {
+    if (bad.length) fail(`under the density floor: ${bad.join(', ')}`);
+    if (empty.length) fail(`${empty.length} region(s) declared in js/regions.js with NO enemy population: ${empty.join(', ')} — a region the density floor cannot measure is a region that can ship unchecked`);
+  }
 }
 
 // ---------------------------------------------------------------- no def
