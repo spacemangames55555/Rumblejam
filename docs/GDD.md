@@ -553,10 +553,34 @@ Both of those are now built and gated: the `shift` primitive (§5.7) and the `ma
 
 | Class | Engine | What exists | Cost |
 |---|---|---|---|
-| **Wizard** | domain shift | `shift` primitive, `p.domainShift`, read by `bestDomainMult` — **built and gated this patch** | 2 tree files + `p.engines.shift = p.domainShifts` |
-| **Priest** | judgment marks | `mark` rider, `e.markT/markBy/markHeal/markRadius`, `_killEnemy` detonation — **built and gated this patch** | 2 tree files + a publish line counting marked enemies |
-| **Bard** | stances | **`p.stance` EXISTS** (verified: initialised to 0, with `stanceCd` and `tohSwapStance` live from the Samurai's `three_stances`) | 2 tree files + `p.engines.stance = p.stance` |
-| **Mage** | crystallize | `tohOnFire` is live and fires from `fireSkill`; `singularity` already counts fires off it | 2 tree files + a per-fire counter and a publish line |
+| **Wizard** | domain shift | `shift` primitive, `p.domainShift`, read by `bestDomainMult` — **built, gated and AUTHORED** | 2 tree files + `p.engines.shift = p.domainShifts` |
+| **Priest** | judgment marks | `mark` rider, `e.markT/markBy/markHeal/markRadius`, `_killEnemy` detonation — **built, gated and AUTHORED** | 2 tree files + a publish line counting marked enemies |
+| **Bard** | ~~stances~~ **rhythm** | **REFILED — the first entry was a false positive, and the correction makes the class cheaper.** See below | 2 tree files + `p.engines.rhythm = p.rhythm`, **and a ruling on the engine's name** |
+| **Mage** | crystallize | **REFILED — crystallize does not exist as a design.** See below | blocked on a design decision, not on code |
+
+#### The second pair, checked before authoring — and only one of them survived
+
+Rule 29 says a generic read is not a generic write. **Both of these classes were filed content-shaped on a read, and neither claim held.** The check is cheap and it is the whole reason phase 5 is estimable, so it is recorded rather than left in a commit message.
+
+**The Bard: `p.stance` is the Samurai's field, and the audit verified the Samurai.** It is initialised to 0 for every player and read in eight places, which is what "verified present" saw. Every write is inside `tohSwapStance`, and its first line is `if (!has(p, 'three_stances') …) return false` — `three_stances` is the **Samurai's** trait. Measured on the live path, four swap attempts each:
+
+| class | trait | `p.stance` | `tohSwapStance` returned |
+|---|---|---|---|
+| Samurai | `three_stances` | 0 → **1** | true, true, true, true |
+| Bard | `rhythm` | 0 → 0 | **false, false, false, false** |
+| Mage | `singularity` | 0 → 0 | **false, false, false, false** |
+
+And sharing the field would be wrong even if it were writable. `p.stance` is 0/1/2 = IRON/PRECISION/FLOW, and each value is read by Samurai-specific code — `ironGrit`, the `ironBank` refund, the precision crit and bleed, the flow tempo stacks. **A Bard writing `stance = 1` would inherit the Samurai's precision crit.** That is the drench-into-`weakened` mistake in a different costume: one class's engine coupled to another class's trait through a shared generic field.
+
+**But the Bard has a real engine, and it is Rhythm.** `p.rhythm` is written by `tohOnFire`, which `fireSkill` calls on **every** skill cast (unconditionally — see `skillsim.js`, the hook that was orphaned when weapons were removed and has been reconnected since). The decay is already live too: `tohTick` drops every stack the moment the window lapses. Measured by lending the Bard a tree so it could cast at all — **`p.rhythm` 0 → 3 in thirty seconds of play, with no engine code of any kind.**
+
+So the Bard is content-shaped — **cheaper than the Wizard or the Priest, both of which needed a write path built first** — but under a different engine name than §8.3's table gives it. That is a ruling, not a rename: traits and engines are deliberately different layers here (the Samurai's engine is Footing while its trait is Three Stances), so "the Bard's engine is Stances" *could* mean a second resource distinct from its trait. **The recommendation is that it should not.** The Bard's whole identity in the character sheet is Rhythm — stacks, a window, ensemble sharing, solo doubling — and Group A's red check is literally named `Bard rhythm never built`. A second resource on top would be one more than the class needs, and the name "Stances" has already produced one false positive by colliding with the Samurai's trait. Rhythm also passes §8.3's own test that every engine interact with the trigger system differently: **it is the first engine with a loss condition.** Footing is stationary time, `armor` a stat derivation, `pack` a count of standing summons, `shift` a count of casts, `marks` a count of live debuffs — none of them can be dropped by playing badly.
+
+**The Mage: crystallize is one word.** It appears exactly twice in the entire project — the §8.3 table row, and the audit line derived from it. There is no mechanic in the GDD, no spec in the compendium, and nothing in the sim: a Mage's player object and the sim object carry **no field matching `/cryst/i` at all**. (`crystal_infusion` is the **Blacksmith's** trait, and `crystal_pyrite`/`quartz`/`calcite` are its post-fight boons. Different class.)
+
+The first audit's proposed write path — "`tohOnFire` is live and `singularity` already counts fires off it" — was describing the Mage's **trait**, not its engine, and then offering the trait's fire counter as crystallize. That counter is real and live (`p.tohAtk` 0 → 25 in thirty seconds, measured the same way), but **a fire counter is a fire counter.** Publishing it as `p.engines.crystal` would give the Mage the Bard's engine with a different label — both would be "casts made" — and §8.3's one structural test is that no two engines are the same shape.
+
+**The Mage is therefore blocked on a design decision, not on code.** Rule 29 cannot be run against it, because the thing to run it against has never been specified. Once crystallize has a mechanic, the check is minutes: what state must a skill produce, and can content produce it today?
 
 **WRITE-PATH — a new primitive or rider first, alone, gated before any tree.**
 
@@ -575,7 +599,21 @@ Both of those are now built and gated: the `shift` primitive (§5.7) and the `ma
 | **Savage** | cascade | banked ranks decay out of combat, and §8.3's asymptotic cooldown floor is bespoke arithmetic |
 | **Blacksmith** | Crystal Forms | timed transformations; `crystal_infusion` is live but the forms decay, and a decay is a tick |
 
-**So the first pair is the Wizard and the Priest** — their write paths landed and passed their gates this patch, which makes them the only two classes whose remaining cost is content alone. **Bard and Mage are the second pair**, each needing one publish line and no new mechanism. That is four content-shaped classes; the other seven are one at a time.
+**So the first pair was the Wizard and the Priest** — their write paths landed, passed their gates, and their four trees are authored. **The second pair did not survive its own check**: the Bard is content-shaped under a corrected engine name, and the Mage is blocked on a design decision. That leaves **three** content-shaped classes, not four.
+
+#### The test for content-shaped, stated so the sort stops producing false positives
+
+Three checks now, and a class must pass all of them. Each one exists because it caught something the previous ones let through.
+
+1. **Can content WRITE the value?** Not "does the field exist", not "is the function live" — can *this class*, casting a skill, move it. Rule 29. This caught the Wizard and the Priest (no write path at all) and the Bard (a write path owned by the Samurai).
+2. **Is the engine SPECIFIED?** A word in a table is not a mechanic. This caught the Mage, where the audit ran against a name and found the nearest live counter.
+3. **Does the tree need a new PASSIVE KEY?** If it does, the class is not content-shaped and the sort was wrong.
+
+**The third check has already paid, and it paid by rejecting.** Two Wizard/Priest nodes were authored as passives keyed to `healPerHit` and `regen`, and `PASSIVE_EFFECT` refused both — those are **item** hooks, not registered passive keys. That refusal was the right outcome and it is worth stating why, because the cheap fix was to register the keys.
+
+**A new passive key is not content. It is a reader in `skillsim.js`** — the passive has to be summed and then consumed somewhere in the shared tick, which is engine code in shared code, which is precisely what "content-shaped" promises the class will not cost. A class that needs one has an engine the game does not model yet, and it belongs in the write-path or tick-shaped group where its real cost is visible. Registering the key instead would have moved a class between groups silently, by making the estimate true after the fact.
+
+Both nodes were rewritten as actives — a `heal` and a `drain` — and say the same thing about the character while costing nothing. **`PASSIVE_EFFECT` is therefore load-bearing on the batch plan, not just on balance**: it is the only thing standing between "this class costs two content files" and a patch that quietly grows a reader.
 
 #### Drench is not one of `ON_STATUS`'s four — ruled, and closed
 
@@ -1152,6 +1190,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 31. **A composed skill aims itself, so anything that used to depend on the player's aim needs re-ruling, not re-plumbing.** The fix above was not simply "call `_sweepWalls` from the primitives". A weapon arc tested facing against a wall because `p.aimA` was the player's own aim; a composed skill's direction comes from `facing()`, which follows the skill's selector to an *enemy* (§15 defect #13, changed deliberately). Restoring the arc test verbatim would therefore have restored the *mechanism* while leaving the *capability* removed — a melee player could no longer choose to hit a wall, and the measurement said so: with facing respected, the Samurai went 24 → 22 barricades; with the ruling below, 24 → 11 and the level clears. **Ruled: a barricade within reach is struck regardless of which way the swing aimed.** A barricade does not dodge and fills the space it occupies, so range still matters and facing does not. **When authority over an input moves from the player to the system, every rule that read that input is now a design question.**
 
+32. **A live write path is not YOUR write path. Check the guard, not the function.** The phase-5 audit filed the Bard as content-shaped on the finding "`p.stance` exists, initialised to 0, with `stanceCd` and `tohSwapStance` live" — every clause true, and the conclusion wrong. `tohSwapStance`'s first line is `if (!has(p, 'three_stances')) return false`, and `three_stances` is the **Samurai's** trait; measured, a Bard calling it gets `false` four times out of four while a Samurai moves 0 → 1. The field exists for everyone because initialisation is generic; the *write* is one class's. This is rule 29 sharpened: it is not enough to ask whether a generic reader exists, or even whether a writer exists — **ask whether the writer accepts this caller**, and prove it by calling it as this class. Worse, the read side was also unshareable: `p.stance`'s three values are read by Samurai-specific code, so a Bard that *could* write it would have inherited the precision-stance crit. **A shared field with a per-class guard is a private field wearing a public name**, and the audit that only greps for the name will file it wrong every time.
+
+33. **An engine that is one word in a table cannot be audited, and auditing it anyway invents one.** The Mage's engine is listed as "Crystallize" and that word appears exactly twice in the project — the table row, and the audit line derived from it. No mechanic in the GDD, none in the compendium, and no field matching `/cryst/i` anywhere in a Mage's player object or in the sim. Asked "does it have a write path", the first audit found the nearest live counter — the `singularity` trait's per-fire tally — and proposed it, which would have given the Mage the **Bard's** engine (casts made) under a different label, breaking §8.3's one structural test that no two engines share a shape. Every other row in that table carries a clause saying what the engine *does*; the ones that do not are not scoped, they are named. **Before estimating a feature, check that the feature has a definition, and treat a bare name as an open design question rather than as a specification with the details omitted.**
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1201,7 +1243,7 @@ Eleven classes have no trees. Weapons are removed, so a class without a tree can
 | Item | Question |
 |---|---|
 | **Throughput: Nest Purge** | **CLOSED — working as intended.** Measured at both party sizes with the party arriving at level 12: 4p clears 3/3 at 213 s of 360 s. Solo reaches 2/3 and is not the target. The deciding factor was **loadout slots, not HP** — see §13 rule 20. *No failing check.* |
-| **Throughput: Bounty Hunt** *(1 failing)* | **1p only now — 4p CLEARS.** See below; the EXPECTED-RED ruling has moved. |
+| **Throughput: Bounty Hunt** *(1 failing)* | **1p only now — 4p CLEARS.** See below; the EXPECTED-RED ruling has moved. The 1p number is now **0 of 5**, down from 1, because the solo fixture is a named worst-case class — **expected, and explained below so a diff does not read it as a regression.** |
 | **Summoner harness gap** *(1 failing)* | Narrowed by §8.5, not closed. Skill-era summons exist and the Necromancer fields them, but they are *units* — they walk, they die, they are re-raised. Structure **recall** (`STRUCT_CHANNEL_S`) still has nothing to act on: `bonelord` builds its structure via `_addWeapon` and `weaponSlots` is 0. The decision is whether recall survives the removal of weapons at all. |
 | **Penalty weighting on stat items** | **MEASURED AGAIN, still not added.** With a real item pool the free-roll rate is **10.8% mean / 25.8% worst**, down from 18.8%/29.3% with no items — the old number was inflated because one healing skill in the game made Recovery free in every non-Druid build. One roll in ten landing harmlessly is variance, not a broken trade-off. Re-measure when phase 5 widens what a build can ignore. *No failing check.* |
 | **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data. *No failing check.* |
@@ -1222,6 +1264,14 @@ Measured twice so nobody re-derives it: per-target attribution on the 1p mark sh
 `bounty (4p)` went green when §9.5 gave Ferocity its job as a multiplier on all composed damage. No mark HP was touched, no escort was weakened, and the selector is unchanged at 100%. A four-player party simply now has enough throughput to grind through an escort pack the long way. Pierce would still be the *efficient* answer, and remains a §9.2 modifier item.
 
 **`bounty (1p)` stays EXPECTED-RED and the original reasoning holds for it**: one player cannot out-throughput a wall built for a party, and the wall is the point.
+
+#### The 1p number moved from 1 of 5 to 0 of 5, and that is the fixture, not a regression
+
+**Recorded so a set diff never reads it as one.** `bounty (1p)` is the same expected-red check it has always been; what changed is who is standing in it. The solo objective fixture used to be positional — whichever class headed `SELECTABLE` — and it is now a **named** class chosen for being the hardest to finish a level with (`toh_samurai`; see D-27 and §13 rule 30). The Samurai is the only built class with neither a projectile nor a ground hazard, so against five escorted marks it reaches **0 of 5** where the Necromancer reached 1.
+
+That is the guard working exactly as §5.9 describes it, not failing. **Escorts are a wall, the wall is built for a party carrying pierce, and a melee class solo has neither.** Pinning the fixture made the test measure the worst case on purpose; a worse number from a harder fixture is the intended consequence of that choice, and reverting it to recover the 1 would be tuning the harness to flatter the result.
+
+**The guard below still reads correctly and is unchanged.** The question to ask if this row ever goes green is still "is the party carrying pierce yet" — the class in the string does not change that. What a future diff must not conclude is that throughput regressed between the two numbers: nothing about marks, escorts, or damage moved in the patch that changed them.
 
 **WARNING — the guard's condition has moved, and the next patch could trip it.** The old line said "if the solo row goes green before pierce exists, that IS the tuning failure". Pierce now exists: `extraPierce` is live on the skill path (D-25) and reads a real projectile. It is not *sold* — no item pool is authored — so nothing has been tuned and the row is still red. But it is much closer: across the crit ruling and the rider fixes the solo mark went from **20.5% HP remaining to 0.4%**, on 159 stream kills against 108. If it clears in a later patch, the question to ask is not "did we tune the mark" but "is the party carrying pierce yet" — and if the answer is no, the wall has been eroded by throughput after all.
 
@@ -1419,7 +1469,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard and Priest built (10 trees, 100 skills, 5 selectable); 9 of 14 classes have no trees |
+| Classes 3–14 | **In progress** — Wizard and Priest built (10 trees, 100 skills, 5 selectable); 9 of 14 classes have no trees. Bard is content-shaped pending an engine-name ruling; **Mage is blocked on a design decision** — crystallize has never been specified |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1438,6 +1488,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
 
-**Nine class engines exist only as design.** §8.3 specifies them; Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift` and the Priest's `marks` are implemented and gated.
+**Nine class engines exist only as design, and one of them is not even that.** §8.3 specifies eight of the nine; Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift` and the Priest's `marks` are implemented and gated. **The Mage's "Crystallize" is a name with no mechanic behind it anywhere in the project** — it cannot be estimated, audited or built until somebody says what it does (§13 rule 33).
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.
