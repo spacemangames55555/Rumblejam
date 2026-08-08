@@ -71,6 +71,16 @@ Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
 
 Placement: Shrine and Cursed may not sit in column 1; both Elites may not share a column. Node type is **visible before selection** — the route decision does not exist otherwise.
 
+**What each type is for.** §2.3 exists to create a route decision, and a route decision needs the nodes to reward different builds. The deep-versus-wide sweep at the level-70 anchor (`tools/shape_by_node.mjs`) says they do, and says which way:
+
+| Type | Deep/wide | What it asks |
+|---|---|---|
+| Horde | 1.33, depth wins 4/6 trees | **Asks the build question.** Many thin enemies reward the specialised answer; a spread build clears the room more slowly than a signature does |
+| Objective | 0.82, depth wins 0/6 trees | **Prices breadth.** A structure to hold rather than a crowd to delete — the only shape where spreading points is the better buy, and therefore the only place a breadth build gets paid. Unanimous: every tree, both classes |
+| Elite | 1.18, depth wins 4/6 trees | **Compresses the spread.** Depth still wins, but by a narrower margin than in a horde — few-and-fat pulls the two shapes together rather than reversing them |
+
+Region-weighted across the 4/2/2 combat mix: **1.16**. Depth wins a region, but not by enough to make breadth a mistake — which is the shape §4.2 wants and is why no per-class breadth cost was added. The design consequence is that Objective is the node a breadth build routes *toward* and Horde is the one a depth build routes toward, and both are visible on the map before the choice is made.
+
 Depth scaling within a region: `depthMult = 1 + 0.08 * (column - 1)`. Resets each region.
 
 The tree regenerates from the region's node pool on party wipe. A failed region never replays identically.
@@ -155,6 +165,21 @@ Four difficulty settings scale HP, damage, density, and gold. **Standard is exac
 
 The difficulty setting's primary purpose is replay — a maxed character levelling an alt through region 1.
 
+**Measured, not declared** (`tools/difficulty_gate.mjs`). The table above was true and unreachable from phase 2b until D-24: `difficultyOf()` was called from one function, and that function had no callers. The load assertion passed the whole time because it checked that 1.3 is bigger than 1.0 in a table nothing read. What a 60-second room now fields, per setting:
+
+| Setting | Density | HP | Damage | Gold | XP per kill |
+|---|---|---|---|---|---|
+| Measured | ×0.87 (0.85) | ×0.87 (0.85) | ×0.89 (0.85) | ×0.93 (0.9) | 1.86 |
+| Standard | 1.00 | 1.00 | 1.00 | 1.00 | 1.78 |
+| Harrowed | ×1.23 (1.2) | ×1.26 (1.3) | ×1.28 (1.25) | ×1.29 (1.35) | 1.70 |
+| Unmade | ×1.56 (1.45) | ×1.69 (1.7) | ×1.53 (1.5) | ×1.76 (1.8) | 1.74 |
+
+Four axes move in the declared direction and within 25% of the declared magnitude; the fifth is flat within 10%, which is §4.1's exclusion observed rather than asserted.
+
+Two things had to change for the gold axis to be real. **A multiplier applied to an integer of 1 or 2 rounds to identity** — the gold factor was scaling `e.mats` at spawn, where `Math.round(1 × 0.9)` is 1, so every setting below Standard paid exactly Standard's gold. It now multiplies on the kill path with the fraction carried across kills. And because gold and XP had ridden the same number since phase 1, more gold meant more XP: **each dropped material now carries its own XP value**, and the extras a difficulty adds carry zero. A player's own doubling hook still carries XP with it — the exclusion is on the difficulty axis, not on multipliers in general, because a hook the player built for is a build paying off.
+
+The measurement denominator is its own lesson. The first version of the gate stood a level-1 character still, divided by the 0.02–0.06 materials it had banked per enemy, and reported the game paying ×0.58 where the table says ×0.9. The game was right; the denominator was a bot's walking pattern. Gold and XP are now read from `sim.payout` — what the kill path paid, per enemy killed — with the banked figures kept only as the end-to-end check that the zero-XP split survives the pickup path (Harrowed banks 1.33 materials per XP against Standard's 1.00).
+
 ### 4.2 The player power curve
 
 - **1–2 levels per map.** Across 48 maps this produces a character in the **low 70s** at the end of a run.
@@ -172,22 +197,24 @@ Skills fire on cooldowns. A character running few skills has long gaps and spiky
 
 | tree | Horde | Elite | Objective |
 |---|---:|---:|---:|
-| `samurai_armor` | 2.42 | 1.29 | **0.93** |
-| `samurai_tactics` | 1.63 | 1.32 | **0.86** |
-| `necro_marrow` | **0.25** | **0.55** | **0.61** |
-| `necro_dark_matter` | 1.02 | 1.62 | **0.82** |
-| `necro_summons` | 1.86 | 1.98 | **0.91** |
-| `druid_beasts` | **0.80** | **0.98** | **0.79** |
+| `samurai_armor` | 2.42 | 1.00 | **0.93** |
+| `samurai_tactics` | 1.63 | 1.25 | **0.86** |
+| `necro_marrow` | **0.25** | **0.48** | **0.61** |
+| `necro_dark_matter` | 1.02 | 1.76 | **0.82** |
+| `necro_summons` | 1.86 | 1.65 | **0.91** |
+| `druid_beasts` | **0.80** | **0.92** | **0.79** |
 | **depth wins** | 4/6 | 4/6 | **0/6** |
-| **mean ratio** | 1.33 | 1.29 | **0.82** |
+| **mean ratio** | 1.33 | 1.18 | **0.82** |
 
-Measured against a **real** Elite node — §2.4's modifiers applied, not reconstructed (D-24). Elite fields 65 enemies at 22 HP against Horde's 118 at 9.
+Measured against a **real** Elite node — §2.4's modifiers applied, not reconstructed (D-24). Elite fields 69 enemies at 23 HP against Horde's 118 at 9.
+
+The Elite column moved when the gold multiplier moved to the kill path: a node paying ×1.35 gold now drops extra materials, each drop consumes the shared RNG stream, and the sequence downstream differs. Horde and Objective, which pay ×1.0, are unchanged to the digit. That is worth stating rather than quietly re-running — **a balance number carries the build it was measured on**, and this one is measured on the build where difficulty and node gold are both real.
 
 **Objective nodes favour breadth in every tree measured.** A nest is a structure to reach past tough company, and covering several situations beats doing one thing hard. Horde and Elite both favour depth in four of six.
 
-**Elite pulls toward breadth, but by less than the reconstruction suggested.** Its mean is 1.29 against Horde's 1.33 — a real narrowing, and it moves the two trees that were furthest into depth (`samurai_armor` 2.42 → 1.29, `druid_beasts` 0.80 → 0.98) hardest. Fewer-and-fatter compresses the spread rather than reversing it. **Objective, not Elite, is the node that prices breadth.**
+**Elite pulls toward breadth, but by less than the reconstruction suggested.** Its mean is 1.18 against Horde's 1.33 — a real narrowing, and it pulls the extremes in from both ends (`samurai_armor` 2.42 → 1.00, `druid_beasts` 0.80 → 0.92). Fewer-and-fatter compresses the spread rather than reversing it. **Objective, not Elite, is the node that prices breadth.**
 
-**Region-weighted, the claim holds.** §2.4 gives a region 4 Horde, 2 Elite and 2 Objective combat nodes. Weighted by that mixture the ratio is **1.19** — mildly depth-favouring, not the runaway a single horde arena suggests.
+**Region-weighted, the claim holds.** §2.4 gives a region 4 Horde, 2 Elite and 2 Objective combat nodes. Weighted by that mixture the ratio is **1.16** — mildly depth-favouring, not the runaway a single horde arena suggests.
 
 So the optimum sits in the middle **across a region, not within a fight**. A player who optimises for the horde nodes pays for it at the objective, and the route decision in §2.3 is what prices the choice. **No per-class breadth cost is needed**, and the Druid's revive scale is a flavour of its engine rather than the only thing holding the design up.
 
@@ -992,7 +1019,7 @@ Eleven classes have no trees. Weapons are removed, so a class without a tree can
 | **Summoner harness gap** *(1 failing)* | Narrowed by §8.5, not closed. Skill-era summons exist and the Necromancer fields them, but they are *units* — they walk, they die, they are re-raised. Structure **recall** (`STRUCT_CHANNEL_S`) still has nothing to act on: `bonelord` builds its structure via `_addWeapon` and `weaponSlots` is 0. The decision is whether recall survives the removal of weapons at all. |
 | **Penalty weighting on stat items** | §9.2 — fully random penalties can roll free on stats a build does not use. Weight lightly toward used stats, or accept free rolls as luck? *No failing check.* |
 | **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data. *No failing check.* |
-| **§9.5 stats** | The stat system has no recorded intent, and phase 4's stat tier is defined in terms of opposing axes that are nowhere named. Separately measured: **Ferocity, Tempo and Attunement are read by no skill path** — Ferocity multiplies no composed damage at all, Tempo reaches move speed only, and `_attuned` has no caller in `compose.js` or `skillsim.js`. Ferocity is still offered on level-up at 4/7/12%. *No failing check — nothing asserts it yet.* |
+| **§9.5 stats** | **CLOSED — §9.5 is written and D-23 is fixed.** All ten stats are read by the live path and proved by effect at 10/10 (`stat_gate.mjs`). Tempo's defect was the *label*, not the code: it reaches move speed only, and nothing shortens a skill cooldown. The glossary and compendium now say so. *No failing check.* |
 
 #### Bounty Hunt is EXPECTED-RED until phase 4. Do not re-diagnose it.
 
@@ -1037,7 +1064,7 @@ Measured against a Horde room from the same seed, over 60 s:
 
 **Asserted by effect, not by wiring.** `sim_test` counts what actually spawned; a version that resolved the modifiers, stored them on the sim and never applied them would pass any check reading `sim.fightMods` and fails this one. The direction of each axis is absolute — a count ratio above 1 fails outright, with the message naming why: an Elite node that is Horde with a bigger number asks the same build question.
 
-*Wired along with it:* `difficultyOf()` was the other half of the orphan and had never been applied either. At the default setting every multiplier is 1.0, so nothing changed today — but difficulty is now live for the first time, and a non-default setting will do something.
+*Wired along with it:* `difficultyOf()` was the other half of the orphan and had never been applied either. At the default setting every multiplier is 1.0, so nothing changed on the day — and "a non-default setting will do something" was a prediction, not a measurement. It has since been measured: `tools/difficulty_gate.mjs` fights the same room on all four settings and finds every axis moving in the declared direction, after two further defects that only a measurement could have found (a gold multiplier rounding to identity against an integer of 1, and gold dragging XP with it). See §4.1.
 
 #### D-23 — CLOSED: three stats sold and doing nothing
 
@@ -1101,14 +1128,14 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Skill points, ranks, loadout | Built, rank-1 passive rule enforced |
 | Node trees, node types | Built, runtime behaviour for Shrine/Cursed/Elite |
 | World map | Rules built, **no DOM** |
-| Difficulty | Built, 4 settings, XP exclusion asserted |
+| Difficulty | **Built and measured** — `difficulty_gate.mjs`: 4 axes move in a real fight, XP per kill flat within 10% |
 | Saves, frontier rule | Built, file round-trip verified |
 | Netcode state migration | Built, lobby heartbeat at 3 Hz, drops classified |
 | Determinism | Built, negative control, byte-identical same-seed runs |
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **10 of 10 live** |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
-| Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.19; objective nodes favour breadth 0/6 (§4.2) |
+| Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
 | Node types | Horde, Elite and Objective all live and measured; difficulty wired (D-24) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |

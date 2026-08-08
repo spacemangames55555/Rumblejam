@@ -151,6 +151,10 @@ export class Sim {
     this.mutations = null; this.mutIdx = 0; this.siegeT = 0; this.bossAt = Infinity;
     this.bossSpawned = false; this.bossT = 0; this.siegeCfg = null;
     this.profile = null; this.fronts = [0, 2]; this.fightLoot = 0; this.lootT = null;
+    // What this fight PAID, separated by axis, because gold and XP no longer
+    // move together (§4.1). `gold` is materials dropped after every multiplier;
+    // `xp` is the experience-bearing subset of them.
+    this.payout = { kills: 0, gold: 0, xp: 0 };
     this.holdCircle = null;   // {x,y,r,held} — spawn-choke sub-objective
     this.pylonId = null; this.enemyBuff = 1;
     this._startFloor(1);
@@ -240,7 +244,10 @@ export class Sim {
       x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.hitbox || 1),
       mx: 0, my: 0, interact: false, moving: false, aimA: 0, stillT: 0,
       hp: 1, shield: 0, downed: false, reviveP: 0, invuln: 0, pullX: 0, pullY: 0,
-      level: 1, xp: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
+      // `xp` is the bar and RESETS on every level-up; `xpEarned` never does, so
+      // anything measuring experience over a run reads the second one. Reading
+      // the bar reports a smaller number the better the player did.
+      level: 1, xp: 0, xpEarned: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
       materials: 0, matsCollected: 0, banked: 0,
       weapons: [], items: [],
       boosts: {}, permStats: {}, tempStats: {},
@@ -673,6 +680,8 @@ export class Sim {
     // is a queue, and holding ground against a queue is the sanctioned play
     this.fronts = [this.waveRng.int(0, 3)];
     this.fightLoot = 0;  // materials actually picked up this fight
+    this.payout = { kills: 0, gold: 0, xp: 0 };  // and what the fight paid out
+    this._goldAcc = 0;   // the difficulty multiplier's carried fraction, per fight
     this.lootT = null;   // the siege's post-boss looting countdown
     this.safe = false;   // the room is live again
     this._armCurses();   // last round's curses expire; this round's bite
@@ -1377,8 +1386,7 @@ export class Sim {
       radius: def.radius * (opts.elite ? 1.45 : 1) * (opts.mini ? 0.6 : 1),
       spd: def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * (opts.spdMult || 1),
       dmg: def.dmg * dmgScale, dmgScale,
-      // §2.4: an Elite node pays more, or nobody takes the harder route.
-      mats: opts.noMats ? 0 : Math.round(def.mats * ((this.fightMods && this.fightMods.gold) || 1)), mini: !!opts.mini,
+      mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
       t: this.rng.float(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
@@ -2333,9 +2341,46 @@ export class Sim {
     MIN.dropToken(this, x, y);
     if (killer && killer.stats) tohOnKill(this, killer, e);
     // drops
+    // GOLD (§2.4 node payout, §4.1 difficulty) MULTIPLIES HERE, NOT AT SPAWN.
+    // It was applied to `e.mats` at spawn and rounded, and `def.mats` is 1 or 2
+    // — so Math.round(1 × 0.9) is 1 and every sub-1.0 multiplier vanished. The
+    // difficulty gate caught it as Measured paying ×1.04 where its table says
+    // ×0.9: a multiplier that rounds to identity is not a multiplier.
+    //
+    // The accumulator carries the fraction across kills so the rate is exact in
+    // aggregate rather than truncated on every enemy.
+    const goldMult = (this.fightMods && this.fightMods.gold) || 1;
     let mats = objectiveKillPays(this, e) ? e.mats * this.greedMats : 0;
-    if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && this.rng.float() < killer.hookAgg.doubleMaterials) mats *= 2;
-    for (let i = 0; i < mats; i++) this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15));
+    // XP RIDES THE PRE-MULTIPLIER AMOUNT (§4.1: XP is never scaled by
+    // difficulty). XP is earned per material banked, so paying more gold on a
+    // harder setting would pay more XP with it through the back door and make
+    // the hardest setting the only correct choice — the exact outcome §4.1
+    // exists to prevent.
+    let xpMats = mats;
+    // A PLAYER'S OWN double DOES carry XP, and difficulty's gold does not. The
+    // distinction is not "which multiplier came first", it is whose it is:
+    // §4.1 excludes XP from the DIFFICULTY axis so the ladder stays a
+    // preference. A hook the player built for is a build paying off.
+    if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && this.rng.float() < killer.hookAgg.doubleMaterials) { mats *= 2; xpMats *= 2; }
+    if (goldMult !== 1) {
+      this._goldAcc = (this._goldAcc || 0) + mats * (goldMult - 1);
+      const extra = Math.floor(this._goldAcc);
+      this._goldAcc -= extra;
+      mats += extra;
+    }
+    // THE PAYOUT INSTRUMENT (§13: counters on every new mechanic). Gold and XP
+    // now diverge on the kill path, so the fight records what it paid on each
+    // axis and how many kills it paid for. Measuring the ratio at the pickup
+    // instead makes the denominator "materials the bot happened to walk over",
+    // which is a fixture property, not a game one.
+    this.payout.kills++; this.payout.gold += mats; this.payout.xp += xpMats;
+    // A pickup carries its own XP value. The BASE materials carry XP; the
+    // extras the gold multiplier added carry NONE, so a harder setting pays
+    // more gold and exactly the same XP. That is §4.1's exclusion expressed in
+    // the drop rather than trusted to a load assertion.
+    for (let i = 0; i < mats; i++) {
+      this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15), 1, i < xpMats ? 1 : 0);
+    }
     // killer hooks & traits
     if (killer && killer.stats) {
       killer.kills++;
@@ -2849,13 +2894,16 @@ export class Sim {
 
   // ---------------- pickups ----------------
 
-  _dropMaterial(x, y, value = 1) {
+  // `xpValue` defaults to the material's value, so every existing caller keeps
+  // paying XP exactly as before. Only the gold multiplier's extra materials
+  // pass 0 — see _killEnemy.
+  _dropMaterial(x, y, value = 1, xpValue = value) {
     if (this.pickups.length >= 240) {
       const m = this.pickups[(this.rng.float() * this.pickups.length) | 0];
-      m.v += value;
+      m.v += value; m.xp = (m.xp === undefined ? m.v - value : m.xp) + xpValue;
       return;
     }
-    this.pickups.push({ x: clamp(x, WALL + 10, this.W - WALL - 10), y: clamp(y, WALL + 10, this.H - WALL - 10), v: value, vx: 0, vy: 0, target: -1 });
+    this.pickups.push({ x: clamp(x, WALL + 10, this.W - WALL - 10), y: clamp(y, WALL + 10, this.H - WALL - 10), v: value, xp: xpValue, vx: 0, vy: 0, target: -1 });
   }
 
   _tickPickups(dt) {
@@ -2879,19 +2927,24 @@ export class Sim {
         if (dist2(m.x, m.y, p.x, p.y) < (p.radius + 8) * (p.radius + 8)) {
           this.pickups.splice(i, 1);
           this.fightLoot += m.v; // the fight's "collected" tally for the clear banner
-          this._collectMaterial(p, m.v);
+          this._collectMaterial(p, m.v, m.xp);
         }
       }
     }
   }
 
-  _collectMaterial(p, v) {
+  _collectMaterial(p, v, xpV) {
     this.pushEvent({ k: 'sfx', s: 'pickup' });
     if (p.hookAgg.pickupBonusChance > 0 && this.rng.float() < p.hookAgg.pickupBonusChance) v += 1;
     p.materials += v;
     p.matsCollected += v;
-    const xpGain = v * (1 + p.hookAgg.xpBonus / 100);
+    // XP rides the pickup's OWN xp value where it has one — a difficulty's gold
+    // multiplier adds materials that are worth money and no experience (§4.1).
+    // Every other caller (tithe, interest, debug) passes nothing and keeps the
+    // old behaviour of one XP per material.
+    const xpGain = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100);
     p.xp += xpGain;
+    p.xpEarned += xpGain;
     while (p.xp >= p.xpNext) {
       p.xp -= p.xpNext;
       p.level++;
