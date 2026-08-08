@@ -130,6 +130,44 @@ function facing(sim, p, grid, range, select) {
   return d !== null ? d : p.aimA;
 }
 
+// A SWEEP CHEWS BARRICADES. `game.js` has always stated the rule — "every
+// splash, nova and blast chews barricades as well as bodies" — and enforced it
+// on the weapon paths: melee arcs called `_sweepWalls`, blasts went through
+// `_areaDamageEnemies`, and a straight shot damaged the wall that absorbed it.
+// Composed primitives inherited none of that, and weapons are gone, so in the
+// skill era `strike`, `cone` and `line` passed through a Nest Purge barricade
+// without scratching it.
+//
+// THE GATE SAID THE LEVEL WAS COMPLETABLE BECAUSE ONE CLASS STOOD IN IT.
+// `bolt` reaches walls through the projectile tick and `hazard` through the
+// zone tick, so the Necromancer and the Druid cleared Nest Purge and the gate
+// was green. Measured across the built five, a melee class made ZERO progress
+// on twenty-four barricades in six minutes. That is §13 rule 28's shape a third
+// time: a claim about a LEVEL, decided by whichever class the fixture happened
+// to be holding.
+//
+// `drain` is deliberately not here. It is single-target on a living thing and
+// pays the caster back out of what it took; there is nothing to drain from a
+// barricade, and giving it one would be inventing a behaviour rather than
+// restoring one.
+//
+// A BARRICADE IN REACH IS STRUCK REGARDLESS OF WHICH WAY THE SWING AIMED, and
+// that is a ruling, not a shortcut. A weapon arc tested facing against walls
+// because the PLAYER aimed it — `p.aimA` pointed wherever they were looking.
+// A composed skill aims itself: `facing()` follows the skill's own selector to
+// an ENEMY (§15 defect #13, fixed deliberately). Keeping the arc test would
+// therefore mean the skill era quietly removed the player's ability to choose
+// to hit a wall, and the measurement says exactly that — a Samurai standing
+// against a barricade for six minutes took 24 of them down to 22.
+//
+// A barricade is not a body. It does not dodge, it fills the space it occupies,
+// and a person swinging a sword inside arm's reach of one hits it. So the sweep
+// passes the full circle: range still matters, facing does not.
+function chewWalls(sim, p, range, dmg) {
+  if (!sim.walls.length) return;
+  sim._sweepWalls(p.x, p.y, 0, range, Math.PI * 2, dmg, p);
+}
+
 // ---------------------------------------------------------------- primitives
 
 export const PRIMITIVES = {
@@ -159,6 +197,7 @@ export const PRIMITIVES = {
         applyImpactRiders(sim, p, skill, r, e, rank, Math.atan2(dy, dx), out);
         out.hits++;
       }
+      chewWalls(sim, p, reach, dmg);
     }
     sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: reach, color: p.color });
   },
@@ -215,6 +254,7 @@ export const PRIMITIVES = {
       applyImpactRiders(sim, p, skill, r, e, rank, Math.atan2(dy, dx), out);
       out.hits++;
     }
+    chewWalls(sim, p, step.range, dmg);
     sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: step.range, color: p.color });
   },
 
@@ -241,6 +281,12 @@ export const PRIMITIVES = {
         applyImpactRiders(sim, p, skill, r, e, rank, a0, out);
         out.hits++;
       }
+      // The beam STOPS at a barricade (losClipLen above), so the barricade is
+      // what it stopped on and takes the hit — the same rule the friendly
+      // projectile tick states as "a DESTRUCTIBLE wall takes the hit rather
+      // than merely eating the shot". Measured at the clipped end, half-width
+      // plus the sweep's own slack, so a beam grazing a corner still bites.
+      if (sim.walls.length) sim._areaDamageWalls(p.x + ca * len, p.y + sa * len, half + 12, dmg, p);
     }
     sim.fx.beams.push({ x1: p.x, y1: p.y, x2: p.x + ca * len, y2: p.y + sa * len, color: p.color, w: step.width });
   },

@@ -114,6 +114,32 @@ const PROBES = {
     // the engine's.
     high: (g, p) => g._applyPerm(p, { grit: 40 }),
   },
+  shift: {
+    what: 'attunements banked this room',
+    char: 'toh_wizard',
+    // Filled by the `shift` primitive firing on its own cooldown — nothing to
+    // stage beyond letting the Wizard's own Attune nodes come up. The low
+    // staging keeps the counter at zero each frame; unlike `armor` and `pack`
+    // this one is ACCUMULATED rather than derived, so zeroing it holds.
+    low: (g, p) => { p.domainShifts = 0; p.engines.shift = 0; },
+    // WHAT FILLS IT IS ANOTHER SKILL, and the loadout has three slots. `footing`,
+    // `armor` and `pack` are filled by standing still, by the stat sheet and by
+    // the pack — none of which needs a slot — so the gate only ever slotted the
+    // skill it was MEASURING. For an engine a skill fills, that fixture measures
+    // a Wizard who never attunes. Derived from the trees rather than named, so a
+    // content rename cannot turn this into a silent zero (§13 rule 12).
+    fills: sk => (sk.compose || []).some(c => c.kind === 'shift'),
+  },
+  marks: {
+    what: 'enemies carrying this player\'s judgment',
+    char: 'toh_priest',
+    // The marks ARE the resource, so the low staging clears them off the
+    // enemies each frame — the same shape as removing the Druid's animals. The
+    // marked enemies stay in the room either way, so the only thing that
+    // changes between the two runs is the count the engine publishes.
+    low: (g, p) => { for (const e of g.enemyPool) if (e.active) e.markT = 0; p.engines.marks = 0; },
+    fills: sk => (sk.compose || []).some(c => c.riders && c.riders.mark),
+  },
   pack: {
     what: 'animals standing',
     char: 'toh_druid',
@@ -182,7 +208,13 @@ function measure(key) {
   const pr = PROBES[key];
   if (!pr) return null;
   const claim = pickClaim(key, pr.char);
-  const slot = claim ? [claim.skill] : null;
+  // The measured skill FIRST, then whatever fills the engine — a loadout the
+  // player who wanted this engine would actually be carrying (§13 rule 20).
+  const fillers = pr.fills
+    ? Object.values(TREES).filter(t => t.classId === pr.char)
+        .flatMap(t => t.skills).filter(x => x.type === 'active' && pr.fills(x)).map(x => x.id)
+    : [];
+  const slot = claim ? [claim.skill, ...fillers].slice(0, 8) : null;
 
   // --- FILLED: does the resource rise above zero in a real room? ---
   const { g, p } = stage(pr.char, slot);

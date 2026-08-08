@@ -2452,18 +2452,25 @@ export class Sim {
     // source, and it reaches ALLIES — the mark is the Priest's contribution to a
     // party, and a version that healed only the caster would be a lifesteal item.
     if (e.markT > 0 && e.markHeal > 0) {
-      const owner = this.players[e.markBy];
+      // THE MARK IS SPENT BEFORE IT PAYS, and that ordering is load-bearing.
+      // The Priest's own `grace_and_judgment` trait turns healing into damage
+      // through `tohOnHeal`, so a detonation that healed while still marked went
+      // heal -> damage -> kill the same enemy -> detonate -> heal, and blew the
+      // stack. Clearing first makes it one bounce, never a loop — the same
+      // guarantee `voodooMirror` gets from its `mirrored` flag, and the same
+      // class of defect: a payout that re-enters the path that triggered it.
+      const heal = e.markHeal, radius = e.markRadius, owner = this.players[e.markBy];
+      e.markT = 0; e.markHeal = 0;
       let healed = 0;
       for (const q of this.livePlayers()) {
-        if (dist2(x, y, q.x, q.y) > e.markRadius * e.markRadius) continue;
-        this._heal(q, e.markHeal, { by: owner });
+        if (dist2(x, y, q.x, q.y) > radius * radius) continue;
+        this._heal(q, heal, { by: owner });
         healed++;
       }
       if (healed) {
-        this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: e.markRadius });
+        this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: radius });
         this.pushEvent({ k: 'sfx', s: 'revive' });
       }
-      e.markT = 0;
     }
     tohEnemyDied(this, e);              // Necromancer bone-dust — any kill, anywhere
     // A soul token, from ANY death, for ANY party. It is a world resource read

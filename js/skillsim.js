@@ -33,8 +33,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
@@ -66,7 +66,7 @@ export function startRoomMinions(sim, p) {
   // tick — but "until the end of the room" only means something if something
   // ends it. Reset here rather than in a new room hook, so the one function the
   // sim already calls per room start owns both per-room resets a class needs.
-  p.domainShift = null;
+  p.domainShift = null; p.domainShifts = 0;
   resetMinionsForRoom(sim, p);
   for (const [id, rank] of Object.entries(p.skillRanks || {})) {
     if (!(rank > 0)) continue;
@@ -232,8 +232,21 @@ export function tickSkills(sim, dt) {
     if (p.gone) continue;
     // publish the engines other trees read
     p.engines.armor = Math.max(0, p.stats.grit);
+    // THE WIZARD'S SHIFT ENGINE (§8.3): attunements banked this room, written by
+    // the `shift` primitive and reset at every door. One publish line, beside
+    // armor's, which is what "content-shaped" was supposed to mean.
+    p.engines.shift = p.domainShifts || 0;
+    // THE PRIEST'S MARK ENGINE: how many enemies are currently carrying THIS
+    // player's judgment. A count of standing debt rather than a rate — a Priest
+    // who has marked the room is at their strongest in the moment before it
+    // breaks, and killing the marks spends the power along with the heal.
+    let marked = 0;
+    for (const e of sim.enemyPool) if (e.active && e.markT > 0 && e.markBy === p.idx) marked++;
+    p.engines.marks = marked;
     p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
     p.engineScaleBonus.pack = passiveSum(p, 'packDamageBonus');
+    p.engineScaleBonus.shift = passiveSum(p, 'shiftDamageBonus');
+    p.engineScaleBonus.marks = passiveSum(p, 'marksDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
     // holding slots no skill still pays for.

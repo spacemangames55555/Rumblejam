@@ -1,0 +1,194 @@
+// PRIEST — Judgment tree.
+//
+// THE CLASS ENGINE, EXPRESSED AS CONTENT. §8.3 gives the Priest "judgment marks
+// — marks detonate on the target's death, healing nearby allies", and the write
+// path is the `mark` rider (ruled and gated before this file existed). Nothing
+// here is engine code: a mark is a rider on a damage step, and the resource it
+// feeds is `p.engines.marks`, published in one line.
+//
+// THE MARK IS A DEBT THE ROOM PAYS LATER. It does not heal when applied; it
+// heals when the marked thing dies, to every ally in reach, whoever landed the
+// killing blow. That is the shape that makes the Priest a party class rather
+// than a self-sustain class: a mark on something the Samurai is about to kill is
+// worth exactly as much as one on something the Priest kills, and a mark placed
+// while the party is healthy is worth nothing at all.
+//
+// AND IT IS WHY THE ENGINE IS A COUNT, NOT A RATE. `p.engines.marks` is how many
+// marked things are currently standing — a Priest who has marked the whole room
+// is holding a large unpaid debt, and this tree's later skills read that as
+// power. Kill them and the power is spent along with the heal. Spread marks and
+// hold them, and the Priest is strongest in the moment before the room breaks.
+//
+// EVERY NUMBER IN THIS FILE LIVES IN TUNING.
+
+export const TUNING = {
+  // tier 1 — Rebuke
+  rebukeDamage: 8, rebukeReach: 100, rebukeArc: 1.6, rebukeRadius: 130,
+  rebukeCount: 1, rebukeCd: 1000,
+  // tier 2 — Judgment
+  judgeDamage: 9, judgeSpeed: 500, judgeRange: 250, judgeCd: 2800,
+  judgeMarkDur: 9000, judgeMarkHeal: 7, judgeMarkRadius: 190,
+  // tier 3 — Censure
+  censureDamage: 10, censureAngle: 1.7, censureRange: 220, censureRadius: 170,
+  censureCount: 3, censureCd: 4400,
+  censureMarkDur: 8000, censureMarkHeal: 5, censureMarkRadius: 170,
+  // tier 4 — Weight of Sin
+  weightDamage: 11, weightReach: 108, weightArc: 1.8, weightRadius: 140,
+  weightCount: 2, weightCd: 4000, weightWeakenMult: 0.78, weightWeakenDur: 2500,
+  // tier 5 — Attend the Fallen (passive)
+  attendPer: 0.02,
+  // tier 6 — Sentence
+  sentenceDamage: 14, sentenceSpeed: 520, sentenceRange: 260, sentencePct: 50,
+  sentenceCd: 4600, sentenceMarkDur: 7000, sentenceMarkHeal: 12, sentenceMarkRadius: 210,
+  // tier 7 — Chorus of the Named
+  chorusDamage: 10, chorusAngle: 2.2, chorusRange: 235, chorusRadius: 195,
+  chorusCount: 4, chorusCd: 5600, chorusPer: 0.05,
+  // tier 8 — Reliquary Ward
+  reliquaryAmount: 24, reliquaryDuration: 5000, reliquaryCd: 8500, reliquaryPer: 0.07,
+  // tier 9 — The Long Ledger
+  ledgerDamage: 12, ledgerWidth: 36, ledgerLength: 380, ledgerRadius: 215,
+  ledgerCount: 3, ledgerCd: 6400, ledgerPer: 0.06,
+  ledgerMarkDur: 8000, ledgerMarkHeal: 8, ledgerMarkRadius: 200,
+  // tier 10 — Day of Accounts
+  accountsDamage: 17, accountsAngle: 2.8, accountsRange: 255, accountsRadius: 225,
+  accountsCount: 4, accountsCd: 10500, accountsPer: 0.07,
+  accountsMarkDur: 10000, accountsMarkHeal: 16, accountsMarkRadius: 240,
+  // rank increments — linear, never compounding
+  rankDamage: 0.04, rankDuration: 0.035,
+};
+
+const T = TUNING;
+const R = { damage: T.rankDamage, duration: T.rankDuration };
+
+export const PRIEST_JUDGMENT = [
+  {
+    id: 'pri_rebuke', tree: 'priest_judgment', tier: 1, name: 'Rebuke',
+    desc: 'A backhand at whatever came close. Deals 8 damage in a 1.6-radian arc.',
+    type: 'active', domain: 'spiritual', prereq: null,
+    select: 'nearest',
+    trigger: { kind: 'PROXIMITY', radius: T.rebukeRadius, count: T.rebukeCount },
+    cooldown: T.rebukeCd,
+    compose: [{ kind: 'strike', damage: T.rebukeDamage, reach: T.rebukeReach, arc: T.rebukeArc, riders: {} }],
+    ranks: R,
+  },
+  {
+    // THE ENGINE, TIER 2 — for the same reason the Wizard's shift is tier 2. A
+    // Priest without marks is a weak Mage, and a class should not spend a third
+    // of a run being a worse version of another one.
+    id: 'pri_judgment', tree: 'priest_judgment', tier: 2, name: 'Judgment',
+    desc: 'Marks a target for 9s. When it dies, allies within 190 units are healed 7.',
+    type: 'active', domain: 'spiritual', prereq: 'pri_rebuke',
+    select: 'highest_hp',
+    trigger: { kind: 'NEAREST', range: T.judgeRange },
+    cooldown: T.judgeCd,
+    compose: [{
+      kind: 'bolt', damage: T.judgeDamage, speed: T.judgeSpeed, range: T.judgeRange,
+      riders: { mark: { dur: T.judgeMarkDur, heal: T.judgeMarkHeal, radius: T.judgeMarkRadius } },
+    }],
+    ranks: R,
+  },
+  {
+    id: 'pri_censure', tree: 'priest_judgment', tier: 3, name: 'Censure',
+    desc: 'Marks a whole fan at once for 8s, healing 5 each when they fall. Deals 10 damage.',
+    type: 'active', domain: 'spiritual', prereq: 'pri_judgment',
+    select: 'densest_cluster',
+    trigger: { kind: 'PROXIMITY', radius: T.censureRadius, count: T.censureCount },
+    cooldown: T.censureCd,
+    compose: [{
+      kind: 'cone', damage: T.censureDamage, angle: T.censureAngle, range: T.censureRange,
+      riders: { mark: { dur: T.censureMarkDur, heal: T.censureMarkHeal, radius: T.censureMarkRadius } },
+    }],
+    ranks: R,
+  },
+  {
+    id: 'pri_weight_of_sin', tree: 'priest_judgment', tier: 4, name: 'Weight of Sin',
+    desc: 'A heavy arc that leaves them deals 22% less for 2.5s. Deals 11 damage.',
+    type: 'active', domain: 'physical', prereq: 'pri_censure',
+    select: 'highest_hp',
+    trigger: { kind: 'PROXIMITY', radius: T.weightRadius, count: T.weightCount },
+    cooldown: T.weightCd,
+    compose: [{
+      kind: 'strike', damage: T.weightDamage, reach: T.weightReach, arc: T.weightArc,
+      riders: { weakenDamage: { mult: T.weightWeakenMult, dur: T.weightWeakenDur } },
+    }],
+    ranks: R,
+  },
+  {
+    id: 'pri_attend_the_fallen', tree: 'priest_judgment', tier: 5, name: 'Attend the Fallen',
+    desc: 'Every standing mark is worth 2% more to every skill that reads them.',
+    type: 'passive', domain: 'spiritual', prereq: 'pri_weight_of_sin',
+    trigger: null, cooldown: 0, compose: [],
+    passive: { marksDamageBonus: T.attendPer },
+    // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks —
+    // the same shape as Held Edge on Footing and Pack Bond on the pack. A
+    // rank-1 cap here would have been the assertion's other complaint.
+    ranks: { damage: T.rankDamage },
+  },
+  {
+    id: 'pri_sentence', tree: 'priest_judgment', tier: 6, name: 'Sentence',
+    desc: 'Marks the dying for a large payout — 12 healed when it falls. Deals 14 damage below 50% health.',
+    type: 'active', domain: 'spiritual', prereq: 'pri_attend_the_fallen',
+    select: 'lowest_hp',
+    trigger: { kind: 'TARGET_THRESHOLD', pct: T.sentencePct, range: T.sentenceRange },
+    cooldown: T.sentenceCd,
+    compose: [{
+      kind: 'bolt', damage: T.sentenceDamage, speed: T.sentenceSpeed, range: T.sentenceRange,
+      riders: { mark: { dur: T.sentenceMarkDur, heal: T.sentenceMarkHeal, radius: T.sentenceMarkRadius } },
+    }],
+    ranks: R,
+  },
+  {
+    id: 'pri_chorus', tree: 'priest_judgment', tier: 7, name: 'Chorus of the Named',
+    desc: 'Louder for every mark still standing. 10 damage, +5% per marked enemy.',
+    type: 'active', domain: 'mental', prereq: 'pri_sentence',
+    select: 'densest_cluster',
+    trigger: { kind: 'PROXIMITY', radius: T.chorusRadius, count: T.chorusCount },
+    cooldown: T.chorusCd,
+    compose: [{
+      kind: 'cone', damage: T.chorusDamage, angle: T.chorusAngle, range: T.chorusRange,
+      scaleWith: 'marks', scalePer: T.chorusPer, riders: {},
+    }],
+    ranks: R,
+  },
+  {
+    id: 'pri_reliquary_ward', tree: 'priest_judgment', tier: 8, name: 'Reliquary Ward',
+    desc: 'A ward that thickens with every mark held. Absorbs 24, +7% per marked enemy, over 5s.',
+    type: 'active', domain: 'spiritual', prereq: 'pri_chorus',
+    select: 'nearest',
+    trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
+    cooldown: T.reliquaryCd,
+    compose: [{
+      kind: 'ward', amount: T.reliquaryAmount, duration: T.reliquaryDuration, reflectPct: 0,
+      scaleWith: 'marks', scalePer: T.reliquaryPer,
+    }],
+    ranks: R,
+  },
+  {
+    id: 'pri_long_ledger', tree: 'priest_judgment', tier: 9, name: 'The Long Ledger',
+    desc: 'A line that marks everything it crosses for 8s. 12 damage, +6% per marked enemy.',
+    type: 'active', domain: 'mental', prereq: 'pri_reliquary_ward',
+    select: 'farthest',
+    trigger: { kind: 'PROXIMITY', radius: T.ledgerRadius, count: T.ledgerCount },
+    cooldown: T.ledgerCd,
+    compose: [{
+      kind: 'line', damage: T.ledgerDamage, width: T.ledgerWidth, length: T.ledgerLength,
+      scaleWith: 'marks', scalePer: T.ledgerPer,
+      riders: { mark: { dur: T.ledgerMarkDur, heal: T.ledgerMarkHeal, radius: T.ledgerMarkRadius } },
+    }],
+    ranks: R,
+  },
+  {
+    id: 'pri_day_of_accounts', tree: 'priest_judgment', tier: 10, name: 'Day of Accounts',
+    desc: 'Everything in front of you is named at once, for 10s and 16 healing each. 17 damage, +7% per marked enemy.',
+    type: 'active', domain: 'spiritual', prereq: 'pri_long_ledger',
+    select: 'densest_cluster',
+    trigger: { kind: 'PROXIMITY', radius: T.accountsRadius, count: T.accountsCount },
+    cooldown: T.accountsCd,
+    compose: [{
+      kind: 'cone', damage: T.accountsDamage, angle: T.accountsAngle, range: T.accountsRange,
+      scaleWith: 'marks', scalePer: T.accountsPer,
+      riders: { mark: { dur: T.accountsMarkDur, heal: T.accountsMarkHeal, radius: T.accountsMarkRadius } },
+    }],
+    ranks: R,
+  },
+];

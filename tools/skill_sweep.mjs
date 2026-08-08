@@ -133,6 +133,14 @@ function observe(g, p, foes) {
     // window — a real effect, but not the one the skill claims, and it would
     // still have passed with the spawn broken and only the wisp firing.
     minions: (p.minions || []).length,
+    // A SHIFT'S WHOLE EFFECT IS PLAYER STATE. The three Attune nodes deal no
+    // damage, apply no status and spawn nothing — by design — so every existing
+    // observable read them as wired to nothing. The sweep's own list is what was
+    // incomplete: it covered damage, statuses, zones, projectiles, summons and
+    // heals, and the twelfth primitive writes none of those. Same shape as the
+    // summon and heal entries above, and added for the same reason.
+    domain: p.domainShift || '',
+    shifts: p.domainShifts || 0,
   };
 }
 
@@ -197,6 +205,8 @@ for (const skill of ALL_SKILLS) {
     // without this the Druid's Rejuvenate fired correctly every run and was
     // reported as wired to nothing.
     if (after.hp > before.hp) effects.push(`healed +${Math.round(after.hp - before.hp)}`);
+    if (after.domain !== before.domain) effects.push(`domain -> ${after.domain}`);
+    else if (after.shifts > before.shifts) effects.push(`re-attuned (${after.shifts} banked)`);
 
     if (effects.length) ok(`${skill.id} — ${skill.trigger.kind} fired, ${effects.join(', ')}`);
     else fail(`${skill.id}: fired but produced NOTHING observable — a skill wired to nothing`);

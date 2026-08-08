@@ -44,8 +44,25 @@ const ALL_CHARS_N = _ALL_CHARS.length;
 // tree. Derived from SELECTABLE so a retired or unplayable id can never be
 // hardcoded back in; when phase 5 arms more classes these simply follow.
 const _SEL = SELECTABLE;
-const T1 = _SEL[0].id;
-const T2 = _SEL[1 % _SEL.length].id;
+// THE DEFAULT FIXTURE CLASS IS NAMED, NOT POSITIONAL.
+//
+// It was `_SEL[0].id` — whichever class happened to head SELECTABLE — and 36
+// checks read it. Registering the Wizard's trees moved the Wizard to the front
+// and silently re-pointed every one of them at a different character: the D-24
+// elite-gold assertion, the Nest Purge throughput run and the siege crest all
+// went red at once, and none of them was about the Wizard.
+//
+// That is §13 rule 28 again in a different costume — an anchor derived from the
+// population it measures. The DPS band learned it; so does this. Phase 5 adds
+// nine more classes, and any one of them landing at index 0 would do the same
+// thing again. A named reference class is a decision; an index is an accident.
+const T1_REFERENCE = 'toh_necromancer';
+const T1 = _SEL.some(c => c.id === T1_REFERENCE) ? T1_REFERENCE : _SEL[0].id;
+// The second reference class, named for the same reason T1 is. With T1 pinned
+// and T2 still positional, both resolved to the Necromancer the moment the
+// Wizard took index 0 — and the weapon-cap check reported the same class twice.
+const T2_REFERENCE = 'toh_samurai';
+const T2 = _SEL.some(c => c.id === T2_REFERENCE) ? T2_REFERENCE : _SEL[1 % _SEL.length].id;
 // A party of N built from the selectable classes, cycling. Replaces a dozen
 // hardcoded lists of retired classic characters; those tests care about party
 // SIZE and mixture, never about which retired trait was in slot 3.
@@ -1546,7 +1563,28 @@ try {
   const { CONFIG: CO } = await import('../js/config.js');
   const { ITEMS: IO } = await import('../js/content/items.js');
   const mk = (ids) => ids.map((c, i) => ({ idx: i, key: `o${i}`, name: `O${i}`, charId: c, color: '#fff' }));
-  const quad = n => mk(Array.from({ length: n }, (_, i) => pickN(4)[i % 4]));
+  // THE SOLO OBJECTIVE FIXTURE IS NAMED. THE CO-OP ONE IS A MIX.
+  //
+  // These two party sizes are asking different questions and were sharing one
+  // positional answer. Co-op is a MIXTURE test — four different classes, which
+  // is what `pickN` is for. Solo is a THROUGHPUT test: one class has to finish
+  // the level on its own, so which class it is decides the result.
+  //
+  // It was `pickN(4)[0]`, i.e. whichever class headed SELECTABLE, and
+  // registering the Wizard's trees moved it. That turned Nest Purge red and the
+  // red was real: composed `strike`/`cone`/`line` never damaged a barricade, so
+  // the level had only ever been completable by the classes whose kit reaches
+  // walls some other way (`bolt` through the projectile tick, `hazard` through
+  // the zone tick). Two of the three built classes had one. See §13 rule 30.
+  //
+  // So the solo fixture is now named, and named for the WORST case rather than
+  // a convenient one: the Samurai is the only built class with no projectile
+  // and no ground hazard, and it is the slowest to clear every level that has
+  // structure in it. A gate that proves the hardest class finishes has proved
+  // the level finishes.
+  const OBJ_SOLO_REFERENCE = 'toh_samurai';
+  const soloRef = _SEL.some(c => c.id === OBJ_SOLO_REFERENCE) ? OBJ_SOLO_REFERENCE : _SEL[0].id;
+  const quad = n => (n === 1 ? mk([soloRef]) : mk(Array.from({ length: n }, (_, i) => pickN(4)[i % 4])));
 
   // --- floor composition: 12 combat nodes with the guaranteed mix ---
   {
@@ -1656,7 +1694,17 @@ try {
         // hunt for one player with this deliberately modest three-weapon kit
         // (measured 12 min at 1p / 6 min at 4p). The gate still proves the level
         // FINISHES; the length is a design decision, not a bug.
-        const budget = 60 * 60 * (kind === 'bounty' ? 20 : 6);
+        //
+        // Nest Purge gets the same leash for the same reason, and the number is
+        // measured rather than guessed. That same playtest pass put ten times
+        // the health on every NEST too, behind twenty-four barricades. Solo
+        // clear times across the five built classes, once composed primitives
+        // could damage a barricade at all: Druid 176s, Wizard 284s, Necromancer
+        // 303s, Priest 396s, Samurai 513s. The old 360s budget sat inside that
+        // spread, so it was passing or failing on the fixture's class rather
+        // than on the level — which is exactly how the barricade defect stayed
+        // invisible. 12 minutes clears the slowest by 40%.
+        const budget = 60 * 60 * (kind === 'bounty' ? 20 : kind === 'nest' ? 12 : 6);
         while (!g.cleared && !g.over && ticks++ < budget) {
           steerObj(g); g.tick();
           for (const p of g.players) if (!p.downed) p.hp = p.stats.vitality;
@@ -1666,6 +1714,81 @@ try {
       }
     }
     if (!objFail) ok(`all 8 objective levels clear solo and 4p — ${times.join(' · ')}`);
+  }
+
+  // --- BARRICADE PARITY: every built class can take a wall down ---
+  //
+  // The clear-time gate above found this by accident and took six minutes per
+  // class to do it. This one asserts the effect directly and takes seconds,
+  // which is the difference between a gate and a coincidence.
+  //
+  // WHAT WAS BROKEN. `game.js` states the rule — "every splash, nova and blast
+  // chews barricades as well as bodies" — and enforced it on the weapon paths.
+  // Composed primitives never inherited it, so `strike`, `cone` and `line` swept
+  // straight through a Nest Purge barricade. Weapons are gone, so for a melee
+  // class that meant no way to damage a wall AT ALL: a Samurai parked against a
+  // ring for six minutes took twenty-four barricades down to twenty-two, and all
+  // of that came from splash it did not aim.
+  //
+  // WHY IT SURVIVED. `bolt` reaches walls through the friendly-projectile tick
+  // and `hazard` through the zone tick, so any class holding one of those looked
+  // fine — and the fixture happened to be holding one. The assertion "every
+  // objective level is completable" was true of the CLASS, not of the LEVEL.
+  {
+    let bad = 0;
+    const notes = [];
+    for (const c of _SEL) {
+      const g = new Sim({ seed: 771177, party: mk([c.id]) });
+      const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+      node.kind = 'nest'; g.god = true;
+      for (const p of g.players) { armBot(g, p); g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 }); }
+      g._travelTo(node.id);
+      const p = g.players[0];
+      const w = g.walls[0];
+      if (!w) { bad++; fail(`${c.id}: the nest node built no barricades to test against`); continue; }
+      // Stand against the outer face, the way a player who walked up to it does.
+      // OUTSIDE the ring, not inside: spawning in the enclosure would test a
+      // wall the level never asks anyone to reach from that side.
+      const nest = g.enemyById(g.obj.nests.find(id => g.enemyById(id) && g.enemyById(id).id === w.nestId) ?? g.obj.nests[0]);
+      const cx = w.x + w.w / 2, cy = w.y + w.h / 2;
+      const ax = cx - nest.x, ay = cy - nest.y, al = Math.hypot(ax, ay) || 1;
+      p.x = cx + (ax / al) * 40; p.y = cy + (ay / al) * 40;
+      const hp0 = w.hp;
+      // STAGE A FIGHT, not a vacuum. Every trigger in the game wants an enemy —
+      // PROXIMITY counts them, NEAREST needs one in range — so a class parked
+      // alone at a wall casts NOTHING and the gate would report "cannot break a
+      // barricade" about a room the level never presents. Six immortal dummies
+      // ringing the player is rider_gate's staging, and it is the situation Nest
+      // Purge actually puts a party in: swinging at a crowd with a ring at your
+      // back. §13 rule 26 — a probe that stages the wrong precondition measures
+      // the staging.
+      const dummies = [];
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const d = g.spawnEnemyById(ENEMIES[0].id, p.x + Math.cos(a) * 70, p.y + Math.sin(a) * 70);
+        if (d) { d.maxHp = d.hp = 1e9; d.speed = 0; dummies.push(d); }
+      }
+      if (dummies.length < 6) { bad++; fail(`${c.id}: could not stage a fight at the barricade`); continue; }
+      // The ceiling is measured, not guessed: against one 270hp barricade the
+      // five built classes take Druid 14s, Necromancer 19s, Samurai 19s, Priest
+      // 23s, Wizard 74s. The Wizard is slow because most of its kit is `bolt`,
+      // and a bolt only touches a wall when the dummy it was aimed at happens to
+      // be on the far side. 150s is twice the slowest — wide enough that a
+      // future class is judged on whether it CAN, not on how fast.
+      const CEILING = 60 * 150;
+      let t = 0, broke = false;
+      for (; t < CEILING && !g.over; t++) {
+        g.setInput(0, { mx: 0, my: 0 });
+        for (const d of dummies) { d.hp = d.maxHp; d.x = d.spawnX ?? d.x; d.y = d.spawnY ?? d.y; }
+        g.tick();
+        if (!p.downed) p.hp = p.stats.vitality;
+        if (w.hp <= 0 || !g.walls.includes(w)) { broke = true; break; }
+      }
+      const dealt = hp0 - Math.max(0, w.hp);
+      if (broke) notes.push(`${c.id.replace('toh_', '')} ${(t / 60).toFixed(0)}s`);
+      else { bad++; fail(`${c.id} cannot break a barricade: ${dealt.toFixed(0)}/${hp0} damage in ${CEILING / 60}s`); }
+    }
+    if (!bad) ok(`every built class breaks a Nest Purge barricade — ${notes.join(' · ')}`);
   }
 
   // --- Bounty Hunt: a mark must always be KILLABLE, and only a real kill counts ---

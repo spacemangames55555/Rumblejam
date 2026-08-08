@@ -218,7 +218,20 @@ function run(skillId, obs, strip = null, add = null) {
   const line = obs.pierceLine ? [target(g, p.x + 90, p.y), target(g, p.x + 150, p.y), target(g, p.x + 210, p.y)] : null;
   const lineHp0 = line ? line.reduce((a, e) => a + (e ? e.hp : 0), 0) : 0;
   const ally = obs.markHeal ? g.players[1] : null;
-  if (ally) { ally.x = p.x + 40; ally.y = p.y; ally.hp = Math.max(1, Math.round(ally.stats.vitality * 0.3)); }
+  // THE OBSERVER MUST SURVIVE THE OBSERVATION. The ally stands inside the ring
+  // the marks are being placed on, takes contact damage for the whole run, and
+  // goes down — and `_heal` returns immediately for a downed player, so the
+  // detonation paid out to nobody and five working skills read DROPPED. Its HP
+  // is held at 30% through the run and released just before the kills, so the
+  // number measured is the mark's and not the room's.
+  if (ally) { ally.x = p.x + 40; ally.y = p.y; }
+  const holdAlly = () => {
+    if (!ally) return;
+    ally.x = p.x + 40; ally.y = p.y;
+    ally.downed = false;
+    ally.hp = Math.max(1, Math.round(ally.stats.vitality * 0.3));
+  };
+  holdAlly();
   const allyHp0 = ally ? ally.hp : 0;
   const from = es.map(e => ({ x: e.x, y: e.y }));
   const bystander = obs.bystander ? target(g, p.x + 120, p.y) : null;
@@ -231,6 +244,8 @@ function run(skillId, obs, strip = null, add = null) {
     if (obs.peak) peak = Math.max(peak, obs.peak(es));
     if (firstDamageT < 0 && es.reduce((a, e) => a + e.hp, 0) < hp0) firstDamageT = i;
     if (!obs.displacement) for (const e of es) { e.x = e.spawnX; e.y = e.spawnY; e.knockX = 0; e.knockY = 0; }
+    if (line) for (const e of line) if (e) { e.x = e.spawnX; e.y = e.spawnY; }
+    holdAlly();
   }
   if (obs.displacement) peak = es.reduce((a, e, i) => a + Math.hypot(e.x - from[i].x, e.y - from[i].y), 0);
   if (obs.bystander) peak = bystander ? Math.round(1e9 - bystander.hp) : NaN;
