@@ -344,6 +344,11 @@
       "w": 32,
       "h": 32
     },
+    "item.arcline_coil": {
+      "file": "item/arcline_coil.png",
+      "w": 32,
+      "h": 32
+    },
     "item.ashen_grimoire": {
       "file": "item/ashen_grimoire.png",
       "w": 32,
@@ -356,6 +361,16 @@
     },
     "item.assemblers_manual": {
       "file": "item/assemblers_manual.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.awl_of_the_line": {
+      "file": "item/awl_of_the_line.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.ballast_vest": {
+      "file": "item/ballast_vest.png",
       "w": 32,
       "h": 32
     },
@@ -394,6 +409,11 @@
       "w": 32,
       "h": 32
     },
+    "item.boneglass_lens": {
+      "file": "item/boneglass_lens.png",
+      "w": 32,
+      "h": 32
+    },
     "item.boneset_splint": {
       "file": "item/boneset_splint.png",
       "w": 32,
@@ -411,6 +431,11 @@
     },
     "item.bulwark_pauldron": {
       "file": "item/bulwark_pauldron.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.butchers_apron": {
+      "file": "item/butchers_apron.png",
       "w": 32,
       "h": 32
     },
@@ -484,8 +509,18 @@
       "w": 32,
       "h": 32
     },
+    "item.coup_de_grace": {
+      "file": "item/coup_de_grace.png",
+      "w": 32,
+      "h": 32
+    },
     "item.crit_salve": {
       "file": "item/crit_salve.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.crooked_ledger": {
+      "file": "item/crooked_ledger.png",
       "w": 32,
       "h": 32
     },
@@ -534,6 +569,11 @@
       "w": 32,
       "h": 32
     },
+    "item.duelists_promise": {
+      "file": "item/duelists_promise.png",
+      "w": 32,
+      "h": 32
+    },
     "item.duelists_veil": {
       "file": "item/duelists_veil.png",
       "w": 32,
@@ -556,6 +596,11 @@
     },
     "item.emberstoked_bellows": {
       "file": "item/emberstoked_bellows.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.emberwick_thread": {
+      "file": "item/emberwick_thread.png",
       "w": 32,
       "h": 32
     },
@@ -624,8 +669,23 @@
       "w": 32,
       "h": 32
     },
+    "item.gamblers_cuff": {
+      "file": "item/gamblers_cuff.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.ghostlight_sigil": {
+      "file": "item/ghostlight_sigil.png",
+      "w": 32,
+      "h": 32
+    },
     "item.ghostweave_cloak": {
       "file": "item/ghostweave_cloak.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.giants_follow_through": {
+      "file": "item/giants_follow_through.png",
       "w": 32,
       "h": 32
     },
@@ -694,8 +754,18 @@
       "w": 32,
       "h": 32
     },
+    "item.hairline_edge": {
+      "file": "item/hairline_edge.png",
+      "w": 32,
+      "h": 32
+    },
     "item.hardtack_ration": {
       "file": "item/hardtack_ration.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.headhunters_tally": {
+      "file": "item/headhunters_tally.png",
       "w": 32,
       "h": 32
     },
@@ -714,6 +784,11 @@
       "w": 32,
       "h": 32
     },
+    "item.hoarfrost_shim": {
+      "file": "item/hoarfrost_shim.png",
+      "w": 32,
+      "h": 32
+    },
     "item.hollow_kings_signet": {
       "file": "item/hollow_kings_signet.png",
       "w": 32,
@@ -721,6 +796,11 @@
     },
     "item.horizon_glass": {
       "file": "item/horizon_glass.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.iron_reading": {
+      "file": "item/iron_reading.png",
       "w": 32,
       "h": 32
     },
@@ -824,6 +904,11 @@
       "w": 32,
       "h": 32
     },
+    "item.ossuary_harness": {
+      "file": "item/ossuary_harness.png",
+      "w": 32,
+      "h": 32
+    },
     "item.overcharged_core": {
       "file": "item/overcharged_core.png",
       "w": 32,
@@ -886,6 +971,11 @@
     },
     "item.prism_lens_array": {
       "file": "item/prism_lens_array.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.pyre_conductor": {
+      "file": "item/pyre_conductor.png",
       "w": 32,
       "h": 32
     },
@@ -974,6 +1064,11 @@
       "w": 32,
       "h": 32
     },
+    "item.second_sight": {
+      "file": "item/second_sight.png",
+      "w": 32,
+      "h": 32
+    },
     "item.second_wind_whistle": {
       "file": "item/second_wind_whistle.png",
       "w": 32,
@@ -996,6 +1091,11 @@
     },
     "item.sistered_plates": {
       "file": "item/sistered_plates.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.skewer_of_ruin": {
+      "file": "item/skewer_of_ruin.png",
       "w": 32,
       "h": 32
     },
@@ -1026,6 +1126,11 @@
     },
     "item.sparkdust_pouch": {
       "file": "item/sparkdust_pouch.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.split_quarrel": {
+      "file": "item/split_quarrel.png",
       "w": 32,
       "h": 32
     },
@@ -1079,8 +1184,33 @@
       "w": 32,
       "h": 32
     },
+    "item.thaumic_shunt": {
+      "file": "item/thaumic_shunt.png",
+      "w": 32,
+      "h": 32
+    },
     "item.the_bad_bargain": {
       "file": "item/the_bad_bargain.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.the_deep_cut": {
+      "file": "item/the_deep_cut.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.the_far_mark": {
+      "file": "item/the_far_mark.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.the_long_odds": {
+      "file": "item/the_long_odds.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.the_quiet_argument": {
+      "file": "item/the_quiet_argument.png",
       "w": 32,
       "h": 32
     },
@@ -1151,6 +1281,11 @@
     },
     "item.warcasters_sigil": {
       "file": "item/warcasters_sigil.png",
+      "w": 32,
+      "h": 32
+    },
+    "item.wardens_yoke": {
+      "file": "item/wardens_yoke.png",
       "w": 32,
       "h": 32
     },

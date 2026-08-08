@@ -173,6 +173,16 @@ function makeActor(sim, m) {
     x: m.x, y: m.y, radius: m.radius, color: m.color, aimA: 0,
     idx: p.idx, stats: p.stats, hookAgg: p.hookAgg, char: p.char,
     engines: p.engines, engineScaleBonus: p.engineScaleBonus,
+    // `curses` and the healing accumulator are identity too (§13 rule 23), and
+    // they were missing until a summoner bought a lifesteal item: the minion
+    // hit something, the hit healed the OWNER through `_heal`, and `_heal` read
+    // `p.curses` off a facade that had none. The facade is an ALLOWLIST, so
+    // every owner field a new engine path touches has to arrive here — which is
+    // the standing cost of the pattern and worth paying, because the
+    // alternative is a minion with its own copy of the owner's state.
+    curses: p.curses, downed: false, gone: false,
+    get healAcc() { return p.healAcc; }, set healAcc(v) { p.healAcc = v; },
+    get roomVitGain() { return p.roomVitGain; }, set roomVitGain(v) { p.roomVitGain = v; },
     // The engine writes these through the actor during a swing; they must land
     // on the owner, not on a copy that is discarded when the swing ends.
     get hp() { return p.hp; }, set hp(v) { p.hp = v; },

@@ -794,9 +794,40 @@ The six conditional grants — after a kill, every Nth hit, versus chilled, vers
 
 **`stat_gate` measures both halves of Reflex.** It now sweeps *channels* rather than stats — 11 channels across 10 stats — because proving one channel says nothing about the other, and a single-probe gate would have reported Reflex green with half of it unmeasured.
 
+#### BUILT — what phase 4 shipped, and the two answers it owes
+
+`item_gate` reports **48 of 48 hook kinds live across 173 items**, and refuses to let anything into the shop that does not move an observable. `econ_gate` asserts §9.2's and §9.3's constraints by effect rather than by name.
+
+| Tier | Items | Read in |
+|---|---|---|
+| Stat, rolled penalty | 9 | the sheet, via `_itemStats` — level scales bonus and penalty together |
+| Magnitude | 8 | `bolt` count, `spawnSkillProj` pierce, `skillDamage`, `applyImpactRiders`, `minions.js` |
+| Rider | 4 | `skillDamage` → `applyOnHitRiders` |
+| Domain add | 3 | `skillDamage` → `bestDomainMult` |
+| Selector add | 3 | `PRIMITIVES.bolt` |
+
+**ANSWER 1 — the free-roll rate with a real item pool is 10.8%, not 28%.** Measured the way `penalty_roll` measured it, with every build run twice: bare, and holding what a run of that length actually hands it (`level/3` items drawn through the shop's own rarity roll and late-weighted picker).
+
+| | mean | worst build |
+|---|---:|---:|
+| No items — the old measurement | 18.8% | 29.3% |
+| Real pool | **10.8%** | 25.8% |
+
+The gap is the measurement's own bias, and it is exactly the one flagged when the 28% was first reported: with no items, `druid_rejuvenate` is the only healing source in the game, so Recovery reads free in every build that is not a Druid. Give the build the regen, lifesteal and kill-heal items a run supplies and Recovery becomes a stat it can feel. What survives at 10.8% is genuine build shape — a Samurai still does not care about Ingenuity, because it has no summons and never will.
+
+**Weighting is still not added.** One in ten rolls landing somewhere harmless is variance, not a broken trade-off, and §9.2 already argues that the occasional lucky roll is the point. Re-measure when phase 5's twelve classes widen the spread of what a build can ignore.
+
+**ANSWER 2 — late-game weighting is data on the item, at a cost of one number.** `lateWeight` (0..1) lives on the item; the shop holds no region table and knows nothing about which items belong where. It passes a single normalised progress scalar to `_pickWeighted`, and the item's own data decides.
+
+That one number is the whole coupling and is worth naming rather than pretending it is zero: weighting is a function of the item *and* the position in the run, so something must know the position. The choice was whether the shop knows **region semantics** — a table of which items appear where, which grows with every region and every item and is exactly the sort of thing that spreads — or a single float. It is the float. **Adding region 5 changes no shop code.** Measured: late-weighted rares are 16.3% of region-1 rolls and 34.0% of region-8 rolls.
+
 ### 9.3 Sinks and respec
 
 Shop rerolls escalating within a visit; item upgrades; **skill respec at 1000 gold base, multiplying ×2.5 per use, never resetting**. Respec refunds all points at once — per-point respec would let players micro-optimise between every map.
+
+**Built and measured** (`econ_gate`). Rerolls run 6 → 9 → 14 → 20 within a visit and reset to 6 at the next shop: escalation is the pressure inside one browse, not a tax across a run. The respec ladder is 1000 → 2500 → 6250 → 15625 and survives a floor change — never resetting is the whole mechanic, since a cost that reset per region would make rebuilding a routine rather than a decision.
+
+**An item upgrade is a duplicate purchase**, priced at ×1.6, capped at level 4, and it deepens *both halves*: the bonus and the rolled penalty scale together, so buying a second copy is never a way to acquire the upside alone. Hook payloads are not scaled by a blanket multiplier — an item declares an explicit `perLevel` block instead, because "stronger" is not the same direction for every field and a generic ×1.5 would quietly weaken a lower-is-better one.
 
 ### 9.4 Numbers
 
@@ -1027,6 +1058,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 26. **A probe that stages the wrong precondition is measuring a different game, and it fails in the direction that looks like a finding.** The rider gate's first run reported twelve declared riders DROPPED. Two were real. The other ten were one room: a crowd of six full-HP dummies satisfies `PROXIMITY` and `NEAREST` and *defeats* `ISOLATED`, which is "fewer than count within radius"; it never dips under a `TARGET_THRESHOLD`; and a Reflex dodge is deliberately not an `ON_DODGE` (§6.5), so hitting the player until the dice saved them armed nothing. Add an observer reading `burnDps` for a rider that applies plague and the count reaches ten. **Every one of those failures pointed at the game and was in the harness** — which is the dangerous direction, because a red gate reads as evidence. Stage per-trigger, name the mechanism rather than the flavour in every observer, and give any "it moved" observable a stripped-rider baseline: six bodies packed around a player separate by collision alone, and every knockback row passed on that drift before the baseline existed.
 
+27. **A new stochastic mechanic gets its own RNG stream, or it silently reprices every measurement taken before it existed.** §4.2's deep-versus-wide sweep moved when the difficulty gold multiplier started drawing from the shared `rng` — not because build shapes changed, but because extra material drops consumed floats and every downstream roll shifted. The sweep had to be re-measured and the old number retired. Crit and the economy's penalty roll both arrived after that lesson and both got their own streams (`sim.critRng`, `sim.econRng`), which buys two things: a gate can compare exact numbers from one seed instead of averaging variance out of a variance mechanic, and adding the feature does not invalidate the balance table. The cost is one line at construction. **`econ_gate` asserts the isolation by effect** — twenty penalty rolls must leave the shared stream in the same place — because "it has its own stream" is a declaration, and rule 24 applies to this rule too.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1042,7 +1075,7 @@ Each has caught a real defect on this project. They are design constraints on ho
 | 2 | Region systems, node trees, saves, second trees | **Done** |
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
 | 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
-| 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | Not started |
+| 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | **Done** |
 | 5 | Remaining 12 classes, 38 trees, regions 3–8 | Not started |
 
 Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
@@ -1076,7 +1109,7 @@ Eleven classes have no trees. Weapons are removed, so a class without a tree can
 | **Throughput: Nest Purge** | **CLOSED — working as intended.** Measured at both party sizes with the party arriving at level 12: 4p clears 3/3 at 213 s of 360 s. Solo reaches 2/3 and is not the target. The deciding factor was **loadout slots, not HP** — see §13 rule 20. *No failing check.* |
 | **Throughput: Bounty Hunt** *(1 failing)* | **1p only now — 4p CLEARS.** See below; the EXPECTED-RED ruling has moved. |
 | **Summoner harness gap** *(1 failing)* | Narrowed by §8.5, not closed. Skill-era summons exist and the Necromancer fields them, but they are *units* — they walk, they die, they are re-raised. Structure **recall** (`STRUCT_CHANNEL_S`) still has nothing to act on: `bonelord` builds its structure via `_addWeapon` and `weaponSlots` is 0. The decision is whether recall survives the removal of weapons at all. |
-| **Penalty weighting on stat items** | §9.2 — fully random penalties can roll free on stats a build does not use. Weight lightly toward used stats, or accept free rolls as luck? *No failing check.* |
+| **Penalty weighting on stat items** | **MEASURED AGAIN, still not added.** With a real item pool the free-roll rate is **10.8% mean / 25.8% worst**, down from 18.8%/29.3% with no items — the old number was inflated because one healing skill in the game made Recovery free in every non-Druid build. One roll in ten landing harmlessly is variance, not a broken trade-off. Re-measure when phase 5 widens what a build can ignore. *No failing check.* |
 | **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data. *No failing check.* |
 | **§9.5 stats** | **CLOSED — §9.5 is written and D-23 is fixed.** All ten stats are read by the live path and proved by effect at 10/10 (`stat_gate.mjs`). Tempo's defect was the *label*, not the code: it reaches move speed only, and nothing shortens a skill cooldown. The glossary and compendium now say so. *No failing check.* |
 
@@ -1239,7 +1272,7 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Determinism | Built, negative control, byte-identical same-seed runs |
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
-| Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **44 of 44 hook kinds live** (D-25 closed) |
+| Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
 | Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **30 of 30 land** (D-26 closed) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
@@ -1255,7 +1288,8 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
 | Modifier tiers | **Magnitude and rider wired** — 16 hooks reconnected to the skill path, read sites recorded in §9.2 |
 | Crit | **Built and ruled** — a roll in `skillDamage()`; chance from Reflex + items, multiplier from `CONFIG.CRIT_MULT_BASE` + items, on a dedicated seeded stream |
-| Economy | **Not started** — the tiers are wired and gated; items, rerolls, upgrades and respec are the next patch |
+| Economy | **Built** — 27 new items across four tiers, rolled penalties, upgrades, respec, late weighting. `econ_gate` green |
+| Econ gate | Built — `econ_gate.mjs`: cooldown ban, zero-stat rule, stream isolation, respec ladder, reroll escalation and weighting, all by effect |
 
 ---
 

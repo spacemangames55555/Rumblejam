@@ -505,6 +505,133 @@ export const ITEMS = [
     curse: { key: 'barrage', value: 1, scope: 'enemy' },
     desc: 'CURSED — next round only: one extra artillery barrage falls on the party, and you take −5% Tempo with it.',
     curse2: { key: 'tempo', value: -5, scope: 'self' } },
+
+  // ================================================================
+  // PHASE 4 — §9.2's item tiers as content.
+  //
+  // Four things distinguish everything below from the catalog above.
+  //
+  // `penalty` is a MAGNITUDE, not a stat. §9.2's stat items grant a flat bonus
+  // and roll the penalty randomly against another stat at the moment of the
+  // grant, so the pairing is never memorised and every offer stays a real
+  // question. The roll is per instance and lives on the player, not here.
+  //
+  // `lateWeight` is 0..1 and is the whole of late-game weighting. The shop
+  // holds no region table; it passes one normalised progress scalar and the
+  // item's own data decides. Adding region 5 changes no shop code.
+  //
+  // `perLevel` is what buying a second copy deepens (§9.3). Hook payloads are
+  // NOT scaled by a blanket multiplier, because "stronger" is not the same
+  // direction for every field — an explicit block has no direction to get wrong.
+  //
+  // And nothing here touches a cooldown. §9.2 bans it on every item for the
+  // same reason §4.2 keeps it off ranks: it is the one thing that lets a narrow
+  // build buy back its uptime, and the depth-versus-breadth pressure goes with
+  // it. `validate_items` fails on the word; `econ_gate` fails on the effect.
+
+  // ---------------- stat items, rolled penalty (§9.2 common tier) ----------
+  { id: 'crooked_ledger', name: 'Crooked Ledger', rarity: 'common', price: 15,
+    stats: { greed: 5 }, penalty: 3,
+    desc: '+5 Greed, and −3 to one other stat, rolled when you take it.' },
+  { id: 'butchers_apron', name: "Butcher's Apron", rarity: 'common', price: 16,
+    stats: { ferocity: 7 }, penalty: 4,
+    desc: '+7% Ferocity, and −4 to one other stat, rolled when you take it.' },
+  { id: 'ballast_vest', name: 'Ballast Vest', rarity: 'common', price: 16,
+    stats: { vitality: 12 }, penalty: 4,
+    desc: '+12 Vitality, and −4 to one other stat, rolled when you take it.' },
+  { id: 'gamblers_cuff', name: "Gambler's Cuff", rarity: 'uncommon', price: 26,
+    stats: { reflex: 9 }, penalty: 5,
+    desc: '+9% Reflex — dodge and crit both — and −5 to one other stat, rolled when you take it.' },
+  { id: 'thaumic_shunt', name: 'Thaumic Shunt', rarity: 'uncommon', price: 28,
+    stats: { attunement: 12 }, penalty: 6,
+    desc: '+12% Attunement, and −6 to one other stat, rolled when you take it.' },
+  { id: 'boneglass_lens', name: 'Boneglass Lens', rarity: 'uncommon', price: 27,
+    stats: { ingenuity: 6 }, penalty: 4,
+    desc: '+6 Ingenuity, and −4 to one other stat, rolled when you take it.' },
+  { id: 'wardens_yoke', name: "Warden's Yoke", rarity: 'rare', price: 48,
+    stats: { grit: 7, vitality: 14 }, penalty: 7,
+    desc: '+7 Grit and +14 Vitality, and −7 to one other stat, rolled when you take it.' },
+  { id: 'duelists_promise', name: "Duelist's Promise", rarity: 'rare', price: 52,
+    stats: { ferocity: 16, reflex: 8 }, penalty: 8,
+    desc: '+16% Ferocity and +8% Reflex, and −8 to one other stat, rolled when you take it.' },
+  { id: 'the_long_odds', name: 'The Long Odds', rarity: 'legendary', price: 96,
+    stats: { reflex: 22 }, penalty: 12,
+    desc: '+22% Reflex, and −12 to one other stat, rolled when you take it.' },
+
+  // ---------------- magnitude (§9.2) --------------------------------------
+  // Splash radius, projectile count, PIERCE, chain jumps, duration. §5.9 puts
+  // pierce here deliberately: it is the answer to an escorted target, and a
+  // party that wants to punch through buys it rather than being handed it.
+  { id: 'awl_of_the_line', name: 'Awl of the Line', rarity: 'rare', price: 46, lateWeight: 0.6,
+    hooks: { extraPierce: { add: 1 } }, perLevel: { hooks: { extraPierce: { add: 1 } } },
+    desc: 'Your bolts pierce 1 extra target. Each upgrade adds 1 more.' },
+  { id: 'skewer_of_ruin', name: 'Skewer of Ruin', rarity: 'legendary', price: 104, lateWeight: 0.9,
+    hooks: { extraPierce: { add: 3 } }, perLevel: { hooks: { extraPierce: { add: 2 } } },
+    desc: 'Your bolts pierce 3 extra targets. Each upgrade adds 2 more.' },
+  { id: 'split_quarrel', name: 'Split Quarrel', rarity: 'legendary', price: 112, lateWeight: 1,
+    hooks: { extraProjectiles: { add: 1 } }, perLevel: { hooks: { extraProjectiles: { add: 1 } } },
+    desc: 'Bolt skills fire at 1 extra target. Each upgrade adds 1 more.' },
+  { id: 'giants_follow_through', name: "Giant's Follow-Through", rarity: 'uncommon', price: 30, lateWeight: 0.3,
+    hooks: { knockbackBoost: { mult: 0.6 } },
+    desc: 'Knockback riders push 60% further.' },
+  { id: 'headhunters_tally', name: "Headhunter's Tally", rarity: 'rare', price: 58, lateWeight: 0.7,
+    hooks: { eliteBossDamage: { bonus: 22 } }, perLevel: { hooks: { eliteBossDamage: { bonus: 12 } } },
+    desc: '+22% damage to elites and bosses. Each upgrade adds 12%.' },
+  { id: 'hairline_edge', name: 'Hairline Edge', rarity: 'rare', price: 54, lateWeight: 0.5,
+    hooks: { critChance: { percent: 8 } }, perLevel: { hooks: { critChance: { percent: 5 } } },
+    desc: '+8% crit chance on top of Reflex. Each upgrade adds 5%.' },
+  { id: 'the_deep_cut', name: 'The Deep Cut', rarity: 'legendary', price: 118, lateWeight: 0.9,
+    hooks: { critMult: { add: 0.9 } }, perLevel: { hooks: { critMult: { add: 0.4 } } },
+    desc: 'Crits deal ×0.9 more. Each upgrade adds ×0.4.' },
+  { id: 'ossuary_harness', name: 'Ossuary Harness', rarity: 'rare', price: 50, lateWeight: 0.4,
+    hooks: { summonBoost: { damage: 25, hp: 25 } }, perLevel: { hooks: { summonBoost: { damage: 15, hp: 15 } } },
+    desc: 'Your summons deal +25% damage and have +25% HP. Each upgrade adds 15%.' },
+
+  // ---------------- rider (§9.2) ------------------------------------------
+  // "Adds an effect the skill did not have." Every one of these lands through
+  // the single composed-impact path, so it reaches skills nobody has authored.
+  { id: 'emberwick_thread', name: 'Emberwick Thread', rarity: 'uncommon', price: 32, lateWeight: 0.5,
+    hooks: { burnOnHit: { chance: 0.2, dps: 7, duration: 3 } },
+    desc: '20% of hits set the target burning for 7 damage a second over 3s.' },
+  { id: 'hoarfrost_shim', name: 'Hoarfrost Shim', rarity: 'uncommon', price: 33, lateWeight: 0.5,
+    hooks: { chillOnHit: { chance: 0.22, mult: 0.65, duration: 2 } },
+    desc: '22% of hits chill the target to 65% speed for 2s.' },
+  { id: 'arcline_coil', name: 'Arcline Coil', rarity: 'rare', price: 56, lateWeight: 0.7,
+    hooks: { chainOnHit: { chance: 0.25, damage: 14, range: 190 } },
+    desc: '25% of hits arc to a second enemy within 190 units for 14 damage.' },
+  { id: 'pyre_conductor', name: 'Pyre Conductor', rarity: 'legendary', price: 108, lateWeight: 0.9,
+    hooks: { burnOnHit: { chance: 0.45, dps: 16, duration: 4 } },
+    desc: '45% of hits set the target burning for 16 damage a second over 4s.' },
+
+  // ---------------- domain add (§9.2's "domain swap", as an ADD) -----------
+  // The tier is named swap; the section's governing rule is "an item may add,
+  // never take away". These resolve the triangle as the BEST of the skill's own
+  // domain and the granted one — a build gains the matchup it lacked and keeps
+  // every matchup it had. See §9.2 for the reconciliation and the assumption.
+  { id: 'iron_reading', name: 'Iron Reading', rarity: 'rare', price: 62, lateWeight: 0.8,
+    hooks: { domainAdd: { domain: 'physical' } },
+    desc: 'Your skills also resolve as Physical when that reads better (×1.25 into Spiritual).' },
+  { id: 'the_quiet_argument', name: 'The Quiet Argument', rarity: 'rare', price: 62, lateWeight: 0.8,
+    hooks: { domainAdd: { domain: 'mental' } },
+    desc: 'Your skills also resolve as Mental when that reads better (×1.25 into Physical).' },
+  { id: 'ghostlight_sigil', name: 'Ghostlight Sigil', rarity: 'legendary', price: 96, lateWeight: 1,
+    hooks: { domainAdd: { domain: 'spiritual' } },
+    desc: 'Your skills also resolve as Spiritual when that reads better (×1.25 into Mental).' },
+
+  // ---------------- selector add (§9.2) -----------------------------------
+  // Selector-ADD, never selector-swap. A crowd-clearing build that finds one
+  // gains an elite-killer without losing its crowd clear and without spending a
+  // point. The added selector re-ranks only what the skill's own range already
+  // returns (§5.3 rule 1) — an item may not widen a search.
+  { id: 'second_sight', name: 'Second Sight', rarity: 'rare', price: 66, lateWeight: 0.9,
+    hooks: { selectorAdd: { select: 'highest_hp' } },
+    desc: 'Bolt skills also strike the highest-HP target in range.' },
+  { id: 'coup_de_grace', name: 'Coup de Grâce', rarity: 'rare', price: 64, lateWeight: 0.9,
+    hooks: { selectorAdd: { select: 'lowest_hp' } },
+    desc: 'Bolt skills also strike the lowest-HP target in range.' },
+  { id: 'the_far_mark', name: 'The Far Mark', rarity: 'legendary', price: 98, lateWeight: 1,
+    hooks: { selectorAdd: { select: 'objective_target' } },
+    desc: 'Bolt skills also strike the objective — nest, mark, boss, elite — when one is in range.' },
 ];
 
 export const ITEM_BY_ID = Object.fromEntries(ITEMS.map(it => [it.id, it]));

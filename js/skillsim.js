@@ -410,7 +410,7 @@ export function rollCrit(sim, p, e) {
 }
 
 export function skillDamage(sim, e, amount, p, skill) {
-  let amt = amount * domainMult(skill.domain, e.domain) * ferocityMult(p);
+  let amt = amount * bestDomainMult(p, skill.domain, e.domain) * ferocityMult(p);
   if (e.defDownT > 0) amt /= e.defDownMult;         // defense down = takes more
   amt *= eliteBossMult(p, e);                       // §9.2 magnitude, item-granted
   // Crit multiplies LAST, on top of every other term, so "×2 on a crit" means
@@ -442,6 +442,25 @@ export function skillDamage(sim, e, amount, p, skill) {
 // §9.2 magnitude: bonus damage to elites and bosses. Read here rather than in
 // `_hitEnemy`, where it lived and where nothing has called it since weapons were
 // removed (D-25).
+// §9.2 DOMAIN SWAP, implemented as a domain ADD. The tier is named "swap" in
+// the table and the section's governing rule is "an item may add, never take
+// away", so the two have to be reconciled: this resolves the triangle as the
+// BEST of the skill's own domain and any the player's items grant. A crowd
+// build that finds a spiritual grant gains the matchup it lacked and keeps
+// every matchup it had.
+//
+// ASSUMPTION FLAGGED: a literal swap — replace the domain — would make a shop
+// roll capable of inverting a build's whole triangle position, which is the
+// failure that deleted trigger-swap items from the design. If the intent was
+// literal replacement, this is the line to change and §9.2 is the ruling to
+// make first.
+export function bestDomainMult(p, atk, def) {
+  let best = domainMult(atk, def);
+  const adds = p && p.hookAgg ? p.hookAgg.domainAdd : null;
+  if (adds && adds.length) for (const d of adds) best = Math.max(best, domainMult(d, def));
+  return best;
+}
+
 export function eliteBossMult(p, e) {
   if (!p || !p.hookAgg || !p.hookAgg.eliteBossDamage) return 1;
   if (!(e.elite || e.boss)) return 1;

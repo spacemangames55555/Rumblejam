@@ -174,6 +174,20 @@ export const PRIMITIVES = {
     const targets = count > 1
       ? selectTargets(skill.select, grid, p.x, p.y, range, count)
       : [selectTarget(skill.select, grid, p.x, p.y, range)].filter(Boolean);
+    // §9.2 SELECTOR-ADD. The skill ALSO strikes what a second selector picks —
+    // it does not stop striking what its own picked. A crowd-clearing build
+    // that finds one gains an elite-killer without losing its crowd clear and
+    // without spending a point.
+    //
+    // Range is the SKILL'S, not the selector's: §5.3 rule 1 says a selector
+    // re-ranks only what the skill's own range already returns, and a selector
+    // arriving on an item must obey that too or every shop roll would be a
+    // silent range upgrade.
+    const adds = (p.hookAgg && p.hookAgg.selectorAdd) || [];
+    for (const sel of adds) {
+      const extra = selectTarget(sel, grid, p.x, p.y, range);
+      if (extra && !targets.includes(extra)) targets.push(extra);
+    }
     if (!targets.length) return;
     for (const t of targets) {
       sim.spawnSkillProj(p, skill, step, rank, aimAt(p, t), range);

@@ -2142,12 +2142,37 @@ try {
   }
 
   // --- item tradeoff audit ---
+  //
+  // AMENDED IN PHASE 4, because §9.2 changed what a trade-off IS and this check
+  // was written before it. Two things now count as a subtraction on a stat item:
+  // a hard-coded negative, and `penalty` — the rolled kind, where the magnitude
+  // is authored and the STAT is drawn when the player takes it.
+  //
+  // And the MODIFIER TIERS are exempt, not overlooked. §9.2's governing rule for
+  // magnitude, rider, domain and selector items is "an item may add, never take
+  // away": finding a modifier should feel like a new capability arriving, never
+  // like a familiar one leaving. Their trade-off is price and the opportunity
+  // cost of the slot, not a stat penalty. Requiring a subtraction from them
+  // would have quietly re-legislated a design decision through a test — which is
+  // the failure §13 rule 24 describes running in the other direction.
   {
-    const neg = it => it.stats && Object.values(it.stats).some(v => v < 0);
-    const eligible = r => IP.filter(it => it.rarity === r && !it.curse);
+    const MODIFIER_HOOKS = new Set(['extraPierce', 'extraProjectiles', 'knockbackBoost',
+      'eliteBossDamage', 'critChance', 'critMult', 'summonBoost',
+      'burnOnHit', 'chillOnHit', 'chainOnHit', 'selectorAdd', 'domainAdd']);
+    const isModifier = it => it.hooks && Object.keys(it.hooks).some(k => MODIFIER_HOOKS.has(k));
+    const neg = it => (it.stats && Object.values(it.stats).some(v => v < 0)) || it.penalty > 0;
+    const eligible = r => IP.filter(it => it.rarity === r && !it.curse && !isModifier(it));
+    // COMMONS NO LONGER STAY CLEAN, and that is §9.2 rather than a slip. The
+    // section puts stat items — "flat + with a randomly rolled − on another
+    // stat" — at COMMON rarity: the rolled trade-off is the entry-level item,
+    // not a high-rarity flourish. What still must not appear on a common is a
+    // HARD-CODED negative, because that is the memorisable fixed-opposition
+    // table §9.2 rejects; a rolled penalty is the opposite of memorisable.
     const commons = eligible('common');
-    if (!commons.some(neg)) ok(`commons stay clean (${commons.length} items, no subtractions)`);
-    else fail(`commons with subtractions: ${commons.filter(neg).map(i => i.id).join(', ')}`);
+    const hardNeg = it => it.stats && Object.values(it.stats).some(v => v < 0);
+    const badCommons = commons.filter(hardNeg);
+    if (!badCommons.length) ok(`commons carry no hard-coded subtraction (${commons.filter(i => i.penalty).length} of ${commons.length} carry a ROLLED one, per §9.2)`);
+    else fail(`commons with a fixed subtraction: ${badCommons.map(i => i.id).join(', ')} — §9.2's stat items roll the stat, they do not name it`);
     const unc = eligible('uncommon');
     const uncShare = unc.filter(neg).length / unc.length;
     if (uncShare >= 0.35 && uncShare <= 0.65) ok(`~half of uncommons carry a subtraction (${unc.filter(neg).length}/${unc.length})`);
@@ -2158,9 +2183,17 @@ try {
       if (!clean.length) ok(`every ${r} carries a subtraction (${list.length} items)`);
       else fail(`${r} with no subtraction: ${clean.map(i => i.id).join(', ')}`);
     }
-    // the subtraction opposes the item's own lane, and is spelled out
-    const silent = IP.filter(it => neg(it) && !/Costs you/.test(it.desc || ''));
-    if (!silent.length) ok('every subtraction is stated explicitly on the item');
+    // The subtraction is spelled out — in one of two forms, because §9.2 now has
+    // two kinds. A FIXED subtraction names the stat ("Costs you −3% Tempo"). A
+    // ROLLED one cannot name the stat, since it does not exist until the player
+    // takes the item, so it must state the MAGNITUDE and say that it is rolled.
+    // That is a stricter test than the old one, not a looser one: an item that
+    // said "−4 to another stat" without admitting the stat is drawn at random
+    // would be hiding the part that makes it a gamble.
+    const statedFixed = it => /Costs you/.test(it.desc || '');
+    const statedRolled = it => new RegExp(`−${it.penalty}\\b`).test(it.desc || '') && /roll/i.test(it.desc || '');
+    const silent = IP.filter(it => (it.penalty ? !statedRolled(it) : (neg(it) && !statedFixed(it))));
+    if (!silent.length) ok('every subtraction is stated explicitly — fixed ones name the stat, rolled ones state the size and admit the roll');
     else fail(`items hiding a subtraction: ${silent.map(i => i.id).join(', ')}`);
     const selfHarm = IP.filter(it => {
       if (!neg(it)) return false;

@@ -475,6 +475,48 @@ const HOOKS = {
     run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
   },
 
+  // ---- the two remaining §9.2 tiers ----
+  domainAdd: {
+    // The triangle, not a damage number. A `physical` grant must beat a
+    // SPIRITUAL target, and the fixture's own skills must not already beat it —
+    // otherwise the probe measures a matchup the player already had and the
+    // grant looks dead. The target's domain is set explicitly for that reason.
+    what: 'damage to a target the skill\'s own domain does NOT beat',
+    char: NECRO,
+    payload: { domain: 'physical' },
+    run: ({ g, p }) => {
+      const e = target(g, p.x + 60, p.y);
+      if (!e) return NaN;
+      e.domain = 'spiritual';           // physical beats spiritual; spiritual does not
+      const b = e.hp;
+      tickFor(g, 8, [e]);
+      return Math.round(b - e.hp);
+    },
+  },
+  selectorAdd: {
+    // TWO TARGETS, AND THE OBSERVABLE IS THE ONE THE SKILL WOULD NOT PICK.
+    // Measuring total damage would pass on a selector that added nothing, since
+    // the bolts still land somewhere. The claim is "it ALSO strikes what a
+    // second selector picks", so the probe watches the target the skill's own
+    // selector ranks last and the added one ranks first.
+    what: 'damage to the target the skill\'s own selector would not choose',
+    char: NECRO,
+    payload: { select: 'highest_hp' },
+    run: ({ g, p }) => {
+      // PERPENDICULAR, NOT COLLINEAR. §5.9: selection is not delivery. Placed on
+      // one ray, the bolt aimed at the far target is intercepted by the near one
+      // — `bolt` stops at the first body it meets — and the probe reads zero on
+      // a selector that chose correctly. The gate spent a run reporting that as
+      // a dead item.
+      const near = target(g, p.x + 50, p.y, { hp: 4000 });
+      const fat = target(g, p.x, p.y + 150);          // 1e9 HP: highest_hp picks this
+      if (!near || !fat) return NaN;
+      const before = fat.hp;
+      tickFor(g, 8, [near, fat]);
+      return Math.round(before - fat.hp);
+    },
+  },
+
   // ---- pickups ----
   pickupBlast: {
     what: 'damage to an enemy standing where materials are collected',

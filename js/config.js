@@ -144,6 +144,30 @@ export const CONFIG = {
   ELITE_DMG_MULT: 1.5,
 
   REROLL_BASE: 6, REROLL_PER_FLOOR: 3, REROLL_GROWTH: 1.5,
+
+  // ---- phase 4: the economy (§9.2, §9.3) ----
+  // Respec refunds ALL points at once — per-point respec would let a player
+  // micro-optimise between every map, which is the opposite of a build. The
+  // cost never resets, so a run's second respec costs 2500 and its fourth
+  // 15625: a mid-run correction is affordable, a rebuild-every-region habit
+  // is not.
+  RESPEC_BASE: 1000, RESPEC_GROWTH: 2.5,
+
+  // Buying a copy of an item you own UPGRADES it rather than stacking a
+  // duplicate. Level scales everything the item grants — its bonus, its rolled
+  // penalty, and its hook magnitudes — so an upgrade is never a way to buy the
+  // upside without the downside.
+  ITEM_MAX_LEVEL: 4,
+  ITEM_LEVEL_MULT: 0.5,        // each level past the first adds 50% of base
+  ITEM_UPGRADE_PRICE_MULT: 1.6,
+
+  // §9.2 late-game weighting. `lateWeight` on an item is 0 for "as likely in
+  // region 1 as region 8" and 1 for "strongly a late find". The shop multiplies
+  // its roll weight by (1 + lateWeight * progress * LATE_WEIGHT_MAX), where
+  // progress is the single normalised scalar the shop already has. That one
+  // number is the whole coupling — see §9.2.
+  LATE_WEIGHT_MAX: 2.5,
+
   SHOP_SLOTS: 4,
   RARITY_WEIGHTS: { common: 62, uncommon: 25, rare: 10, legendary: 3 },
   PRICE_FLOOR_SCALE: 0.25,  // prices *(1+0.25*(floor-1))
@@ -306,3 +330,32 @@ export function weaponBasePrice(def, tier) {
 export function sellValue(basePrice, floorNum) {
   return Math.floor(basePrice * (1 + CONFIG.PRICE_FLOOR_SCALE * (floorNum - 1)) * 0.3);
 }
+
+// ---------------------------------------------------------------- §9.2 the penalty roll
+//
+// A stat item grants a flat bonus and rolls its penalty RANDOMLY against
+// another stat. There is no fixed opposition table, because a fixed one —
+// damage always costs speed — is memorised after one run and the shop stops
+// being a gamble. Rolling the pairing keeps every offer a real question.
+//
+// TWO CONSTRAINTS, BOTH FROM §9.2, AND THEY ARE NOT DECORATION.
+//
+// 1. A penalty may not roll into a stat the character has NONE OF. Reducing a
+//    stat already at zero costs nothing, and a shop full of free items has no
+//    trade-offs left. This is enforced per roll against the live sheet, not
+//    here — eligibility depends on the character, not the catalog.
+//
+// 2. NOTHING IN THE ROLL TABLE MAY REACH A COOLDOWN, directly or by proxy.
+//    §9.2 bans cooldown reduction on every item for the same reason §4.2 keeps
+//    it off ranks: it is the one thing that lets a narrow build buy back its
+//    uptime, and the depth-versus-breadth pressure disappears with it. Tempo is
+//    rollable BECAUSE it is move speed only — that was §9.5's ruling, and the
+//    defect there was the label rather than the code.
+//
+// The exclusion list is empty today and that is a claim, not an oversight: no
+// stat in STATS touches a cooldown. `tools/econ_gate.mjs` asserts it by effect
+// — it rolls a penalty into every eligible stat and measures whether any skill
+// fires more or less often — because §13 rule 24 says an exclusion asserted on
+// a table is not an exclusion until something measures it.
+export const ROLL_EXCLUDED = [];
+export const ROLL_TABLE = STATS.map(s => s.key).filter(k => !ROLL_EXCLUDED.includes(k));
