@@ -149,6 +149,25 @@ const PROBES = {
     },
   },
 
+  // REFLEX IS TWO-SIDED NOW (§9.5). Dodge is the defensive outlier and crit is
+  // the offensive one, and a gate that measured only the first would have let
+  // half the stat go dead exactly the way Ferocity did. The crit roll draws from
+  // a dedicated seeded stream, so these two numbers are EXACT rather than an
+  // average over samples — a variance mechanic measured by washing variance out
+  // is a gate that cannot tell a small effect from none.
+  reflexCrit: {
+    stat: 'reflex',
+    what: 'damage to a pinned target over 8 s (crit chance rides Reflex)',
+    char: () => NECRO.id,
+    run: ({ g, p }) => {
+      const e = target(g, p.x + 60, p.y);
+      if (!e) return NaN;
+      const before = e.hp;
+      for (let i = 0; i < 60 * 8; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); e.x = e.spawnX; e.y = e.spawnY; }
+      return Math.round(before - e.hp);
+    },
+  },
+
   recovery: {
     what: 'HP restored by a 50-point heal',
     run: ({ g, p }) => {
@@ -246,17 +265,27 @@ const PROBES = {
 
 // ---------------------------------------------------------------- the sweep
 
-console.log(`stat gate — ${STATS.length} stats, each staged in the situation it would matter in\n`);
+console.log(`stat gate — ${STATS.length} stats, each channel staged in the situation it would matter in\n`);
 
 const offered = new Set(STAT_BOOSTS.map(b => b.stat));
 const notOffered = STATS.filter(s => !offered.has(s.key));
 if (!notOffered.length) ok(`all ${STATS.length} stats are offered to players at level-up — the whole set is under test`);
 else console.log(`  note: ${notOffered.map(s => s.key).join(', ')} are never offered`);
 
-const results = [];
+// CHANNELS, NOT STATS. A stat may be read by more than one part of the game,
+// and proving one channel says nothing about the other. Reflex is the case that
+// forced this: it has been live on defence since phase 1 and gained an offensive
+// job with the crit ruling, and a single-probe gate would have reported the stat
+// green with half of it unmeasured.
+const CHANNELS = [];
 for (const stat of STATS) {
-  const probe = PROBES[stat.key];
-  if (!probe) { fail(`${stat.key} has no probe — a stat with no gate is exactly the hole this file exists to close`); continue; }
+  const own = Object.entries(PROBES).filter(([k, pr]) => (pr.stat || k) === stat.key);
+  if (!own.length) { fail(`${stat.key} has no probe — a stat with no gate is exactly the hole this file exists to close`); continue; }
+  for (const [key, probe] of own) CHANNELS.push({ stat, key, probe });
+}
+
+const results = [];
+for (const { stat, key, probe } of CHANNELS) {
   const charId = probe.char ? probe.char() : SELECTABLE[0].id;
   let base, bumped, err = null;
   try {
@@ -264,14 +293,14 @@ for (const stat of STATS) {
     bumped = probe.run(stage(charId, stat.key, BUMP));
   } catch (e) { err = e; }
   const usable = !err && Number.isFinite(base) && Number.isFinite(bumped);
-  results.push({ stat, probe, base, bumped, usable, err, live: usable && base !== bumped, charId });
-  if (VERBOSE) console.log(`    ${stat.key} (${charId}): ${base} -> ${bumped}${err ? ' ERR ' + err.message : ''}`);
+  results.push({ stat, key, probe, base, bumped, usable, err, live: usable && base !== bumped, charId });
+  if (VERBOSE) console.log(`    ${key} (${charId}): ${base} -> ${bumped}${err ? ' ERR ' + err.message : ''}`);
 }
 
 // §13 rule 4 — the gate proves it can see a live stat before reporting a dead
 // one. Vitality is unambiguously connected; if its probe does not move, nothing
 // below means anything.
-const vit = results.find(r => r.stat.key === 'vitality');
+const vit = results.find(r => r.key === 'vitality');
 if (vit && vit.live) ok(`control: Vitality moves its probe (${vit.base} -> ${vit.bumped} ${vit.probe.what}) — the gate can see a live stat`);
 else fail('control failed: Vitality did not move its own probe, so no result below can be trusted');
 
@@ -279,19 +308,20 @@ console.log('\n  stat         verdict   observable                              
 console.log('  ----         -------   ----------                                        ---------------');
 for (const r of results) {
   const verdict = !r.usable ? 'BROKEN' : (r.live ? 'live' : 'DEAD');
-  console.log(`  ${r.stat.key.padEnd(12)} ${verdict.padEnd(9)} ${r.probe.what.slice(0, 48).padEnd(50)} ${r.base} -> ${r.bumped}`);
+  console.log(`  ${r.key.padEnd(12)} ${verdict.padEnd(9)} ${r.probe.what.slice(0, 48).padEnd(50)} ${r.base} -> ${r.bumped}`);
 }
 console.log('');
 
 for (const r of results) {
-  if (!r.usable) { fail(`${r.stat.key}: probe could not run (${r.err ? r.err.message : `base ${r.base}, bumped ${r.bumped}`}) — a probe that cannot measure is not a pass`); continue; }
+  if (!r.usable) { fail(`${r.key}: probe could not run (${r.err ? r.err.message : `base ${r.base}, bumped ${r.bumped}`}) — a probe that cannot measure is not a pass`); continue; }
   if (!r.live) {
-    fail(`${r.stat.key} ("${r.stat.name}") is SOLD TO PLAYERS AND CHANGES NOTHING — +${BUMP} left ${r.probe.what} at ${r.base}`);
+    fail(`${r.key} ("${r.stat.name}") is SOLD TO PLAYERS AND CHANGES NOTHING — +${BUMP} left ${r.probe.what} at ${r.base}`);
   }
 }
 const liveN = results.filter(r => r.live).length;
-if (liveN === results.length) ok(`every stat the game sells is read by the live path — all ${results.length} moved their probe`);
-else console.log(`  ${liveN}/${results.length} stats are connected to anything.`);
+const statsLive = new Set(results.filter(r => r.live).map(r => r.stat.key)).size;
+if (liveN === results.length) ok(`every channel of every stat is read by the live path — all ${results.length} channels across ${STATS.length} stats moved their probe`);
+else console.log(`  ${liveN}/${results.length} channels live, across ${statsLive}/${STATS.length} stats.`);
 
 console.log(failures ? `\n${failures} STAT GATE FAILURE(S)` : '\nEVERY STAT THE GAME SELLS DOES SOMETHING');
 process.exit(failures ? 1 : 0);

@@ -26,6 +26,25 @@ export const CONFIG = {
   CONTACT_COOLDOWN: 0.8,   // s between contact hits from one enemy
   INVULN_AFTER_HIT: 0.35,  // brief player i-frames after any hit
 
+  // ---- crit (§9.5) ----
+  // REFLEX DRIVES CRIT CHANCE. Reflex is the variance stat — a chance-based
+  // outlier outcome on defence — and crit is the same thing on offence, which
+  // makes it two-sided and creates the decision Ferocity cannot: Ferocity buys
+  // damage, Reflex buys the chance of much more. Ferocity was rejected for this
+  // job precisely because it already multiplies all composed damage, so one
+  // point would have bought flat damage and variance damage together and
+  // compounded into a strictly dominant stat — which breaks §1.1's trade-off
+  // pillar and poisons §9.2's penalty roll, since a penalty into a dominant
+  // stat is always the worst roll and the randomness stops mattering.
+  //
+  // THE RATE IS AN ASSUMPTION, not a ruling. Half a point of crit chance per
+  // point of Reflex means a Reflex build at the DODGE_CAP of 60 carries 30%
+  // crit alongside 60% dodge. It is set low deliberately: Reflex now pays on
+  // both sides of the fight, and the conservative number is the one that can be
+  // raised after measurement rather than walked back after a patch.
+  CRIT_CHANCE_PER_REFLEX: 0.5,   // % crit chance per point of Reflex
+  CRIT_MULT_BASE: 2,             // damage multiplier on a crit, before items
+
   // ---- skill-era summons (js/minions.js) ----
   // Engine-wide limits and shared kinematics, matching GDD §8.5. Per-summon
   // magnitudes — hp, damage, duration, counts — are NOT here: they live in each

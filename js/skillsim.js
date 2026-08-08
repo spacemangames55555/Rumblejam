@@ -13,6 +13,7 @@ import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamag
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
 import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
+import { CONFIG } from './config.js';
 import { TUNING as SAM } from './content/skills/samurai_armor.js';
 
 const S = TRIGGER_TICK_MS / 1000;
@@ -361,12 +362,63 @@ export function ferocityMult(p) {
   return Math.max(0, 1 + (p && p.stats ? p.stats.ferocity : 0) / 100);
 }
 
+// ------------------------------------------------------------------- crit
+//
+// §9.5: CRIT IS A ROLL INSIDE `skillDamage`. One roll, one path — the same
+// single site that made Ferocity work, so every composed source inherits crit
+// without a per-primitive decision and phase 5's twelve classes get it free.
+// Before this it existed only in `_fireWeapon`: six items sold it and no skill
+// in the game could crit (D-25).
+//
+// TWO TERMS IN ONE FORMULA, not two definitions of one thing:
+//   chance     = Reflex × CRIT_CHANCE_PER_REFLEX + item chance
+//   multiplier = the player's base (CONFIG.CRIT_MULT_BASE, or a trait's) + item
+// Splitting a mechanic across two sources is what rule 25 warns about; splitting
+// one formula across two terms is arithmetic.
+
+export function critChance(p) {
+  const stat = (p && p.stats ? p.stats.reflex : 0) * CONFIG.CRIT_CHANCE_PER_REFLEX;
+  const item = (p && p.hookAgg ? p.hookAgg.critChance : 0) || 0;
+  return Math.max(0, stat + item);
+}
+
+export function critMultOf(p) {
+  const base = (p && p.critMult) || CONFIG.CRIT_MULT_BASE;
+  return base + ((p && p.hookAgg ? p.hookAgg.critMult : 0) || 0);
+}
+
+// The six conditional GRANTS resolve before the roll and do not consume it: an
+// item promising "every 10th hit crits" must deliver on the 10th hit whether or
+// not the dice agreed. Order matters only in that a guarantee should not burn a
+// one-shot flag the roll would have covered — `firstHitCrit` and `critAfterKill`
+// are one-shot, so they are tested first and spent when they fire.
+export function rollCrit(sim, p, e) {
+  const agg = p && p.hookAgg;
+  if (!agg) return false;
+  let crit = false;
+  if (p.nextCrit) { p.nextCrit = false; crit = true; }                  // Slipstream
+  else if (agg.firstHitCrit && !p.firstHitUsed) crit = true;
+  else if (agg.critAfterKill && p.critArmed) { p.critArmed = false; crit = true; }
+  else if (agg.critEveryN > 0 && ++p.critCounter >= agg.critEveryN) { p.critCounter = 0; crit = true; }
+  else if (agg.critVsChilled && e.slowT > 0) crit = true;
+  else if (agg.critVsBurning && e.burnT > 0) crit = true;
+  else if (agg.critVsFullHp && e.hp >= e.maxHp) crit = true;
+  // SEEDED STREAM, not `sim.rng` — see the note where `critRng` is built.
+  else crit = sim.critRng.float() * 100 < critChance(p);
+  p.firstHitUsed = true;
+  return crit;
+}
+
 export function skillDamage(sim, e, amount, p, skill) {
   let amt = amount * domainMult(skill.domain, e.domain) * ferocityMult(p);
   if (e.defDownT > 0) amt /= e.defDownMult;         // defense down = takes more
   amt *= eliteBossMult(p, e);                       // §9.2 magnitude, item-granted
+  // Crit multiplies LAST, on top of every other term, so "×2 on a crit" means
+  // twice the hit the player would otherwise have landed.
+  const crit = rollCrit(sim, p, e);
+  if (crit) amt *= critMultOf(p);
   const before = e.hp;
-  sim.damageEnemy(e, amt, { owner: p });
+  sim.damageEnemy(e, amt, { owner: p, crit });
   const dealt = before - e.hp;
   p.damageDealt += Math.max(0, dealt);
   // §9.2 RIDER TIER — "adds an effect the skill did not have". This is the one
@@ -379,6 +431,11 @@ export function skillDamage(sim, e, amount, p, skill) {
   // hazard. That is a property of the call graph, and `item_gate` measures it
   // rather than trusting it.
   if (dealt > 0) applyOnHitRiders(sim, p, skill, e);
+  // `critHeal` is a healing SOURCE, so it goes through `_heal` and Recovery
+  // amplifies it like every other. It was the seventh hook blocked on this
+  // ruling and the one whose name hid the dependency: it grants no crit, it
+  // only fires on one.
+  if (crit && p.hookAgg && p.hookAgg.critHeal) sim._heal(p, p.hookAgg.critHeal);
   return Math.max(0, dealt);
 }
 

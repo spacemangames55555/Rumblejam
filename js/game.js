@@ -75,6 +75,14 @@ export class Sim {
     // incidentals whose order is already fully determined by the tick order;
     // a shared stream is both simpler and exactly as reproducible.
     this.rng = new Rng(hashString(`sim:${this.seed}`));
+    // CRIT ROLLS GET THEIR OWN SEEDED STREAM, for two reasons that both matter.
+    // Determinism: same seed, same crits, so a gate comparing two runs sees
+    // exact numbers instead of averaging variance out over samples. And
+    // isolation: crit rolls do not consume from `rng`, so adding crit to the
+    // game does not shift the sequence every existing balance measurement was
+    // taken against — §4.2's sweep moved once already when a gold multiplier
+    // started drawing from the shared stream, and once was enough.
+    this.critRng = subRng(this.seed, 'crit');
     this.W = 1280; this.H = 720; // placeholder until the first arena sets real dims
     this.tickNum = 0;
     this.time = 0;
@@ -253,7 +261,7 @@ export class Sim {
       boosts: {}, permStats: {}, tempStats: {},
       stats: null, hookAgg: null,
       weaponSlots: CONFIG.WEAPON_SLOT_MAX,
-      reflexCap: CONFIG.DODGE_CAP, critMult: 2,
+      reflexCap: CONFIG.DODGE_CAP, critMult: CONFIG.CRIT_MULT_BASE,
       firstHitUsed: false, nextCrit: false,
       tempoBuffT: 0, dmgBuffT: 0, dmgBuffAmt: 0,
       frenzy: [], secondWindUsed: false, blockT: 0,
@@ -335,6 +343,12 @@ export class Sim {
       // crit grants (crit is not a stat)
       critAfterKill: false, critEveryN: 0, critVsChilled: false, critVsBurning: false,
       critVsFullHp: false, firstHitCrit: false,
+      // The two crit TERMS, as opposed to the six conditional GRANTS above.
+      // §9.5: chance is Reflex plus items, multiplier is CONFIG.CRIT_MULT_BASE
+      // plus items. No item in the catalog grants either yet — they are the
+      // sites phase 4's magnitude tier writes into, and `item_gate` carries a
+      // probe for each so the site is proven before an item is priced.
+      critChance: 0, critMult: 0,
       // pickup procs
       pickupBlast: [], pickupTempo: [], pickupBonusChance: 0,
       // status spreaders (attuned)
@@ -370,6 +384,8 @@ export class Sim {
       if (h.critVsBurning) agg.critVsBurning = true;
       if (h.critVsFullHp) agg.critVsFullHp = true;
       if (h.firstHitCrit) agg.firstHitCrit = true;
+      if (h.critChance) agg.critChance += h.critChance.percent;
+      if (h.critMult) agg.critMult += h.critMult.add;
       if (h.pickupBlast) agg.pickupBlast.push(h.pickupBlast);
       if (h.pickupTempo) agg.pickupTempo.push(h.pickupTempo);
       if (h.pickupBonusChance) agg.pickupBonusChance = Math.min(1, agg.pickupBonusChance + h.pickupBonusChance.chance);
@@ -2801,6 +2817,22 @@ export class Sim {
         if (z.hurts === 'enemies') {
           const owner = z.owner !== undefined ? this.players[z.owner] : null;
           this._areaDamageEnemies(z.x, z.y, z.r, z.dps * mul, owner, { silent: true });
+          // THE HAZARD'S `slow` RIDER, which was carried here and dropped.
+          // `PRIMITIVES.hazard` has always passed `slowMult`/`slowDur` into the
+          // zone and this loop read only `z.dps`, so Blight, Gravechill and
+          // Bramble declared a chill that never once landed. Same shape as the
+          // cone/line gap (§13 rule 25): a value plumbed to a consumer that
+          // ignores it, validated by a table that only checks the declaration.
+          if (z.slowMult && z.slowDur) {
+            const src = z.ownerIdx !== undefined ? this.players[z.ownerIdx] : owner;
+            const seen = new Set();
+            this.grid.query(z.x, z.y, z.r + 40, e => {
+              if (!e.active || seen.has(e.id)) return;
+              seen.add(e.id);
+              if (dist2(z.x, z.y, e.x, e.y) > (z.r + e.radius) * (z.r + e.radius)) return;
+              this.applySlow(e, z.slowMult, z.slowDur, src);
+            });
+          }
         } else {
           for (const p of this.livePlayers()) {
             if (!p.downed && dist2(z.x, z.y, p.x, p.y) <= z.r * z.r) this.hurtPlayer(p, z.dps * mul, null);

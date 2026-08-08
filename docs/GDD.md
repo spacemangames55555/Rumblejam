@@ -767,13 +767,32 @@ The tiers above are not new machinery. Every one of them already had an item hoo
 
 **A minion's hit procs its owner's riders**, because §13 rule 23 makes `hookAgg` the owner's field by reference on the actor facade. A skeleton carrying its summoner's burn is the same statement as a skeleton's kill being its summoner's kill.
 
-#### OPEN — crit has no design home
+#### Crit — RULED
 
-Six item hooks grant crit and one consumes it, and **crit does not exist in the skill era**. It is decided only in `_fireWeapon`: no composed step rolls it, no rider grants it, no stat carries a crit term, and this document has never mentioned it. Those seven are held back from D-25's reconnection deliberately — wiring a mechanic the design has not defined would be choosing it by implementation, which is the thing §13 exists to prevent.
+Crit did not exist in the skill era. It was decided only in `_fireWeapon`: no composed step rolled it, no rider granted it, no stat carried a crit term, and this document had never mentioned it — while six items sold it and a seventh healed off it.
 
-**Settled: crit is a roll inside `skillDamage()`**, the same single path that made Ferocity work, so every composed source inherits it without a per-primitive decision and phase 5's classes get it for free.
+**Crit is a roll inside `skillDamage()`**, the same single path that made Ferocity work, so every composed source inherits it without a per-primitive decision and phase 5's twelve classes get it free.
 
-**Not settled: does a stat drive crit chance, or is crit items-only?** §9.5's ten stats carry no crit term, so either one gains it as a second job or crit becomes something points cannot buy. Nothing is built until this is ruled.
+**Reflex drives crit chance.** Reflex is already the variance stat — a chance-based outlier outcome on defence — and crit is the same thing on offence. That makes it two-sided the way Grit is, and it creates the decision the design needs: **Ferocity buys damage, Reflex buys the chance of much more.**
+
+**Ferocity was rejected for the job, and the reason is the ruling's whole point.** Ferocity already multiplies all composed damage, so a crit term would have made one point buy flat damage and variance damage together, compounding into a strictly dominant stat. That breaks §1.1's trade-off pillar, and it poisons §9.2's penalty roll specifically: a penalty into a dominant stat is always the worst roll, so the randomness that makes the shop a gamble stops mattering.
+
+Two terms in one formula, not two definitions of one thing:
+
+| Term | Sources |
+|---|---|
+| chance | Reflex × `CRIT_CHANCE_PER_REFLEX` + item `critChance` |
+| multiplier | the player's base (`CONFIG.CRIT_MULT_BASE`, or a trait's) + item `critMult` |
+
+Splitting a *mechanic* across two sources is what rule 25 warns about. Splitting one *formula* across two terms is arithmetic, and both resolve in one roll on one path.
+
+The six conditional grants — after a kill, every Nth hit, versus chilled, versus burning, versus full HP, first hit of a room — resolve **before** the roll and do not consume it. An item promising "every 10th hit crits" delivers on the 10th hit whether or not the dice agreed.
+
+**The RATE is an assumption, not a ruling.** `CRIT_CHANCE_PER_REFLEX = 0.5` means a Reflex build at the `DODGE_CAP` of 60 carries 30% crit alongside 60% dodge. It is set low deliberately, because Reflex now pays on both sides of the fight and a conservative number can be raised after measurement rather than walked back after a patch.
+
+**The roll draws from a dedicated seeded stream** (`sim.critRng`), for two reasons. Determinism: same seed, same crits, so a gate compares exact numbers instead of averaging variance out — a variance mechanic measured by washing variance out is a gate that cannot tell a small effect from none. And isolation: crit rolls do not consume from the shared `rng`, so adding crit did not shift the sequence every existing balance measurement was taken against. §4.2's sweep moved once already when a gold multiplier started drawing from the shared stream, and once was enough.
+
+**`stat_gate` measures both halves of Reflex.** It now sweeps *channels* rather than stats — 11 channels across 10 stats — because proving one channel says nothing about the other, and a single-probe gate would have reported Reflex green with half of it unmeasured.
 
 ### 9.3 Sinks and respec
 
@@ -1006,6 +1025,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 25. **A rider table that lists a rider is not a primitive that applies one.** `RIDER_TABLE` declared `cone: [...IMPACT_RIDERS]` and `line: [...IMPACT_RIDERS]` while neither primitive called `applyImpactRiders`, so Bone Nova's knockback 300, Wrecking Ball's knockback and stun, Stampede's knockback, and the Banshee's and Dread Howl's `weakenDamage` were authored, validated against the table, and silently dropped at the moment of impact — five skills across two classes. This is rule 24 in the content layer: the table said the capability existed, and nothing measured whether it arrived. It was found by an item gate measuring something else entirely (`knockbackBoost` had no live knockback to scale), which is the argument for gates that assert by effect even when the effect is somebody else's.
 
+26. **A probe that stages the wrong precondition is measuring a different game, and it fails in the direction that looks like a finding.** The rider gate's first run reported twelve declared riders DROPPED. Two were real. The other ten were one room: a crowd of six full-HP dummies satisfies `PROXIMITY` and `NEAREST` and *defeats* `ISOLATED`, which is "fewer than count within radius"; it never dips under a `TARGET_THRESHOLD`; and a Reflex dodge is deliberately not an `ON_DODGE` (§6.5), so hitting the player until the dice saved them armed nothing. Add an observer reading `burnDps` for a rider that applies plague and the count reaches ten. **Every one of those failures pointed at the game and was in the harness** — which is the dangerous direction, because a red gate reads as evidence. Stage per-trigger, name the mechanism rather than the flavour in every observer, and give any "it moved" observable a stripped-rider baseline: six bodies packed around a player separate by collision alone, and every knockback row passed on that drift before the baseline existed.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1032,7 +1053,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem. The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `stat_gate`, `difficulty_gate`, `validate_items` — are all green.
 
-**Group D has one entry: D-25, opened by `item_gate` on its first run.** D-23 and D-24 are closed. All three were found by measurement rather than by a red check, which is the argument for keeping the measuring tools around between patches — and for writing the next gate before the content it guards.
+**Group D is empty.** D-23, D-24, D-25 and D-26 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1073,7 +1094,9 @@ Measured twice so nobody re-derives it: per-target attribution on the 1p mark sh
 
 `bounty (4p)` went green when §9.5 gave Ferocity its job as a multiplier on all composed damage. No mark HP was touched, no escort was weakened, and the selector is unchanged at 100%. A four-player party simply now has enough throughput to grind through an escort pack the long way. Pierce would still be the *efficient* answer, and remains a §9.2 modifier item.
 
-**`bounty (1p)` stays EXPECTED-RED and the original reasoning holds for it**: one player cannot out-throughput a wall built for a party, and the wall is the point. If the solo row goes green before pierce exists, that IS the tuning failure the old line was guarding against.
+**`bounty (1p)` stays EXPECTED-RED and the original reasoning holds for it**: one player cannot out-throughput a wall built for a party, and the wall is the point.
+
+**WARNING — the guard's condition has moved, and the next patch could trip it.** The old line said "if the solo row goes green before pierce exists, that IS the tuning failure". Pierce now exists: `extraPierce` is live on the skill path (D-25) and reads a real projectile. It is not *sold* — no item pool is authored — so nothing has been tuned and the row is still red. But it is much closer: across the crit ruling and the rider fixes the solo mark went from **20.5% HP remaining to 0.4%**, on 159 stream kills against 108. If it clears in a later patch, the question to ask is not "did we tune the mark" but "is the party carrying pierce yet" — and if the answer is no, the wall has been eroded by throughput after all.
 
 ### Group C — phase 4, the economy (7)
 
@@ -1083,9 +1106,27 @@ Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, co
 
 The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same defect, different class in the string — worth knowing before a set diff reads one as fixed and the other as new.
 
-### Group D — genuine open defects (1)
+### Group D — genuine open defects (0)
 
-#### D-25 — NARROWED: nine of sixteen reconnected; seven are blocked on a crit ruling
+#### D-26 — CLOSED: thirty declared riders, eight of which had never landed
+
+`tools/rider_gate.mjs` exists because rule 25's defect was found by luck — an item gate measuring `knockbackBoost` noticed there was no live knockback to scale. The gate is the process instead: every rider on every skill, staged and asserted by effect, with coverage as part of the assertion so a rider it cannot measure fails by name rather than being skipped.
+
+**Three separate places dropped a declared rider, all the same shape.** A value plumbed to a consumer that ignored it, validated by a table that only checked the declaration:
+
+| Where | Riders lost | Skills |
+|---|---|---|
+| `PRIMITIVES.cone` never called `applyImpactRiders` | knockback, weakenDamage | Bone Nova, Banshee's Wail, Dread Howl |
+| `PRIMITIVES.line` never called `applyImpactRiders` | knockback, stun | Wrecking Ball, Stampede |
+| the zone tick read `z.dps` and ignored `z.slowMult` | slow | Blight, Gravechill, Bramble |
+
+`PRIMITIVES.hazard` had always passed `slowMult`/`slowDur` into `addZone`; nothing on the other end read them. Eight skills across three classes, every one of them authored correctly and doing less than it said.
+
+**All thirty riders now land** — asserted per skill, per rider, in the situation that skill's trigger requires.
+
+
+
+#### D-25 — CLOSED: 44 of 44 item hooks live
 
 `tools/item_gate.mjs` was written before the phase-4 item pool, on the principle that an item granting a modifier nothing reads is Ferocity with a price tag. Its first run says **28 of 44 hook kinds in the catalog are connected to anything**, and the other 16 are sold across 22 items:
 
@@ -1097,9 +1138,9 @@ The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `t
 
 **NINE ARE RECONNECTED. `item_gate` reports 37 of 44 live**, up from 28. Every read site is recorded in §9.2's table above; the shape is that `skillDamage()` is the modifier path for the same reason it is Ferocity's.
 
-**Seven remain, and they are one question, not seven.** `critAfterKill`, `critEveryN`, `critVsChilled`, `critVsBurning`, `critVsFullHp` and `firstHitCrit` grant crit; `critHeal` consumes it. **Crit does not exist in the skill era** — it is decided only in `_fireWeapon`, and this document has never named it. They are held back deliberately: wiring a mechanic the design has not defined would be choosing it by implementation. See §9.2's crit entry for what is settled and what is not.
+**The last seven were one question, not seven**, and it is now answered. `critAfterKill`, `critEveryN`, `critVsChilled`, `critVsBurning`, `critVsFullHp` and `firstHitCrit` grant crit; `critHeal` consumes it; crit did not exist. §9.2 records the ruling — a roll inside `skillDamage()`, chance from Reflex plus items, multiplier from `CONFIG.CRIT_MULT_BASE` plus items — and with it wired **`item_gate` reports 44 of 44**. Two aggregate fields, `critChance` and `critMult`, exist ahead of any item that grants them and carry probes anyway: rule 24 says a declared capability is worth less than nothing until something measures it, and phase 4 is about to price items against those sites.
 
-*Worth stating because the arithmetic misleads:* sixteen minus six crit-granting hooks is ten, but `critHeal` fires only on a crit, so the reconnectable set was nine and the residual is seven. A hook can be blocked by a mechanic without being named after it.
+*Worth stating because the arithmetic misleads:* sixteen minus six crit-granting hooks is ten, but `critHeal` fires only on a crit, so the reconnectable set was nine and the residual was seven. A hook can be blocked by a mechanic without being named after it.
 
 **Five of the twenty-one verdicts the gate has issued were the gate's own fault**, and every one was §13 rule 20 — the fixture must arrive in the state a player would arrive in.
 
@@ -1197,8 +1238,9 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Netcode state migration | Built, lobby heartbeat at 3 Hz, drops classified |
 | Determinism | Built, negative control, byte-identical same-seed runs |
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
-| Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **10 of 10 live** |
-| Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **37 of 44 hook kinds live**; the 7 red are the crit set (D-25) |
+| Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
+| Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **44 of 44 hook kinds live** (D-25 closed) |
+| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **30 of 30 land** (D-26 closed) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1211,9 +1253,9 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
-| Modifier tiers | **Magnitude and rider wired** — 9 hooks reconnected to the skill path, read sites recorded in §9.2 |
-| Crit | **Does not exist.** Decided only in `_fireWeapon`; no step, rider or stat carries it. Home settled (`skillDamage`), source unruled |
-| Economy | **Not started** — items, rerolls, upgrades and respec all follow the crit ruling |
+| Modifier tiers | **Magnitude and rider wired** — 16 hooks reconnected to the skill path, read sites recorded in §9.2 |
+| Crit | **Built and ruled** — a roll in `skillDamage()`; chance from Reflex + items, multiplier from `CONFIG.CRIT_MULT_BASE` + items, on a dedicated seeded stream |
+| Economy | **Not started** — the tiers are wired and gated; items, rerolls, upgrades and respec are the next patch |
 
 ---
 

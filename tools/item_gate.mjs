@@ -181,6 +181,10 @@ const HOOKS = {
   },
   critHeal: {
     what: 'HP regained from crits while firing skills for 8 s at 1 HP',
+    // A guaranteed crit source in BOTH runs. Without it the fixture's Reflex is
+    // near zero, no crit ever lands, and a working heal reads dead — the same
+    // shape as Ingenuity's probe measuring a field with no minion on it.
+    with: { critEveryN: { n: 1 } },
     payload: { amount: 40 },
     run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; p.hp = 1; tickFor(g, 8, [e]); return Math.round(p.hp); },
   },
@@ -451,6 +455,26 @@ const HOOKS = {
     },
   },
 
+  // ---- the two crit TERMS (§9.5) ----
+  //
+  // No item grants either yet. They are probed anyway, because these are the
+  // sites phase 4's magnitude tier writes into and rule 24 says a declared
+  // capability is worth less than nothing until something measures it. An item
+  // priced against an unproven site is the shop version of Ferocity.
+  critChance: {
+    what: 'damage to a pinned target over 8 s with crit chance forced to 100%',
+    char: NECRO,
+    payload: { percent: 100 },
+    run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
+  },
+  critMult: {
+    what: 'damage to a pinned target over 8 s with every hit critting',
+    char: NECRO,
+    with: { critEveryN: { n: 1 } },
+    payload: { add: 20 },
+    run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
+  },
+
   // ---- pickups ----
   pickupBlast: {
     what: 'damage to an enemy standing where materials are collected',
@@ -540,8 +564,13 @@ for (const key of Object.keys(HOOKS).filter(k => usedHooks.has(k)).sort()) {
   let base, granted, err = null;
   try {
     const so = { twoPlayer: !!h.two, slot: h.slot };
-    base = h.run(stage(charId, null, so));
-    granted = h.run(stage(charId, claim, so));
+    // `with` is a PRECONDITION, not a claim: hooks granted in both runs so a
+    // probe can stage the situation its own hook needs without the comparison
+    // crediting the precondition. `critHeal` fires only on a crit, so measuring
+    // it requires a crit source present on both sides of the diff.
+    const pre = h.with ? { hooks: { ...h.with } } : null;
+    base = h.run(stage(charId, pre, so));
+    granted = h.run(stage(charId, h.with ? { hooks: { ...h.with, [key]: h.payload } } : claim, so));
   } catch (e) { err = e; }
   const usable = !err && Number.isFinite(base) && Number.isFinite(granted);
   results.push({ key, what: h.what, base, granted, usable, err, live: usable && base !== granted, items: usedHooks.get(key) });
