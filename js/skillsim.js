@@ -449,11 +449,11 @@ export function skillDamage(sim, e, amount, p, skill) {
 // build that finds a spiritual grant gains the matchup it lacked and keeps
 // every matchup it had.
 //
-// ASSUMPTION FLAGGED: a literal swap — replace the domain — would make a shop
-// roll capable of inverting a build's whole triangle position, which is the
-// failure that deleted trigger-swap items from the design. If the intent was
-// literal replacement, this is the line to change and §9.2 is the ruling to
-// make first.
+// RULED, not assumed. §9.2's table now reads "domain add" rather than "domain
+// swap": the governing rule — an item may add, never take away — wins over the
+// label the tier was drafted with. A literal replacement would let one shop roll
+// invert a build's whole triangle position, which is the failure that deleted
+// trigger-swap items from the design.
 export function bestDomainMult(p, atk, def) {
   let best = domainMult(atk, def);
   const adds = p && p.hookAgg ? p.hookAgg.domainAdd : null;

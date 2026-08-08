@@ -714,7 +714,7 @@ Two levers together: **slower income** and **escalating prices**. Price escalati
 | Stat items | Flat + with a **randomly rolled** − on another stat | Common |
 | Magnitude | Splash radius, projectile count, **pierce**, chain jumps, duration | Common–Rare |
 | Rider | Adds an effect the skill did not have | Rare |
-| Domain swap | Changes one skill's damage domain | Rare–Legendary |
+| Domain add | A skill also resolves the triangle as a second domain, whichever reads better | Rare–Legendary |
 | Selector add | The skill **also** hits what a second selector picks | Rare–Legendary |
 
 **Radius lives in magnitude items exclusively**, since ranks no longer grant it.
@@ -724,6 +724,8 @@ Two levers together: **slower income** and **escalating prices**. Price escalati
 **Pierce is the answer to escorted targets** (§5.9) and belongs in magnitude.
 
 #### Items add, they never take away
+
+**The tier is "domain ADD", and that is the design rather than a compromise.** It was drafted as "domain swap" and the two halves of the section disagreed: a swap replaces, and the governing rule below says an item may never take away. **The governing rule wins over the label.** A skill resolves the triangle as the best of its own domain and any an item grants, so a build gains the matchup it lacked and keeps every matchup it had. A literal replacement would let a single shop roll invert a build's whole triangle position — the exact failure that deleted trigger-swap items from the design — and shipping it would have re-introduced that failure under a different name.
 
 **Trigger-swap items are deleted from the design.** An item that changed *when* a skill fired could invalidate a build mid-run — a player who had spent forty points around a trigger could have it rewritten by a shop roll.
 
