@@ -34,8 +34,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
@@ -247,8 +247,20 @@ export function tickSkills(sim, dt) {
     // who has marked the room is at their strongest in the moment before it
     // breaks, and killing the marks spends the power along with the heal.
     let marked = 0;
-    for (const e of sim.enemyPool) if (e.active && e.markT > 0 && e.markBy === p.idx) marked++;
+    // THE SUNDIAN'S DRENCH ENGINE (§8.3), counted in the same sweep as the
+    // Priest's marks because it is the same question asked of a different field:
+    // how much of THIS player's status is standing in the room. Marks count
+    // ENEMIES; drench counts STACKS, because a Sundian who has soaked one enemy
+    // four times has four times the payout waiting, and a counter that measured
+    // bodies would price that the same as four enemies at one stack each.
+    let drenched = 0;
+    for (const e of sim.enemyPool) {
+      if (!e.active) continue;
+      if (e.markT > 0 && e.markBy === p.idx) marked++;
+      if (e.drenchT > 0 && e.drenchBy === p.idx) drenched += e.drench || 0;
+    }
     p.engines.marks = marked;
+    p.engines.drench = drenched;
     // THE BARD'S RHYTHM ENGINE (§8.3): stacks held right now. Unlike every other
     // engine here this one can be DROPPED — `tohOnFire` builds it on each cast
     // and `tohTick` wipes the whole stack the moment the window lapses. Both
@@ -278,6 +290,7 @@ export function tickSkills(sim, dt) {
     p.engineScaleBonus.marks = passiveSum(p, 'marksDamageBonus');
     p.engineScaleBonus.rhythm = passiveSum(p, 'rhythmDamageBonus');
     p.engineScaleBonus.crystal = passiveSum(p, 'crystalDamageBonus');
+    p.engineScaleBonus.drench = passiveSum(p, 'drenchDamageBonus');
     p.engineScaleBonus.doll = passiveSum(p, 'dollDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
@@ -679,6 +692,11 @@ export function tickSkillStatuses(sim, dt) {
     // status does. One line in an existing loop rather than a decay function of
     // its own, which is what keeps the Priest content-shaped from here on.
     if (e.markT > 0) e.markT -= dt;
+    // DRENCH IS A COUNTER WITH A CLOCK, and when the clock runs out the counter
+    // goes with it. Decaying the timer while leaving the stacks would let a
+    // Sundian bank drench across a whole room and cash it minutes later, which
+    // is the unbounded-multiplier shape the cap exists to prevent.
+    if (e.drenchT > 0) { e.drenchT -= dt; if (e.drenchT <= 0) { e.drench = 0; e.drenchBy = -1; } }
     if (e.plagueT > 0) {
       e.plagueT -= dt;
       e.plagueAcc = (e.plagueAcc || 0) + e.plagueDps * dt;

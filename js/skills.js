@@ -17,6 +17,8 @@ import { MAGE_CRYSTALBLADE, TUNING as MAGE_CRY_TUNING } from './content/skills/m
 import { MAGE_COLLAPSE, TUNING as MAGE_COL_TUNING } from './content/skills/mage_collapse.js';
 import { WD_EFFIGY, TUNING as WD_EFF_TUNING } from './content/skills/wd_effigy.js';
 import { WD_BLIGHT, TUNING as WD_BLI_TUNING } from './content/skills/wd_blight.js';
+import { SUN_TIDEWRACK, TUNING as SUN_TID_TUNING } from './content/skills/sun_tidewrack.js';
+import { SUN_REEF, TUNING as SUN_REEF_TUNING } from './content/skills/sun_reef.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
@@ -40,6 +42,8 @@ export const TREES = {
   mage_collapse: { id: 'mage_collapse', name: 'Collapse', classId: 'toh_mage', skills: MAGE_COLLAPSE, tuning: MAGE_COL_TUNING },
   wd_effigy: { id: 'wd_effigy', name: 'Effigy', classId: 'toh_witch_doctor', skills: WD_EFFIGY, tuning: WD_EFF_TUNING },
   wd_blight: { id: 'wd_blight', name: 'Blight', classId: 'toh_witch_doctor', skills: WD_BLIGHT, tuning: WD_BLI_TUNING },
+  sun_tidewrack: { id: 'sun_tidewrack', name: 'Tidewrack', classId: 'toh_sundian', skills: SUN_TIDEWRACK, tuning: SUN_TID_TUNING },
+  sun_reef: { id: 'sun_reef', name: 'Reef', classId: 'toh_sundian', skills: SUN_REEF, tuning: SUN_REEF_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
@@ -79,6 +83,7 @@ export const PASSIVE_EFFECT = {
   rhythmDamageBonus: 'damage',    // Perfect Time: more per stack held
   crystalDamageBonus: 'damage',   // Lattice: more per crystal carried
   dollDamageBonus: 'damage',      // Sympathetic Binding: more per point banked in the doll
+  drenchDamageBonus: 'damage',    // Tidemark: more per drench stack standing
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the

@@ -1157,6 +1157,7 @@ export class Sim {
       domain: PYLON_DEF.domain,
       t: 0, phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
       markT: 0, markBy: -1, markHeal: 0, markRadius: 0,   // §13 rule 8: pooled slots inherit nothing
+      drench: 0, drenchT: 0, drenchBy: -1,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0, healTarget: null, brood: null, shape: PYLON_DEF.shape, color: PYLON_DEF.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
@@ -1184,6 +1185,7 @@ export class Sim {
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
+      drench: 0, drenchT: 0, drenchBy: -1,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
     });
@@ -1445,6 +1447,7 @@ export class Sim {
       domain: def.domain || (def.bossDomain || 'physical'),
       t: this.rng.float(), phase: 0, slowT: 0, slowMult: 1, burnT: 0, burnDps: 0, burnOwner: null,
       markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
+      drench: 0, drenchT: 0, drenchBy: -1,
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0.8 + this.rng.float(), healTarget: null, brood: null, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,

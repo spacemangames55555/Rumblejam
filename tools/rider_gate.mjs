@@ -81,6 +81,14 @@ function stage(skillId, twoPlayer = false, charOverride = null) {
   return { g, p, sk };
 }
 
+// SOME RIDERS ARE ONLY EXERCISABLE IN PAIRS. The synthetic probe adds one rider
+// at a time, which is right for every rider that stands alone and wrong for a
+// payout: `sluice` cashes drench stacks, so hosted by itself it finds an empty
+// counter and reads DROPPED about a rider that works. `SYNTH_WITH` names the
+// companions a rider needs on the same step. The rider under test is still the
+// only one being ASSERTED — the companion is staging, not the claim.
+const SYNTH_WITH = { sluice: ['drench'] };
+
 // Riders whose write path is owned by a TRAIT rather than by the skill. The
 // synthetic probe has to put that trait in the chair or it measures nothing.
 const SYNTH_HOST_CLASS = { doll: 'toh_witch_doctor' };
@@ -200,6 +208,14 @@ const OBSERVERS = {
   // staging can be built for it. What is measured HERE is that the rider fires
   // and the engine it feeds comes off zero.
   doll:          { what: 'the doll bank fills for the designated enemy', player: (g, p) => p.engines.doll },
+  // DRENCH IS MEASURED AS THE COUNTER STANDING, which is what the engine reads
+  // and what the payout spends.
+  drench:        { what: 'drench stacks stand on an enemy', peak: es => Math.max(0, ...es.map(e => e.drench || 0)) },
+  // AND SLUICE IS MEASURED AS DAMAGE THE STEP DID NOT DECLARE. The burst is
+  // extra damage on top of the step's own magnitude, so the observable is total
+  // damage against the same skill with the rider stripped — watching `e.drench`
+  // fall to zero would pass on the decay timer alone.
+  sluice:        { what: 'a drenched enemy takes burst damage the step never declared', stripped: true, needsDrench: true },
   // multiPulse and windUp are SHAPE riders read inside the primitive rather than
   // applied to an enemy: multiPulse repeats the hit loop, windUp defers the step
   // by a timer. Both are measured as damage against the same skill with the
@@ -214,7 +230,11 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
   const { g, p, sk } = stage(skillId, !!obs.markHeal, charOverride);
   if (add) {
     const clone = { ...sk, compose: sk.compose.map(c => ({ ...c, riders: { ...(c.riders || {}) } })) };
-    for (const c of clone.compose) if (['strike', 'cone', 'line', 'bolt'].includes(c.kind)) c.riders[add.rider] = add.payload;
+    for (const c of clone.compose) {
+      if (!['strike', 'cone', 'line', 'bolt'].includes(c.kind)) continue;
+      for (const companion of SYNTH_WITH[add.rider] || []) c.riders[companion] = SYNTH_PAYLOAD[companion];
+      c.riders[add.rider] = add.payload;
+    }
     SKILL_BY_ID[skillId] = clone;
     for (const t of Object.values(TREES)) {
       const i = t.skills.findIndex(x => x.id === skillId);
@@ -240,6 +260,19 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
   // nothing and would read as a mark that never detonated.
   // `healPerHit` heals the caster, and a heal on a full-HP player moves nothing.
   if (obs.hurtSelf) p.hp = Math.max(1, Math.round(p.stats.vitality * 0.25));
+  // A PAYOUT NEEDS SOMETHING TO PAY OUT. `sluice` cashes drench stacks and
+  // clears them, so a skill staged ALONE — which is this gate's whole idiom,
+  // because a rider landing is only attributable when nothing else could have
+  // landed it — finds an empty counter and reads DROPPED about a rider that
+  // works. The counter is therefore pre-staged ON THE TARGETS rather than by
+  // slotting a second skill: the burst stays attributable to the measured skill,
+  // and the fixture only supplies the precondition (§13 rule 26).
+  //
+  // It is re-applied every tick because the rider spends what it finds, and a
+  // one-shot soak would measure the first cast and nothing after it.
+  if (obs.needsDrench) {
+    for (const e of es) { e.drench = 8; e.drenchT = 9; e.drenchBy = p.idx; }
+  }
   // `pierce` needs bodies BEHIND the first one: a projectile that stops at the
   // first target is exactly what pierce changes, so the observable has to
   // contain something the first body was shielding.
@@ -268,6 +301,9 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
   for (let i = 0; i < 60 * SECONDS; i++) {
     g.setInput(0, { mx: 0, my: 0 });
     if (arm) arm();
+    // Re-soak: the rider under test SPENDS the counter, so it has to be there
+    // for every cast and not just the first.
+    if (obs.needsDrench) for (const e of es) { e.drench = 8; e.drenchT = 9; e.drenchBy = p.idx; }
     g.tick();
     if (obs.peak) peak = Math.max(peak, obs.peak(es));
     if (firstDamageT < 0 && es.reduce((a, e) => a + e.hp, 0) < hp0) firstDamageT = i;
@@ -329,6 +365,12 @@ const SYNTH_PAYLOAD = {
   // The Witch Doctor's designation. A truthy payload is all it needs — the
   // rider names an enemy, it does not carry a magnitude.
   doll: true,
+  // The Sundian's pair. `drench` puts the counter on, `sluice` cashes it — and
+  // they are probed together because a counter with no payout is a number and a
+  // payout with no counter is a multiplier. The synthetic host carries BOTH, so
+  // the observable below sees the burst that only exists when both landed.
+  drench: { stacks: 3, cap: 12, dur: 9000 },
+  sluice: { per: 9, radius: 30 },
 };
 const UNCLAIMED = ALL_RIDERS.filter(r => !DECLARED.has(r));
 

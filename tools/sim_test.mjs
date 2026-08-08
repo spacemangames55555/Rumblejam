@@ -3089,11 +3089,19 @@ try {
 
   // --- the new per-player state and world entities ride the wire ---
   {
+    // THE SECOND SEAT IS A SUNDIAN, AND THAT IS THE POINT OF THE BLOB CHECK.
+    // `tohSnapshot` returns null unless there is coral, a singularity or a coral
+    // wall in the world, and coral is planted by the Sundian's trait every
+    // fourth cast. The fixture used to seat a Samurai beside a Samurai, so no
+    // class present could produce the very entity the check asserts rides the
+    // wire — `toh blob: null` was a statement about the fixture. §13 rule 20:
+    // the party has to contain the thing being measured.
     const g = new Sim({ seed: 77, party: [
       { idx: 0, key: 'a', name: 'A', charId: 'toh_samurai', color: '#fff' },
-      { idx: 1, key: 'b', name: 'B', charId: T2, color: '#fff' }] });
+      { idx: 1, key: 'b', name: 'B', charId: 'toh_sundian', color: '#fff' }] });
     const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
     node.kind = 'combat'; g._travelTo(node.id); g.god = true;
+    for (const q of g.players) armBot(g, q);
     for (let i = 0; i < 60 * 25; i++) {
       for (const q of g.players) { g.setInput(q.idx, { mx: 0, my: 0 }); q.hp = q.stats.vitality; }
       g.tick();
