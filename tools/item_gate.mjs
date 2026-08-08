@@ -79,6 +79,16 @@ function stage(charId, claim, opts = {}) {
     }
   }
   if (claim) g._grantItem(p, probeItem(claim));
+  // LEARNED IS NOT SLOTTED (§13 rule 20). `spendSkillPoint` auto-slots only into
+  // an already-unlocked slot, and a level-12 character has three — so a fixture
+  // that learns thirty skills still fights with the first three it bought. A
+  // probe whose claim rides a specific skill must SLOT that skill, the way the
+  // player who wanted it would. `knockbackBoost` read DEAD for exactly this: no
+  // skill in the default loadout carries a knockback rider.
+  if (opts.slot) {
+    p.loadout = new Array(8).fill(null);
+    opts.slot.forEach((id, i) => { p.loadout[i] = id; });
+  }
   const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
   g._travelTo(node.id);
   // Every probe stages its own targets; ambient spawns would add noise the
@@ -369,7 +379,11 @@ const HOOKS = {
     run: ({ g, p }) => { const e = target(g, p.x + 60, p.y, { elite: true }); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
   },
   extraPierce: {
+    // ONLY THE NECROMANCER HAS `bolt` SKILLS. A samurai fixture would measure a
+    // pierce item in a class with no projectile and report a working item dead
+    // — the same shape as Ingenuity's probe measuring the player's own damage.
     what: 'total damage across three targets standing in a line',
+    char: NECRO,
     payload: { add: 6 },
     run: ({ g, p }) => {
       const es = [target(g, p.x + 60, p.y), target(g, p.x + 120, p.y), target(g, p.x + 180, p.y)];
@@ -380,21 +394,45 @@ const HOOKS = {
     },
   },
   extraProjectiles: {
-    what: 'damage to a pinned target over 8 s',
+    // THREE TARGETS, NOT ONE. Extra projectiles fan across a target LIST, so a
+    // probe with a single pinned dummy measures a fan that has nowhere to go and
+    // reports the same number either way. The claim is "hits more things", and
+    // the observable has to contain more things.
+    what: 'total damage across three separated targets over 8 s',
+    char: NECRO,
     payload: { add: 8 },
-    run: ({ g, p }) => { const e = target(g, p.x + 60, p.y); if (!e) return NaN; const b = e.hp; tickFor(g, 8, [e]); return Math.round(b - e.hp); },
-  },
-  knockbackBoost: {
-    what: 'how far an unpinned enemy is pushed over 6 s of fire',
-    payload: { mult: 30 },
     run: ({ g, p }) => {
-      const e = target(g, p.x + 60, p.y); if (!e) return NaN;
-      e.hp = e.maxHp = 1e9;
-      const x0 = e.x, y0 = e.y;
-      for (let i = 0; i < 360; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
-      return Math.round(Math.hypot(e.x - x0, e.y - y0));
+      const es = [target(g, p.x + 70, p.y - 70), target(g, p.x + 90, p.y), target(g, p.x + 70, p.y + 70)];
+      if (es.some(e => !e)) return NaN;
+      const before = es.reduce((a, e) => a + e.hp, 0);
+      tickFor(g, 8, es);
+      return Math.round(before - es.reduce((a, e) => a + e.hp, 0));
     },
   },
+  knockbackBoost: {
+    what: 'how far a cluster of four is pushed over 6 s of fire',
+    // THE PROBE MUST SATISFY THE TRIGGER, not just slot the skill. `necro_bone_nova`
+    // is PROXIMITY radius 140 count 4 — it does not fire until FOUR enemies are
+    // inside 140 units. A single pinned dummy never armed it, the skill never
+    // swung, and the 58 units of drift the probe was reading was collision
+    // separation from the player's own body. Staging the loadout was necessary
+    // and not sufficient; staging the CONDITION is the rest of §13 rule 20.
+    slot: ['necro_bone_nova'],
+    payload: { mult: 30 },
+    run: ({ g, p }) => {
+      const es = [];
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const e = target(g, p.x + Math.cos(a) * 60, p.y + Math.sin(a) * 60);
+        if (!e) return NaN;
+        es.push(e);
+      }
+      const from = es.map(e => ({ x: e.x, y: e.y }));
+      tickFor(g, 6);                       // NOT pinned — displacement is the point
+      return Math.round(es.reduce((a, e, i) => a + Math.hypot(e.x - from[i].x, e.y - from[i].y), 0));
+    },
+  },
+
   summonBoost: {
     what: 'damage a summoned minion deals, and its max HP',
     payload: { damage: 900, hp: 900 },
@@ -501,8 +539,9 @@ for (const key of Object.keys(HOOKS).filter(k => usedHooks.has(k)).sort()) {
   const claim = { hooks: { [key]: h.payload } };
   let base, granted, err = null;
   try {
-    base = h.run(stage(charId, null, { twoPlayer: !!h.two }));
-    granted = h.run(stage(charId, claim, { twoPlayer: !!h.two }));
+    const so = { twoPlayer: !!h.two, slot: h.slot };
+    base = h.run(stage(charId, null, so));
+    granted = h.run(stage(charId, claim, so));
   } catch (e) { err = e; }
   const usable = !err && Number.isFinite(base) && Number.isFinite(granted);
   results.push({ key, what: h.what, base, granted, usable, err, live: usable && base !== granted, items: usedHooks.get(key) });

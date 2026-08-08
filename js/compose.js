@@ -51,8 +51,16 @@ export function stepDamage(step, skill, rank, p) {
   // applies to a summon's swing, never to the summoner's own skills, and this
   // is the one place the two can be told apart. A player has no such field, so
   // the term is exactly 1 for every non-minion caster.
-  return rankedDamage(step.damage, skill, rank) * engineScale(step, p) * (p.ingMult || 1);
+  // `_atkBuff` is the post-dodge one-shot buff (§9.2), set and cleared around a
+  // single fire in `fireSkill`. A minion's facade does not carry it, which is
+  // correct — the player dodged, not the skeleton.
+  return rankedDamage(step.damage, skill, rank) * engineScale(step, p)
+    * (p.ingMult || 1) * (p.summonMult || 1) * (p._atkBuff || 1);
 }
+
+// §9.2 magnitude: item-granted knockback scaling. A player with no such item
+// has `knockMult === 1`, and a minion reads its owner's by reference.
+export function knockMult(p) { return (p && p.hookAgg && p.hookAgg.knockMult) || 1; }
 
 const TAU = Math.PI * 2;          // structural
 const MS = 1000;                  // structural: step params are milliseconds
@@ -158,7 +166,11 @@ export const PRIMITIVES = {
   // Travelling projectile. Riders ride the projectile and resolve on impact.
   bolt(sim, p, skill, step, rank, grid, out) {
     const range = step.range || skill.trigger.range || skill.trigger.radius;
-    const count = step.count || 1;
+    // §9.2 magnitude: projectile count. This is the tier's headline shape —
+    // "hit the nearest two targets instead of one" — and it needs no new
+    // machinery because `bolt` already fans to a target list. Read only in
+    // `_fireWeapon` until D-25.
+    const count = (step.count || 1) + ((p.hookAgg && p.hookAgg.extraProjectiles) || 0);
     const targets = count > 1
       ? selectTargets(skill.select, grid, p.x, p.y, range, count)
       : [selectTarget(skill.select, grid, p.x, p.y, range)].filter(Boolean);
@@ -173,6 +185,7 @@ export const PRIMITIVES = {
   // crowd answer rather than a wide single-target hit.
   cone(sim, p, skill, step, rank, grid, out) {
     const dmg = stepDamage(step, skill, rank, p);
+    const r = step.riders || {};
     const a0 = grid.densestAngle(p.x, p.y, step.range) ?? facing(sim, p, grid, step.range, skill.select);
     for (const e of grid.near(p.x, p.y, step.range)) {
       const dx = e.x - p.x, dy = e.y - p.y;
@@ -180,6 +193,12 @@ export const PRIMITIVES = {
       if (Math.abs(angleDelta(Math.atan2(dy, dx), a0)) > step.angle / 2) continue;
       if (sim.losBlocked(p.x, p.y, e.x, e.y)) continue;
       sim.skillDamage(e, dmg, p, skill);
+      // RIDER_TABLE has always said `cone: [...IMPACT_RIDERS]` and this
+      // primitive applied none of them. Bone Nova's knockback 300, and the
+      // Banshee's and Dread Howl's weakenDamage, were declared and dropped.
+      // Found while measuring `knockbackBoost` — the item had nothing to scale
+      // because the rider it scales was never applied.
+      applyImpactRiders(sim, p, skill, r, e, rank, Math.atan2(dy, dx), out);
       out.hits++;
     }
     sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: step.range, color: p.color });
@@ -202,6 +221,10 @@ export const PRIMITIVES = {
         const off = Math.abs(-dx * sa + dy * ca);
         if (off > half + e.radius) continue;
         sim.skillDamage(e, dmg, p, skill);
+        // Same gap as `cone`: Wrecking Ball's knockback and stun, and
+        // Stampede's knockback, were declared on a primitive that applied
+        // nothing. A beam knocks along its own axis, not away from the caster.
+        applyImpactRiders(sim, p, skill, r, e, rank, a0, out);
         out.hits++;
       }
     }
@@ -331,7 +354,10 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
   }
   if (r.root) { e.rootT = Math.max(e.rootT || 0, r.root / MS); out.statuses++; }
   if (r.taunt) { e.tauntT = Math.max(e.tauntT || 0, r.taunt / MS); e.tauntIdx = p.idx; out.statuses++; }
-  if (r.knockback) { e.knockX += Math.cos(angle) * r.knockback; e.knockY += Math.sin(angle) * r.knockback; out.statuses++; }
+  if (r.knockback) {
+    const k = r.knockback * knockMult(p);           // §9.2 magnitude (D-25)
+    e.knockX += Math.cos(angle) * k; e.knockY += Math.sin(angle) * k; out.statuses++;
+  }
   if (r.slow) { sim.applySlow(e, r.slow.mult, r.slow.dur / MS, p); out.statuses++; }
   if (r.weakenDamage) { e.weakDmgT = r.weakenDamage.dur / MS; e.weakDmgMult = r.weakenDamage.mult; out.statuses++; }
   if (r.weakenDefense) { e.defDownT = r.weakenDefense.dur / MS; e.defDownMult = r.weakenDefense.mult; out.statuses++; }

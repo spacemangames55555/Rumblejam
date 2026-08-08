@@ -747,6 +747,34 @@ A fixed table — damage always costs speed — is memorised after one run, and 
 
 **Weapons are gone from the game. `SHOP_WEAPON_CHANCE = 0`.** A shop stocking unequippable items is a bug, not a design question.
 
+#### Where each modifier is read
+
+The tiers above are not new machinery. Every one of them already had an item hook and an aggregate field; what they lacked was a reader on the skill path, because the readers were all in `_fireWeapon` and `_hitEnemy` and nothing has called those since weapons were removed (D-25). Recorded here so the next tier is authored against a site rather than a hope:
+
+| Tier | Hook | Read in | Notes |
+|---|---|---|---|
+| Magnitude | `extraProjectiles` | `PRIMITIVES.bolt` — added to the target `count` | The tier's headline shape: "hit the nearest two targets instead of one" |
+| Magnitude | `extraPierce` | `spawnSkillProj` — added to `pr.pierce` | **No skill declares a `pierce` rider**, so the item is the whole of pierce. §5.9 puts it in the shop deliberately |
+| Magnitude | `eliteBossDamage` | `skillDamage()` | Beside Ferocity and the domain triangle |
+| Magnitude | `knockbackBoost` | `applyImpactRiders` | Scales a declared knockback; see rule 25 for why there was nothing to scale |
+| Magnitude | `nextAttackAfterDodge` | `fireSkill` → `stepDamage` | Consumed once per fire, for the whole fire, exactly as the weapon path spent it |
+| Magnitude | `summonBoost` | `minions.js` — damage and HP terms | Beside Ingenuity, not folded into it, so a report can say which one moved |
+| Rider | `burnOnHit`, `chillOnHit`, `chainOnHit` | `skillDamage()` → `applyOnHitRiders` | |
+
+**`skillDamage()` is the modifier path**, for the same reason it is Ferocity's: it is the one function every composed impact passes through, so no primitive has to know a modifier exists. That is the property that makes phase 5's twelve classes free — a tier added here reaches skills nobody has written yet.
+
+**Impacts, never ticks.** Zones, burn and plague damage through `_areaDamageEnemies` and direct HP subtraction, not through `skillDamage`, so a 15%-chance proc rolls on hits rather than sixty times a second inside a hazard. That is a property of the call graph rather than a guard, and `item_gate` measures it.
+
+**A minion's hit procs its owner's riders**, because §13 rule 23 makes `hookAgg` the owner's field by reference on the actor facade. A skeleton carrying its summoner's burn is the same statement as a skeleton's kill being its summoner's kill.
+
+#### OPEN — crit has no design home
+
+Six item hooks grant crit and one consumes it, and **crit does not exist in the skill era**. It is decided only in `_fireWeapon`: no composed step rolls it, no rider grants it, no stat carries a crit term, and this document has never mentioned it. Those seven are held back from D-25's reconnection deliberately — wiring a mechanic the design has not defined would be choosing it by implementation, which is the thing §13 exists to prevent.
+
+**Settled: crit is a roll inside `skillDamage()`**, the same single path that made Ferocity work, so every composed source inherits it without a per-primitive decision and phase 5's classes get it for free.
+
+**Not settled: does a stat drive crit chance, or is crit items-only?** §9.5's ten stats carry no crit term, so either one gains it as a second job or crit becomes something points cannot buy. Nothing is built until this is ruled.
+
 ### 9.3 Sinks and respec
 
 Shop rerolls escalating within a visit; item upgrades; **skill respec at 1000 gold base, multiplying ×2.5 per use, never resetting**. Respec refunds all points at once — per-point respec would let players micro-optimise between every map.
@@ -974,6 +1002,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 22. **A ratio reported over a chosen subset is not a finding.** Six trees measured deep-versus-wide at the endgame anchor came out 3 depth-dominant and 3 breadth-dominant. A four-tree table drawn from the same run — omitting the two breadth-dominant Necromancer trees — read as "3 of 4 depth-dominant" and sent a design conclusion the wrong way: it argued that §4.2's self-balancing claim was half broken and that every class might need its own breadth cost. Neither was true. Report the whole population or state the selection rule in the same sentence as the number; a subset chosen while building a table is a selection rule nobody declared.
 23. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing primitives and the owner's identity by reference; do not give it verbs of its own. A minion's attack is a compose step through the same `PRIMITIVES` table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the owner's fields, so attribution never has to be forwarded because it never diverged. This is why summoning — the largest bespoke category in the source project, where every summon carried its own spawn, attack and death code — cost **one primitive and one trigger** here, with zero per-archetype handlers across twenty new skills. The same shape is waiting for the Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks. See §8.5.
 
+24. **An exclusion asserted on a table is not an exclusion until something measures the effect.** §4.1 has said "XP is never scaled by difficulty" since phase 2b and asserted it at load — by checking that no difficulty row *declares* an XP multiplier. That assertion was true and irrelevant for four phases, because gold and XP rode the same number: a difficulty's gold multiplier paid XP with it through a shared quantity the assertion never looked at. The exclusion was not written down wrongly; it was written down in a place that could not see the leak. The general form is worse than a dead constant, because a dead constant merely does nothing while a declared exclusion actively tells the reader a risk has been handled. **Any rule of the form "X never affects Y" needs a probe that moves X and reads Y**, and the probe belongs in the same patch as the rule. Three separate defects have now been found this way — Ferocity, §2.4's Elite modifiers, and the difficulty ladder — each after a check on the declaration had passed for months.
+
+25. **A rider table that lists a rider is not a primitive that applies one.** `RIDER_TABLE` declared `cone: [...IMPACT_RIDERS]` and `line: [...IMPACT_RIDERS]` while neither primitive called `applyImpactRiders`, so Bone Nova's knockback 300, Wrecking Ball's knockback and stun, Stampede's knockback, and the Banshee's and Dread Howl's `weakenDamage` were authored, validated against the table, and silently dropped at the moment of impact — five skills across two classes. This is rule 24 in the content layer: the table said the capability existed, and nothing measured whether it arrived. It was found by an item gate measuring something else entirely (`knockbackBoost` had no live knockback to scale), which is the argument for gates that assert by effect even when the effect is somebody else's.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1053,7 +1085,7 @@ The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `t
 
 ### Group D — genuine open defects (1)
 
-#### D-25 — OPEN: sixteen item hooks are sold and do nothing
+#### D-25 — NARROWED: nine of sixteen reconnected; seven are blocked on a crit ruling
 
 `tools/item_gate.mjs` was written before the phase-4 item pool, on the principle that an item granting a modifier nothing reads is Ferocity with a price tag. Its first run says **28 of 44 hook kinds in the catalog are connected to anything**, and the other 16 are sold across 22 items:
 
@@ -1063,7 +1095,20 @@ The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `t
 
 **The fix is the phase-4 modifier plumbing, not a repair.** §9.2's four tiers need exactly these mechanisms on the skill path — `extraPierce` is the pierce §5.9 names as the answer to escorted targets, `extraProjectiles` is the magnitude tier's projectile count, and `burnOnHit`/`chillOnHit`/`chainOnHit` are the rider tier's "adds an effect the skill did not have". Reconnecting them is building the tier, and the gate is what says when it is done.
 
-**Two of the eighteen the gate first reported were the gate's own fault**, and both are worth recording. `killExplode` and `onHurtRetaliate` are read in live code and came back DEAD because `_areaDamageEnemies` queries the spatial grid, the grid is rebuilt every tick, and a probe that spawned a target and fired a blast in the same instant blasted an empty index. One frame of settling was the difference between measuring the game and measuring the fixture.
+**NINE ARE RECONNECTED. `item_gate` reports 37 of 44 live**, up from 28. Every read site is recorded in §9.2's table above; the shape is that `skillDamage()` is the modifier path for the same reason it is Ferocity's.
+
+**Seven remain, and they are one question, not seven.** `critAfterKill`, `critEveryN`, `critVsChilled`, `critVsBurning`, `critVsFullHp` and `firstHitCrit` grant crit; `critHeal` consumes it. **Crit does not exist in the skill era** — it is decided only in `_fireWeapon`, and this document has never named it. They are held back deliberately: wiring a mechanic the design has not defined would be choosing it by implementation. See §9.2's crit entry for what is settled and what is not.
+
+*Worth stating because the arithmetic misleads:* sixteen minus six crit-granting hooks is ten, but `critHeal` fires only on a crit, so the reconnectable set was nine and the residual is seven. A hook can be blocked by a mechanic without being named after it.
+
+**Five of the twenty-one verdicts the gate has issued were the gate's own fault**, and every one was §13 rule 20 — the fixture must arrive in the state a player would arrive in.
+
+- `killExplode` and `onHurtRetaliate` are read in live code and came back DEAD because `_areaDamageEnemies` queries the spatial grid, the grid is rebuilt every tick, and a probe that spawned a target and fired a blast in the same instant blasted an empty index. One frame of settling fixed both.
+- `extraPierce` and `extraProjectiles` were staged on a Samurai. **Only the Necromancer has `bolt` skills**, so the probes measured projectile items in a class with no projectile.
+- `extraProjectiles` then still read DEAD against a single pinned dummy: a fan across a target list has nowhere to fan when there is one target. The claim is "hits more things" and the observable had to contain more things.
+- `knockbackBoost` took three passes. Slotting a knockback skill was necessary and not sufficient — `necro_bone_nova` is `PROXIMITY radius 140 count 4` and does not fire until **four** enemies are inside 140 units, so the probe had to stage the trigger's condition and not merely the loadout. The 58 units of drift it had been reading was collision separation from the player's own body.
+
+The third pass is what found rule 25: with the trigger finally satisfied, the knockback still did not scale, because `cone` and `line` declared impact riders in `RIDER_TABLE` and applied none.
 
 
 #### D-24 — CLOSED: §2.4 wins, and an Elite node is now fewer and fatter
@@ -1153,7 +1198,7 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Determinism | Built, negative control, byte-identical same-seed runs |
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **10 of 10 live** |
-| Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **28 of 44 hook kinds live** (D-25) |
+| Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **37 of 44 hook kinds live**; the 7 red are the crit set (D-25) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1166,7 +1211,9 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
-| Economy | **Not started** |
+| Modifier tiers | **Magnitude and rider wired** — 9 hooks reconnected to the skill path, read sites recorded in §9.2 |
+| Crit | **Does not exist.** Decided only in `_fireWeapon`; no step, rider or stat carries it. Home settled (`skillDamage`), source unruled |
+| Economy | **Not started** — items, rerolls, upgrades and respec all follow the crit ruling |
 
 ---
 

@@ -304,7 +304,15 @@ function fireSkill(sim, p, sk) {
   // by the skill that read it — the same shape as ON_KILL's counter being
   // cleared by the tick that saw it. Keyed by trigger kind in triggers.js.
   triggerConsume(sim, p, sk);
+  // §9.2 magnitude, timed: the post-dodge damage buff is armed in `hurtPlayer`
+  // and was CONSUMED in `_fireWeapon`, which stopped running with weapons — so
+  // dodging armed a bonus that nothing ever spent (D-25). It is consumed here,
+  // once per fire and for the whole fire, exactly as the weapon path spent it:
+  // "next attack" means the next skill, not the next enemy in an arc.
+  p._atkBuff = 1;
+  if (p.dmgBuffT > 0 && p.dmgBuffAmt > 0) { p._atkBuff = 1 + p.dmgBuffAmt / 100; p.dmgBuffT = 0; }
   const out = runCompose(sim, p, sk, rank, sim.trigGrid);
+  p._atkBuff = 1;
   // THE ToH TRAIT LAYER OBSERVES ATTACKS, and this is what an attack is now.
   // tohOnFire() was called from _tickWeapons() and nothing else — and
   // _tickWeapons has not run since weapons were removed. So Rhythm never built
@@ -356,11 +364,59 @@ export function ferocityMult(p) {
 export function skillDamage(sim, e, amount, p, skill) {
   let amt = amount * domainMult(skill.domain, e.domain) * ferocityMult(p);
   if (e.defDownT > 0) amt /= e.defDownMult;         // defense down = takes more
+  amt *= eliteBossMult(p, e);                       // §9.2 magnitude, item-granted
   const before = e.hp;
   sim.damageEnemy(e, amt, { owner: p });
   const dealt = before - e.hp;
   p.damageDealt += Math.max(0, dealt);
+  // §9.2 RIDER TIER — "adds an effect the skill did not have". This is the one
+  // path every composed impact takes, which is the same reason Ferocity works
+  // here and nowhere else: no primitive has to know a rider exists.
+  //
+  // ONLY IMPACTS, NEVER TICKS. Zones, burn and plague damage through
+  // `_areaDamageEnemies` and direct HP subtraction, not through this function —
+  // so a 15%-chance proc rolls on hits and not sixty times a second inside a
+  // hazard. That is a property of the call graph, and `item_gate` measures it
+  // rather than trusting it.
+  if (dealt > 0) applyOnHitRiders(sim, p, skill, e);
   return Math.max(0, dealt);
+}
+
+// §9.2 magnitude: bonus damage to elites and bosses. Read here rather than in
+// `_hitEnemy`, where it lived and where nothing has called it since weapons were
+// removed (D-25).
+export function eliteBossMult(p, e) {
+  if (!p || !p.hookAgg || !p.hookAgg.eliteBossDamage) return 1;
+  if (!(e.elite || e.boss)) return 1;
+  return 1 + p.hookAgg.eliteBossDamage / 100;
+}
+
+// The rider tier, applied where damage actually lands.
+//
+// A MINION'S HIT PROCS ITS OWNER'S RIDERS, and that is deliberate: §13 rule 23
+// makes `hookAgg` the owner's field by reference on the actor facade, so a
+// skeleton carrying its summoner's burn is the same statement as a skeleton's
+// kill being its summoner's kill. Attribution never has to be forwarded because
+// it never diverged.
+export function applyOnHitRiders(sim, p, skill, e) {
+  const agg = p && p.hookAgg;
+  if (!agg || !e.active) return;
+  for (const b of agg.burnOnHit) {
+    if (sim.rng.float() < b.chance) sim._applyBurn(e, sim._attuned(p, b.dps), b.duration, p);
+  }
+  for (const s of agg.chillOnHit) {
+    if (sim.rng.float() < s.chance) applySlow(sim, e, s.mult, s.duration, p);
+  }
+  for (const c of agg.chainOnHit) {
+    if (sim.rng.float() >= c.chance) continue;
+    const near = sim._nearestEnemyExcept(e.x, e.y, c.range, e);
+    if (!near) continue;
+    sim.fx.beams.push({ x1: e.x, y1: e.y, x2: near.x, y2: near.y, color: '#4fd8eb' });
+    // The chain damages DIRECTLY, not through skillDamage — a chain that
+    // re-entered the rider path would chain off its own chain, and three items
+    // stacked would recurse until the pool emptied.
+    sim.damageEnemy(near, Math.max(1, Math.round(sim._attuned(p, c.damage))), { owner: p });
+  }
 }
 
 export function skillSplash(sim, p, skill, x, y, radius, damage, exclude) {
@@ -388,7 +444,12 @@ export function spawnSkillProj(sim, p, skill, step, rank, angle, range) {
     vx: Math.cos(angle) * step.speed, vy: Math.sin(angle) * step.speed,
     dmg: stepDamage(step, skill, rank, p), crit: false, friendly: true, lob: false,   // engine scaling rides the projectile
     ttl: (range + 60) / step.speed, radius: step.radius || SKILL_PROJ_R, color: p.color, owner: p.idx,
-    pierce: r.pierce || 0, hitIds: new Set(),
+    // §9.2 magnitude: PIERCE IS AN ITEM, NOT A SKILL PROPERTY. No skill in the
+    // game declares a `pierce` rider, so this term is the whole of it — §5.9
+    // names pierce as the answer to escorted targets and puts it deliberately
+    // in the shop rather than in a tree, so buying it is a build decision with
+    // a cost. It was read only in `_fireWeapon` until D-25.
+    pierce: (r.pierce || 0) + ((p.hookAgg && p.hookAgg.extraPierce) || 0), hitIds: new Set(),
     weaponId: null, kind: 'skill', summonBurn: null, summonKnock: 0, fromSummon: false,
     skill: { id: skill.id, rank },
   });
