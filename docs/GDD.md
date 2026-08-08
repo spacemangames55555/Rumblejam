@@ -806,7 +806,9 @@ Grit already bridges to skills as `p.engines.armor`. Any stat may be exposed the
 
 Currently exposed: **Grit**. Nothing else, deliberately.
 
-#### Stat items and the random roll
+#### The penalty roll — constraints and measurement
+
+*§9.2 states the rule; this states what the roll may not do, and what it measures at.* Both sections were headed "Stat items and the random roll" until the merge that folded the last web upload found two identical headings in one document — the only structural defect it turned up, and pre-existing rather than merge-made.
 
 §9.2's stat items grant a flat bonus and roll their penalty **randomly against another stat**. There is no fixed opposition table, because a fixed one is memorised after a run and the shop stops being a gamble.
 
@@ -846,7 +848,9 @@ This is the stat-system counterpart to the offence gate, and its absence is the 
 
 #### Dead constants
 
-`SCALING_RATES` is weapon-era and unread by the combat path. Scheduled for removal.
+`SCALING_RATES` was weapon-era and unread by the combat path. **It is deleted, not deprecated** — `js/config.js` keeps a comment where it stood, naming what it did and why it went, because a dead constant that looks live is how the README drifted the first time.
+
+This line said "scheduled for removal" for two drafts after the removal had happened. It was caught by the merge that folded the last web upload, not by a check — the GDD has no gate, which is the argument for it having exactly one writer.
 
 ---
 
