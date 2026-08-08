@@ -15,6 +15,8 @@ import { BARD_CADENCE, TUNING as BARD_CAD_TUNING } from './content/skills/bard_c
 import { BARD_ENSEMBLE, TUNING as BARD_ENS_TUNING } from './content/skills/bard_ensemble.js';
 import { MAGE_CRYSTALBLADE, TUNING as MAGE_CRY_TUNING } from './content/skills/mage_crystalblade.js';
 import { MAGE_COLLAPSE, TUNING as MAGE_COL_TUNING } from './content/skills/mage_collapse.js';
+import { WD_EFFIGY, TUNING as WD_EFF_TUNING } from './content/skills/wd_effigy.js';
+import { WD_BLIGHT, TUNING as WD_BLI_TUNING } from './content/skills/wd_blight.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
@@ -36,6 +38,8 @@ export const TREES = {
   bard_ensemble: { id: 'bard_ensemble', name: 'Ensemble', classId: 'toh_bard', skills: BARD_ENSEMBLE, tuning: BARD_ENS_TUNING },
   mage_crystalblade: { id: 'mage_crystalblade', name: 'Crystalblade', classId: 'toh_mage', skills: MAGE_CRYSTALBLADE, tuning: MAGE_CRY_TUNING },
   mage_collapse: { id: 'mage_collapse', name: 'Collapse', classId: 'toh_mage', skills: MAGE_COLLAPSE, tuning: MAGE_COL_TUNING },
+  wd_effigy: { id: 'wd_effigy', name: 'Effigy', classId: 'toh_witch_doctor', skills: WD_EFFIGY, tuning: WD_EFF_TUNING },
+  wd_blight: { id: 'wd_blight', name: 'Blight', classId: 'toh_witch_doctor', skills: WD_BLIGHT, tuning: WD_BLI_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
@@ -74,6 +78,7 @@ export const PASSIVE_EFFECT = {
   marksDamageBonus: 'damage',     // Attend the Fallen: more per mark standing
   rhythmDamageBonus: 'damage',    // Perfect Time: more per stack held
   crystalDamageBonus: 'damage',   // Lattice: more per crystal carried
+  dollDamageBonus: 'damage',      // Sympathetic Binding: more per point banked in the doll
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the

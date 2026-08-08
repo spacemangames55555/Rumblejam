@@ -34,31 +34,31 @@ export const TUNING = {
   shardCount: 1, shardCd: 1300,
   // tier 2 — Facet Strike
   facetDamage: 5, facetReach: 108, facetArc: 1.8, facetRadius: 135,
-  facetCount: 1, facetCd: 2200, facetPer: 0.05,
+  facetCount: 1, facetCd: 2200, facetPer: 0.03,
   // tier 3 — Fracture Line
   fractureDamage: 6, fractureReach: 112, fractureArc: 2.0, fractureRadius: 140,
-  fractureCount: 2, fractureCd: 3400, fracturePer: 0.055,
+  fractureCount: 2, fractureCd: 3400, fracturePer: 0.033,
   fractureDefMult: 0.78, fractureDefDur: 2400,
   // tier 4 — Hardened Edge
-  hardenAmount: 18, hardenDuration: 4600, hardenCd: 7000, hardenPer: 0.06,
+  hardenAmount: 18, hardenDuration: 4600, hardenCd: 7000, hardenPer: 0.036,
   // tier 5 — Lattice (passive)
-  latticePer: 0.02,
+  latticePer: 0.012,
   // tier 6 — Refracted Guard
   guardDamage: 7, guardReach: 116, guardArc: 2.2, guardRadius: 145,
-  guardCount: 2, guardCd: 3800, guardPer: 0.06, guardKnock: 200,
+  guardCount: 2, guardCd: 3800, guardPer: 0.036, guardKnock: 200,
   // tier 7 — Pressure Front
   pressureDamage: 8, pressureReach: 120, pressureArc: 2.4, pressureRadius: 150,
-  pressureCount: 3, pressureCd: 4600, pressurePer: 0.065,
+  pressureCount: 3, pressureCd: 4600, pressurePer: 0.04,
   pressureSlowMult: 0.74, pressureSlowDur: 1400,
   // tier 8 — Cleavage Plane
   planeDamage: 8, planeReach: 124, planeArc: 2.6, planeRadius: 155,
-  planeCount: 3, planeCd: 5400, planePer: 0.07, planePulses: 2,
+  planeCount: 3, planeCd: 5400, planePer: 0.042, planePulses: 2,
   // tier 9 — Inclusion
   inclusionDamage: 9, inclusionReach: 118, inclusionArc: 2.0, inclusionRadius: 150,
-  inclusionCount: 2, inclusionCd: 5000, inclusionPer: 0.075, inclusionRoot: 1500,
+  inclusionCount: 2, inclusionCd: 5000, inclusionPer: 0.045, inclusionRoot: 1500,
   // tier 10 — The Whole Stone
   wholeDamage: 12, wholeReach: 132, wholeArc: 3.0, wholeRadius: 165,
-  wholeCount: 3, wholeCd: 9500, wholePer: 0.085, wholeStun: 650,
+  wholeCount: 3, wholeCd: 9500, wholePer: 0.05, wholeStun: 650,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -86,7 +86,7 @@ export const MAGE_CRYSTALBLADE = [
     // Priest's mark and the Bard's Quickstep. A class should not spend a third
     // of a run being a worse version of another one.
     id: 'mage_facet_strike', tree: 'mage_crystalblade', tier: 2, name: 'Facet Strike',
-    desc: 'A cut that sharpens with everything you have absorbed. 7 damage, +5% per crystal.',
+    desc: 'A cut that sharpens with everything you have absorbed. 7 damage, +3% per crystal.',
     type: 'active', domain: 'physical', prereq: 'mage_shardcut',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.facetRadius, count: T.facetCount },
@@ -99,7 +99,7 @@ export const MAGE_CRYSTALBLADE = [
   },
   {
     id: 'mage_fracture_line', tree: 'mage_crystalblade', tier: 3, name: 'Fracture Line',
-    desc: 'A cut that leaves a seam — what it touches takes 22% more for 2.4s. 8 damage, +5.5% per crystal.',
+    desc: 'A cut that leaves a seam — what it touches takes 22% more for 2.4s. 8 damage, +3.3% per crystal.',
     type: 'active', domain: 'mental', prereq: 'mage_facet_strike',
     select: 'highest_hp',
     trigger: { kind: 'PROXIMITY', radius: T.fractureRadius, count: T.fractureCount },
@@ -118,7 +118,7 @@ export const MAGE_CRYSTALBLADE = [
     // absorbs, which does not reduce what gets through in the first place, so it
     // never quietly turns off the class's own accumulation.
     id: 'mage_hardened_edge', tree: 'mage_crystalblade', tier: 4, name: 'Hardened Edge',
-    desc: 'Absorbs 22 over 4.6s, +6% per crystal, when you drop below 55% health.',
+    desc: 'Absorbs 22 over 4.6s, +3.6% per crystal, when you drop below 55% health.',
     type: 'active', domain: 'physical', prereq: 'mage_fracture_line',
     select: 'nearest',
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
@@ -131,7 +131,7 @@ export const MAGE_CRYSTALBLADE = [
   },
   {
     id: 'mage_lattice', tree: 'mage_crystalblade', tier: 5, name: 'Lattice',
-    desc: 'Every crystal you are carrying is worth 2% more to every skill that reads them.',
+    desc: 'Every crystal you are carrying is worth 1.2% more to every skill that reads them.',
     type: 'passive', domain: 'mental', prereq: 'mage_hardened_edge',
     trigger: null, cooldown: 0, compose: [],
     passive: { crystalDamageBonus: T.latticePer },
@@ -142,7 +142,7 @@ export const MAGE_CRYSTALBLADE = [
   },
   {
     id: 'mage_refracted_guard', tree: 'mage_crystalblade', tier: 6, name: 'Refracted Guard',
-    desc: 'A sweep that throws the front rank off you. 9 damage, +6% per crystal.',
+    desc: 'A sweep that throws the front rank off you. 9 damage, +3.6% per crystal.',
     type: 'active', domain: 'physical', prereq: 'mage_lattice',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.guardRadius, count: T.guardCount },
@@ -156,7 +156,7 @@ export const MAGE_CRYSTALBLADE = [
   },
   {
     id: 'mage_pressure_front', tree: 'mage_crystalblade', tier: 7, name: 'Pressure Front',
-    desc: 'A wide grinding arc that drags the crowd to 74% speed for 1.4s. 10 damage, +6.5% per crystal.',
+    desc: 'A wide grinding arc that drags the crowd to 74% speed for 1.4s. 10 damage, +4% per crystal.',
     type: 'active', domain: 'mental', prereq: 'mage_refracted_guard',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.pressureRadius, count: T.pressureCount },
@@ -170,7 +170,7 @@ export const MAGE_CRYSTALBLADE = [
   },
   {
     id: 'mage_cleavage_plane', tree: 'mage_crystalblade', tier: 8, name: 'Cleavage Plane',
-    desc: 'Two cuts along the same seam. 11 damage a pulse, +7% per crystal.',
+    desc: 'Two cuts along the same seam. 11 damage a pulse, +4.2% per crystal.',
     type: 'active', domain: 'physical', prereq: 'mage_pressure_front',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.planeRadius, count: T.planeCount },
@@ -184,7 +184,7 @@ export const MAGE_CRYSTALBLADE = [
   },
   {
     id: 'mage_inclusion', tree: 'mage_crystalblade', tier: 9, name: 'Inclusion',
-    desc: 'Drives a splinter in and pins what it cuts for 1.5s. 12 damage, +7.5% per crystal.',
+    desc: 'Drives a splinter in and pins what it cuts for 1.5s. 12 damage, +4.5% per crystal.',
     type: 'active', domain: 'spiritual', prereq: 'mage_cleavage_plane',
     select: 'highest_hp',
     trigger: { kind: 'PROXIMITY', radius: T.inclusionRadius, count: T.inclusionCount },
@@ -201,7 +201,7 @@ export const MAGE_CRYSTALBLADE = [
     // tree, and both of those are the same statement: this is what a whole
     // room's worth of absorbed damage is FOR.
     id: 'mage_whole_stone', tree: 'mage_crystalblade', tier: 10, name: 'The Whole Stone',
-    desc: 'Everything you have taken, returned at once. 16 damage, +8.5% per crystal, and what it touches is stunned for 0.65s.',
+    desc: 'Everything you have taken, returned at once. 16 damage, +5% per crystal, and what it touches is stunned for 0.65s.',
     type: 'active', domain: 'physical', prereq: 'mage_inclusion',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.wholeRadius, count: T.wholeCount },

@@ -186,6 +186,49 @@ const PROBES = {
     each: (g, p) => { p.invuln = 0; g.hurtPlayer(p, 8, null); p.hp = p.stats.vitality; },
     low: (g, p) => { p.crystal = 0; p.engines.crystal = 0; },
   },
+  doll: {
+    what: 'debt banked in the bound enemy',
+    char: 'toh_witch_doctor',
+    // NO `each` STAGING, AND THAT IS A MEASURED ANSWER RATHER THAN AN ASSUMPTION.
+    // `crystal` needed per-tick staging because the fixture's dummies deal no
+    // damage and never would. The doll is different: the mirror pays whenever
+    // the Witch Doctor damages ANYTHING that is not the doll, and this fixture's
+    // ring gives it exactly that — several bodies, one of them designated. So
+    // the engine fills from ordinary play here, the way footing and marks do.
+    //
+    // What it DOES need is the designating skill in the loadout, for the same
+    // reason `shift` and `marks` do: the gate slots only the measured skill, and
+    // the measured skill is one that READS the doll rather than one that names
+    // it. Derived from the rider rather than named (§13 rule 12).
+    //
+    // It does need a CROWD, though, and that is the staging the doll turned up:
+    // the mirror pays only on damage to something that is not the doll, so a
+    // one-dummy room is a room this engine cannot exist in. Four bodies is the
+    // smallest room where a doll and a source of debt are different enemies.
+    bodies: 4,
+    // AND IT NEEDS A LONGER WINDOW THAN ANY OTHER ENGINE, because it is the
+    // slowest to fill by a wide margin. Measured in a real fight, the doll banks
+    // 2.1 stacks at 10 s, 4.0 at 20 s, 6.0 at 30 s and reaches the cap around
+    // 50 s — a deliberate ramp for an engine whose whole payoff is the window
+    // before the doll dies. At the shared 6 s the gate saw 0.30 stacks and a
+    // 56/54 damage split: a PASS, but one bad tick away from a false negative.
+    // An instrument that barely distinguishes is not an instrument (§13 rule 37
+    // from the other end — saturated there, starved here).
+    seconds: 30,
+    low: (g, p) => { p.voodooDmg = 0; p.engines.doll = 0; },
+    // THE FILLER SET IS "ANYTHING THAT DEALS DAMAGE", not "the skill that names
+    // the doll". `shift` and `marks` are filled by one specific step, so their
+    // fillers are that step; the mirror takes 35% of EVERYTHING the Witch Doctor
+    // lands on anything that is not the doll, so the honest loadout is the one a
+    // Witch Doctor actually carries. With only the designator slotted the gate
+    // saw one stack and a 76/74 split — true, and thin enough to be one tick
+    // from a false negative.
+    fills: sk => (sk.compose || []).some(c => c.riders && c.riders.doll)
+      || (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
+    // Without a designated doll there is no engine at all, so the designator
+    // must survive the eight-slot truncation whatever else is in the tree.
+    fillsFirst: sk => (sk.compose || []).some(c => c.riders && c.riders.doll),
+  },
   pack: {
     what: 'animals standing',
     char: 'toh_druid',
@@ -256,22 +299,43 @@ function measure(key) {
   const claim = pickClaim(key, pr.char);
   // The measured skill FIRST, then whatever fills the engine — a loadout the
   // player who wanted this engine would actually be carrying (§13 rule 20).
-  const fillers = pr.fills
+  let fillers = pr.fills
     ? Object.values(TREES).filter(t => t.classId === pr.char)
         .flatMap(t => t.skills).filter(x => x.type === 'active' && pr.fills(x)).map(x => x.id)
     : [];
+  // THE LOADOUT IS EIGHT SLOTS AND THE LIST IS TRUNCATED TO FIT, so an engine
+  // with a broad filler set can push its ESSENTIAL filler out of the room. The
+  // doll is fed by any damage but only exists once something designates it, and
+  // if `wd_pin` fell past slot eight the gate would read a weaker engine and
+  // still pass. `fillsFirst` names the filler that must survive the truncation.
+  if (pr.fillsFirst) {
+    const key = id => (pr.fillsFirst(SKILL_BY_ID[id]) ? 0 : 1);
+    fillers = [...fillers].sort((a2, b2) => key(a2) - key(b2));
+  }
   const slot = claim ? [claim.skill, ...fillers].slice(0, 8) : null;
 
   // --- FILLED: does the resource rise above zero in a real room? ---
   const { g, p } = stage(pr.char, slot);
   if (pr.high) pr.high(g, p);
   let peak = 0;
-  const e0 = target(g, p.x + 60, p.y);
-  for (let i = 0; i < 60 * SECONDS; i++) {
+  // ONE BODY IS A ROOM SOME ENGINES CANNOT EXIST IN. The FILLED phase staged a
+  // single dummy, which is enough for footing, armor, shift, rhythm and crystal
+  // — and is precisely the wrong room for the doll, because the mirror only pays
+  // when the Witch Doctor damages something that is NOT the doll. With one enemy
+  // the doll is that enemy, `voodooMirror` skips it, and the engine reads zero
+  // while working perfectly. `bodies` names how big a crowd the engine needs.
+  const bodies = [];
+  for (let i = 0; i < (pr.bodies || 1); i++) {
+    const a2 = (i / (pr.bodies || 1)) * Math.PI * 2;
+    const e = target(g, p.x + Math.cos(a2) * 60, p.y + Math.sin(a2) * 60);
+    if (e) bodies.push(e);
+  }
+  const secs = pr.seconds || SECONDS;
+  for (let i = 0; i < 60 * secs; i++) {
     g.setInput(0, { mx: 0, my: 0 });
     if (pr.each) pr.each(g, p);
     g.tick();
-    if (e0) { e0.x = e0.spawnX; e0.y = e0.spawnY; }
+    for (const e of bodies) { e.x = e.spawnX; e.y = e.spawnY; }
     peak = Math.max(peak, p.engines[key] || 0);
   }
 
@@ -308,7 +372,7 @@ function measure(key) {
     if (!es.length) return NaN;
     const before = es.reduce((a, e) => a + e.hp, 0);
     let shieldPeak = 0;
-    for (let i = 0; i < 60 * SECONDS; i++) {
+    for (let i = 0; i < 60 * (pr.seconds || SECONDS); i++) {
       g2.setInput(0, { mx: 0, my: 0 });
       // `each` runs on BOTH runs, unlike `high`. It is not the thing that makes
       // the engine big — `low` still starves that — it is the thing that makes
