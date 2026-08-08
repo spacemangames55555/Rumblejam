@@ -994,7 +994,9 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current red is a defect.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem. **Group D is empty — D-23 and D-24 are both closed.** Both were found by measurement rather than by a red check, which is the argument for keeping the measuring tools around between patches. The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `validate_items` — are all green.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem. The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `stat_gate`, `difficulty_gate`, `validate_items` — are all green.
+
+**Group D has one entry: D-25, opened by `item_gate` on its first run.** D-23 and D-24 are closed. All three were found by measurement rather than by a red check, which is the argument for keeping the measuring tools around between patches — and for writing the next gate before the content it guards.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1045,7 +1047,20 @@ Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, co
 
 The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same defect, different class in the string — worth knowing before a set diff reads one as fixed and the other as new.
 
-### Group D — genuine open defects (0)
+### Group D — genuine open defects (1)
+
+#### D-25 — OPEN: sixteen item hooks are sold and do nothing
+
+`tools/item_gate.mjs` was written before the phase-4 item pool, on the principle that an item granting a modifier nothing reads is Ferocity with a price tag. Its first run says **28 of 44 hook kinds in the catalog are connected to anything**, and the other 16 are sold across 22 items:
+
+`burnOnHit` · `chillOnHit` · `chainOnHit` · `critHeal` · `critAfterKill` · `critEveryN` · `critVsChilled` · `critVsBurning` · `critVsFullHp` · `firstHitCrit` · `eliteBossDamage` · `extraPierce` · `extraProjectiles` · `knockbackBoost` · `nextAttackAfterDodge` · `summonBoost`
+
+**One cause, not sixteen.** Every one of them is read in exactly one place, and that place is `_fireWeapon`, `_hitEnemy` or `_summonStats` — the weapon era. Skills reach damage through `compose → skillDamage → damageEnemy` and never touch any of them. This is D-23's defect with a price attached: the damage path moved from weapons to skills, and the hooks that hung off the old path stayed where they were. Crit is the sharpest case, because crit is only *decided* in `_fireWeapon`: six item hooks grant it and no skill in the game can crit.
+
+**The fix is the phase-4 modifier plumbing, not a repair.** §9.2's four tiers need exactly these mechanisms on the skill path — `extraPierce` is the pierce §5.9 names as the answer to escorted targets, `extraProjectiles` is the magnitude tier's projectile count, and `burnOnHit`/`chillOnHit`/`chainOnHit` are the rider tier's "adds an effect the skill did not have". Reconnecting them is building the tier, and the gate is what says when it is done.
+
+**Two of the eighteen the gate first reported were the gate's own fault**, and both are worth recording. `killExplode` and `onHurtRetaliate` are read in live code and came back DEAD because `_areaDamageEnemies` queries the spatial grid, the grid is rebuilt every tick, and a probe that spawned a target and fired a blast in the same instant blasted an empty index. One frame of settling was the difference between measuring the game and measuring the fixture.
+
 
 #### D-24 — CLOSED: §2.4 wins, and an Elite node is now fewer and fatter
 
@@ -1134,6 +1149,8 @@ Two of the live ones are only *partly* live and should be settled in §9.5 as we
 | Determinism | Built, negative control, byte-identical same-seed runs |
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **10 of 10 live** |
+| Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **28 of 44 hook kinds live** (D-25) |
+| Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
 | Node types | Horde, Elite and Objective all live and measured; difficulty wired (D-24) |
