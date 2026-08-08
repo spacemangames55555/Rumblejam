@@ -457,6 +457,44 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
     e.markRadius = r.mark.radius;
     out.statuses++;
   }
+  // THE VOODOO DOLL. §8.3's Witch Doctor engine, and the smallest write path in
+  // the game — because the MIRROR ALREADY EXISTS. `voodooMirror` has always sent
+  // 35% of everything the Witch Doctor deals onto `p.voodooId`, through walls and
+  // across the map. What did not exist was the DESIGNATION: `tickVoodoo` binds
+  // the NEAREST enemy and rebinds on death or drift, so the doll was whatever
+  // trash happened to be closest, and the class's whole fantasy — pour damage
+  // into a doll and have it come out of something that matters — was unreachable.
+  //
+  // This rider is that choice. It writes `p.voodooId` on the caster rather than
+  // state on the enemy, which is unusual for an impact rider and is exactly
+  // right: the doll IS an enemy identity, so the moment of impact is when the
+  // game knows which one. §5.7 condition 2 — a rider will do, because there is
+  // an impact to resolve on — so this is a rider and not a thirteenth primitive.
+  //
+  // Rebinding CLEARS THE BANKED DEBT, the same way `tickVoodoo` does on an
+  // auto-rebind. Carrying `voodooDmg` across a designation would let a Witch
+  // Doctor load a trash mob, re-designate onto a boss, and arrive with a full
+  // engine it never paid for.
+  // DESIGNATION IS STICKY, and that is the load-bearing half of the rule.
+  // `p.voodooDmg` is per-doll and `tickVoodoo` zeroes it on every auto-rebind,
+  // so a rider that re-designated on every hit would reset the bank on every
+  // cast — a cone touching four bodies would end each swing with a fresh doll
+  // and an empty engine, and the class would never accumulate anything. So the
+  // rider binds only when the slot is OPEN: no doll, or a doll that has died.
+  //
+  // The choice is still the player's, and it is expressed through the skill's
+  // own SELECTOR — a designating skill that picks `highest_hp` pins the elite
+  // the moment the last doll dies, which is the whole class fantasy. What it
+  // cannot do is thrash.
+  if (r.doll) {
+    const live = p.voodooId !== null ? sim.enemyById(p.voodooId) : null;
+    if (!live || !live.active) {
+      p.voodooId = e.id;
+      p.voodooDmg = 0;
+      sim.pushEvent({ k: 'toast', idx: p.idx, text: 'The doll has a name' });
+      out.states++;
+    }
+  }
 }
 
 // Projectile-only riders — the ones that need a flight or an impact point.
@@ -499,7 +537,7 @@ export const PRIMITIVE_KINDS = Object.keys(PRIMITIVES);
 // exactly eight enemy fields before it and none of them was a mark, so a
 // skill-placed mark had nowhere to live and no detonation site — every death
 // hook in `_killEnemy` read `killer.hookAgg`, the ITEM aggregate.
-export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mark'];
+export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mark', 'doll'];
 // Riders that shape the swing itself rather than the target.
 export const SHAPE_RIDERS = ['windUp', 'multiPulse'];
 // Riders that need a projectile: a flight to pierce, an impact point to splash.

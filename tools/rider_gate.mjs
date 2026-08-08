@@ -24,7 +24,7 @@
 
 import { Sim } from '../js/game.js';
 import { SELECTABLE } from '../js/content/characters.js';
-import { TREES, SKILL_BY_ID } from '../js/skills.js';
+import { TREES, SKILL_BY_ID, TREES_BY_CLASS } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
 import { ENEMIES } from '../js/content/enemies.js';
 import { IMPACT_RIDERS, SHAPE_RIDERS, BOLT_RIDERS } from '../js/compose.js';
@@ -43,12 +43,26 @@ const SECONDS = 6;
 // a rider landing is only attributable if nothing else in the loadout could
 // have landed it — §13 rule 20's other half: the fixture must also not contain
 // what it is not measuring.
-function stage(skillId, twoPlayer = false) {
+// SOME WRITE PATHS BELONG TO A TRAIT, NOT TO A SKILL, and then the class in the
+// chair decides the result. `doll` writes `p.voodooId`, which only `voodoo_link`
+// reads — so a synthetic doll hosted on a Wizard skill designates an enemy that
+// nothing will ever mirror into, and the gate reported DROPPED about a rider
+// that works. That is §13 rule 26 again: the probe staged the wrong
+// precondition, and it failed in the direction that looks like a finding.
+//
+// `charOverride` puts the right class in the chair. The class it names has no
+// trees of its own yet — which is the entire reason the write path is being
+// gated BEFORE its trees are authored (§5.7 condition 3) — so the host's tree is
+// lent to it for the fixture and taken back afterwards.
+function stage(skillId, twoPlayer = false, charOverride = null) {
   const sk = SKILL_BY_ID[skillId];
   const tree = Object.values(TREES).find(t => t.skills.some(s => s.id === skillId));
-  const party = [{ idx: 0, key: 'k', name: 'P', charId: tree.classId, color: '#fff' }];
-  if (twoPlayer) party.push({ idx: 1, key: 'k2', name: 'Q', charId: tree.classId, color: '#0ff' });
-  const g = new Sim({ seed: SEED, party });
+  const charId = charOverride || tree.classId;
+  const lent = charOverride && !(TREES_BY_CLASS[charOverride] || []).includes(tree.id);
+  if (lent) TREES_BY_CLASS[charOverride] = [...(TREES_BY_CLASS[charOverride] || []), tree.id];
+  const party = [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }];
+  if (twoPlayer) party.push({ idx: 1, key: 'k2', name: 'Q', charId, color: '#0ff' });
+  const g = new Sim({ seed: SEED, party, allowUnplayable: true });
   const p = g.players[0];
   p.level = 40;
   // Learn the prerequisite chain, then rank the subject up.
@@ -63,8 +77,13 @@ function stage(skillId, twoPlayer = false) {
   p.loadout = new Array(8).fill(null);
   p.loadout[0] = skillId;
   p.hp = p.stats.vitality;
+  if (lent) TREES_BY_CLASS[charOverride] = TREES_BY_CLASS[charOverride].filter(x => x !== tree.id);
   return { g, p, sk };
 }
+
+// Riders whose write path is owned by a TRAIT rather than by the skill. The
+// synthetic probe has to put that trait in the chair or it measures nothing.
+const SYNTH_HOST_CLASS = { doll: 'toh_witch_doctor' };
 
 function target(g, x, y) {
   const e = g.spawnEnemyById(DUMMY_ID, x, y);
@@ -172,6 +191,15 @@ const OBSERVERS = {
   mark:          { what: 'an ally is healed when the marked enemy dies', markHeal: true },
   healPerHit:    { what: 'the player heals on hit',        player: (g, p) => p.hp, hurtSelf: true },
   pierce:        { what: 'total damage across three targets in a line', pierceLine: true },
+  // THE DOLL IS TWO CLAIMS, and this gate can only honestly measure one of them.
+  // "An enemy is designated" is a flag; "the mirror then pays into the one the
+  // player chose rather than the one that happened to be nearest" is the
+  // mechanic — and that needs a room with a near enemy and a far one, which this
+  // gate's ring fixture is not. The distinguishing assertion therefore lives in
+  // `engine_gate`'s write-path section beside the `shift` triangle, where the
+  // staging can be built for it. What is measured HERE is that the rider fires
+  // and the engine it feeds comes off zero.
+  doll:          { what: 'the doll bank fills for the designated enemy', player: (g, p) => p.engines.doll },
   // multiPulse and windUp are SHAPE riders read inside the primitive rather than
   // applied to an enemy: multiPulse repeats the hit loop, windUp defers the step
   // by a timer. Both are measured as damage against the same skill with the
@@ -182,8 +210,8 @@ const OBSERVERS = {
 
 // Fire the staged skill for `SECONDS`, tracking the peak of whatever the
 // observer watches.
-function run(skillId, obs, strip = null, add = null) {
-  const { g, p, sk } = stage(skillId, !!obs.markHeal);
+function run(skillId, obs, strip = null, add = null, charOverride = null) {
+  const { g, p, sk } = stage(skillId, !!obs.markHeal, charOverride);
   if (add) {
     const clone = { ...sk, compose: sk.compose.map(c => ({ ...c, riders: { ...(c.riders || {}) } })) };
     for (const c of clone.compose) if (['strike', 'cone', 'line', 'bolt'].includes(c.kind)) c.riders[add.rider] = add.payload;
@@ -298,6 +326,9 @@ const SYNTH_PAYLOAD = {
   // how the cone/line gap survived three patches.
   pierce: 6,
   healPerHit: 25,
+  // The Witch Doctor's designation. A truthy payload is all it needs — the
+  // rider names an enemy, it does not carry a magnitude.
+  doll: true,
 };
 const UNCLAIMED = ALL_RIDERS.filter(r => !DECLARED.has(r));
 
@@ -331,7 +362,7 @@ for (const c of CASES) {
         || Object.values(TREES).flatMap(t => t.skills).find(x => (x.compose || []).some(y => y.kind === wantKind));
       if (!host) throw new Error(`no ${wantKind} skill to host a synthetic ${c.rider} on`);
       c.skill = host.id;
-      got = run(host.id, obs, null, { rider: c.rider, payload: SYNTH_PAYLOAD[c.rider] });
+      got = run(host.id, obs, null, { rider: c.rider, payload: SYNTH_PAYLOAD[c.rider] }, SYNTH_HOST_CLASS[c.rider] || null);
       without = run(host.id, obs, null, null);
     } else {
       got = run(c.skill, obs);

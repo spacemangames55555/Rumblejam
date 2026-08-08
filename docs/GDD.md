@@ -359,7 +359,7 @@ Any active is data: an ordered list of steps from twelve primitives plus riders.
 
 **Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `heal` · `shield` · `ward` · `drain` · `summon` · `plague` · `shift`
 
-**Impact riders** (land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mark`
+**Impact riders** (land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mark` · `doll`
 **Shape riders** (shape a swing): `arc` · `windUp` · `multiPulse`
 **Projectile riders:** `pierce` · `splash` · `impactDot` · `defenseDown`
 
@@ -632,6 +632,8 @@ Crystal ramps within a room and resets at the door, the same shape as the Wizard
 
 **The player has already paid.** Every point of crystal was bought in health, in the only currency that matters, at the moment it accrued. Charging again at the point of use taxes one decision twice — and the room reset already gives the ramp an end, so nothing runs away. The Mage becomes content-shaped and needs no new machinery: one line in `tohOnHurt`, one field, one room reset, one publish line.
 
+**And it is NOT Footing wearing a different hat**, which is worth stating because Footing is its nearest neighbour and the two would collapse into each other if the distinction were left implicit. **Footing is stationary TIME and rewards holding ground; crystal is damage ABSORBED and rewards being hit.** A Samurai who holds a corner nothing reaches still banks a full stance; a Mage who kites perfectly gets nothing at all. The melee-only ruling below sharpens it further — Footing pays out wherever the Samurai is standing, crystal pays out only in reach of the thing that filled it.
+
 **AND THE BUILT-IN COST §8.3 REQUIRES IS GRIT.** Crystal is written off `mitigated` — what actually got through — so **armour is anti-synergistic with the engine**. Mitigation means less damage taken means less crystal. The Mage is **the only class in the game punished for playing safely**, and that is the tension the engine exists to create rather than a bug to tune out later. Every other class's engine is paid for in the player's own initiative — time stood still, casts made, animals kept alive, marks placed; this one is paid for in health, by someone else's decision, and the obvious defensive answer makes it worse.
 
 **Asserted, not described.** §13 rule 24 says a claim of the form "X reduces Y" is not real until something moves X and reads Y, so `engine_gate` does: two identical Mages eat twelve identical blows through `hurtPlayer`, one of them wearing armour. **5.8 crystal bare, 1.4 at 40 Grit — a 75% cut.** The gate also asserts that crystal does not survive a door, for the same reason a shift must not.
@@ -650,6 +652,37 @@ Crystal ramps within a room and resets at the door, the same shape as the Wizard
 Every other engine fills itself in `measureDps`: footing accrues because the harness pins the player still, rhythm and shift accrue because it casts, marks accrue because it marks. **`crystal` is the exception, and it is the exception by design** — the fixture's dummies deal no damage on purpose, because the gate measures output rather than survival. So the Mage would have been scored forever at an empty pool: **30.3 against 37.5 with the pool full, and only the second number is the class anyone plays.**
 
 The first tuning pass proved the cost of that. At the numbers the tree was authored with, the Mage read **34.9 at an empty pool (+18%, in band) and 45.2 with the pool full (+53%, OUT)** — a class that passes its own gate and is out of band in every fight it has ever been in. The harness now stages any engine it cannot fill, **named rather than inferred**, because the alternative is a silent zero and that is the whole failure mode `engine_gate` exists to prevent.
+
+#### The rest of the sort, as it now stands
+
+**WRITE-PATH — a new primitive or rider first, alone, gated before any tree.**
+
+| Class | Engine | What is missing |
+|---|---|---|
+| ~~**Witch Doctor**~~ | voodoo doll | **BUILT, GATED AND AUTHORED.** The `doll` rider — see below. It was the cheapest write path yet, because the mirror was already live and only the DESIGNATION was missing |
+| **Sundian** | drench stacks | Ruled: drench is not one of `ON_STATUS`'s four (above). Needs a rider and an enemy field of its own |
+| **Assassin** | killbox | a trap placed inert and detonated by a later skill is neither a `hazard` (which ticks damage) nor a `summon` (which acts). New primitive, plus lifetime state |
+| **Hunter** | two bodies | "skills may trigger off the pet's position" is a change to `triggers.js`, not to `p.engines` — the evaluation origin is the player throughout |
+
+**TICK-SHAPED — a stateful accumulator or decay, alone.**
+
+| Class | Engine | Why |
+|---|---|---|
+| **Monk** | Chi loop | accrues from damage dealt, drains on spend — neither is a derivation of an existing field |
+| **Savage** | cascade | banked ranks decay out of combat, and §8.3's asymptotic cooldown floor is bespoke arithmetic |
+| **Blacksmith** | Crystal Forms | timed transformations; `crystal_infusion` is live but the forms decay, and a decay is a tick |
+
+#### The Witch Doctor: the mirror was live, the CHOICE was not
+
+`voodooMirror` has sent 35% of everything the Witch Doctor deals onto `p.voodooId` — through walls, across the map — since the trait era. What did not exist was any way to say **which** enemy. `tickVoodoo` binds the NEAREST and rebinds on death or drift, so the doll was whatever trash happened to be closest, and the class's whole fantasy — pour damage into a doll and have it come out of something that matters — was unreachable.
+
+**So the write path is a rider, not a primitive, and §5.7 condition 2 is what decides that**: a designation resolves on a target at the moment of impact, so there is an impact to hang it on. The rider writes `p.voodooId` on the caster rather than state on the enemy, which is unusual and is exactly right — the doll *is* an enemy identity, and impact is when the game knows which one.
+
+**Designation is STICKY, and that half is load-bearing.** `p.voodooDmg` is per-doll and `tickVoodoo` zeroes it on every rebind, so a rider that re-designated on every hit would reset the bank on every swing — a cone touching four bodies would end each cast with a fresh doll and an empty engine. The rider binds only when the slot is open: no doll, or a doll that has died. The player's choice is still expressed, through the skill's own **selector** — `wd_pin` takes `highest_hp`, so it pins the elite the moment the last doll dies.
+
+**The engine is the debt, and it dies with the doll.** `p.engines.doll` is what the bound enemy has absorbed, capped, zeroed on rebind. Every point in it arrived as damage *to the doll*, so the Witch Doctor is always killing the thing it is loading. **Marks pay out on death; the doll pays out by staying alive** — the opposite half of the same idea, which is what keeps the Priest's engine and this one from being the same engine. Measured ramp in a real fight: 2.1 stacks at 10 s, 4.0 at 20 s, 6.0 at 30 s, cap around 50 s.
+
+**Cost of the write path:** one entry in `IMPACT_RIDERS`, one branch in `applyImpactRiders`, two numbers on the trait, one publish line, one `engineScaleBonus` reader, one `PASSIVE_EFFECT` entry. No primitive, no new field on the enemy, no tick.
 
 #### The test for content-shaped, stated so the sort stops producing false positives
 
@@ -1252,6 +1285,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 37. **A saturated instrument reads identical for a working mechanism and a broken one.** The probe asserting Grit's anti-synergy with crystallize first ran for six seconds and reported **10.0 crystal bare and 10.0 at 40 Grit** — no difference, because both had pinned `crystalCap` long before the window closed. The engine was working perfectly; the measurement had run off the end of its own scale. Sized to twelve blows, comfortably under the cap, the same probe reads **5.8 against 1.4, a 75% cut**. Any probe measuring a RATIO has to stay inside the region where the quantity can still move, and a capped resource makes that region finite — so check the cap before choosing the window, not after reading a null result.
 
+38. **Retiring a subsystem orphans every hook it was the sole caller of, and the hooks do not announce it.** `tohOnFire` was found and reconnected when weapons were removed; its two siblings — `tohHitDamage` and `tohOnHit` — were not, and stayed dead for the whole skill era, taking four traits with them across three classes including one shipped as BUILT (§15, D-28). Each was a live function, exported, imported, and referenced in `game.js`; a grep for any of their names finds them and finds them "used". **What makes a hook orphaned is not the absence of a reference but the absence of a CALLER THAT STILL RUNS**, and that is invisible to every check the project had. Two habits follow. When a subsystem is removed, enumerate the functions it was the sole caller of and re-home each one deliberately — the same discipline rule 30 asks for capabilities. And prefer gates that assert a trait's EFFECT over gates that assert its existence, because the only reason this was ever found is that a write path was gated before the content that would have quietly absorbed the loss.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1280,7 +1315,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
-**Group D is empty.** D-23, D-24, D-25, D-26 and D-27 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
+**Group D is empty.** D-23, D-24, D-25, D-26, D-27 and D-28 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1346,6 +1381,27 @@ That is the guard working exactly as §5.9 describes it, not failing. **Escorts 
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-28 — CLOSED: two trait hooks orphaned by the weapon removal, taking four traits with them
+
+**Found by gating a write path before authoring its trees**, which is the sequence §5.7 condition 3 exists to force. The `doll` rider designated its target correctly and the engine read zero, and the reason was not the rider.
+
+`tohHitDamage` and `tohOnHit` were called from `_fireWeapon` and nothing else — and `_fireWeapon` has not run since weapons were removed. **Exactly the orphaning that hit `tohOnFire`, on the two sibling hooks, and nobody went back for them.** What went dead with them:
+
+| trait | class | what stopped |
+|---|---|---|
+| `voodoo_link` | Witch Doctor | **the mirror never fired** — the entire class engine |
+| `three_stances` | **Samurai** | Precision's crit and bleed, Flow's stacks, Iron's bank payout — three of three stances, on a class shipped as BUILT |
+| `blood_dance` | Savage | Heat and leech |
+| `karma` | Monk | the spirit echo, and the karma release |
+
+plus the singularity **vulnerability**, which is a property of the enemy rather than of a trait and so applies to every source including allies — the Mage's burst debuff was doing nothing to anyone's skills.
+
+Reconnected in `skillDamage` in the weapon path's exact order: `tohHitDamage` adjusts the number before mitigation, `tohOnHit` observes after the hit resolved and **before** any dead-enemy bail, because a killing blow is still a hit. The mirror's own follow-up goes through `damageEnemy` rather than `skillDamage`, so the bounce cannot re-enter.
+
+**It cost the Mage a retune, which is the honest sign the fix did something.** With the vulnerability live, the Mage went from +27% to **+42% — out of band** at a full crystal pool; its crystal ramp was trimmed ~40% to pay for a trait that had been silently switched off. No other built class moved: the Samurai's stances need a stance swap and an enemy that dies, neither of which the DPS fixture does.
+
+**The general form is §13 rule 38.** When a subsystem is retired, its hooks do not announce that they have stopped being called.
 
 #### D-27 — CLOSED: a melee class could not damage a barricade, and the gate said the level was fine
 
@@ -1519,8 +1575,8 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
-| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **47 of 47 land across 6 classes** (D-26 closed) |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **7 of 7** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
+| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **70 of 70 land across 8 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **8 of 8** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1529,7 +1585,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard, Priest, Bard and Mage built (14 trees, 140 skills, 7 selectable); 7 of 14 classes have no trees. All four content-shaped classes are done; the remaining seven are write-path or tick-shaped, one at a time |
+| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage and Witch Doctor built (16 trees, 160 skills, 8 selectable); 6 of 14 classes have no trees. All four content-shaped classes are done, plus the first write-path one; the remaining six are write-path or tick-shaped, one at a time |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1548,6 +1604,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
 
-**Seven class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm` and the Mage's `crystal` are implemented and gated at **7 of 7**. The remaining seven — cascade, drench, voodoo doll, Chi, Crystal Forms, killbox, two bodies — are specified in §8.3 and unbuilt.
+**Six class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal` and the Witch Doctor's `doll` are implemented and gated at **8 of 8**. The remaining six — cascade, drench, Chi, Crystal Forms, killbox, two bodies — are specified in §8.3 and unbuilt.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.

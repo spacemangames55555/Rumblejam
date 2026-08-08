@@ -74,6 +74,12 @@ export const CHARACTERS_TOH = [
     trait: {
       key: 'voodoo_link', mirrorPct: 0.35, bindRange: 900, stitchTargets: 2,
       stitchRadius: 150, stitchDur: 3, deathHealPct: 0.05,
+      // THE DOLL ENGINE (§8.3): the debt banked in the doll, expressed as capped
+      // stacks so a `scaleWith` step reads a legible number instead of raw
+      // damage. `dollPer` is stacks per point mirrored in; the cap matches every
+      // other engine's. `p.voodooDmg` already accumulated this — it was only ever
+      // read by the death heal.
+      dollPer: 0.05, dollCap: 10,
     },
     desc: 'Voodoo Link: the nearest enemy is bound to your doll and rebound whenever it dies or drifts away. 35% of all damage you deal to anything is mirrored onto the bound enemy through walls and across the map. When it dies the link stitches to 2 more enemies within 150 for 3s, and you heal for 5% of everything that enemy took while bound.' },
 

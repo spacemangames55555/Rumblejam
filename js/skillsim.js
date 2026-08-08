@@ -14,6 +14,7 @@ import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank
 import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
 import { CONFIG } from './config.js';
+import { tohHitDamage, tohOnHit } from './traits-toh.js';
 import { TUNING as SAM } from './content/skills/samurai_armor.js';
 
 const S = TRIGGER_TICK_MS / 1000;
@@ -33,8 +34,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
@@ -259,12 +260,25 @@ export function tickSkills(sim, dt) {
     // engine in the game the enemy fills — every other one is paid for in the
     // player's own initiative.
     p.engines.crystal = p.crystal || 0;
+    // THE WITCH DOCTOR'S DOLL ENGINE (§8.3): the debt banked in the bound enemy,
+    // as capped stacks. `p.voodooDmg` is written by `voodooMirror`, which has
+    // been live since the trait era; the only thing this patch added was the
+    // DESIGNATION that decides which enemy it goes into.
+    //
+    // AND THIS IS THE ONE ENGINE YOU CAN DESTROY BY WINNING. Every point in it
+    // arrived as damage to the doll, so the class is always killing the thing it
+    // is loading — and `tickVoodoo` zeroes the bank on rebind. Marks pay out on
+    // death; the doll pays out by STAYING ALIVE.
+    const dt_ = p.char.trait;
+    p.engines.doll = dt_.key === 'voodoo_link' && p.voodooId !== null
+      ? Math.min(dt_.dollCap, (p.voodooDmg || 0) * dt_.dollPer) : 0;
     p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
     p.engineScaleBonus.pack = passiveSum(p, 'packDamageBonus');
     p.engineScaleBonus.shift = passiveSum(p, 'shiftDamageBonus');
     p.engineScaleBonus.marks = passiveSum(p, 'marksDamageBonus');
     p.engineScaleBonus.rhythm = passiveSum(p, 'rhythmDamageBonus');
     p.engineScaleBonus.crystal = passiveSum(p, 'crystalDamageBonus');
+    p.engineScaleBonus.doll = passiveSum(p, 'dollDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
     // holding slots no skill still pays for.
@@ -458,10 +472,35 @@ export function skillDamage(sim, e, amount, p, skill) {
   // twice the hit the player would otherwise have landed.
   const crit = rollCrit(sim, p, e);
   if (crit) amt *= critMultOf(p);
+  // THE TRAIT LAYER OBSERVES HITS, AND THIS IS WHAT A HIT IS NOW.
+  //
+  // `tohHitDamage` and `tohOnHit` were called from `_fireWeapon` and nothing
+  // else — and `_fireWeapon` has not run since weapons were removed. Same
+  // orphaning as `tohOnFire`, on the two sibling hooks, and it took FOUR traits
+  // down with it across three classes:
+  //
+  //   voodoo_link   the mirror never fired — the Witch Doctor's entire engine
+  //   three_stances Precision's bleed and crit, Flow's stacks, Iron's bank
+  //                 payout: three of the Samurai's three stances, on a BUILT class
+  //   blood_dance   the Savage's Heat and leech
+  //   karma         the Monk's spirit echo, and the karma release
+  //
+  // plus the singularity VULNERABILITY, which is a property of the enemy and so
+  // applies to every source including allies — the Mage's burst debuff was doing
+  // nothing to anyone's skills.
+  //
+  // Ordering follows the weapon path exactly: `tohHitDamage` adjusts the number
+  // before mitigation, `tohOnHit` observes after the hit resolved and BEFORE any
+  // dead-enemy bail, because a killing blow is still a hit.
+  amt = tohHitDamage(sim, p, e, amt);
   const before = e.hp;
   sim.damageEnemy(e, amt, { owner: p, crit });
   const dealt = before - e.hp;
   p.damageDealt += Math.max(0, dealt);
+  // `ctx.mirrored` is absent here on purpose: this is an original hit, and the
+  // mirror's own follow-up goes through `damageEnemy` rather than this function,
+  // so the bounce cannot re-enter.
+  tohOnHit(sim, p, e, dealt, { crit });
   // §9.2 RIDER TIER — "adds an effect the skill did not have". This is the one
   // path every composed impact takes, which is the same reason Ferocity works
   // here and nowhere else: no primitive has to know a rider exists.
