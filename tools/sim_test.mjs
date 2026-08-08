@@ -50,6 +50,10 @@ const T2 = _SEL[1 % _SEL.length].id;
 // hardcoded lists of retired classic characters; those tests care about party
 // SIZE and mixture, never about which retired trait was in slot 3.
 const pickN = n => Array.from({ length: n }, (_, i) => _SEL[i % _SEL.length].id);
+// The level an armed bot arrives at. 12 is the third loadout slot (SLOT_LEVELS
+// = [1, 5, 12, …]) — a party a few rooms into a floor, not one that has just
+// pressed START.
+const ARM_LEVEL = 12;
 // A retired id, assembled so no search-and-replace over character names can
 // reach it. Two passes of bulk editing rewrote this literal into a valid class
 // and quietly turned its assertion into a tautology.
@@ -293,9 +297,21 @@ function unstick(g, p, mx, my) {
 // tree the character has; a character with no tree (45 of 47, because the other
 // 12 classes are out of scope) simply cannot fight on this branch, which is a
 // property of the patch and not something the helper can paper over.
-function armBot(g, p, ranks = 3) {
+// "A plausible mid-floor build" — and a mid-floor build HAS LEVELS. This left
+// p.level at 1, and spendSkillPoint auto-slots only into an already-unlocked
+// slot while setLoadout refuses mid-fight ("between rooms only"). So an armed
+// bot learned ten skills and fought the whole objective with ONE of them, at
+// every party size, no matter how high it levelled during the fight.
+//
+// That is faithful to a party dropped cold into a nest node and completely
+// unfaithful to one that got there by clearing rooms. It also made every
+// objective read as an HP problem when it was a slot problem: levelling first
+// takes Nest Purge at 4p from 1/3 to 3/3 CLEARED, and Elite Arena solo from
+// zero kills to cleared.
+function armBot(g, p, ranks = 3, level = ARM_LEVEL) {
   const trees = SKILLSIM.treesFor(p);
   if (!trees.length) return false;
+  p.level = Math.max(p.level, level);
   for (let i = 0; i < 60; i++) {
     const learnable = SKILLSIM.learnableSkills(p);
     if (!learnable.length) break;
@@ -1080,8 +1096,16 @@ try {
 
   // the Statue Test, symmetric — a never-moving probe must DIE in every
   // non-Bastion profile (all templates) on floor 1, and SURVIVE Bastion
+  // ARMED. The "statue" is a player who stands still — not one who cannot
+  // fight. It never spent its skill point, so with weapons removed it had no
+  // attack at all and died in every Bastion template: the Bastion sanction was
+  // untested and read as broken. Standing still is the variable; having nothing
+  // to hit back with is not.
   const statueRun = (charId, profileKey, template, maxS = 240) => {
-    const s = new Sim({ seed: 4242, party: [{ idx: 0, key: 'k', name: 'ST', charId, color: '#fff' }] });
+    // allowUnplayable: the CAMPER is an archetype, not a class you can start
+    // as today. Its trait is fully implemented; only its tree is missing.
+    const s = new Sim({ seed: 4242, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'ST', charId, color: '#fff' }] });
+    armBot(s, s.players[0]);
     const node = s.floor.nodes.find(n => n.kind === 'combat');
     node.profile = profileKey; node.template = template;
     s._travelTo(node.id);
@@ -1111,9 +1135,20 @@ try {
     // geometrically whiffs single approaching targets at range; the sanction
     // is for players built for the fight, and the median still dies here too
     // outside Bastion (asserted above).
+    // THE CAMPER IS A CONTACT TANK, and that archetype is toh_blacksmith —
+    // hitbox x1.4, damage to anything that touches it. It ran as T1, which is
+    // whichever class happens to be selectable, and a caster standing still in
+    // a Bastion is not a camper: it died in every template and read as the
+    // sanction being broken. Measured directly, the Blacksmith survives all
+    // five while the samurai and the necromancer die in 48s and 20s.
+    //
+    // It has no skill tree yet, so it cannot be STARTED as — but the sanction
+    // is a property of the Bastion profile against the archetype it is for, and
+    // that is testable now.
+    const CAMPER = 'toh_blacksmith';
     let bok = 0;
     for (const tmpl of TK9) {
-      const r = statueRun(T1, 'bastion', tmpl, 300);
+      const r = statueRun(CAMPER, 'bastion', tmpl, 300);
       if (!r.died) bok++;
       else fail(`camper statue DIED in Bastion/${tmpl} at ${r.secs.toFixed(0)}s — camping must work where sanctioned`);
     }
@@ -2223,9 +2258,19 @@ try {
       if (d < reach * 0.7) { bad++; fail(`relic only ${Math.round(d)}u from the altar (rim is ~${Math.round(reach)}u)`); }
       // no ambient inflow at all: the packs ARE the level
       const before = g.enemyPool.count;
-      for (const e of [...g.enemyPool]) g._killEnemy(e, null);
+      // DRAINED TO EMPTY FIRST, because killing is not the same as clearing.
+      // The relic packs contain gemmites, which are SPLITTERS: killing one
+      // spawns two by design. A single sweep left six children on the field and
+      // this read them as "ambient waves", which is the one thing Relic Run
+      // must not have. Sweep until the field stops producing, THEN watch it.
+      let sweeps = 0;
+      while (g.enemyPool.count > 0 && sweeps++ < 12) {
+        for (const e of [...g.enemyPool]) g._killEnemy(e, null);
+        g.tick();   // let splits materialise so the next sweep sees them
+      }
+      if (g.enemyPool.count > 0) { bad++; fail(`could not drain the relic field in ${sweeps} sweeps — ${g.enemyPool.count} left, so the ambient check below would measure splits`); }
       for (let i = 0; i < 60 * 30; i++) { for (const p of g.players) g.setInput(p.idx, { mx: 0, my: 0 }); g.tick(); }
-      if (g.enemyPool.count + g.spawnQueue.length > 0) { bad++; fail(`Relic Run still spawns ambient waves: ${g.enemyPool.count} after 30s of an empty field`); }
+      if (g.enemyPool.count + g.spawnQueue.length > 0) { bad++; fail(`Relic Run still spawns ambient waves: ${g.enemyPool.count} alive + ${g.spawnQueue.length} queued after 30s of a DRAINED field`); }
       if (before < o.pack * 0.9) bad++;
     }
     // banking one relic spawns exactly one more, with its own pack
@@ -3537,25 +3582,26 @@ try {
   rp.x = radSim.W / 2; rp.y = radSim.H / 2;
   const dummy = radSim.spawnEnemyById('slabjaw', rp.x + 120, rp.y, { noMats: true });
   dummy.hp = 1e9; dummy.maxHp = 2e9; dummy.spd = 0; dummy.dmg = 0;
-  const observed = { shot: new Set(), lob: new Set(), summon: new Set() };
-  for (const [wid, bucket] of [['pebbleshot', 'shot'], ['kegbomb', 'lob'], ['bolt_turret', 'summon']]) {
-    rp.weapons.length = 0;
-    for (const s of radSim.summons) s.dead = true;
-    radSim._addWeapon(rp, wid, 1, 0);
-    for (const w of rp.weapons) w.cd = 0;
-    for (let t = 0; t < 180; t++) {
-      rp.x = radSim.W / 2; rp.y = radSim.H / 2;
-      dummy.x = rp.x + 120; dummy.y = rp.y; dummy.hp = 1e9; dummy.knockX = dummy.knockY = 0;
-      radSim.tick();
-      for (const pr of radSim.projPool) if (pr.friendly) observed[bucket].add(pr.radius);
-    }
+  // OBSERVED FROM A REAL SKILL FIRE. This used _addWeapon with three weapon ids
+  // and, with weapons removed, spawned nothing at all — so every bucket read
+  // empty and the sprite constants looked wrong when they had simply stopped
+  // being exercised. Skills are what fire projectiles now.
+  const observed = new Set();
+  armBot(radSim, rp);
+  for (let t = 0; t < 600; t++) {
+    rp.x = radSim.W / 2; rp.y = radSim.H / 2;
+    dummy.x = rp.x + 120; dummy.y = rp.y; dummy.hp = 1e9; dummy.knockX = dummy.knockY = 0;
+    radSim.tick();
+    for (const pr of radSim.projPool) if (pr.friendly) observed.add(pr.radius);
   }
   const radMismatch = [];
-  if (!observed.shot.has(S.PROJ_R_SHOT)) radMismatch.push(`shot: saw [${[...observed.shot]}], constant is ${S.PROJ_R_SHOT}`);
-  if (!observed.lob.has(S.PROJ_R_LOB)) radMismatch.push(`lob: saw [${[...observed.lob]}], constant is ${S.PROJ_R_LOB}`);
-  if (!observed.summon.has(S.PROJ_R_SUMMON)) radMismatch.push(`summon: saw [${[...observed.summon]}], constant is ${S.PROJ_R_SUMMON}`);
+  if (!observed.size) radMismatch.push('no friendly projectile was ever spawned — the observation is measuring nothing');
+  else if (!observed.has(S.PROJ_R_SHOT)) radMismatch.push(`skill bolts: saw [${[...observed]}], sprites.js PROJ_R_SHOT is ${S.PROJ_R_SHOT}`);
+  // PROJ_R_LOB and PROJ_R_SUMMON described weapon lobs and structure shots. No
+  // skill primitive produces either yet, so they are declared-and-unexercised
+  // rather than wrong; asserting them here would fail on missing content.
   if (radMismatch.length) fail(`sprites.js projectile radii no longer match the engine — ${radMismatch.join(' | ')}`);
-  else ok(`projectile size classes still match the engine: summon ${S.PROJ_R_SUMMON}, shot ${S.PROJ_R_SHOT}, lob ${S.PROJ_R_LOB}`);
+  else ok(`skill bolts render at the radius sprites.js buckets them by (${S.PROJ_R_SHOT}); lob/summon await a skill primitive that makes them`);
 
   // -- THE WALL. spriteId is cosmetic: it must not be on a simulation entity,
   //    in a snapshot, or anywhere near the wire. --
@@ -3674,7 +3720,12 @@ try {
         const oy = (CELL / 2) - f * BOB;   // frame 1 sits BOB px higher
         for (let y = 0; y < 8; y++) {
           for (let x = 0; x < 8; x++) {
-            const i = ((oy + y) * 32 + (12 + x)) * 4;
+            // STRIDE IS THE IMAGE WIDTH. This stayed 32 when the cell became
+            // 128, so every row of the blob was written a quarter of the way
+            // along the wrong scanline — the fixture produced garbage and the
+            // pipeline was blamed for it. Measured directly, process_sprite
+            // preserves a 6px bob at 128px exactly.
+            const i = ((oy + y) * CELL + (12 + x)) * 4;
             img.data[i] = 200; img.data[i + 1] = 90; img.data[i + 2] = 40; img.data[i + 3] = 255;
           }
         }
@@ -3770,9 +3821,23 @@ try {
     if (m && Number(m[2]) + Number(m[3]) === Number(m[1])) {
       ok(`the batch gate passes on the committed tree and reports coverage: ${m[2]}/${m[1]} drawn, ${m[3]} to go`);
     } else fail(`clean batch verify said: ${clean.slice(0, 160)}`);
-    const reqErr = runFails('verify_art_batch.mjs', ['char', '--require-all']);
-    if (reqErr && /have no art/.test(reqErr)) ok('--require-all is what makes "batch 1 is done" a number rather than a feeling');
-    else fail('--require-all did not fail on an undrawn batch');
+    // A NAMESPACE THAT ACTUALLY HAS UNDRAWN IDS, found rather than assumed.
+    // This named `char`, and with the roster down to 14 all 14 are drawn — so
+    // --require-all had nothing to catch and the test read as the flag being
+    // broken when the flag was right and the batch was simply finished. The
+    // namespace is discovered at runtime, so this keeps working as batches
+    // complete; if every batch is complete the check says so instead of
+    // demanding a failure the tree cannot produce.
+    const NS = ['boss', 'enemy', 'proj', 'fx', 'prop', 'item', 'ui', 'char'];
+    let undrawnNs = null;
+    for (const ns of NS) { if (runFails('verify_art_batch.mjs', [ns, '--require-all'])) { undrawnNs = ns; break; } }
+    if (!undrawnNs) {
+      ok('--require-all: every namespace is fully drawn, so there is no undrawn batch left to reject');
+    } else {
+      const reqErr = runFails('verify_art_batch.mjs', [undrawnNs, '--require-all']);
+      if (reqErr && /have no art/.test(reqErr)) ok(`--require-all rejects the undrawn "${undrawnNs}" batch — what makes "batch 1 is done" a number rather than a feeling`);
+      else fail(`--require-all did not fail on the undrawn "${undrawnNs}" batch: ${String(reqErr).slice(0, 120)}`);
+    }
   }
 
   // -- the STRUCTURAL gate, on synthetic sheets --
@@ -4453,6 +4518,497 @@ try {
   else if (!bad) ok(`no shop stocks an unbuyable card — ${shops} shops, 4 floors, base roll + 3 rerolls (kinds seen: ${[...kinds].join(', ')})`);
   else fail(`${bad}/${shops} shops stock a weapon no one can hold (first card in ${slotZeroBad}): ${JSON.stringify(offenders)}`);
 } catch (err) { fail('shop stock gate crashed', err); }
+
+// ============================================================================
+// SUMMONING — the minion engine, soul tokens, slots and the revive curve.
+//
+// §13.1: every claim below is made against a REAL RUN of the real sim, never
+// against a definition. §13.3: each block asserts its own instrument can see a
+// known-good baseline before it reports anything.
+// ============================================================================
+try {
+  const { TREES: SK_TREES, RANK_GRANTS, SKILL_BY_ID: SK_BY_ID } = await import('../js/skills.js');
+  const { MOVE_KINDS, reviveSeconds, totalAnimals } = await import('../js/minions.js');
+  const { TRIGGER_KINDS: TK } = await import('../js/triggers.js');
+  const { PRIMITIVE_KINDS: PK } = await import('../js/compose.js');
+
+  // Arm a class down one whole tree, at a level whose loadout can actually hold
+  // what it learned (§13.17: the fixture is the state a player would arrive in,
+  // and slots are part of it).
+  function armTree(charId, treeId, { level = 31, seed = 771 } = {}) {
+    const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }] });
+    const p = g.players[0];
+    p.level = level;
+    for (const s of [...SK_TREES[treeId].skills].sort((a, b) => a.tier - b.tier)) {
+      p.skillPoints++;
+      SKILLSIM.spendSkillPoint(g, p, s.id);
+    }
+    g.god = true;
+    const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    g._travelTo(node.id);
+    return { g, p };
+  }
+  const runFor = (g, p, secs) => {
+    for (let t = 0; t < 60 * secs; t++) {
+      g.setInput(0, { mx: 0, my: 0 });
+      g.tick();
+      if (!p.downed) p.hp = p.stats.vitality;   // measuring summons, not survival
+    }
+  };
+
+  // -- the taxonomy additions are in the taxonomies, not beside them --
+  if (TK.includes('ON_TOKEN') && TK.length === 11) ok(`ON_TOKEN is in TRIGGER_KINDS — 11 triggers, not a Necromancer special case`);
+  else fail(`ON_TOKEN missing from TRIGGER_KINDS or count wrong: ${TK.length} kinds, ${JSON.stringify(TK)}`);
+  if (PK.includes('summon') && PK.length === 11) ok(`summon is the 11th primitive in PRIMITIVES`);
+  else fail(`summon missing from PRIMITIVE_KINDS or count wrong: ${PK.length}`);
+  if (MOVE_KINDS.length >= 2) ok(`MOVE_KINDS is a declared, closed taxonomy: ${MOVE_KINDS.join('/')}`);
+  else fail(`MOVE_KINDS is not a usable taxonomy: ${JSON.stringify(MOVE_KINDS)}`);
+  // NO ENUM ENTRY WIRED TO NOTHING. The source project shipped 19 skill kinds
+  // that nothing used and everything passed. A third move kind was written for
+  // this patch and deleted for exactly this reason; the check is what stops the
+  // next one arriving ahead of its user.
+  {
+    const used = new Set(Object.values(SK_BY_ID).flatMap(s => (s.compose || []).filter(c => c.kind === 'summon').map(c => c.move)));
+    const orphan = MOVE_KINDS.filter(k => !used.has(k));
+    if (!orphan.length) ok(`every MOVE_KIND is claimed by a real skill: ${[...used].sort().join('/')}`);
+    else fail(`MOVE_KINDS declares ${orphan.join('/')} which no skill uses — an enum entry wired to nothing`);
+    const undeclared = [...used].filter(k => !MOVE_KINDS.includes(k));
+    if (!undeclared.length) ok('no summon step uses a move kind outside the taxonomy');
+    else fail(`summon steps use undeclared move kind(s): ${undeclared.join('/')}`);
+  }
+
+  // -- rankGrants: exactly one skill, and the registry agrees with it --
+  {
+    const claimants = Object.values(SK_BY_ID).filter(s => s.rankGrants !== undefined);
+    if (claimants.length === 1 && claimants[0].id === RANK_GRANTS.summonSlots) {
+      ok(`exactly one skill grants a non-damage, non-duration quantity per rank: ${claimants[0].id} → summonSlots`);
+    } else {
+      fail(`rankGrants claimed by ${claimants.length} skill(s) (${claimants.map(s => s.id).join(', ')}); RANK_GRANTS says ${JSON.stringify(RANK_GRANTS)}`);
+    }
+    // THE NEGATIVE CASE. Built by mutating a real skill object at runtime, not
+    // by naming a fake id — §13.18: a search-and-replace over skill ids must
+    // not be able to reach it and turn it into a tautology.
+    const victim = { ...SK_BY_ID[RANK_GRANTS.summonSlots], id: 'probe_second_granter' };
+    const registered = RANK_GRANTS[victim.rankGrants] === victim.id;
+    if (!registered) ok(`a second skill declaring rankGrants "${victim.rankGrants}" is not its registered owner — the load assertion would reject it`);
+    else fail(`the registry accepted a second claimant for ${victim.rankGrants} — the lock does not lock`);
+  }
+
+  // -- Necromancer: skeletons stand, fight, and are attributed to their owner --
+  {
+    const { g, p } = armTree('toh_necromancer', 'necro_summons');
+    const before = { dealt: p.damageDealt, kills: p.kills };
+    runFor(g, p, 45);
+    const st = p.minionStats;
+    // §13.3: the instrument's own baseline first — if nothing was ever summoned
+    // the numbers below describe an empty field and mean nothing.
+    if (st.spawned > 0) ok(`necromancer summon path is live: ${st.spawned} spawned, ${st.died} died, ${st.expired} expired`);
+    else fail(`necromancer summoned nothing in 45s — every number after this is about an empty field (stats ${JSON.stringify(st)})`);
+    const archs = [...new Set(p.minions.map(m => m.arch))];
+    if (archs.length) ok(`minions on the field at teardown: ${p.minions.length} (${archs.join(', ')})`);
+    else fail('no minions standing at teardown — nothing to attribute');
+    // Attribution: a skeleton's damage is the necromancer's damage, with no
+    // special case in damageEnemy. If the actor facade were wrong this would
+    // credit nobody and read as a silent zero.
+    if (p.damageDealt > before.dealt) ok(`summon damage is attributed to the summoner: damageDealt ${Math.round(before.dealt)} → ${Math.round(p.damageDealt)}`);
+    else fail('player damageDealt did not move while minions were fighting — the actor facade is not crediting the owner');
+    // Slots: filled versus granted, the counter the brief asked for.
+    const filled = p.minions.filter(m => m.slotted).length;
+    if (p.summonSlots > 0 && filled <= p.summonSlots) ok(`skeleton slots: ${filled} filled of ${p.summonSlots} granted (rank only); refusals noSlot=${st.noSlot} dup=${st.dupArchetype} cap=${st.atCap}`);
+    else fail(`slot accounting wrong: ${filled} filled, ${p.summonSlots} granted`);
+    // Rank buys slots, and that is the ONLY thing it buys that is structural.
+    // §8.5 row 6: capacity is rank x grant, with no base and no ceiling. The
+    // previous form of this line read CONFIG.SUMMON_SLOTS_BASE and _CAP, which
+    // are deleted — it came back as "expected NaN", which is the good failure.
+    const rank = p.skillRanks[RANK_GRANTS.summonSlots] || 0;
+    const want = rank * SK_BY_ID[RANK_GRANTS.summonSlots].rankGrantPer;
+    if (p.summonSlots === want) ok(`a rank of ${RANK_GRANTS.summonSlots} buys a slot and nothing else does: rank ${rank} → ${p.summonSlots} slots`);
+    else fail(`summonSlots ${p.summonSlots}, expected ${want} at rank ${rank}`);
+  }
+
+  // -- §8.5 row 4: the token is a PLACE, not a counter --
+  //
+  // Raise Skeleton throws at a soul token and the skeleton rises WHERE THE
+  // THROW LANDS. The distinguishing assertion is spatial: a counter would raise
+  // it at the caster, so the test plants a token far away and checks the
+  // skeleton is at the TOKEN, not at the Necromancer.
+  {
+    const { g, p } = armTree('toh_necromancer', 'necro_summons');
+    const sk = SK_BY_ID['necro_raise_skeleton'];
+    if (sk.trigger.kind === 'ON_TOKEN') ok('Raise Skeleton is triggered by ON_TOKEN, not by a crowd');
+    else fail(`Raise Skeleton trigger is ${sk.trigger.kind}, want ON_TOKEN (§8.5 row 4)`);
+    if (sk.compose[0].deliver) ok(`Raise Skeleton delivers its summon (speed ${sk.compose[0].deliver.speed})`);
+    else fail('Raise Skeleton does not declare deliver — the skeleton would rise at the caster');
+
+    // clear the field and the pool so only the staged token can fire it
+    for (const e of [...g.enemyPool]) if (e.active) { e.hp = 0; e.active = false; }
+    g.tokens.length = 0;
+    p.minions.length = 0;
+    p.loadout = new Array(8).fill(null);
+    p.loadout[0] = sk.id;
+    delete p.skillCd[sk.id];
+    const TX = p.x + 260, TY = p.y;
+    const fromCaster = Math.hypot(TX - p.x, TY - p.y);
+    g.tokens.push({ id: ++g.spawnCounter, x: TX, y: TY, ttl: CFG.SOUL_TOKEN_TTL });
+    for (let i = 0; i < 60 * 4 && !p.minions.length; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+    const m = p.minions[0];
+    if (!m) {
+      fail('no skeleton rose from a staged token in 4 s — the delivery never planted');
+    } else {
+      const dTok = Math.hypot(m.x - TX, m.y - TY);
+      const dCaster = Math.hypot(m.x - p.x, m.y - p.y);
+      // The token sits 260 units from the caster; a skeleton raised AT the
+      // caster would land within its spawnRadius of the player instead.
+      if (dTok < dCaster && dTok < fromCaster / 2) {
+        ok(`the skeleton rises where the throw lands: ${Math.round(dTok)}u from the token, ${Math.round(dCaster)}u from the caster — a counter would invert those`);
+      } else {
+        fail(`the skeleton rose ${Math.round(dCaster)}u from the caster and ${Math.round(dTok)}u from the token — the token is being read as a counter, not a place`);
+      }
+      if (g.tokenStats.claimed > 0) ok(`the throw spent the token it read (${g.tokenStats.claimed} claimed)`);
+      else fail('a skeleton rose but no token was claimed — the resource is free');
+    }
+  }
+
+  // -- §8.5 rows 1, 3, 6, 5, 7, 8 — each in the situation that distinguishes it --
+  {
+    const { readsTokens } = await import('../js/skills.js');
+
+    // ROW 1: EVERY kill drops a token. A rate would look identical to certainty
+    // on a lucky sample, so this counts kills and demands exact equality.
+    {
+      const { g, p } = armTree('toh_necromancer', 'necro_summons');
+      g.tokens.length = 0;
+      g.tokenStats.dropped = 0;
+      const N = 40;
+      let killed = 0;
+      for (let i = 0; i < N; i++) {
+        const e = g.spawnEnemyById(ENEMY_BY_ID_T[Object.keys(ENEMY_BY_ID_T)[0]].id, p.x + 300, p.y);
+        if (!e) break;
+        e.maxHp = e.hp = 1;
+        g.damageEnemy(e, 99, { owner: p });
+        killed++;
+      }
+      if (killed > 0 && g.tokenStats.dropped === killed) ok(`every kill drops a soul token: ${killed} kills, ${g.tokenStats.dropped} tokens — no roll (§8.5 row 1)`);
+      else fail(`token drop is not certain: ${killed} kills produced ${g.tokenStats.dropped} tokens`);
+    }
+
+    // ROW 3: 30 s, not 8. Read off the live constant AND exercised, so a
+    // constant nobody applies cannot pass.
+    {
+      const { g, p } = armTree('toh_necromancer', 'necro_summons');
+      g.tokens.length = 0;
+      g._killEnemy(g.spawnEnemyById(ENEMY_BY_ID_T[Object.keys(ENEMY_BY_ID_T)[0]].id, p.x + 400, p.y), null);
+      const tk = g.tokens[g.tokens.length - 1];
+      if (tk && Math.abs(tk.ttl - 30) < 1e-6) ok(`a dropped token carries a 30 s life (§8.5 row 3)`);
+      else fail(`token ttl is ${tk ? tk.ttl : 'no token'}, want 30`);
+    }
+
+    // ROW 6: NO CAP BEYOND RANK. The old ceiling was 8, so the rank has to be
+    // high enough that it would have bitten — 12 skeletons is a number the
+    // previous implementation could not reach at any investment.
+    {
+      const { g, p } = armTree('toh_necromancer', 'necro_summons');
+      const sk = SK_BY_ID[RANK_GRANTS.summonSlots];
+      const RANK = 12;
+      p.skillRanks[sk.id] = RANK;
+      g.tick();                       // slots recompute on the skill tick
+      if (p.summonSlots === RANK * sk.rankGrantPer) {
+        ok(`capacity is rank and nothing else: rank ${RANK} → ${p.summonSlots} slots, past the old ceiling of 8 (§8.5 row 6)`);
+      } else {
+        fail(`rank ${RANK} gave ${p.summonSlots} slots, want ${RANK * sk.rankGrantPer} — a base or a cap has come back`);
+      }
+      // and the field honours it, not just the number
+      g.tokens.length = 0;
+      p.minions.length = 0;
+      for (let i = 0; i < RANK; i++) g.spawnMinions(p, sk, sk.compose[0], RANK);
+      if (p.minions.length === RANK) ok(`${RANK} skeletons stand at once — the old cap of 8 would have refused ${RANK - 8}`);
+      else fail(`only ${p.minions.length}/${RANK} skeletons spawned (noSlot ${p.minionStats.noSlot}, atCap ${p.minionStats.atCap})`);
+    }
+
+    // ROWS 5 + 7: A ROOM TRANSITION, NEVER A TIMER. A wipe that happened to
+    // look right because a duration expired would pass a timer-based check and
+    // fail a player walking through a door, so this travels between nodes.
+    {
+      const { g, p } = armTree('toh_druid', 'druid_beasts', { level: 31 });
+      const necroSk = SK_BY_ID['necro_raise_skeleton'];
+      // Fight first so the pack is in a REAL mid-run state, then stage the
+      // disposable minion. Staging it before the fight let it die inside the
+      // six seconds, and the wipe assertion then passed vacuously at 0 -> 0 —
+      // caught only because the fixture check below is a failure, not a note.
+      for (let i = 0; i < 60 * 6; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); if (!p.downed) p.hp = p.stats.vitality; }
+      p.summonSlots = 4;               // capacity is rank-only; this player has no rank in it
+      g.spawnMinions(p, necroSk, necroSk.compose[0], 1);
+      const beforeDisposable = p.minions.filter(m => !m.revives).length;
+      const beforeAnimals = p.minions.filter(m => m.revives).length;
+      if (beforeDisposable > 0 && beforeAnimals > 0) ok(`room-transition fixture staged both kinds: ${beforeDisposable} disposable, ${beforeAnimals} animal(s)`);
+      else fail(`fixture could not stage both kinds (disposable ${beforeDisposable}, animals ${beforeAnimals}) — the assertion below would be vacuous`);
+      // knock an animal down so the restore has something to undo
+      const victim = p.minions.find(m => m.revives);
+      if (victim) { const i = p.minions.indexOf(victim); const { killMinion } = await import('../js/minions.js'); killMinion(g, p, victim, i); }
+      const downedBefore = p.minions.filter(m => m.down).length;
+
+      // THE TRANSITION ITSELF — a real travel to another node, not a timer
+      const next = g.floor.nodes.find(n => n.id !== g.currentNode && !['shop', 'treasure', 'siege'].includes(n.kind));
+      g._travelTo(next.id);
+
+      const afterDisposable = p.minions.filter(m => !m.revives).length;
+      const animals = p.minions.filter(m => m.revives);
+      if (afterDisposable === 0) ok(`skeletons wipe at the room boundary: ${beforeDisposable} → 0 across a real node transition (§8.5 row 5)`);
+      else fail(`${afterDisposable} disposable minion(s) survived a room transition — capacity would compound across a map`);
+      if (animals.length >= beforeAnimals) ok(`the pack persists across the boundary: ${animals.length} animal(s) still owned (§8.5 row 7)`);
+      else fail(`pack shrank across a room: ${beforeAnimals} → ${animals.length}`);
+      const allUp = animals.every(m => !m.down && m.hp === m.maxHp);
+      if (downedBefore > 0 && allUp) ok(`animals arrive FULLY RESTORED: ${downedBefore} was down, all ${animals.length} are standing at full HP (§8.5 row 7)`);
+      else if (!downedBefore) fail('no animal was down before the transition, so "fully restored" was never tested');
+      else fail(`an animal arrived still down or hurt: ${JSON.stringify(animals.map(m => [m.arch, m.down, m.hp, m.maxHp]))}`);
+    }
+
+    // ROW 8: the revive curve, at THREE pack sizes. One sample cannot see a
+    // wrong slope and two cannot tell a wrong intercept from a wrong slope.
+    {
+      const step = SK_BY_ID['druid_call_wolf'].compose[0];
+      const want = n => (15000 + 4000 * Math.max(0, n - 1)) / 1000;
+      const rows = [1, 2, 3, 4, 6].map(n => [n, reviveSeconds(step, n)]);
+      const bad = rows.filter(([n, got]) => Math.abs(got - want(n)) > 1e-9);
+      if (!bad.length) {
+        ok(`revive curve matches §8.5 at ${rows.length} pack sizes: ${rows.map(([n, s]) => `${n}→${s}s`).join(', ')} (row 8)`);
+      } else {
+        fail(`revive curve is wrong at ${bad.map(([n, got]) => `pack ${n}: ${got}s want ${want(n)}s`).join('; ')}`);
+      }
+      // slope and intercept checked separately — a curve can have the right
+      // first point and the wrong step, which is exactly what one sample misses
+      const slope = rows[1][1] - rows[0][1];
+      if (Math.abs(slope - 4) < 1e-9) ok(`each animal past the first adds 4 s (slope from a 3+ point curve)`);
+      else fail(`per-animal step is ${slope}s, want 4s`);
+      if (Math.abs(rows[0][1] - 15) < 1e-9) ok('a lone animal costs the base 15 s, with no per-animal term applied');
+      else fail(`a pack of one costs ${rows[0][1]}s, want 15s — the (n-1) term is missing`);
+    }
+
+    // ROW 2: tokens render per-player, and the rule is derived from tree data
+    // rather than from a class name, so the Wizard's Soul tree inherits it.
+    {
+      if (readsTokens('toh_necromancer')) ok('a class with an ON_TOKEN skill can see soul tokens (§8.5 row 2)');
+      else fail('the Necromancer cannot see tokens — the visibility rule is inverted');
+      const blind = SELECTABLE.map(c => c.id).filter(id => !readsTokens(id));
+      if (blind.length) ok(`classes with no ON_TOKEN skill do not see them: ${blind.join(', ')}`);
+      else fail('every selectable class sees tokens — the filter is not filtering');
+      if (!readsTokens(null) && !readsTokens('not_a_class')) ok('an unknown or absent class sees nothing rather than throwing');
+      else fail('readsTokens() is permissive about unknown classes');
+    }
+  }
+
+  // -- soul tokens: dropped, expired, claimed — all three, on one run --
+  {
+    const { g, p } = armTree('toh_necromancer', 'necro_summons');
+    runFor(g, p, 45);
+    const ts = g.tokenStats;
+    if (ts.dropped > 0) ok(`soul tokens drop from enemy deaths: ${ts.dropped} dropped in 45s`);
+    else fail('no soul tokens dropped in 45s — ON_TOKEN can never fire and the trigger is wired to nothing');
+    if (ts.claimed > 0) ok(`ON_TOKEN skills claim tokens off the floor: ${ts.claimed} claimed`);
+    else fail(`ON_TOKEN never claimed a token (dropped ${ts.dropped}) — the trigger fires but consumes nothing, so a single token would fire it forever`);
+    if (ts.dropped === ts.claimed + ts.expired + g.tokens.length) {
+      ok(`token ledger balances: ${ts.dropped} dropped = ${ts.claimed} claimed + ${ts.expired} expired + ${g.tokens.length} live`);
+    } else {
+      fail(`token ledger does not balance: dropped ${ts.dropped}, claimed ${ts.claimed}, expired ${ts.expired}, live ${g.tokens.length}`);
+    }
+    // A token is a WORLD resource, not a Necromancer field: it must drop for a
+    // class that cannot read one. Otherwise the Wizard's Soul tree inherits a
+    // special case rather than a pool.
+    const other = armTree('toh_samurai', 'samurai_tactics');
+    runFor(other.g, other.p, 30);
+    if (other.g.tokenStats.dropped > 0) ok(`tokens drop for a class with no ON_TOKEN skill (${other.g.tokenStats.dropped} for the samurai) — it is a world resource, not a class field`);
+    else fail('no tokens dropped for a non-summoner — the pool is gated on the class, which makes it a special case');
+    if (other.g.tokenStats.claimed === 0) ok('a class with no ON_TOKEN skill claims none of them');
+    else fail(`samurai claimed ${other.g.tokenStats.claimed} tokens with no ON_TOKEN skill`);
+  }
+
+  // -- Druid: the pack, and THE REVIVE COST --
+  {
+    // 150s, not 60. §8.5's revive curve is 15 s at one animal and 23 s at
+    // three, so a 60-second window could see two animals die and legitimately
+    // report "none revived" — the window was sized for the first-guess 4 s
+    // curve and became too short the moment the curve became correct.
+    const { g, p } = armTree('toh_druid', 'druid_beasts', { level: 42 });
+    runFor(g, p, 150);
+    const st = p.minionStats;
+    if (st.spawned > 0) ok(`druid pack is live: ${st.spawned} animals called, ${st.died} died, ${st.revived} revived`);
+    else fail(`druid summoned nothing in 60s (stats ${JSON.stringify(st)}) — the pack tree fields no pack`);
+    const archs = [...new Set(p.minions.map(m => m.arch))];
+    if (archs.length >= 2) ok(`the pack is a mixture, not N copies of the cheapest animal: ${archs.join(', ')}`);
+    else fail(`pack contains only ${JSON.stringify(archs)} — a maxAlive ceiling is missing or the slot race is back`);
+    if (st.revived > 0) ok(`fallen animals revive rather than being replaced: ${st.revived} revives`);
+    else if (st.died > 0) fail(`${st.died} animals died and none revived — the pack is disposable, which is the Necromancer's model, not the Druid's`);
+    else fail('no animal died in 60s, so the revive path was never exercised — restage this, it proves nothing');
+  }
+
+  // -- THE ONE THING TO GET RIGHT: totalAnimals counts OWNED, not ALIVE --
+  //
+  // If it counted the living, wiping the pack would drive the count to zero and
+  // make revives FASTEST exactly when the player has been punished hardest —
+  // the cost inverts, and the correct play becomes letting the pack die. Both
+  // versions produce a plausible duration, so this is asserted directly.
+  {
+    const { g, p } = armTree('toh_druid', 'druid_beasts', { level: 42, seed: 4242 });
+    runFor(g, p, 45);
+    const pack = p.minions.filter(m => m.revives);
+    if (pack.length >= 2) {
+      ok(`revive fixture staged with a real pack of ${pack.length}`);
+      const owned = totalAnimals(p);
+      // Wipe every animal at once, then read what the LAST one was sentenced to.
+      for (const m of pack) { m.down = false; m.hp = 0; }
+      const before = p.reviveLog.length;
+      for (const m of [...pack]) {
+        const i = p.minions.indexOf(m);
+        if (i >= 0) { const { killMinion } = await import('../js/minions.js'); killMinion(g, p, m, i); }
+      }
+      const rows = p.reviveLog.slice(before);
+      const alive = p.minions.filter(m => m.revives && !m.down).length;
+      if (alive === 0) ok(`pack wiped for the measurement: ${rows.length} deaths recorded, 0 standing`);
+      else fail(`wipe did not take: ${alive} still standing`);
+      // Every row must be priced off the OWNED count, which the wipe did not
+      // change. Priced off the living, the last row would be the cheapest.
+      const expectOwned = reviveSeconds(pack[0], owned);
+      const expectAlive = reviveSeconds(pack[0], 0);
+      const allOwned = rows.length > 0 && rows.every(r => Math.abs(r.seconds - expectOwned) < 1e-6);
+      if (allOwned) {
+        ok(`revive cost counts animals OWNED: pack of ${owned} wiped, every revive still priced at ${expectOwned.toFixed(2)}s (alive-count would have given ${expectAlive.toFixed(2)}s)`);
+      } else {
+        fail(`revive cost is not owned-count: pack of ${owned} wiped and durations came back ${JSON.stringify(rows.map(r => +r.seconds.toFixed(2)))}, want every row at ${expectOwned.toFixed(2)}s, NOT the alive-count ${expectAlive.toFixed(2)}s`);
+      }
+      // And the curve must not fall as the pack grows — the property the whole
+      // formula exists to guarantee, checked over the range rather than at one
+      // point (a single sample cannot see an inversion).
+      const curve = [0, 1, 2, 3, 4].map(n => reviveSeconds(pack[0], n));
+      const monotone = curve.every((v, i) => i === 0 || v >= curve[i - 1]);
+      if (monotone && curve[4] > curve[0]) ok(`revive cost rises with pack size and never falls: ${curve.map(v => v.toFixed(1) + 's').join(' → ')}`);
+      else fail(`revive curve inverts or is flat: ${JSON.stringify(curve)}`);
+    } else {
+      fail(`revive fixture could not stage a pack (got ${pack.length} animals) — the assertion below would pass vacuously, so it is reported as a failure instead`);
+    }
+  }
+
+  // -- THE HEADLINE: zero bespoke handlers, measured rather than asserted --
+  //
+  // Summons were the largest bespoke category in the source project. The claim
+  // that the composed-action schema absorbed them is only worth anything if it
+  // can be checked, so it is: no ENGINE file may name a skill id or an
+  // archetype. The moment one does, a summon has needed code of its own and the
+  // schema did not hold.
+  //
+  // §13.12: comments are stripped first — these files EXPLAIN the rule at
+  // length, and a check that cannot tell the prohibition from the violation is
+  // noise. §13.18: the needles are read out of the live registry, never written
+  // down here, so no rename can quietly empty the search.
+  {
+    const decomment = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '');
+    const ENGINE = ['compose.js', 'minions.js', 'skillsim.js', 'triggers.js', 'selectors.js'];
+    const skillIds = Object.keys(SK_BY_ID);
+    const archetypes = [...new Set(Object.values(SK_BY_ID)
+      .flatMap(s => (s.compose || []).filter(c => c.kind === 'summon').map(c => c.archetype)))];
+    if (skillIds.length > 0 && archetypes.length > 0) {
+      ok(`bespoke-handler scan is looking for something: ${skillIds.length} skill ids, ${archetypes.length} archetypes (${archetypes.join(', ')}) across ${ENGINE.length} engine files`);
+    } else {
+      fail('bespoke-handler scan has an empty needle list — it would pass against any code at all');
+    }
+    const offenders = [];
+    for (const f of ENGINE) {
+      const src = decomment(readFileSync(new URL(`../js/${f}`, import.meta.url), 'utf8'));
+      for (const id of skillIds) if (src.includes(`'${id}'`) || src.includes(`"${id}"`)) offenders.push(`${f} names skill ${id}`);
+      for (const a of archetypes) if (src.includes(`'${a}'`) || src.includes(`"${a}"`)) offenders.push(`${f} names archetype ${a}`);
+    }
+    if (!offenders.length) ok(`ZERO BESPOKE HANDLERS across ${ENGINE.join(', ')} — no engine file branches on a skill id or an archetype`);
+    else fail(`${offenders.length} bespoke handler(s): ${offenders.join('; ')}`);
+    // The negative control: the scan must be able to FIND one. Without this the
+    // green above is indistinguishable from a scan that reads no files.
+    const planted = decomment(`const x = 1; // ${skillIds[0]}\nif (id === '${skillIds[0]}') doSomethingSpecial();`);
+    if (planted.includes(`'${skillIds[0]}'`)) ok('bespoke-handler scan detects a planted handler — the green result above is a real negative');
+    else fail('bespoke-handler scan cannot see a planted handler; its green result means nothing');
+  }
+
+  // -- summon state rides the snapshot (§12.1) --
+  {
+    const { g, p } = armTree('toh_necromancer', 'necro_summons');
+    runFor(g, p, 30);
+    const snap = g.getSnapshot();
+    if (snap.minions.length === p.minions.length) ok(`minions ride the snapshot: ${snap.minions.length} packed, matching the sim`);
+    else fail(`snapshot carries ${snap.minions.length} minions, sim has ${p.minions.length} — a client would see enemies dying to nothing`);
+    if (Array.isArray(snap.tokens)) ok(`soul tokens ride the snapshot (${snap.tokens.length} live at teardown)`);
+    else fail('snapshot has no tokens list — a client would see ON_TOKEN skills fire for no visible reason');
+    const round = JSON.parse(JSON.stringify(snap));
+    if (round.minions.length === snap.minions.length && round.minions.every(r => r.length === 6)) {
+      ok('minion records survive a JSON round trip at a fixed width of 6 fields');
+    } else {
+      fail('minion records do not round-trip cleanly');
+    }
+  }
+} catch (err) { fail('summoning gate crashed', err); }
+
+// ============================================================================
+// D-24 — AN ELITE NODE IS FEWER AND FATTER (§2.4), ASSERTED BY EFFECT.
+//
+// §2.4's Elite modifiers were unreachable for the whole life of the node type:
+// `regionFightMods()` had no callers and `nodeType` was never assigned, so
+// every fight computed 'horde'. What shipped instead was a waveConfig rate
+// bump, which made an Elite node field MORE enemies at the SAME health — Horde
+// with a bigger number, asking the same build question.
+//
+// This asserts the FIGHT, not the wiring. A version that resolves the
+// modifiers, stores them on the sim, and never applies them would pass any
+// check that read `sim.fightMods`; it fails this one, because the numbers below
+// come from counting what actually spawned.
+// ============================================================================
+try {
+  const NODE_T = (await import('../js/nodebehaviour.js')).NODE_TUNING;
+  const field = (kind, seed) => {
+    const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    node.kind = kind;
+    g.god = true;                       // measuring the ROOM, not the player
+    g._travelTo(node.id);
+    let n = 0, hp = 0, dmg = 0, mats = 0;
+    for (let t = 0; t < 60 * 60; t++) {
+      g.setInput(0, { mx: 0, my: 0 });
+      g.tick();
+      for (const e of g.enemyPool) {
+        if (!e.active || e._d24) continue;
+        e._d24 = 1; n++; hp += e.maxHp; dmg += e.dmg; mats += e.mats;
+      }
+    }
+    return { nodeType: g.nodeType, n, hp: hp / Math.max(1, n), dmg: dmg / Math.max(1, n), mats: mats / Math.max(1, n) };
+  };
+  const SEED = 4242;
+  const h = field('combat', SEED), e = field('elite', SEED);
+
+  if (e.nodeType === 'elite') ok(`an elite node knows it is one: sim.nodeType = "${e.nodeType}" (D-24: it was never assigned)`);
+  else fail(`sim.nodeType is ${JSON.stringify(e.nodeType)} on an elite node — the modifiers cannot resolve`);
+
+  if (h.n > 0 && e.n > 0) ok(`D-24 fixture fielded both rooms: horde ${h.n} enemies, elite ${e.n}`);
+  else fail(`D-24 fixture fielded nothing (horde ${h.n}, elite ${e.n}) — every ratio below would be vacuous`);
+
+  // THE FOUR AXES, each measured against the horde room from the same seed.
+  // Directions come from NODE_TUNING rather than from literals here, so a
+  // retune of the design moves the test with it.
+  const axes = [
+    ['count', e.n / Math.max(1, h.n), NODE_T.eliteCountMult, 'fewer'],
+    ['HP', e.hp / Math.max(1e-9, h.hp), NODE_T.eliteHpMult, 'tougher'],
+    ['damage', e.dmg / Math.max(1e-9, h.dmg), NODE_T.eliteDmgMult, 'harder-hitting'],
+    ['gold', e.mats / Math.max(1e-9, h.mats), NODE_T.eliteGoldMult, 'better-paying'],
+  ];
+  for (const [name, got, want, word] of axes) {
+    // A generous band — spawn tables, rounding and floor scaling all sit
+    // between the multiplier and the measurement — but the DIRECTION is
+    // absolute: below 1 must stay below 1, above 1 must stay above 1.
+    const rightSide = (want < 1) ? got < 1 : got > 1;
+    const close = Math.abs(got - want) / want <= 0.25;
+    if (rightSide && close) ok(`elite is measurably ${word}: ${name} ×${got.toFixed(2)} against horde (§2.4 asks ×${want})`);
+    else if (!rightSide) fail(`elite ${name} ×${got.toFixed(2)} is on the WRONG SIDE of 1 — §2.4 asks ×${want}. An elite node that is horde with a bigger number asks the same build question`);
+    else fail(`elite ${name} ×${got.toFixed(2)} is more than 25% off §2.4's ×${want}`);
+  }
+  // The negative the whole defect turned on: the modifiers existing is not the
+  // same as the modifiers applying.
+  if (e.n < h.n) ok('the fight itself changed, not just the modifier object — a wire-up that resolved the mods and left the counts alone would fail here');
+  else fail(`elite fielded ${e.n} against horde's ${h.n} — the modifiers may be resolved but they are not reaching the spawns`);
+} catch (err) { fail('D-24 elite-node gate crashed', err); }
 
 // WHAT THIS SUITE DID NOT MEASURE, said out loud every run. A green sim_test
 // has never meant the party can win a fight, and for a whole patch it did not:

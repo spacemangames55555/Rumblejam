@@ -10,16 +10,21 @@ import { NECRO_DARK_MATTER, TUNING as NECRO_TUNING } from './content/skills/necr
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
+import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
+import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS } from './triggers.js';
 import { PRIMITIVE_KINDS, RIDERS_BY_PRIMITIVE } from './compose.js';
 import { isDomain } from './domains.js';
 import { SELECT_KINDS } from './selectors.js';
+import { MOVE_KINDS } from './minions.js';
 
 export const TREES = {
   necro_dark_matter: { id: 'necro_dark_matter', name: 'Dark Matter', classId: 'toh_necromancer', skills: NECRO_DARK_MATTER, tuning: NECRO_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
+  necro_summons: { id: 'necro_summons', name: 'Summons', classId: 'toh_necromancer', skills: NECRO_SUMMONS, tuning: SUMMONS_TUNING },
+  druid_beasts: { id: 'druid_beasts', name: 'Tapestry of Beasts', classId: 'toh_druid', skills: DRUID_BEASTS, tuning: BEASTS_TUNING },
 };
 
 export const ALL_SKILLS = Object.values(TREES).flatMap(t => t.skills);
@@ -46,9 +51,47 @@ export const PASSIVE_EFFECT = {
   // everything else — unlocks, rank-1
   footingAccrualPct: 'other',     // Set Stance / Measured Breath: settle faster
   footingGritBonus: 'other',      // Weight: more Grit per stack
-  armorGrit: 'other',             // Calcify
-  armorVit: 'other',              // Calcify
+  armorGrit: 'other',             // Calcify, Bone Plate
+  armorVit: 'other',              // Calcify, Bone Plate
+  packDamageBonus: 'damage',      // Pack Bond: more damage per standing animal
 };
+
+// WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the
+// skill allowed to claim each entry.
+//
+// Ranks buy damage or duration. That is the rule everywhere else in the game,
+// and `ranks` is asserted below to contain nothing but those two keys. Raise
+// Skeleton is the single exception: its rank buys a SUMMON SLOT, which is a
+// structural quantity rather than a magnitude.
+//
+// The registry is a two-way lock. A skill declaring `rankGrants` must be the
+// registered owner of that grant, and a registered grant must be claimed by a
+// skill that exists — so a second skill cannot pick up `summonSlots` by
+// copy-paste, and the owner cannot quietly drop it either. Adding a third
+// exception means editing this table on purpose.
+//
+// It exists because the UNSTATED version of this rule has already failed once.
+// Set Stance declared a rankable `footingMaxBonus`; nothing asserted that a
+// rank may not raise a hard cap; and a designed ten Footing stacks measured as
+// seventeen, inflating every per-stack term derived from it. That was a rank
+// buying a structural quantity with no registry to stop it.
+export const RANK_GRANTS = {
+  summonSlots: 'necro_raise_skeleton',
+};
+
+// WHO CAN SEE A SOUL TOKEN (§8.5 row 2). Tokens are state and ride the
+// snapshot for everyone — losing one would desync a Necromancer's fire — but
+// they RENDER per-player, and only for a class that can actually read them.
+//
+// Derived from tree data rather than named, exactly like selectability: any
+// class with an ON_TOKEN skill sees them. §8.5 says "visible only to
+// Necromancers" because the Necromancer is the only such class today; when the
+// Wizard's Soul tree lands it inherits the visibility with no code change,
+// which a hardcoded class id would not have given it.
+const TOKEN_READERS = new Set(
+  ALL_SKILLS.filter(s => s.trigger && s.trigger.kind === 'ON_TOKEN')
+    .map(s => TREES[s.tree] && TREES[s.tree].classId).filter(Boolean));
+export function readsTokens(charId) { return TOKEN_READERS.has(charId); }
 
 // A skill is "damaging" if any step deals damage. Used by the tier-1 assertion
 // and by the anti-softlock floor, so both read the same definition.
@@ -92,6 +135,65 @@ export function canLearn(p, skill) {
 // These run once, at import. They throw — a tree that violates one of them is
 // not a warning to be triaged later, it is a build that cannot answer the gate
 // question, and it should fail before a fight starts rather than during one.
+
+// A summon step, checked to the same standard as a trigger's params. A minion
+// with an undefined `move` or a malformed attack is the summon-shaped version
+// of "wired to nothing": it spawns, stands there, and looks like a balance
+// problem rather than a missing field.
+//
+// The attack is validated as what it is — a compose step in its own right —
+// against the same primitive and rider tables the outer step uses. That is the
+// check that keeps a minion's attack inside the schema instead of beside it.
+function summonStepProblems(s, step) {
+  const out = [];
+  if (!step.archetype) out.push(`${s.id}: summon step with no archetype name`);
+  if (!MOVE_KINDS.includes(step.move)) {
+    out.push(`${s.id}: summon move ${JSON.stringify(step.move)} is not one of ${MOVE_KINDS.join('/')}`);
+  }
+  for (const k of ['hp', 'radius', 'spawnRadius', 'attackCd']) {
+    if (!(step[k] > 0)) out.push(`${s.id}: summon step needs a positive "${k}"`);
+  }
+  if (step.slotted === undefined) out.push(`${s.id}: summon step must declare "slotted" — whether it occupies a summon slot or is a timed extra`);
+  // EVERY SUMMON MUST BE BOUNDED BY SOMETHING. Three bounds are legitimate and
+  // they express three different engines: a slot (Necromancer capacity, bought
+  // by rank), a `maxAlive` ceiling (Druid pack, one per animal skill), or a
+  // duration (a timed extra). A summon with none of them accumulates for the
+  // length of the run.
+  if (!step.slotted && !(step.maxAlive > 0) && !(step.duration > 0)) {
+    out.push(`${s.id}: summon step is unbounded — it needs a slot, a maxAlive ceiling or a duration, or it accumulates without limit`);
+  }
+  // A DELIVERED SUMMON NEEDS A PLACE TO BE DELIVERED TO, and the only thing
+  // that produces one is the ON_TOKEN trigger spending a token. Declaring
+  // `deliver` on a summon with any other trigger would give the primitive a
+  // null position and it would silently never spawn — the wired-to-nothing
+  // shape, in the one skill whose whole point is that the token is a place.
+  if (step.deliver) {
+    if (!(step.deliver.speed > 0)) out.push(`${s.id}: deliver needs a positive speed`);
+    if (!(step.deliver.radius > 0)) out.push(`${s.id}: deliver needs a positive radius`);
+    if (!s.trigger || s.trigger.kind !== 'ON_TOKEN') {
+      out.push(`${s.id}: summon declares "deliver" but its trigger is ${JSON.stringify(s.trigger && s.trigger.kind)} — only ON_TOKEN produces a place to deliver to, so this would spawn nothing, ever`);
+    }
+  }
+  if (step.maxAlive !== undefined && !(step.maxAlive >= 1 && Number.isInteger(step.maxAlive))) {
+    out.push(`${s.id}: summon maxAlive ${step.maxAlive} must be a positive integer — omit it for "as many as slots allow"`);
+  }
+  if (step.revives && !(step.reviveBase > 0)) {
+    out.push(`${s.id}: summon revives but declares no reviveBase — the revive would be instant`);
+  }
+  const a = step.attack;
+  if (!a) { out.push(`${s.id}: summon step has no attack — it would stand on the field and do nothing`); return out; }
+  if (!PRIMITIVE_KINDS.includes(a.kind)) out.push(`${s.id}: summon attack uses unknown primitive "${a.kind}"`);
+  if (a.kind === 'summon') out.push(`${s.id}: a summon's attack may not be another summon — minions do not raise minions`);
+  if (!SELECT_KINDS.includes(a.select)) {
+    out.push(`${s.id}: summon attack select ${JSON.stringify(a.select)} is not one of ${SELECT_KINDS.join('/')} — the minion picks its own target and needs its own rule`);
+  }
+  if (!(a.damage > 0)) out.push(`${s.id}: summon attack deals no damage`);
+  const allowed = RIDERS_BY_PRIMITIVE[a.kind] || [];
+  for (const r of Object.keys(a.riders || {})) {
+    if (!allowed.includes(r)) out.push(`${s.id}: summon attack rider "${r}" is not valid on ${a.kind}`);
+  }
+  return out;
+}
 
 function assertTrees() {
   const problems = [];
@@ -141,6 +243,7 @@ function assertTrees() {
           for (const r of Object.keys(step.riders || {})) {
             if (!allowed.includes(r)) problems.push(`${s.id}: rider "${r}" is not valid on ${step.kind}`);
           }
+          if (step.kind === 'summon') problems.push(...summonStepProblems(s, step));
         }
       } else if (s.type !== 'passive') {
         problems.push(`${s.id}: type ${JSON.stringify(s.type)} is neither active nor passive`);
@@ -175,6 +278,19 @@ function assertTrees() {
         problems.push(`${s.id}: maxRank ${s.maxRank} must be a positive integer`);
       }
 
+      // THE rankGrants LOCK. See RANK_GRANTS above for why this is a registry
+      // rather than a rule: a rank that buys a structural quantity has already
+      // breached a hard cap once when it was merely a convention.
+      if (s.rankGrants !== undefined) {
+        if (!(s.rankGrants in RANK_GRANTS)) {
+          problems.push(`${s.id}: rankGrants ${JSON.stringify(s.rankGrants)} is not in RANK_GRANTS — a rank buys damage or duration unless this table says otherwise, and adding an entry is a design decision, not a data change`);
+        } else if (RANK_GRANTS[s.rankGrants] !== s.id) {
+          problems.push(`${s.id}: rankGrants "${s.rankGrants}" is registered to ${RANK_GRANTS[s.rankGrants]}, not to this skill — exactly one skill may grant it`);
+        }
+        if (!(s.rankGrantPer > 0)) problems.push(`${s.id}: declares rankGrants but no positive rankGrantPer — a rank would grant nothing`);
+        if (s.type !== 'active') problems.push(`${s.id}: rankGrants on a ${s.type} — a grant this structural belongs on the skill that uses it`);
+      }
+
       // 6.1: ranks are linear. A skill declaring a multiplicative rank block
       // would compound, which is explosive at rank 40.
       if (s.ranks) {
@@ -194,6 +310,19 @@ function assertTrees() {
       if (!pre) problems.push(`${s.id}: tier ${s.tier} with no prerequisite`);
       else if (pre.tier !== s.tier - 1) problems.push(`${s.id}: prereq ${pre.id} is tier ${pre.tier}, want ${s.tier - 1}`);
     }
+  }
+
+  // The other half of the lock: every registered grant must be claimed. A
+  // registry entry pointing at a skill that no longer declares it would leave
+  // the exception open with nothing standing in it.
+  for (const [grant, ownerId] of Object.entries(RANK_GRANTS)) {
+    const owner = ALL_SKILLS.find(s => s.id === ownerId);
+    if (!owner) problems.push(`RANK_GRANTS.${grant} names ${ownerId}, which is not a skill in any tree`);
+    else if (owner.rankGrants !== grant) problems.push(`RANK_GRANTS.${grant} names ${ownerId}, but that skill declares rankGrants ${JSON.stringify(owner.rankGrants)} — the registry and the skill must agree`);
+  }
+  const claimants = ALL_SKILLS.filter(s => s.rankGrants !== undefined).map(s => s.id);
+  if (claimants.length > Object.keys(RANK_GRANTS).length) {
+    problems.push(`${claimants.length} skills declare rankGrants (${claimants.join(', ')}) but RANK_GRANTS has ${Object.keys(RANK_GRANTS).length} entries`);
   }
 
   if (problems.length) {

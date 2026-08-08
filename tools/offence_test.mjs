@@ -179,14 +179,29 @@ console.log('\n--- an armed party against the three objectives that failed ---')
       g.setInput(p.idx, d < 90 ? { mx: 0, my: 0 } : { mx: dx / d, my: dy / d });
     }
   };
+  // BOTH PARTY SIZES. Objectives are co-op content and this table was solo, so
+  // "cannot finish in budget" could not be told apart from "cannot finish
+  // alone". Nest Purge and Elite Arena clear at 4p; Bounty does not, and the
+  // gap is the escort wall that §15 already resolved as design.
+  //
+  // The party arrives at ARRIVE_LEVEL, not level 1. spendSkillPoint auto-slots
+  // only into an already-unlocked slot and setLoadout refuses mid-fight, so a
+  // party dropped in at level 1 fights the whole objective with ONE skill. That
+  // single detail is what made these read as an HP problem: at three slots,
+  // Nest Purge goes from 1/3 to CLEARED and Elite Arena solo from 0 kills to
+  // cleared, with no tuning changed anywhere.
+  const ARRIVE_LEVEL = 12;   // the third loadout slot; SLOT_LEVELS = [1, 5, 12, …]
   const rows = [];
-  for (const kind of ['nest', 'elite_arena', 'bounty']) {
+  for (const [kind, n] of [['nest', 1], ['nest', 4], ['elite_arena', 1], ['elite_arena', 4], ['bounty', 1], ['bounty', 4]]) {
+    const ids = SELECTABLE.map(c => c.id);
     const sim = new Sim({ seed: 20250811 + kind.length * 31,
-      party: SELECTABLE.map((c, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: c.id, color: '#fff' })) });
+      party: Array.from({ length: n }, (_, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: ids[i % ids.length], color: '#fff' })) });
     const node = sim.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
     node.kind = kind;
     sim.god = true;   // survival is not the question; finishing the level is
+    if (kind === 'bounty') sim.selLog = new Map();   // selection is the assertion here
     for (const p of sim.players) {
+      p.level = ARRIVE_LEVEL;   // unlock the slots BEFORE spending; see above
       for (let i = 0; i < 60; i++) {
         const learnable = learnableSkills(p);
         if (!learnable.length) break;
@@ -203,29 +218,84 @@ console.log('\n--- an armed party against the three objectives that failed ---')
       for (const p of sim.players) if (!p.downed) p.hp = p.stats.vitality;
     }
     const o = sim.obj || {};
+    // BOUNTY IS ASSERTED ON SELECTION, NOT KILLS — resolved as design (GDD §15).
+    // Marks spawn with an escort and escorts are a wall you clear first; that is
+    // what makes a mark different from a nest. Punching straight through needs
+    // pierce, which is a §9.2 modifier item and does not exist until phase 4.
+    // Asserting mark kills here would demand a capability the game has not
+    // shipped, and would quietly turn into a retune request on mark HP.
+    // SCOPED TO THE SKILLS THAT CLAIM TO TARGET OBJECTIVES. At one loadout slot
+    // every fire came from an objective_target skill and a flat ratio worked;
+    // at three slots the party also fires densest_cluster skills, which pick
+    // chaff BY DESIGN and correctly. Counting those as misses read as an 86%
+    // "regression" in a selector that had not changed at all.
+    // SCOPED TWICE, and both scopes were learned the hard way. First to skills
+    // that actually declare `objective_target` — a densest_cluster skill
+    // correctly picking chaff is not a regression. Then to fires where a mark
+    // was IN RANGE: a selector cannot choose what it cannot see, and counting
+    // those fires made the ratio a measure of party positioning rather than of
+    // selection.
+    const objFires = [...(sim.selLog || new Map())]
+      .filter(([k]) => (SKILL_BY_ID[k.split('->')[0]] || {}).select === 'objective_target')
+      .filter(([k]) => k.endsWith('|markInRange'));
+    const selMark = objFires.filter(([k]) => /->MARK\|markInRange$/.test(k)).reduce((n, [, v]) => n + v, 0);
+    const selTotal = objFires.reduce((n, [, v]) => n + v, 0);
     const progress = kind === 'nest' ? `${(o.total || 0) - (o.alive || 0)}/${o.total || 0} nests down`
-      : kind === 'bounty' ? `${o.killed || 0}/${o.need || 0} marks`
+      : kind === 'bounty' ? `${selMark}/${selTotal} objective-targeting fires chose the mark (kills: ${o.killed || 0}/${o.need || 0}, needs pierce)`
         // NOT "kills of total": p.kills counts chaff too, and printing it against
         // the elite count read as "78 of 52 elites", which is both impossible and
         // exactly the kind of number a reader would quote back.
         : (sim.cleared ? `all ${o.total || 0} elites` : `${o.total || 0} elites spawned, arena not cleared`);
     const dealt = Math.round(sim.players.reduce((n, p) => n + p.damageDealt, 0));
     const kills = sim.players.reduce((n, p) => n + p.kills, 0);
-    rows.push({ kind, dealt, kills, progress, cleared: sim.cleared });
-    console.log(`  ${kind.padEnd(12)} dealt ${String(dealt).padStart(6)}  kills ${String(kills).padStart(4)}  ${progress}${sim.cleared ? '  CLEARED' : ''}`);
+    const slots = Math.max(...sim.players.map(q => q.loadout.filter(Boolean).length));
+    rows.push({ kind, n, dealt, kills, progress, cleared: sim.cleared, selMark, selTotal, slots });
+    console.log(`  ${kind.padEnd(12)} ${n}p  dealt ${String(dealt).padStart(6)}  kills ${String(kills).padStart(4)}  `
+      + `${slots} slot(s)  ${progress}${sim.cleared ? '  CLEARED' : ''}`);
   }
 
   // THE ASSERTION IS "SOMETHING GOT TARGETED", not "the level finished". Whether
   // one tier-1 skill can chew through a 3x-HP elite inside six minutes is a
   // question about elite HP, and answering it here would let a throughput
   // change silently satisfy a targeting test.
-  const untouched = rows.filter(r => /^0\//.test(r.progress) || (!r.cleared && r.kind === 'elite_arena' && !r.kills));
-  if (untouched.length === rows.length) {
+  // 4p is the target for objectives; solo is not, and saying so is the point of
+  // running both.
+  for (const kind of ['nest', 'elite_arena']) {
+    const four = rows.find(r => r.kind === kind && r.n === 4);
+    if (!four) continue;
+    if (four.cleared) ok(`${kind}: a 4-player party clears it (${four.slots} slots) — co-op is the target, solo is not`);
+    else fail(`${kind}: a 4-player armed party did not clear it — ${four.progress}. That is a throughput question, and the party size it is designed for is now on the table`);
+  }
+  const bounty = rows.find(r => r.kind === 'bounty' && r.n === 4);
+  if (bounty) {
+    // Every fire should choose the mark. If that ratio drops, the selector has
+    // regressed — which is a real defect, unlike the mark surviving its escort.
+    // NOT 100%. Bounty Hunt runs FIVE marks in sequence and each is on a spawn
+    // timer, so there are windows with no mark on the field at all — a fire in
+    // one of those correctly selects chaff, because there is nothing else. The
+    // measured miss count is ~1% and matches the number of fires those gaps can
+    // hold. A genuine selector regression does not shave a percent off this; it
+    // collapses it, because chaff outnumbers the mark by two orders of
+    // magnitude and `nearest` would pick chaff essentially always.
+    const MARK_SELECT_FLOOR = 0.9;
+    const ratio = bounty.selTotal ? bounty.selMark / bounty.selTotal : 0;
+    if (!bounty.selTotal) fail('bounty: nothing fired at all, so selection cannot be judged');
+    else if (ratio < MARK_SELECT_FLOOR) {
+      fail(`bounty: only ${bounty.selMark}/${bounty.selTotal} objective-targeting fires (${(ratio * 100).toFixed(0)}%) chose the mark — `
+        + `objective_target has regressed; below ${MARK_SELECT_FLOOR * 100}% means it is picking by proximity again`);
+    } else {
+      ok(`bounty: ${bounty.selMark}/${bounty.selTotal} objective-targeting fires (${(ratio * 100).toFixed(1)}%) chose the mark — `
+        + `the rest fall in the gaps between the five marks. It survives its escort by design; pierce is a phase-4 item`);
+    }
+  }
+  const others = rows.filter(r => r.kind !== 'bounty' && r.n === 4);
+  const untouched = others.filter(r => /^0\//.test(r.progress) || (!r.cleared && r.kind === 'elite_arena' && !r.kills));
+  if (untouched.length === others.length) {
     fail('not one objective target was damaged — `select` is not reaching the role-tagged entities at all');
   } else if (untouched.length) {
-    fail(`${untouched.length}/${rows.length} objective(s) still show zero progress: ${untouched.map(r => r.kind).join(', ')} `
+    fail(`${untouched.length}/${others.length} objective(s) still show zero progress: ${untouched.map(r => r.kind).join(', ')} `
       + '— report whether that is selection or throughput before changing either');
-  } else ok(`every objective shows progress: ${rows.map(r => `${r.kind} ${r.progress}`).join('; ')}`);
+  } else ok(`every objective shows progress: ${others.map(r => `${r.kind} ${r.progress}`).join('; ')}`);
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall offence checks passed');

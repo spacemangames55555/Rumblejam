@@ -15,6 +15,29 @@ import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
 import { DOMAIN_COLOR } from './domains.js';
 import { clamp } from './util.js';
 
+// Minion and soul-token presentation. Rule 14: no inline constants in
+// behaviour code, and a renderer is behaviour code that happens to draw.
+// Radii are per-archetype so a bear does not read as a wolf; a family missing
+// from the table falls back rather than throwing, because a new archetype is
+// supposed to be a data change and must not need this file edited to appear.
+const MINION_ART = {
+  radius: { skeleton: 9, golem: 15, risen: 10, wisp: 7, wolf: 11, bear: 15, hawk: 8 },
+  radiusDefault: 10,
+  diamond: ['wisp', 'hawk'],       // flyers
+  fallbackColor: '#9aa0bd',
+  outline: 2,
+  downAlpha: 0.4,
+  ringWidth: 2,
+  ringGap: 4,
+  hpBarBelow: 0.99,
+  hpBarGap: 6,
+  hpBarH: 3,
+  tokenR: 5,
+  tokenFill: '#c9a6ff',
+  tokenPulse: 0.15,
+  tokenAlphaMin: 0.25,
+};
+
 // The debug grid. Default OFF — it is the reference the 2.18 roster scale was
 // tuned against, and it will be needed again the moment biome enemy sheets
 // arrive, so it is a flag rather than a deletion.
@@ -262,6 +285,8 @@ export class Renderer {
     }
     for (const d of view.decoys || []) { if (inView(d.x, d.y)) this._drawDecoy(ctx, d, view); }
     for (const s of view.summons || []) { if (inView(s.x, s.y)) this._drawSummon(ctx, s, view); }
+    for (const tk of view.tokens || []) { if (inView(tk.x, tk.y)) this._drawSoulToken(ctx, tk); }
+    for (const m of view.minions || []) { if (inView(m.x, m.y)) this._drawMinion(ctx, m, view); }
     for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e); }
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
     // projectiles
@@ -1211,6 +1236,65 @@ export class Renderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.fillText(p.name, 0, -r - 8);
+    ctx.restore();
+  }
+
+  // A soul token on the floor. It fades as it expires rather than vanishing on
+  // a timer nobody can see — the ttl fraction rides the wire so this can read
+  // it, which is the only reason that field exists.
+  _drawSoulToken(ctx, tk) {
+    ctx.save();
+    ctx.translate(tk.x, tk.y);
+    const pulse = 1 + Math.sin(this.t * 4 + tk.x * 0.11) * MINION_ART.tokenPulse;
+    ctx.globalAlpha = MINION_ART.tokenAlphaMin + (1 - MINION_ART.tokenAlphaMin) * clamp(tk.ttlP, 0, 1);
+    ctx.fillStyle = MINION_ART.tokenFill;
+    ctx.strokeStyle = PALETTE.outline;
+    ctx.lineWidth = MINION_ART.outline;
+    ctx.beginPath();
+    ctx.arc(0, 0, MINION_ART.tokenR * pulse, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // A skill-era minion. Drawn in its owner's colour so a four-Druid party can
+  // tell whose bear is whose, with a shape per archetype family and — for the
+  // Druid's animals — the same revive ring the Hunter's beast already uses, so
+  // "down and coming back" reads identically wherever it appears.
+  _drawMinion(ctx, m, view) {
+    const owner = (view.players || []).find(p => p.idx === m.owner);
+    const col = owner ? owner.color : MINION_ART.fallbackColor;
+    const r = MINION_ART.radius[m.arch] || MINION_ART.radiusDefault;
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.strokeStyle = PALETTE.outline;
+    ctx.lineWidth = MINION_ART.outline;
+    if (m.down) {
+      // waiting on a revive: inert, translucent, with the countdown as a ring
+      ctx.globalAlpha = MINION_ART.downAlpha;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = MINION_ART.ringWidth;
+      ctx.beginPath();
+      ctx.arc(0, 0, r + MINION_ART.ringGap, -Math.PI / 2, -Math.PI / 2 + (1 - clamp(m.downP, 0, 1)) * Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = PALETTE.outline;
+      ctx.lineWidth = MINION_ART.outline;
+    }
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    if (MINION_ART.diamond.includes(m.arch)) {
+      // flyers read as a diamond so they are never mistaken for a ground unit
+      ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0); ctx.closePath();
+    } else {
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+    }
+    ctx.fill(); ctx.stroke();
+    // health, only once it matters — a full bar over every minion is noise
+    if (!m.down && m.hpP < MINION_ART.hpBarBelow) {
+      ctx.fillStyle = PALETTE.outline;
+      ctx.fillRect(-r, -r - MINION_ART.hpBarGap, r * 2, MINION_ART.hpBarH);
+      ctx.fillStyle = col;
+      ctx.fillRect(-r, -r - MINION_ART.hpBarGap, r * 2 * clamp(m.hpP, 0, 1), MINION_ART.hpBarH);
+    }
     ctx.restore();
   }
 

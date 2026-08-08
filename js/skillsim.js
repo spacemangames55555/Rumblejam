@@ -7,10 +7,11 @@
 // Everything here runs on the HOST. Clients receive fire events in the fx
 // stream and render them; they never evaluate a trigger.
 
-import { EnemyGrid, triggerHolds, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
+import { EnemyGrid, triggerHolds, triggerConsume, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
 import { selectTarget } from './selectors.js';
 import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
+import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
 import { TUNING as SAM } from './content/skills/samurai_armor.js';
 
@@ -27,8 +28,9 @@ export function initSkillPlayer(sim, p) {
   p.trigEvents = { kill: 0, hitTaken: 0, dodgeT: -999, lastFired: null };
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0 };   // passives that raise a stack's worth
+  initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
   p.footingShield = 0;               // the stance's absorb pool (see engineStatBonus)
@@ -43,6 +45,33 @@ export function initSkillPlayer(sim, p) {
 }
 
 export function treesFor(p) { return TREES_BY_CLASS[p.charId] || []; }
+
+// ROOM START, §8.5 rows 5 and 7. Lives here rather than in minions.js because
+// it needs the skill registry, and minions.js cannot import it — js/skills.js
+// imports MOVE_KINDS from minions.js, so the dependency only runs one way.
+//
+// Two halves of one rule. resetMinionsForRoom wipes what does not revive and
+// restores what does; this then fills in any animal the player has PAID FOR but
+// does not currently have standing. A Druid arrives with its pack, rather than
+// spending the opening seconds of every fight re-summoning what its points
+// already bought.
+export function startRoomMinions(sim, p) {
+  resetMinionsForRoom(sim, p);
+  for (const [id, rank] of Object.entries(p.skillRanks || {})) {
+    if (!(rank > 0)) continue;
+    const sk = SKILL_BY_ID[id];
+    if (!sk) continue;
+    for (const step of sk.compose || []) {
+      // Only persistent summons are restored. A timed extra is bought by firing
+      // its skill, and handing one out free at every door would make it a
+      // permanent that happens to expire.
+      if (step.kind !== 'summon' || !step.revives) continue;
+      const have = p.minions.filter(m => m.arch === step.archetype).length;
+      const want = step.maxAlive || 1;
+      for (let i = have; i < want; i++) spawnMinions(sim, p, sk, step, rank);
+    }
+  }
+}
 
 export function learnableSkills(p) {
   return treesFor(p).flatMap(t => TREES[t].skills).filter(s => canLearn(p, s));
@@ -193,6 +222,11 @@ export function tickSkills(sim, dt) {
     // publish the engines other trees read
     p.engines.armor = Math.max(0, p.stats.grit);
     p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
+    p.engineScaleBonus.pack = passiveSum(p, 'packDamageBonus');
+    // Slots are recomputed from ranks every tick rather than incremented on
+    // spend, so respecs, save loads and rank rollbacks cannot leave a player
+    // holding slots no skill still pays for.
+    p.summonSlots = summonSlotsFor(p, p.skillRanks, SKILL_BY_ID);
     p.movingT = p.moving ? (p.movingT || 0) + dt : 0;
     tickFooting(sim, p, dt);
     for (const id of Object.keys(p.skillCd)) {
@@ -207,6 +241,8 @@ export function tickSkills(sim, dt) {
       runCompose(sim, p, { ...q.skill, compose: [q.step] }, q.rank, sim.trigGrid);
     }
   }
+
+  tickMinions(sim, dt);
 
   sim.trigAcc += dt;
   if (sim.trigAcc < S) return;
@@ -264,6 +300,10 @@ function runTriggerTick(sim) {
 function fireSkill(sim, p, sk) {
   const rank = skillRank(p, sk.id);
   p.skillCd[sk.id] = sk.cooldown / 1000;
+  // What the fire SPENDS, before what it does. A token is taken off the floor
+  // by the skill that read it — the same shape as ON_KILL's counter being
+  // cleared by the tick that saw it. Keyed by trigger kind in triggers.js.
+  triggerConsume(sim, p, sk);
   const out = runCompose(sim, p, sk, rank, sim.trigGrid);
   // THE ToH TRAIT LAYER OBSERVES ATTACKS, and this is what an attack is now.
   // tohOnFire() was called from _tickWeapons() and nothing else — and
@@ -273,7 +313,18 @@ function fireSkill(sim, p, sk) {
   // target position, so it takes the one this skill's own selector chose.
   const range = sk.trigger.range || sk.trigger.radius || 0;
   const tgt = range ? selectTarget(sk.select, sim.trigGrid, p.x, p.y, range) : null;
-  sim._selLedger(sk.id, tgt);
+  // Only computed when the ledger is on — this is a diagnostic scan, and a
+  // per-fire grid walk has no business in a normal run.
+  let markInRange = null;
+  if (sim.selLog && range) {
+    markInRange = false;
+    for (const e of sim.trigGrid.near(p.x, p.y, range)) {
+      if (!e.bounty) continue;
+      const dx = e.x - p.x, dy = e.y - p.y;
+      if (dx * dx + dy * dy <= range * range) { markInRange = true; break; }
+    }
+  }
+  sim._selLedger(sk.id, tgt, markInRange);
   sim.tohOnFire(p, { def: null, a: p.aimA, tx: tgt ? tgt.x : p.x, ty: tgt ? tgt.y : p.y });
   p.trigEvents.lastFired = sk.id;
   p.fireLog.push({ id: sk.id, trigger: sk.trigger.kind, t: sim.time, hits: out.hits });
@@ -289,8 +340,21 @@ function fireSkill(sim, p, sk) {
 // hazard ticks and plague ticks included. There is no unrouted path, because
 // the moment one exists a build is strong for reasons the rim colour cannot
 // explain.
+// FEROCITY — the general offence stat (§9.5). Applied HERE, at the single
+// damage path every composed action routes through, because "multiplies all
+// composed damage" has to mean all of it: a strike, a bolt's impact, a cone, a
+// hazard tick, a splash and a minion's swing are the same call.
+//
+// It was weapon damage in the weapon era and was left behind when the damage
+// path moved to skills — §9.5's ruling is that this is the same job
+// generalised, not a new stat. The floor at -100% keeps a heavy penalty roll
+// from inverting damage into healing.
+export function ferocityMult(p) {
+  return Math.max(0, 1 + (p && p.stats ? p.stats.ferocity : 0) / 100);
+}
+
 export function skillDamage(sim, e, amount, p, skill) {
-  let amt = amount * domainMult(skill.domain, e.domain);
+  let amt = amount * domainMult(skill.domain, e.domain) * ferocityMult(p);
   if (e.defDownT > 0) amt /= e.defDownMult;         // defense down = takes more
   const before = e.hp;
   sim.damageEnemy(e, amt, { owner: p });
@@ -308,6 +372,13 @@ export function skillSplash(sim, p, skill, x, y, radius, damage, exclude) {
   }
 }
 
+// The render radius a skill bolt carries. js/content/sprites.js mirrors this as
+// PROJ_R_SHOT and buckets sprites off it, so the two must agree — they were two
+// unlinked literals that happened to both be 5, and a change to either would
+// have silently picked the wrong projectile sprite. sim_test asserts they
+// match by observing a real skill fire.
+export const SKILL_PROJ_R = 5;
+
 export function spawnSkillProj(sim, p, skill, step, rank, angle, range) {
   const pr = sim.projPool.alloc();
   if (!pr) return;
@@ -316,7 +387,7 @@ export function spawnSkillProj(sim, p, skill, step, rank, angle, range) {
     id: ++sim.spawnCounter, x: p.x + Math.cos(angle) * 6, y: p.y + Math.sin(angle) * 6,
     vx: Math.cos(angle) * step.speed, vy: Math.sin(angle) * step.speed,
     dmg: stepDamage(step, skill, rank, p), crit: false, friendly: true, lob: false,   // engine scaling rides the projectile
-    ttl: (range + 60) / step.speed, radius: 5, color: p.color, owner: p.idx,
+    ttl: (range + 60) / step.speed, radius: step.radius || SKILL_PROJ_R, color: p.color, owner: p.idx,
     pierce: r.pierce || 0, hitIds: new Set(),
     weaponId: null, kind: 'skill', summonBurn: null, summonKnock: 0, fromSummon: false,
     skill: { id: skill.id, rank },
@@ -339,17 +410,35 @@ export function hitSkillProj(sim, pr, e) {
 
 // ---------------------------------------------------------------- statuses
 
-export function applySlow(sim, e, mult, dur) {
-  e.slowT = Math.max(e.slowT || 0, dur);
-  e.slowMult = Math.min(e.slowMult || 1, mult);
+// ATTUNEMENT — status potency (§9.5). This is the function every composed
+// skill calls, and it applied nothing: `_applySlow` in game.js took an owner
+// and amplified, `applySlow` here took none and did not. Two functions one
+// character apart, one silently dropping the stat, and that single fork is
+// most of why Attunement measured dead.
+//
+// A deeper slow AND a longer one, matching _applySlow so the two paths cannot
+// drift again. The clamp at 0.15 keeps a chill from becoming a stun.
+export function statusMult(p) {
+  return 1 + ((p && p.stats ? p.stats.attunement : 0) + (p && p.hookAgg ? p.hookAgg.statusBoost : 0)) / 100;
+}
+
+export function applySlow(sim, e, mult, dur, owner = null) {
+  const att = statusMult(owner);
+  const m = Math.max(0.15, 1 - (1 - mult) * att);
+  e.slowT = Math.max(e.slowT || 0, dur * Math.max(0.25, att));
+  e.slowMult = Math.min(e.slowMult || 1, m);
 }
 
 // Plague STACKS rather than refreshing — that is what makes Internal Collapse a
 // payoff for a tree that already applies dots, and it is marked EXACT in the
 // spec for a reason.
 export function applyPlague(sim, e, damage, dur, p, skill) {
+  // Attunement rides the magnitude at APPLICATION, so the stored dps already
+  // carries it and the tick loop stays a plain subtraction. Ferocity does not:
+  // a dot is a status, and §9.5 gives status potency to Attunement.
+  const amt = damage * statusMult(p);
   e.plagueT = Math.max(e.plagueT || 0, dur);
-  e.plagueDps = (e.plagueDps || 0) + damage / Math.max(0.1, dur);
+  e.plagueDps = (e.plagueDps || 0) + amt / Math.max(0.1, dur);
   e.plagueOwner = p.idx;
   e.plagueDomain = skill.domain;
 }

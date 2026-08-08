@@ -3,6 +3,9 @@
 // sim events and UI/audio. Simulation (game.js) never touches the DOM.
 
 import { CONFIG, DEV, PALETTE } from './config.js';
+import { readsTokens } from './skills.js';
+// A player row's class, host-side. `char` is the def object; charId is the id.
+const myCharId = p => (p && p.char ? p.char.id : null);
 import { BIOMES, tileVariant } from './biomes.js';
 import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
@@ -1043,6 +1046,21 @@ function viewFromSim(sim) {
     pickups: sim.pickups,
     summons: sim.summons.filter(s => !s.dead).map(s => ({ owner: s.owner, type: s.type, x: s.x, y: s.y, aimA: s.aimA, packed: s.deployT > 0,
       down: !!s.down, downP: s.down ? s.downT / BEAST.DOWN_S : 0 })),
+    // Skill-era minions and soul tokens. Built the same way on both sides — see
+    // the client unpack below — so the renderer cannot tell host from client.
+    minions: sim.players.flatMap(p => (p.minions || []).map(m => ({
+      owner: p.idx, arch: m.arch, x: m.x, y: m.y,
+      hpP: m.maxHp > 0 ? Math.max(0, m.hp / m.maxHp) : 0,
+      down: !!m.down, downP: m.down ? m.downT / Math.max(0.01, m.downDur) : 0,
+    }))),
+    // §8.5 row 2: rendered only for a class that can read them. The list is
+    // still ON THE WIRE for everyone — it is state, not a cosmetic — this is a
+    // VIEW filter, so a Necromancer joining mid-fight sees the floor correctly.
+    // §8.5 row 2: rendered only for a class that can read them. The list is
+    // still ON THE WIRE for everyone — it is state, not a cosmetic — so this is
+    // a VIEW filter and a Necromancer joining mid-fight sees the floor at once.
+    tokens: readsTokens(myCharId(sim.players[app.myIdx]))
+      ? sim.tokens.map(t => ({ x: t.x, y: t.y, ttlP: Math.min(1, t.ttl / CONFIG.SOUL_TOKEN_TTL) })) : [],
     tele: sim.telegraphs.map(tg => tg.shape === 'circle'
       ? { shape: 'c', x: tg.x, y: tg.y, r: tg.r, prog: tg.t / tg.dur, spawnMark: !!tg.spawnMark }
       : { shape: 'b', x: tg.x, y: tg.y, a: tg.angle, w: tg.w, len: tg.len, prog: tg.t / tg.dur }),
@@ -1150,6 +1168,12 @@ function viewFromSnaps(dtFrame) {
     pickups: s1.pickups.map(m => ({ x: m[0], y: m[1] })),
     summons: s1.summons.map(sm => ({ owner: sm[0], type: sm[1], x: sm[2], y: sm[3], aimA: sm[5], packed: !!sm[6],
       down: (sm[7] || 0) > 0, downP: sm[7] || 0 })),
+    // Must produce the same shape as the host view above, or a summon looks
+    // different depending on who is looking at it.
+    minions: (s1.minions || []).map(m => ({ owner: m[0], arch: m[1], x: m[2], y: m[3], hpP: m[4],
+      down: (m[5] || 0) > 0, downP: m[5] || 0 })),
+    tokens: readsTokens((players.find(q => q.idx === app.myIdx) || {}).charId)
+      ? (s1.tokens || []).map(t => ({ x: t[0], y: t[1], ttlP: t[2] })) : [],
     tele: s1.tele.map(tg => tg[0] === 'c'
       ? { shape: 'c', x: tg[1], y: tg[2], r: tg[3], prog: tg[4], spawnMark: !!tg[5] }
       : { shape: 'b', x: tg[1], y: tg[2], a: tg[3], w: tg[4], len: tg[5], prog: tg[6] }),

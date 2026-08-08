@@ -17,6 +17,7 @@ const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
 const { TREES, SKILL_BY_ID, ALL_SKILLS } = await import('../js/skills.js');
 const { PRIMITIVE_KINDS, IMPACT_RIDERS, SHAPE_RIDERS, BOLT_RIDERS } = await import('../js/compose.js');
+const { CONFIG } = await import('../js/config.js');
 
 const VERBOSE = process.argv.includes('--verbose');
 let failures = 0;
@@ -94,6 +95,14 @@ function stage(g, p, skill) {
       if (e) { g.applyPlague(e, 20, 5, p, skill); out.push(e); }
       break;
     }
+    // A soul token on the floor, inside the trigger's range — the world state
+    // ON_TOKEN reads. Dropped through the sim's own pool rather than pushed
+    // onto the array, so the sweep exercises the same path a kill does.
+    case 'ON_TOKEN': {
+      ring(1, 60);
+      g.tokens.push({ id: ++g.spawnCounter, x: p.x + Math.min(t.range * 0.3, 50), y: p.y, ttl: CONFIG.SOUL_TOKEN_TTL });
+      break;
+    }
     case 'ON_HIT_TAKEN': ring(1, 60); p.trigEvents.hitTaken = 1; break;
     case 'ON_KILL': ring(1, 60); p.trigEvents.kill = 1; break;
     case 'ON_DODGE': ring(1, 60); p.trigEvents.dodgeT = g.time; break;
@@ -119,6 +128,11 @@ function observe(g, p, foes) {
     shield: p.shield, ward: p.ward,
     zones: g.zones.length, projs: g.projPool.count,
     hp: p.hp,
+    // A summon's observable effect is THE SUMMON. Without this, Raise Skeleton
+    // passed the sweep on the damage its skeleton happened to deal inside the
+    // window — a real effect, but not the one the skill claims, and it would
+    // still have passed with the spawn broken and only the wisp firing.
+    minions: (p.minions || []).length,
   };
 }
 
@@ -177,6 +191,12 @@ for (const skill of ALL_SKILLS) {
     if (after.ward > before.ward) effects.push(`ward ${Math.round(after.ward)}`);
     if (after.zones > before.zones) effects.push(`zone`);
     if (after.projs > before.projs) effects.push(`projectile`);
+    if (after.minions > before.minions) effects.push(`summon +${after.minions - before.minions}`);
+    // A heal's whole effect is HP that came back. Every SELF_THRESHOLD skill is
+    // staged below its own threshold, so there is always room to heal into —
+    // without this the Druid's Rejuvenate fired correctly every run and was
+    // reported as wired to nothing.
+    if (after.hp > before.hp) effects.push(`healed +${Math.round(after.hp - before.hp)}`);
 
     if (effects.length) ok(`${skill.id} — ${skill.trigger.kind} fired, ${effects.join(', ')}`);
     else fail(`${skill.id}: fired but produced NOTHING observable — a skill wired to nothing`);

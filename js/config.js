@@ -26,6 +26,35 @@ export const CONFIG = {
   CONTACT_COOLDOWN: 0.8,   // s between contact hits from one enemy
   INVULN_AFTER_HIT: 0.35,  // brief player i-frames after any hit
 
+  // ---- skill-era summons (js/minions.js) ----
+  // Engine-wide limits and shared kinematics, matching GDD §8.5. Per-summon
+  // magnitudes — hp, damage, duration, counts — are NOT here: they live in each
+  // tree's TUNING block and arrive on the compose step, so a Necromancer
+  // skeleton and a Druid wolf differ as data.
+  //
+  // THERE IS NO SUMMON SLOT POOL. §8.5 gives the Druid a pack size equal to how
+  // many animal skills it took, and the Necromancer capacity from rank alone.
+  // SUMMON_SLOTS_BASE and SUMMON_SLOT_CAP lived here and are deleted: they were
+  // invented to fix a problem the design does not have, and a shared pool
+  // silently couples two engines the section keeps deliberately opposite. If a
+  // future class needs standing capacity, it belongs to that class's engine.
+  MINION_CAP_PER_PLAYER: 64,   // runaway backstop only — §8.5 caps nothing by design
+  MINION_SPEED: 250,           // u/s; below BASE_SPEED so a pack cannot outrun its owner
+  MINION_AGGRO_RANGE: 420,     // how far a chaser will look for something to fight
+  MINION_HEEL_RANGE: 70,       // with nothing to fight, this close to the owner is close enough
+  MINION_ORBIT_RATE: 1.6,      // rad/s for orbiters
+  MINION_ORBIT_LERP: 8,        // how hard an orbiter corrects toward its station
+  MINION_CONTACT_CD: 1,        // s between contact hits from one enemy onto one minion
+
+  // ---- soul tokens ----
+  // A world resource read by the ON_TOKEN trigger. Not a Necromancer field: any
+  // enemy death can leave one and any class's skill may read one.
+  //
+  // EVERY enemy death drops one, and there is no cap and no roll (§8.5). The
+  // Necromancer's cost is the cold start — a room begins with no tokens because
+  // nothing has died in it yet — not scarcity within the fight.
+  SOUL_TOKEN_TTL: 30,          // s before it fades
+
   // ---- structure relocation (turrets/drones follow their owner) ----
   // "Off the owner's screen" is judged against a box GENEROUSLY larger than
   // any real viewport (the renderer shows ROOM_W×ROOM_H of world at the
@@ -214,7 +243,12 @@ export const PALETTE = {
 export const STATS = [
   { key: 'vitality',   name: 'Vitality',   pct: false, base: 80 }, // hit points
   { key: 'ferocity',   name: 'Ferocity',   pct: true,  base: 0 },  // universal damage %
-  { key: 'tempo',      name: 'Tempo',      pct: true,  base: 0 },  // attack + move speed
+  // MOVEMENT ONLY, and the label was the defect (§9.5). An "attack speed" stat
+  // is cooldown reduction renamed, and §4.2 keeps that off ranks and off items
+  // because it is the only thing stopping a narrow build buying back its
+  // uptime. The implementation was right; this comment claimed otherwise, and
+  // so did the glossary the player reads.
+  { key: 'tempo',      name: 'Tempo',      pct: true,  base: 0 },  // move speed
   { key: 'grit',       name: 'Grit',       pct: false, base: 0 },  // mitigation + knockback resist
   { key: 'reflex',     name: 'Reflex',     pct: true,  base: 0 },  // dodge (cap 60)
   { key: 'recovery',   name: 'Recovery',   pct: true,  base: 0 },  // amplifies ALL healing received

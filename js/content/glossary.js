@@ -16,8 +16,8 @@ export const STAT_GLOSS = {
     detail: 'A straight boost to every hit from every weapon. The most common damage stat — many weapons also scale with it directly.',
   },
   tempo: {
-    short: 'Attack speed and movement speed in one.',
-    detail: 'Makes you attack faster and run faster at the same time. Fast weapons and hit-and-run fighters love it.',
+    short: 'How fast you move.',
+    detail: 'Makes you run faster. It does NOT make your skills fire faster — skills fire on their own cooldowns, and nothing in the game shortens those. Positioning is what Tempo buys.',
   },
   grit: {
     short: 'Toughness — shrug off damage and knockback.',

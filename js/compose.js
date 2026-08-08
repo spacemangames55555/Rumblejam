@@ -47,7 +47,11 @@ export function engineScale(step, p) {
 // Magnitude for a step: base, ranked, then scaled by whatever engine it rides.
 // One function so a primitive cannot accidentally apply one and not the other.
 export function stepDamage(step, skill, rank, p) {
-  return rankedDamage(step.damage, skill, rank) * engineScale(step, p);
+  // `ingMult` is present only on a minion's actor facade — Ingenuity (§9.5)
+  // applies to a summon's swing, never to the summoner's own skills, and this
+  // is the one place the two can be told apart. A player has no such field, so
+  // the term is exactly 1 for every non-minion caster.
+  return rankedDamage(step.damage, skill, rank) * engineScale(step, p) * (p.ingMult || 1);
 }
 
 const TAU = Math.PI * 2;          // structural
@@ -263,6 +267,35 @@ export const PRIMITIVES = {
     out.hits++;
   },
 
+  // Puts a minion on the field. The ELEVENTH primitive, and the one that
+  // decides whether this table generalises: summons were the largest bespoke
+  // category in the source project, and every one of them had its own spawn,
+  // attack and death code.
+  //
+  // Everything that made them bespoke is data here. `archetype` names a row,
+  // `move` names one of MOVE_KINDS, and `attack` is ITSELF A COMPOSE STEP that
+  // the minion runs through this same table — so a skeleton's cleave is the
+  // `strike` above, not a copy of it. This function does not know what a
+  // skeleton is, and js/minions.js does not either.
+  summon(sim, p, skill, step, rank, grid, out) {
+    // DELIVERED SUMMONS. §8.5: Raise Skeleton throws at a soul token and the
+    // skeleton rises WHERE IT LANDS. `deliver` makes that a property of the
+    // step rather than of the skill, so any future summon can be thrown and
+    // this function still does not know what a skeleton is.
+    //
+    // It is what turns the token from a counter into a place: the position
+    // comes from the trigger that spent it, and a Necromancer's positioning
+    // stops being only about where enemies are.
+    if (step.deliver) {
+      const at = p.tokenClaimAt;
+      if (!at) return;                     // nothing was spent, nothing lands
+      sim.spawnSummonSeed(p, skill, step, rank, at);
+      out.states++;
+      return;
+    }
+    out.states += sim.spawnMinions(p, skill, step, rank);
+  },
+
   // A spreading damage-over-time. Stacks rather than refreshing, which is what
   // makes Internal Collapse a payoff for a tree that already applies dots.
   plague(sim, p, skill, step, rank, grid, out) {
@@ -299,7 +332,7 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
   if (r.root) { e.rootT = Math.max(e.rootT || 0, r.root / MS); out.statuses++; }
   if (r.taunt) { e.tauntT = Math.max(e.tauntT || 0, r.taunt / MS); e.tauntIdx = p.idx; out.statuses++; }
   if (r.knockback) { e.knockX += Math.cos(angle) * r.knockback; e.knockY += Math.sin(angle) * r.knockback; out.statuses++; }
-  if (r.slow) { sim.applySlow(e, r.slow.mult, r.slow.dur / MS); out.statuses++; }
+  if (r.slow) { sim.applySlow(e, r.slow.mult, r.slow.dur / MS, p); out.statuses++; }
   if (r.weakenDamage) { e.weakDmgT = r.weakenDamage.dur / MS; e.weakDmgMult = r.weakenDamage.mult; out.statuses++; }
   if (r.weakenDefense) { e.defDownT = r.weakenDefense.dur / MS; e.defDownMult = r.weakenDefense.mult; out.statuses++; }
   if (r.healPerHit) { p.hp = Math.min(p.stats.vitality, p.hp + r.healPerHit); out.states++; }
@@ -353,5 +386,10 @@ export const RIDERS_BY_PRIMITIVE = {
   cone: [...IMPACT_RIDERS],
   bolt: [...IMPACT_RIDERS, ...BOLT_RIDERS],
   hazard: ['slow'],
+  // A summon takes no riders. Riders resolve on a target at the moment of
+  // impact; a summon has no impact. What the MINION'S attack carries is
+  // declared on the attack step, and is validated against that step's own
+  // primitive — see assertTrees().
+  summon: [],
   heal: [], shield: [], ward: [], drain: [], plague: [],
 };

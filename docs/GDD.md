@@ -64,12 +64,22 @@ Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
 | Type | Contents |
 |---|---|
 | Horde | Standard arena wave combat |
-| Elite | ×0.55 count, ×2.4 HP, 75% drawn from the region's heavy half |
+| Elite | ×0.55 count, ×2.4 HP, ×1.35 damage, ×1.35 gold, 75% drawn from the region's heavy half |
 | Objective | One of the 8 existing objective types |
 | Shrine | No combat. Party chooses: +1 skill point **or** one guaranteed shop reroll. Never both, never rolled |
 | Cursed | Region modifier active for that node only, ×1.6 gold |
 
 Placement: Shrine and Cursed may not sit in column 1; both Elites may not share a column. Node type is **visible before selection** — the route decision does not exist otherwise.
+
+**What each type is for.** §2.3 exists to create a route decision, and a route decision needs the nodes to reward different builds. The deep-versus-wide sweep at the level-70 anchor (`tools/shape_by_node.mjs`) says they do, and says which way:
+
+| Type | Deep/wide | What it asks |
+|---|---|---|
+| Horde | 1.33, depth wins 4/6 trees | **Asks the build question.** Many thin enemies reward the specialised answer; a spread build clears the room more slowly than a signature does |
+| Objective | 0.82, depth wins 0/6 trees | **Prices breadth.** A structure to hold rather than a crowd to delete — the only shape where spreading points is the better buy, and therefore the only place a breadth build gets paid. Unanimous: every tree, both classes |
+| Elite | 1.18, depth wins 4/6 trees | **Compresses the spread.** Depth still wins, but by a narrower margin than in a horde — few-and-fat pulls the two shapes together rather than reversing them |
+
+Region-weighted across the 4/2/2 combat mix: **1.16**. Depth wins a region, but not by enough to make breadth a mistake — which is the shape §4.2 wants and is why no per-class breadth cost was added. The design consequence is that Objective is the node a breadth build routes *toward* and Horde is the one a depth build routes toward, and both are visible on the map before the choice is made.
 
 Depth scaling within a region: `depthMult = 1 + 0.08 * (column - 1)`. Resets each region.
 
@@ -155,6 +165,21 @@ Four difficulty settings scale HP, damage, density, and gold. **Standard is exac
 
 The difficulty setting's primary purpose is replay — a maxed character levelling an alt through region 1.
 
+**Measured, not declared** (`tools/difficulty_gate.mjs`). The table above was true and unreachable from phase 2b until D-24: `difficultyOf()` was called from one function, and that function had no callers. The load assertion passed the whole time because it checked that 1.3 is bigger than 1.0 in a table nothing read. What a 60-second room now fields, per setting:
+
+| Setting | Density | HP | Damage | Gold | XP per kill |
+|---|---|---|---|---|---|
+| Measured | ×0.87 (0.85) | ×0.87 (0.85) | ×0.89 (0.85) | ×0.93 (0.9) | 1.86 |
+| Standard | 1.00 | 1.00 | 1.00 | 1.00 | 1.78 |
+| Harrowed | ×1.23 (1.2) | ×1.26 (1.3) | ×1.28 (1.25) | ×1.29 (1.35) | 1.70 |
+| Unmade | ×1.56 (1.45) | ×1.69 (1.7) | ×1.53 (1.5) | ×1.76 (1.8) | 1.74 |
+
+Four axes move in the declared direction and within 25% of the declared magnitude; the fifth is flat within 10%, which is §4.1's exclusion observed rather than asserted.
+
+Two things had to change for the gold axis to be real. **A multiplier applied to an integer of 1 or 2 rounds to identity** — the gold factor was scaling `e.mats` at spawn, where `Math.round(1 × 0.9)` is 1, so every setting below Standard paid exactly Standard's gold. It now multiplies on the kill path with the fraction carried across kills. And because gold and XP had ridden the same number since phase 1, more gold meant more XP: **each dropped material now carries its own XP value**, and the extras a difficulty adds carry zero. A player's own doubling hook still carries XP with it — the exclusion is on the difficulty axis, not on multipliers in general, because a hook the player built for is a build paying off.
+
+The measurement denominator is its own lesson. The first version of the gate stood a level-1 character still, divided by the 0.02–0.06 materials it had banked per enemy, and reported the game paying ×0.58 where the table says ×0.9. The game was right; the denominator was a bot's walking pattern. Gold and XP are now read from `sim.payout` — what the kill path paid, per enemy killed — with the banked figures kept only as the end-to-end check that the zero-XP split survives the pickup path (Harrowed banks 1.33 materials per XP against Standard's 1.00).
+
 ### 4.2 The player power curve
 
 - **1–2 levels per map.** Across 48 maps this produces a character in the **low 70s** at the end of a run.
@@ -165,6 +190,41 @@ The difficulty setting's primary purpose is replay — a maxed character levelli
 #### Why no cap self-balances
 
 Skills fire on cooldowns. A character running few skills has long gaps and spiky damage. A character running many has syncopated fire rates and smooth damage, but each skill is under-invested and hits softly. Neither extreme wins; the optimum sits in the middle and moves with enemy HP and density.
+
+#### MEASURED — the claim holds, but across a region rather than within a fight
+
+`tools/shape_by_node.mjs` measures deep-versus-wide for six trees at the level-70 anchor, in four encounter shapes rather than one. **Depth does not win everywhere, and where it wins depends on the node.**
+
+| tree | Horde | Elite | Objective |
+|---|---:|---:|---:|
+| `samurai_armor` | 2.42 | 1.00 | **0.93** |
+| `samurai_tactics` | 1.63 | 1.25 | **0.86** |
+| `necro_marrow` | **0.25** | **0.48** | **0.61** |
+| `necro_dark_matter` | 1.02 | 1.76 | **0.82** |
+| `necro_summons` | 1.86 | 1.65 | **0.91** |
+| `druid_beasts` | **0.80** | **0.92** | **0.79** |
+| **depth wins** | 4/6 | 4/6 | **0/6** |
+| **mean ratio** | 1.33 | 1.18 | **0.82** |
+
+Measured against a **real** Elite node — §2.4's modifiers applied, not reconstructed (D-24). Elite fields 69 enemies at 23 HP against Horde's 118 at 9.
+
+The Elite column moved when the gold multiplier moved to the kill path: a node paying ×1.35 gold now drops extra materials, each drop consumes the shared RNG stream, and the sequence downstream differs. Horde and Objective, which pay ×1.0, are unchanged to the digit. That is worth stating rather than quietly re-running — **a balance number carries the build it was measured on**, and this one is measured on the build where difficulty and node gold are both real.
+
+**Objective nodes favour breadth in every tree measured.** A nest is a structure to reach past tough company, and covering several situations beats doing one thing hard. Horde and Elite both favour depth in four of six.
+
+**Elite pulls toward breadth, but by less than the reconstruction suggested.** Its mean is 1.18 against Horde's 1.33 — a real narrowing, and it pulls the extremes in from both ends (`samurai_armor` 2.42 → 1.00, `druid_beasts` 0.80 → 0.92). Fewer-and-fatter compresses the spread rather than reversing it. **Objective, not Elite, is the node that prices breadth.**
+
+**Region-weighted, the claim holds.** §2.4 gives a region 4 Horde, 2 Elite and 2 Objective combat nodes. Weighted by that mixture the ratio is **1.16** — mildly depth-favouring, not the runaway a single horde arena suggests.
+
+So the optimum sits in the middle **across a region, not within a fight**. A player who optimises for the horde nodes pays for it at the objective, and the route decision in §2.3 is what prices the choice. **No per-class breadth cost is needed**, and the Druid's revive scale is a flavour of its engine rather than the only thing holding the design up.
+
+**CORRECTION to the previous entry.** This section briefly claimed depth won in "three of four measured trees" at the endgame. That was drawn from a four-tree table which omitted `necro_marrow` and `necro_dark_matter` — both breadth-dominant in the same run. The full six-tree set was 3 deep / 3 breadth even in a single arena, and the conclusion was an artifact of a subset chosen for a table rather than a measurement. A ratio reported over a chosen subset is not a finding.
+
+#### Measure a ratio at more than one level, and in more than one arena
+
+Two anchors matter because a rank-11 skill is 92% of a level-12 character's points and 16% of a level-70 one's. **Capping skeletons from the level-12 ratio would have capped the endgame using the tutorial.**
+
+Two *arenas* matter for the same reason in a different axis. The single-arena reading also depended on a harness detail: an early version of the sweep restored the player to full HP every tick, which reported `druid_beasts` at 1.46 where a survival-faithful harness said 0.69 — the same tree at the same level, two answers. Two harnesses disagreeing means one is measuring something else.
 
 #### The two levers that must stay off ranks
 
@@ -504,6 +564,40 @@ The lesson generalises: **a measurement insensitive to every dial you try is mea
 
 Summons were the largest bespoke category in the source project and are the largest untested area of the composed-action schema. Two classes use them, and they are deliberately opposite engines rather than one mechanic with different art.
 
+**Implementation status: built, and diverging from this section in eight places.** The engine, both trees and the instrumentation shipped before this section was available to build against. The divergence log at the end of §8.5 lists every gap; **§8.5 wins on all eight and the code changes to match.** Nothing below is a proposal.
+
+#### A minion is an ACTOR, not a behaviour
+
+**This is the pattern the remaining eleven classes should follow, and it is the reason summoning cost one primitive instead of a handler per archetype.**
+
+The instinct is to model a summon as a *behaviour*: a skeleton knows how to swing, a hawk knows how to dive, and each new archetype brings the code that makes it act. That is what the source project did, and it is why summons were its largest bespoke category — every summon carried its own spawn, attack and death path, so adding one meant editing the engine.
+
+A minion here is an **actor**. It does not know how to do anything. It is a position, a body and an allegiance, handed to the same machinery a player is handed to. Two halves make that work:
+
+1. **Its attack is a compose step**, run through the same `PRIMITIVES` table a player's skill uses (§5.7). A skeleton's cleave *is* `strike`. A hawk's dive *is* `bolt`. There is no minion attack code, because an attack is already a thing this codebase knows how to resolve, and a minion has no better claim to a private version of it than a skill does.
+2. **Its identity fields are the owner's, by reference** — `idx`, `stats`, `hookAgg`, `char`. Only the spatial fields are the minion's own. So a skeleton's kill is the Necromancer's kill, its lifesteal heals the Necromancer, and the damage ledger attributes to the Necromancer, with **no special case in `damageEnemy` or `skillDamage`**. Attribution is not forwarded; it never diverged.
+
+What falls out: a new archetype is a row of data. `js/minions.js` does not know what a skeleton is, and neither does `js/compose.js` — asserted by a scan in `sim_test` that searches every engine file for any skill id or archetype name, reading the needles out of the live registry so a rename cannot empty the search, and carrying a negative control that plants a handler and confirms the scan sees it.
+
+**Generalise it as: give the new thing an actor, not a vocabulary.** The Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks are all the same shape — an entity that acts somewhere the player is not. Each should borrow the primitives and the owner's identity rather than grow its own verbs. Recorded as §13 rule 23.
+
+#### The shape
+
+```
+{ kind: 'summon', archetype: 'wolf', move: 'chase', maxAlive: 1,
+  slotted: true, revives: true, hp, radius, spawnRadius, duration,
+  attackCd, reviveBase, revivePerAnimal,
+  attack: { kind: 'strike', damage, arc, reach, select: 'nearest' } }
+```
+
+`move` is a closed taxonomy (`MOVE_KINDS`: `chase`, `orbit`), asserted at load like `TRIGGER_KINDS` (§5.2) and `SELECT_KINDS` (§5.3). A third kind, `guard`, was written and deleted before shipping because no skill used one — §13 rule 1.
+
+**`select` on the *attack* step is the minion's own targeting rule, not the summoner's.** The summoner chose where to put it; the minion chooses what to bite. A summon step therefore carries two independent selection decisions, and collapsing them would make every pet a mirror of its owner's build.
+
+`maxAlive` caps one archetype without capping the rest. It exists because the cheapest-triggering summon otherwise takes every available place: the first armed Druid fielded three wolves and never once a bear.
+
+**Tier 1 in both summoner trees is a direct attack, not a summon.** §5.6 requires a tree's opening pick to be a damaging active, and a summon defers its damage behind a spawn, a walk and an attack cooldown — "something that kills" has to kill now. The first animal and the first skeleton are tier 2.
+
 #### Druid — the pack
 
 - **One summon per animal skill.** Additional ranks make that animal stronger, not more numerous.
@@ -555,7 +649,53 @@ reviveMs = 15000 + 4000 × (totalAnimals − 1)
 | Across a room | Persist, revive on a timer | Wipe, rebuild from zero |
 | Cost | Offence forgone; revives slow as the pack grows | Cold start every room; capacity is useless without offence |
 
+#### The token is a place, not a counter
+
+Row 4 is the substantial one, and it matters beyond correctness. A token that is merely *spent* is a counter: it could be an integer on the player and nothing about the game would change. A token that is **thrown at, and raises a skeleton where the throw lands**, is a position on the floor — and positions are what this game is made of.
+
+**This is §5.1's premise applied to a resource.** Players do not fire manually; every ability triggers from a condition the player controls through where they stand and how they move. Until row 4, the Necromancer's positioning was about where enemies *are*, like everyone else's. Now it is also about **where things died** — a fought-over corner is a place worth standing near, a body dropped behind a wall is a skeleton you cannot reach, and a kill in the wrong spot is a resource wasted. The build reads the floor's history rather than only its present.
+
+It is also why the Necromancer's cold start is a real cost rather than a tax. A room begins with no tokens because nothing has died in it yet: the floor has no history to read.
+
+Mechanically this is a `deliver` block on the summon step — a property of the step, not of the skill — so any future summon can be thrown without the engine learning what a skeleton is. `claimToken()` returns the position rather than a boolean for the same reason; a boolean would reduce it back to a counter in the one function that decides.
+
+#### Divergence log — CLOSED
+
+All eight rows are closed. The summoning engine now matches this section; the log is kept because the shape of the mistake is worth remembering — the engine, both trees and the instrumentation were built from a brief citing a §8.5 that had not yet reached the repository, so the magnitudes and several mechanics were invented at the keyboard. §8.5 won on every row.
+
+| # | §8.5 | how it was closed, and what asserts it |
+|---|---|---|
+| 1 | **Every** kill drops a token | No roll, no cap. Asserted by counting: 40 kills, 40 tokens, exact equality — a rate looks identical to certainty on a lucky sample |
+| 2 | Visible only to classes that can read them | A **view** filter, not a wire filter — tokens stay on the snapshot for everyone because they are state. Derived from tree data (`readsTokens()`), so the Wizard's Soul tree inherits it with no code change |
+| 3 | Expire after 30 s | Read off a token dropped through the real kill path |
+| 4 | Thrown at the token; rises where it lands | See above. Asserted spatially: 4u from the token, 264u from the caster |
+| 5 | Skeletons wipe every room | Asserted across a **real node transition**, never a timer — a wipe that happened to look right because a duration expired would pass a timer check and fail a player walking through a door |
+| 6 | No cap beyond rank | `SUMMON_SLOTS_BASE` and `SUMMON_SLOT_CAP` deleted. Asserted at **rank 12**, chosen because the old ceiling of 8 would have bitten: 12 slots granted and 12 skeletons standing |
+| 7 | Animals present at map start, fully restored | Restored at the room-start HP restore, where this section puts it. Asserted by downing an animal, travelling, and checking it arrives standing at full HP |
+| 8 | `15000 + 4000 × (N−1)` | Asserted at **five** pack sizes with slope and intercept checked separately — one sample cannot see a wrong slope, and two cannot tell a wrong slope from a wrong intercept |
+
+**`SUMMON_SLOTS_BASE` is gone and must not return.** It was invented to give the Druid somewhere to put an animal. This section solves that differently: a Druid's pack size is how many animal skills it took, its animals are **not slotted at all**, and the Necromancer's capacity is rank alone. A shared pool would couple two engines this section keeps deliberately opposite. If a future class needs standing capacity, it belongs to that class's own engine.
+
+#### Balance pass, at two anchors
+
+Measured by `tools/balance_summoners.mjs` against the four already-tuned trees, at both build shapes, at **two levels**. One anchor is not enough: a depth-versus-breadth ratio is a point on a curve that moves with how much of a character's total investment one rank represents.
+
+| | level 12 (3 slots, region 2) | level 70 (region-8 anchor) |
+|---|---|---|
+| a rank-11/69 signature is | 92% of every point owned | 99% of every point owned |
+| `necro_summons` wide → deep | 14.2 → 24.6 (1.74) | 26.1 → 48.3 (**1.85**) |
+| `druid_beasts` wide → deep | 18.0 → 7.8 (0.43) | 27.5 → 19.0 (**0.69 — live decision**) |
+| `samurai_armor` wide → deep | 25.9 → 16.4 (0.63) | 29.0 → 49.3 (**1.70**) |
+| `samurai_tactics` wide → deep | — | 39.6 → 55.8 (**1.41**) |
+
+Both trees sit inside the reference band at both shapes and both anchors.
+
+**No skeleton cap. The earlier reading was an artifact of the anchor.** "Depth dominates at 1.90 against the Samurai's 0.63" was measured only at level 12 — and at level 70 the *already-tuned* Samurai trees flip to 1.70 and 1.41. Depth favouring the endgame is the norm for a tuned tree here, not a Necromancer anomaly, and the Necromancer's 1.85 sits beside `samurai_armor`'s 1.70. Capping skeletons from the level-12 number would have capped the endgame using the tutorial.
+
+**The Druid's shape problem resolved without a balance patch.** §9.5's ruling that minion HP is the rank's duration term is what fixed it: a rank now raises a minion's damage *and* how long it survives, so investment stops buying a pet that hits harder and dies just as fast. The ratio moved 0.43 → 0.69 at the endgame anchor, from BREADTH DOMINATES to a live decision. The flat HP inflation applied earlier as a balance patch has been **reverted** — it moved the number (0.53 → 0.84 animals standing) without moving the shape, which was the evidence that the constant was never what was wrong.
+
 ---
+
 
 ## 9. Economy and Shop
 
@@ -617,9 +757,100 @@ All placeholders for playtest. Income roughly flat within a region, scaling ~15%
 
 ### 9.5 Stats
 
-**GAP — this document does not record the stat system.** The ten stats live in `js/config.js` and are authoritative there, but the GDD records no intent: what each stat is for, which are opposed for §9.2's +/− trade-offs, and which are engine-readable via `scaleWith`. This needs writing before phase 4, since the stat item tier is defined in terms of opposing axes that are nowhere named.
+Ten stats. This section records what each is **for** — the code in `js/config.js` records what each is worth. Where they disagree, this section wins.
 
-`SCALING_RATES` in config is dead with weapons and is scheduled for removal.
+Three stats are currently dead (D-23) and one is half-live. Their entries below state the intended job, not the current behaviour; §15 tracks the gap.
+
+#### The ten
+
+| Stat | Job | Reads |
+|---|---|---|
+| **Vitality** | How much punishment the body absorbs before it stops | Max HP, room-start restore, `hpAbove`/`hpBelow` conditions, objective %-max true damage |
+| **Ferocity** | The general offence stat — **multiplies all composed damage** | *Dead. Intended: a multiplier applied in the compose damage path, the counterpart to Vitality* |
+| **Tempo** | How fast the body moves. **Movement only** | Move speed, Wizard decree tick |
+| **Grit** | Damage mitigation and staying put | Mitigation, knockback resistance, Quill reflect, and `p.engines.armor` for `scaleWith` |
+| **Reflex** | Avoiding a hit outright | Dodge roll in `hurtPlayer` |
+| **Recovery** | How much healing is worth | `_heal()`, every healing source; Priest shield scaling |
+| **Ingenuity** | **The summoner stat** — minion damage and minion HP | *Dead. Intended: applied to every summoned actor's damage and HP* |
+| **Attunement** | **Status potency** — the strength and duration of slows, weakens, and damage-over-time | *Dead. Intended: applied wherever a status is written, including the composed path* |
+| **Greed** | Wealth and luck | Tithe on fight clear, rarity bias in `_rollRarity`; Assassin contract payout |
+| **Reach** | How far the body's influence extends | Pickup magnetism, ToH trait radii |
+
+#### Tempo is movement, and the label is the bug
+
+Tempo reaches only move speed. **That is correct and should not be changed.**
+
+An "attack speed" stat would be cooldown reduction wearing a different name, and §4.2 keeps cooldown reduction off ranks and off items because it is the only thing preventing a narrow build from buying back its uptime. A stat item granting Tempo would reintroduce it through the back door.
+
+**The defect is the UI claiming attack speed, not the implementation withholding it.** Fix the label.
+
+#### The three dead stats and their intended jobs
+
+Each dead stat's old read-sites point at what it was for, and each has a natural home in the skill era:
+
+- **Ferocity** was weapon damage. Its skill-era job is the same one generalised: **a multiplier on all composed damage.** It is the offence stat the way Vitality is the defence stat, and it is the one every class wants some of.
+- **Ingenuity** was read only by `_summonStats` — the summon stat, in a game that then had no summons. §8.5 gives it a job: **minion damage and minion HP.** The class that just gained summons currently ignores the summon stat.
+- **Attunement** was applied by `_applySlow` but not by `applySlow`, the one every composed skill calls. Its job is **status potency** — how hard a slow slows, how long a weaken lasts, how much a plague ticks.
+
+**A stat is defined by what it multiplies, not by which function happens to call it.** All three were alive in the weapon era and were left behind by a migration that moved the damage path; none is a new stat needing a new design.
+
+#### Minion HP is duration
+
+A summoned actor's HP is how long it lasts. Under §4.2 — ranks raise damage and duration — **a rank in a summon skill raises both its minion's damage and its minion's HP**, because for an actor those are the two terms.
+
+This is the intended reading and it resolves a measured problem: a rank-11 wolf that hits harder but dies just as fast, then costs a 15-second revive, makes depth strictly worse than breadth for the Druid. HP scaling as the duration term is not a balance patch; it is the rank rule applied correctly to a thing that has a body.
+
+#### Which stats feed `scaleWith`
+
+Grit already bridges to skills as `p.engines.armor`. Any stat may be exposed the same way, but exposure is a design decision per stat, not a default — a stat readable by every skill stops being a stat and becomes a global multiplier.
+
+Currently exposed: **Grit**. Nothing else, deliberately.
+
+#### The penalty roll — constraints and measurement
+
+*§9.2 states the rule; this states what the roll may not do, and what it measures at.* Both sections were headed "Stat items and the random roll" until the merge that folded the last web upload found two identical headings in one document — the only structural defect it turned up, and pre-existing rather than merge-made.
+
+§9.2's stat items grant a flat bonus and roll their penalty **randomly against another stat**. There is no fixed opposition table, because a fixed one is memorised after a run and the shop stops being a gamble.
+
+Two constraints on the roll:
+
+1. **A penalty may not roll into a stat the character has none of.** Reducing a stat already at zero is free, and a shop full of free items has no trade-offs.
+2. **Tempo is rollable; cooldown is not a stat.** Nothing in the roll table may reach a cooldown, directly or by proxy.
+
+**OPEN — penalty weighting. MEASURED, NOT YET RULED.** `tools/penalty_roll.mjs` applies a real penalty to each eligible stat, replays the same fight from the same seed, and calls it free when nothing observable changes.
+
+| build | eligible pool | free-roll rate | free for this build |
+|---|---:|---:|---|
+| Necromancer L12 | 7/10 | 40.3% | reflex, recovery, reach |
+| Druid L12 | 7/10 | 28.5% | reflex, recovery |
+| Samurai L12 | 7/10 | 42.3% | reflex, recovery, ingenuity |
+| Necromancer L70 | 10/10 | 9.8% | recovery |
+| Druid L70 | 10/10 | 17.8% | reflex, recovery |
+| Samurai L70 | 10/10 | 29.3% | grit, recovery, ingenuity |
+
+**Mean 28.0%, worst 42.3%.** The zero-stat constraint alone removes only 1.5 of 10 stats from the pool on average, so **it is not sufficient** — roughly one roll in 3.5 lands somewhere the build cannot feel.
+
+**But the number is inflated by content that does not exist yet, and weighting should not be added on it.** Recovery is free in **five of the six builds**, and it dominates the result for one reason: `druid_rejuvenate` is the only healing skill in the game. A stat is free for a build with no source for it, and eleven of fourteen classes have no tree at all — so the measured pool of "stats a build engages" is small because the content is missing, not because the design leaks.
+
+**Re-measure when phase 5 has landed healers, status classes and more summoners.** If the rate stays near 30% with a full roster, weighting is justified; if it falls, fully random stands and the lottery is preserved unmodified. Adding weighting now would tune against a three-class game.
+
+*Known limitation:* three cells read UNTESTED — a build owns a status or summon source that the 45-second staged fight never fired. They are counted as neither free nor felt rather than assumed.
+
+#### The stat gate
+
+**Everything the game sells must be read by something in the live path, proven by effect rather than existence.** `tools/stat_gate.mjs` stages each stat in the situation where it would matter and compares a bumped run against an unbumped one from the same seed.
+
+A grep cannot do this job: `p.stats.ferocity` appears at four read sites and all four are dead code. Nor can a single arena run — Reflex read as dead until the probe arranged to be hit, and Greed read as dead until the probe learned the tithe fires on fight clear rather than per kill.
+
+This is the stat-system counterpart to the offence gate, and its absence is the same gap that let a party with no offence pass a green suite for an entire overhaul.
+
+**Any stat displayed to a player, offered on level-up, or sold in a shop must pass the gate.** A stat that cannot be shown to move something is not a stat.
+
+#### Dead constants
+
+`SCALING_RATES` was weapon-era and unread by the combat path. **It is deleted, not deprecated** — `js/config.js` keeps a comment where it stood, naming what it did and why it went, because a dead constant that looks live is how the README drifted the first time.
+
+This line said "scheduled for removal" for two drafts after the removal had happened. It was caught by the merge that folded the last web upload, not by a check — the GDD has no gate, which is the argument for it having exactly one writer.
 
 ---
 
@@ -738,6 +969,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 17. **All numbers in `TUNING` blocks.**
 18. **Verified push** — confirm with `git ls-remote` before treating a branch as landed.
 19. **Save tests round-trip through a real file.**
+20. **A harness must arrive in the state a player would arrive in.** Level, slots and items are part of the FIXTURE, not incidental setup. Objective harnesses dropped a party in at level 1, and `spendSkillPoint` auto-slots only into an already-unlocked slot while `setLoadout` refuses mid-fight — so a party that learned ten skills fought entire objectives with **one**, however high it levelled during them. That hid a build-depth constraint behind an apparent HP constraint for three patches: at three slots, with nothing tuned, Nest Purge at 4p went from 1/3 to cleared and Elite Arena solo from zero kills to cleared.
+21. **Everything the game SELLS a player must be read by something in the live path, and a gate must prove it by effect rather than by existence.** This is the stat-system form of the offence gate, and its absence was the same gap: a green suite once hid a party that could not deal damage, and a green suite then hid three stats that did nothing while being offered at every level-up. A search for the identifier is not evidence — `p.stats.ferocity` is read in four places, all of them dead code. `tools/stat_gate.mjs` stages each stat in the situation it would matter in and compares a large swing against an unbumped run from the same seed; a stat that moves no observable fails. Extend it to any other currency the game offers, and never let a probe that could not run report as a pass.
+22. **A ratio reported over a chosen subset is not a finding.** Six trees measured deep-versus-wide at the endgame anchor came out 3 depth-dominant and 3 breadth-dominant. A four-tree table drawn from the same run — omitting the two breadth-dominant Necromancer trees — read as "3 of 4 depth-dominant" and sent a design conclusion the wrong way: it argued that §4.2's self-balancing claim was half broken and that every class might need its own breadth cost. Neither was true. Report the whole population or state the selection rule in the same sentence as the number; a subset chosen while building a table is a selection rule nobody declared.
+23. **An entity that acts is an ACTOR, not a behaviour.** Give it the existing primitives and the owner's identity by reference; do not give it verbs of its own. A minion's attack is a compose step through the same `PRIMITIVES` table a player's skill uses, and its `idx`/`stats`/`hookAgg` *are* the owner's fields, so attribution never has to be forwarded because it never diverged. This is why summoning — the largest bespoke category in the source project, where every summon carried its own spawn, attack and death code — cost **one primitive and one trigger** here, with zero per-archetype handlers across twenty new skills. The same shape is waiting for the Monk's traps, the Assassin's killbox, the Hunter's second body and the Priest's judgment marks. See §8.5.
 
 ### 13.1 The through-line
 
@@ -763,30 +998,134 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**Two thirds of the current red is not defects.** 21 failing checks: 8 are content not authored, 6 await a design decision, 7 are a deferred subsystem. **Group D is empty.**
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **15 failing checks**: 6 are content not authored, 2 await a design decision, 7 are a deferred subsystem. The counts sum to 15 with nothing double-counted, and the focused instruments — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `stat_gate`, `difficulty_gate`, `validate_items` — are all green.
 
-### Group A — waiting on phase-5 trees (8)
+**Group D has one entry: D-25, opened by `item_gate` on its first run.** D-23 and D-24 are closed. All three were found by measurement rather than by a red check, which is the argument for keeping the measuring tools around between patches — and for writing the next gate before the content it guards.
 
-Twelve classes have no trees. Failures here are classes that do not exist yet — Bard rhythm, singularity, coral, blob, and related trait gaps. These go away as §8.2 is authored.
+**A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
-### Group B — waiting on a design decision (6)
+### Group A — waiting on phase-5 trees (6)
+
+Eleven classes have no trees. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
+
+| what fails | count | why |
+|---|---:|---|
+| `Bard rhythm never built`, `no singularity in 30s`, `no coral planted`, `toh blob` | 4 | These traits key off `tohOnFire`, which is correctly wired to `fireSkill` — but `toh_bard`, `toh_mage` and `toh_sundian` have no tree, so they never fire a skill. The hook is right; there is nothing to hook onto. (`toh blob` is the Sundian's coral array specifically.) |
+| `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
+| `DPS gate: 2 outlier(s)` | 1 | The DPS table measures all fourteen; eleven score 0 because they cannot attack. |
+
+**Two entries left this group by being built.** `elite_arena (1p) never cleared` went green when the Necromancer's Summons tree landed — the class gained a third tree, the solo build got deeper, and the objective cleared with nothing tuned. `toh_druid` left with its own tree. That is the group working as labelled: it said "not built yet", something got built, and it closed.
+
+### Group B — waiting on a design decision (2 failing, 3 open questions)
 
 | Item | Question |
 |---|---|
-| **Throughput: Nest Purge** | A tier-1 skill at ten ranks makes progress but cannot finish 3 nests in budget. Are nests meant for a party, a deeper build, or is nest HP wrong? |
-| **Throughput: Bounty Hunt** | The same, for 5 marks — compounded by §5.9, since escorts are a deliberate wall |
-| **Penalty weighting on stat items** | §9.2 — fully random penalties can roll free on stats a build does not use. Weight lightly toward used stats, or accept free rolls as luck? |
-| **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data |
-| **Summoner harness gap** | The summoner class has no structure to recall — a test fixture gap now that §8.5 defines the mechanic |
-| **§9.5 stats** | The stat system has no recorded intent, and phase 4's stat tier is defined in terms of opposing axes that are nowhere named |
+| **Throughput: Nest Purge** | **CLOSED — working as intended.** Measured at both party sizes with the party arriving at level 12: 4p clears 3/3 at 213 s of 360 s. Solo reaches 2/3 and is not the target. The deciding factor was **loadout slots, not HP** — see §13 rule 20. *No failing check.* |
+| **Throughput: Bounty Hunt** *(1 failing)* | **1p only now — 4p CLEARS.** See below; the EXPECTED-RED ruling has moved. |
+| **Summoner harness gap** *(1 failing)* | Narrowed by §8.5, not closed. Skill-era summons exist and the Necromancer fields them, but they are *units* — they walk, they die, they are re-raised. Structure **recall** (`STRUCT_CHANNEL_S`) still has nothing to act on: `bonelord` builds its structure via `_addWeapon` and `weaponSlots` is 0. The decision is whether recall survives the removal of weapons at all. |
+| **Penalty weighting on stat items** | §9.2 — fully random penalties can roll free on stats a build does not use. Weight lightly toward used stats, or accept free rolls as luck? *No failing check.* |
+| **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data. *No failing check.* |
+| **§9.5 stats** | **CLOSED — §9.5 is written and D-23 is fixed.** All ten stats are read by the live path and proved by effect at 10/10 (`stat_gate.mjs`). Tempo's defect was the *label*, not the code: it reaches move speed only, and nothing shortens a skill cooldown. The glossary and compendium now say so. *No failing check.* |
+
+#### Bounty Hunt is EXPECTED-RED until phase 4. Do not re-diagnose it.
+
+`bounty (1p) never cleared` and `bounty (4p) never cleared` are **§5.9's design resolution appearing as a red line.** The specific thing to not do is reach for mark HP.
+
+- Marks spawn with an escort pack **by design**. Escorts are a wall you clear first, and that is what distinguishes a mark from a nest: a nest is a structure you reach, a mark is a target you earn a line on.
+- Punching straight through needs **pierce**, a §9.2 modifier item at the magnitude tier. It does not exist until phase 4.
+- A 4-player armed party reaches **3 of 5 marks** in the full budget, which is the correct number for a party with no pierce.
+
+Measured twice so nobody re-derives it: per-target attribution on the 1p mark showed the selector chose the mark on **23 of 23** fires with **2** arriving; across `offence_test` the selector chooses the mark on **93.4%** of objective-targeting fires. It is not a targeting failure — the shots are intercepted. `offence_test` therefore asserts **selection correctness** for this objective and never mark kills, because asserting kills would demand a capability the game has not shipped and would quietly become a retune request on mark HP.
+
+**UPDATE — 4p now clears, and nothing was tuned to make it.** The line above used to read "these two go green when pierce exists, not before; if they go green earlier, something has been tuned that should not have been". That test has now fired, and the honest answer is that the condition was written before Ferocity had a job.
+
+`bounty (4p)` went green when §9.5 gave Ferocity its job as a multiplier on all composed damage. No mark HP was touched, no escort was weakened, and the selector is unchanged at 100%. A four-player party simply now has enough throughput to grind through an escort pack the long way. Pierce would still be the *efficient* answer, and remains a §9.2 modifier item.
+
+**`bounty (1p)` stays EXPECTED-RED and the original reasoning holds for it**: one player cannot out-throughput a wall built for a party, and the wall is the point. If the solo row goes green before pierce exists, that IS the tuning failure the old line was guarding against.
 
 ### Group C — phase 4, the economy (7)
 
 Weapon leftovers and shop-economy checks. **Skipped, not deleted** — named, counted, and reported separately so a skip never reads as a pass, and restored by flipping `CONFIG.WEAPONS_ENABLED`.
 
-### Group D — genuine open defects (0)
+`below-max duplicate` · `combine result wrong` · `manual combine broke` · `extraction shop buy failed` · `sell weapon: mats 0→0` · `toh_druid weapon cap 0` · `toh_necromancer weapon cap 0`.
 
-Empty. Every remaining failure is content not authored, a decision not taken, or a subsystem deferred.
+The weapon-cap pair names whichever two classes head `SELECTABLE`, so it read `toh_samurai` before the Druid gained a tree. Same defect, different class in the string — worth knowing before a set diff reads one as fixed and the other as new.
+
+### Group D — genuine open defects (1)
+
+#### D-25 — OPEN: sixteen item hooks are sold and do nothing
+
+`tools/item_gate.mjs` was written before the phase-4 item pool, on the principle that an item granting a modifier nothing reads is Ferocity with a price tag. Its first run says **28 of 44 hook kinds in the catalog are connected to anything**, and the other 16 are sold across 22 items:
+
+`burnOnHit` · `chillOnHit` · `chainOnHit` · `critHeal` · `critAfterKill` · `critEveryN` · `critVsChilled` · `critVsBurning` · `critVsFullHp` · `firstHitCrit` · `eliteBossDamage` · `extraPierce` · `extraProjectiles` · `knockbackBoost` · `nextAttackAfterDodge` · `summonBoost`
+
+**One cause, not sixteen.** Every one of them is read in exactly one place, and that place is `_fireWeapon`, `_hitEnemy` or `_summonStats` — the weapon era. Skills reach damage through `compose → skillDamage → damageEnemy` and never touch any of them. This is D-23's defect with a price attached: the damage path moved from weapons to skills, and the hooks that hung off the old path stayed where they were. Crit is the sharpest case, because crit is only *decided* in `_fireWeapon`: six item hooks grant it and no skill in the game can crit.
+
+**The fix is the phase-4 modifier plumbing, not a repair.** §9.2's four tiers need exactly these mechanisms on the skill path — `extraPierce` is the pierce §5.9 names as the answer to escorted targets, `extraProjectiles` is the magnitude tier's projectile count, and `burnOnHit`/`chillOnHit`/`chainOnHit` are the rider tier's "adds an effect the skill did not have". Reconnecting them is building the tier, and the gate is what says when it is done.
+
+**Two of the eighteen the gate first reported were the gate's own fault**, and both are worth recording. `killExplode` and `onHurtRetaliate` are read in live code and came back DEAD because `_areaDamageEnemies` queries the spatial grid, the grid is rebuilt every tick, and a probe that spawned a target and fired a blast in the same instant blasted an empty index. One frame of settling was the difference between measuring the game and measuring the fixture.
+
+
+#### D-24 — CLOSED: §2.4 wins, and an Elite node is now fewer and fatter
+
+**The ruling: §2.4 is the definition of an Elite node.** An Elite node that fields more enemies at the same health is a Horde node with a bigger number, and the two would ask the same build question — which wastes 2 of every 10 nodes and the route decision they exist to create.
+
+Three things were wrong and all three are fixed. `this.nodeType` was read twice and assigned nowhere, so every fight computed `'horde'`. `regionFightMods()` — the only consumer of `nodeModifiers()` — appeared exactly once in the codebase, its own definition, and had no callers. And `waveConfig()` raised an Elite node's spawn *rates*, pulling against the modifiers rather than agreeing with them; that bump is deleted, along with the elite injections, which are now siege-only. **§2.4 is the single definition; nothing multiplies against it.**
+
+Measured against a Horde room from the same seed, over 60 s:
+
+| axis | §2.4 asks | measured |
+|---|---:|---:|
+| count | ×0.55 | **×0.53** |
+| HP | ×2.4 | **×2.60** |
+| damage | ×1.35 | **×1.38** |
+| gold | ×1.35 | **×1.23** |
+
+**Asserted by effect, not by wiring.** `sim_test` counts what actually spawned; a version that resolved the modifiers, stored them on the sim and never applied them would pass any check reading `sim.fightMods` and fails this one. The direction of each axis is absolute — a count ratio above 1 fails outright, with the message naming why: an Elite node that is Horde with a bigger number asks the same build question.
+
+*Wired along with it:* `difficultyOf()` was the other half of the orphan and had never been applied either. At the default setting every multiplier is 1.0, so nothing changed on the day — and "a non-default setting will do something" was a prediction, not a measurement. It has since been measured: `tools/difficulty_gate.mjs` fights the same room on all four settings and finds every axis moving in the declared direction, after two further defects that only a measurement could have found (a gold multiplier rounding to identity against an integer of 1, and gold dragging XP with it). See §4.1.
+
+#### D-23 — CLOSED: three stats sold and doing nothing
+
+Ferocity, Ingenuity and Attunement now have the jobs §9.5 gives them — a multiplier on all composed damage, minion damage and HP, and status potency — and `tools/stat_gate.mjs` reports **10 live of 10**. Every stat the game sells moves something a player can observe.
+
+The fix was not a redesign. Each of the three was alive in the weapon era and left behind when the damage path moved to skills, so each was reconnected to the modern equivalent of the site it used to read. The one that took a second attempt was the *gate*, not the game: Ingenuity's probe never ticked, so `summonSlots` was still 0, every spawn was refused, and the probe measured the player's own damage — which Ingenuity correctly does not scale. A working stat read as dead. The probe now benches the player's loadout so every point of damage is the minion's, and returns a broken verdict rather than a dead one when no minion reaches the field.
+
+#### What each stat is actually read by
+
+`live` = moved its probe. Dead paths are listed because they are what a search finds, and what would otherwise be mistaken for the stat working.
+
+| stat | verdict | live readers | dead readers (what a grep finds) |
+|---|---|---|---|
+| **vitality** | live | max HP everywhere; room-start restore; `hpAbove`/`hpBelow` conditions; objective % -max true damage | — |
+| **ferocity** | **DEAD** | none reachable | `weapons.js` weaponStats; `_fireWeapon`; `_tickNova` (`nova_core`, archived); `_summonStats` (`overseer`, archived); Samurai stance-1 bleed (stance never held) |
+| **tempo** | live (movement only) | move speed (`game.js:1509`); Wizard decree tick | **skill cooldowns do not read it** — `skillCd = cooldown/1000`, no Tempo term. Every attack-speed site is weapon-era |
+| **grit** | live | mitigation; knockback resist; **bridges to skills** as `p.engines.armor` for `scaleWith: 'armor'`; Quill reflect | — |
+| **reflex** | live | dodge roll in `hurtPlayer` | — |
+| **recovery** | live | `_heal()` — every healing source | Priest shield scaling (no tree yet) |
+| **ingenuity** | **DEAD** | none | `_summonStats` only — weapon-era structures. **Skill-era minions do not read it**, so the class that just gained summons still ignores the summon stat |
+| **attunement** | **DEAD** | none | `_attuned()` × 20 callers, all in `game.js`/`traits-toh.js`, none in the skill path; `_applySlow` applies it, `applySlow` (the skill one) does not |
+| **greed** | live | tithe on fight clear (`_clearRewards`); rarity bias in `_rollRarity` | Assassin contract payout (no tree yet) |
+| **reach** | live | pickup magnetism (`game.js:2832`); ToH trait radii | weapon range; `standard_high` (archived) |
+
+Two of the live ones are only *partly* live and should be settled in §9.5 as well: **Tempo** claims "attack + move speed" and reaches only movement, and **Greed**'s two channels both work while its declared "+1% Ferocity per bonus Grit" interaction feeds a dead stat.
+
+### The browser suite is counted separately, and it is not clean
+
+`tools/browser_test.mjs` reports **13 failures, none of them in the count above**, because this section has only ever tallied `sim_test`. They share one cause: the browser fixtures still click `.char-card[data-char="bulwark"]` and `"facet"` — **retired classic ids** left behind by §3.3. Every one is a `querySelector(...).click()` on null, which then fails that whole page's test. Fixture cleanup, not a game defect. Measured across the summoning patch the set went **15 → 13** with no additions.
+
+### Fixed, kept for the record
+
+| # | was | now |
+|---|---|---|
+| 8 | Client→host input had no delivery guarantee | Ack with resend-until-acked; **the wild `client ready` failure is NOT explained by it** — still open above |
+| 9 | Room registration failing ~1 run in 3–4 | **A negative result, not a fix** — see below |
+| 10 | Suite gated co-op behind tests for removed weapons | Skipped, named, counted; co-op reaches its phase every run |
+| 11 | Only 2 of 47 characters could deal damage | Classic roster retired per §3.3; selection gated on having a tree |
+| 13 | Skills converged on "whatever is nearest" | `select` is a required field on every active (§5.3) |
+| 14 | `tohOnFire` orphaned on a dead `_tickWeapons` | Called from `fireSkill` |
+| 15 | `hitbox` honoured by trait *name* (`immovable`, retired) | Read by presence |
+| 16 | Art style anchor hardcoded a retired character | `STYLE_ANCHOR_ID`, named and live |
 
 ### Recorded negatives
 
@@ -798,28 +1137,35 @@ Empty. Every remaining failure is content not authored, a decision not taken, or
 
 | System | Status |
 |---|---|
-| Trigger system, 10 kinds | Built, gated, measured |
+| Trigger system, 11 kinds | Built, gated, measured — `ON_TOKEN` added with summoning |
 | Selectors, 6 rules | Built, required field, no default |
-| Composed-action schema | Built, zero bespoke across 40 skills |
-| `scaleWith` engine hook | Built, generalised across two engines |
+| Composed-action schema | Built, 11 primitives, **zero bespoke handlers across 60 skills** — scanned, with a negative control |
+| `scaleWith` engine hook | Built, generalised across three engines — footing, armor, pack |
 | Damage triangle | Built, all damage routed |
 | Telegraphs | Built, 9 telegraphing types, ≥50% density both regions |
 | Footing | Built, three-way measured, decision live |
 | Skill points, ranks, loadout | Built, rank-1 passive rule enforced |
 | Node trees, node types | Built, runtime behaviour for Shrine/Cursed/Elite |
 | World map | Rules built, **no DOM** |
-| Difficulty | Built, 4 settings, XP exclusion asserted |
+| Difficulty | **Built and measured** — `difficulty_gate.mjs`: 4 axes move in a real fight, XP per kill flat within 10% |
 | Saves, frontier rule | Built, file round-trip verified |
 | Netcode state migration | Built, lobby heartbeat at 3 Hz, drops classified |
 | Determinism | Built, negative control, byte-identical same-seed runs |
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
+| Stat gate | Built — `stat_gate.mjs` proves each stat by EFFECT; **10 of 10 live** |
+| Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **28 of 44 hook kinds live** (D-25) |
+| Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
+| Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
+| Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
+| Node types | Horde, Elite and Objective all live and measured; difficulty wired (D-24) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** |
-| Classes 3–14 | **Not started** — 12 of 14 classes have no trees |
-| Summoning | **Designed, not built** — §8.5, both classes |
-| `ON_TOKEN` trigger | **Designed, not built** |
+| Classes 3–14 | **Not started** — 11 of 14 classes have no trees |
+| Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
+| `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
+| Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
 | Economy | **Not started** |
 
 ---

@@ -154,12 +154,23 @@ export function waveConfig(floorNum, depth, kind) {
   const dur = siege ? Infinity : Math.round(60 + depth * 5 + floorNum * 5); // 60–90s
   // floor 1 is the baseline a one-weapon starting kit can chew through
   // (~0.6 kills/sec organic); later floors outpace it and force build growth
-  const r0 = 0.5 + 0.25 * (floorNum - 1) + (elite ? 0.2 : 0);
-  const r1 = 1.2 + 0.55 * (floorNum - 1) + 0.18 * depth + (elite ? 0.5 : 0);
+  // AN ELITE NODE NO LONGER BUMPS ITS SPAWN RATE (D-24). It used to add +0.2
+  // and +0.5 here, which made an elite node field MORE enemies at the same
+  // health — the opposite of §2.4, and the exact shape nodebehaviour.js's own
+  // validator rejects ("same count with more HP is a slog, not an elite
+  // fight"). §2.4 is now the single definition of what an elite node is, and
+  // it arrives through nodeModifiers(); leaving this bump in place would have
+  // multiplied against it rather than agreeing with it.
+  const r0 = 0.5 + 0.25 * (floorNum - 1);
+  const r1 = 1.2 + 0.55 * (floorNum - 1) + 0.18 * depth;
   return {
     t: 0, acc: 0, dur, r0, r1,
     rampT: siege ? 150 : dur,          // sieges plateau at 150s and hold
-    eliteEvery: elite ? 16 : (siege ? 22 : 0), // periodic elite injections
+    // Periodic elite injections belong to SIEGES only, for the same reason: an
+    // elite node's identity is fewer-and-fatter, and sprinkling extra
+    // ELITE_HP_MULT champions on top of that is a third definition nobody
+    // specified.
+    eliteEvery: siege ? 22 : 0,
     eliteT: 8,
     done: false,
   };

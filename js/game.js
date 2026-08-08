@@ -15,6 +15,7 @@ import {
 import { CHAR_BY_ID, isSelectable, unselectableReason } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
+import * as MIN from './minions.js';
 import { EnemyGrid } from './triggers.js';
 import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
@@ -86,7 +87,8 @@ export class Sim {
     this.projPool = new Pool(CONFIG.POOL_PROJECTILES, () => ({}));
     this.grid = new SpatialHash(CONFIG.GRID_CELL);
     this.pickups = [];
-    this.summons = [];
+    this.summons = [];        // weapon-era structures; phase 4, untouched
+    MIN.initTokens(this);     // skill-era soul-token pool + its counters
     this.telegraphs = [];
     this.zones = [];
     this.vortexes = [];
@@ -149,6 +151,10 @@ export class Sim {
     this.mutations = null; this.mutIdx = 0; this.siegeT = 0; this.bossAt = Infinity;
     this.bossSpawned = false; this.bossT = 0; this.siegeCfg = null;
     this.profile = null; this.fronts = [0, 2]; this.fightLoot = 0; this.lootT = null;
+    // What this fight PAID, separated by axis, because gold and XP no longer
+    // move together (§4.1). `gold` is materials dropped after every multiplier;
+    // `xp` is the experience-bearing subset of them.
+    this.payout = { kills: 0, gold: 0, xp: 0 };
     this.holdCircle = null;   // {x,y,r,held} — spawn-choke sub-objective
     this.pylonId = null; this.enemyBuff = 1;
     this._startFloor(1);
@@ -183,10 +189,19 @@ export class Sim {
 
   // What each skill fire SELECTED, before anything travelled. A projectile that
   // misses and a target never chosen look identical downstream.
-  _selLedger(skillId, target) {
+  // WHAT THE SELECTOR CHOSE, AND WHETHER IT HAD THE CHOICE.
+  //
+  // `available` says a mark was inside this fire's range. Without it the ledger
+  // cannot separate "the selector picked chaff over a mark" — a real defect —
+  // from "there was no mark in range, so it correctly picked the best thing
+  // present". The ratio of MARK to everything silently measures how much time
+  // the party spends near the mark, which moves whenever throughput changes:
+  // it read 93% and then 83% across a patch in which the selector did not
+  // change at all.
+  _selLedger(skillId, target, available = null) {
     if (!this.selLog) return;
     const k = target ? (target.bounty ? 'MARK' : target.isNest ? 'nest' : target.boss ? 'boss' : target.elite ? 'elite' : 'chaff') : 'none';
-    const key = `${skillId}->${k}`;
+    const key = `${skillId}->${k}${available === true ? '|markInRange' : ''}`;
     this.selLog.set(key, (this.selLog.get(key) || 0) + 1);
   }
 
@@ -229,7 +244,10 @@ export class Sim {
       x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.hitbox || 1),
       mx: 0, my: 0, interact: false, moving: false, aimA: 0, stillT: 0,
       hp: 1, shield: 0, downed: false, reviveP: 0, invuln: 0, pullX: 0, pullY: 0,
-      level: 1, xp: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
+      // `xp` is the bar and RESETS on every level-up; `xpEarned` never does, so
+      // anything measuring experience over a run reads the second one. Reading
+      // the bar reports a smaller number the better the player did.
+      level: 1, xp: 0, xpEarned: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
       materials: 0, matsCollected: 0, banked: 0,
       weapons: [], items: [],
       boosts: {}, permStats: {}, tempStats: {},
@@ -638,6 +656,14 @@ export class Sim {
     this.boss = null;
     this.roomEnteredT = this.time;
     this.waveRng = subRng(this.seed, 'wave', this.floorNum, node.id);
+    // D-24. `nodeType` was read in two places and assigned in none, so every
+    // fight in the game computed 'horde' and §2.4's node modifiers were
+    // unreachable. Assigned here, at the one moment the node is known.
+    this.nodeType = node.kind;
+    // Resolved ONCE per fight rather than per spawn: the modifiers cannot
+    // change mid-room, and a per-spawn call would put a region lookup inside
+    // the spawn loop.
+    this.fightMods = this.regionFightMods();
     this.wave = waveConfig(this.floorNum, node.col, node.kind);
     // the fight's pressure profile: sieges are always high-friction; stops
     // have none; combat/elite carry the recipe rolled at map generation
@@ -654,6 +680,8 @@ export class Sim {
     // is a queue, and holding ground against a queue is the sanctioned play
     this.fronts = [this.waveRng.int(0, 3)];
     this.fightLoot = 0;  // materials actually picked up this fight
+    this.payout = { kills: 0, gold: 0, xp: 0 };  // and what the fight paid out
+    this._goldAcc = 0;   // the difficulty multiplier's carried fraction, per fight
     this.lootT = null;   // the siege's post-boss looting countdown
     this.safe = false;   // the room is live again
     this._armCurses();   // last round's curses expire; this round's bite
@@ -690,6 +718,12 @@ export class Sim {
       p.firstHitUsed = false;
       p.pullX = p.pullY = 0;
       p.hp = p.stats.vitality;   // every room starts at full health
+      // §8.5, rows 5 and 7, and they are one moment because they are two halves
+      // of the same rule: the Necromancer's summons WIPE and the Druid's pack
+      // PERSISTS. Skeletons leave, so every fight ramps from zero and capacity
+      // never compounds across a map; animals are restored, so the pack is a
+      // standing commitment rather than something re-earned each room.
+      SK.startRoomMinions(this, p);
       // per-FIGHT trait state (the old per-room triggers)
       p.roomVitGain = 0;        // Vesper's overheal→Vitality cap
       p.roomFirstKillT = -10;
@@ -752,6 +786,7 @@ export class Sim {
     if (w.t >= w.dur) { w.done = true; return; }
     let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult
       * ((this.profile && this.profile.rateMult) || 1)
+      * ((this.fightMods && this.fightMods.count) || 1)   // §2.4: an Elite node fields FEWER
       * objectiveSpawnMult(this);
     if (this.boss) {
       // "reduced add spawns" while the boss is up — and tapering to silence,
@@ -1334,8 +1369,10 @@ export class Sim {
     const e = this.enemyPool.alloc();
     if (!e) return null;
     const fl = Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1);
-    const dmgScale = Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1);
+    const dmgScale = Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1)
+      * ((this.fightMods && this.fightMods.dmg) || 1);      // §2.4 node damage
     let hp = def.hp * fl * this.coopHp * this.greedHp * CONFIG.enemyHpMult * (opts.elite ? CONFIG.ELITE_HP_MULT : 1);
+    hp *= (this.fightMods && this.fightMods.hp) || 1;      // §2.4: and each one TOUGHER
     hp *= this.curseEnemyHp;                       // cursed round: tougher enemies
     if (opts.hpMult) hp *= opts.hpMult;            // objective variants (elite arena, bounties)
     // a level-wide toughness dial the objective owns (Nest Purge: +50%);
@@ -1455,8 +1492,9 @@ export class Sim {
     for (const e of this.enemyPool) this.grid.insert(e);
     // projectiles
     this._tickProjectiles(dt);
-    SK.tickSkills(this, dt);
+    SK.tickSkills(this, dt);            // also ticks minions — they are skill state
     SK.tickSkillStatuses(this, dt);
+    MIN.tickTokens(this, dt);
     tickTelegraphs(this, dt);
     // telegraphs / zones / vortexes
     this._tickAreas(dt);
@@ -2297,11 +2335,52 @@ export class Sim {
       this.fx.booms.push({ x: Math.round(x), y: Math.round(y), r: 120 });
     }
     tohEnemyDied(this, e);              // Necromancer bone-dust — any kill, anywhere
+    // A soul token, from ANY death, for ANY party. It is a world resource read
+    // by the ON_TOKEN trigger, not a Necromancer counter — so the Wizard's Soul
+    // tree reads the same pool later with nothing added here.
+    MIN.dropToken(this, x, y);
     if (killer && killer.stats) tohOnKill(this, killer, e);
     // drops
+    // GOLD (§2.4 node payout, §4.1 difficulty) MULTIPLIES HERE, NOT AT SPAWN.
+    // It was applied to `e.mats` at spawn and rounded, and `def.mats` is 1 or 2
+    // — so Math.round(1 × 0.9) is 1 and every sub-1.0 multiplier vanished. The
+    // difficulty gate caught it as Measured paying ×1.04 where its table says
+    // ×0.9: a multiplier that rounds to identity is not a multiplier.
+    //
+    // The accumulator carries the fraction across kills so the rate is exact in
+    // aggregate rather than truncated on every enemy.
+    const goldMult = (this.fightMods && this.fightMods.gold) || 1;
     let mats = objectiveKillPays(this, e) ? e.mats * this.greedMats : 0;
-    if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && this.rng.float() < killer.hookAgg.doubleMaterials) mats *= 2;
-    for (let i = 0; i < mats; i++) this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15));
+    // XP RIDES THE PRE-MULTIPLIER AMOUNT (§4.1: XP is never scaled by
+    // difficulty). XP is earned per material banked, so paying more gold on a
+    // harder setting would pay more XP with it through the back door and make
+    // the hardest setting the only correct choice — the exact outcome §4.1
+    // exists to prevent.
+    let xpMats = mats;
+    // A PLAYER'S OWN double DOES carry XP, and difficulty's gold does not. The
+    // distinction is not "which multiplier came first", it is whose it is:
+    // §4.1 excludes XP from the DIFFICULTY axis so the ladder stays a
+    // preference. A hook the player built for is a build paying off.
+    if (killer && killer.hookAgg && killer.hookAgg.doubleMaterials && this.rng.float() < killer.hookAgg.doubleMaterials) { mats *= 2; xpMats *= 2; }
+    if (goldMult !== 1) {
+      this._goldAcc = (this._goldAcc || 0) + mats * (goldMult - 1);
+      const extra = Math.floor(this._goldAcc);
+      this._goldAcc -= extra;
+      mats += extra;
+    }
+    // THE PAYOUT INSTRUMENT (§13: counters on every new mechanic). Gold and XP
+    // now diverge on the kill path, so the fight records what it paid on each
+    // axis and how many kills it paid for. Measuring the ratio at the pickup
+    // instead makes the denominator "materials the bot happened to walk over",
+    // which is a fixture property, not a game one.
+    this.payout.kills++; this.payout.gold += mats; this.payout.xp += xpMats;
+    // A pickup carries its own XP value. The BASE materials carry XP; the
+    // extras the gold multiplier added carry NONE, so a harder setting pays
+    // more gold and exactly the same XP. That is §4.1's exclusion expressed in
+    // the drop rather than trusted to a load assertion.
+    for (let i = 0; i < mats; i++) {
+      this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15), 1, i < xpMats ? 1 : 0);
+    }
     // killer hooks & traits
     if (killer && killer.stats) {
       killer.kills++;
@@ -2550,6 +2629,14 @@ export class Sim {
           if (hitWall) this.damageWall(hitWall, pr.dmg, this.players[pr.owner]);
           this.projPool.release(pr); continue;
         }
+        // A summon seed is a delivery, not a shot: it passes through everything
+        // and plants its payload where it stops. Handled here rather than in a
+        // per-skill branch — this code knows a seed carries something, never
+        // what. See §8.5, "the token is a place".
+        if (pr.kind === 'summonSeed') {
+          if (expired || oob) { MIN.plantSeed(this, pr); this.projPool.release(pr); }
+          continue;
+        }
         if (expired || oob) { this.projPool.release(pr); continue; }
         // vs enemies
         let dead = false;
@@ -2650,8 +2737,13 @@ export class Sim {
   skillSplash(p, skill, x, y, r, dmg, exclude) { return SK.skillSplash(this, p, skill, x, y, r, dmg, exclude); }
   spawnSkillProj(p, skill, step, rank, angle, range) { return SK.spawnSkillProj(this, p, skill, step, rank, angle, range); }
   applyPlague(e, dmg, dur, p, skill) { return SK.applyPlague(this, e, dmg, dur, p, skill); }
-  applySlow(e, mult, dur) { return SK.applySlow(this, e, mult, dur); }
+  applySlow(e, mult, dur, owner = null) { return SK.applySlow(this, e, mult, dur, owner); }
   queueSkillStep(p, skill, step, rank, delay) { return SK.queueSkillStep(this, p, skill, step, rank, delay); }
+  // ---- summon surface (js/compose.js's `summon` primitive and ON_TOKEN) ----
+  spawnMinions(p, skill, step, rank) { return MIN.spawnMinions(this, p, skill, step, rank); }
+  spawnSummonSeed(p, skill, step, rank, at) { return MIN.spawnSummonSeed(this, p, skill, step, rank, at); }
+  tokenWithin(x, y, range) { return MIN.tokenWithin(this, x, y, range); }
+  claimToken(x, y, range) { return MIN.claimToken(this, x, y, range); }
   addVortex(x, y, v, scale) { this.vortexes.push({ x, y, t: v.dur, pullR: v.pullR, pullSpd: v.pullSpd, dps: v.dps * scale, coreR: v.coreR, acc: 0 }); }
 
   fireBeam(x, y, a, len, width, dmg, src) {
@@ -2802,13 +2894,16 @@ export class Sim {
 
   // ---------------- pickups ----------------
 
-  _dropMaterial(x, y, value = 1) {
+  // `xpValue` defaults to the material's value, so every existing caller keeps
+  // paying XP exactly as before. Only the gold multiplier's extra materials
+  // pass 0 — see _killEnemy.
+  _dropMaterial(x, y, value = 1, xpValue = value) {
     if (this.pickups.length >= 240) {
       const m = this.pickups[(this.rng.float() * this.pickups.length) | 0];
-      m.v += value;
+      m.v += value; m.xp = (m.xp === undefined ? m.v - value : m.xp) + xpValue;
       return;
     }
-    this.pickups.push({ x: clamp(x, WALL + 10, this.W - WALL - 10), y: clamp(y, WALL + 10, this.H - WALL - 10), v: value, vx: 0, vy: 0, target: -1 });
+    this.pickups.push({ x: clamp(x, WALL + 10, this.W - WALL - 10), y: clamp(y, WALL + 10, this.H - WALL - 10), v: value, xp: xpValue, vx: 0, vy: 0, target: -1 });
   }
 
   _tickPickups(dt) {
@@ -2832,19 +2927,24 @@ export class Sim {
         if (dist2(m.x, m.y, p.x, p.y) < (p.radius + 8) * (p.radius + 8)) {
           this.pickups.splice(i, 1);
           this.fightLoot += m.v; // the fight's "collected" tally for the clear banner
-          this._collectMaterial(p, m.v);
+          this._collectMaterial(p, m.v, m.xp);
         }
       }
     }
   }
 
-  _collectMaterial(p, v) {
+  _collectMaterial(p, v, xpV) {
     this.pushEvent({ k: 'sfx', s: 'pickup' });
     if (p.hookAgg.pickupBonusChance > 0 && this.rng.float() < p.hookAgg.pickupBonusChance) v += 1;
     p.materials += v;
     p.matsCollected += v;
-    const xpGain = v * (1 + p.hookAgg.xpBonus / 100);
+    // XP rides the pickup's OWN xp value where it has one — a difficulty's gold
+    // multiplier adds materials that are worth money and no experience (§4.1).
+    // Every other caller (tithe, interest, debug) passes nothing and keeps the
+    // old behaviour of one XP per material.
+    const xpGain = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100);
     p.xp += xpGain;
+    p.xpEarned += xpGain;
     while (p.xp >= p.xpNext) {
       p.xp -= p.xpNext;
       p.level++;
@@ -3818,6 +3918,24 @@ export class Sim {
         // contracts closed, Hunter pack mode, Blacksmith infusions
         tohState(this, p)]),
       enemies: [], projs: [], pickups: [], summons: [], tele: [], zones: [],
+      // SKILL-ERA SUMMONS AND SOUL TOKENS RIDE THE SNAPSHOT (§12.1: if losing
+      // it breaks the game it is state). A client that missed a skeleton would
+      // see enemies dying to nothing; a client that missed the tokens would see
+      // a Necromancer's ON_TOKEN skills fire for no visible reason.
+      //
+      // Like `summons`, neither list is packed by js/netcodec.js — it spreads
+      // the snapshot and repacks only enemies, projs, pickups, zones,
+      // telegraphs and fx. So these are a VIEW addition, not a wire-format
+      // change: no stride, no delta compression, no version handshake.
+      // Field 5 is the down fraction, in the same 0..1 idiom decoys, telegraphs
+      // and the Hunter's beast already use — one number carries both "it is
+      // down" and "how long until it is back".
+      minions: this.players.flatMap(p => (p.minions || []).map(m => [
+        p.idx, m.arch, r(m.x), r(m.y),
+        m.maxHp > 0 ? +Math.max(0, m.hp / m.maxHp).toFixed(2) : 0,
+        m.down ? Math.max(0.01, +(m.downT / Math.max(0.01, m.downDur)).toFixed(2)) : 0,
+      ])),
+      tokens: this.tokens.map(tk => [r(tk.x), r(tk.y), +Math.min(1, tk.ttl / CONFIG.SOUL_TOKEN_TTL).toFixed(2)]),
       beams: this.activeBeams,
       // `phase2` rides here rather than only in the one-shot `bossPhase` event.
       // The event still fires for the ENRAGED banner and the roar; the FACT of
