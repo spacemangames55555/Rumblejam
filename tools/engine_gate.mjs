@@ -309,6 +309,19 @@ const PROBES = {
     fills: sk => (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
     fillsFirst: sk => (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
   },
+  cascade: {
+    what: 'ranks banked by firing something different each time',
+    char: 'toh_savage',
+    // ADVANCED BY VARIETY, so the starve makes every fire look like a repeat.
+    // Pinning `cascadeLast` to null each frame would stop it advancing but would
+    // also stop it BREAKING, which is a different mechanic; zeroing the rank is
+    // the honest opposite — a Savage whose chain keeps collapsing.
+    low: (g, p) => { p.cascade = 0; p.engines.cascade = 0; },
+    // Filled by firing at all, provided the fires differ — so the loadout needs
+    // more than one thing in it, which the default staging already gives.
+    fills: sk => (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
+    fillsFirst: sk => (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
+  },
   pack: {
     what: 'animals standing',
     char: 'toh_druid',
@@ -785,6 +798,111 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
     for (let i = 0; i < 30; i++) { p.chiLastGain = g.time; g.tick(); }
     if (p.chi >= beforeHot) ok('and it does not leak while the Monk is still landing hits — the decay exists to stop banking between fights, not to tax fighting');
     else fail(`Chi decayed while the Monk was still dealing damage (${beforeHot} → ${p.chi.toFixed(1)}) — the leak is fighting the loop it is supposed to bound`);
+  }
+
+  // --- the cascade: variety in, and the asymptotic floor that makes it safe ---
+  //
+  // Cascade is the one exemption from the no-cooldown-reduction rule (§4.2,
+  // §9.2), and the ASYMPTOTE is the entire reason the exemption is safe. That is
+  // why the floor is asserted here rather than trusted: a clamped-linear
+  // reduction satisfies "never below 50%" just as well and is a different
+  // mechanic, exactly like the Monk's cliff-versus-slope.
+  {
+    const { g, p } = stage('toh_savage');
+    const sk = SKILL_BY_ID['sav_rip'];
+    const base = sk.cooldown;
+
+    // DIRECTION ONE — VARIETY BANKS. Different ids in a row climb.
+    p.cascade = 0; p.cascadeLast = null;
+    ENG.cascadeAdvance(g, p, 'sav_rip');
+    ENG.cascadeAdvance(g, p, 'sav_wide_swing');
+    ENG.cascadeAdvance(g, p, 'sav_gore');
+    ENG.cascadeAdvance(g, p, 'sav_rip');
+    const banked = p.cascade;
+    if (banked === 3) ok(`variety banks the cascade: four fires with no two the same in a row read ${banked} ranks — the first fire arms the chain and each different one after it extends it`);
+    else fail(`four alternating fires banked ${banked} ranks, want 3 — the advance is not counting variety`);
+
+    // DIRECTION TWO — A REPEAT BREAKS IT, TOTALLY. This is the half that makes
+    // it a decision rather than a meter, and the half a decay would erase.
+    ENG.cascadeAdvance(g, p, 'sav_rip');
+    if (p.cascade === 0) ok('and the same skill twice running breaks it to ZERO, not down a step — a partial loss would let a Savage spam its fastest skill and keep most of the chain');
+    else fail(`a repeated skill left ${p.cascade} ranks standing — the break is not total, so the engine has no failure state`);
+
+    // THE COOLDOWN COMES DOWN AT ALL — the write path nothing else in the game
+    // has. Items may not reduce a cooldown, ranks may not, no other engine does.
+    p.cascade = 10;
+    const at10 = ENG.cascadeCooldown(p, sk);
+    if (at10 < base) ok(`the cascade SHORTENS a cooldown: ${base}ms → ${Math.round(at10)}ms at 10 ranks — the only cooldown reduction in the game, and the only class that has it`);
+    else fail(`10 ranks did not shorten ${sk.id}: ${base} → ${at10}`);
+
+    // ...AND ONLY FOR THE SAVAGE. An exemption that leaks is not an exemption.
+    const { p: other } = stage('toh_samurai');
+    other.cascade = 10;
+    const otherSk = SKILL_BY_ID['sam_cross_guard'];
+    if (ENG.cascadeCooldown(other, otherSk) === otherSk.cooldown) {
+      ok('and no other class gets it, even holding the same field: a Samurai at 10 ranks pays its full cooldown — the exemption is gated on the tree that pays for it');
+    } else fail('a non-Savage had its cooldown reduced — the one exemption from the no-cooldown-reduction rule has leaked into the whole roster');
+
+    // THE FLOOR, ASSERTED THREE WAYS. Bound alone is not enough.
+    const F = CFG.CASCADE_CD_FLOOR;
+    const floor = base * F;
+    const at = n => { p.cascade = n; return ENG.cascadeCooldown(p, sk); };
+
+    // 1. monotonically decreasing
+    let mono = true;
+    let prev = Infinity;
+    for (let n = 0; n <= 60; n++) { const v = at(n); if (v > prev) mono = false; prev = v; }
+    if (mono) ok('the reduction is monotonic across 0..60 ranks — deeper is never worse');
+    else fail('the reduction is not monotonic — a rank made a cooldown longer');
+
+    // 2. STRICTLY ABOVE THE FLOOR AT A RANK WHERE LINEAR WOULD HAVE HIT ZERO,
+    //    and NEVER BELOW IT AT ANY RANK AT ALL.
+    //
+    //    Two claims, because they are not the same claim and the first one has a
+    //    limit. A linear 8%-of-base per rank crosses zero at rank 13, so rank 40
+    //    is already deep into negative-cooldown territory for the naive version
+    //    and is the honest place to separate the two.
+    //
+    //    THE ASYMPTOTE IS EXACT IN MATHEMATICS AND FINITE IN DOUBLES. Around rank
+    //    441, `0.92^n` falls below the ULP of the floor term and `floor + tiny`
+    //    rounds ONTO the floor — so "strictly above at every finite rank" is true
+    //    of the formula and not of the arithmetic, and asserting it at rank 1000
+    //    fails against a mechanic that is working. That boundary is named here
+    //    rather than left for a future reader to rediscover as a defect, and the
+    //    direction it lands is the safe one: it reaches the floor and never
+    //    passes through it.
+    const LINEAR_ZERO = Math.ceil(1 / CFG.CASCADE_CD_RATE);
+    const deep = at(40);
+    const linearAt40 = base * (1 - CFG.CASCADE_CD_RATE * 40);
+    if (deep > floor) {
+      ok(`and it is ASYMPTOTIC, not clamped: at 40 ranks the cooldown is ${Math.round(deep)}ms, still above the ${floor}ms floor. A linear ${CFG.CASCADE_CD_RATE * 100}%-of-base per rank would have crossed zero at rank ${LINEAR_ZERO} and read ${Math.round(linearAt40)}ms here`);
+    } else fail(`the floor did not hold at 40 ranks: ${deep}ms against a floor of ${floor}ms — at a rank where a linear reduction would already be at ${Math.round(linearAt40)}ms, so this is the rank that separates the two`);
+
+    // The second claim, swept rather than sampled: no rank anywhere goes under.
+    let under = -1, landed = -1;
+    for (let n = 0; n <= 2000; n++) {
+      const v = at(n);
+      if (v < floor) { under = n; break; }
+      if (landed < 0 && v <= floor) landed = n;
+    }
+    if (under < 0) {
+      ok(`and NO rank from 0 to 2000 is ever below the floor — double precision lands exactly ON ${floor}ms at rank ${landed} and stays there, which is the safe direction for a bound to be reached from`);
+    } else fail(`rank ${under} produced ${at(under)}ms, under the ${floor}ms floor — an uncapped engine that can go under its bound has no bound`);
+
+    // 3. THE PER-RANK DECREMENT SHRINKS. This is what separates asymptotic from
+    //    clamped-linear, and neither the bound nor monotonicity can see it — a
+    //    clamped-linear curve passes both and has a CONSTANT decrement until it
+    //    slams into the floor and drops to zero.
+    const d1 = at(0) - at(1), d20 = at(20) - at(21), d60 = at(60) - at(61);
+    if (d1 > d20 && d20 > d60 && d60 > 0) {
+      ok(`and every rank is worth less than the one before it: ${d1.toFixed(1)}ms for the first, ${d20.toFixed(2)}ms for the twenty-first, ${d60.toFixed(4)}ms for the sixty-first — a constant decrement here would be clamped-linear wearing an asymptote's result`);
+    } else fail(`the per-rank decrement is not shrinking: ${d1.toFixed(3)} / ${d20.toFixed(3)} / ${d60.toFixed(3)}ms. Equal values mean clamped-linear, which passes the bound and is a different mechanic`);
+
+    // AND IT DOES NOT SURVIVE A DOOR, like every other in-room resource.
+    p.cascade = 12;
+    SKROOM.startRoomMinions(g, p);
+    if (p.cascade === 0) ok('a cascade does not survive a room transition — a chain is a property of a fight, and arriving at depth is the Savage\'s whole loop skipped');
+    else fail(`the cascade persisted across a room start (${p.cascade})`);
   }
 
   // --- the registry: every accumulator is reached, and none is orphaned -----

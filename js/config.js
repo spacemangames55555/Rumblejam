@@ -130,6 +130,28 @@ export const CONFIG = {
   // — it exists to stop a full pool being carried down a quiet corridor.
   CHI_IDLE_SECONDS: 3,
   CHI_DECAY_PER_SEC: 4,
+  // THE SAVAGE'S CASCADE. Advanced by VARIETY rather than by order — see the
+  // ruling in §8.3, and the measurement that forced it. A fire by a skill other
+  // than the one before it banks a rank; the same skill twice resets to zero.
+  //
+  // The cooldown term is §8.3's, implemented exactly as specified: each rank
+  // removes CASCADE_CD_RATE of the REMAINING REDUCIBLE cooldown, which is the
+  // part above the floor. So
+  //
+  //     cd = base * (FLOOR + (1 - FLOOR) * (1 - RATE)^ranks)
+  //
+  // and the reduction is ASYMPTOTIC — it approaches the floor at every finite
+  // rank and reaches it at none. That is the property that lets ranks be
+  // uncapped, and it is the reason cascade is the one exemption from the
+  // no-cooldown-reduction rule (§4.2, §9.2). A linear 8%-of-base per rank would
+  // cross zero at rank 12.5; this one is still above half at rank 1000.
+  CASCADE_CD_RATE: 0.08,
+  CASCADE_CD_FLOOR: 0.5,
+  // The leak, and the only part of cascade that is actually a tick. Ranks fall
+  // off after a gap with no fires at all — a Savage who stops fighting loses the
+  // chain, which is what stops a cascade being carried between rooms inside one.
+  CASCADE_IDLE_SECONDS: 2.5,
+  CASCADE_DECAY_PER_SEC: 6,
   ARMOR_K: 15,             // damage taken = raw * K / (K + armor)
   NEG_ARMOR_MAX_BONUS: 0.5,
 
