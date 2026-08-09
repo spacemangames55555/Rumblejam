@@ -40,6 +40,9 @@ import { TREES, SKILL_BY_ID } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
 import * as SKROOM from '../js/skillsim.js';
 import { ENEMIES } from '../js/content/enemies.js';
+import * as ENG from '../js/engines.js';
+import { engineScale as engineScaleOf } from '../js/compose.js';
+import { CONFIG as CFG } from '../js/config.js';
 
 const VERBOSE = process.argv.includes('--verbose');
 let failures = 0;
@@ -290,6 +293,21 @@ const PROBES = {
     each: (g, p) => { for (const m of p.minions) { m.x = p.x + 600; m.y = p.y; m.cd = 999; } },
     // A `from: 'self'` claim, named for the reason in `pickClaim`.
     claimSkill: 'hun_enfilade',
+  },
+  chi: {
+    what: 'Chi banked from damage dealt',
+    char: 'toh_monk',
+    // A TWO-DIRECTION ENGINE, and the only one so far. The starve empties the
+    // pool every frame, which is the honest opposite of the mechanic — a Monk
+    // that has just spent everything. It clears `p.chi` as well as the published
+    // value, because the tick re-derives one from the other and a probe that
+    // zeroed only the published number would be overwritten before it was read.
+    low: (g, p) => { p.chi = 0; p.engines.chi = 0; },
+    // Filled by dealing damage at all, which is every damaging skill — there is
+    // no generator node to name, and that is the design (a resource with its own
+    // generator button is a rotation rather than a decision).
+    fills: sk => (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
+    fillsFirst: sk => (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
   },
   pack: {
     what: 'animals standing',
@@ -694,6 +712,108 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
     SKROOM.startRoomMinions(g, p);
     if (p.crystal === 0) ok('crystal does not survive a room transition — damage taken in the last fight is not credit in the next one');
     else fail(`crystal persisted across a room start (${p.crystal}) — a state with no decay and no reset is permanent`);
+  }
+
+  // --- the Chi loop: the first engine that runs in TWO directions ------------
+  //
+  // Every assertion here drives the ENGINE FUNCTIONS rather than any authored
+  // skill, on purpose. §5.7 condition 3 says a write path gates before its trees
+  // exist, and a tick-shaped engine has the same obligation: if these read a
+  // skill id they would be measuring content, and the point is to know the
+  // mechanism works before there is any content standing on it. Every one of
+  // them would pass identically against an empty tree.
+  {
+    const { g, p } = stage('toh_monk');
+
+    // DIRECTION ONE — IN. Dealing damage fills it, and nothing else does.
+    p.chi = 0;
+    ENG.gainChi(g, p, 20);
+    const filled = p.chi;
+    if (filled > 0) ok(`damage dealt puts Chi IN: 20 damage banks ${filled.toFixed(1)} — the engine has no generator node, which is the design (§8.3)`);
+    else fail('20 damage banked no Chi — the fill path is not reached from skillDamage');
+
+    // And it is CAPPED, so a boss cannot fund the rest of the floor.
+    ENG.gainChi(g, p, 100000);
+    if (p.chi <= CFG.CHI_CAP) ok(`and the pool is capped at ${CFG.CHI_CAP}: 100000 damage banks ${p.chi} — an uncapped pool is a whole floor bought in one fight`);
+    else fail(`Chi exceeded its cap: ${p.chi} > ${CFG.CHI_CAP}`);
+
+    // DIRECTION TWO — OUT, and this is what no engine before it does. A spend
+    // that succeeds takes the resource; a spend that cannot pay takes nothing
+    // AND REFUSES, which is what makes the cost conditional rather than free.
+    p.chi = 20;
+    const paid = ENG.spendChi(g, p, 8);
+    const afterPaid = p.chi;
+    const broke = ENG.spendChi(g, p, 999);
+    const afterBroke = p.chi;
+    if (paid && afterPaid === 12 && !broke && afterBroke === 12) {
+      ok('and a skill takes it OUT: 20 → 12 on an affordable spend, and an unaffordable one is REFUSED with the pool untouched — the first engine that runs both ways');
+    } else fail(`the spend path is wrong: paid=${paid} left ${afterPaid} (want 12), unaffordable=${broke} left ${afterBroke} (want 12 and a refusal)`);
+
+    // THE CLIFF. This is the whole of ruling 2, asserted rather than described:
+    // the published value steps at zero, and NOTHING anywhere resolves below its
+    // authored base. A multiplier under 1.0 would show up here as a scale below
+    // one, and that is the thing §9.2's shape forbids.
+    const step = { damage: 10, scaleWith: 'chi', scalePer: 0.01 };
+    p.chi = 0; p.engines.chi = ENG.chiPublished(p);
+    const atZero = engineScaleOf(step, p);
+    p.chi = 1; p.engines.chi = ENG.chiPublished(p);
+    const atOne = engineScaleOf(step, p);
+    p.chi = 40; p.engines.chi = ENG.chiPublished(p);
+    const atFull = engineScaleOf(step, p);
+    if (atZero === 1 && atOne > atZero && atFull > atOne) {
+      ok(`ZERO CHI IS A FLOOR, NOT A PENALTY: the scale reads ×${atZero.toFixed(3)} at 0, ×${atOne.toFixed(3)} at 1 and ×${atFull.toFixed(3)} at 40 — the tree is authored at the floor and Chi adds on top, so nothing in the game multiplies damage by less than one`);
+    } else fail(`the cliff is the wrong shape: ×${atZero.toFixed(3)} at 0 chi, ×${atOne.toFixed(3)} at 1, ×${atFull.toFixed(3)} at 40. Zero must read exactly 1.0 and the first point must be worth more than the ones after it`);
+
+    // And the step must be a STEP. A slope with no discontinuity at zero is a
+    // `scaleWith` like any other, and the ruling would be decoration.
+    const firstPoint = atOne - atZero;
+    const laterPoint = (atFull - atOne) / 39;
+    if (firstPoint > laterPoint * 2) {
+      ok(`and it is a CLIFF rather than a slope: the first point of Chi is worth ${(firstPoint / laterPoint).toFixed(1)}× a later one — crossing zero downward is a fall, which is the feeling the design asked for, reached by adding`);
+    } else fail(`the first point of Chi is worth ${(firstPoint / laterPoint).toFixed(1)}× a later one — that is a slope, and "weakens at zero" is then just scaleWith wearing a costume`);
+
+    // THE DECAY, which is the only part of the loop that is actually a tick.
+    p.chi = 30; p.chiLastGain = -999;      // idle long enough for the leak to open
+    const beforeDecay = p.chi;
+    for (let i = 0; i < 120; i++) g.tick();
+    if (p.chi < beforeDecay) ok(`the tick leaks it: ${beforeDecay} → ${p.chi.toFixed(1)} over two idle seconds — a full pool cannot be carried down a quiet corridor`);
+    else fail(`Chi did not decay while idle (${beforeDecay} → ${p.chi}) — the registered tick is not being reached, which is exactly the silent 1.0 this gate exists for`);
+
+    // ...but NOT while the loop is running, or the leak would fight the engine.
+    p.chi = 30; p.chiLastGain = g.time;
+    const beforeHot = p.chi;
+    for (let i = 0; i < 30; i++) { p.chiLastGain = g.time; g.tick(); }
+    if (p.chi >= beforeHot) ok('and it does not leak while the Monk is still landing hits — the decay exists to stop banking between fights, not to tax fighting');
+    else fail(`Chi decayed while the Monk was still dealing damage (${beforeHot} → ${p.chi.toFixed(1)}) — the leak is fighting the loop it is supposed to bound`);
+  }
+
+  // --- the registry: every accumulator is reached, and none is orphaned -----
+  //
+  // `tickFooting` was a hardcoded call and a hardcoded content import in
+  // `skillsim.js` — the only per-class hardcode in shared code, flagged in §16
+  // since phase 2. The Monk is the second of four, so it became a table. A table
+  // can be asserted; a hardcoded call could only be read.
+  {
+    const seen = new Set();
+    for (const e of ENG.ENGINE_TICKS) {
+      if (!TREES[e.tree]) { fail(`the engine registry names tree "${e.tree}", which is not in the registry — a tick gated on a tree that does not exist never runs`); continue; }
+      if (!ENGINE_KEYS.includes(e.key)) { fail(`the engine registry claims key "${e.key}", which is not in p.engines — a tick writing a key nothing reads is the silent 1.0`); continue; }
+      if (seen.has(e.key)) { fail(`two registered ticks both claim "${e.key}" — one of them is overwriting the other every frame`); continue; }
+      seen.add(e.key);
+      if (typeof e.tick !== 'function') fail(`the registration for "${e.key}" has no tick function`);
+    }
+    if (!failures) ok(`the engine tick registry is well-formed: ${ENG.ENGINE_TICKS.length} accumulators (${[...seen].join(', ')}), each naming a live tree and a key in the bag`);
+
+    // AND THE TABLE IS WHAT THE SIM ACTUALLY ITERATES. A registry nothing reads
+    // is a list, and this is the assertion that tells the two apart: a class
+    // whose tree is NOT registered must not accrue the key, or the guard is
+    // decorative and every class is quietly running every accumulator.
+    const { p: monk } = stage('toh_monk');
+    const { g: g2, p: sam } = stage('toh_samurai');
+    ENG.gainChi(g2, sam, 40);
+    if (monk.engines.chi !== undefined && sam.chi === 0) {
+      ok('and the gating is real: a Samurai dealing 40 damage banks no Chi at all — an accumulator belongs to the tree that pays for it, not to every player in the room');
+    } else fail(`a class with no monk_chi tree banked ${sam.chi} Chi — the registry's tree guard is not being applied`);
   }
 }
 

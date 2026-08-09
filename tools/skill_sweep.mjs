@@ -55,6 +55,19 @@ function arena(skill) {
   if (skill.type === 'active') p.loadout[0] = skill.id;
   p.level = 66;              // every slot open, so slot gating never masks a miss
   g.god = true;              // the dummy must not kill the tester
+  // A CHI-COSTING SKILL IS A PAIR TOO (§13 rule 41), and for the same reason a
+  // `from: 'pet'` skill is. The Monk's spends do not fire unless the pool can pay
+  // — that is the ruling, checked one line after the cooldown check — so a skill
+  // staged ALONE with an empty pool never fires and the sweep reports its trigger
+  // dead while the trigger was never the thing being asked about. The Chi is
+  // granted rather than earned because the generator is EVERY damaging skill and
+  // the sweep deliberately slots only the one under test: there is no single node
+  // to lend, so the fixture supplies the state a Monk mid-fight would have.
+  if (skill.chi) {
+    p.chi = Math.max(p.chi || 0, skill.chi * 2);
+    p.chiLastGain = g.time;
+    p.engines.chi = p.chi;
+  }
   // A `from: 'pet'` SKILL IS A PAIR AND CANNOT BE STAGED ALONE (§13 rule 41).
   // Its trigger asks its question at the beast, so with no beast on the field
   // `triggerOrigin` returns null and the skill never fires — which the sweep

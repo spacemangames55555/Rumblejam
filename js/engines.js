@@ -1,0 +1,255 @@
+// PER-CLASS ENGINE TICKS — the registry, and the one module allowed to know a
+// class by name.
+//
+// WHY THIS EXISTS. Eleven of the game's twelve engines are a PUBLISH LINE: one
+// statement in `tickSkills` copying a number something else already produced
+// into `p.engines`. Those cost nothing and belong where they are. A minority are
+// ACCUMULATORS — they have their own state, their own accrual rate and their own
+// decay, and none of that is a derivation of an existing field. Footing was the
+// first; Chi is the second; §8.3's sort names cascade and Crystal Forms as the
+// third and fourth.
+//
+// Footing was written as a function in `js/skillsim.js` with a hardcoded
+// `treesFor(p).includes('samurai_armor')` guard and a hardcoded
+// `import { TUNING as SAM } from './content/skills/samurai_armor.js'`. §16 has
+// flagged that as the only per-class hardcode in shared code since phase 2, and
+// the flag was right about the shape but understated the cost: the dependency
+// runs BACKWARDS. Shared engine code importing a content file is the one arrow
+// the whole architecture is built to avoid, and left alone it would have been
+// drawn four times.
+//
+// So the accumulators move here and register themselves in a table, and
+// `tickSkills` iterates the table knowing no class:
+//
+//     for (const e of ENGINE_TICKS) if (trees.includes(e.tree)) e.tick(sim, p, dt);
+//
+// That is the same shape as `PRIMITIVES`, `IMPACT_RIDERS` and `PASSIVE_EFFECT` —
+// a table keyed by name, populated by data, iterated generically.
+//
+// WHERE THE NUMBERS LIVE IS NOT UNIFORM, DELIBERATELY. Footing's still live in
+// the Armor tree's TUNING and are imported here, because every one of them is
+// documented in place against the measurements that produced it and detaching a
+// number from its rationale is worse than an import. Chi's live in CONFIG,
+// beside the killbox's, because the engine ships and gates BEFORE the tree that
+// spends it and its constants cannot live in a file that does not exist yet.
+// The import that remains is legitimate in this module in a way it was not in
+// `skillsim.js`: per-class accumulators are this file's declared subject, so the
+// arrow points at what the module is for rather than out of shared code.
+//
+// AND THE TABLE IS GATEABLE, which the hardcode was not. Every registration
+// names the engine key it writes, so `engine_gate` can assert that each
+// registered tick is reached by the live path and moves its own key — the same
+// coverage/reached/effect shape as `trait_gate`. A tick written and never called
+// returns a silent 1.0 through `engineScale`; that is the exact failure mode
+// §8.3 says this group is prone to, and a registry is what makes it visible.
+
+import { CONFIG } from './config.js';
+import { TREES_BY_CLASS } from './skills.js';
+import { TUNING as SAM } from './content/skills/samurai_armor.js';
+
+// ---------------------------------------------------------------- footing
+
+// FOOTING. One stack per half-second stationary. Movement inside the grace
+// window (footingGraceMs) holds the stance without growing it; movement past it
+// drops the whole stack at once. No gradual decay — a falloff would let the
+// Samurai drift and keep most of the payoff, which erases the decision.
+//
+// `passives` and `recompute` arrive as arguments rather than as imports: this
+// module must not import `skillsim.js`, which imports it. The two functions it
+// needs are `passiveSum` and `sim._recomputeStats`, and both are handed in.
+function tickFooting(sim, p, dt, passives) {
+  // THE GRACE BUDGET. Movement time accumulates here and decays while standing
+  // still; the stance drops when the budget is spent, not the moment a key goes
+  // down. See footingGraceMs in the Armor tree's TUNING for why.
+  const grace = SAM.footingGraceMs / 1000;
+  if (p.moving) p.footingMove = (p.footingMove || 0) + dt;
+  else p.footingMove = Math.max(0, (p.footingMove || 0) - dt * SAM.footingGraceRefill);
+
+  if (p.moving) {
+    // Inside the window: the stance HOLDS but does not grow. A sidestep out of
+    // a committed zone keeps what you had; it does not pay you for moving.
+    if (p.footingMove < grace) { p.footingAcc = 0; return; }
+    // Past the window: the whole stack, at once. No partial falloff — a
+    // gradual decay would let the Samurai drift across a room and keep most of
+    // the payoff, which erases the decision. The absorb pool goes with it.
+    //
+    // WHY THE WINDOW EXISTS. Before it, criterion 13 at 50% telegraph density
+    // put the holder at x0.37-x0.40 damage taken against a correct sidestepper,
+    // and that ratio did not move for any dial tried. The insensitivity was the
+    // evidence: it was never the size of a stack, it was that a 200ms sidestep
+    // cost the entire stance and the rebuild is slower than the next commit
+    // arrives, so a bot that dodged correctly lived permanently at 0-3 stacks
+    // and never had a stance to make a decision about.
+    if (p.engines.footing) { p.engines.footing = 0; p.footingShield = 0; sim._recomputeStats(p); }
+    p.footingAcc = 0;
+    return;
+  }
+  // THE CAP IS THE ENGINE'S, AND NOTHING RAISES IT. This read
+  // `SAM.footingMaxStacks + passiveSum(p, 'footingMaxBonus')`, so Set Stance's
+  // rankable +1 pushed a designed ten to a measured seventeen and inflated
+  // every per-stack term with it. `footingMaxBonus` is deliberately not summed
+  // here any more: if a future skill declares one it does nothing, which is the
+  // correct outcome for a passive trying to raise a hard cap.
+  const maxStacks = SAM.FOOTING_MAX_STACKS;
+  const rate = 1 + passives(p, 'footingAccrualPct');
+  p.footingAcc += dt * rate;
+  const per = SAM.footingTickMs / 1000;
+  while (p.footingAcc >= per && p.engines.footing < maxStacks) {
+    p.footingAcc -= per;
+    p.engines.footing++;
+    p.footingShield = footingShieldFor(p, passives);
+    sim._recomputeStats(p);
+  }
+  if (p.engines.footing >= maxStacks) p.footingAcc = 0;
+}
+
+// The pool itself. It reuses the shield mechanism — same absorb-then-carry path
+// in hurtPlayer — but lives in its own field rather than in p.shield, because
+// breaking stance must drop exactly the Footing part and not eat an Iron Sleeve
+// proc that happens to be running. Recomputed whenever the stack changes, so it
+// tracks the stack exactly in both directions.
+export function footingShieldFor(p) {
+  const f = (p.engines && p.engines.footing) || 0;
+  return f * SAM.footingShieldPerStack;
+}
+
+// Footing's contribution to the stat sheet.
+//
+// NOT vitality. Footing used to grant max HP per stack, which meant breaking
+// stance lowered max Vitality and CLAMPED current HP down with it: a Samurai
+// lost health for dodging, by an amount unrelated to the attack, and the loss
+// landed hardest exactly when they did the thing the mechanic exists to reward.
+// The stack carries the absorb pool above instead, which costs the same to break
+// and takes nothing the player already had.
+//
+// NO REFLEX either — see the note in the Armor tree's TUNING. The Samurai has
+// surrendered the ability to dodge anything telegraphed; paying him dodge chance
+// for standing still was the opposite of that, and most of why holding beat
+// dodging on both axes.
+function footingStats(p, passives) {
+  const f = (p.engines && p.engines.footing) || 0;
+  return { grit: f * (SAM.footingGritPerStack + passives(p, 'footingGritBonus')), vitality: 0 };
+}
+
+// ---------------------------------------------------------------- chi
+
+// CHI. The second accumulator, and the first engine that runs in TWO
+// DIRECTIONS: damage skills put Chi in, heals and traps take it out. Every
+// engine before it only accumulates — footing, marks, drench, crystal and the
+// rest all move one way and are reset by a door or a mistake, never by the
+// player choosing to spend them.
+//
+// THE TICK ITSELF IS ONLY THE DECAY. Chi is filled in `skillDamage` (dealing
+// damage) and spent in `runTriggerTick` (a skill declaring a `chi` cost), so
+// what is left for a per-frame tick is the leak: Chi bleeds away out of combat,
+// which is what stops a Monk banking a full pool in a corridor and arriving at
+// the next fight with the whole engine already paid for. It decays only when the
+// Monk has not dealt damage recently, so the leak never fights the loop while
+// the loop is running.
+//
+// AND THE PUBLISHED VALUE IS NOT THE RESOURCE. `p.chi` is what a skill spends.
+// `p.engines.chi` is what `scaleWith: 'chi'` reads, and it carries the STEP that
+// makes zero Chi a cliff rather than a slope — see the ruling in §8.3. Deriving
+// it here rather than in a publish line keeps the two numbers in one place, the
+// same way the Witch Doctor's doll derives its published value from `voodooDmg`.
+function tickChi(sim, p, dt) {
+  const idle = sim.time - (p.chiLastGain ?? -999);
+  if (idle >= CONFIG.CHI_IDLE_SECONDS && p.chi > 0) {
+    p.chi = Math.max(0, p.chi - CONFIG.CHI_DECAY_PER_SEC * dt);
+  }
+  p.engines.chi = chiPublished(p);
+}
+
+// THE CLIFF, IN ONE PLACE. At zero Chi the engine publishes zero and every
+// `scaleWith: 'chi'` step resolves at its authored base — which IS the winded
+// number, because the tree is authored at the floor (§8.3). The first point of
+// Chi is worth `chiFocusStep` extra points on top of itself, so crossing zero
+// upward is a step and every point after it is a slope. Nothing anywhere
+// multiplies a damage number by less than one.
+export function chiPublished(p) {
+  if (!(p.chi > 0)) return 0;
+  return Math.min(CONFIG.CHI_CAP, p.chi) + CONFIG.CHI_FOCUS_STEP;
+}
+
+// Chi in, from dealing damage. Called from `skillDamage` — the one place the
+// game knows a player's own skill connected — and capped, so a Monk cannot bank
+// an unbounded pool against a boss and spend it for the rest of the floor.
+export function gainChi(sim, p, dealt) {
+  if (!(dealt > 0)) return;
+  if (!TREES_BY_CLASS[p.charId] || !TREES_BY_CLASS[p.charId].includes('monk_chi')) return;
+  const before = p.chi;
+  p.chi = Math.min(CONFIG.CHI_CAP, p.chi + dealt * CONFIG.CHI_PER_DAMAGE);
+  p.chiLastGain = sim.time;
+  p.engines.chi = chiPublished(p);
+  // THE CLIFF IS LEGIBLE, in both directions. A step this large that nothing
+  // announces is a number the player is expected to infer from their own damage
+  // output, which is exactly the kind of invisible state §13 rule 33 rejects.
+  if (before <= 0 && p.chi > 0) sim.pushEvent({ k: 'toast', idx: p.idx, text: 'Centred' });
+}
+
+// Chi out. Returns false when the Monk cannot pay, and the CALLER declines to
+// fire — see the ruling on conditional spending in §8.3.
+export function spendChi(sim, p, cost) {
+  if (!(cost > 0)) return true;
+  if (p.chi < cost) return false;
+  p.chi -= cost;
+  p.engines.chi = chiPublished(p);
+  if (p.chi <= 0) {
+    p.chi = 0;
+    p.engines.chi = 0;
+    sim.pushEvent({ k: 'toast', idx: p.idx, text: 'Winded' });
+  }
+  return true;
+}
+
+export function chiCostOf(sk) { return sk && sk.chi ? sk.chi : 0; }
+
+// ---------------------------------------------------------------- the table
+
+// One row per accumulator. `tree` is what gates it — an engine belongs to the
+// tree that pays for it, not to the class, so a Monk who never spends a point in
+// Chi never accrues any. `key` is the engine it writes, and it is here so
+// `engine_gate` can assert the registry rather than trusting it.
+export const ENGINE_TICKS = [
+  { tree: 'samurai_armor', key: 'footing', tick: tickFooting, stats: footingStats },
+  { tree: 'monk_chi', key: 'chi', tick: tickChi },
+];
+
+// The stat half of the same table. An accumulator that feeds the sheet declares
+// a `stats` function; one that does not, does not. Chi does not — it is read by
+// `scaleWith` and spent by skills, and a resource that also silently moved the
+// stat sheet would be two engines wearing one name.
+//
+// This exists so `js/skillsim.js` imports NO content file: `engineStatBonus`
+// used to read the Samurai's TUNING directly, which meant the registry would
+// have moved the tick out and left the arrow pointing backwards anyway.
+export function engineStats(p, passives) {
+  const trees = TREES_BY_CLASS[p.charId] || [];
+  let grit = 0, vitality = 0;
+  for (const e of ENGINE_TICKS) {
+    if (!e.stats || !trees.includes(e.tree)) continue;
+    const s = e.stats(p, passives);
+    grit += s.grit || 0; vitality += s.vitality || 0;
+  }
+  return { grit, vitality };
+}
+
+// Per-room reset for every registered accumulator that has one. Called from
+// `startRoomMinions`, which is the one function the sim already runs at a door.
+export function resetEnginesForRoom(p) {
+  // CHI DOES NOT SURVIVE A DOOR, for the same reason crystal and the killbox do
+  // not: a resource banked in the last fight is this fight's decision made for
+  // free. The Monk arrives winded and has to earn its way back out, which is the
+  // loop the class is built on, run once per room rather than once per run.
+  p.chi = 0;
+  p.chiLastGain = -999;
+  if (p.engines) p.engines.chi = 0;
+}
+
+export function initEnginePlayer(p) {
+  p.chi = 0;
+  p.chiLastGain = -999;
+  p.footingAcc = 0;
+  p.footingMove = 0;
+  p.footingShield = 0;
+}
