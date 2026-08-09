@@ -4448,6 +4448,11 @@ try {
     // the shop and the sheet close locally on their own button — no host event
     'overlay-shop':     { open: 'shop',     done: null, exit: '#shop-close' },
     'overlay-sheet':    { open: null,       done: null, exit: '#sheet-close' },
+    // The skill screen is PULL, like the sheet and unlike every other panel
+    // here: the player opens it, it renders `app.meta`, and it closes on its own
+    // button. No host event on either edge — which is why its driver has no
+    // `open`/`done` and an `exit` instead.
+    'overlay-skills':   { open: null,       done: null, exit: '#skills-close' },
   };
 
   // (d) the anti-rot assertion: refuse to skip what the gate does not understand

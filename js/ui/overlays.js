@@ -7,6 +7,7 @@ import { CHAR_BY_ID } from '../content/characters.js';
 import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_NAMES, weaponBasePrice, sellValue } from '../config.js';
 import { escapeHtml } from './screens.js';
 import { glossName, glossShort, glossDetail, glossify } from './gloss.js';
+import { SLOT_LEVELS } from '../skills.js';
 import { sfx } from '../audio.js';
 
 const $ = id => document.getElementById(id);
@@ -15,7 +16,7 @@ let A = null;
 export function initOverlays(actions) { A = actions; }
 
 export function closeAllOverlays() {
-  for (const id of ['overlay-shop', 'overlay-levelup', 'overlay-treasure', 'overlay-sheet', 'overlay-boon', 'overlay-opening']) $(id).classList.add('hidden');
+  for (const id of ['overlay-shop', 'overlay-levelup', 'overlay-treasure', 'overlay-sheet', 'overlay-boon', 'overlay-opening', 'overlay-skills']) $(id).classList.add('hidden');
 }
 
 // ---------------- tooltips ----------------
@@ -516,6 +517,132 @@ export function showOpening(ev) {
 }
 
 export function closeOpening() { $('overlay-opening').classList.add('hidden'); }
+
+// ---------------- the skill screen ----------------
+//
+// The player-facing half of the skill system: every tier of every tree the
+// character owns, with prerequisites, ranks, costs and the loadout.
+//
+// PULL, NOT PUSH — and that is the whole reason it is built differently from
+// the boon and opening panels beside it. Those are HOST-PUSHED: the sim decides
+// a moment has arrived and hands the client the exact picks to render, so the
+// client never needs state it was not given. This screen is opened by the
+// PLAYER, at a moment the host did not choose, and has to render a whole build.
+// So it reads `app.meta` — the per-player private channel that already carries
+// level, stats, items and weapons, and now carries `skillPoints`, `skillRanks`
+// and `loadout` too.
+//
+// THE SIM IS THE ENFORCEMENT, NOT THIS FILE. Every affordance below is a
+// courtesy: `canLearn` is mirrored here so a node that cannot be bought looks
+// like it, and the slot row is disabled mid-fight per §5.5 — but `spendSkillPoint`
+// and `setLoadout` re-check both on the host, because a client can send anything.
+// Where the two disagree the host wins and the screen redraws from the meta it
+// gets back.
+let SKILLS_STATE = { meta: null, charId: null, pickSlot: null };
+
+function canLearnLocal(meta, sk) {
+  if (!sk) return false;
+  const rank = (meta.skillRanks || {})[sk.id] || 0;
+  if (sk.maxRank !== undefined && rank >= sk.maxRank) return false;
+  if (!sk.prereq) return true;
+  return ((meta.skillRanks || {})[sk.prereq] || 0) >= 1;
+}
+
+function skillCard(meta, sk, spendable) {
+  const rank = (meta.skillRanks || {})[sk.id] || 0;
+  const cap = sk.maxRank !== undefined ? sk.maxRank : null;
+  const learnable = spendable && canLearnLocal(meta, sk);
+  const locked = !rank && sk.prereq && !((meta.skillRanks || {})[sk.prereq] || 0);
+  const cls = ['skill-node', rank ? 'known' : '', learnable ? 'buyable' : '', locked ? 'locked' : ''].filter(Boolean).join(' ');
+  const rankText = cap === 1 ? (rank ? 'taken' : 'unlock') : `rank ${rank}${cap ? `/${cap}` : ''}`;
+  return `<div class="${cls}" data-id="${escapeHtml(sk.id)}" data-buy="${learnable ? 1 : 0}">
+    <div class="sk-tier">T${sk.tier}</div>
+    <div class="sk-name">${escapeHtml(sk.name)}${sk.type === 'passive' ? ' <span class="sk-tag">passive</span>' : ''}</div>
+    <div class="sk-rank">${rankText}${learnable ? ' · <b>1 pt</b>' : ''}</div>
+    <div class="sk-desc">${escapeHtml(sk.desc || '')}</div>
+  </div>`;
+}
+
+export function showSkills(meta, charId, trees) {
+  if (!meta || !trees) return;
+  SKILLS_STATE = { meta, charId, pickSlot: SKILLS_STATE.pickSlot };
+  const el = $('overlay-skills');
+  el.classList.remove('hidden');
+  const pts = meta.skillPoints || 0;
+  const slots = meta.skillSlots || 0;
+  // §5.5, as answered by the HOST. Not re-derived here: `setLoadout` owns the
+  // rule and re-checks every action, so this is a look rather than a gate.
+  const canSlot = meta.canSlot !== false;
+  const loadout = meta.loadout || [];
+  const known = Object.entries(meta.skillRanks || {}).filter(([, r]) => r > 0).map(([id]) => id);
+  const actives = known.filter(id => { const s = trees.byId[id]; return s && s.type === 'active'; });
+
+  el.innerHTML = `
+    <div class="panel skills-panel">
+      <div class="ov-title">SKILLS — <span class="${pts ? 'pts-have' : ''}">${pts} point${pts === 1 ? '' : 's'}</span> unspent</div>
+
+      <div class="slot-row">
+        <div class="slot-label">LOADOUT ${canSlot ? '' : '<span class="slot-locked">— locked during a fight (§5.5)</span>'}</div>
+        <div class="slots">${Array.from({ length: 8 }, (_, i) => {
+          const open = i < slots;
+          const id = loadout[i];
+          const sk = id ? trees.byId[id] : null;
+          const sel = SKILLS_STATE.pickSlot === i;
+          return `<div class="slot ${open ? '' : 'shut'} ${sel ? 'picking' : ''}" data-slot="${i}">
+            <div class="slot-n">${i + 1}</div>
+            <div class="slot-name">${open ? (sk ? escapeHtml(sk.name) : '—') : 'lvl ' + SLOT_LEVELS[i]}</div>
+          </div>`;
+        }).join('')}</div>
+        ${SKILLS_STATE.pickSlot !== null && canSlot ? `<div class="slot-pick">
+          <div class="slot-label">put in slot ${SKILLS_STATE.pickSlot + 1}:</div>
+          <div class="slot-choices">
+            <button class="slot-choice" data-put="">clear</button>
+            ${actives.map(id => `<button class="slot-choice" data-put="${escapeHtml(id)}">${escapeHtml(trees.byId[id].name)}</button>`).join('')}
+          </div></div>` : ''}
+      </div>
+
+      ${trees.list.map(t => `
+        <div class="tree-block">
+          <div class="tree-name">${escapeHtml(t.name)}</div>
+          <div class="tree-row">${t.skills.map(sk => skillCard(meta, sk, pts > 0)).join('')}</div>
+        </div>`).join('')}
+
+      <button id="skills-close">Close</button>
+    </div>`;
+
+  el.querySelectorAll('.skill-node[data-buy="1"]').forEach(n => {
+    n.onclick = () => { sfx.click(); A.learnSkill(n.dataset.id); };
+  });
+  if (canSlot) {
+    el.querySelectorAll('.slot:not(.shut)').forEach(n => {
+      n.onclick = () => {
+        sfx.click();
+        const i = +n.dataset.slot;
+        SKILLS_STATE.pickSlot = SKILLS_STATE.pickSlot === i ? null : i;
+        showSkills(SKILLS_STATE.meta, SKILLS_STATE.charId, trees);
+      };
+    });
+    el.querySelectorAll('.slot-choice').forEach(n => {
+      n.onclick = () => {
+        sfx.click();
+        A.setSlot(SKILLS_STATE.pickSlot, n.dataset.put || null);
+        SKILLS_STATE.pickSlot = null;
+      };
+    });
+  }
+  el.querySelector('#skills-close').onclick = () => { sfx.click(); closeSkills(); };
+}
+
+// Redraw in place when the host sends a new meta — a spend or a slot change is
+// answered by the sim, so the screen must show what the HOST agreed to rather
+// than what the click hoped for.
+export function updateSkillsMeta(meta, trees) {
+  if ($('overlay-skills').classList.contains('hidden')) return;
+  showSkills(meta, SKILLS_STATE.charId, trees);
+}
+
+export function isSkillsOpen() { return !$('overlay-skills').classList.contains('hidden'); }
+export function closeSkills() { $('overlay-skills').classList.add('hidden'); SKILLS_STATE.pickSlot = null; }
 
 // ---------------- character sheet ----------------
 // Live view of one player's build: all sixteen stats (base shown where it

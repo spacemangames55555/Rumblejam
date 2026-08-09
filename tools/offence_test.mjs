@@ -28,6 +28,7 @@
 import { Sim } from '../js/game.js';
 import { CHARACTERS, SELECTABLE, isSelectable, unselectableReason } from '../js/content/characters.js';
 import { SKILL_BY_ID, TREES_BY_CLASS, canLearn } from '../js/skills.js';
+import * as SK_UI from '../js/skillsim.js';
 import { learnableSkills, spendSkillPoint } from '../js/skillsim.js';
 
 const SECONDS = parseInt(process.argv[2] || '20', 10);
@@ -154,6 +155,47 @@ function sweep() {
       fail(`${silent.length}/${raw.length} class(es) deal ZERO damage on map 1 as a real player receives them: ${silent.map(r => r.charId).join(', ')}. `
         + `Any class still dealing damage here is doing it on TRAIT damage rather than a skill`);
     }
+  }
+
+  // ------------------------------------------------------------------------
+  // THE SKILL SCREEN'S DATA REACHES A CLIENT, and §5.5 is enforced by the SIM.
+  //
+  // The screen is PULL: a player opens it whenever they like, so unlike a boon
+  // it cannot be handed its contents in the event that opens it — it renders
+  // `getMeta`. A field missing there is a screen that renders a blank build, and
+  // nothing else in the suite reads that payload.
+  {
+    const sim = new Sim({ seed: 5150, party: [{ idx: 0, key: 'k', name: 'S', charId: ids[0], color: '#fff' }] });
+    const p = sim.players[0];
+    const m = sim.getMeta(p);
+    const need = ['skillPoints', 'skillRanks', 'loadout', 'skillSlots', 'canSlot'];
+    const absent = need.filter(k => m[k] === undefined);
+    if (!absent.length) {
+      ok(`the build rides the meta channel: ${need.join(', ')} — ${m.skillPoints} point(s), ${m.skillSlots} slot(s), canSlot=${m.canSlot}. A pull-open screen renders what is already on the client, so a field missing here is a blank tree`);
+    } else fail(`getMeta omits ${absent.join(', ')} — the skill screen has no way to render them, and no other check reads this payload`);
+
+    // §5.5, ASSERTED ON THE HOST. The screen greys the slot row mid-fight, but a
+    // client can send anything; the rule has to bite in `setLoadout` or it is
+    // decoration. Both directions, because "always refuses" would pass a
+    // one-sided check and break the game.
+    sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+    const learned = Object.keys(p.skillRanks).find(k => p.skillRanks[k] > 0);
+    const inFight = SK_UI.setLoadout(sim, p, 0, learned || null);
+    sim.cleared = true;
+    const afterFight = SK_UI.setLoadout(sim, p, 0, learned || null);
+    if (!inFight.ok && afterFight.ok) {
+      ok(`§5.5 is enforced by the sim, not the screen: a slot change is refused mid-fight ("${inFight.reason}") and accepted once the room is cleared`);
+    } else fail(`§5.5 slot gating is wrong: mid-fight ok=${inFight.ok} (want false), cleared ok=${afterFight.ok} (want true)`);
+
+    // And the host's own answer to "may I slot right now" must agree with it —
+    // the screen reads `canSlot` off meta rather than re-deriving the rule, so a
+    // disagreement is a screen that lies in one direction or the other.
+    sim.cleared = false;
+    const saysNo = sim.getMeta(p).canSlot;
+    sim.cleared = true;
+    const saysYes = sim.getMeta(p).canSlot;
+    if (saysNo === false && saysYes === true) ok('and `meta.canSlot` agrees with it in both directions — the screen is told the answer rather than computing a second copy of the rule');
+    else fail(`meta.canSlot disagrees with setLoadout: mid-fight ${saysNo} (want false), cleared ${saysYes} (want true)`);
   }
 
   // And the ones NOT yet selectable are named, so the gap is a number in the

@@ -50,6 +50,7 @@ export function initSkillPlayer(sim, p) {
 }
 
 export function treesFor(p) { return TREES_BY_CLASS[p.charId] || []; }
+export { slotsAtLevel };
 
 // ROOM START, §8.5 rows 5 and 7. Lives here rather than in minions.js because
 // it needs the skill registry, and minions.js cannot import it — js/skills.js
@@ -135,6 +136,7 @@ export function spendSkillPoint(sim, p, id) {
     if (free >= 0) p.loadout[free] = id;
   }
   sim._recomputeStats(p);
+  p.metaDirty = true;         // the build changed; the skill screen reads it off meta
   sim.pushEvent({ k: 'skillLearned', idx: p.idx, id, rank: p.skillRanks[id] });
   return true;
 }
@@ -152,11 +154,13 @@ export function setLoadout(sim, p, slot, id) {
   const ownsDamage = Object.keys(p.skillRanks).some(x => isDamaging(SKILL_BY_ID[x]));
   if (ownsDamage && !anyDamage) return { ok: false, reason: 'at least one damaging active must stay slotted' };
   p.loadout = next;
+  p.metaDirty = true;
   return { ok: true };
 }
 
 export function grantSkillPoint(sim, p) {
   p.skillPoints++;
+  p.metaDirty = true;
   sim.pushEvent({ k: 'skillPoint', idx: p.idx, points: p.skillPoints });
 }
 
