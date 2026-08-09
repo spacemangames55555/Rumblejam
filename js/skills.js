@@ -27,6 +27,8 @@ import { MONK_CHI, TUNING as MONK_CHI_TUNING } from './content/skills/monk_chi.j
 import { MONK_STONEGARDEN, TUNING as MONK_SG_TUNING } from './content/skills/monk_stonegarden.js';
 import { SAV_PRIMAL_FURY, TUNING as SAV_PF_TUNING } from './content/skills/sav_primal_fury.js';
 import { SAV_BLOODBOUND, TUNING as SAV_BB_TUNING } from './content/skills/sav_bloodbound.js';
+import { SMITH_CRYSTAL, TUNING as SMITH_CR_TUNING } from './content/skills/smith_crystal.js';
+import { SMITH_FORGE, TUNING as SMITH_FG_TUNING } from './content/skills/smith_forge.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
@@ -60,6 +62,8 @@ export const TREES = {
   monk_stonegarden: { id: 'monk_stonegarden', name: 'Stone Garden', classId: 'toh_monk', skills: MONK_STONEGARDEN, tuning: MONK_SG_TUNING },
   sav_primal_fury: { id: 'sav_primal_fury', name: 'Primal Fury', classId: 'toh_savage', skills: SAV_PRIMAL_FURY, tuning: SAV_PF_TUNING },
   sav_bloodbound: { id: 'sav_bloodbound', name: 'Bloodbound', classId: 'toh_savage', skills: SAV_BLOODBOUND, tuning: SAV_BB_TUNING },
+  smith_crystal: { id: 'smith_crystal', name: 'Crystal', classId: 'toh_blacksmith', skills: SMITH_CRYSTAL, tuning: SMITH_CR_TUNING },
+  smith_forge: { id: 'smith_forge', name: 'Forge', classId: 'toh_blacksmith', skills: SMITH_FORGE, tuning: SMITH_FG_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
@@ -104,6 +108,7 @@ export const PASSIVE_EFFECT = {
   spreadDamageBonus: 'damage',    // Long Leash: more per span between you and the beast
   chiDamageBonus: 'damage',       // Still Water: more per point of Chi held
   cascadeDamageBonus: 'damage',   // Red Memory: more per rank banked in the cascade
+  formDamageBonus: 'damage',      // Facet: more while a crystal form holds
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the
@@ -248,6 +253,16 @@ function summonStepProblems(s, step) {
 function assertTrees() {
   const problems = [];
 
+  // Every form name any `form` step enters, DERIVED rather than restated — a
+  // hand-written list here would go stale the moment a fourth form is authored,
+  // which is §13 rule 12 and the same reason CLASS_OF in skill_sweep is derived.
+  const FORM_NAMES = new Set();
+  for (const tree of Object.values(TREES)) {
+    for (const s of tree.skills) {
+      for (const c of s.compose || []) if (c.kind === 'form' && c.form) FORM_NAMES.add(c.form);
+    }
+  }
+
   for (const tree of Object.values(TREES)) {
     const byTier = [...tree.skills].sort((a, b) => a.tier - b.tier);
 
@@ -302,6 +317,16 @@ function assertTrees() {
           const cls = TREES[s.tree] && TREES[s.tree].classId;
           const owns = (TREES_BY_CLASS[cls] || []).includes('monk_chi');
           if (!owns) problems.push(`${s.id}: declares a chi cost but ${cls} has no monk_chi tree to generate any — a cost nothing can pay is a skill that never fires`);
+        }
+        // §8.3, the Blacksmith's Crystal Forms: a skill may declare the FORM it
+        // fires in. Refused when no `form` step anywhere declares that name,
+        // because a skill gated on a form nothing enters is a skill that never
+        // fires — the wired-to-nothing shape, one layer up from a dead primitive.
+        if (s.form !== undefined) {
+          if (typeof s.form !== 'string' || !s.form) problems.push(`${s.id}: form ${JSON.stringify(s.form)} is not a form name`);
+          else if (!FORM_NAMES.has(s.form)) {
+            problems.push(`${s.id}: gated on form "${s.form}", which no \`form\` step anywhere enters — known forms: ${[...FORM_NAMES].join('/') || '(none)'}`);
+          }
         }
         // REQUIRED, NEVER DEFAULTED. `select` is what the skill hits; the
         // trigger is only when it fires. Defaulting a missing one to 'nearest'

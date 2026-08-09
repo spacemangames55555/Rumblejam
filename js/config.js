@@ -152,6 +152,13 @@ export const CONFIG = {
   // chain, which is what stops a cascade being carried between rooms inside one.
   CASCADE_IDLE_SECONDS: 2.5,
   CASCADE_DECAY_PER_SEC: 6,
+  // THE BLACKSMITH'S CRYSTAL FORMS. The engine is BINARY, and that is the whole
+  // ruling: a form is a state the player is in, not a resource they hold, so
+  // `p.engines.form` publishes FORM_POWER while transformed and 0 otherwise. It
+  // reads identically at one second remaining and at five, because a form does
+  // not deplete — it ends. `engine_gate` asserts exactly that, since an engine
+  // that drifted with the timer would be a quantity wearing a state's name.
+  FORM_POWER: 1,
   ARMOR_K: 15,             // damage taken = raw * K / (K + armor)
   NEG_ARMOR_MAX_BONUS: 0.5,
 

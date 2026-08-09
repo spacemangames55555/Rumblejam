@@ -15,7 +15,7 @@ import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spa
 import { domainMult } from './domains.js';
 import { CONFIG } from './config.js';
 import { tohHitDamage, tohOnHit } from './traits-toh.js';
-import { ENGINE_TICKS, engineStats, footingShieldFor, resetEnginesForRoom, initEnginePlayer, gainChi, spendChi, chiCostOf, cascadeAdvance, cascadeCooldown } from './engines.js';
+import { ENGINE_TICKS, engineStats, footingShieldFor, resetEnginesForRoom, initEnginePlayer, gainChi, spendChi, chiCostOf, cascadeAdvance, cascadeCooldown, formHolds } from './engines.js';
 
 const S = TRIGGER_TICK_MS / 1000;
 
@@ -34,8 +34,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0, chi: 0, cascade: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0, chi: 0, cascade: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0, chi: 0, cascade: 0, form: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0, chi: 0, cascade: 0, form: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   // Every registered accumulator's own fields, in the module that owns them.
   initEnginePlayer(p);
@@ -169,13 +169,15 @@ export function passiveSum(p, key) {
 // The stack now carries an absorb pool instead (footingShield below), which
 // costs the same to break and takes nothing the player already had.
 export function engineStatBonus(p) {
-  const e = engineStats(p, passiveSum);
-  // Marrow's Calcify is a flat passive rather than an engine, but it lands in
-  // the same place so the two compose rather than racing.
-  const grit = e.grit + passiveSum(p, 'armorGrit');
-  const vit = e.vitality + passiveSum(p, 'armorVit');
-  if (!grit && !vit) return null;
-  return { grit, vitality: vit };
+  // Every registered engine's stat contribution, plus the two flat passives that
+  // land in the same place. Marrow's Calcify is a passive rather than an engine
+  // but belongs here so the two compose rather than racing.
+  const out = engineStats(p, passiveSum);
+  const grit = passiveSum(p, 'armorGrit'), vit = passiveSum(p, 'armorVit');
+  if (grit) out.grit = (out.grit || 0) + grit;
+  if (vit) out.vitality = (out.vitality || 0) + vit;
+  for (const k in out) if (out[k]) return out;
+  return null;
 }
 
 export { footingShieldFor };
@@ -262,6 +264,7 @@ export function tickSkills(sim, dt) {
     p.engineScaleBonus.doll = passiveSum(p, 'dollDamageBonus');
     p.engineScaleBonus.chi = passiveSum(p, 'chiDamageBonus');
     p.engineScaleBonus.cascade = passiveSum(p, 'cascadeDamageBonus');
+    p.engineScaleBonus.form = passiveSum(p, 'formDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
     // holding slots no skill still pays for.
@@ -327,6 +330,13 @@ function runTriggerTick(sim) {
       // cost the ruling actually wanted intact — a heal near a hurt ally still
       // fires on its own trigger and still takes the Chi with it.
       if (chiCostOf(sk) > p.chi) continue;
+      // AND THE FORM THIRD, same place and same shape. A skill declaring
+      // `form: 'pyrite'` fires only while that form holds — the skill stays
+      // slotted and visible, and what the form changes is whether its condition
+      // can hold. §5.5 forbids mid-fight loadout changes, so a form that swapped
+      // slotted skills would be the trigger-swap item §9.2 deleted, pointed at
+      // the player by their own class.
+      if (!formHolds(p, sk)) continue;
       if (evals >= MAX_TRIGGER_EVALS_PER_TICK) { capped = true; break; }
       evals++;
       const st = (p.trigState[id] ||= { armed: true });

@@ -451,6 +451,35 @@ export const PRIMITIVES = {
     out.states++;
   },
 
+  // THE FOURTEENTH PRIMITIVE (§5.7), and the first that puts the player into a
+  // named STATE rather than moving a number.
+  //
+  // Every other engine is a quantity something scales off. A Crystal Form is a
+  // state the player is IN: it has a name, a duration, a stat delta, and skills
+  // that only fire while it holds. §8.3 lists the Druid's morph beside it, and
+  // the archaeology says they are not the same thing — `wildshape` is `prism`
+  // reskinned, a boon picker, and the source project's timed-stat field
+  // (`p.tempStats`) was initialised and read by nothing at all.
+  //
+  // WHY A PRIMITIVE AND NOT A RIDER, which is §5.7 condition 2: a rider resolves
+  // on a target at the moment of impact, and a form has no target — it is caster
+  // state, exactly like `shift`. And why not an existing primitive (condition 1):
+  // nothing writes a named timed player state, and `shield`/`ward` write pools
+  // rather than identity.
+  //
+  // ENTERING A FORM REPLACES ANY FORM ALREADY HELD. One at a time, always — two
+  // simultaneous forms would stack their stat deltas and make the deepest
+  // threshold strictly the best, which erases the choice between them.
+  form(sim, p, skill, step, rank, grid, out) {
+    const dur = rankedDuration(step.duration, skill, rank) / MS;
+    p.form = step.form;
+    p.formT = dur;
+    p.formStats = step.stats || null;
+    sim._recomputeStats(p);
+    sim.pushEvent({ k: 'toast', idx: p.idx, text: `${step.form.toUpperCase()}` });
+    out.states++;
+  },
+
   plague(sim, p, skill, step, rank, grid, out) {
     const seed = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.spreadRadius);
     if (!seed) return;

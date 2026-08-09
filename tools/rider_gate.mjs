@@ -24,10 +24,11 @@
 
 import { Sim } from '../js/game.js';
 import { SELECTABLE } from '../js/content/characters.js';
-import { TREES, SKILL_BY_ID, TREES_BY_CLASS } from '../js/skills.js';
+import { TREES, SKILL_BY_ID, TREES_BY_CLASS, ALL_SKILLS } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
 import { ENEMIES } from '../js/content/enemies.js';
 import { IMPACT_RIDERS, SHAPE_RIDERS, BOLT_RIDERS } from '../js/compose.js';
+import { CONFIG } from '../js/config.js';
 
 const VERBOSE = process.argv.includes('--verbose');
 let failures = 0;
@@ -110,6 +111,21 @@ function target(g, x, y) {
 function stageFor(g, p, sk) {
   const t = sk.trigger;
   const es = [];
+  // A `form`-GATED SKILL IS A PAIR (§13 rule 41), the same shape as the
+  // Sundian's sluice needing drench and the Hunter's `from: 'pet'` needing a
+  // beast. `smith_anvil_strike` declares `knockback` and fires only in Iron
+  // Pyrite; staged out of form it never fires, and the gate reported a working
+  // rider DROPPED. The form is entered with the stats the authoring step gives
+  // it, so the fixture is the state the skill is actually played in.
+  if (sk.form) {
+    const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === sk.form));
+    const step = src && src.compose.find(c => c.kind === 'form');
+    p.form = sk.form;
+    p.formT = 60;
+    p.formStats = step ? step.stats || null : null;
+    p.engines.form = CONFIG.FORM_POWER;
+    g._recomputeStats(p);
+  }
   const put = (n, r) => {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;

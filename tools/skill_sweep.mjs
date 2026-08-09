@@ -68,6 +68,21 @@ function arena(skill) {
     p.chiLastGain = g.time;
     p.engines.chi = p.chi;
   }
+  // AND A `form`-GATED SKILL IS A PAIR TOO (§13 rule 41) — the third of this
+  // shape after `from: 'pet'` and the Monk's `chi`. A skill declaring
+  // `form: 'pyrite'` does not fire out of that form, so staged alone it reads as
+  // a dead trigger. The form is entered rather than assigned: `p.formStats` has
+  // to arrive too or the stat half of the state is missing, and the fixture would
+  // be testing a form that changes nothing.
+  if (skill.form) {
+    const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === skill.form));
+    const step = src && src.compose.find(c => c.kind === 'form');
+    p.form = skill.form;
+    p.formT = 30;
+    p.formStats = step ? step.stats || null : null;
+    p.engines.form = CONFIG.FORM_POWER;
+    g._recomputeStats(p);
+  }
   // A `from: 'pet'` SKILL IS A PAIR AND CANNOT BE STAGED ALONE (§13 rule 41).
   // Its trigger asks its question at the beast, so with no beast on the field
   // `triggerOrigin` returns null and the skill never fires — which the sweep
@@ -155,6 +170,12 @@ function observe(g, p, foes) {
     shield: p.shield, ward: p.ward,
     zones: g.zones.length, projs: g.projPool.count,
     hp: p.hp,
+    // A FORM IS A STATE, so the state is the observable. Without this the three
+    // `form` steps were judged on their side effects and two of them passed by
+    // ACCIDENT — Pyrite and Calcite grant Vitality, which moves max HP, while
+    // Quartz grants Attunement and Ferocity and moved nothing the snapshot read.
+    // The one that failed was the only honest reading of the three (§13 rule 37).
+    form: p.form || null,
     // A summon's observable effect is THE SUMMON. Without this, Raise Skeleton
     // passed the sweep on the damage its skeleton happened to deal inside the
     // window — a real effect, but not the one the skill claims, and it would
@@ -242,6 +263,7 @@ for (const skill of ALL_SKILLS) {
     if (after.domain !== before.domain) effects.push(`domain -> ${after.domain}`);
     else if (after.shifts > before.shifts) effects.push(`re-attuned (${after.shifts} banked)`);
     if (after.traps > before.traps) effects.push(`trap set (${after.traps} armed)`);
+    if (after.form !== before.form && after.form) effects.push(`form -> ${after.form}`);
 
     if (effects.length) ok(`${skill.id} — ${skill.trigger.kind} fired, ${effects.join(', ')}`);
     else fail(`${skill.id}: fired but produced NOTHING observable — a skill wired to nothing`);
