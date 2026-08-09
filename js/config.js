@@ -103,6 +103,12 @@ export const CONFIG = {
   TRAP_CAP: 6,
   // How close a cast has to be to a trap to set it off. Read by `detonateTraps`.
   TRAP_DETONATE_RANGE: 190,
+  // THE HUNTER'S TWO BODIES. The engine is the SPAN between the Hunter and its
+  // nearest beast, in bands rather than raw pixels so a `scaleWith` step reads a
+  // legible number. One band per 90 units, capped at six — six bands is 540, a
+  // little over half the arena's short axis, which is as far apart as two bodies
+  // can be and still be fighting the same room.
+  SPREAD_UNIT: 90, SPREAD_CAP: 6,
   ARMOR_K: 15,             // damage taken = raw * K / (K + armor)
   NEG_ARMOR_MAX_BONUS: 0.5,
 
