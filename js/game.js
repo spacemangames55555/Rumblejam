@@ -2,7 +2,7 @@
 // rendering. Clients only ever send inputs/UI intents; everything here is the
 // single source of truth. Solo play runs this exact code with one player.
 
-import { CONFIG, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, ROLL_TABLE } from './config.js';
+import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, ROLL_TABLE } from './config.js';
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
@@ -3351,14 +3351,32 @@ export class Sim {
   // an unplayable run. The choice is still OFFERED first and is still the
   // player's; this only catches the case where nothing answered by the time the
   // fighting starts.
+  // AND WHEN IT FIRES, IT IS LOUD. A net that rescues silently is a net that
+  // hides the thing it caught: this fired on every single run — the §5.6 card
+  // was unreachable behind the map screen's z-index — and the only symptom was a
+  // toast that read like a normal part of starting a run. Nothing was red,
+  // because the run was playable.
+  //
+  // So it now records itself. `openingFloored` is a run-long counter that
+  // `offence_test` asserts stays at ZERO on the normal path, the event is a
+  // `defect` rather than a toast, and DEV builds warn to the console. The floor
+  // still rescues — a bricked run is worse than a loud one — but it can no
+  // longer do it quietly.
   _floorOpeningAbility(p) {
     if (p.gone || p.skillPoints <= 0) return;
     if (SK.hasDamagingSlotted(p)) return;
     const picks = SK.openingPicks(p);
     if (!picks.length) return;
+    const wasOffered = !!p.openingOffer;
     p.openingOffer = null;
     SK.spendSkillPoint(this, p, picks[0].id);
-    this.pushEvent({ k: 'toast', idx: p.idx, text: `Opening ability: ${picks[0].name}` });
+    this.openingFloored = (this.openingFloored || 0) + 1;
+    const why = wasOffered
+      ? 'the §5.6 card was presented and never answered — check that it is REACHABLE, not merely visible'
+      : 'no §5.6 card was ever offered to this player';
+    this.pushEvent({ k: 'defect', idx: p.idx, code: 'opening-floor',
+      text: `Opening ability auto-granted (${picks[0].name}) — ${why}` });
+    if (DEV) console.warn(`[DEFECT] opening-floor: p${p.idx} ${p.charId} — ${why}`);
   }
 
   _offerBoon(p) {

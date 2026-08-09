@@ -220,6 +220,20 @@ body.touch-on .overlay.overlay-boon{padding-bottom:calc(20vh + 8px);}
 .boon-card{min-width:130px; min-height:56px; padding:10px;}
 /* stacking: a pending level-up always shows above shop/treasure/sheet */
 #overlay-shop{z-index:10;} #overlay-treasure{z-index:20;} #overlay-sheet{z-index:25;} #overlay-levelup{z-index:30;}
+/* THE PANELS THAT CAN OPEN ON THE MAP SCREEN NEED ONE TOO, and this is the whole
+   of a shipped defect. `.overlay` declares no z-index, so it stacks in DOM order;
+   `#screen-map` declares 5. The four overlays above were given a z-index because
+   they open over the map. `#overlay-boon` was not — and got away with it, because
+   a boon appears in the ARENA where the map screen is hidden.
+   The §5.6 opening card appears ON THE MAP, and inherited the same omission: it
+   rendered, it was visible, its panel had `pointer-events: auto`, and the map
+   screen painted straight over it. Measured with elementFromPoint at the card's
+   own centre, the topmost element was `screen` and the card was unreachable — so
+   every real click fell through and the anti-softlock floor granted the ability
+   instead. A test using `.click()` never saw it: that bypasses hit-testing.
+   The opening card sits ABOVE everything, because it is the one choice a
+   character cannot start without. */
+#overlay-boon{z-index:28;} #overlay-skills{z-index:26;} #overlay-opening{z-index:35;}
 .overlay .panel{min-width:min(92vw,900px);}
 .ov-title{font-size:24px; color:var(--gold); letter-spacing:3px; margin-bottom:2px;}
 .ov-sub{color:var(--dim); margin-bottom:14px; font-size:14px;}

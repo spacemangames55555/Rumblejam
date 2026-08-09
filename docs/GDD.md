@@ -1575,6 +1575,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 56. **A safety net will answer the question you meant to ask about the mechanism, and the check will not tell you which one replied.** The gate said all fourteen classes deal damage as the game provisions them. That was true at the commit where no player was ever offered an opening ability — because the anti-softlock floor granted one on arena entry. The assertion could not distinguish "the offer works" from "the offer is dead and the net caught it", and it reported the outcome both produce. §13 rule 52 says to assert the mechanism separately from the net, and that was done for the OFFER; what was missed is that the *outcome* check silently depends on whichever of the two fires. **Where a net exists, one check must run with the net's effect visible in the result** — name which path produced the outcome, or the net will keep answering for a mechanism that has stopped working.
 
+57. **Visible is not reachable, and the check that proves one says nothing about the other.** Rule 55 came from a panel whose cards were built inside a hidden container, and the fix was to assert `offsetParent`. The very next defect in the same panel passed that check: the card was visible, its `pointer-events` were `auto`, and the map screen was painted over it because `.overlay` declares no z-index. `elementFromPoint` at the element's own centre returned `screen-map`. **`.click()` cannot see this class of bug at all** — it dispatches at the node and skips hit-testing, which is exactly the step that was broken. For anything a player must press, the assertion is *"the topmost element at its centre is the element"*; for anything they must merely see, `offsetParent` is enough. Two questions, two checks, and a suite that asks only the easier one will keep passing through the harder one's failures.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1605,7 +1607,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
-**Group D is empty.** D-23 through D-32 are all closed. **D-31 is the only one of them found by a human playing the game rather than by measurement**, which is worth its own line: every gate in the suite passed while the game was unplayable, because every gate provisioned its own fixture. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
+**Group D is empty.** D-23 through D-33 are all closed. **D-31 is the only one of them found by a human playing the game rather than by measurement**, which is worth its own line: every gate in the suite passed while the game was unplayable, because every gate provisioned its own fixture. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1685,6 +1687,32 @@ They are the same category as the seven checks above, and the same category as D
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-33 — CLOSED: the opening card was visible, on top of nothing, and unclickable
+
+A playtest reported *"starting a map shows X skill was chosen"* — the anti-softlock floor's toast, firing on every run. The card was reaching the screen; **no click could reach the card.**
+
+`.overlay` declares **no z-index**, so it stacks in DOM order. `#screen-map` declares **5**. The four older overlays each declare one — shop 10, treasure 20, sheet 25, levelup 30 — because they open over the map. `#overlay-boon` never did and got away with it: a boon appears in the **arena**, where the map screen is hidden. The §5.6 card appears **on the map**, inherited the same omission, and the map screen painted over it.
+
+Measured with `elementFromPoint` at the card's own centre, on all fourteen classes:
+
+```
+visible 1, reachable 0, topmost "screen-map"
+```
+
+The panel rendered, was visible, and its cards had `pointer-events: auto`. Every real click fell through to the map, and the floor granted an ability on arena entry.
+
+**Why every check was green.** `skillscreen_test` answered the card with `.click()`, which dispatches straight at the node and **bypasses hit-testing entirely** — the one thing a real pointer cannot do. `offence_test` asserted `p.openingOffer` on the sim, which was correct throughout. And the damage assertion passed because the floor did the work. Three checks, three different reasons to be green, one unplayable choice.
+
+**Fixed** with `#overlay-opening{z-index:35}`, `#overlay-boon{z-index:28}` and `#overlay-skills{z-index:26}` — the opening card highest, because it is the one choice a character cannot start without.
+
+#### The floor is loud now, and that was the more important half
+
+A net that rescues silently hides what it caught. `_floorOpeningAbility` now increments `sim.openingFloored`, pushes a `defect` event rather than a toast, and warns to the console in DEV builds. **`offence_test` asserts the counter is ZERO across all fourteen classes on the normal path** — so the damage assertion can no longer be answered by the net standing in for the mechanism. `skillscreen_test` asserts the same after its browser sweep.
+
+The floor still rescues, because a bricked run is worse than a loud one. It can no longer do it quietly.
+
+**Considered and not shipped: blocking travel until the card is answered.** §5.6 puts the choice at character start, so a map that waits for it is arguably more correct — but it is a design change rather than a fix, and it breaks 30 `pickNode` call sites across 10 fixtures that travel as setup. Raised rather than smuggled in; the z-index was the defect.
 
 #### D-32 — CLOSED: the skill screen, and the host's blind spot that came with it
 
