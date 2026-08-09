@@ -15,7 +15,7 @@ import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spa
 import { domainMult } from './domains.js';
 import { CONFIG } from './config.js';
 import { tohHitDamage, tohOnHit } from './traits-toh.js';
-import { ENGINE_TICKS, engineStats, footingShieldFor, resetEnginesForRoom, initEnginePlayer, gainChi, spendChi, chiCostOf } from './engines.js';
+import { ENGINE_TICKS, engineStats, footingShieldFor, resetEnginesForRoom, initEnginePlayer, gainChi, spendChi, chiCostOf, cascadeAdvance, cascadeCooldown } from './engines.js';
 
 const S = TRIGGER_TICK_MS / 1000;
 
@@ -34,8 +34,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0, chi: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0, chi: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0, chi: 0, cascade: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0, chi: 0, cascade: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   // Every registered accumulator's own fields, in the module that owns them.
   initEnginePlayer(p);
@@ -261,6 +261,7 @@ export function tickSkills(sim, dt) {
     p.engineScaleBonus.spread = passiveSum(p, 'spreadDamageBonus');
     p.engineScaleBonus.doll = passiveSum(p, 'dollDamageBonus');
     p.engineScaleBonus.chi = passiveSum(p, 'chiDamageBonus');
+    p.engineScaleBonus.cascade = passiveSum(p, 'cascadeDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
     // holding slots no skill still pays for.
@@ -356,7 +357,15 @@ function runTriggerTick(sim) {
 // ONE FIRE PER TICK PER SKILL, regardless of how many enemies satisfied it.
 function fireSkill(sim, p, sk) {
   const rank = skillRank(p, sk.id);
-  p.skillCd[sk.id] = sk.cooldown / 1000;
+  // THE CASCADE ADVANCES BEFORE THE COOLDOWN IS WRITTEN, so the cast that
+  // extends the chain is itself shortened by the extension. See engines.js for
+  // why that ordering is the engine's built-in cost rather than a generosity.
+  cascadeAdvance(sim, p, sk.id);
+  // AND THIS IS THE ONLY PLACE IN THE GAME A COOLDOWN IS EVER SHORTENED. Items
+  // may not (§9.2), ranks may not (§4.2), and no other engine touches it. The
+  // Savage is the single exemption and `cascadeCooldown` is a no-op for every
+  // other class, which is what keeps the exemption from leaking.
+  p.skillCd[sk.id] = cascadeCooldown(p, sk) / 1000;
   // What the fire SPENDS, before what it does. A token is taken off the floor
   // by the skill that read it — the same shape as ON_KILL's counter being
   // cleared by the tick that saw it. Keyed by trigger kind in triggers.js.

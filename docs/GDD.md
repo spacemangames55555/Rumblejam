@@ -302,6 +302,8 @@ Three properties define it, and each one is a ruling rather than an implementati
 
 **`chi` — *what the skill costs*.** A skill may declare `chi: N`, and it does not fire unless the caster can pay. The check sits one line after the cooldown check, in the same function and in the same shape: a skill that cannot pay costs one number comparison and is skipped. Two things are refused at load — a **damaging** skill declaring a cost, because damage generates Chi and a skill doing both funds and drains the same loop in one cast; and a cost on any class with no `monk_chi` tree to generate any, because a cost nothing can pay is a skill that never fires. The full ruling, including why refusing beats clamping at zero, is in §8.3.
 
+**Cooldowns may be SHORTENED in exactly one place.** Items may not (§9.2), ranks may not (§4.2), and no engine but the Savage's does. `cascadeCooldown` in `js/engines.js` is the only function in the game that returns less than a skill's declared cooldown, it is gated on the tree that pays for it, and `engine_gate` asserts both that it works and that no other class can reach it. The exemption and the asymptote that makes it safe are ruled in §8.3.
+
 ### 5.3 Selectors — *what*
 
 Every active declares a `select`. **There is no default**, and a missing selector fails at load.
@@ -377,7 +379,7 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 240 skills across 24 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 260 skills across 26 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
 #### The primitive set is OPEN, and what admits a twelfth
 
@@ -420,7 +422,7 @@ A primitive that deals damage is not finished when it has damaged bodies. **`gam
 
 A step may declare `scaleWith: '<engine>'` and `scalePer`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
 
-This is what makes the remaining class engines data rather than engineering — but only the READ side (§13 rule 29). `shift` and `marks` joined `footing`, `armor` and `pack` on this hook with no change to it at all; what each of them cost was a **publish line**, and two of them cost a write path before that. Cascade, Chi and Crystal Forms still owe the same two answers; drench, crystallize, killbox and two bodies have since given them.
+This is what makes the remaining class engines data rather than engineering — but only the READ side (§13 rule 29). `shift` and `marks` joined `footing`, `armor` and `pack` on this hook with no change to it at all; what each of them cost was a **publish line**, and two of them cost a write path before that. Only Crystal Forms still owes the same two answers; drench, crystallize, killbox, two bodies, Chi and cascade have since given them.
 
 ### 5.9 Selection is not delivery
 
@@ -531,7 +533,7 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 12 of 14**, two trees each (24 trees, 240 skills). Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 13 of 14**, two trees each (26 trees, 260 skills). Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
@@ -547,8 +549,9 @@ The Sundian's `classId` remains `atlantean` internally for save compatibility. *
 | Assassin | Killbox, Shadow |
 | Hunter | Longshot, Houndmaster |
 | Monk | Chi, Stone Garden |
+| Savage | Primal Fury, Bloodbound |
 
-The remaining two — Blacksmith and Savage — are §15 group A, and both are tick-shaped (§8.3).
+The remaining one — the Blacksmith — is §15 group A, and is tick-shaped (§8.3).
 
 ### 8.3 Class engines
 
@@ -556,7 +559,7 @@ Every class has a mechanical engine no other class has. Each must interact with 
 
 | Class | Engine |
 |---|---|
-| Savage | **Cascade** — an ordered 3-skill sequence banks uncapped ranks; each grants +8% damage and removes 8% of *remaining* reducible cooldown, floored at 50% of base |
+| Savage | **Cascade** — firing something DIFFERENT from the last thing banks uncapped ranks; the same skill twice running breaks the whole chain. Each rank shortens every cooldown by 8% of the *remaining reducible* part, floored at 50% of base. **Ruled from "an ordered 3-skill sequence" after measurement** — see below |
 | Sundian | **Drench stacks** — its own status, applied by `drench` and cashed by `sluice`. The engine counts STACKS across the room, and spending them is the class's own best move |
 | Mage | **Crystallize** — damage TAKEN accumulates crystal; crystal drives melee output. The only engine filled by the enemy rather than by the player's own action, and **the only one Grit fights** |
 | Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
@@ -703,7 +706,7 @@ The first tuning pass proved the cost of that. At the numbers the tree was autho
 | Class | Engine | Why |
 |---|---|---|
 | ~~**Monk**~~ | Chi loop | **BUILT, GATED AND AUTHORED.** The registry came due with it — see below |
-| **Savage** | cascade | banked ranks decay out of combat, and §8.3's asymptotic cooldown floor is bespoke arithmetic |
+| ~~**Savage**~~ | cascade | **BUILT, GATED AND AUTHORED** — and the specification did not survive the measurement. See below |
 | **Blacksmith** | Crystal Forms | timed transformations; `crystal_infusion` is live but the forms decay, and a decay is a tick |
 
 #### The Witch Doctor: the mirror was live, the CHOICE was not
@@ -763,7 +766,75 @@ Measured in the DPS harness, which soaks its own dummies: **24 stacks standing, 
 
 The general form is §13 rule 25's neighbour: **a taxonomy read generically is a contract with everything that reads it. Adding a member is not a local decision.**
 
-**The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat sequencing rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor.
+**The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat play rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor. **This is now the only cooldown reduction in the game**, it lives in one function, and `engine_gate` asserts both that it works and that no other class can reach it.
+
+#### The Savage: the specification did not survive the combat model, and the measurement is what said so
+
+Cascade was written before any of this machinery existed — the first engine fully specified in this document, and the only one specified against a game that was still a shooter. It asked for **an ordered 3-skill sequence**. Measured against auto-triggered combat, that is not a decision a player can make, and the way it fails is more interesting than a simple no.
+
+**MEASUREMENT 1 — what fire order actually looks like.** Real 60-second fights, built classes, continuously fed:
+
+| class | stream that is the same skill twice running | distinct 3-grams | most common 3-gram |
+|---|---:|---:|---|
+| Samurai | **63%** | 9 | `cross_guard > cross_guard > cross_guard` at 49% |
+| Monk | 48% | 4 | `open_palm > rolling_fist > open_palm` at 26% |
+| Druid | 35% | 23 | `thorn_lash > thorn_lash > call_wolf` at 15% |
+
+The dominant pattern is **repetition**, not rotation: the shortest-cooldown skill whose trigger holds most often fires again and again, and everything else fires in the gaps. Where a cycle does appear it is a cooldown ratio — the Monk's 1000ms against 2000ms — not a choice.
+
+**MEASUREMENT 2 — can a build be constructed to sequence deliberately?** Three skills, and every lever pointed at producing `A > B > C`:
+
+| fixture | the intended cycle |
+|---|---:|
+| as authored (different cooldowns, different triggers) | **2%** of windows |
+| cooldowns forced identical | 14% |
+| cooldowns identical **and** triggers identical and always-holding | **100%**, perfectly, forever |
+
+So it is producible — and the third row is the finding, not a success. What produces it is `for (let i = 0; i < slots; i++)` in `runTriggerTick`: three skills that become ready in the same tick fire in **loadout array index order**. The "sequence" is a for-loop over an array the player arranged once, between rooms, and never touched again. There is no in-fight decision anywhere in it, and no cost.
+
+**Both ends are useless and there is nothing in between.** Either the skills differ, and the order is cooldown arithmetic and crowd geometry the player does not control; or they are identical, and the order is free. No tuning reaches a third state, because the player's only in-fight inputs are position and movement, and those decide *which triggers hold* — never *which of several ready skills goes first*.
+
+#### RULED: cascade counts VARIETY, not order
+
+A fire by a skill other than the one before it banks a rank. **The same skill twice running breaks the whole chain to zero.**
+
+Everything §8.3 reasoned about is kept — uncapped ranks, damage per rank, the asymptotic cooldown floor that makes uncapped safe. What is replaced is the one clause the combat model cannot express, and it is replaced by the closest thing it *can*: the fire stream's own variety, which the table above shows is a real, measurable, wildly build-dependent quantity.
+
+**It is a decision on both axes the player actually has.** Build: a loadout of skills whose triggers hold in *different* situations. Position: standing where several triggers hold rather than one. Measured on the finished class, that reads directly off the slot count:
+
+| level | slots | stream that is a repeat | cascade mean | peak |
+|---:|---:|---:|---:|---:|
+| 12 | 3 | 26% | 1.7 | 10 |
+| 40 | 5 | 14% | 4.9 | 18 |
+| 70 | 8 | 6% | **8.9** | 42 |
+
+That is §4.2's breadth-versus-depth pressure turned into a class engine. Depth in Primal Fury buys bigger per-rank multipliers; breadth buys a chain that breaks less often. Neither dominates.
+
+**And it is distinct from Rhythm, which is its nearest neighbour.** The Bard counts *gaps in time* — attack without pausing. The Savage counts *variety* — attack without repeating. The Samurai's 63%-repeat stream would max a Bard's engine and hold a Savage at nothing, which is the measurement showing the two are orthogonal rather than the argument claiming it.
+
+**THE BUILT-IN COST IS THE ENGINE'S OWN FEEDBACK, not a bolt-on.** Each rank shortens every cooldown, so the *fastest* skill returns soonest, so it is the likeliest to be the one that fires twice and breaks the chain. **The deeper the cascade, the harder it is to hold** — which is precisely what lets the ranks be uncapped.
+
+**It gets its own memory.** `p.trigEvents.lastFired` already holds exactly the id this needs, and its only readers are the debug overlay and four test harnesses. Reading it here would make a diagnostic load-bearing — which is how `sim.summons` became D-29 — so `p.cascadeLast` is one field that owes nothing to an instrument.
+
+#### The floor is asserted three ways, because the bound alone cannot see the mechanic
+
+`cd = base × (0.5 + 0.5 × 0.92^ranks)`. A **clamped-linear** reduction satisfies "never below 50% of base" exactly as well and is a different mechanic — the same trap as the Monk's cliff-versus-slope, where the bound was true of both and only the ratio told them apart. So:
+
+1. **Monotonic** across 0–60 ranks — deeper is never worse.
+2. **Strictly above the floor at rank 40**, where a linear 8%-of-base would read **−2310ms**, having crossed zero at rank 13.
+3. **Every rank worth less than the one before it** — 42.0ms for the first, 7.93ms for the twenty-first, 0.2822ms for the sixty-first. A *constant* decrement here is clamped-linear wearing an asymptote's result, and this is the only one of the three that can see the difference.
+
+**One finding came out of asserting it rather than implementing it.** The first version claimed "strictly above the floor at every finite rank" and checked rank 1000. It failed — correctly. `0.92^1000` is about 5×10⁻³⁷, which is far below the ULP of the floor term, so `floor + tiny` **rounds onto the floor**. The asymptote is exact in mathematics and finite in doubles: it lands exactly on 525ms at **rank 441** and stays there. The assertion now claims what is true — strictly above at any reachable rank, and never *below* at any rank from 0 to 2000 — and names the boundary in place so a future reader does not rediscover it as a defect. The direction it lands is the safe one: it reaches the bound and never passes through it.
+
+#### The trait was tuned for a game with weapons, and it is a ×2.3
+
+The Savage's first reading was **64.2, +118%, the only outlier**. Cascade was not the cause: pinned to zero the class still read 58.2. The cause was measured directly — **live Ferocity 130 against a base stat of 10.**
+
+Blood Dance grants +8% Ferocity per connecting hit up to +120%, falling off 3s after the last one. In the weapon era that condition meant something: a swing or two per second, and a lapse was a real risk. In the skill era, eight actives fire on their own triggers into a crowd, so the cap is reached in about two seconds and **never drops for the rest of the fight**. The trait's condition has quietly become vacuous, and its value is a flat, permanent ×2.3 on all damage.
+
+**The trait was not touched** — unlike the Hunter's free beast, these numbers have an author and are in the character's own description. The trees were authored against them instead, which is why every damage number in both Savage files is roughly half its neighbours' in other classes. That is not the class being weak; it is the class being written at the baseline it actually plays at. This is §13 rule 43's family again, with the arrow pointing at a *condition* rather than a number: **a trait whose trigger was hard in the old system and is automatic in the new one is a flat bonus wearing a condition**, and it should be re-read whenever the system under it changes.
+
+Measured after: **33.1, +12%, in band**, with the cascade contributing 4.0 of it and the cooldown term adding 5% more casts.
 
 #### The Monk: the first engine that runs in two directions
 
@@ -1429,6 +1500,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 46. **A registry you cannot assert is a list.** The value of turning four hardcoded calls into a table is not that the call site got shorter — it is that a table has rows to check. `engine_gate` now asserts that every registration names a live tree and a live engine key, that no two rows claim the same key, and that a class *without* the tree does not accrue the key. That last one is the assertion that matters, because it is the only one that distinguishes a registry the sim iterates from a registry nothing reads: without it, a guard that had quietly stopped applying would leave every class running every accumulator and every gate still green. When you replace a hardcode with a table, write the assertion that would fail if the table were decorative.
 
+47. **A mechanic specified before its system exists is a hypothesis, and the first thing to do with it is measure whether the system can express it.** Cascade was written as "an ordered 3-skill sequence" against a game that was still a shooter, and it survived four phases of design review unchallenged because it *reads* fine. Auto-triggered combat cannot express it: measured, a deliberate A>B>C appears in 2% of windows when the three skills differ and 100% when they are made identical, and the 100% is `for (let i = 0; i < slots; i++)` walking the loadout array. **Both ends are useless and there is nothing between them.** The tell is that the spec names a player ACTION — "cast these in order" — in a game where the player casts nothing; whenever an older spec's verb belongs to the player, check who actually performs it now. And when the answer is "nobody", redesign around what the system *can* express rather than bolting on a way to fake the old verb: the replacement here (variety rather than order) kept every other clause of the spec intact, and the class got a better engine than the one it was promised.
+
+48. **When a system changes underneath a conditional bonus, the CONDITION is what to re-read, not the number.** Blood Dance grants +120% Ferocity for keeping up a stream of connecting hits — a real risk when a player swung a weapon a couple of times a second, and automatic once eight skills fire on their own triggers into a crowd. Measured: live Ferocity 130 against a base of 10, reached in about two seconds and never dropping. Nothing about the trait changed and nothing is broken; its condition simply stopped being a condition, and it is now a flat ×2.3 that a class must be authored against. This is rule 43's family with the arrow moved: that rule is about a number nobody chose for this context, this one is about a *gate* nobody re-checked for it. **A conditional whose condition is always true is a constant**, and the migration that made it always true is exactly the moment nobody looks.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1445,7 +1520,7 @@ Each has caught a real defect on this project. They are design constraints on ho
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
 | 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
 | 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | **Done** |
-| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin, Hunter and Monk built (24 trees, 240 skills, 12 selectable classes); regions 3–8 blocked on `PIXELLAB_API_KEY` |
+| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **In progress** — 13 of 14 classes built (26 trees, 260 skills, 13 selectable); only the Blacksmith remains. Regions 3–8 blocked on `PIXELLAB_API_KEY` |
 
 Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
 
@@ -1465,7 +1540,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ### Group A — waiting on phase-5 trees (0)
 
-Two classes have no trees — Blacksmith and Savage, both tick-shaped. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
+One class has no trees — the Blacksmith, which is tick-shaped. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
@@ -1772,7 +1847,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
 | Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **105 of 105 land across 12 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
 | Trait gate | Built **after** D-28, which is the wrong order and is why it exists — `trait_gate.mjs`: every trait on the roster reached by the live path and moving its own observable, against a control with the trait key switched off. **14 of 14** |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **12 of 12** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`, `spread`, `chi`. Also asserts, by effect: Grit's anti-synergy with crystallize, the killbox inert-then-consumed pair, the Hunter's trigger origin moving to the beast and refusing to fall back when none is alive, both directions of the Chi loop with its step at zero, and the engine-tick registry including the negative case (§8.3) |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **13 of 13** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`, `spread`, `chi`, `cascade`. Also asserts, by effect: Grit's anti-synergy with crystallize, the killbox inert-then-consumed pair, the Hunter's trigger origin moving to the beast and refusing to fall back when none is alive, both directions of the Chi loop with its step at zero, the cascade's variety-in / repeat-breaks pair with its asymptotic floor asserted three ways, that no non-Savage can reach the cooldown exemption, and the engine-tick registry including the negative case (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: **13.7% mean / 35.3% worst** against a real item pool (20.1% / 50.2% with no items, which is the measurement's own bias); weighting NOT added, re-measure as phase 5 widens what a build can ignore (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1781,7 +1856,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin, Hunter and Monk built (24 trees, 240 skills, 12 selectable); 2 of 14 classes have no trees. **Every content-shaped and every write-path class is done, and the first tick-shaped one**; the remaining two are Savage and Blacksmith |
+| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin, Hunter, Monk and Savage built (26 trees, 260 skills, 13 selectable); **1 of 14 classes has no trees**. Every content-shaped and every write-path class is done, and two of the three tick-shaped; only the Blacksmith remains |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1800,6 +1875,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining classes are authored.
 
-**Two class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench`, the Assassin's `killbox`, the Hunter's `spread` and the Monk's `chi` are implemented and gated at **12 of 12**. The remaining two — cascade and Crystal Forms — are specified in §8.3 and unbuilt, and both are tick-shaped.
+**One class engine exists only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench`, the Assassin's `killbox`, the Hunter's `spread`, the Monk's `chi` and the Savage's `cascade` are implemented and gated at **13 of 13**. Only Crystal Forms remains — specified in §8.3, unbuilt, and tick-shaped.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.

@@ -25,6 +25,8 @@ import { HUN_LONGSHOT, TUNING as HUN_LS_TUNING } from './content/skills/hun_long
 import { HUN_HOUNDMASTER, TUNING as HUN_HM_TUNING } from './content/skills/hun_houndmaster.js';
 import { MONK_CHI, TUNING as MONK_CHI_TUNING } from './content/skills/monk_chi.js';
 import { MONK_STONEGARDEN, TUNING as MONK_SG_TUNING } from './content/skills/monk_stonegarden.js';
+import { SAV_PRIMAL_FURY, TUNING as SAV_PF_TUNING } from './content/skills/sav_primal_fury.js';
+import { SAV_BLOODBOUND, TUNING as SAV_BB_TUNING } from './content/skills/sav_bloodbound.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
@@ -56,6 +58,8 @@ export const TREES = {
   hun_houndmaster: { id: 'hun_houndmaster', name: 'Houndmaster', classId: 'toh_hunter', skills: HUN_HOUNDMASTER, tuning: HUN_HM_TUNING },
   monk_chi: { id: 'monk_chi', name: 'Chi', classId: 'toh_monk', skills: MONK_CHI, tuning: MONK_CHI_TUNING },
   monk_stonegarden: { id: 'monk_stonegarden', name: 'Stone Garden', classId: 'toh_monk', skills: MONK_STONEGARDEN, tuning: MONK_SG_TUNING },
+  sav_primal_fury: { id: 'sav_primal_fury', name: 'Primal Fury', classId: 'toh_savage', skills: SAV_PRIMAL_FURY, tuning: SAV_PF_TUNING },
+  sav_bloodbound: { id: 'sav_bloodbound', name: 'Bloodbound', classId: 'toh_savage', skills: SAV_BLOODBOUND, tuning: SAV_BB_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
@@ -99,6 +103,7 @@ export const PASSIVE_EFFECT = {
   killboxDamageBonus: 'damage',   // Dead Ground: more per trap set
   spreadDamageBonus: 'damage',    // Long Leash: more per span between you and the beast
   chiDamageBonus: 'damage',       // Still Water: more per point of Chi held
+  cascadeDamageBonus: 'damage',   // Red Memory: more per rank banked in the cascade
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the

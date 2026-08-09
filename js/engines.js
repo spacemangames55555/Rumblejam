@@ -204,6 +204,84 @@ export function spendChi(sim, p, cost) {
 
 export function chiCostOf(sk) { return sk && sk.chi ? sk.chi : 0; }
 
+// ---------------------------------------------------------------- cascade
+
+// CASCADE. The third accumulator, and the one whose specification did not
+// survive contact with the combat model.
+//
+// §8.3 specified "an ordered 3-skill sequence". MEASURED, THAT CANNOT BE A
+// DECISION IN THIS GAME. Nothing is manually cast, so fire order is decided by
+// cooldown arithmetic and by which triggers happen to hold — and the fixture
+// showed both ends of the range are useless: as authored, a deliberate A>B>C
+// appears in 2% of windows, and with all three skills forced to identical
+// cooldowns and identical always-holding triggers it appears in 100% of them,
+// perfectly, forever, because `runTriggerTick` walks the loadout ARRAY IN INDEX
+// ORDER. At that point the "sequence" is a for-loop and the player's only input
+// was arranging three slots once, between rooms.
+//
+// So cascade counts VARIETY rather than ORDER. A fire by a skill other than the
+// one before it banks a rank; the same skill twice running resets to zero. The
+// full ruling, and why this is the closest thing auto-triggered combat can
+// actually express, is in §8.3.
+//
+// AND IT HAS ITS OWN MEMORY. `p.trigEvents.lastFired` already holds exactly the
+// id this needs — and its only readers are the debug overlay and four test
+// harnesses. Reading it here would make a diagnostic load-bearing, which is how
+// `sim.summons` became D-29; `p.cascadeLast` is one field and owes nothing to an
+// instrument.
+function tickCascade(sim, p, dt) {
+  const idle = sim.time - (p.cascadeLastT ?? -999);
+  if (idle >= CONFIG.CASCADE_IDLE_SECONDS && p.cascade > 0) {
+    p.cascade = Math.max(0, p.cascade - CONFIG.CASCADE_DECAY_PER_SEC * dt);
+    if (p.cascade === 0) p.cascadeLast = null;
+  }
+  p.engines.cascade = Math.floor(p.cascade);
+}
+
+// Called on every fire, before the cooldown is written — so the cast that
+// extends the chain is itself shortened by the extension. That ordering is
+// deliberate and it is also where the engine's BUILT-IN COST comes from: a
+// deeper cascade shortens the fastest skill most, so the fastest skill comes
+// back soonest, so it is likelier to be the one that fires twice running and
+// breaks the chain. The engine makes its own maintenance harder as it deepens.
+export function cascadeAdvance(sim, p, skillId) {
+  if (!hasEngineTree(p, 'sav_primal_fury')) return;
+  if (p.cascadeLast === skillId) {
+    // THE BREAK IS TOTAL, like the Bard's rhythm and unlike a decay. A partial
+    // loss would let a Savage spam its fastest skill and keep most of the chain,
+    // which erases the decision the whole engine exists to create.
+    if (p.cascade >= 1) sim.pushEvent({ k: 'toast', idx: p.idx, text: 'Cascade broken' });
+    p.cascade = 0;
+  } else if (p.cascadeLast !== null) {
+    p.cascade += 1;                 // UNCAPPED, per §8.3
+  }
+  p.cascadeLast = skillId;
+  p.cascadeLastT = sim.time;
+  p.engines.cascade = Math.floor(p.cascade);
+}
+
+// §8.3's cooldown term, exactly as specified: each rank removes CASCADE_CD_RATE
+// of the REMAINING REDUCIBLE cooldown — the part above the floor — so the
+// reduction is asymptotic and approaches the floor without ever arriving.
+//
+// THIS IS THE ONE EXEMPTION FROM THE NO-COOLDOWN-REDUCTION RULE (§4.2, §9.2),
+// and the asymptote is the entire reason it is safe. Ranks are banked by
+// in-combat sequencing rather than by point investment, so there is no
+// investment cost to price the reduction against; a linear 8%-of-base per rank
+// would cross zero at rank 12.5 and hand out free infinite uptime. This one is
+// still above half at rank 1000, which `engine_gate` asserts rather than trusts.
+export function cascadeCooldown(p, sk) {
+  const base = sk.cooldown;
+  if (!p || !(p.cascade > 0) || !hasEngineTree(p, 'sav_primal_fury')) return base;
+  const F = CONFIG.CASCADE_CD_FLOOR;
+  return base * (F + (1 - F) * Math.pow(1 - CONFIG.CASCADE_CD_RATE, Math.floor(p.cascade)));
+}
+
+function hasEngineTree(p, tree) {
+  const t = TREES_BY_CLASS[p.charId];
+  return !!t && t.includes(tree);
+}
+
 // ---------------------------------------------------------------- the table
 
 // One row per accumulator. `tree` is what gates it — an engine belongs to the
@@ -213,6 +291,7 @@ export function chiCostOf(sk) { return sk && sk.chi ? sk.chi : 0; }
 export const ENGINE_TICKS = [
   { tree: 'samurai_armor', key: 'footing', tick: tickFooting, stats: footingStats },
   { tree: 'monk_chi', key: 'chi', tick: tickChi },
+  { tree: 'sav_primal_fury', key: 'cascade', tick: tickCascade },
 ];
 
 // The stat half of the same table. An accumulator that feeds the sheet declares
@@ -243,12 +322,21 @@ export function resetEnginesForRoom(p) {
   // loop the class is built on, run once per room rather than once per run.
   p.chi = 0;
   p.chiLastGain = -999;
-  if (p.engines) p.engines.chi = 0;
+  // AND NEITHER DOES THE CASCADE. A chain is a property of a fight, and carrying
+  // one through a door would mean arriving at the next room already at depth —
+  // the Savage's whole loop is rebuilding it, once per room.
+  p.cascade = 0;
+  p.cascadeLast = null;
+  p.cascadeLastT = -999;
+  if (p.engines) { p.engines.chi = 0; p.engines.cascade = 0; }
 }
 
 export function initEnginePlayer(p) {
   p.chi = 0;
   p.chiLastGain = -999;
+  p.cascade = 0;
+  p.cascadeLast = null;
+  p.cascadeLastT = -999;
   p.footingAcc = 0;
   p.footingMove = 0;
   p.footingShield = 0;
