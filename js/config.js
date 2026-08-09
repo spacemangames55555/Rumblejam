@@ -109,6 +109,27 @@ export const CONFIG = {
   // little over half the arena's short axis, which is as far apart as two bodies
   // can be and still be fighting the same room.
   SPREAD_UNIT: 90, SPREAD_CAP: 6,
+  // THE MONK'S CHI LOOP. Here rather than in the Chi tree's TUNING for the same
+  // reason the killbox constants are: the engine ships and gates BEFORE the
+  // content that spends it, so its numbers cannot live in a file that does not
+  // exist yet. The tree's TUNING carries skill numbers only.
+  //
+  // CHI_PER_DAMAGE is the fill rate — one point of Chi per two damage dealt, so
+  // a full pool is roughly 80 damage of work and a single spend is a few
+  // seconds of fighting rather than a whole engagement.
+  CHI_PER_DAMAGE: 0.5,
+  CHI_CAP: 40,
+  // THE STEP THAT MAKES ZERO A CLIFF (§8.3). `p.engines.chi` publishes 0 at zero
+  // Chi and `chi + CHI_FOCUS_STEP` above it, so the first point is worth six and
+  // every point after it is worth one. Nothing multiplies a damage number by
+  // less than one anywhere; the tree is authored at the floor and this is the
+  // bonus on top of it.
+  CHI_FOCUS_STEP: 5,
+  // The leak. Chi bleeds only once the Monk has gone CHI_IDLE_SECONDS without
+  // landing a hit, so the decay never fights the loop while the loop is running
+  // — it exists to stop a full pool being carried down a quiet corridor.
+  CHI_IDLE_SECONDS: 3,
+  CHI_DECAY_PER_SEC: 4,
   ARMOR_K: 15,             // damage taken = raw * K / (K + armor)
   NEG_ARMOR_MAX_BONUS: 0.5,
 

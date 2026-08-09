@@ -300,6 +300,8 @@ Three properties define it, and each one is a ruling rather than an implementati
 - **It moves the QUESTION, not the ANSWER.** Compose steps still resolve from the caster: the bolt leaves the Hunter, the line is drawn from the Hunter. The beast is a remote **sensor**, not a second caster. An entity that *acts* is an actor running compose steps (§13 rule 23) and that is what a summon's own `attack` block already is; this is the other thing entirely, and keeping them separate is why the whole write path touches `js/triggers.js` and nothing else.
 - **No pet, no fire.** A `from: 'pet'` skill does not fall back to the caster when every beast is dead. That refusal is the class's cost: it is what makes the body load-bearing instead of decorative, and it is asserted in `engine_gate` rather than described.
 
+**`chi` — *what the skill costs*.** A skill may declare `chi: N`, and it does not fire unless the caster can pay. The check sits one line after the cooldown check, in the same function and in the same shape: a skill that cannot pay costs one number comparison and is skipped. Two things are refused at load — a **damaging** skill declaring a cost, because damage generates Chi and a skill doing both funds and drains the same loop in one cast; and a cost on any class with no `monk_chi` tree to generate any, because a cost nothing can pay is a skill that never fires. The full ruling, including why refusing beats clamping at zero, is in §8.3.
+
 ### 5.3 Selectors — *what*
 
 Every active declares a `select`. **There is no default**, and a missing selector fails at load.
@@ -375,7 +377,7 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 220 skills across 22 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 240 skills across 24 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
 #### The primitive set is OPEN, and what admits a twelfth
 
@@ -529,7 +531,7 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 11 of 14**, two trees each (22 trees, 220 skills). Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 12 of 14**, two trees each (24 trees, 240 skills). Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
@@ -544,8 +546,9 @@ The Sundian's `classId` remains `atlantean` internally for save compatibility. *
 | Sundian | Tidewrack, Reef |
 | Assassin | Killbox, Shadow |
 | Hunter | Longshot, Houndmaster |
+| Monk | Chi, Stone Garden |
 
-The remaining three — Blacksmith, Monk, Savage — are §15 group A, and all three are tick-shaped (§8.3).
+The remaining two — Blacksmith and Savage — are §15 group A, and both are tick-shaped (§8.3).
 
 ### 8.3 Class engines
 
@@ -564,7 +567,7 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Wizard | **Domain shift** — the only class that changes its own damage domain mid-fight |
 | Priest | **Judgment marks** — marks detonate on the target's death, healing nearby allies |
 | Samurai | **Footing** — see §8.4 |
-| Monk | **Chi loop** — damage generates Chi; heals and traps spend it |
+| Monk | **Chi loop** — damage skills put Chi in, heals and traps take it out, and at zero Chi the damage skills are at their floor. **The only engine that runs in two directions**, and the only one the player empties on purpose |
 | Assassin | **Killbox** — traps placed inert, detonating when other skills fire nearby. The only engine banked by BEING SOMEWHERE rather than by acting |
 | Hunter | **Two bodies** — a skill may declare `from: 'pet'` and evaluate its trigger at the beast instead of at the player. The engine, `spread`, is the distance between them in bands: **the only engine that measures a relationship rather than a quantity** |
 
@@ -576,7 +579,7 @@ The eleven unbuilt classes sort into three shapes. **The sort is the batch plan.
 
 #### Phase 5 batch order — the write-path audit, run
 
-The first sort asked "does it need a tick" and that was the wrong question. `engineScale()` reads `p.engines[name]` knowing no engine by name, and that read-side generality was mistaken for the whole story. **Nothing publishes into the bag generically** — `tickFooting()` is a function, `armor` is one line in `tickSkills`, `pack` is one line in `tickMinions` — so every engine costs at least a publish line, and two classes needed a write path the engine did not have at all.
+The first sort asked "does it need a tick" and that was the wrong question. `engineScale()` reads `p.engines[name]` knowing no engine by name, and that read-side generality was mistaken for the whole story. **Nothing publishes into the bag generically** — `tickFooting()` is a registered accumulator, `armor` is one line in `tickSkills`, `pack` is one line in `tickMinions` — so every engine costs at least a publish line, and two classes needed a write path the engine did not have at all.
 
 Both of those are now built and gated: the `shift` primitive (§5.7) and the `mark` rider. **The audit below was then run across the remaining nine**, asking of each: what state must a skill produce, and can content produce it today?
 
@@ -699,7 +702,7 @@ The first tuning pass proved the cost of that. At the numbers the tree was autho
 
 | Class | Engine | Why |
 |---|---|---|
-| **Monk** | Chi loop | accrues from damage dealt, drains on spend — neither is a derivation of an existing field |
+| ~~**Monk**~~ | Chi loop | **BUILT, GATED AND AUTHORED.** The registry came due with it — see below |
 | **Savage** | cascade | banked ranks decay out of combat, and §8.3's asymptotic cooldown floor is bespoke arithmetic |
 | **Blacksmith** | Crystal Forms | timed transformations; `crystal_infusion` is live but the forms decay, and a decay is a tick |
 
@@ -761,6 +764,57 @@ Measured in the DPS harness, which soaks its own dummies: **24 stacks standing, 
 The general form is §13 rule 25's neighbour: **a taxonomy read generically is a contract with everything that reads it. Adding a member is not a local decision.**
 
 **The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat sequencing rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor.
+
+#### The Monk: the first engine that runs in two directions
+
+Every engine before this one only accumulates. Footing, marks, drench, crystal, the killbox, spread and the rest all move one way and are emptied by a door or by a mistake — never by the player deciding to empty them. Chi is put in by dealing damage and taken out by the Monk's own heals and traps, so the class's sustain is funded by its offence and every point of health bought is damage the next few seconds will not do.
+
+Three things had to be ruled before a line of content was written, because each one had an obvious reading that was wrong.
+
+**RULING 1 — the tick belongs in a registry, and the registry came due at two.**
+
+`tickFooting` was a function in `js/skillsim.js` with a hardcoded `treesFor(p).includes('samurai_armor')` guard and a hardcoded `import { TUNING as SAM } from './content/skills/samurai_armor.js'`. §16 has carried it as the only per-class hardcode in shared code since phase 2. The flag was right about the shape and understated the cost: **the dependency runs backwards.** Shared engine code importing a content file is the one arrow the architecture exists to avoid, and the sort in this section already names four classes that would each have drawn it again.
+
+So the accumulators moved to `js/engines.js` and register themselves in a table, and `tickSkills` iterates the table knowing no class:
+
+```js
+for (const e of ENGINE_TICKS) if (trees.includes(e.tree)) e.tick(sim, p, dt, passiveSum);
+```
+
+Same shape as `PRIMITIVES`, `IMPACT_RIDERS` and `PASSIVE_EFFECT` — a table keyed by name, populated by data, iterated generically. **The stat contribution moved with it**, because `engineStatBonus` read the Samurai's TUNING too: migrating only the tick would have left the arrow pointing backwards and called the job done. `js/skillsim.js` now imports no content file at all.
+
+**The decisive argument for doing it at two rather than at five is that the third and fourth are already on the plan in this very section.** Generalising ahead of a known end state is not speculation; it is the difference between one table and four hardcodes. And the table can be **asserted**, which the hardcode could not: `engine_gate` now checks that every registration names a live tree and a key in the bag, that no two claim the same key, and — the assertion that separates a registry from a list — that a class *without* the tree does not accrue the key. A Samurai dealing 40 damage banks no Chi, measured.
+
+**RULING 2 — "weakens at zero Chi" is the AUTHORED FLOOR, not a penalty applied to it.**
+
+The obvious reading is a multiplier below 1.0 on damage steps at zero Chi, and it would have made this the only thing in the game that subtracts. §9.2's rule — *an item may add, never take away* — is stated about **items**, and its reason is about acquisition: finding a modifier should never feel like a capability leaving. An engine is not acquired, so the rule does not literally bind here. **It was still followed, because the alternative reading is better design as well as more consistent.**
+
+The numbers in the Chi tree ARE the winded numbers. They are what a Monk at zero Chi deals, they are what the tree was balanced at, and `scaleWith: 'chi'` adds on top of them. Nothing anywhere multiplies a damage number by less than one.
+
+**The cliff survives, because the published value carries a STEP rather than a slope.** `p.engines.chi` is `0` at zero and `chi + CHI_FOCUS_STEP` above it, so the first point of Chi is worth six and every point after it is worth one. Measured through `engineScale`: ×1.000 at zero, ×1.060 at one, ×1.450 at forty — **the first point is worth 6.0× a later one**. Crossing zero downward is a fall, which is the feeling the design asked for, reached by adding. Had the step been a slope, "weakens at zero" would have been `scaleWith` wearing a costume, and `engine_gate` asserts the ratio for exactly that reason.
+
+**RULING 3 — spending is CONDITIONAL. A skill that cannot pay does not fire.**
+
+Everything auto-triggers, so a heal that spends Chi fires on its own trigger and the Monk can drain itself standing near a hurt ally. That cost is real and it is **kept** — it is the class's built-in cost and it is what makes Chi a decision rather than a meter. What is not kept is the pathological half. The two alternatives to refusing were letting the spend clamp at zero, which makes a heal *free* exactly when the Monk is broke, and letting Chi go negative, which invents a state no other engine has.
+
+Refusing is neither, and it costs nothing conceptually: the check sits one line after the cooldown check, in the same function, and is the same shape — a skill that cannot pay costs one number comparison and does not fire. It also keeps §5.2's "no unconditional trigger" honest from a new direction: a Chi cost is another player-controllable condition on when a skill goes off.
+
+Two consequences were predicted before building and both landed. **A Chi-costing skill is a PAIR** (§13 rule 41) — `skill_sweep` stages each skill alone, so all six spends read *"trigger never fired with its condition staged"* on the first run, about a trigger that was never the thing being asked. The sweep now pre-stages the pool. And a **damaging skill may not declare a Chi cost**, asserted at load: damage generates Chi, so a skill doing both funds and drains the same loop in one cast and its net rate is an accident of tuning rather than a decision.
+
+**Cost of the tick:** one new module (`js/engines.js`), the footing tick and its stat contribution moved into it unchanged, one `tickChi` of five lines, three helpers (`gainChi`, `spendChi`, `chiPublished`), one call site in `skillDamage`, two lines in `runTriggerTick`, one publish line, one `engineScaleBonus` reader, one `PASSIVE_EFFECT` entry, one load assertion, and five constants in CONFIG. **`js/skillsim.js` got shorter.**
+
+#### The DPS fixture fills this one by itself, and that is worth stating
+
+The Mage needed staging because `crystal` is filled by the *enemy* and the gate's dummies deal no damage (§13 rule 36). Chi is filled by damage **dealt**, which is the one thing the fixture does constantly, so it fills honestly with nothing added: measured, 0 → 40 in seven seconds and pinned at cap for the remaining thirteen.
+
+That makes the reading the class's **ceiling** rather than its average, because the fixture's Monk also never spends — god mode keeps it above every heal's threshold. So both ends were measured:
+
+| | DPS | vs anchor |
+|---|---|---|
+| pool full, never spending | **34.7** | +18% |
+| pool pinned empty | **23.1** | −22% |
+
+**Both ends are inside the ±40% band, and that is the outcome the ruling was aiming at.** A Monk who has lost its engine is a weak class, not a dead one; a Monk holding a full pool is a strong one, not an unanswerable one. The band containing both is what says the floor was authored rather than derived.
 
 #### The Hunter: the only write path that never touched `p.engines`
 
@@ -1371,6 +1425,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 44. **A facade that forwards state is an allowlist, and every shared path that writes a COUNTER has to be on it.** The minion actor forwards `hp`, `damageDealt`, `shield` and `ward` to its owner, and that list was assembled from the fields a swing was known to touch. `skillDamage` also rolls a crit and can kill, and both of those write counters back onto whatever object dealt the blow — `kills`, `critCounter`, `firstHitUsed`, `frenzy`. None were forwarded, so `killer.kills++` was `NaN` written to an object discarded at the end of the swing: every kill a summon made went uncredited, `critEveryN` never advanced behind a pet, and `firstHitCrit` re-armed on every swing. **All of it silent, for as long as the facade has existed.** The one field that was an *array* threw on `.length`, and that is the only reason the family was found. A missing scalar on a forwarding facade reads as a plausible zero; prefer a shape where absence is loud, and when that is not available, re-derive the allowlist from the callers rather than from the fields you remember.
 
+45. **Generalise a per-class hardcode when the SECOND one arrives, if the plan already names the third.** `tickFooting` sat in shared code behind a hardcoded tree-id guard and a hardcoded content import for three phases, correctly flagged and correctly left alone — one instance is not a pattern. The Monk made it two, and the argument for a registry was not "two is enough" but that §8.3's own sort already named four. Generalising ahead of a *known* end state is not speculation; generalising ahead of a guessed one is. The test is whether you can point at the later instances in a document rather than imagine them. **And take the whole dependency, not the part you came for**: migrating the tick and leaving `engineStatBonus` reading the same content file would have moved the smell rather than removed it, and would have read as done.
+
+46. **A registry you cannot assert is a list.** The value of turning four hardcoded calls into a table is not that the call site got shorter — it is that a table has rows to check. `engine_gate` now asserts that every registration names a live tree and a live engine key, that no two rows claim the same key, and that a class *without* the tree does not accrue the key. That last one is the assertion that matters, because it is the only one that distinguishes a registry the sim iterates from a registry nothing reads: without it, a guard that had quietly stopped applying would leave every class running every accumulator and every gate still green. When you replace a hardcode with a table, write the assertion that would fail if the table were decorative.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1387,7 +1445,7 @@ Each has caught a real defect on this project. They are design constraints on ho
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
 | 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
 | 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | **Done** |
-| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin and Hunter built (22 trees, 220 skills, 11 selectable classes); regions 3–8 blocked on `PIXELLAB_API_KEY` |
+| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin, Hunter and Monk built (24 trees, 240 skills, 12 selectable classes); regions 3–8 blocked on `PIXELLAB_API_KEY` |
 
 Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
 
@@ -1407,7 +1465,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ### Group A — waiting on phase-5 trees (0)
 
-Three classes have no trees — Blacksmith, Monk and Savage, all tick-shaped. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
+Two classes have no trees — Blacksmith and Savage, both tick-shaped. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
@@ -1714,7 +1772,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
 | Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **105 of 105 land across 12 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
 | Trait gate | Built **after** D-28, which is the wrong order and is why it exists — `trait_gate.mjs`: every trait on the roster reached by the live path and moving its own observable, against a control with the trait key switched off. **14 of 14** |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **11 of 11** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`, `spread`. Also asserts, by effect: Grit's anti-synergy with crystallize, the killbox inert-then-consumed pair, and the Hunter's trigger origin moving to the beast and refusing to fall back when none is alive (§8.3) |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **12 of 12** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`, `spread`, `chi`. Also asserts, by effect: Grit's anti-synergy with crystallize, the killbox inert-then-consumed pair, the Hunter's trigger origin moving to the beast and refusing to fall back when none is alive, both directions of the Chi loop with its step at zero, and the engine-tick registry including the negative case (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: **13.7% mean / 35.3% worst** against a real item pool (20.1% / 50.2% with no items, which is the measurement's own bias); weighting NOT added, re-measure as phase 5 widens what a build can ignore (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1723,7 +1781,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin and Hunter built (22 trees, 220 skills, 11 selectable); 3 of 14 classes have no trees. **Every content-shaped and every write-path class is done**; the remaining three are all tick-shaped (Monk, Savage, Blacksmith) |
+| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin, Hunter and Monk built (24 trees, 240 skills, 12 selectable); 2 of 14 classes have no trees. **Every content-shaped and every write-path class is done, and the first tick-shaped one**; the remaining two are Savage and Blacksmith |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1742,6 +1800,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining classes are authored.
 
-**Three class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench`, the Assassin's `killbox` and the Hunter's `spread` are implemented and gated at **11 of 11**. The remaining three — cascade, Chi, Crystal Forms — are specified in §8.3 and unbuilt, and all three are tick-shaped.
+**Two class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench`, the Assassin's `killbox`, the Hunter's `spread` and the Monk's `chi` are implemented and gated at **12 of 12**. The remaining two — cascade and Crystal Forms — are specified in §8.3 and unbuilt, and both are tick-shaped.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.
