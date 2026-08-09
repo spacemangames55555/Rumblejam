@@ -126,6 +126,11 @@ export const CHARACTERS_TOH = [
     stats: { ingenuity: 5, reach: 20 }, weapon: 'pebbleshot',
     trait: {
       key: 'pack_tactics', freeBeastPerFloor: 1, maxBeasts: 4, alphaRadius: 120,
+      // The beast's own bite, sized for a unit the class is GIVEN — four of
+      // them by floor 4, at no cost in points, gold or slots. It borrowed the
+      // Guard Drone's 6-on-0.55s until now, which made the free half of the
+      // class out-damage the paid half.
+      beastDmg: 4, beastCd: 1.2,
       alphaMinBeasts: 2, alphaFer: 20, alphaTempo: 10,
       marksmanRadius: 250, marksmanPierce: 1, marksmanDmgPerBeast: 8,
     },

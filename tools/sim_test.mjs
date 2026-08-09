@@ -3134,12 +3134,15 @@ try {
     const { BEAST } = B;
     const src = readFileSync(new URL('../js/entities/beast.js', import.meta.url), 'utf8');
 
-    // allowUnplayable: the beast is toh_hunter's TRAIT and is fully
-    // implemented; only its skill tree is missing, so it cannot be started as
-    // a run. Substituting another class silently gave a party with no beast
-    // and a crash forty lines later on `beastOf(g)` being undefined.
+    // NAMED, NEVER SUBSTITUTED. The beast is `pack_tactics`, which is
+    // toh_hunter's trait and nobody else's, so a fixture that falls back to a
+    // reference class fields a party with no beast at all and every probe below
+    // it either crashes on `beastOf(g)` being undefined or reports a count of
+    // zero as a beast defect. The class carried `allowUnplayable` while it had
+    // no tree; it has two now and is selectable, so the flag is gone and this
+    // seats it the ordinary way.
     const hunter = (seed = 4242) => {
-      const g = new Sim({ seed, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'H', charId: 'toh_hunter', color: '#fff' }] });
+      const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'H', charId: 'toh_hunter', color: '#fff' }] });
       const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
       node.kind = 'combat'; g._travelTo(node.id); g.god = true;
       const p = g.players[0];
@@ -3302,9 +3305,14 @@ try {
 
       // ...and through another player and their beast: 8 players x 4 beasts is
       // 32 bodies, and mutual collision would make an arena impassable
+      // BOTH SEATS ARE HUNTERS BY NAME. This read `T2` — the reference class —
+      // and the reference is the Samurai, which has no beast: the probe was
+      // asking two beastless players for two beasts and reporting the answer as
+      // a beast-vs-beast collision failure. §13 rule 40 again, and the reason
+      // §15's Group A carried an open red for as long as it did.
       const g4 = new Sim({ seed: 99, party: [
-        { idx: 0, key: 'a', name: 'H1', charId: T2, color: '#fff' },
-        { idx: 1, key: 'b', name: 'H2', charId: T2, color: '#0ff' },
+        { idx: 0, key: 'a', name: 'H1', charId: 'toh_hunter', color: '#fff' },
+        { idx: 1, key: 'b', name: 'H2', charId: 'toh_hunter', color: '#0ff' },
       ] });
       const n4 = g4.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
       n4.kind = 'combat'; g4._travelTo(n4.id); g4.god = true;

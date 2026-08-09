@@ -292,6 +292,14 @@ Every active declares exactly one trigger and one cooldown. Triggers evaluate **
 
 `ISOLATED` is true in an empty room — a skill rewarding solitude should not also require company. Steps needing a target no-op when there is none.
 
+**`from` — *where the question is asked*.** A skill may declare `from: 'pet'` beside `select` and `domain`. The trigger then evaluates at the position of the caster's nearest living minion instead of at the caster. Six of the eleven triggers ask a spatial question — `NEAREST`, `PROXIMITY`, `ISOLATED`, `TARGET_THRESHOLD`, `ON_STATUS`, `ON_TOKEN` — and only those have an origin to move; declaring `from: 'pet'` on any of the other five fails at load, because there is no position in the question to relocate.
+
+Three properties define it, and each one is a ruling rather than an implementation detail:
+
+- **The origin is a property of the SKILL, not the player.** It sits in the skill definition, so one Hunter can hold a shot that watches the bird and another that watches their own feet. A player-level flag would have made it a *mode*, and a mode is not a decision — it is just standing where the pet is.
+- **It moves the QUESTION, not the ANSWER.** Compose steps still resolve from the caster: the bolt leaves the Hunter, the line is drawn from the Hunter. The beast is a remote **sensor**, not a second caster. An entity that *acts* is an actor running compose steps (§13 rule 23) and that is what a summon's own `attack` block already is; this is the other thing entirely, and keeping them separate is why the whole write path touches `js/triggers.js` and nothing else.
+- **No pet, no fire.** A `from: 'pet'` skill does not fall back to the caster when every beast is dead. That refusal is the class's cost: it is what makes the body load-bearing instead of decorative, and it is asserted in `engine_gate` rather than described.
+
 ### 5.3 Selectors — *what*
 
 Every active declares a `select`. **There is no default**, and a missing selector fails at load.
@@ -367,7 +375,7 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 200 skills across 20 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 220 skills across 22 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
 #### The primitive set is OPEN, and what admits a twelfth
 
@@ -410,7 +418,7 @@ A primitive that deals damage is not finished when it has damaged bodies. **`gam
 
 A step may declare `scaleWith: '<engine>'` and `scalePer`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
 
-This is what makes the remaining class engines data rather than engineering — but only the READ side (§13 rule 29). `shift` and `marks` joined `footing`, `armor` and `pack` on this hook with no change to it at all; what each of them cost was a **publish line**, and two of them cost a write path before that. Cascade, drench, crystallize, Chi, killbox and two bodies still owe the same two answers.
+This is what makes the remaining class engines data rather than engineering — but only the READ side (§13 rule 29). `shift` and `marks` joined `footing`, `armor` and `pack` on this hook with no change to it at all; what each of them cost was a **publish line**, and two of them cost a write path before that. Cascade, Chi and Crystal Forms still owe the same two answers; drench, crystallize, killbox and two bodies have since given them.
 
 ### 5.9 Selection is not delivery
 
@@ -521,7 +529,23 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 2 of 14.** Samurai (Armor, Tactics) and Necromancer (Marrow, Dark Matter). The remaining twelve are §15 group A.
+**Built: 11 of 14**, two trees each (22 trees, 220 skills). Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+
+| Class | Trees as built |
+|---|---|
+| Samurai | Armor, Tactics |
+| Necromancer | Marrow, Dark Matter |
+| Druid | Beasts, Restoration |
+| Wizard | Attunement, Arcana |
+| Priest | Judgment, Grace |
+| Bard | Cadence, Ensemble |
+| Mage | Crystalblade, Collapse |
+| Witch Doctor | Effigy, Blight |
+| Sundian | Tidewrack, Reef |
+| Assassin | Killbox, Shadow |
+| Hunter | Longshot, Houndmaster |
+
+The remaining three — Blacksmith, Monk, Savage — are §15 group A, and all three are tick-shaped (§8.3).
 
 ### 8.3 Class engines
 
@@ -542,7 +566,7 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Samurai | **Footing** — see §8.4 |
 | Monk | **Chi loop** — damage generates Chi; heals and traps spend it |
 | Assassin | **Killbox** — traps placed inert, detonating when other skills fire nearby. The only engine banked by BEING SOMEWHERE rather than by acting |
-| Hunter | **Two bodies** — skills may trigger off the pet's position |
+| Hunter | **Two bodies** — a skill may declare `from: 'pet'` and evaluate its trigger at the beast instead of at the player. The engine, `spread`, is the distance between them in bands: **the only engine that measures a relationship rather than a quantity** |
 
 #### Batch order for phase 5 — engine shape decides it
 
@@ -669,7 +693,7 @@ The first tuning pass proved the cost of that. At the numbers the tree was autho
 | ~~**Witch Doctor**~~ | voodoo doll | **BUILT, GATED AND AUTHORED.** The `doll` rider — see below. It was the cheapest write path yet, because the mirror was already live and only the DESIGNATION was missing |
 | ~~**Sundian**~~ | drench stacks | **BUILT, GATED AND AUTHORED.** Two riders, not one — see below |
 | ~~**Assassin**~~ | killbox | **BUILT, GATED AND AUTHORED.** It did need the thirteenth primitive — see §5.7 |
-| **Hunter** | two bodies | "skills may trigger off the pet's position" is a change to `triggers.js`, not to `p.engines` — the evaluation origin is the player throughout |
+| ~~**Hunter**~~ | two bodies | **BUILT, GATED AND AUTHORED.** The only write path that touched the TRIGGER layer instead of `p.engines` — see below |
 
 **TICK-SHAPED — a stateful accumulator or decay, alone.**
 
@@ -738,6 +762,26 @@ The general form is §13 rule 25's neighbour: **a taxonomy read generically is a
 
 **The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat sequencing rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor.
 
+#### The Hunter: the only write path that never touched `p.engines`
+
+Every previous write path added a way to *produce a resource*: a primitive that writes the caster's domain, riders that write state on an enemy, a primitive that places an object. **Two bodies is not a resource at all** — it is a change to where a trigger asks its question, and it lands in `js/triggers.js`. The full ruling is in §5.2 under `from`; what belongs here is why the class is shaped that way and what it costs.
+
+**The engine measures a RELATIONSHIP, and it is the only one that does.** `p.engines.spread` is the distance between the Hunter and its furthest living beast, in bands of 90 units, capped at 6. Every other engine in the game counts a quantity the player has accumulated — seconds stood still, casts made, stacks applied, objects placed, damage absorbed. This one is a fact about **two things the player owns at once**, which is the only reading of "two bodies" that is actually about both of them. A Hunter standing on its bird has no engine.
+
+**The trait is the built-in cost, and it pays at both ends of the same axis.** Pack Tactics gives **ALPHA** — +20% Ferocity and +10% Tempo to the Hunter and every beast — for two or more beasts within 120, and **MARKSMAN** — one extra pierce and +8% damage per living beast — for no beast within 250. It pays nothing in between. `spread` agrees with Marksman and fights Alpha, so the §4.2 decision on this class is not "how deep" but **which shape of Hunter**: one bird a long way out reading the room, or a pack underfoot making everything hit harder. Longshot scales with the span and sends bodies away; Houndmaster reads no engine at all, is paid in flat numbers, and short-leashes every summon with `move: 'orbit'` so the pack stays inside Alpha's 120.
+
+**Cost of the write path:** two exports in `js/triggers.js` (`SPATIAL_TRIGGERS`, `TRIGGER_FROM`), one `triggerOrigin()` function, two lines at the head of `triggerHolds` and the same origin threaded through its six spatial cases, one origin claim in `triggerConsume`, and one load assertion in `js/skills.js`. **No primitive, no rider, no field on the player, no publish line into `p.engines` for the mechanic itself** — `spread` gets its own publish line the same as any other engine, but that is the *scaling* half, and it would exist whether or not `from` did.
+
+#### The free beast was statted by a shop weapon, and it out-damaged the trees
+
+The Hunter's first DPS reading was **56.8, +93% and the only outlier in the table.** Split by source it was player casts 22.2, the bird 18.4, and **the free trait beast 16.2** — a unit the class is given at the start of every floor, up to four, at no cost in points, gold or slots. That free body alone was **55% of the anchor class's entire output**, and by floor 4 there would have been four of it.
+
+The cause was not tuning. `pack_tactics` spawns its beast as `guard_drone` because that is what gave it a body, and `_summonStats` therefore read the **Guard Drone's numbers**: 6 damage on a 0.55-second cycle, the fastest bite in the game, written for an item somebody buys once. Nobody ever wrote a number for the Hunter's beast. §13 rule 35 — a cast rate is a damage number — and this one had no author.
+
+Fixing it in the trees would have been the wrong lever twice over: the Hunter's own casts were already **below** the anchor at 22.2 against the Samurai's 29.5, so paying for the free half would have made the paid half the weakest content in the game. The beast now carries its own `beastDmg` / `beastCd` on the trait, sized for something given away four times over. Measured after: free beast 5.1, bird 10.8, player casts 19.6 — **35.5 total, +20%, in band**, with both trees within a few points of each other and of the Druid.
+
+**The general form is the one §15 keeps rediscovering: a number inherited from a system that no longer owns it is not a default, it is an accident.** Recorded as §13 rule 43.
+
 ### 8.4 Footing
 
 The Samurai's engine, and the most-iterated design in the project.
@@ -797,7 +841,7 @@ Summons were the largest bespoke category in the source project and are the larg
 
 #### A minion is an ACTOR, not a behaviour
 
-**This is the pattern the remaining eleven classes should follow, and it is the reason summoning cost one primitive instead of a handler per archetype.**
+**This is the pattern the remaining classes should follow, and it is the reason summoning cost one primitive instead of a handler per archetype.**
 
 The instinct is to model a summon as a *behaviour*: a skeleton knows how to swing, a hawk knows how to dive, and each new archetype brings the code that makes it act. That is what the source project did, and it is why summons were its largest bespoke category — every summon carried its own spawn, attack and death path, so adding one meant editing the engine.
 
@@ -1323,6 +1367,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 42. **When a primitive is proposed, test the cheap option by asking what the existing thing IS, not what it looks like.** The Assassin's killbox looked like a `hazard` with a dormant flag — same circle, same placement, same owner. It is not, and the way to see that is to read what a zone actually does rather than what it is shaped like: `addZone` makes a clock, and the zone tick advances it, accumulates against a cadence, damages on that cadence, applies riders and expires. A trap has no cadence, deals nothing while placed, and ends by being *consumed*. Carrying it on `hazard` would have meant a flag, a branch skipping every behaviour the tick has, an ignored payload and a consumption path — an object sharing its geometry with a zone and none of its verbs. **Shape is not identity.** Two things that occupy the same circle can still be two things, and the test that separates them is the list of behaviours, written out. Where that comparison lands also tells you where the code goes: `engine_gate` now asserts both halves of the answer — inert while placed, consumed by a cast — so the ruling is measured rather than remembered.
 
+43. **A number inherited from a system that no longer owns it is not a default — it is an accident.** The Hunter's free beast was spawned as `guard_drone` because that gave it a body cheaply, and it silently kept the drone's damage and cadence: 6 on a 0.55-second cycle, the fastest bite in the game, written for a shop item somebody buys once and never for a unit the class is *given*, four times, for free. Measured, that one body was 55% of the anchor class's entire output and the trees were being asked to pay for it. Nothing was broken; every function did what it said. **The tell is ownership, not correctness** — when a class reaches into an archived catalogue for a body, ask which of the borrowed fields anyone chose *for this class*, and give the ones nobody chose an author before tuning anything that stands on them. This is the same family as D-28 and D-29 with the arrow reversed: those were callers that stopped existing, this is a number that never had one.
+
+44. **A facade that forwards state is an allowlist, and every shared path that writes a COUNTER has to be on it.** The minion actor forwards `hp`, `damageDealt`, `shield` and `ward` to its owner, and that list was assembled from the fields a swing was known to touch. `skillDamage` also rolls a crit and can kill, and both of those write counters back onto whatever object dealt the blow — `kills`, `critCounter`, `firstHitUsed`, `frenzy`. None were forwarded, so `killer.kills++` was `NaN` written to an object discarded at the end of the swing: every kill a summon made went uncredited, `critEveryN` never advanced behind a pet, and `firstHitCrit` re-armed on every swing. **All of it silent, for as long as the facade has existed.** The one field that was an *array* threw on `.length`, and that is the only reason the family was found. A missing scalar on a forwarding facade reads as a plausible zero; prefer a shape where absence is loud, and when that is not available, re-derive the allowlist from the callers rather than from the fields you remember.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1339,7 +1387,7 @@ Each has caught a real defect on this project. They are design constraints on ho
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
 | 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
 | 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | **Done** |
-| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **In progress** — Wizard and Priest built (10 trees, 100 skills, 5 selectable classes); regions 3–8 blocked on `PIXELLAB_API_KEY` |
+| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin and Hunter built (22 trees, 220 skills, 11 selectable classes); regions 3–8 blocked on `PIXELLAB_API_KEY` |
 
 Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
 
@@ -1347,27 +1395,31 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **10 failing checks**: 1 is content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 10 with nothing double-counted, and all eighteen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, plus `validate_items`.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **9 failing checks**: 0 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 9 with nothing double-counted, and all eighteen focused instruments are green — `offence_test`, `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, plus `validate_items`.
+
+**Group A closed on the Hunter patch, and that is the whole of the 10 → 9 move.** The set diff added nothing: `expected 2 beasts across 2 Hunters` left, and the two reds the patch created along the way — a `penalty_roll` crash and a DPS outlier at +93% — were both closed inside the same patch as **D-30** and the free-beast retune (§8.3), rather than being carried.
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
-**Group D is empty.** D-23, D-24, D-25, D-26, D-27, D-28 and D-29 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
+**Group D is empty.** D-23, D-24, D-25, D-26, D-27, D-28, D-29 and D-30 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
-### Group A — waiting on phase-5 trees (1)
+### Group A — waiting on phase-5 trees (0)
 
-Eleven classes have no trees. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
+Three classes have no trees — Blacksmith, Monk and Savage, all tick-shaped. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
 | ~~`no coral planted`~~, ~~`toh blob`~~ | 0 | **BOTH LEFT THIS GROUP.** `no coral planted` closed by content: the Sundian has trees, so it casts, so `tohOnFire` plants coral every fourth cast. `toh blob` needed one more thing — the snapshot fixture seated a Samurai beside a Samurai, so no class present could produce the coral the check asserts rides the wire. `toh blob: null` was a statement about the fixture (§13 rule 20). It now seats a Sundian and reads 3 nodes. |
 | ~~`no singularity in 30s`~~ | 0 | **LEFT THIS GROUP by gaining content.** The Mage's trees landed, so it casts, so `tohOnFire` counts to nine and the singularity forms. Nothing about the trait changed. |
 | ~~`Bard rhythm never built`~~ | 0 | **LEFT THIS GROUP — half by gaining content, half by rule 20.** The Bard's trees landed, and the check still read 0 because the trait fixture spent no skill points: `tohOnFire` runs only from `fireSkill` now, so a bot with a tree it never learned still never attacks. Arming the fixture the way a player arrives (§13 rule 20) closes it at **10 stacks, +60% Ferocity, +95% Tempo solo**. The remaining three stay red for the reason this group gives — those classes genuinely have no tree. |
-| `expected 2 beasts across 2 Hunters` | 1 | `toh_hunter` has no tree, so it is constructed through a path that never reaches fight-start granting. |
+| ~~`expected 2 beasts across 2 Hunters`~~ | 0 | **LEFT THIS GROUP — half by gaining content, half by rule 40.** The Hunter's trees landed, so it is selectable and no longer needs `allowUnplayable` to be constructed at all. The check still read 0 because the two-player fixture seated the **reference class**, and the reference is the Samurai, which has no beast: the probe was asking two beastless players for two beasts and reporting the answer as a beast-vs-beast collision failure. Both seats now name `toh_hunter`, and the pair stack. |
 | ~~`DPS gate`~~ | 0 | **LEFT THIS GROUP, and not by gaining content.** The harness was weapon-era: it spent no skill points, so with weapons removed every BUILT class measured 0.0 while two classes with no tree measured 3.2 and 16.2 off trait damage alone. The table was upside down since `patch-trigger-core` and nothing said so, because the median it compared against came from the same broken numbers. It now spends the class's trees, and the anchor is a declared reference set rather than a live median. |
 
 **Three entries have now left this group.** `elite_arena (1p) never cleared` went green when the Necromancer's Summons tree landed — the class gained a third tree, the solo build got deeper, and the objective cleared with nothing tuned. `toh_druid` left with its own tree. That is the group working as labelled: it said "not built yet", something got built, and it closed.
+
+**GROUP A IS NOW EMPTY.** Every check that was waiting on a phase-5 tree has closed, and the four classes that still have no trees — Blacksmith, Monk, Savage and the phase-5 remainder — no longer hold a red line open. The group stays in this document because the next four classes will refill it, and because the exit pattern is worth keeping: of the entries that left, **two closed purely by content arriving, and three needed the fixture corrected as well.** A check labelled "waiting on content" is a check nobody has run against real content, so half of them were also staging bugs. That is not a reason to distrust the label; it is a reason to re-read the fixture on the patch that closes the entry, rather than assuming the content did it.
 
 ### Group B — waiting on a design decision (2 failing, 3 open questions)
 
@@ -1376,7 +1428,7 @@ Eleven classes have no trees. Weapons are removed, so a class without a tree can
 | **Throughput: Nest Purge** | **CLOSED — working as intended.** Measured at both party sizes with the party arriving at level 12: 4p clears 3/3 at 213 s of 360 s. Solo reaches 2/3 and is not the target. The deciding factor was **loadout slots, not HP** — see §13 rule 20. *No failing check.* |
 | **Throughput: Bounty Hunt** *(1 failing)* | **1p only now — 4p CLEARS.** See below; the EXPECTED-RED ruling has moved. The 1p number is now **0 of 5**, down from 1, because the solo fixture is a named worst-case class — **expected, and explained below so a diff does not read it as a regression.** |
 | **Summoner harness gap** *(1 failing)* | Narrowed by §8.5, not closed. Skill-era summons exist and the Necromancer fields them, but they are *units* — they walk, they die, they are re-raised. Structure **recall** (`STRUCT_CHANNEL_S`) still has nothing to act on: `bonelord` builds its structure via `_addWeapon` and `weaponSlots` is 0. The decision is whether recall survives the removal of weapons at all. |
-| **Penalty weighting on stat items** | **MEASURED AGAIN, still not added.** With a real item pool the free-roll rate is **10.8% mean / 25.8% worst**, down from 18.8%/29.3% with no items — the old number was inflated because one healing skill in the game made Recovery free in every non-Druid build. One roll in ten landing harmlessly is variance, not a broken trade-off. Re-measure when phase 5 widens what a build can ignore. *No failing check.* |
+| **Penalty weighting on stat items** | **MEASURED AGAIN, still not added.** With a real item pool the free-roll rate is **13.7% mean / 35.3% worst**, down from 20.1%/50.2% with no items — the old number was inflated because one healing skill in the game made Recovery free in every non-Druid build. Roughly one roll in seven landing harmlessly is variance, not a broken trade-off. Re-measure when phase 5 widens what a build can ignore. *No failing check.* |
 | **#8 — `ready` toggles even** | Every message delivered and applied, zero drops, and `ready` is still false — so `p.ready = !p.ready` fired an even number of times. Two mechanisms remain and they call for opposite fixes: one press became two messages, or one message was applied twice. **Deliberately unfixed** — two diagnoses have already been overturned by the next measurement, both times because the fix was chosen before the data. *No failing check.* |
 | **§9.5 stats** | **CLOSED — §9.5 is written and D-23 is fixed.** All ten stats are read by the live path and proved by effect at 10/10 (`stat_gate.mjs`). Tempo's defect was the *label*, not the code: it reaches move speed only, and nothing shortens a skill cooldown. The glossary and compendium now say so. *No failing check.* |
 
@@ -1427,6 +1479,28 @@ They are the same category as the seven checks above, and the same category as D
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-30 — CLOSED: every kill a summon made went uncredited, and two crit hooks were dead behind a pet
+
+**Found by `penalty_roll` crashing**, which is the only reason it was found at all.
+
+A minion is an ACTOR (§13 rule 23): its attack runs the same `PRIMITIVES` table a player's skill does, through a **facade** that forwards the owner's identity by reference. The facade is an explicit allowlist, and its own comment says so — *"every owner field a new engine path touches has to arrive here."* It carried `idx`, `stats`, `hookAgg`, `char`, `curses`, `engines`, and getter/setter pairs for `hp`, `damageDealt`, `shield`, `ward`, `healAcc` and `roomVitGain`.
+
+It did not carry any **counter**. `skillDamage` rolls a crit and can kill, and both paths write back onto whatever object dealt the blow:
+
+| field | writer | what happened behind a pet |
+|---|---|---|
+| `kills`, `lastKillT`, `roomFirstKillT` | `_killEnemy` | `killer.kills++` on an absent field is `NaN`, written to an object discarded when the swing ends — **every summon kill uncredited**, and the `afterKill` / `firstKill` item conditions never true |
+| `critCounter` | `rollCrit` | `++p.critCounter` is `NaN`, so `critEveryN` **never fires** through a minion |
+| `firstHitUsed` | `rollCrit` | re-armed every swing, so `firstHitCrit` **crit every single bite** |
+| `critArmed`, `vitKillGained` | `_killEnemy` | `critAfterKill` and the vitality-on-kill cap read and wrote a throwaway |
+| `frenzy` | `_killEnemy` | **the only array in the list** — `killer.frenzy.length` threw, and that is what surfaced the family |
+
+Every scalar failed silently in the direction of a plausible zero. The array is what made noise, and it only made noise because a `killTempo` item happened to roll onto a class fielding a pet.
+
+**Fixed** by forwarding all ten to the owner with accessors, beside the ones already there. Recorded as §13 rule 44 — the general form is that a forwarding facade's allowlist must be re-derived from its callers, not from the fields anyone remembers.
+
+**It moved no balance number.** The DPS harness carries no items, so the crit hooks it disables were never firing there either; the fix is worth having because a real run does carry them.
 
 #### D-29 — CLOSED: two more traits reading a data structure the weapon removal emptied
 
@@ -1638,18 +1712,18 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
-| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **91 of 91 land across 10 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
+| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **105 of 105 land across 12 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
 | Trait gate | Built **after** D-28, which is the wrong order and is why it exists — `trait_gate.mjs`: every trait on the roster reached by the live path and moving its own observable, against a control with the trait key switched off. **14 of 14** |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **10 of 10** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **11 of 11** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`, `spread`. Also asserts, by effect: Grit's anti-synergy with crystallize, the killbox inert-then-consumed pair, and the Hunter's trigger origin moving to the beast and refusing to fall back when none is alive (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
-| Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
+| Penalty roll | Measured — `penalty_roll.mjs`: **13.7% mean / 35.3% worst** against a real item pool (20.1% / 50.2% with no items, which is the measurement's own bias); weighting NOT added, re-measure as phase 5 widens what a build can ignore (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
 | Node types | Horde, Elite and Objective all live and measured; difficulty wired (D-24) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian and Assassin built (20 trees, 200 skills, 10 selectable); 4 of 14 classes have no trees. All four content-shaped classes are done, plus three write-path ones; the remaining four are write-path (Hunter) or tick-shaped (Monk, Savage, Blacksmith) |
+| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin and Hunter built (22 trees, 220 skills, 11 selectable); 3 of 14 classes have no trees. **Every content-shaped and every write-path class is done**; the remaining three are all tick-shaped (Monk, Savage, Blacksmith) |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1666,8 +1740,8 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Pending-pick and results screens are partial fixes.** Presence rides state so a lost close cannot softlock a panel open, but an offer's contents still ride the open event — a lost open is a missed level-up pick. Similarly `st.over` stops a client stranding in a dead world but the results payload still rides `end`. Both are noted in code where the next reader hits them.
 
-**Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
+**Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining classes are authored.
 
-**Four class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench` and the Assassin's `killbox` are implemented and gated at **10 of 10**. The remaining four — cascade, Chi, Crystal Forms, two bodies — are specified in §8.3 and unbuilt.
+**Three class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench`, the Assassin's `killbox` and the Hunter's `spread` are implemented and gated at **11 of 11**. The remaining three — cascade, Chi, Crystal Forms — are specified in §8.3 and unbuilt, and all three are tick-shaped.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.

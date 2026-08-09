@@ -17,6 +17,7 @@ const { Sim } = await import('../js/game.js');
 const SK = await import('../js/skillsim.js');
 const { TREES, SKILL_BY_ID, ALL_SKILLS } = await import('../js/skills.js');
 const { PRIMITIVE_KINDS, IMPACT_RIDERS, SHAPE_RIDERS, BOLT_RIDERS } = await import('../js/compose.js');
+const { spawnMinions } = await import('../js/minions.js');
 const { CONFIG } = await import('../js/config.js');
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -54,6 +55,19 @@ function arena(skill) {
   if (skill.type === 'active') p.loadout[0] = skill.id;
   p.level = 66;              // every slot open, so slot gating never masks a miss
   g.god = true;              // the dummy must not kill the tester
+  // A `from: 'pet'` SKILL IS A PAIR AND CANNOT BE STAGED ALONE (§13 rule 41).
+  // Its trigger asks its question at the beast, so with no beast on the field
+  // `triggerOrigin` returns null and the skill never fires — which the sweep
+  // reports as "trigger never fired with its condition staged" while the
+  // condition it staged was never the one being asked. The beast is not a
+  // favour: the summon is already in this skill's own prereq chain and was
+  // learned above, so lending the body is only casting a node the fixture
+  // already owns and is deliberately keeping out of the loadout.
+  if (skill.from === 'pet') {
+    const src = chain.find(s => (s.compose || []).some(c => c.kind === 'summon'));
+    const step = src && src.compose.find(c => c.kind === 'summon');
+    if (step) spawnMinions(g, p, src, step, 1);
+  }
   return { g, p };
 }
 

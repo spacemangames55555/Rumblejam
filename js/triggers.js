@@ -26,6 +26,14 @@ export const TRIGGER_KINDS = [
 // Which params each kind requires. Checked at load — a trigger missing a param
 // would otherwise read `undefined` as a radius and quietly never fire, which is
 // the exact failure mode section 11 exists to prevent.
+// WHICH TRIGGERS HAVE A POSITION TO MOVE. `from: 'pet'` is only meaningful on a
+// trigger that asks a SPATIAL question; the other five read player state — a
+// kill counter, a hit counter, a dodge timestamp, own HP, own movement — and a
+// pet has none of those. Declaring `from` on one of them is a content error that
+// would read as a skill quietly behaving normally, so it is refused at load.
+export const SPATIAL_TRIGGERS = ['NEAREST', 'PROXIMITY', 'ISOLATED', 'TARGET_THRESHOLD', 'ON_STATUS', 'ON_TOKEN'];
+export const TRIGGER_FROM = ['self', 'pet'];
+
 export const TRIGGER_PARAMS = {
   PROXIMITY: ['radius', 'count'],
   NEAREST: ['range'],
@@ -144,6 +152,45 @@ export class EnemyGrid {
 
 // ---------------------------------------------------------------- evaluation
 
+// WHERE A TRIGGER LOOKS FROM. §8.3 gives the Hunter "two bodies — skills may
+// trigger off the pet's position", and this is the whole write path: every
+// spatial trigger asks its question at an ORIGIN, and the origin has always been
+// the player because nothing had ever asked for anything else.
+//
+// IT IS A PROPERTY OF THE SKILL, NOT OF THE PLAYER. `from: 'pet'` sits on the
+// skill beside `select` and `domain`. A flag on the player would make it a MODE
+// — every skill in the build shifting origin together — and a mode is not a
+// decision, it is just standing where the pet is. Per-skill is what lets a
+// Hunter genuinely play two positions at once, which is the whole class.
+//
+// NO PET, NO FIRE. A skill that declares it triggers off the pet does not
+// quietly fall back to the player when the pet is dead: the origin does not
+// exist, so the condition cannot hold. That is what makes the beast load-bearing
+// rather than decorative, and it is the cost the class pays for covering two
+// places at once.
+//
+// AND THE ORIGIN MOVES THE QUESTION, NOT THE ANSWER. The compose steps still
+// resolve from the player — the pet is a remote SENSOR, not a second caster.
+// §13 rule 23 already rules that an entity which ACTS is an actor running
+// compose steps, and the minion system is that; letting the pet also cast the
+// owner's skills would be a second, worse copy of it. So this write path touches
+// `triggers.js` and nothing else, which is what makes it a different shape from
+// every write path before it.
+export function triggerOrigin(sim, p, skill) {
+  if (!skill || skill.from !== 'pet') return p;
+  const pets = p.minions;
+  if (!pets || !pets.length) return null;
+  // The nearest living beast. "Nearest" rather than "first" so a Hunter with a
+  // pack does not have its sightline decided by spawn order.
+  let best = null, bd = Infinity;
+  for (const m of pets) {
+    if (m.dead || m.down) continue;
+    const d = (m.x - p.x) ** 2 + (m.y - p.y) ** 2;
+    if (d < bd) { bd = d; best = m; }
+  }
+  return best;
+}
+
 // Does one trigger's condition hold right now?
 //
 // COOLDOWN IS TESTED BY THE CALLER, BEFORE THIS IS REACHED. That ordering is
@@ -151,18 +198,22 @@ export class EnemyGrid {
 // not a spatial query.
 export function triggerHolds(sim, p, skill, st, grid) {
   const t = skill.trigger;
+  // `o` is the SPATIAL origin; the five event-shaped kinds below read player
+  // state and ignore it, which is why `from` is refused on them at load.
+  const o = triggerOrigin(sim, p, skill);
+  if (!o) return false;
   switch (t.kind) {
     case 'NEAREST':
-      return !!grid.nearest(p.x, p.y, t.range);
+      return !!grid.nearest(o.x, o.y, t.range);
 
     case 'PROXIMITY':
-      return grid.countWithin(p.x, p.y, t.radius) >= t.count;
+      return grid.countWithin(o.x, o.y, t.radius) >= t.count;
 
     case 'ISOLATED':
       // "fewer than count within radius" is true in an empty room too, which is
       // correct: a skill that rewards breaking away should not also require
       // company. Skills that need a target get one from their compose step.
-      return grid.countWithin(p.x, p.y, t.radius) < t.count;
+      return grid.countWithin(o.x, o.y, t.radius) < t.count;
 
     case 'ON_KILL':
       return p.trigEvents.kill > 0;
@@ -185,8 +236,8 @@ export function triggerHolds(sim, p, skill, st, grid) {
     }
 
     case 'TARGET_THRESHOLD': {
-      for (const e of grid.near(p.x, p.y, t.range)) {
-        const dx = e.x - p.x, dy = e.y - p.y;
+      for (const e of grid.near(o.x, o.y, t.range)) {
+        const dx = e.x - o.x, dy = e.y - o.y;
         if (dx * dx + dy * dy > t.range * t.range) continue;
         if (e.hp / Math.max(1, e.maxHp) < t.pct / 100) return true;
       }
@@ -194,8 +245,8 @@ export function triggerHolds(sim, p, skill, st, grid) {
     }
 
     case 'ON_STATUS': {
-      for (const e of grid.near(p.x, p.y, t.range)) {
-        const dx = e.x - p.x, dy = e.y - p.y;
+      for (const e of grid.near(o.x, o.y, t.range)) {
+        const dx = e.x - o.x, dy = e.y - o.y;
         if (dx * dx + dy * dy > t.range * t.range) continue;
         if (hasStatus(e, t.status)) return true;
       }
@@ -216,7 +267,7 @@ export function triggerHolds(sim, p, skill, st, grid) {
     // lives in js/minions.js and is owned by nobody; this asks the same
     // question ON_STATUS asks, against a different kind of thing on the floor.
     case 'ON_TOKEN':
-      return sim.tokenWithin(p.x, p.y, t.range);
+      return sim.tokenWithin(o.x, o.y, t.range);
 
     default:
       return false;
@@ -238,7 +289,11 @@ export function triggerConsume(sim, p, skill) {
   // on a miss so a step can never plant at a stale position from a fire two
   // rooms ago — a coordinate that is silently the wrong one is worse than
   // none, since it still produces a skeleton somewhere plausible.
-  p.tokenClaimAt = sim.claimToken(p.x, p.y, skill.trigger.range);
+  // Claimed at the trigger's own ORIGIN: if the pet saw the token, the pet's
+  // token is the one taken. Reading the player here would let a `from: 'pet'`
+  // skill fire on a token it cannot reach and then claim a different one.
+  const o = triggerOrigin(sim, p, skill) || p;
+  p.tokenClaimAt = sim.claimToken(o.x, o.y, skill.trigger.range);
 }
 
 // The status vocabulary a trigger can ask about, mapped onto the fields the

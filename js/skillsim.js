@@ -7,7 +7,7 @@
 // Everything here runs on the HOST. Clients receive fire events in the fx
 // stream and render them; they never evaluate a trigger.
 
-import { EnemyGrid, triggerHolds, triggerConsume, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
+import { EnemyGrid, triggerHolds, triggerConsume, triggerOrigin, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
 import { selectTarget } from './selectors.js';
 import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
@@ -34,8 +34,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0, spread: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
@@ -271,6 +271,18 @@ export function tickSkills(sim, dt) {
     // strongest standing in a field it prepared, and every detonation spends
     // part of that field.
     p.engines.killbox = sim.traps.reduce((a, t) => a + (t.owner === p.idx ? 1 : 0), 0);
+    // THE HUNTER'S SPREAD ENGINE (§8.3): how far apart the two bodies are, in
+    // bands. Every other engine measures a quantity — time, casts, stacks,
+    // objects, damage. This one measures a RELATIONSHIP between two things the
+    // player owns, which is the only reading of "two bodies" that is about both
+    // of them. A Hunter standing on its beast has no engine at all.
+    let spread = 0;
+    for (const m of p.minions) {
+      if (m.dead || m.down) continue;
+      const d = Math.hypot(m.x - p.x, m.y - p.y);
+      spread = Math.max(spread, Math.min(CONFIG.SPREAD_CAP, Math.floor(d / CONFIG.SPREAD_UNIT)));
+    }
+    p.engines.spread = spread;
     // THE BARD'S RHYTHM ENGINE (§8.3): stacks held right now. Unlike every other
     // engine here this one can be DROPPED — `tohOnFire` builds it on each cast
     // and `tohTick` wipes the whole stack the moment the window lapses. Both
@@ -302,6 +314,7 @@ export function tickSkills(sim, dt) {
     p.engineScaleBonus.crystal = passiveSum(p, 'crystalDamageBonus');
     p.engineScaleBonus.drench = passiveSum(p, 'drenchDamageBonus');
     p.engineScaleBonus.killbox = passiveSum(p, 'killboxDamageBonus');
+    p.engineScaleBonus.spread = passiveSum(p, 'spreadDamageBonus');
     p.engineScaleBonus.doll = passiveSum(p, 'dollDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
@@ -498,6 +511,14 @@ export function rollCrit(sim, p, e) {
   else crit = sim.critRng.float() * 100 < critChance(p);
   p.firstHitUsed = true;
   return crit;
+}
+
+// A gate surface for the trigger layer. `triggerHolds` needs the spatial grid,
+// which only the tick owns; this hands a probe the same question against the
+// live grid so the two-bodies write path can be asserted without reproducing
+// the tick. Exported for `engine_gate`, used nowhere in play.
+export function triggerHoldsAt(sim, p, skill) {
+  return triggerHolds(sim, p, skill, p.trigState[skill.id] || {}, sim.trigGrid);
 }
 
 // DETONATION IS A PROPERTY OF THE OBJECT, checked where casts are observed.

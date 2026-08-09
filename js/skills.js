@@ -21,12 +21,14 @@ import { SUN_TIDEWRACK, TUNING as SUN_TID_TUNING } from './content/skills/sun_ti
 import { SUN_REEF, TUNING as SUN_REEF_TUNING } from './content/skills/sun_reef.js';
 import { ASN_KILLBOX, TUNING as ASN_KB_TUNING } from './content/skills/asn_killbox.js';
 import { ASN_SHADOW, TUNING as ASN_SH_TUNING } from './content/skills/asn_shadow.js';
+import { HUN_LONGSHOT, TUNING as HUN_LS_TUNING } from './content/skills/hun_longshot.js';
+import { HUN_HOUNDMASTER, TUNING as HUN_HM_TUNING } from './content/skills/hun_houndmaster.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
-import { TRIGGER_KINDS, TRIGGER_PARAMS } from './triggers.js';
+import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
 import { PRIMITIVE_KINDS, RIDERS_BY_PRIMITIVE } from './compose.js';
 import { isDomain } from './domains.js';
 import { SELECT_KINDS } from './selectors.js';
@@ -48,6 +50,8 @@ export const TREES = {
   sun_reef: { id: 'sun_reef', name: 'Reef', classId: 'toh_sundian', skills: SUN_REEF, tuning: SUN_REEF_TUNING },
   asn_killbox: { id: 'asn_killbox', name: 'Killbox', classId: 'toh_assassin', skills: ASN_KILLBOX, tuning: ASN_KB_TUNING },
   asn_shadow: { id: 'asn_shadow', name: 'Shadow', classId: 'toh_assassin', skills: ASN_SHADOW, tuning: ASN_SH_TUNING },
+  hun_longshot: { id: 'hun_longshot', name: 'Longshot', classId: 'toh_hunter', skills: HUN_LONGSHOT, tuning: HUN_LS_TUNING },
+  hun_houndmaster: { id: 'hun_houndmaster', name: 'Houndmaster', classId: 'toh_hunter', skills: HUN_HOUNDMASTER, tuning: HUN_HM_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
@@ -89,6 +93,7 @@ export const PASSIVE_EFFECT = {
   dollDamageBonus: 'damage',      // Sympathetic Binding: more per point banked in the doll
   drenchDamageBonus: 'damage',    // Tidemark: more per drench stack standing
   killboxDamageBonus: 'damage',   // Dead Ground: more per trap set
+  spreadDamageBonus: 'damage',    // Long Leash: more per span between you and the beast
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the
@@ -257,6 +262,17 @@ function assertTrees() {
           // fires — exactly the "wired to nothing" failure this file exists for
           for (const k of TRIGGER_PARAMS[tg.kind]) {
             if (tg[k] === undefined || tg[k] === null) problems.push(`${s.id}: ${tg.kind} needs param "${k}"`);
+          }
+          // §8.3, the Hunter's two bodies: a skill may declare where its trigger
+          // LOOKS FROM. Refused on the five event-shaped kinds, which read player
+          // state — a kill counter, a hit counter, a dodge timestamp, own HP, own
+          // movement — and have no position for a pet to stand in. A `from` that
+          // silently did nothing would read as a skill behaving normally.
+          if (s.from !== undefined) {
+            if (!TRIGGER_FROM.includes(s.from)) problems.push(`${s.id}: from ${JSON.stringify(s.from)} is not one of ${TRIGGER_FROM.join('/')}`);
+            else if (s.from === 'pet' && !SPATIAL_TRIGGERS.includes(tg.kind)) {
+              problems.push(`${s.id}: from "pet" on ${tg.kind}, which asks no spatial question — only ${SPATIAL_TRIGGERS.join('/')} have an origin to move`);
+            }
           }
         }
         // REQUIRED, NEVER DEFAULTED. `select` is what the skill hits; the

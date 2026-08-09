@@ -3706,6 +3706,18 @@ export class Sim {
     let dmg = sd.dmg * TIER_MULT[s.tier - 1] * ing * dmgBoost;
     let cd = sd.cd;
     let range = sd.range;
+    // THE HUNTER'S BEAST IS STATTED BY THE HUNTER, not by a shop weapon. It is
+    // spawned as `guard_drone` because that gave it a body cheaply, and it kept
+    // the drone's numbers with it — 6 damage on a 0.55s cycle, the fastest bite
+    // in the game, written for an item somebody buys once and never for a unit
+    // the class is given free on every floor up to four times. Measured, the
+    // free beast alone was 16.2 DPS — 55% of the anchor class's ENTIRE output,
+    // from one body, at floor 1, and the trees were being asked to pay for it.
+    // §13 rule 35: a cast rate is a damage number, and this one had no author.
+    if (s.type === 'beast' && t.beastDmg !== undefined) {
+      dmg = t.beastDmg * TIER_MULT[s.tier - 1] * ing * dmgBoost;
+      cd = t.beastCd;
+    }
     if (t.key === 'overseer') {
       dmg *= 1 + p.stats.ferocity / 100;
       cd /= Math.max(0.25, 1 + p.stats.tempo / 100);

@@ -54,7 +54,11 @@ const SECONDS = 8;
 // ------------------------------------------------------------------- staging
 
 function stage(charId, slot = null) {
-  const g = new Sim({ seed: SEED, party: [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }] });
+  // `allowUnplayable`: a write path is gated BEFORE its trees exist (§5.7
+  // condition 3), so the gate has to be able to seat a class the sim would
+  // otherwise refuse to start. rider_gate and trait_gate already do this for the
+  // same reason.
+  const g = new Sim({ seed: SEED, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }] });
   const p = g.players[0];
   p.level = LEVEL;
   for (const tid of Object.keys(TREES).filter(t => TREES[t].classId === charId)) {
@@ -260,6 +264,33 @@ const PROBES = {
     fills: sk => (sk.compose || []).some(c => c.kind === 'trap'),
     fillsFirst: sk => (sk.compose || []).some(c => c.kind === 'trap'),
   },
+  spread: {
+    what: 'bands of ground between the Hunter and its beast',
+    char: 'toh_hunter',
+    // A RELATIONSHIP, NOT A QUANTITY, and the only engine of that shape. The
+    // starve pins the beast ON the Hunter each frame, which is the honest
+    // opposite of the mechanic: two bodies in one place are one body. Removing
+    // the beast instead would also remove the pack it feeds and measure two
+    // things at once.
+    low: (g, p) => { for (const m of p.minions) { m.x = p.x; m.y = p.y; m.cd = 999; } p.engines.spread = 0; },
+    // The beast is what fills it, so the loadout has to contain a summon.
+    fills: sk => (sk.compose || []).some(c => c.kind === 'summon'),
+    fillsFirst: sk => (sk.compose || []).some(c => c.kind === 'summon'),
+    // And the beast has to actually be somewhere else. Minions orbit their
+    // owner, so the fixture walks them out and holds them there — the engine is
+    // about distance, and a probe that lets them close it measures the orbit.
+    // `m.cd` is held high so the BEAST NEVER SWINGS. The observable is damage
+    // dealt, and a beast pinned on the enemies in the starved run was adding its
+    // own bites to it — the gate read 171 fed against 321 starved, an engine
+    // that looked inverted because the observable contained something other than
+    // the engine. Silent in both runs, the only difference left is the span.
+    // 600 units, not 400: the cap is six bands of ninety, so 400 measured four
+    // and left a third of the engine's range untested. The swing at four bands
+    // was 1.8%, which is true and too thin to trust.
+    each: (g, p) => { for (const m of p.minions) { m.x = p.x + 600; m.y = p.y; m.cd = 999; } },
+    // A `from: 'self'` claim, named for the reason in `pickClaim`.
+    claimSkill: 'hun_enfilade',
+  },
   pack: {
     what: 'animals standing',
     char: 'toh_druid',
@@ -319,15 +350,23 @@ for (const t of Object.values(TREES)) {
 // So: pick a claim BELONGING TO THE PROBE'S CLASS, prefer one whose scaled step
 // carries damage, and watch the field that step actually writes.
 const DAMAGE_STEPS = new Set(['strike', 'cone', 'line', 'bolt', 'drain']);
-function pickClaim(key, charId) {
+function pickClaim(key, charId, want) {
   const mine = (CLAIMED[key] || []).filter(c => c.cls === charId);
+  // MEASURE THE ENGINE, NOT THE TRIGGER. The Hunter's first `spread` claim is a
+  // `from: 'pet'` skill, and the staging that FILLS the engine — the beast four
+  // hundred units away — is precisely what stops that skill firing at a ring
+  // around the player. The gate read 174 fed against 324 starved: the engine
+  // inverted, and both numbers were true. A probe whose measured skill is
+  // disabled by its own staging is measuring the staging (§13 rule 26), so a
+  // probe may name the claim it wants.
+  if (want) { const c = mine.find(x => x.skill === want); if (c) return c; }
   return mine.find(c => DAMAGE_STEPS.has(c.kind)) || mine[0] || null;
 }
 
 function measure(key) {
   const pr = PROBES[key];
   if (!pr) return null;
-  const claim = pickClaim(key, pr.char);
+  const claim = pickClaim(key, pr.char, pr.claimSkill);
   // The measured skill FIRST, then whatever fills the engine — a loadout the
   // player who wanted this engine would actually be carrying (§13 rule 20).
   let fillers = pr.fills
@@ -519,6 +558,62 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
     SKROOM.startRoomMinions(g, p);
     if (p.domainShift === null) ok('a shift does not survive a room transition — which is what lets the primitive avoid a decay tick');
     else fail(`the shift persisted across a room start (${p.domainShift}) — a state with no decay and no reset is permanent`);
+  }
+
+  // --- two bodies: a trigger that asks its question somewhere else --------
+  //
+  // The Hunter's write path is the first that touches the TRIGGER layer rather
+  // than `p.engines`, so what is asserted here is different in kind: not that a
+  // resource moves, but that the same skill, in the same room, answers its
+  // trigger differently depending on where it is told to look.
+  {
+    const { g, p } = stage('toh_hunter');
+    // One enemy, far from the Hunter and right beside where the beast will be.
+    const far = target(g, p.x + 400, p.y);
+    // ENOUGH TICKS FOR ONE TRIGGER TICK. `triggerHolds` asks the spatial grid,
+    // and `runTriggerTick` rebuilds that grid on its own cadence rather than
+    // every frame — one `g.tick()` is not one rebuild. Asserting before a
+    // rebuild measures an EMPTY ROOM, which reads as "both false" and looks
+    // exactly like a beast that was never found.
+    for (let i = 0; i < 20; i++) { g.tick(); far.x = far.spawnX; far.y = far.spawnY; }
+    // AND THE BEASTS ARE READ AFTER THE TICKS, NOT BEFORE. A minion that dies is
+    // replaced, so a handle taken before the loop can be a stale object that is
+    // no longer in `p.minions` — moving THAT one puts nothing anywhere, while
+    // `triggerOrigin` correctly picks a live beast still standing next to the
+    // Hunter. The assertion then reads "the origin did not move" about an origin
+    // working perfectly (§13 rule 40).
+    //
+    // AND EVERY LIVE MINION MOVES, NOT ONE. `triggerOrigin` resolves to the
+    // NEAREST live pet, and a Hunter carrying both trees fields more than one —
+    // a hawk from Longshot t2 and hounds from Houndmaster t2/t4. Sending a single
+    // beast to +400 leaves the origin answering at whichever body is still at the
+    // Hunter's heel, so the probe measures the player's position and reports the
+    // write path dead. The fixture has to empty the heel, not just populate the
+    // far end.
+    const beasts = p.minions.filter(m => !m.dead && !m.down);
+    if (!beasts.length) { fail('the Hunter fixture fielded no beast, so the two-bodies write path cannot be asserted at all'); }
+    else {
+      const skill = { from: 'pet', trigger: { kind: 'NEAREST', range: 120 }, select: 'nearest' };
+      const selfSkill = { from: 'self', trigger: { kind: 'NEAREST', range: 120 }, select: 'nearest' };
+      for (const m of beasts) { m.x = far.x; m.y = far.y; }
+      // The precondition, checked separately so an empty grid cannot masquerade
+      // as an origin that did not move.
+      if (!g.trigGrid.nearest(far.x, far.y, 120)) {
+        fail('the trigger grid holds no enemy at the beast — the fixture never got a trigger tick, so nothing below would be about the origin');
+      }
+      const holdsPet = SKROOM.triggerHoldsAt(g, p, skill);
+      const holdsSelf = SKROOM.triggerHoldsAt(g, p, selfSkill);
+      if (holdsPet && !holdsSelf) ok('a `from: "pet"` trigger answers at the BEAST: an enemy 400 away is out of the Hunter\'s 120 range and inside the beast\'s, and the same trigger holds for one and not the other');
+      else fail(`the trigger origin did not move: pet=${holdsPet} self=${holdsSelf} across ${beasts.length} beast(s). Both true means the origin is still the player; both false means no beast was found — and a Hunter fields several, so a probe that moved only one would read exactly like this while the origin worked`);
+
+      // NO PET, NO FIRE — the cost that makes the beast load-bearing.
+      const saved = p.minions.slice();
+      p.minions.length = 0;
+      const holdsDead = SKROOM.triggerHoldsAt(g, p, skill);
+      p.minions.push(...saved);
+      if (!holdsDead) ok('and with no beast alive the trigger cannot hold — a `from: "pet"` skill does not quietly fall back to the player, which is what makes the beast load-bearing rather than decorative');
+      else fail('a `from: "pet"` trigger held with no pet — the origin fell back to the player, and the class\'s whole cost with it');
+    }
   }
 
   // --- the killbox: an inert object that a LATER CAST consumes ------------

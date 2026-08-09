@@ -190,6 +190,23 @@ function makeActor(sim, m) {
     get shield() { return p.shield; }, set shield(v) { p.shield = v; },
     get ward() { return p.ward; }, set ward(v) { p.ward = v; },
   };
+  // KILL CREDIT AND THE CRIT STREAM ARE THE OWNER'S TOO (D-30). A minion's swing
+  // runs `skillDamage`, which rolls a crit and can kill — and both of those
+  // paths write COUNTERS back onto whatever object dealt the blow, which is this
+  // facade. None of these fields were on the allowlist, so `killer.kills++` was
+  // NaN written to an object discarded at the end of the swing: every kill a
+  // summon made went uncredited, `critEveryN` never advanced behind a pet, and
+  // `firstHitCrit` re-armed on every single swing. All of it silent — `frenzy`
+  // is the one that is an ARRAY, so `.length` on absent threw and the family got
+  // found. Forwarded rather than copied: the counter has to land on the owner.
+  for (const k of ['kills', 'lastKillT', 'roomFirstKillT', 'vitKillGained', 'frenzy',
+                   'nextCrit', 'firstHitUsed', 'critCounter', 'critArmed', 'critMult']) {
+    Object.defineProperty(a, k, {
+      enumerable: true,
+      get: () => p[k],
+      set: v => { p[k] = v; },
+    });
+  }
   return a;
 }
 
