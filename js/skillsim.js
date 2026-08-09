@@ -98,6 +98,24 @@ export function startRoomMinions(sim, p) {
   }
 }
 
+// §5.6, THE OPENING ABILITY. The tier-1 nodes of this character's own trees,
+// filtered by the same `canLearn` predicate every other spend uses — so this is
+// the real choice set rather than a second opinion about one. Every tree's
+// tier-1 node is asserted at load to be a damaging active, which is what makes
+// this list safe to offer and safe to fall back on.
+export function openingPicks(p) {
+  return treesFor(p)
+    .map(t => TREES[t].skills.find(s => s.tier === 1))
+    .filter(s => s && canLearn(p, s))
+    .map(s => ({ id: s.id, name: s.name, desc: s.desc, tree: TREES[s.tree].name, domain: s.domain }));
+}
+
+// Whether anything in the loadout can actually kill something. The same question
+// `setLoadout`'s anti-softlock floor asks, asked from outside.
+export function hasDamagingSlotted(p) {
+  return (p.loadout || []).some(id => id && isDamaging(SKILL_BY_ID[id]));
+}
+
 export function learnableSkills(p) {
   return treesFor(p).flatMap(t => TREES[t].skills).filter(s => canLearn(p, s));
 }

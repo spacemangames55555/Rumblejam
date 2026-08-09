@@ -102,6 +102,60 @@ function sweep() {
       + mute.map(r => `${r.charId} (${r.learned})`).join(', '));
   } else ok(`all ${rows.length} selectable class(es) deal damage once armed`);
 
+  // ------------------------------------------------------------------------
+  // THE CHECK THAT WAS MISSING SINCE WEAPONS WERE REMOVED.
+  //
+  // Every assertion above spends the opening point first, because `fight()` is
+  // called with `arm: true`. That models a player who has ALREADY made their
+  // §5.6 choice, and it is the right fixture for "is the tree any good". It is
+  // the wrong fixture for "can somebody play this game", and for as long as it
+  // was the only one, the suite reported a healthy roster while a real new
+  // character arrived on map 1 with nothing.
+  //
+  // §13 rule 17 is written about harnesses being UNDER-provisioned — a fixture
+  // too poor to reach the thing it measures. This is the inverse and it is
+  // strictly more dangerous, because under-provisioning fails loudly and
+  // OVER-provisioning passes. `armBot` and every gate like it hands the fixture
+  // a state the game never hands a player, and the gap between the two is
+  // invisible by construction: nothing in the suite was measuring the
+  // provisioning itself.
+  //
+  // So this runs the identical fixture with `arm: false` — no learned skill, no
+  // lent tree, no point spent by the harness — and requires damage on map 1
+  // from what THE GAME grants. It is deliberately the last word in this file.
+  {
+    // FIRST: IS THE CHOICE OFFERED AT ALL? §5.6 says the first point spent is
+    // the opening ability, CHOSEN at character start. The floor below would make
+    // the damage assertion pass even if no panel ever appeared, so the offer is
+    // asserted separately — otherwise this gate would prove the safety net works
+    // and say nothing about the mechanic it is a net for.
+    const offered = [];
+    for (const id of ids) {
+      const sim = new Sim({ seed: 909, party: [{ idx: 0, key: 'k', name: 'N', charId: id, color: '#fff' }] });
+      const p = sim.players[0];
+      offered.push({ id, picks: (p.openingOffer || []).length, pts: p.skillPoints, ranks: Object.keys(p.skillRanks || {}).length });
+    }
+    const unoffered = offered.filter(o => o.picks === 0);
+    if (!unoffered.length) {
+      ok(`every class is OFFERED its §5.6 opening ability at character start — ${offered.map(o => `${o.id.replace('toh_', '')}:${o.picks}`).join(' ')} tier-1 picks, each holding ${offered[0].pts} unspent point and no learned ranks`);
+    } else {
+      fail(`${unoffered.length}/${offered.length} class(es) are never offered an opening ability: ${unoffered.map(o => o.id).join(', ')}. `
+        + `The point is granted and nothing presents the choice, so it cannot be spent`);
+    }
+
+    // AND THEN: DOES THE PROVISIONING ACTUALLY ARM THEM? No pick answered by the
+    // harness — this is the state a player reaches by doing nothing at all.
+    const raw = ids.map(id => fight(id, { arm: false }));
+    const silent = raw.filter(r => !r.err && r.dealt === 0);
+    console.log(`  as the game provisions them (nothing spent): ${raw.map(r => `${r.charId.replace('toh_', '')}:${r.err ? 'ERR' : r.dealt}`).join('  ')}`);
+    if (!silent.length) {
+      ok(`and all ${raw.length} deal damage on map 1 AS THE GAME PROVISIONS THEM — no armBot, no lent tree, no point the harness spent. A player who answers nothing still arrives armed`);
+    } else {
+      fail(`${silent.length}/${raw.length} class(es) deal ZERO damage on map 1 as a real player receives them: ${silent.map(r => r.charId).join(', ')}. `
+        + `Any class still dealing damage here is doing it on TRAIT damage rather than a skill`);
+    }
+  }
+
   // And the ones NOT yet selectable are named, so the gap is a number in the
   // log rather than something you notice when a player asks where the classes
   // went.

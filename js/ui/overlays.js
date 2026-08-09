@@ -15,7 +15,7 @@ let A = null;
 export function initOverlays(actions) { A = actions; }
 
 export function closeAllOverlays() {
-  for (const id of ['overlay-shop', 'overlay-levelup', 'overlay-treasure', 'overlay-sheet', 'overlay-boon']) $(id).classList.add('hidden');
+  for (const id of ['overlay-shop', 'overlay-levelup', 'overlay-treasure', 'overlay-sheet', 'overlay-boon', 'overlay-opening']) $(id).classList.add('hidden');
 }
 
 // ---------------- tooltips ----------------
@@ -487,6 +487,35 @@ export function showBoon(ev) {
 }
 
 export function closeBoon() { $('overlay-boon').classList.add('hidden'); }
+
+// ---------------- §5.6 the opening ability ----------------
+// The first point a character spends, chosen from the tier-1 nodes of their own
+// trees. Characters start with NO abilities at all, so until this is answered
+// the player has no way to deal damage — which is exactly what shipped, because
+// this panel did not exist and nothing else ever sent `learnSkill`.
+//
+// Deliberately built on the boon panel's markup rather than a new screen: it is
+// the same kind of moment (a small set of cards, one click, no dismiss) and
+// reusing it means one styling path rather than two that drift.
+export function showOpening(ev) {
+  const el = $('overlay-opening');
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="panel boon-panel">
+      <div class="ov-title" style="font-size:15px;">YOUR OPENING ABILITY — this is your first and only attack</div>
+      <div class="offer-row boon-row">${ev.picks.map(p => `
+        <div class="offer-card boon-card" data-id="${escapeHtml(p.id)}">
+          <div class="oname">${escapeHtml(p.name)}</div>
+          <div class="orarity">${escapeHtml(p.tree)} · ${escapeHtml(p.domain)}</div>
+          <div class="gloss-short">${escapeHtml(p.desc || '')}</div>
+        </div>`).join('')}</div>
+    </div>`;
+  el.querySelectorAll('.boon-card').forEach(card => {
+    card.onclick = () => { sfx.click(); A.pickOpening(card.dataset.id); };
+  });
+}
+
+export function closeOpening() { $('overlay-opening').classList.add('hidden'); }
 
 // ---------------- character sheet ----------------
 // Live view of one player's build: all sixteen stats (base shown where it

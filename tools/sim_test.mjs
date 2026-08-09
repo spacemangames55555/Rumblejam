@@ -4437,6 +4437,12 @@ try {
   // an overlay to index.html without adding it here and (d) fails.
   const DRIVERS = {
     'overlay-boon':     { open: 'boon',     done: 'boonDone',     act: (p, ev) => ({ kind: 'boon', id: ev.picks[0].id }) },
+    // §5.6's opening ability (D-31). Closed by `skillLearned` rather than a
+    // bespoke `openingDone`: the panel's whole job is to spend the point, so the
+    // event that says the point was spent is the honest close signal — and it is
+    // pushed by `spendSkillPoint` itself, which means the floor in `_enterArena`
+    // dismisses the panel too if a client never answered it.
+    'overlay-opening':  { open: 'opening',  done: 'skillLearned', act: (p, ev) => ({ kind: 'opening', id: ev.picks[0].id }) },
     'overlay-levelup':  { open: 'offer',    done: 'offerDone',    act: (p, ev) => ({ kind: 'levelup', id: ev.picks[0].id }) },
     'overlay-treasure': { open: 'treasure', done: 'treasureDone', act: (p, ev) => ({ kind: 'treasure', id: ev.picks[0] }) },
     // the shop and the sheet close locally on their own button — no host event
@@ -5257,8 +5263,17 @@ try {
     const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
     const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
     node.kind = kind;
-    g.god = true;                       // measuring the ROOM, not the player
+    // MEASURING THE ROOM, NOT THE PLAYER — and `god` alone does not achieve
+    // that. It makes the player invulnerable; it does not stop them KILLING,
+    // and a player who kills frees pool slots and pulls later spawns into the
+    // sample. That never showed up while a level-1 character had no skills at
+    // all: the fixture was accidentally pristine, and D-31's fix — granting the
+    // §5.6 opening ability — armed it. Measured, the gold ratio slid 1.05 → 1.01
+    // and tripped a band it had only ever passed by a hair. The loadout is
+    // emptied so nothing dies and the sample is the spawn table itself.
+    g.god = true;
     g._travelTo(node.id);
+    g.players[0].loadout.fill(null);
     let n = 0, hp = 0, dmg = 0, mats = 0;
     for (let t = 0; t < 60 * 60; t++) {
       g.setInput(0, { mx: 0, my: 0 });
