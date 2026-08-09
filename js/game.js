@@ -102,6 +102,13 @@ export class Sim {
     this.grid = new SpatialHash(CONFIG.GRID_CELL);
     this.pickups = [];
     this.summons = [];        // weapon-era structures; phase 4, untouched
+    // THE ASSASSIN'S KILLBOX. Inert placed objects, written by the `trap`
+    // primitive and consumed by `detonateTraps` when their owner casts nearby.
+    // Its own array rather than a flag on `zones` because a zone ticks and this
+    // does not, and because the detonation check runs on EVERY cast in the game
+    // — scanning every zone in the world to find one class's traps would be a
+    // permanent cost on every other class. See §5.7.
+    this.traps = [];
     MIN.initTokens(this);     // skill-era soul-token pool + its counters
     this.telegraphs = [];
     this.zones = [];
@@ -2864,6 +2871,14 @@ export class Sim {
     this.telegraphs.push(entry);
   }
   addZone(z) { this.zones.push({ t: 0, acc: 0, ...z }); }
+  // Capped, and the cap is a CONFIG constant rather than a tree number: a trap
+  // is a world entity on every tick and an uncapped placer is a perf problem
+  // before it is a balance one — the same reason the Sundian's coral is capped.
+  addTrap(t) {
+    const mine = this.traps.filter(x => x.owner === t.owner);
+    if (mine.length >= CONFIG.TRAP_CAP) this.traps.splice(this.traps.indexOf(mine[0]), 1);
+    this.traps.push({ t: 0, ...t });
+  }
 
   // A POSITIONAL dodge: inside the committed zone at commit, outside it at
   // resolve. This is the only thing that sets the ON_DODGE window now — the
@@ -2933,6 +2948,13 @@ export class Sim {
         }
         if (tg.onFire) tg.onFire();
       }
+    }
+    // Traps age out. An inert object with no clock is a permanent, and a room
+    // full of permanents is a killbox the Assassin never has to re-earn.
+    for (let i = this.traps.length - 1; i >= 0; i--) {
+      const tr = this.traps[i];
+      tr.t += dt;
+      if (tr.t >= tr.ttl) this.traps.splice(i, 1);
     }
     for (let i = this.zones.length - 1; i >= 0; i--) {
       const z = this.zones[i];

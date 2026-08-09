@@ -291,6 +291,54 @@ export const PRIMITIVES = {
     sim.fx.beams.push({ x1: p.x, y1: p.y, x2: p.x + ca * len, y2: p.y + sa * len, color: p.color, w: step.width });
   },
 
+  // AN INERT PLACED OBJECT. The THIRTEENTH primitive (§5.7), and the two
+  // questions §5.7 asks were both answered against the cheaper option.
+  //
+  // COULD `hazard` CARRY IT WITH A DORMANT FLAG? No, and the demonstration is
+  // what a zone IS rather than what it looks like. `addZone` makes
+  // `{t, acc, x, y, r, dps, dur, hurts}` and the zone tick advances a clock,
+  // accumulates against a cadence, damages everything inside every 0.4s, applies
+  // the slow rider, and splices the zone when `t >= dur`. A trap does NONE of
+  // that: no cadence, no damage while it sits there, and it ends by being
+  // CONSUMED rather than by expiring. Carrying it on `hazard` would mean a
+  // dormant flag, a branch in the tick that skips every single thing the tick
+  // does, a stored payload the tick must ignore, and a consumption path — at
+  // which point the object shares its geometry with a zone and not one of its
+  // behaviours. That is §5.7's "a distinctive verb is a list of existing steps"
+  // failing in the other direction: not one verb with different parameters, but
+  // two verbs that happen to be circles.
+  //
+  // And there is a cost that is not aesthetic. `fireSkill` runs on EVERY cast in
+  // the game, and the detonation check runs with it; scanning `sim.zones` —
+  // which holds enemy hazards, objective hazards and every player's ground — to
+  // find one class's traps would be O(all zones) on every cast forever. Its own
+  // array is O(traps).
+  //
+  // IS DETONATION A RIDER ON THE TRIGGERING SKILL? No, and §5.7 condition 2 is
+  // the test: riders resolve on a TARGET at the moment of impact. A detonation
+  // has neither. The skill that sets it off might be a heal, a shield, a ward or
+  // a shift — none of which touches an enemy — so there is no impact to hang it
+  // on. What the moment has is a CAST at a POSITION, which is caster state, so
+  // by the same condition that made the Wizard's shift a primitive rather than a
+  // rider, this is a property of the OBJECT, checked where casts are already
+  // observed. See `detonateTraps` in skillsim.js.
+  trap(sim, p, skill, step, rank, grid, out) {
+    // Placed where the skill's own selector is looking, so a trap goes where the
+    // Assassin is aiming rather than where it is standing — the difference
+    // between setting a killbox ahead of a fight and dropping one on your feet.
+    const target = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.radius);
+    const x = target ? target.x : p.x, y = target ? target.y : p.y;
+    sim.addTrap({
+      x, y, owner: p.idx,
+      radius: step.radius,
+      damage: stepDamage(step, skill, rank, p),
+      ttl: rankedDuration(step.duration, skill, rank) / MS,
+      domain: skill.domain,
+      skill,
+    });
+    out.states++;
+  },
+
   // Ground pool that ticks. Routed through the triangle like everything else —
   // hazard ticks are exactly the kind of damage that quietly escapes a rule.
   hazard(sim, p, skill, step, rank, grid, out) {
@@ -591,6 +639,11 @@ export const RIDERS_BY_PRIMITIVE = {
   // declared on the attack step, and is validated against that step's own
   // primitive — see assertTrees().
   summon: [],
+  // `trap` takes no riders for the same reason `summon` and `shift` take none:
+  // riders resolve on a target at the moment of impact, and placing an inert
+  // object has no impact. What the DETONATION carries is declared on the trap
+  // step and read when it goes off.
+  trap: [],
   // `shift` takes no riders for the same reason `summon` takes none: riders
   // resolve on a target at the moment of impact, and a shift has no target.
   heal: [], shield: [], ward: [], drain: [], plague: [], shift: [],
