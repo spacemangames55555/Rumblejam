@@ -3,7 +3,7 @@
 // sim events and UI/audio. Simulation (game.js) never touches the DOM.
 
 import { CONFIG, DEV, PALETTE } from './config.js';
-import { readsTokens } from './skills.js';
+import { readsTokens, TREES as TREES_UI, TREES_BY_CLASS as TREES_BY_CLASS_UI } from './skills.js';
 // A player row's class, host-side. `char` is the def object; charId is the id.
 const myCharId = p => (p && p.char ? p.char.id : null);
 import { BIOMES, tileVariant } from './biomes.js';
@@ -22,7 +22,7 @@ import { initScreens, showTitle, showLobby, showResults, hideScreens, currentNam
 import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
-import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening } from './ui/overlays.js';
+import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening, showSkills, closeSkills, isSkillsOpen, updateSkillsMeta } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
 import { tohSnapshot, tohMarks, tohState, TOH_STANCE_NAMES } from './traits-toh.js';
 import { ITEMS } from './content/items.js';
@@ -110,10 +110,13 @@ initOverlays({
   pickTreasure: id => sendUi({ kind: 'treasure', id }),
   pickBoon: id => sendUi({ kind: 'boon', id }),
   pickOpening: id => sendUi({ kind: 'opening', id }),
+  learnSkill: id => sendUi({ kind: 'learnSkill', id }),
+  setSlot: (slot, id) => sendUi({ kind: 'setSlot', slot, id }),
   combine: (a, b, id, tier) => sendUi({ kind: 'combine', a, b, id, tier }),
   sellWeapon: (slot, id, tier) => sendUi({ kind: 'sellWeapon', slot, id, tier }),
   sellItem: id => sendUi({ kind: 'sellItem', id }),
   openSheet: () => toggleSheet(true),
+  openSkills: () => toggleSkills(true),
 });
 window.addEventListener('pointerdown', ensureAudio, { once: false });
 window.addEventListener('keydown', ensureAudio, { once: false });
@@ -133,9 +136,11 @@ initLeaveButton();
 document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
 document.getElementById('stance-btn').onclick = () => { sfx.click(); pressStance(); };
 document.getElementById('sheet-btn').onclick = () => { sfx.click(); toggleSheet(); };
+document.getElementById('skills-btn').onclick = () => { sfx.click(); toggleSkills(); };
 window.addEventListener('keydown', e => {
   if (document.activeElement.tagName === 'INPUT') return;
   if (e.code === 'KeyC' && app.mode === 'run') toggleSheet();
+  if (e.code === 'KeyK' && app.mode === 'run') toggleSkills();
   // The trigger-core debug overlay. Not optional: without it the gate cannot be
   // evaluated — "it felt bad" is not actionable, and a trigger budget problem
   // is invisible until it is structural.
@@ -151,6 +156,56 @@ function toggleSheet(forceOpen = false) {
   if (app.mode !== 'run' || !app.meta) return;
   const me = app.party && app.party.find(m => m.idx === app.myIdx);
   showSheet(app.meta, me ? me.charId : null);
+}
+
+// The skill screen: the same shape as the sheet — opened by the player, closed
+// by its own button, no host event on either edge. Its DATA is `app.meta`, which
+// now carries skillPoints/skillRanks/loadout; its CONTENT is the tree registry,
+// read straight from js/skills.js because trees are static data that ships with
+// the build and has no business on the wire.
+function skillTrees() {
+  const me = app.party && app.party.find(m => m.idx === app.myIdx);
+  const charId = me && me.charId;
+  const ids = (TREES_BY_CLASS_UI[charId] || []);
+  if (!ids.length) return null;
+  const byId = {};
+  const list = ids.map(t => {
+    const skills = [...TREES_UI[t].skills].sort((a, b) => a.tier - b.tier);
+    for (const s of skills) byId[s.id] = s;
+    return { id: t, name: TREES_UI[t].name, skills };
+  });
+  return { list, byId };
+}
+
+// REOPEN THE §5.6 CARD FROM `pend`, not from the event.
+//
+// The offer is created while the Sim is being constructed, so the `opening`
+// event can be flushed before this client is listening — a browser run showed
+// exactly that, with the panel never appearing and only the anti-softlock floor
+// saving the run. `pend` carries presence rather than picks, so the picks are
+// REBUILT here from the tree registry, which every client already ships: they
+// are the tier-1 nodes of this character's own trees, which is the same list
+// `openingPicks` produces on the host. No new wire field, and the two lists
+// cannot drift because both are derived from the same static content.
+function showOpeningFromPend() {
+  if (!document.getElementById('overlay-opening').classList.contains('hidden')) return;
+  const trees = skillTrees();
+  if (!trees || !app.meta) return;
+  const ranks = app.meta.skillRanks || {};
+  const picks = trees.list
+    .map(t => t.skills.find(s => s.tier === 1))
+    .filter(s => s && !(s.maxRank !== undefined && (ranks[s.id] || 0) >= s.maxRank))
+    .map(s => ({ id: s.id, name: s.name, desc: s.desc, tree: TREES_UI[s.tree].name, domain: s.domain }));
+  if (picks.length) showOpening({ picks });
+}
+
+function toggleSkills(forceOpen = false) {
+  if (isSkillsOpen() && !forceOpen) { closeSkills(); return; }
+  if (app.mode !== 'run' || !app.meta) return;
+  const trees = skillTrees();
+  if (!trees) return;
+  const me = app.party && app.party.find(m => m.idx === app.myIdx);
+  showSkills(app.meta, me ? me.charId : null, trees);
 }
 
 function soloSheetPaused() {
@@ -620,7 +675,7 @@ function clientOnMessage(msg) {
       break;
     }
     case 'ev': for (const ev of msg.list) handleEvent(ev); break;
-    case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); updateSheetMeta(app.meta); } break;
+    case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); updateSheetMeta(app.meta); updateSkillsMeta(app.meta, skillTrees()); } break;
     case 'abandon': // host ended the run for everyone — back to the lobby together
       app.lobby = sanitizeLobby(msg.lobby);
       app.mode = 'lobby';
@@ -780,6 +835,7 @@ function applySnapState(snap) {
     if (!mine[1]) closeLevelup();
     if (!mine[2]) closeTreasure();
     if (!mine[3]) closeBoon();
+    if (!mine[4]) closeOpening(); else showOpeningFromPend();
   }
 
   // ---- the run being over ----
@@ -915,11 +971,27 @@ function drainSimOutputs(initial = false) {
     if (p.metaDirty || initial) {
       const meta = sim.getMeta(p);
       app.metas[p.idx] = meta;
-      if (p.idx === app.myIdx) { app.meta = meta; updateShopMeta(meta); updateSheetMeta(meta); }
+      if (p.idx === app.myIdx) { app.meta = meta; updateShopMeta(meta); updateSheetMeta(meta); updateSkillsMeta(meta, skillTrees()); }
       else if (app.hostT) {
         const member = app.party.find(m => m.idx === p.idx);
         if (member && member.key !== '_local') app.hostT.send(member.key, meta);
       }
+    }
+  }
+  // THE HOST NEVER APPLIES `st` TO ITSELF, which is why the §5.6 panel worked
+  // for clients and not for the host or for solo. A client derives its open
+  // panels from `st.pend` — presence is the truth, closed defect #4 — but the
+  // host drains events and metas and never reads the state block it just built.
+  // So the `opening` event, pushed while the Sim is still being constructed, is
+  // the host's ONLY signal, and it fires before this handler is listening.
+  // Driven in a browser: the sim held `openingOffer: 2` with the point unspent
+  // and no panel on screen. This is the same presence check the client does, so
+  // the two are now symmetric.
+  {
+    const me = sim.players[app.myIdx];
+    if (me && !me.gone) {
+      if (me.openingOffer) showOpeningFromPend();
+      else closeOpening();
     }
   }
 }

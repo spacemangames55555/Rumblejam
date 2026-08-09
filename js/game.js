@@ -4297,18 +4297,24 @@ export class Sim {
           p.pendingOffer ? 1 : 0,
           p.treasureOffer ? 1 : 0,
           p.boonOffer ? 1 : 0,
+          // AND THE OPENING ABILITY. Shipped as an event alone, and a browser
+          // run showed exactly why that is not enough: the offer is created
+          // while the Sim is being constructed, so the `opening` event can be
+          // flushed before a client is listening and the panel never appears.
+          // That is closed defect #4's shape — a lost open — reached by a new
+          // route. Presence here is the truth for this panel too.
+          p.openingOffer ? 1 : 0,
         ]),
         // The run being over is the most load-bearing edge there is: a client
         // that missed `end` sits in a dead run with no results and no way out.
         over: this.over ? 1 : 0,
-        // LOADOUT AND UNSPENT POINTS. These were on no channel at all: getMeta
-        // still ships `weapons`, and patch-trigger-core replaced weapons with
-        // skills without ever putting the loadout on the wire. A client could
-        // not see what it had slotted, and a player who cannot see their skills
-        // cannot spend a point on one — progression, delivered by nothing.
-        // Slot ids are interned into `ldk` so eight players sharing an opener
-        // cost one copy of the string rather than eight.
-        ld: null, ldk: null,
+        // `ld`/`ldk` LIVED HERE AS A STUB and are deleted. The comment was
+        // right that the loadout was on no channel; the placeholder was never
+        // filled, so it was a third declared-with-no-writer field in a codebase
+        // that keeps finding them. The build now rides `getMeta` instead, which
+        // is the correct home: a loadout is PRIVATE to one player, the meta
+        // channel is already per-player and sent when dirty, and the snapshot is
+        // a 15 Hz broadcast every peer receives.
       },
       fx: this.fxBatch || this._emptyFx(),
       hazards: (this.hazards || []).map(h => h.type === 'spikes'
@@ -4436,6 +4442,20 @@ export class Sim {
       items: [...p.items],
       itemState: JSON.parse(JSON.stringify(p.itemState || {})),
       stats: { ...p.stats }, weaponSlots: p.weaponSlots,
+      // THE BUILD, for the skill screen. The meta channel is the right home for
+      // it and the only one: a tree screen is opened by the PLAYER at a moment
+      // the host did not choose, so unlike a boon it cannot be handed its
+      // contents in the event that opens it — it has to render state that is
+      // already on the client. Run-long, changes a few times a floor, sent when
+      // dirty. Exactly the shape of everything else in this payload.
+      skillPoints: p.skillPoints, skillRanks: { ...p.skillRanks }, loadout: [...p.loadout],
+      // How many slots are OPEN and whether they may be changed right now. Both
+      // are the host's answers to questions the client would otherwise have to
+      // re-derive — §5.5's "never mid-fight" is enforced in `setLoadout`, and a
+      // second copy of that rule in the UI is a second thing to keep in step.
+      // The screen renders what it is told and the host re-checks every action.
+      skillSlots: SK.slotsAtLevel(p.level),
+      canSlot: !(this.phase === 'arena' && !this.cleared),
       boonCounts: ['prism', 'wildshape'].includes(p.char.trait.key) ? { ...p.boonCounts } : undefined,
       // run-long, changes a few times a floor — the meta channel, not the 15Hz snapshot
       infusions: p.char.trait.key === 'crystal_infusion' ? { ...p.infusions, detonate: p.detonate } : undefined,
