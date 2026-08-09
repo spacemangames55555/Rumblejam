@@ -19,6 +19,8 @@ import { WD_EFFIGY, TUNING as WD_EFF_TUNING } from './content/skills/wd_effigy.j
 import { WD_BLIGHT, TUNING as WD_BLI_TUNING } from './content/skills/wd_blight.js';
 import { SUN_TIDEWRACK, TUNING as SUN_TID_TUNING } from './content/skills/sun_tidewrack.js';
 import { SUN_REEF, TUNING as SUN_REEF_TUNING } from './content/skills/sun_reef.js';
+import { ASN_KILLBOX, TUNING as ASN_KB_TUNING } from './content/skills/asn_killbox.js';
+import { ASN_SHADOW, TUNING as ASN_SH_TUNING } from './content/skills/asn_shadow.js';
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
@@ -44,6 +46,8 @@ export const TREES = {
   wd_blight: { id: 'wd_blight', name: 'Blight', classId: 'toh_witch_doctor', skills: WD_BLIGHT, tuning: WD_BLI_TUNING },
   sun_tidewrack: { id: 'sun_tidewrack', name: 'Tidewrack', classId: 'toh_sundian', skills: SUN_TIDEWRACK, tuning: SUN_TID_TUNING },
   sun_reef: { id: 'sun_reef', name: 'Reef', classId: 'toh_sundian', skills: SUN_REEF, tuning: SUN_REEF_TUNING },
+  asn_killbox: { id: 'asn_killbox', name: 'Killbox', classId: 'toh_assassin', skills: ASN_KILLBOX, tuning: ASN_KB_TUNING },
+  asn_shadow: { id: 'asn_shadow', name: 'Shadow', classId: 'toh_assassin', skills: ASN_SHADOW, tuning: ASN_SH_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
@@ -84,6 +88,7 @@ export const PASSIVE_EFFECT = {
   crystalDamageBonus: 'damage',   // Lattice: more per crystal carried
   dollDamageBonus: 'damage',      // Sympathetic Binding: more per point banked in the doll
   drenchDamageBonus: 'damage',    // Tidemark: more per drench stack standing
+  killboxDamageBonus: 'damage',   // Dead Ground: more per trap set
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the

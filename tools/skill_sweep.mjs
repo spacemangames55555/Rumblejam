@@ -141,6 +141,13 @@ function observe(g, p, foes) {
     // summon and heal entries above, and added for the same reason.
     domain: p.domainShift || '',
     shifts: p.domainShifts || 0,
+    // AND A TRAP'S WHOLE EFFECT IS DEFERRED. The thirteenth primitive places an
+    // inert object: no damage, no status, no zone, no projectile — that is what
+    // makes it a trap rather than a hazard, and it is why the sweep read the
+    // three placing skills as wired to nothing. The observable is that the
+    // OBJECT EXISTS; what it does later belongs to `engine_gate`, which asserts
+    // both halves (inert while placed, consumed by a cast).
+    traps: g.traps.filter(t => t.owner === p.idx).length,
   };
 }
 
@@ -207,6 +214,7 @@ for (const skill of ALL_SKILLS) {
     if (after.hp > before.hp) effects.push(`healed +${Math.round(after.hp - before.hp)}`);
     if (after.domain !== before.domain) effects.push(`domain -> ${after.domain}`);
     else if (after.shifts > before.shifts) effects.push(`re-attuned (${after.shifts} banked)`);
+    if (after.traps > before.traps) effects.push(`trap set (${after.traps} armed)`);
 
     if (effects.length) ok(`${skill.id} — ${skill.trigger.kind} fired, ${effects.join(', ')}`);
     else fail(`${skill.id}: fired but produced NOTHING observable — a skill wired to nothing`);

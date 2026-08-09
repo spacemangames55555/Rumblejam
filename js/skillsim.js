@@ -34,8 +34,8 @@ export function initSkillPlayer(sim, p) {
   p.domainShift = null; p.domainShifts = 0;
   // Readable resource state. Every engine in the game publishes here, and
   // compose.js's engineScale() reads here — it knows no engine by name.
-  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0 };
-  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0 };   // passives that raise a stack's worth
+  p.engines = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0 };
+  p.engineScaleBonus = { footing: 0, armor: 0, pack: 0, shift: 0, marks: 0, rhythm: 0, crystal: 0, doll: 0, drench: 0, killbox: 0 };   // passives that raise a stack's worth
   initMinionPlayer(p);
   p.footingAcc = 0;
   p.footingMove = 0;                  // grace budget: movement time, decays while still
@@ -73,6 +73,11 @@ export function startRoomMinions(sim, p) {
   // lets it avoid a decay tick of its own. Damage taken in the last fight is not
   // credit in the next one.
   p.crystal = 0;
+  // AND NEITHER DO TRAPS. A killbox is set for the room it is set in; carrying
+  // one through a door would let an Assassin walk into every fight with a field
+  // already prepared, which is the decision the class is built on handed out for
+  // free. Cleared here for the same reason the shift and the crystal are.
+  sim.traps = sim.traps.filter(t => t.owner !== p.idx);
   resetMinionsForRoom(sim, p);
   for (const [id, rank] of Object.entries(p.skillRanks || {})) {
     if (!(rank > 0)) continue;
@@ -261,6 +266,11 @@ export function tickSkills(sim, dt) {
     }
     p.engines.marks = marked;
     p.engines.drench = drenched;
+    // THE ASSASSIN'S KILLBOX ENGINE (§8.3): traps currently set. A count of
+    // POTENTIAL rather than of debt or of damage taken — the Assassin is
+    // strongest standing in a field it prepared, and every detonation spends
+    // part of that field.
+    p.engines.killbox = sim.traps.reduce((a, t) => a + (t.owner === p.idx ? 1 : 0), 0);
     // THE BARD'S RHYTHM ENGINE (§8.3): stacks held right now. Unlike every other
     // engine here this one can be DROPPED — `tohOnFire` builds it on each cast
     // and `tohTick` wipes the whole stack the moment the window lapses. Both
@@ -291,6 +301,7 @@ export function tickSkills(sim, dt) {
     p.engineScaleBonus.rhythm = passiveSum(p, 'rhythmDamageBonus');
     p.engineScaleBonus.crystal = passiveSum(p, 'crystalDamageBonus');
     p.engineScaleBonus.drench = passiveSum(p, 'drenchDamageBonus');
+    p.engineScaleBonus.killbox = passiveSum(p, 'killboxDamageBonus');
     p.engineScaleBonus.doll = passiveSum(p, 'dollDamageBonus');
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
@@ -403,6 +414,18 @@ function fireSkill(sim, p, sk) {
   }
   sim._selLedger(sk.id, tgt, markInRange);
   sim.tohOnFire(p, { def: null, a: p.aimA, tx: tgt ? tgt.x : p.x, ty: tgt ? tgt.y : p.y });
+  // THE KILLBOX GOES OFF HERE, and here is the only place it could. §8.3 gives
+  // the Assassin "traps placed inert, detonating when other skills fire nearby",
+  // and "a skill fired" is this line — the same event the trait layer observes.
+  // It is deliberately NOT a rider: a rider resolves on a target at the moment of
+  // impact, and the skill that sets a trap off may be a heal, a shield, a ward or
+  // a shift, none of which touches an enemy (§5.7 condition 2).
+  //
+  // A TRAP DOES NOT SET OFF ITS OWN PLACEMENT. `trap` steps are excluded, or an
+  // Assassin laying a second trap inside a killbox would cash the first one on
+  // the way down and never hold more than one.
+  if (sim.traps.length && !(sk.compose || []).some(c => c.kind === 'trap')) detonateTraps(sim, p);
+
   p.trigEvents.lastFired = sk.id;
   p.fireLog.push({ id: sk.id, trigger: sk.trigger.kind, t: sim.time, hits: out.hits });
   if (p.fireLog.length > 20) p.fireLog.shift();
@@ -475,6 +498,32 @@ export function rollCrit(sim, p, e) {
   else crit = sim.critRng.float() * 100 < critChance(p);
   p.firstHitUsed = true;
   return crit;
+}
+
+// DETONATION IS A PROPERTY OF THE OBJECT, checked where casts are observed.
+// Every trap this player owns within `TRAP_DETONATE_RANGE` of where they are
+// standing goes off at once and is removed — the Assassin's decision is
+// POSITIONAL and predictive: place the killbox where the fight will be, then
+// fight there. Nothing about the triggering skill is read except that it
+// happened, which is what keeps this out of the rider table.
+export function detonateTraps(sim, p) {
+  const R = CONFIG.TRAP_DETONATE_RANGE;
+  let fired = 0;
+  for (let i = sim.traps.length - 1; i >= 0; i--) {
+    const t = sim.traps[i];
+    if (t.owner !== p.idx) continue;
+    const dx = t.x - p.x, dy = t.y - p.y;
+    if (dx * dx + dy * dy > R * R) continue;
+    sim.traps.splice(i, 1);
+    fired++;
+    // Routed through `skillSplash` so the damage takes the domain triangle,
+    // Ferocity, crit and every item hook the rest of the game takes — a
+    // detonation is a composed hit, not a special number.
+    sim.skillSplash(p, t.skill, t.x, t.y, t.radius, t.damage, null);
+    sim.fx.booms.push({ x: Math.round(t.x), y: Math.round(t.y), r: Math.round(t.radius) });
+  }
+  if (fired) sim.pushEvent({ k: 'sfx', s: 'boom' });
+  return fired;
 }
 
 export function skillDamage(sim, e, amount, p, skill) {

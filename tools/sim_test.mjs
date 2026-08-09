@@ -4811,12 +4811,12 @@ try {
   // nothing else provided. `shift` is named here because naming the exception is
   // the mechanism — the same shape as `rankGrants` having a registry rather than
   // a convention.
-  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift'];
+  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap'];
   const missing = EXPECTED_PRIMS.filter(k => !PK.includes(k));
   const extra = PK.filter(k => !EXPECTED_PRIMS.includes(k));
-  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, admitted under §5.7's three conditions`);
+  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth and \`trap\` the thirteenth, each admitted under §5.7's three conditions and ruled before its tree`);
   else if (missing.length) fail(`primitives missing from PRIMITIVES: ${missing.join(', ')}`);
-  else fail(`UNDECLARED PRIMITIVE(S): ${extra.join(', ')} — §5.7 admits a twelfth only for a class engine needing a write path nothing else provides, ruled before the tree. A primitive that arrives without being listed here arrived while somebody was authoring content`);
+  else fail(`UNDECLARED PRIMITIVE(S): ${extra.join(', ')} — §5.7 admits a new primitive only for a class engine needing a write path nothing else provides, ruled before the tree. A primitive that arrives without being listed here arrived while somebody was authoring content`);
   if (MOVE_KINDS.length >= 2) ok(`MOVE_KINDS is a declared, closed taxonomy: ${MOVE_KINDS.join('/')}`);
   else fail(`MOVE_KINDS is not a usable taxonomy: ${JSON.stringify(MOVE_KINDS)}`);
   // NO ENUM ENTRY WIRED TO NOTHING. The source project shipped 19 skill kinds

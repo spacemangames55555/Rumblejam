@@ -355,9 +355,9 @@ Characters start with **no abilities at all**. The first point spent is the char
 
 ### 5.7 The composed-action schema
 
-Any active is data: an ordered list of steps from twelve primitives plus riders.
+Any active is data: an ordered list of steps from thirteen primitives plus riders.
 
-**Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `heal` · `shield` · `ward` · `drain` · `summon` · `plague` · `shift`
+**Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `heal` · `shield` · `ward` · `drain` · `summon` · `plague` · `shift` · `trap`
 
 **Impact riders** (land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mark` · `doll` · `drench` · `sluice`
 **Shape riders** (shape a swing): `arc` · `windUp` · `multiPulse`
@@ -367,7 +367,7 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 180 skills across 18 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 200 skills across 20 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
 #### The primitive set is OPEN, and what admits a twelfth
 
@@ -384,6 +384,13 @@ The set was eleven from phase 1 to phase 5 and the discipline that kept it there
 3. **The write path passes its gate before a single tree is authored against it.** `engine_gate` for a caster-state primitive, `rider_gate` for a rider — and `rider_gate` now probes riders no content declares yet on a synthetic host, precisely so a write path can be proven in the window between ruling and authoring.
 
 **The twelfth is `shift`** (§8.3, the Wizard). Recorded here rather than in a commit message so the thirteenth has to argue against the same three conditions.
+
+**The thirteenth is `trap`** (§8.3, the Assassin), and it argued against them. Both cheaper options were tested first and both were rejected on the conditions rather than on taste:
+
+- **Could `hazard` carry it with a dormant flag?** No — and the demonstration is what a zone IS, not what it looks like. `addZone` makes `{t, acc, x, y, r, dps, dur, hurts}`, and the zone tick advances a clock, accumulates against a cadence, damages everything inside every 0.4 s, applies the slow rider and splices the zone at `t >= dur`. A trap does **none** of that: no cadence, no damage while it sits there, and it ends by being **consumed** rather than by expiring. Carrying it on `hazard` means a dormant flag, a branch in the tick that skips every single thing the tick does, a payload the tick must ignore, and a consumption path — at which point the object shares its geometry with a zone and not one of its behaviours. That is condition 1 answered by demonstration: no existing primitive writes an inert object.
+- **Is the detonation a rider on the triggering skill?** No, and **condition 2 is exactly the test**. Riders resolve on a target at the moment of impact; a detonation has neither. The skill that sets a trap off may be a heal, a shield, a ward or a shift — none of which touches an enemy — so there is no impact to hang it on. What the moment has is a *cast at a position*, which is caster state. By the same condition that made the Wizard's shift a primitive rather than a rider, the detonation is a property of the **object**, checked in `fireSkill` where casts are already observed.
+
+There was also a cost that is not aesthetic: `fireSkill` runs on every cast in the game, so scanning `sim.zones` — which holds enemy hazards, objective hazards and every player's ground — to find one class's traps would be O(all zones) on every cast forever. `sim.traps` is O(traps).
 
 #### What a primitive owes the world, not just the enemy
 
@@ -534,7 +541,7 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Priest | **Judgment marks** — marks detonate on the target's death, healing nearby allies |
 | Samurai | **Footing** — see §8.4 |
 | Monk | **Chi loop** — damage generates Chi; heals and traps spend it |
-| Assassin | **Killbox** — traps placed inert, detonating when other skills fire nearby |
+| Assassin | **Killbox** — traps placed inert, detonating when other skills fire nearby. The only engine banked by BEING SOMEWHERE rather than by acting |
 | Hunter | **Two bodies** — skills may trigger off the pet's position |
 
 #### Batch order for phase 5 — engine shape decides it
@@ -661,7 +668,7 @@ The first tuning pass proved the cost of that. At the numbers the tree was autho
 |---|---|---|
 | ~~**Witch Doctor**~~ | voodoo doll | **BUILT, GATED AND AUTHORED.** The `doll` rider — see below. It was the cheapest write path yet, because the mirror was already live and only the DESIGNATION was missing |
 | ~~**Sundian**~~ | drench stacks | **BUILT, GATED AND AUTHORED.** Two riders, not one — see below |
-| **Assassin** | killbox | a trap placed inert and detonated by a later skill is neither a `hazard` (which ticks damage) nor a `summon` (which acts). New primitive, plus lifetime state |
+| ~~**Assassin**~~ | killbox | **BUILT, GATED AND AUTHORED.** It did need the thirteenth primitive — see §5.7 |
 | **Hunter** | two bodies | "skills may trigger off the pet's position" is a change to `triggers.js`, not to `p.engines` — the evaluation origin is the player throughout |
 
 **TICK-SHAPED — a stateful accumulator or decay, alone.**
@@ -1314,6 +1321,8 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 41. **A mechanic that is a PAIR cannot be gated one half at a time, and a gate that stages one skill alone will say the second half is dead.** The Sundian's `drench` puts a counter on an enemy and `sluice` cashes it; each is useless without the other, and the rider gate reported `sluice` DROPPED twice — once on the synthetic path, which adds one rider at a time, and once on the declared path, whose whole idiom is a skill staged ALONE so that a landing rider is attributable. Both reds were the fixture. The fix is not to relax the isolation, which is what makes the gate trustworthy, but to **stage the precondition rather than a second actor**: companion riders are named per-rider for the synthetic host, and for real content the counter is written directly onto the targets. The measured skill stays the only thing in the room that could have produced the observable. Ask of any new rider whether it READS state something else writes; if it does, its probe needs that state staged, not inferred.
 
+42. **When a primitive is proposed, test the cheap option by asking what the existing thing IS, not what it looks like.** The Assassin's killbox looked like a `hazard` with a dormant flag — same circle, same placement, same owner. It is not, and the way to see that is to read what a zone actually does rather than what it is shaped like: `addZone` makes a clock, and the zone tick advances it, accumulates against a cadence, damages on that cadence, applies riders and expires. A trap has no cadence, deals nothing while placed, and ends by being *consumed*. Carrying it on `hazard` would have meant a flag, a branch skipping every behaviour the tick has, an ignored payload and a consumption path — an object sharing its geometry with a zone and none of its verbs. **Shape is not identity.** Two things that occupy the same circle can still be two things, and the test that separates them is the list of behaviours, written out. Where that comparison lands also tells you where the code goes: `engine_gate` now asserts both halves of the answer — inert while placed, consumed by a cast — so the ruling is measured rather than remembered.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1404,6 +1413,16 @@ That is the guard working exactly as §5.9 describes it, not failing. **Escorts 
 **What they are actually waiting on is Group B's summoner-structure question**: whether structure recall survives the removal of weapons at all. `bonelord` builds its structure through `_addWeapon` and `weaponSlots` is 0 for the whole roster, so the answer to that one decides whether these seven get restored or deleted together. **Nothing in phase 5 will close them**, and scoping phase 5 as if it might is the mistake this refiling exists to prevent.
 
 `below-max duplicate` · `combine result wrong` · `manual combine broke` · `extraction shop buy failed` · `sell weapon: mats 0→0` · `toh_necromancer weapon cap 0` · `toh_samurai weapon cap 0`.
+
+#### RULED: the 34 orphaned classic-roster trait keys are DELETED, with this group
+
+`game.js` branches on 34 trait keys that **no living character carries** — `slipstream`, `afterimage`, `glass`, `soulbond`, `immovable`, `prism`, `overwatch` and 27 more, from the archived classic roster. **90 references across three files**, 87 of them in `game.js`.
+
+They are the same category as the seven checks above, and the same category as D-28 and D-29: **code whose caller stopped existing.** The difference is only that these branches are unreachable rather than merely unfed — no character has the key, so no guard ever passes — which is why nothing has broken and why nothing will notice them until an audit finds them again. It already has: they turned up in the D-28 follow-up walk, and without a ruling they will turn up in the next one.
+
+**They are deleted with Group C.** Not before it, because the same structure-recall ruling that decides whether `bonelord`'s structure returns also decides whether any of this era's machinery does; and not after it, because leaving 34 inert branches behind a resolved group is how a cleanup becomes two cleanups. When Group C is executed, the 34 keys go with it.
+
+**Recorded here so it is a decision rather than a rediscovery.** §16's line that "the archived classic roster is design reference, not data" states the intent; this states the disposal.
 
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
@@ -1621,7 +1640,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
 | Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **91 of 91 land across 10 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
 | Trait gate | Built **after** D-28, which is the wrong order and is why it exists — `trait_gate.mjs`: every trait on the roster reached by the live path and moving its own observable, against a control with the trait key switched off. **14 of 14** |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **9 of 9** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **10 of 10** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`. Also asserts Grit's anti-synergy with crystallize by effect (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: 28% mean free-roll rate; weighting NOT added, re-measure at phase 5 (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1630,7 +1649,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor and Sundian built (18 trees, 180 skills, 9 selectable); 5 of 14 classes have no trees. All four content-shaped classes are done, plus two write-path ones; the remaining five are write-path (Assassin, Hunter) or tick-shaped (Monk, Savage, Blacksmith) |
+| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian and Assassin built (20 trees, 200 skills, 10 selectable); 4 of 14 classes have no trees. All four content-shaped classes are done, plus three write-path ones; the remaining four are write-path (Hunter) or tick-shaped (Monk, Savage, Blacksmith) |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1649,6 +1668,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining ten classes are authored.
 
-**Five class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll` and the Sundian's `drench` are implemented and gated at **9 of 9**. The remaining five — cascade, Chi, Crystal Forms, killbox, two bodies — are specified in §8.3 and unbuilt.
+**Four class engines exist only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench` and the Assassin's `killbox` are implemented and gated at **10 of 10**. The remaining four — cascade, Chi, Crystal Forms, two bodies — are specified in §8.3 and unbuilt.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.

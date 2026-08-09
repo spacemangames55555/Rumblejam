@@ -248,6 +248,18 @@ const PROBES = {
     fills: sk => (sk.compose || []).some(c => c.riders && c.riders.drench),
     fillsFirst: sk => (sk.compose || []).some(c => c.riders && c.riders.drench),
   },
+  killbox: {
+    what: 'traps set and waiting',
+    char: 'toh_assassin',
+    // A COUNT OF POTENTIAL, and the one engine banked by BEING SOMEWHERE rather
+    // than by acting. The starve removes the traps each frame, which is the same
+    // shape as clearing the Priest's marks — the placing skill still fires in
+    // both runs, so the only thing that differs is whether the field exists.
+    low: (g, p) => { g.traps.length = 0; p.engines.killbox = 0; },
+    // Filled by any skill carrying a `trap` step, derived rather than named.
+    fills: sk => (sk.compose || []).some(c => c.kind === 'trap'),
+    fillsFirst: sk => (sk.compose || []).some(c => c.kind === 'trap'),
+  },
   pack: {
     what: 'animals standing',
     char: 'toh_druid',
@@ -507,6 +519,45 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
     SKROOM.startRoomMinions(g, p);
     if (p.domainShift === null) ok('a shift does not survive a room transition — which is what lets the primitive avoid a decay tick');
     else fail(`the shift persisted across a room start (${p.domainShift}) — a state with no decay and no reset is permanent`);
+  }
+
+  // --- the killbox: an inert object that a LATER CAST consumes ------------
+  //
+  // The trap is the thirteenth primitive (§5.7) and the two things that make it
+  // one are asserted here rather than described: it deals no damage while it
+  // sits there, and it is consumed by a cast rather than by a clock.
+  {
+    const { g, p } = stage('toh_assassin');
+    const e = target(g, p.x + 900, p.y);          // far away: nothing near the trap
+    const trapSkill = Object.values(TREES).filter(t => t.classId === 'toh_assassin')
+      .flatMap(t => t.skills).find(x => (x.compose || []).some(c => c.kind === 'trap'));
+    const step = trapSkill.compose.find(c => c.kind === 'trap');
+    // Place one by hand at a known spot, so the assertions are about the OBJECT
+    // and not about where a selector chose to put it.
+    g.addTrap({ x: p.x, y: p.y, owner: p.idx, radius: step.radius, damage: step.damage, ttl: 20, domain: trapSkill.domain, skill: trapSkill });
+    const victim = target(g, p.x + 20, p.y);
+    const hp0 = victim.hp;
+    // THE LOADOUT IS EMPTIED FOR THIS ASSERTION, and the first run is why. With
+    // skills slotted the Assassin CAST during the three seconds, the cast set
+    // the trap off, and the gate reported "the trap was not inert" about a trap
+    // behaving exactly as designed. Inertness is a claim about what the object
+    // does WHEN NOTHING SETS IT OFF, so the fixture has to stop setting it off
+    // (§13 rule 40 — a first red is a claim about the fixture).
+    p.loadout = new Array(8).fill(null);
+    for (let i = 0; i < 60 * 3; i++) { victim.x = victim.spawnX; victim.y = victim.spawnY; g.tick(); }
+    if (victim.hp === hp0 && g.traps.length === 1) ok('a trap sits INERT: three seconds beside an enemy, no damage dealt and the trap still set — which is what `hazard` could not express, because a zone ticks');
+    else fail(`the trap was not inert: enemy took ${(hp0 - victim.hp).toFixed(0)}, ${g.traps.length} trap(s) left. A dormant object that damages is a zone, and a zone is what this primitive exists NOT to be`);
+
+    const before = victim.hp, traps0 = g.traps.length;
+    SKROOM.detonateTraps(g, p);
+    if (g.traps.length < traps0 && victim.hp < before) ok(`and a CAST consumes it: ${traps0} → ${g.traps.length} traps, enemy took ${(before - victim.hp).toFixed(0)} — the detonation is a property of the object, not a rider on whatever set it off (§5.7 condition 2)`);
+    else fail(`the trap did not detonate on a cast (${traps0} → ${g.traps.length} traps, ${(before - victim.hp).toFixed(0)} damage) — an inert object nothing consumes is a permanent`);
+
+    // And it must not survive a door, for the same reason a shift must not.
+    g.addTrap({ x: p.x, y: p.y, owner: p.idx, radius: 60, damage: 5, ttl: 20, domain: 'physical', skill: trapSkill });
+    SKROOM.startRoomMinions(g, p);
+    if (!g.traps.some(t => t.owner === p.idx)) ok('a killbox does not survive a room transition — a field carried through a door is the class\'s one decision handed out for free');
+    else fail(`traps persisted across a room start (${g.traps.length}) — a state with no decay and no reset is permanent`);
   }
 
   // --- crystallize: GRIT IS ANTI-SYNERGISTIC, and that is a design property

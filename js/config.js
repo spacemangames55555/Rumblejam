@@ -96,6 +96,13 @@ export const CONFIG = {
   DOOR_COUNTDOWN: 3,
 
   DODGE_CAP: 60,
+  // THE ASSASSIN'S KILLBOX. A trap is a world entity on every tick, so the cap is
+  // a perf floor before it is a balance one — the same reason the Sundian's coral
+  // is capped at eight. Placing past the cap retires the OLDEST trap, so a
+  // killbox is a rolling set rather than a refusal the player cannot see.
+  TRAP_CAP: 6,
+  // How close a cast has to be to a trap to set it off. Read by `detonateTraps`.
+  TRAP_DETONATE_RANGE: 190,
   ARMOR_K: 15,             // damage taken = raw * K / (K + armor)
   NEG_ARMOR_MAX_BONUS: 0.5,
 
