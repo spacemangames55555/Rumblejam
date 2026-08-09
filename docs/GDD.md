@@ -1571,6 +1571,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 54. **A panel is not delivered until you have watched a browser open it.** The skill screen's sim side was asserted from six angles and every one passed; the first time a real page was driven, the §5.6 card from the previous patch turned out never to appear at all in solo — the sim holding a live offer and the screen showing nothing. The cause was structural rather than a typo: **the host never applies its own state block.** Clients derive open panels from `st.pend`, the host drains only events, and an event pushed during construction has no listener yet. No sim-level test can see that, because the gap is between the sim and the DOM and both halves are individually correct. **For anything a player must SEE, one check has to render it in a browser** — and when a host and a client take different paths to the same panel, assert the path that is not the one you built first.
 
+55. **"The element exists" and "the player can see it" are different assertions, and the first one passes during the defect.** Reproduced at the broken commit, the §5.6 panel read `{panel: "HIDDEN", cards: 2}` — the picks had been rendered into a hidden container. Every natural way to write that check is green: counting cards, querying them, reading their text. Only `offsetParent !== null` distinguishes built from shown. **When a check is about something a player must SEE, assert visibility explicitly**, because the DOM being right is exactly the state a broken panel is in — the failure is in whether anything revealed it, and nothing about the markup records that.
+
+56. **A safety net will answer the question you meant to ask about the mechanism, and the check will not tell you which one replied.** The gate said all fourteen classes deal damage as the game provisions them. That was true at the commit where no player was ever offered an opening ability — because the anti-softlock floor granted one on arena entry. The assertion could not distinguish "the offer works" from "the offer is dead and the net caught it", and it reported the outcome both produce. §13 rule 52 says to assert the mechanism separately from the net, and that was done for the OFFER; what was missed is that the *outcome* check silently depends on whichever of the two fires. **Where a net exists, one check must run with the net's effect visible in the result** — name which path produced the outcome, or the net will keep answering for a mechanism that has stopped working.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1689,6 +1693,23 @@ D-31 closed the opening pick. What remained was everything after it: **a player 
 **The screen is PULL, and that is the one thing the boon machinery does not do.** A boon is host-pushed and carries its picks *in the event*, so the client renders exactly what it was handed and never needs state it was not given. A tree screen is opened by the player at a moment the host did not choose and must render a whole build — every tier, rank, cost, prerequisite and slot. So it needed one addition and no new machinery: **`skillPoints`, `skillRanks`, `loadout`, `skillSlots` and `canSlot` on `getMeta`**, the per-player private channel that already carried level, stats, weapons and items and is already sent when dirty.
 
 **§5.5 is answered by the host, not re-derived by the screen.** `setLoadout` already refused mid-fight; `meta.canSlot` is that same condition, sent, so the panel greys its slot row without owning a second copy of the rule. Asserted in both directions, because "always refuses" would pass a one-sided check.
+
+#### The playtest that confirmed it, and what the assertion was really measuring
+
+A playtest of the **Mage** after `fix-opening-ability` merged reported no card and nothing to pick. Reproduced in a browser at both commits, the same class, the same steps:
+
+| commit | sim | panel | player sees |
+|---|---|---|---|
+| `2916a31` — post-`fix-opening-ability` | `openingOffer: 2`, 1 unspent point | **`HIDDEN`, cards 2** | nothing |
+| `5413dfa` — post-`skill-ui` | `openingOffer: 2`, 1 unspent point | `shown`, cards 2 | the card |
+
+**The class was never the variable** — the report landed in the window between the two merges, and D-32 is the defect. But three things in that reading are worth keeping.
+
+**The cards were BUILT, into a hidden element.** `{panel: "HIDDEN", cards: 2}`. Any assertion that counted cards, or queried them at all, would have been green while the screen was dark. Visibility is a different question from presence, and only `offsetParent` asks it.
+
+**The sim-side assertion was green throughout.** `offence_test` checks `p.openingOffer` on the sim — true at the broken commit. And its damage assertion was green because the **anti-softlock floor** grants the ability on arena entry: measured at the broken commit, entering the first fight took the player from 1 point / 0 ranks to 0 / 1 with a skill slotted. So "all fourteen deal damage as provisioned" was true, and was measuring the floor rather than the offer. That is the over-provisioned-harness shape one level up: **the safety net was standing in for the mechanic in the one check that could see either.**
+
+**And the browser suite watched one class.** A per-class client defect had exactly one class looking for it. `skillscreen_test` now sweeps all fourteen through the real lobby, asserting the card is *visible*, with the negative control run at the broken commit to prove it fails there.
 
 #### And driving it in a real browser found the defect that testing the sim could not
 

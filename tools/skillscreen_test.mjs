@@ -22,6 +22,8 @@ if (!peerjsB64) {
   console.warn('⚠ SKIPPED — no local peerjs (set PEERJS_LOCAL, default /tmp/peerjs.min.js).');
   process.exit(0);
 }
+const { SELECTABLE } = await import('../js/content/characters.js');
+const SELECTABLE_IDS = SELECTABLE.map(c => c.id);
 const P = await new Page('solo', 9755, peerjsB64).open();
 
 let bad = 0;
@@ -85,6 +87,45 @@ try {
   await sleep(200);
   const closed = await P.exec(`return document.getElementById('overlay-skills').classList.contains('hidden')?1:0`);
   if (closed) ok('and it closes on its own button'); else no('the close button did not close it');
+
+  // ------------------------------------------------------------------------
+  // EVERY CLASS, IN THE BROWSER — because one class is not coverage.
+  //
+  // This suite tested the Samurai and the Samurai only, and a playtest of the
+  // MAGE is what reported the §5.6 card missing. The class turned out not to be
+  // the variable (D-32 was), but the gap was real: a per-class client defect had
+  // exactly one class watching for it, and the sim-side gate cannot see any of
+  // them — `offence_test` asserts `p.openingOffer` on the SIM, which was green
+  // throughout the defect.
+  //
+  // AND IT ASSERTS VISIBILITY, NOT CARD COUNT. Measured at the broken commit,
+  // the panel read `{panel: "HIDDEN", cards: 2}` — the cards were built and put
+  // into a hidden element. Any check that counted cards, or queried them at all,
+  // would have passed while the player saw nothing. `offsetParent` is the
+  // question that separates "the DOM has it" from "the player can see it".
+  {
+    const dead = [];
+    for (const id of SELECTABLE_IDS) {
+      await P.exec(`document.getElementById('leave-btn').click(); return 1;`);
+      await P.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')?1:0`, 4000, 'confirm');
+      await P.exec(`document.getElementById('leave-yes').click(); return 1;`);
+      await P.waitFor(`return window.uv.mode==='lobby'?1:0`, 6000, 'lobby');
+      await P.exec(`document.querySelector('.char-card[data-char="${id}"]').click(); return 1;`);
+      await sleep(200);
+      await P.exec(`document.getElementById('btn-start').click(); return 1;`);
+      await P.waitFor(`return window.uv.mode==='run' && !!window.uv.sim ?1:0`, 8000, 'run');
+      await sleep(900);
+      const seen = await P.exec(`const el=document.getElementById('overlay-opening');
+        const card = el.querySelector('.boon-card');
+        return {vis: (card && card.offsetParent !== null) ? 1 : 0, cards: el.querySelectorAll('.boon-card').length,
+                offer: (window.uv.sim.players[0].openingOffer||[]).length};`);
+      if (!seen.vis) dead.push(`${id.replace('toh_', '')}(offer ${seen.offer}, cards ${seen.cards}, not visible)`);
+      await P.exec(`const c=document.querySelector('#overlay-opening .boon-card'); if(c) c.click(); return 1;`);
+      await sleep(250);
+    }
+    if (!dead.length) ok(`the §5.6 card is VISIBLE on screen for all ${SELECTABLE_IDS.length} classes — asserted on offsetParent, because at the broken commit the cards existed inside a hidden panel and any count-based check was green`);
+    else no(`${dead.length}/${SELECTABLE_IDS.length} class(es) show no visible opening card: ${dead.join(', ')}`);
+  }
 } catch (e) {
   no(`crashed: ${e.message}`);
 } finally {
