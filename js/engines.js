@@ -128,7 +128,7 @@ export function footingShieldFor(p) {
 // dodging on both axes.
 function footingStats(p, passives) {
   const f = (p.engines && p.engines.footing) || 0;
-  return { grit: f * (SAM.footingGritPerStack + passives(p, 'footingGritBonus')), vitality: 0 };
+  return { grit: f * (SAM.footingGritPerStack + passives(p, 'footingGritBonus')) };
 }
 
 // ---------------------------------------------------------------- chi
@@ -282,6 +282,58 @@ function hasEngineTree(p, tree) {
   return !!t && t.includes(tree);
 }
 
+// ---------------------------------------------------------------- forms
+
+// CRYSTAL FORMS. The fourth accumulator, and the only one that is not an
+// accumulator at all — it is a STATE with a clock, which is why the registry
+// row carries both a tick and a `stats` function. The tick runs the clock and
+// recomputes the sheet on expiry; the `stats` hook is what makes a form change
+// what the player IS rather than only what their skills multiply by.
+//
+// That hook was built for Footing in the Monk patch and had exactly one user
+// until now. A form is its second, and the shape it was generalised for.
+function tickForm(sim, p, dt) {
+  if (p.formT > 0) {
+    p.formT -= dt;
+    if (p.formT <= 0) {
+      // ENDING A FORM IS A SHEET CHANGE, so it must recompute — a stat delta
+      // removed from `formStats` and never recomputed would leave the bonus
+      // standing on a player who is no longer in the form, which is the exact
+      // silent-persistence failure `shift` and `crystal` each needed a door
+      // reset to avoid.
+      p.formT = 0; p.form = null; p.formStats = null;
+      sim._recomputeStats(p);
+      sim.pushEvent({ k: 'toast', idx: p.idx, text: 'The crystal dims' });
+    }
+  }
+  // BINARY BY RULING (§8.3). A form is a state, not a pool: it reads the same
+  // at one second remaining as at five, because it does not deplete — it ends.
+  p.engines.form = p.form ? CONFIG.FORM_POWER : 0;
+}
+
+// The form's contribution to the stat sheet, through the same registry hook
+// Footing uses. `formStats` arrives from the compose step, so WHAT a form does
+// to the sheet is content rather than code — three forms cost three data blocks.
+function formStats(p) {
+  // Passed straight through. `_recomputeStats`'s `add()` applies any key that
+  // exists on the sheet and ignores the rest, so WHAT a form does to a player is
+  // a data block on the compose step — three forms cost three data blocks and no
+  // code at all. This is the reason the `stats` hook was worth generalising in
+  // the Monk patch rather than left as Footing's private arrangement.
+  return p.formStats || {};
+}
+
+// A skill may declare `form: 'pyrite'` and then fires ONLY while that form
+// holds. This is deliberately not a loadout change: §5.5 forbids those mid-fight,
+// and a form that swapped slotted skills would be the trigger-swap item §9.2
+// deleted, aimed at the player by their own class. The skill stays slotted and
+// visible; what the form changes is whether its condition can hold — the same
+// shape as the Monk's `chi` cost and `from: 'pet'`'s need for a live beast.
+export function formHolds(p, sk) {
+  if (!sk || !sk.form) return true;
+  return p.form === sk.form;
+}
+
 // ---------------------------------------------------------------- the table
 
 // One row per accumulator. `tree` is what gates it — an engine belongs to the
@@ -292,6 +344,7 @@ export const ENGINE_TICKS = [
   { tree: 'samurai_armor', key: 'footing', tick: tickFooting, stats: footingStats },
   { tree: 'monk_chi', key: 'chi', tick: tickChi },
   { tree: 'sav_primal_fury', key: 'cascade', tick: tickCascade },
+  { tree: 'smith_crystal', key: 'form', tick: tickForm, stats: formStats },
 ];
 
 // The stat half of the same table. An accumulator that feeds the sheet declares
@@ -304,13 +357,13 @@ export const ENGINE_TICKS = [
 // have moved the tick out and left the arrow pointing backwards anyway.
 export function engineStats(p, passives) {
   const trees = TREES_BY_CLASS[p.charId] || [];
-  let grit = 0, vitality = 0;
+  const out = {};
   for (const e of ENGINE_TICKS) {
     if (!e.stats || !trees.includes(e.tree)) continue;
-    const s = e.stats(p, passives);
-    grit += s.grit || 0; vitality += s.vitality || 0;
+    const s = e.stats(p, passives) || {};
+    for (const k in s) out[k] = (out[k] || 0) + s[k];
   }
-  return { grit, vitality };
+  return out;
 }
 
 // Per-room reset for every registered accumulator that has one. Called from
@@ -328,7 +381,11 @@ export function resetEnginesForRoom(p) {
   p.cascade = 0;
   p.cascadeLast = null;
   p.cascadeLastT = -999;
-  if (p.engines) { p.engines.chi = 0; p.engines.cascade = 0; }
+  // AND NO FORM SURVIVES A DOOR EITHER. A transformation is a response to a
+  // fight going badly, and carrying one into the next room would mean arriving
+  // already transformed with the threshold that bought it long since healed past.
+  p.form = null; p.formT = 0; p.formStats = null;
+  if (p.engines) { p.engines.chi = 0; p.engines.cascade = 0; p.engines.form = 0; }
 }
 
 export function initEnginePlayer(p) {
@@ -337,6 +394,9 @@ export function initEnginePlayer(p) {
   p.cascade = 0;
   p.cascadeLast = null;
   p.cascadeLastT = -999;
+  p.form = null;
+  p.formT = 0;
+  p.formStats = null;
   p.footingAcc = 0;
   p.footingMove = 0;
   p.footingShield = 0;

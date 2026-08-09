@@ -304,6 +304,8 @@ Three properties define it, and each one is a ruling rather than an implementati
 
 **Cooldowns may be SHORTENED in exactly one place.** Items may not (§9.2), ranks may not (§4.2), and no engine but the Savage's does. `cascadeCooldown` in `js/engines.js` is the only function in the game that returns less than a skill's declared cooldown, it is gated on the tree that pays for it, and `engine_gate` asserts both that it works and that no other class can reach it. The exemption and the asymptote that makes it safe are ruled in §8.3.
 
+**`form` — *what the player must BE*.** A skill may declare `form: 'pyrite'` and then fires only while that form holds, checked one line after the cooldown and Chi checks. It is deliberately **not** a loadout change: §5.5 permits those between rooms only, and a form that swapped slotted skills would be §9.2's deleted trigger-swap item pointed at the player by their own class. The skill stays slotted and visible; what the form changes is whether its condition can hold. A `form` naming a state no `form` step anywhere enters fails at load.
+
 ### 5.3 Selectors — *what*
 
 Every active declares a `select`. **There is no default**, and a missing selector fails at load.
@@ -379,7 +381,7 @@ This decomposition replaced an earlier per-primitive rider split that could not 
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 260 skills across 26 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 280 skills across 28 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
 #### The primitive set is OPEN, and what admits a twelfth
 
@@ -396,6 +398,15 @@ The set was eleven from phase 1 to phase 5 and the discipline that kept it there
 3. **The write path passes its gate before a single tree is authored against it.** `engine_gate` for a caster-state primitive, `rider_gate` for a rider — and `rider_gate` now probes riders no content declares yet on a synthetic host, precisely so a write path can be proven in the window between ruling and authoring.
 
 **The twelfth is `shift`** (§8.3, the Wizard). Recorded here rather than in a commit message so the thirteenth has to argue against the same three conditions.
+
+
+**The fourteenth is `form`** (§8.3, the Blacksmith), and it is the last one phase 5 needs. It was ruled the same way, after an archaeology pass rather than from taste:
+
+- **Is it already expressible?** No. `shield` and `ward` write absorb *pools*; `shift` writes one field with no clock and no stat effect. Nothing anywhere writes a **named, timed player state that changes the stat sheet** — and the source project's field for exactly that, `p.tempStats`, was initialised in the player reset and read by nothing at all. One more declared capability with no reader, found by looking rather than by a red check.
+- **Could a rider do it?** No, and condition 2 is again the test. A rider resolves on a target at the moment of impact; a form has no target. It is caster state, exactly like `shift`.
+- **Gated before the trees.** `engine_gate` asserts the primitive enters the state, that the state reaches the sheet, that entering a second form *replaces* the first, that the engine reads identically fresh and nearly-expired, that expiry releases the stats, and that a `form`-gated skill fires in its form and no other.
+
+**Fourteen is where the set closes for phase 5** — every class in §8.2 is built and no fifteenth is needed. That is worth stating because the set was declared OPEN and the conditions were written to keep it honest; the record is that it grew by three across eleven classes, and each one had to demonstrate rather than assert.
 
 **The thirteenth is `trap`** (§8.3, the Assassin), and it argued against them. Both cheaper options were tested first and both were rejected on the conditions rather than on taste:
 
@@ -422,7 +433,7 @@ A primitive that deals damage is not finished when it has damaged bodies. **`gam
 
 A step may declare `scaleWith: '<engine>'` and `scalePer`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
 
-This is what makes the remaining class engines data rather than engineering — but only the READ side (§13 rule 29). `shift` and `marks` joined `footing`, `armor` and `pack` on this hook with no change to it at all; what each of them cost was a **publish line**, and two of them cost a write path before that. Only Crystal Forms still owes the same two answers; drench, crystallize, killbox, two bodies, Chi and cascade have since given them.
+This is what makes the remaining class engines data rather than engineering — but only the READ side (§13 rule 29). `shift` and `marks` joined `footing`, `armor` and `pack` on this hook with no change to it at all; what each of them cost was a **publish line**, and two of them cost a write path before that. Every one of them has since given the same two answers — drench, crystallize, killbox, two bodies, Chi, cascade and the forms. None is outstanding.
 
 ### 5.9 Selection is not delivery
 
@@ -533,7 +544,7 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 13 of 14**, two trees each (26 trees, 260 skills). Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 14 of 14**, two trees each (28 trees, 280 skills). Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
@@ -550,8 +561,9 @@ The Sundian's `classId` remains `atlantean` internally for save compatibility. *
 | Hunter | Longshot, Houndmaster |
 | Monk | Chi, Stone Garden |
 | Savage | Primal Fury, Bloodbound |
+| Blacksmith | Crystal, Forge |
 
-The remaining one — the Blacksmith — is §15 group A, and is tick-shaped (§8.3).
+None remain unbuilt.
 
 ### 8.3 Class engines
 
@@ -564,7 +576,7 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Mage | **Crystallize** — damage TAKEN accumulates crystal; crystal drives melee output. The only engine filled by the enemy rather than by the player's own action, and **the only one Grit fights** |
 | Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
 | Druid | **The pack** — one summon per animal skill, revive timer scales with pack size (§8.5). Morph layers on top: animal DNA visibly mutates the character |
-| Blacksmith | **Crystal Forms** — timed transformations on `SELF_THRESHOLD` |
+| Blacksmith | **Crystal Forms** — timed transformations on `SELF_THRESHOLD`: Iron Pyrite, Prism Quartz, Celestial Calcite. **The only engine that is a STATE rather than a quantity** — it has a name, a duration, a stat delta, and skills that fire only inside it |
 | Necromancer | **Soul tokens** — kills drop tokens, `ON_TOKEN` raises skeletons into rank-granted slots, all wiped at room end (§8.5) |
 | Bard | **Rhythm** — attacking without a gap builds stacks; missing the window drops every one of them at once. **The only engine with a loss condition** |
 | Wizard | **Domain shift** — the only class that changes its own damage domain mid-fight |
@@ -707,7 +719,7 @@ The first tuning pass proved the cost of that. At the numbers the tree was autho
 |---|---|---|
 | ~~**Monk**~~ | Chi loop | **BUILT, GATED AND AUTHORED.** The registry came due with it — see below |
 | ~~**Savage**~~ | cascade | **BUILT, GATED AND AUTHORED** — and the specification did not survive the measurement. See below |
-| **Blacksmith** | Crystal Forms | timed transformations; `crystal_infusion` is live but the forms decay, and a decay is a tick |
+| ~~**Blacksmith**~~ | Crystal Forms | **BUILT, GATED AND AUTHORED.** It needed the fourteenth primitive AND a registry row — see below |
 
 #### The Witch Doctor: the mirror was live, the CHOICE was not
 
@@ -767,6 +779,49 @@ Measured in the DPS harness, which soaks its own dummies: **24 stacks standing, 
 The general form is §13 rule 25's neighbour: **a taxonomy read generically is a contract with everything that reads it. Adding a member is not a local decision.**
 
 **The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat play rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor. **This is now the only cooldown reduction in the game**, it lives in one function, and `engine_gate` asserts both that it works and that no other class can reach it.
+
+#### The Blacksmith: the only engine that is a state, and the archaeology that ruled its shape
+
+The last class, and the one whose engine is different in kind from all thirteen before it. Every other engine is a **quantity** something scales off — seconds stood still, casts made, stacks applied, objects placed, damage absorbed, bands of ground, points of Chi, ranks of chain. A Crystal Form is a thing the player **is**: a name, a duration, a stat delta, and skills that fire only inside it.
+
+**THE ARCHAEOLOGY, RUN BEFORE ANYTHING WAS DECIDED.** §8.3 lists the Druid's morph beside this, so the first question was what already exists:
+
+| candidate | what it actually is |
+|---|---|
+| `wildshape` (the Druid's "morph") | **`prism` reskinned** — a boon picker. The mutation is cosmetic; nothing about the player's state changes |
+| `crystal_infusion` (this class's own trait) | a **permanent** stat grant after every fight — an accumulator, the exact opposite of a timed form |
+| `p.tempStats` | **initialised in the player reset and read by nothing.** `permStats` is live and summed in `_recomputeStats`; its timed twin is a dead field, the vestige of the source project's transformation system |
+
+So nothing survived except one dead field, and the shape was ruled from §5.7's conditions rather than from the old design:
+
+- **Not already expressible.** `shield` and `ward` write absorb pools; `shift` writes one field with no clock and no stat effect. Nothing writes a named, timed player state that reaches the sheet.
+- **Not a rider** (condition 2). A rider resolves on a target at impact; a form has no target — it is caster state, exactly like `shift`.
+- **So: the fourteenth primitive AND a registry row.** The primitive enters the form. The registry's tick runs the clock and recomputes the sheet on expiry. And the registry's **`stats` hook** — built for Footing in the Monk patch and used by nothing else until now — is what makes a form change what the player *is* rather than only what their skills multiply by. It was generalised in that patch to pass any stat key through, so **three forms cost three data blocks and no code at all.**
+
+#### RULED: the engine is BINARY, because the state is
+
+`p.engines.form` publishes `FORM_POWER` while transformed and `0` otherwise. It reads identically with five seconds left and with less than one — asserted, because an engine that drifted with its timer would be a quantity wearing a state's name and nothing else in the gate could tell the difference. **A form does not deplete. It ends.**
+
+Two more properties are asserted rather than described. **Entering a form replaces whatever is held** — two at once would stack their deltas and make the deepest threshold strictly the best, which erases the choice between them. And **expiry releases the stats**, via a recompute; a delta dropped without one would leave the bonus standing on a player who is no longer transformed, which is the silent-persistence failure `shift` and `crystal` each needed a door reset to avoid.
+
+#### RULED: two trees, and the three forms all live in one of them
+
+§8.2's aspiration was Tank / DPS / Runes-Crystal Forms. All thirteen built classes shipped two trees, and **the forms are the engine** — one per tree across two trees would mean a Blacksmith who took the other half owned a third of an engine, which is not a §4.2 decision but a broken class.
+
+So all three forms are in Crystal, and Tank and DPS fold together into Forge: the heavy end of a Blacksmith who never transforms. That makes the decision on this class the sharpest of the fourteen, because **every form is on a SELF_THRESHOLD** — Crystal only pays when the fight is going badly. A Blacksmith deep in Crystal is strongest at 35% health; a Blacksmith deep in Forge would rather not be there at all.
+
+**The three forms are the trait's three crystals.** Crystal Infusion permanently grants Iron Pyrite (Grit), Prism Quartz (Attunement) or Celestial Calcite (Recovery) after every fight; the forms are the temporary version of the same three, at seven seconds instead of a whole run. The class's slow accretion and its emergency transformations are one material at two timescales, which is identity the trait had already written.
+
+#### The DPS harness could not fill this one either, and it is the Mage's case with the sign flipped
+
+Every form fires on a SELF_THRESHOLD and the harness runs in **god mode**, so the Blacksmith's HP never falls and no form ever fires. Worse than the Mage's empty crystal pool, because two of the three slots the auto-slotter fills are the form itself (which deals no damage) and a `form`-gated skill that **cannot fire at all**:
+
+| | DPS | vs anchor |
+|---|---|---|
+| no form — what the harness measured by default | **11.9** | −60%, and an outlier |
+| in Iron Pyrite | **25.7** | −13%, in band |
+
+Pyrite is staged rather than the strongest form, because it is the shallowest threshold and therefore the one a Blacksmith is in most often. This is the third instance of §13 rule 36 and the reason the rule says *named rather than inferred*: the harness now stages two engines it cannot fill, and each one is a line that says which and why.
 
 #### The Savage: the specification did not survive the combat model, and the measurement is what said so
 
@@ -1504,6 +1559,10 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 48. **When a system changes underneath a conditional bonus, the CONDITION is what to re-read, not the number.** Blood Dance grants +120% Ferocity for keeping up a stream of connecting hits — a real risk when a player swung a weapon a couple of times a second, and automatic once eight skills fire on their own triggers into a crowd. Measured: live Ferocity 130 against a base of 10, reached in about two seconds and never dropping. Nothing about the trait changed and nothing is broken; its condition simply stopped being a condition, and it is now a flat ×2.3 that a class must be authored against. This is rule 43's family with the arrow moved: that rule is about a number nobody chose for this context, this one is about a *gate* nobody re-checked for it. **A conditional whose condition is always true is a constant**, and the migration that made it always true is exactly the moment nobody looks.
 
+49. **A fixture's precondition can expire, and the failure looks like a crash rather than a red.** `sim_test` asserted that starting a run as an unselectable class is refused, and found its subject with `CHARACTERS.find(c => !isSelectable(c.id))`. That worked for eleven classes and threw `Cannot read properties of undefined` the moment the fourteenth shipped, because there is no longer an unselectable class to point at. Nothing about the game was wrong — the check had outlived its own subject. **Delete is the wrong reflex and so is a guard clause that quietly skips**: the fix asserts the invariant that now holds ("every roster class is playable") *and* re-arms the original assertion automatically if a fifteenth class ever ships without trees. A test that silently does nothing is worse than one that crashes, because the crash is what told us.
+
+50. **When you generalise a hook for one caller, the second caller is the proof — and it should arrive before you believe the generalisation.** The registry's `stats` hook was built in the Monk patch with exactly one user (Footing) and a hardcoded `{grit, vitality}` return. Crystal Forms was its second, needed Attunement, Ferocity and Recovery, and turned the return into a pass-through in three lines — which is what the hook should always have been, and what one caller could never have shown. The generalisation was still right to make early (rule 45), but "generalised" and "general" are different claims: **until a second caller with different needs has used it, a hook is a refactor of one thing, and its shape is a guess.** Where the second caller is already on the plan, expect to widen it once and budget for that rather than treating it as rework.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1520,7 +1579,7 @@ Each has caught a real defect on this project. They are design constraints on ho
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
 | 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
 | 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | **Done** |
-| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **In progress** — 13 of 14 classes built (26 trees, 260 skills, 13 selectable); only the Blacksmith remains. Regions 3–8 blocked on `PIXELLAB_API_KEY` |
+| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **CLASSES COMPLETE** — 14 of 14 built (28 trees, 280 skills, 14 selectable). Regions 3–8 blocked on `PIXELLAB_API_KEY`, an external dependency |
 
 Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
 
@@ -1540,7 +1599,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ### Group A — waiting on phase-5 trees (0)
 
-One class has no trees — the Blacksmith, which is tick-shaped. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
+**No class has no trees.** All fourteen are built. Weapons are removed, so a class without a tree cannot attack, cannot trigger an attack hook, and cannot finish a level. **Nothing here is repairable by code.**
 
 | what fails | count | why |
 |---|---:|---|
@@ -1552,7 +1611,9 @@ One class has no trees — the Blacksmith, which is tick-shaped. Weapons are rem
 
 **Three entries have now left this group.** `elite_arena (1p) never cleared` went green when the Necromancer's Summons tree landed — the class gained a third tree, the solo build got deeper, and the objective cleared with nothing tuned. `toh_druid` left with its own tree. That is the group working as labelled: it said "not built yet", something got built, and it closed.
 
-**GROUP A IS NOW EMPTY.** Every check that was waiting on a phase-5 tree has closed, and the four classes that still have no trees — Blacksmith, Monk, Savage and the phase-5 remainder — no longer hold a red line open. The group stays in this document because the next four classes will refill it, and because the exit pattern is worth keeping: of the entries that left, **two closed purely by content arriving, and three needed the fixture corrected as well.** A check labelled "waiting on content" is a check nobody has run against real content, so half of them were also staging bugs. That is not a reason to distrust the label; it is a reason to re-read the fixture on the patch that closes the entry, rather than assuming the content did it.
+**GROUP A IS NOW CLOSED FOR GOOD.** With the Blacksmith the roster is complete — fourteen of fourteen built, all selectable, all inside the DPS band — so there is no longer any class this group could be waiting on. It stays in the document as the record of how the group behaved, not as a live section.
+
+**GROUP A WAS EMPTY EVEN BEFORE THAT.** Every check that was waiting on a phase-5 tree has closed, and the four classes that still have no trees — Blacksmith, Monk, Savage and the phase-5 remainder — no longer hold a red line open. The group stays in this document because the next four classes will refill it, and because the exit pattern is worth keeping: of the entries that left, **two closed purely by content arriving, and three needed the fixture corrected as well.** A check labelled "waiting on content" is a check nobody has run against real content, so half of them were also staging bugs. That is not a reason to distrust the label; it is a reason to re-read the fixture on the patch that closes the entry, rather than assuming the content did it.
 
 ### Group B — waiting on a design decision (2 failing, 3 open questions)
 
@@ -1845,9 +1906,9 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
-| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **105 of 105 land across 12 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
+| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **124 of 124 land across 15 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
 | Trait gate | Built **after** D-28, which is the wrong order and is why it exists — `trait_gate.mjs`: every trait on the roster reached by the live path and moving its own observable, against a control with the trait key switched off. **14 of 14** |
-| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **13 of 13** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`, `spread`, `chi`, `cascade`. Also asserts, by effect: Grit's anti-synergy with crystallize, the killbox inert-then-consumed pair, the Hunter's trigger origin moving to the beast and refusing to fall back when none is alive, both directions of the Chi loop with its step at zero, the cascade's variety-in / repeat-breaks pair with its asymptotic floor asserted three ways, that no non-Savage can reach the cooldown exemption, and the engine-tick registry including the negative case (§8.3) |
+| Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **14 of 14** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`, `spread`, `chi`, `cascade`, `form`. Also asserts, by effect: Grit's anti-synergy with crystallize, the killbox inert-then-consumed pair, the Hunter's trigger origin moving to the beast and refusing to fall back when none is alive, both directions of the Chi loop with its step at zero, the cascade's variety-in / repeat-breaks pair with its asymptotic floor asserted three ways, that no non-Savage can reach the cooldown exemption, the form's enter/replace/binary/expire/gate properties, and the engine-tick registry including the negative case (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
 | Penalty roll | Measured — `penalty_roll.mjs`: **13.7% mean / 35.3% worst** against a real item pool (20.1% / 50.2% with no items, which is the measurement's own bias); weighting NOT added, re-measure as phase 5 widens what a build can ignore (§9.5) |
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
@@ -1856,7 +1917,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **In progress** — Wizard, Priest, Bard, Mage, Witch Doctor, Sundian, Assassin, Hunter, Monk and Savage built (26 trees, 260 skills, 13 selectable); **1 of 14 classes has no trees**. Every content-shaped and every write-path class is done, and two of the three tick-shaped; only the Blacksmith remains |
+| Classes 3–14 | **COMPLETE — 14 of 14 built** (28 trees, 280 skills, 14 selectable). Every content-shaped, write-path and tick-shaped class is authored, gated and inside the DPS band. Phase 5's class work is done; what remains for phase 5 is regions 3–8, blocked on `PIXELLAB_API_KEY` |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
@@ -1875,6 +1936,6 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 **Summons are the largest untested area of the composed-action schema.** They were the largest bespoke category in the source project, and the "420 skills are data" claim is unverified against them. §8.5 now specifies both classes' mechanics; the patch that builds them should treat the schema question as its primary finding, not a side effect — if summons need bespoke handlers, that is worth knowing before the remaining classes are authored.
 
-**One class engine exists only as design.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench`, the Assassin's `killbox`, the Hunter's `spread`, the Monk's `chi` and the Savage's `cascade` are implemented and gated at **13 of 13**. Only Crystal Forms remains — specified in §8.3, unbuilt, and tick-shaped.
+**Every class engine in §8.3 is implemented and gated — 14 of 14.** Footing, Marrow's `armor`, the Druid's `pack`, the Wizard's `shift`, the Priest's `marks`, the Bard's `rhythm`, the Mage's `crystal`, the Witch Doctor's `doll`, the Sundian's `drench`, the Assassin's `killbox`, the Hunter's `spread`, the Monk's `chi`, the Savage's `cascade` and the Blacksmith's `form`. None remains as design only.
 
 **The archived classic roster is design reference, not data.** Its traits are engine hooks keyed to values that no longer exist.

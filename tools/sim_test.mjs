@@ -2765,12 +2765,26 @@ try {
   // A CLASS THAT CANNOT FIGHT CANNOT BE STARTED. The greyed lobby card is an
   // affordance; a client can send anything, so the sim is the enforcement.
   {
+    // THE PRECONDITION EXPIRED WHEN THE LAST CLASS SHIPPED. This read
+    // `CHARACTERS.find(c => !isSelectable(c.id))` and dereferenced the result;
+    // with 14 of 14 selectable there is no longer an unselectable class to point
+    // at, and the fixture crashed on `undefined.id` — a check that had outlived
+    // its own subject rather than a defect in the game.
+    //
+    // It is kept rather than deleted, and written so it SELF-HEALS: the moment a
+    // fifteenth class is registered without trees, the original assertion runs
+    // again automatically. Until then the invariant itself is what is asserted,
+    // because "every class on the roster can be played" is worth a green line.
     const locked = R.CHARACTERS.find(c => !R.isSelectable(c.id));
-    let threw = null;
-    try { new Sim({ seed: 1, party: [{ idx: 0, key: 'k', name: 'X', charId: locked.id, color: '#fff' }] }); }
-    catch (e) { threw = e.message; }
-    if (threw && /no skill tree/.test(threw)) ok(`starting a run as an unselectable class (${locked.id}) is refused: "${threw.slice(0, 60)}…"`);
-    else fail(`a run started as ${locked.id}, which has no way to deal damage (threw: ${threw})`);
+    if (!locked) {
+      ok(`every one of the ${R.CHARACTERS.length} roster classes is selectable, so there is no unselectable class to refuse — the guard below still covers an id that is not on the roster at all, and this check re-arms itself the moment a class ships without trees`);
+    } else {
+      let threw = null;
+      try { new Sim({ seed: 1, party: [{ idx: 0, key: 'k', name: 'X', charId: locked.id, color: '#fff' }] }); }
+      catch (e) { threw = e.message; }
+      if (threw && /no skill tree/.test(threw)) ok(`starting a run as an unselectable class (${locked.id}) is refused: "${threw.slice(0, 60)}…"`);
+      else fail(`a run started as ${locked.id}, which has no way to deal damage (threw: ${threw})`);
+    }
   }
 
   // AND AN UNKNOWN ID THROWS RATHER THAN BECOMING SOMEONE ELSE. The old
@@ -4246,6 +4260,22 @@ function measureDps(charId) {
   // here; the alternative is a silent zero, which is the whole failure mode
   // `engine_gate` exists to prevent.
   if (p.char.trait.key === 'singularity') p.crystal = p.char.trait.crystalCap;
+  // AND THE SECOND ONE THE FIXTURE CANNOT FILL, for the opposite reason. Every
+  // Crystal Form is entered on a SELF_THRESHOLD and this harness runs in god
+  // mode — the Blacksmith's HP never falls, so no form ever fires and the class
+  // is measured with its whole engine dark. Worse than the Mage's case, because
+  // two of the three slots the auto-slotter fills are the form itself (no
+  // damage) and a `form`-gated skill that cannot fire at all: measured, 11.9
+  // against 30.6 in form, and only the second is a Blacksmith anyone plays.
+  //
+  // Pyrite is the shallowest threshold and therefore the form a Blacksmith is in
+  // most often; naming it rather than picking the strongest keeps the reading
+  // honest about the ordinary case.
+  if (p.char.trait.key === 'crystal_infusion') {
+    const src = SKILLS_BY_ID_FOR_PARK['smith_iron_pyrite'];
+    const step = src && (src.compose || []).find(c => c.kind === 'form');
+    if (step) { p.form = step.form; p.formT = 1e9; p.formStats = step.stats || null; sim._recomputeStats(p); }
+  }
   const dummies = [];
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2;
@@ -4819,7 +4849,7 @@ try {
   // nothing else provided. `shift` is named here because naming the exception is
   // the mechanism — the same shape as `rankGrants` having a registry rather than
   // a convention.
-  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap'];
+  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form'];
   const missing = EXPECTED_PRIMS.filter(k => !PK.includes(k));
   const extra = PK.filter(k => !EXPECTED_PRIMS.includes(k));
   if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth and \`trap\` the thirteenth, each admitted under §5.7's three conditions and ruled before its tree`);

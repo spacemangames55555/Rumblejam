@@ -41,6 +41,7 @@ import { spendSkillPoint } from '../js/skillsim.js';
 import * as SKROOM from '../js/skillsim.js';
 import { ENEMIES } from '../js/content/enemies.js';
 import * as ENG from '../js/engines.js';
+import { PRIMITIVES as PRIM } from '../js/compose.js';
 import { engineScale as engineScaleOf } from '../js/compose.js';
 import { CONFIG as CFG } from '../js/config.js';
 
@@ -321,6 +322,24 @@ const PROBES = {
     // more than one thing in it, which the default staging already gives.
     fills: sk => (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
     fillsFirst: sk => (sk.compose || []).some(c => ['strike', 'cone', 'line', 'bolt', 'drain'].includes(c.kind)),
+  },
+  form: {
+    what: 'a crystal form held',
+    char: 'toh_blacksmith',
+    // A STATE, NOT A QUANTITY, and the only engine of that kind. The starve
+    // takes the form away each frame — the honest opposite of being transformed
+    // — rather than lowering a number, because there is no number to lower.
+    low: (g, p) => { p.form = null; p.formT = 0; p.formStats = null; p.engines.form = 0; },
+    // Entered by a `form` step, which fires on SELF_THRESHOLD — so the fixture
+    // has to be HURT for the engine to fill at all. That is the whole class:
+    // every form is a response to a fight going badly.
+    each: (g, p) => { p.hp = Math.min(p.hp, p.stats.vitality * 0.5); },
+    fills: sk => (sk.compose || []).some(c => c.kind === 'form'),
+    fillsFirst: sk => (sk.compose || []).some(c => c.kind === 'form'),
+    // A `form`-gated skill cannot be the measured claim — it does not fire in
+    // the starved run BY DESIGN, so the comparison would be a skill against
+    // nothing rather than an engine against itself.
+    claimSkill: 'smith_hammer_blow',
   },
   pack: {
     what: 'animals standing',
@@ -903,6 +922,73 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
     SKROOM.startRoomMinions(g, p);
     if (p.cascade === 0) ok('a cascade does not survive a room transition — a chain is a property of a fight, and arriving at depth is the Savage\'s whole loop skipped');
     else fail(`the cascade persisted across a room start (${p.cascade})`);
+  }
+
+  // --- crystal forms: a STATE with a clock, and the fourteenth primitive -----
+  //
+  // Every assertion here is about the property that makes this engine different
+  // in kind: it is something the player IS rather than something they hold.
+  {
+    const { g, p } = stage('toh_blacksmith');
+    const step = { damage: 10, scaleWith: 'form', scalePer: 0.2 };
+    const baseGrit = p.stats.grit;
+
+    // THE PRIMITIVE ENTERS THE FORM, and the form reaches the STAT SHEET. That
+    // second half is what separates a form from every engine before it — the
+    // others multiply what skills do; this changes what the player is.
+    PRIM.form(g, p, { domain: 'physical' }, { form: 'pyrite', duration: 6000, stats: { grit: 22, vitality: 14 } }, 1, g.trigGrid, { states: 0 });
+    if (p.form === 'pyrite' && p.stats.grit === baseGrit + 22) {
+      ok(`the \`form\` primitive puts the player INTO a state and it reaches the sheet: form=pyrite, Grit ${baseGrit} → ${p.stats.grit} — the fourteenth primitive (§5.7), and the first engine that changes what the player IS rather than what their skills multiply by`);
+    } else fail(`the form did not take: form=${p.form}, Grit ${baseGrit} → ${p.stats.grit} (want +22)`);
+
+    // ENTERING ONE REPLACES THE OTHER. Two at once would stack their deltas and
+    // make the deepest threshold strictly best, erasing the choice between them.
+    PRIM.form(g, p, { domain: 'mental' }, { form: 'quartz', duration: 6000, stats: { attunement: 26, ferocity: 18 } }, 1, g.trigGrid, { states: 0 });
+    if (p.form === 'quartz' && p.stats.grit === baseGrit) {
+      ok('and entering a second form REPLACES the first — Pyrite\'s Grit is gone, not added to Quartz\'s. Two at once would stack their deltas and make the deepest threshold strictly the best');
+    } else fail(`forms stacked: form=${p.form}, Grit ${p.stats.grit} against a base of ${baseGrit} — a form that does not replace is a form that accumulates`);
+
+    // THE ENGINE IS BINARY, WHICH IS THE RULING. A form does not deplete, it
+    // ends — so it must read identically with five seconds left and with one. An
+    // engine that drifted with the timer would be a quantity wearing a state's
+    // name, and nothing else in this gate could tell the difference.
+    p.formT = 5; SKROOM.tickSkills(g, 0);
+    const fresh = engineScaleOf(step, p);
+    p.formT = 0.4; SKROOM.tickSkills(g, 0);
+    const nearlyOut = engineScaleOf(step, p);
+    if (fresh === nearlyOut && fresh > 1) {
+      ok(`and the engine is BINARY: ×${fresh.toFixed(3)} with five seconds left and ×${nearlyOut.toFixed(3)} with less than one — a form is a state you are in, not a pool you spend, so it reads the same throughout and then ends`);
+    } else fail(`the form engine drifts with its timer: ×${fresh.toFixed(3)} fresh against ×${nearlyOut.toFixed(3)} nearly out — that is a quantity wearing a state's name`);
+
+    // IT ENDS, AND ENDING TAKES THE STATS WITH IT. A delta removed from
+    // `formStats` without a recompute would leave the bonus standing on a player
+    // who is no longer in the form — the silent-persistence failure `shift` and
+    // `crystal` each needed a door reset to avoid.
+    const attIn = p.stats.attunement;
+    p.formT = 0.01;
+    for (let i = 0; i < 5; i++) g.tick();
+    if (!p.form && p.engines.form === 0 && p.stats.attunement < attIn) {
+      ok(`and when the clock runs out the state goes and the SHEET GOES WITH IT: Attunement ${attIn} → ${p.stats.attunement}, engine ${p.engines.form} — an expiry that forgot to recompute would leave the bonus standing on a player who is no longer transformed`);
+    } else fail(`the form expired without releasing its stats: form=${p.form}, engine=${p.engines.form}, Attunement ${attIn} → ${p.stats.attunement}`);
+
+    // A FORM-GATED SKILL FIRES ONLY IN ITS FORM. This is what makes a form more
+    // than a stat buff, and it is deliberately NOT a loadout change (§5.5).
+    const gated = SKILL_BY_ID['smith_anvil_strike'];
+    p.form = null;
+    const outOfForm = ENG.formHolds(p, gated);
+    p.form = 'pyrite';
+    const inForm = ENG.formHolds(p, gated);
+    p.form = 'quartz';
+    const wrongForm = ENG.formHolds(p, gated);
+    if (inForm && !outOfForm && !wrongForm) {
+      ok('a `form`-gated skill fires in ITS form and in no other: Anvil Strike holds in Pyrite, not out of form and not in Quartz — the skill stays slotted and visible, and what the form changes is whether its condition can hold');
+    } else fail(`the form gate is wrong: in-form=${inForm}, out-of-form=${outOfForm}, wrong-form=${wrongForm}`);
+
+    // AND NO FORM SURVIVES A DOOR.
+    p.form = 'pyrite'; p.formT = 5; p.formStats = { grit: 22 };
+    SKROOM.startRoomMinions(g, p);
+    if (!p.form && !p.formT) ok('a form does not survive a room transition — a transformation is a response to a fight going badly, and arriving already transformed is the threshold that bought it handed out free');
+    else fail(`the form persisted across a room start (${p.form}, ${p.formT}s)`);
   }
 
   // --- the registry: every accumulator is reached, and none is orphaned -----
