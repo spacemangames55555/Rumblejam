@@ -544,13 +544,13 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 14 of 14**, two trees each (28 trees, 280 skills). Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 14 of 14** (28 trees, 280 skills). Two trees each, with two exceptions recorded in the table below: the Necromancer has three and the Druid has one. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
 | Samurai | Armor, Tactics |
-| Necromancer | Marrow, Dark Matter |
-| Druid | Beasts, Restoration |
+| Necromancer | Marrow, Dark Matter, **Summons** — the only class with three |
+| Druid | Beasts — **the only class with one**, see §15 |
 | Wizard | Attunement, Arcana |
 | Priest | Judgment, Grace |
 | Bard | Cadence, Ensemble |
@@ -1563,6 +1563,12 @@ Each has caught a real defect on this project. They are design constraints on ho
 
 50. **When you generalise a hook for one caller, the second caller is the proof — and it should arrive before you believe the generalisation.** The registry's `stats` hook was built in the Monk patch with exactly one user (Footing) and a hardcoded `{grit, vitality}` return. Crystal Forms was its second, needed Attunement, Ferocity and Recovery, and turned the return into a pass-through in three lines — which is what the hook should always have been, and what one caller could never have shown. The generalisation was still right to make early (rule 45), but "generalised" and "general" are different claims: **until a second caller with different needs has used it, a hook is a refactor of one thing, and its shape is a guess.** Where the second caller is already on the plan, expect to widen it once and budget for that rather than treating it as rework.
 
+51. **A harness that provisions its own fixture cannot see a provisioning bug, and OVER-provisioning is the dangerous direction.** Rule 17 warns about fixtures too poor to reach the thing they measure; that failure is loud, because the check goes red. The inverse is silent by construction. `offence_test` called `fight(id, {arm: true})` and spent the opening skill point itself, so it proved every tree can arm a level-1 character — a true and useful statement — while the game shipped with no way for a player to spend that point at all. Eleven of fourteen classes dealt zero damage on map 1 and **every gate in the suite was green**, because each one built the character it wanted to measure. **For any resource a player must acquire, one check must acquire it the way the player does — including doing nothing.** The `arm` flag already existed and had never been called with `false`; the missing test was one line away for the whole of phase 5.
+
+52. **Assert the mechanism separately from the safety net, or the net becomes the mechanism.** Closing D-31 added both an offer and an anti-softlock floor. The floor alone makes "a new character can deal damage" pass, which would have left the gate proving the net works and saying nothing about whether the panel exists — so a later refactor could delete the offer entirely and stay green. The gate now asserts the offer is PRESENTED (every class holds N tier-1 picks, one unspent point, zero learned ranks) *and* that the provisioning arms them. Two assertions because they are two claims, and the one that would rot silently is the one about the mechanism.
+
+53. **A fixture that was accidentally clean stops being clean the moment a defect is fixed, and it will look like the FIX broke it.** D-31 granted every character its §5.6 opening ability. Two green checks went red immediately, and neither was about the opening ability: `trait_gate`'s Blacksmith probe read 39.0 with the trait on against 40.0 with it off, and the D-24 elite-node gate's gold axis slid 1.05 → 1.01 and tripped a band it had only ever passed by a hair. Both fixtures said, in their own comments, that they measured something else — *"enemies touching the Blacksmith take contact damage"*, *"measuring the ROOM, not the player"* — and both had been true only because a level-1 character could not attack. One had a skill firing into its three bodies; the other had a player killing the spawns it was sampling. **A precondition nobody wrote down is a precondition nobody maintains.** When a fix changes what a character can do, re-read every fixture whose observable that character could now reach, and make the isolation explicit — an emptied loadout is one line and it is the difference between measuring a thing and measuring near it.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1593,7 +1599,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
-**Group D is empty.** D-23, D-24, D-25, D-26, D-27, D-28, D-29 and D-30 are all closed. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
+**Group D is empty.** D-23 through D-31 are all closed. **D-31 is the only one of them found by a human playing the game rather than by measurement**, which is worth its own line: every gate in the suite passed while the game was unplayable, because every gate provisioned its own fixture. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1673,6 +1679,29 @@ They are the same category as the seven checks above, and the same category as D
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-31 — CLOSED: the skill system had no client, so every new character arrived unarmed
+
+**Found in playtest, not by the suite**, and that second half is the more important one.
+
+§5.6: *"Characters start with no abilities at all. The first point spent is the character's opening ability, chosen from the tier-1 nodes of their trees."* The point is granted — `initSkillPlayer` ends with `p.skillPoints = 1` — and the sim has accepted `{kind: 'learnSkill'}` since the trigger-core patch. **Nothing ever sent it.** `learnSkill` has exactly two occurrences in the repository: the handler in `js/game.js`, and `tools/offence_test.mjs`. `setSlot` has one: the handler. The entire player-facing half of the skill system was never built, and with weapons removed there was nothing else to fall back on.
+
+Measured, a freshly created character of every class:
+
+| | value |
+|---|---|
+| level | 1 |
+| skill points | **1, unspent** |
+| loadout slots | 1 |
+| learned ranks | **0** |
+| loadout | **empty** |
+| damaging actives slotted | **0** |
+
+**Eleven of the fourteen dealt literally zero damage in 30 seconds on map 1.** The three that did not were running entirely on trait damage and none was using a skill: the Blacksmith's `crystal_infusion` contact damage (65), the Wizard's `decree` Calamity on a 7s timer (32), and the Hunter's free beast (36). The playtest report named only the Hunter, which is the honest player-facing reading — the other two do not *function*, they merely register a number.
+
+**Fixed in three parts.** `_offerOpening` presents the tier-1 nodes of the character's own trees at the start of floor 1, through the boon-offer machinery — already presented, already resolved by `uiAction`, already handled on every client, and the same shape of decision. A client panel (`showOpening`) and its `pickOpening` sender, because the missing piece was never the sim. And an **anti-softlock floor** in `_enterArena`: a player who still has an unspent opening point and nothing damaging slotted when the fighting starts gets the first tier-1 node granted, because a panel is a thing a client can miss — dismissed, disconnected, or never rendered by an old build — and the cost of missing it was an unplayable run. The choice is offered first and is still the player's; the floor only catches nobody-answered.
+
+**One gap this exposed and did not close: the Druid has ONE tree**, so its §5.6 "choice" is a single card. Every other class offers two or three. That is content, not a defect, and it is left open deliberately rather than papered over — see the note in Group B.
 
 #### D-30 — CLOSED: every kill a summon made went uncredited, and two crit hooks were dead behind a pet
 

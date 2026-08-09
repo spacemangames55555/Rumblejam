@@ -295,7 +295,7 @@ export class Sim {
       lastFireT: -10,      // Overwatch cadence (sim time of last weapon fire)
       lastKillT: -10, roomFirstKillT: -10,
       critCounter: 0, critArmed: false, jesterOdds: 0,
-      boonCounts: {}, boonOffer: null, boonTemp: null,
+      boonCounts: {}, boonOffer: null, boonTemp: null, openingOffer: null,
       // ToH per-player state is stamped on by tohInitPlayer below
       roomVitGain: 0,      // Vesper per-room overheal→Vitality cap tracker
       carrying: null, channelT: 0, // Overseer turret carry/redeploy
@@ -584,6 +584,10 @@ export class Sim {
   // ---------------- floors & rooms ----------------
 
   _startFloor(n) {
+    // The opening pick is offered once, on the first floor, before any node is
+    // chosen — §5.6 says "at character start", and the map screen is the first
+    // thing a character sees.
+    if (n === 1) for (const p of this.players) if (!p.gone) this._offerOpening(p);
     this.floorNum = n;
     this.floor = generateFloorMap(this.seed, n);
     this.phase = 'map';
@@ -694,6 +698,7 @@ export class Sim {
   // ---------------- arenas (the stage) ----------------
 
   _enterArena(node) {
+    for (const p of this.livePlayers()) this._floorOpeningAbility(p);
     const arena = buildArena(this.seed, this.floorNum, node, this.players.length);
     this.phase = 'arena';
     this.arenaNode = node;
@@ -1904,7 +1909,7 @@ export class Sim {
   // owner can see NEVER moves on its own.
   _tickStructureRecall(p, dt) {
     // paused, not cancelled, while an overlay owns the player's attention
-    const busy = p.downed || p.shop || p.pendingOffer || p.treasureOffer || p.boonOffer;
+    const busy = p.downed || p.shop || p.pendingOffer || p.treasureOffer || p.boonOffer || p.openingOffer;
     if (busy) return;                       // hold the timer where it is
     if (p.moving) { p.relocT = 0; return; } // any movement cancels outright
     const offscreen = this._ownedStructures(p).some(s => this._structOffscreen(p, s));
@@ -3314,6 +3319,48 @@ export class Sim {
   // quality rides the same Greed-biased rarity roll; picks are non-blocking
   // (the room plays on while the overlay is up). A boon chosen 3 times total
   // becomes permanent.
+  // §5.6 THE OPENING ABILITY. "Characters start with no abilities at all. The
+  // first point spent is the character's opening ability, chosen from the tier-1
+  // nodes of their trees."
+  //
+  // THE CHOICE WAS NEVER OFFERED. `initSkillPlayer` grants the point and the sim
+  // has accepted `{kind:'learnSkill'}` since the trigger-core patch — but that
+  // message has exactly two senders in the repository, and one of them is
+  // `tools/offence_test.mjs`. Nothing in any client ever sent it, so with weapons
+  // removed a real character arrived on map 1 at level 1 with one unspent point,
+  // one open slot, an empty loadout and no way to deal damage. Eleven of the
+  // fourteen classes dealt literally zero; the three that did not were running on
+  // TRAIT damage — the Blacksmith's contact damage, the Wizard's Decree and the
+  // Hunter's free beast — and none of them was using a skill.
+  //
+  // Offered through the boon machinery rather than a new screen: `boonOffer` is
+  // already presented, already resolved by `uiAction`, and already handled on
+  // every client. A tier-1 pick is the same shape of decision.
+  _offerOpening(p) {
+    if (p.openingOffer || p.skillPoints <= 0) return;
+    const picks = SK.openingPicks(p);
+    if (!picks.length) return;
+    p.openingOffer = picks;
+    this.pushEvent({ k: 'opening', idx: p.idx, picks });
+  }
+
+  // THE ANTI-SOFTLOCK FLOOR, and it is the same rule `setLoadout` already
+  // enforces one layer up: never leave a player with no way to deal damage.
+  // A panel is a thing a client can miss — dismissed, disconnected, never
+  // rendered because a peer is on an old build — and the cost of missing it was
+  // an unplayable run. The choice is still OFFERED first and is still the
+  // player's; this only catches the case where nothing answered by the time the
+  // fighting starts.
+  _floorOpeningAbility(p) {
+    if (p.gone || p.skillPoints <= 0) return;
+    if (SK.hasDamagingSlotted(p)) return;
+    const picks = SK.openingPicks(p);
+    if (!picks.length) return;
+    p.openingOffer = null;
+    SK.spendSkillPoint(this, p, picks[0].id);
+    this.pushEvent({ k: 'toast', idx: p.idx, text: `Opening ability: ${picks[0].name}` });
+  }
+
   _offerBoon(p) {
     const t = p.char.trait;
     const rng = subRng(this.seed, 'boon', this.floorNum, this.currentNode ?? -1, p.idx);
@@ -3892,6 +3939,13 @@ export class Sim {
         if (this.phase !== 'map' || this.currentNode === null) return;
         if (this.floor.nodes[this.currentNode].kind !== 'shop') return;
         this._openShop(p, `node${this.currentNode}`);
+        break;
+      }
+      case 'opening': {
+        if (!p.openingOffer) return;
+        const pick = p.openingOffer.find(o => o.id === msg.id) || p.openingOffer[0];
+        p.openingOffer = null;      // consumed before the spend, so a double tap is dropped
+        SK.spendSkillPoint(this, p, pick.id);
         break;
       }
       case 'boon': {

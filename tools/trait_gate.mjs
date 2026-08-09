@@ -126,6 +126,17 @@ const PROBES = {
   crystal_infusion: {
     what: 'enemies touching the Blacksmith take contact damage',
     enemies: 3, mortal: true, r: 26,
+    // THE LOADOUT IS EMPTIED, and that is the whole probe rather than a detail.
+    // The observable is damage on the enemies, and contact damage is the only
+    // source this trait owns. Before D-31 a Blacksmith had no skills at all, so
+    // "damage on the enemies" WAS contact damage and the probe was accidentally
+    // clean; the moment the §5.6 opening ability started being granted, a skill
+    // began firing into the same three bodies in both runs and swamped it —
+    // measured, 39.0 with the trait on against 40.0 with it off, the control
+    // reading HIGHER than the subject. A saturated instrument reads identical
+    // for working and broken (§13 rule 37), and this one had been saturated by
+    // a fix rather than by a defect.
+    stage: (g, p) => { p.loadout.fill(null); },
     observe: (g, p, es) => es.reduce((a, e) => a + (e.maxHp - e.hp), 0),
   },
   decree: {

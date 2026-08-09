@@ -22,7 +22,7 @@ import { initScreens, showTitle, showLobby, showResults, hideScreens, currentNam
 import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
-import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon } from './ui/overlays.js';
+import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
 import { tohSnapshot, tohMarks, tohState, TOH_STANCE_NAMES } from './traits-toh.js';
 import { ITEMS } from './content/items.js';
@@ -109,6 +109,7 @@ initOverlays({
   pickLevelup: id => sendUi({ kind: 'levelup', id }),
   pickTreasure: id => sendUi({ kind: 'treasure', id }),
   pickBoon: id => sendUi({ kind: 'boon', id }),
+  pickOpening: id => sendUi({ kind: 'opening', id }),
   combine: (a, b, id, tier) => sendUi({ kind: 'combine', a, b, id, tier }),
   sellWeapon: (slot, id, tier) => sendUi({ kind: 'sellWeapon', slot, id, tier }),
   sellItem: id => sendUi({ kind: 'sellItem', id }),
@@ -845,6 +846,8 @@ function handleEvent(ev) {
     case 'offerDone': if (ev.idx === app.myIdx) closeLevelup(); break;
     case 'treasure': if (ev.idx === app.myIdx) showTreasure(ev); break;
     case 'treasureDone': if (ev.idx === app.myIdx) closeTreasure(); break;
+    case 'opening': if (ev.idx === app.myIdx) showOpening(ev); break;
+    case 'skillLearned': if (ev.idx === app.myIdx) closeOpening(); break;
     case 'boon': if (ev.idx === app.myIdx) showBoon(ev); break;
     case 'boonDone': if (ev.idx === app.myIdx) closeBoon(); break;
     case 'shop': if (ev.idx === app.myIdx) {
