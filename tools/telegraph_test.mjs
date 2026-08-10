@@ -9,7 +9,10 @@
 // the projectile, and one arena is not a sample.
 
 import { readFileSync } from 'node:fs';
-const { Sim } = await import('../js/game.js');
+// FixtureSim, not Sim: the harness answers its own §5.6 opening card instead
+// of tripping the anti-softlock floor at every arena door. Same skill, same
+// tick, no defect line — see tools/fixture_sim.mjs.
+const { FixtureSim: Sim } = await import('./fixture_sim.mjs');
 const SK = await import('../js/skillsim.js');
 const { TELEGRAPH_STATES, TELEGRAPH_MIN_WINDUP_MS, TELEGRAPHED_IDS, telegraphBusy } = await import('../js/telegraphs.js');
 const { inZone } = await import('../js/compose.js');

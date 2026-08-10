@@ -13,7 +13,10 @@
 // Five behaviours, not one. A window that only protects the sidestep is a
 // window that also hands out free room crossings.
 
-const { Sim } = await import('../js/game.js');
+// FixtureSim, not Sim: the harness answers its own §5.6 opening card instead
+// of tripping the anti-softlock floor at every arena door. Same skill, same
+// tick, no defect line — see tools/fixture_sim.mjs.
+const { FixtureSim: Sim } = await import('./fixture_sim.mjs');
 const SK = await import('../js/skillsim.js');
 const { TUNING: SAM } = await import('../js/content/skills/samurai_armor.js');
 

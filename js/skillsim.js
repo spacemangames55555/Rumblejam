@@ -163,6 +163,22 @@ export function setLoadout(sim, p, slot, id) {
   return { ok: true };
 }
 
+// ANSWER THE §5.6 CARD THE WAY A PLAYER DOES — for harnesses.
+//
+// The anti-softlock floor is loud on purpose: if it fires, a real player was
+// offered an opening ability and never got to answer it, which is a defect.
+// That signal is worthless if fixtures trip it constantly, and they do — a
+// harness that constructs a character, travels into an arena and only THEN
+// spends its points arrives unprovisioned for exactly one frame, which is all
+// the floor needs. §13 rule 17: a fixture arriving unprovisioned is the
+// fixture's bug, and the fix is to provision it rather than to quieten the
+// alarm. Call this before travelling.
+export function answerOpening(sim, p) {
+  if (!p || !p.openingOffer || !p.openingOffer.length) return false;
+  sim.uiAction(p.idx, { kind: 'opening', id: p.openingOffer[0].id });
+  return true;
+}
+
 export function grantSkillPoint(sim, p) {
   p.skillPoints++;
   p.metaDirty = true;

@@ -16,7 +16,10 @@
 // Anything a client still needs must therefore be in the snapshot, because
 // snapshots repeat 15 times a second and heal on the next frame.
 
-const { Sim } = await import('../js/game.js');
+// FixtureSim, not Sim: the harness answers its own §5.6 opening card instead
+// of tripping the anti-softlock floor at every arena door. Same skill, same
+// tick, no defect line — see tools/fixture_sim.mjs.
+const { FixtureSim: Sim } = await import('./fixture_sim.mjs');
 const SK = await import('../js/skillsim.js');
 const { encodeSnap, decodeSnap, wireSize } = await import('../js/netcodec.js');
 const { CONFIG } = await import('../js/config.js');
