@@ -721,6 +721,12 @@ never loads them:
   the exception and *assert* that it did. Anything measuring the first room a
   player actually walks into — `offence_test`'s map-1 provisioning check — still
   takes column 0 on purpose.
+- **The skill screen draws a GRAPH, not a list.** Tier is the column, lane is the
+  row, and prereq edges are drawn as polylines — a branching tree rendered as a
+  flat row of cards passes every card-counting check while communicating *order*,
+  which is the one thing branching does not mean. `skillscreen_test` asserts the
+  geometry in a real browser (edge count, distinct lanes, forked columns), not
+  just that the nodes exist.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).

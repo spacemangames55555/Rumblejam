@@ -50,10 +50,17 @@ function arena(skill) {
   // learn the chain
   const chain = [];
   for (let s = skill; s; s = s.prereq ? SKILL_BY_ID[s.prereq] : null) chain.unshift(s);
+  // LEVEL BEFORE SPEND, and the order is load-bearing since §8.1.1's tier gate
+  // landed. `p.level = 66` used to sit below this loop, where it only had to
+  // open slots; a tier now unlocks at a character level, so spending first meant
+  // spending as a level-1 character and every node above tier 1 was silently
+  // refused. The sweep then reported 31 passives "defined but wired to nothing"
+  // — a fixture provisioning in the wrong order, wearing the exact shape of a
+  // real defect.
+  p.level = 66;              // every tier open AND every slot open
   for (const s of chain) { p.skillPoints++; SK.spendSkillPoint(g, p, s.id); }
   p.loadout.fill(null);
   if (skill.type === 'active') p.loadout[0] = skill.id;
-  p.level = 66;              // every slot open, so slot gating never masks a miss
   g.god = true;              // the dummy must not kill the tester
   // A CHI-COSTING SKILL IS A PAIR TOO (§13 rule 41), and for the same reason a
   // `from: 'pet'` skill is. The Monk's spends do not fire unless the pool can pay
@@ -235,7 +242,25 @@ for (const skill of ALL_SKILLS) {
     // real ticks, through the real trigger loop — nothing is called directly
     let fired = false;
     for (let i = 0; i < 60 * 6; i++) {
-      g.setInput(0, { mx: 0, my: 0 });
+      // MOVEMENT IS A HELD CONDITION, NOT A STAMPED ONE — both directions.
+      //
+      // `stage()` sets stillT/movingT once, which is enough for a trigger that
+      // reads a flag and wrong for one that reads a DURATION the sim recomputes
+      // every tick. The `still` half was already re-stamped here; the `moving`
+      // half was not, because until samurai_agility no tree used it, and the
+      // sweep reported four working skills as "never fired with its condition
+      // staged". A fixture that stands still cannot stage "has been moving".
+      //
+      // Re-stamped rather than actually walked, deliberately: real movement
+      // would carry the player away from the ring of dummies `stage()` built and
+      // turn a trigger check into a pathing test.
+      const mv = skill.trigger.kind === 'MOVEMENT' && skill.trigger.mode !== 'still';
+      // The `moving` half has to be WALKED, because `movingT` is accumulated by
+      // the sim from real input — stamping it before the tick just gets it
+      // overwritten. Direction alternates every tick so the player jitters in
+      // place: it stays inside the ring of dummies `stage()` built, so this
+      // remains a trigger check rather than a pathing test.
+      g.setInput(0, mv ? { mx: (i % 2 ? 1 : -1), my: 0 } : { mx: 0, my: 0 });
       if (skill.trigger.kind === 'MOVEMENT' && skill.trigger.mode === 'still') p.stillT = skill.trigger.seconds + 1;
       g.tick();
       for (const e of foes) { e.x = e.spawnX ??= e.x; e.y = e.spawnY ??= e.y; }

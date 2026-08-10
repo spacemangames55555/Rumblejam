@@ -165,8 +165,11 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   const p = g.players[0];
   p.level = 66;
   const trees = SK.treesFor(p);
-  if (trees.length === 2) ok(`a Samurai now has ${trees.length} trees: ${trees.join(', ')}`);
-  else fail(`treesFor returned ${JSON.stringify(trees)}`);
+  // §8.2 rules THREE trees per class. The literal was 2 because that is what had
+  // been authored, not because two was the design — the Samurai is the first
+  // class to reach the real number, and the rest follow.
+  if (trees.length === 3) ok(`a Samurai now has ${trees.length} trees: ${trees.join(', ')}`);
+  else fail(`treesFor returned ${JSON.stringify(trees)} — §8.2 gives every class three`);
 
   // Spend into BOTH trees, alternating, and confirm nothing rejects it.
   //

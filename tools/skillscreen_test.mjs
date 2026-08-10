@@ -64,11 +64,37 @@ try {
       slotOpen: el.querySelectorAll('.slot:not(.shut)').length,
       title: (el.querySelector('.ov-title')||{}).textContent || '',
       close: el.querySelector('#skills-close') ? 1 : 0,
+      // THE BRANCH, AS DRAWN. Everything above counts cards, and a branching
+      // tree drawn as a flat row of cards passes every one of those counts while
+      // communicating the one thing branching does not mean — order. So this
+      // reads GEOMETRY: how many prereq edges were drawn, and how many distinct
+      // vertical lanes the nodes actually occupy.
+      edges: el.querySelectorAll('.tree-edges .edge').length,
+      lanes: new Set([...el.querySelectorAll('#overlay-skills .node-at')].map(n => n.style.top)).size,
+      // a fork is two nodes sharing a column at different heights
+      forks: (() => {
+        const by = {};
+        for (const n of el.querySelectorAll('#overlay-skills .node-at')) {
+          (by[n.style.left] ||= new Set()).add(n.style.top);
+        }
+        return Object.values(by).filter(v => v.size > 1).length;
+      })(),
     };`);
   console.log('  ', JSON.stringify(r));
-  if (r.open && r.trees === 2 && r.nodes === 20 && r.slots === 8) {
+  if (r.open && r.trees === 3 && r.nodes === 30 && r.slots === 8) {
     ok(`the screen renders: ${r.trees} trees, ${r.nodes} nodes, ${r.slots} slots (${r.slotOpen} open at level 1), title "${r.title.trim()}"`);
   } else no(`the screen did not render properly: ${JSON.stringify(r)}`);
+
+  // §8.1: THE SHAPE IS NOT PROVEN UNTIL IT IS LEGIBLE. Agility is the branching
+  // tree; 27 nodes across the other two are chains, so a correct render draws
+  // one edge per non-root node (30 - 3 roots = 27) and puts Agility's two
+  // branches on separate lanes with four forked columns (tiers 4/6/8/10).
+  if (r.edges === 27 && r.lanes >= 2 && r.forks >= 4) {
+    ok(`the branch is DRAWN, not implied: ${r.edges} prereq edges, ${r.lanes} lanes, ${r.forks} forked columns — two paths a player can see and choose between`);
+  } else {
+    no(`the tree rendered as a list rather than a graph: ${r.edges} edges, ${r.lanes} lanes, ${r.forks} forked columns `
+      + `(want 27 / >=2 / >=4). A branching tree drawn in one lane communicates ORDER, which is the opposite of the ruling`);
+  }
   if (r.known >= 1) ok(`the opening ability shows as KNOWN in the tree (${r.known} node)`);
   else no('the learned opening ability is not marked known');
 

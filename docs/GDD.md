@@ -540,11 +540,28 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 **What the engine already allows.** The load assertion requires a prereq to sit exactly one tier below. That forbids skipping a tier; it never forbade two skills sharing a parent. Verified by authoring one: a second tier-3 node under the same tier-2 parent loads clean and sweeps 0-red. Every consumer is single-parent generic — `canLearn` reads `skill.prereq`, `skill_sweep` walks to the root, nothing tree-shaped goes over the wire. **All 28 trees are 1-per-tier chains by authoring convention, not by constraint.** The missing assertion is reachability: a chain cannot strand a node, a branch can.
 
+**THE SHAPE SPEC, established by `samurai_agility` and asserted at load.** The first branching tree is the reference every remaining tree is authored against:
+
+| | | |
+|---|---|---|
+| **Nodes** | **10** | §8.1's point budget, asserted (`TREE_NODES`) |
+| **Depth** | **tier 10** | the capstone tier, so the gate table's top entry is reached |
+| **Tiers used** | **1 / 2 / 4 / 6 / 8 / 10** | six of ten gates — tiers are SPARSE |
+| **Branch points** | **1**, at tier 2 | one node with two children |
+| **Nodes per tier** | 1, 1, 2, 2, 2, 2 | the two branches run in parallel through the last four tiers |
+| **Capstones** | **2**, one per branch | symmetric — both branches end at tier 10 |
+
+**Sparse tiers are what make the spec and the gate table compatible, and this was the ruling the first tree forced.** Ten nodes across ten *dense* tiers is one node per tier, which is a chain — the shape spec and §8.1.1 are in direct conflict unless a tree may skip tiers. Tier is therefore a **level gate, not a depth counter**, and the load assertion relaxed from "prereq exactly one tier below" to "prereq at a strictly lower tier". That relaxation is precisely the one the reachability check was written in advance of, and it armed the check in the same patch that needed it.
+
+**Symmetric on purpose.** An asymmetric tree — one long branch carrying the only capstone — is a main line with a detour, not a choice. Both branches are four nodes deep and both terminate at tier 10, so the tier-2 decision is which capstone arrives first. With ~69 points against 30 nodes a player eventually owns both sides; what the branch buys is the ORDER, which at one point per level is most of a run.
+
+**What the assertions enforce** (all at import, all throwing): exactly `TREE_NODES` nodes; exactly one tier-1 node and it must be a damaging active (§5.6's opening pick); every prereq in the same tree; tier strictly decreasing along every prereq edge; every tier within `TIER_LEVELS`, so no node exists that no level unlocks; and every node reachable from the root. They enforce **structure, not shape** — nothing requires a tree to branch, because the 27 chains are still legal until they are converted.
+
 **Authoring order.** The 14 new trees are authored against a proven shape spec first; the existing 28 are converted in a later pass. The engine does not force a big bang, and a shape spec proven on 14 real trees is a better thing to convert 28 trees to than one proven on paper.
 
-#### 8.1.1 Tier unlock levels — **PROPOSED**
+#### 8.1.1 Tier unlock levels — RULED AND ENFORCED
 
-Measured, not assumed: full runs to victory for all 14 classes end at **level 68–70**, reaching ~21 by the end of floor 1, ~35 by floor 2 and ~52 by floor 3. (Two classes measured as outliers here — Assassin 115 and Priest 102. The Assassin was an economy defect and is fixed: D-34 brings it to 70, inside the band. The Priest's is D-35, still open. Neither is a property of the curve.)
+Enforced in `canLearn` (`TIER_LEVELS` in `js/skills.js`), not merely tabled. Measured, not assumed: full runs to victory for all 14 classes end at **level 68–70**, reaching ~21 by the end of floor 1, ~35 by floor 2 and ~52 by floor 3. (Two classes measured as outliers here — Assassin 115 and Priest 102. The Assassin was an economy defect and is fixed: D-34 brings it to 70, inside the band. The Priest's is D-35, still open. Neither is a property of the curve.)
 
 | Tier | Level | Where that lands |
 |---|---|---|
@@ -584,11 +601,11 @@ Two properties worth stating because they are consequences rather than choices. 
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 14 of 14** (28 trees, 280 skills). Two trees each, with two exceptions recorded in the table below: the Necromancer has three and the Druid has one. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 14 of 14** (29 trees, 290 skills). The **Samurai is the first class at the ruled three** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
-| Samurai | Armor, Tactics |
+| Samurai | Armor, Tactics, **Agility** — the first BRANCHING tree, and the §8.1 shape spec's reference |
 | Necromancer | Marrow, Dark Matter, **Summons** — the only class with three |
 | Druid | Beasts — **the only class with one**, see §15 |
 | Wizard | Attunement, Arcana |
@@ -1739,6 +1756,22 @@ They are the same category as the seven checks above, and the same category as D
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-36 — CLOSED: half the MOVEMENT trigger was wired to nothing
+
+`js/triggers.js` has read `p.movingT` for the MOVEMENT trigger's `moving` mode since phase 1:
+
+```js
+return t.mode === 'still' ? p.stillT >= t.seconds : (p.movingT || 0) >= t.seconds;
+```
+
+**Nothing anywhere ever wrote `p.movingT`.** `stillT` was maintained on the player tick; its mirror was not, so the `moving` branch evaluated `0 >= seconds` for the whole of phases 1–5 and could not fire — in the game or in any test.
+
+It survived because **no authored skill used the mode.** Twenty-eight trees, 280 skills, and every MOVEMENT skill among them declared `still`. The load assertions could not see it: the declaration was always valid, `TRIGGER_PARAMS.MOVEMENT` was satisfied, and the missing half was a *reader*, not a field. `skill_sweep` could not see it either, because a sweep with nothing to sweep is green.
+
+It surfaced the moment `samurai_agility` was authored, because the Gale branch is built on `moving` — four skills failed the sweep in one patch. **A trigger kind is a PAIR of modes, and a mode with no content is a mode with no coverage** — the same shape as §13 rule 41 and D-29's dead consumers, one layer down.
+
+Two fixtures were wrong in the same way and are fixed with it: `skill_sweep` and `rider_gate` both stamped `movingT` (or nothing) and then stood still, so the sim zeroed it on the next tick. A held condition has to be *held* — both now walk the player, alternating direction each tick so it jitters inside the ring of dummies rather than wandering out of it.
 
 #### D-34 — CLOSED: the Assassin's trait out-earned the entire kill economy
 

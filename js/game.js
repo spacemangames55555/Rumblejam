@@ -1619,6 +1619,16 @@ export class Sim {
     // movement — Tempo drives it; Grit shrugs off pulls
     p.moving = (p.mx !== 0 || p.my !== 0);
     p.stillT = p.moving ? 0 : (p.stillT || 0) + dt; // snipers lock faster onto statues
+    // ...AND ITS MIRROR, WHICH WAS NEVER MAINTAINED. `triggers.js` has read
+    // `p.movingT` for the MOVEMENT trigger's `moving` mode since phase 1, and
+    // nothing anywhere ever wrote it — so the branch evaluated `0 >= seconds`
+    // and that half of the trigger could not fire, in the game or in a test.
+    // It went unnoticed because no authored skill used the mode until
+    // samurai_agility, whose Gale branch is built on it. A trigger kind is a
+    // PAIR of modes; shipping one of them wired to nothing is the exact failure
+    // this project's load assertions exist for, and assertions cannot see it
+    // because the declaration was always valid — only the reader was missing.
+    p.movingT = p.moving ? (p.movingT || 0) + dt : 0;
     const t = p.char.trait;
     let spd = CONFIG.BASE_SPEED * (1 + p.stats.tempo / 100);
     spd = Math.max(60, spd);

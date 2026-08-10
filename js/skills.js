@@ -32,6 +32,7 @@ import { SMITH_FORGE, TUNING as SMITH_FG_TUNING } from './content/skills/smith_f
 import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samurai_armor.js';
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
+import { SAMURAI_AGILITY, TUNING as AGILITY_TUNING } from './content/skills/samurai_agility.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
@@ -67,6 +68,7 @@ export const TREES = {
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
+  samurai_agility: { id: 'samurai_agility', name: 'Agility', classId: 'toh_samurai', skills: SAMURAI_AGILITY, tuning: AGILITY_TUNING },
   necro_summons: { id: 'necro_summons', name: 'Summons', classId: 'toh_necromancer', skills: NECRO_SUMMONS, tuning: SUMMONS_TUNING },
   druid_beasts: { id: 'druid_beasts', name: 'Tapestry of Beasts', classId: 'toh_druid', skills: DRUID_BEASTS, tuning: BEASTS_TUNING },
 };
@@ -163,6 +165,28 @@ export function isDamaging(skill) {
 // assertTrees() for why this is a budget and not a house style.
 export const TREE_NODES = 10;
 
+// §8.1.1 — WHAT CHARACTER LEVEL EACH TIER UNLOCKS AT.
+//
+// The Diablo 2 model, ruled in: tiers unlock by LEVEL, nodes unlock by
+// PREREQUISITE, and points spread freely across a character's three trees.
+// There is deliberately no points-spent-in-tree requirement — that is WoW's
+// mechanism and it exists to force specialisation, which this game does not
+// want.
+//
+// Measured, not guessed: full runs to victory for all fourteen classes end at
+// level 68-70, passing ~21 at the end of floor 1, ~35 at floor 2 and ~52 at
+// floor 3. The first six gates land within a level or two of D2's own shape
+// (its 6/12/18/24/30 of 99 is 6-30% of the cap, which against 69 is
+// 4/8/12/17/21); the top four depart from it on purpose so the capstone lands
+// in floor 4 rather than at the halfway point.
+//
+// TIER IS A GATE, NOT A DEPTH. A tree may skip tiers — see samurai_agility,
+// which spends ten nodes on six of these ten gates so two branches can run in
+// parallel. Ten nodes across ten DENSE tiers is one node per tier, which is a
+// chain: sparse tiers are what make the shape spec and this table compatible.
+export const TIER_LEVELS = [1, 3, 6, 10, 15, 21, 28, 36, 48, 60];
+export function tierLevel(tier) { return TIER_LEVELS[tier - 1]; }
+
 export const SLOT_LEVELS = [1, 5, 12, 21, 31, 42, 54, 66];
 export function slotsAtLevel(level) {
   let n = 0;
@@ -186,6 +210,14 @@ export function canLearn(p, skill) {
   // to bite, or a rank-1-only passive is still rankable at a level-up screen.
   // Same lesson as the Footing stack cap: the clamp belongs in the engine.
   if (skill.maxRank !== undefined && skillRank(p, skill.id) >= skill.maxRank) return false;
+  // §8.1.1's TIER GATE, enforced here rather than merely tabled. Diablo 2's
+  // model has two locks and this is the first: a tier opens at a character
+  // level. The second is the prereq below. There is no third — no points-spent
+  // requirement — so a player may spread across all three trees freely.
+  //
+  // Ranking a skill you already own is NOT re-gated: the tier bought the node,
+  // and a rank is an investment in something already unlocked.
+  if (skillRank(p, skill.id) < 1 && (p.level || 1) < tierLevel(skill.tier)) return false;
   if (!skill.prereq) return true;
   return skillRank(p, skill.prereq) >= 1;
 }
@@ -447,10 +479,34 @@ function assertTrees() {
     // convergence is ruled out of v1, and `prereq` is a single id everywhere.
     //
     for (const s of byTier) {
+      // EVERY TIER MUST HAVE A GATE. Tier is a level gate now, so a node above
+      // the table would be unlockable at no level at all — content that loads,
+      // renders and can never be bought. This is the assertion the relaxation
+      // below makes necessary: while a prereq had to sit exactly one tier down,
+      // tier 11 was unreachable by construction.
+      if (!(s.tier >= 1 && s.tier <= TIER_LEVELS.length)) {
+        problems.push(`${s.id}: tier ${s.tier} has no entry in TIER_LEVELS (1..${TIER_LEVELS.length}) — no character level would ever unlock it`);
+      }
       if (s.tier === 1) continue;
       const pre = SKILL_BY_ID[s.prereq];
       if (!pre) problems.push(`${s.id}: tier ${s.tier} with no prerequisite`);
-      else if (pre.tier !== s.tier - 1) problems.push(`${s.id}: prereq ${pre.id} is tier ${pre.tier}, want ${s.tier - 1}`);
+      // STRICTLY LOWER, NOT EXACTLY ONE BELOW — the relaxation §8.1 needs, and
+      // the one the reachability walk below was written in advance of.
+      //
+      // The old rule forced a prereq one tier down, which made tiers dense and
+      // therefore made every tree a chain: ten nodes over ten tiers is one node
+      // per tier. Branching needs parallel paths through the SAME gates, so a
+      // tree skips tiers and its branches sit side by side — samurai_agility
+      // spends ten nodes on tiers 1/2/4/6/8/10 with two branches running through
+      // the last four together.
+      //
+      // What still holds, and is what keeps a tree renderable and finite: tier
+      // strictly decreases along every prereq edge. The screen lays out on tier,
+      // so a parent is always to the left of its children.
+      else if (!(pre.tier < s.tier)) {
+        problems.push(`${s.id}: prereq ${pre.id} is tier ${pre.tier}, which is not below tier ${s.tier} — `
+          + `tier must strictly decrease along a prereq edge or the tree is not layered and cannot be drawn`);
+      }
     }
 
     // REACHABILITY — and an honest account of when it can actually fire.
