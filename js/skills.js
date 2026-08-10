@@ -33,6 +33,8 @@ import { SAMURAI_ARMOR, TUNING as SAMURAI_TUNING } from './content/skills/samura
 import { NECRO_MARROW, TUNING as MARROW_TUNING } from './content/skills/necro_marrow.js';
 import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samurai_tactics.js';
 import { SAMURAI_AGILITY, TUNING as AGILITY_TUNING } from './content/skills/samurai_agility.js';
+import { BARD_REQUIEM, TUNING as BARD_REQ_TUNING } from './content/skills/bard_requiem.js';
+import { MAGE_REFRACTION, TUNING as MAGE_REF_TUNING } from './content/skills/mage_refraction.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
@@ -69,6 +71,8 @@ export const TREES = {
   necro_marrow: { id: 'necro_marrow', name: 'Marrow', classId: 'toh_necromancer', skills: NECRO_MARROW, tuning: MARROW_TUNING },
   samurai_tactics: { id: 'samurai_tactics', name: 'Tactics', classId: 'toh_samurai', skills: SAMURAI_TACTICS, tuning: TACTICS_TUNING },
   samurai_agility: { id: 'samurai_agility', name: 'Agility', classId: 'toh_samurai', skills: SAMURAI_AGILITY, tuning: AGILITY_TUNING },
+  bard_requiem: { id: 'bard_requiem', name: 'Requiem', classId: 'toh_bard', skills: BARD_REQUIEM, tuning: BARD_REQ_TUNING },
+  mage_refraction: { id: 'mage_refraction', name: 'Refraction', classId: 'toh_mage', skills: MAGE_REFRACTION, tuning: MAGE_REF_TUNING },
   necro_summons: { id: 'necro_summons', name: 'Summons', classId: 'toh_necromancer', skills: NECRO_SUMMONS, tuning: SUMMONS_TUNING },
   druid_beasts: { id: 'druid_beasts', name: 'Tapestry of Beasts', classId: 'toh_druid', skills: DRUID_BEASTS, tuning: BEASTS_TUNING },
 };
@@ -289,6 +293,34 @@ function summonStepProblems(s, step) {
 
 function assertTrees() {
   const problems = [];
+
+  // IDS ARE UNIQUE ACROSS EVERY TREE, and nothing checked it until a class had
+  // three trees to collide within.
+  //
+  // `SKILL_BY_ID` is built with Object.fromEntries, so a repeated id silently
+  // KEEPS THE LAST and drops the first — and that map is what resolves every
+  // prereq, every loadout slot and every fire. A duplicate does not throw
+  // anywhere: it shadows a real skill, so one node's prereq chain quietly points
+  // at a different tree's node and the shadowed skill can never be fired.
+  //
+  // It was found by authoring two third trees at once: `bard_finale` collided
+  // with bard_ensemble and `mage_inclusion` with mage_crystalblade, because a
+  // third tree draws on the same vocabulary the first two already used.
+  // `ALL_SKILLS` read 310 while `SKILL_BY_ID` held 308 — the count of the defect
+  // was visible and nothing was looking at it. With eleven more trees to author
+  // against the same class vocabularies, this is a certainty rather than a risk.
+  {
+    const owner = {};
+    for (const tree of Object.values(TREES)) {
+      for (const s of tree.skills) {
+        if (owner[s.id]) problems.push(`duplicate skill id "${s.id}" in ${owner[s.id]} and ${tree.id} — SKILL_BY_ID keeps the LAST, so the other is shadowed: unreachable by prereq, by loadout and by fire`);
+        else owner[s.id] = tree.id;
+      }
+    }
+    if (ALL_SKILLS.length !== Object.keys(SKILL_BY_ID).length) {
+      problems.push(`${ALL_SKILLS.length} skills but ${Object.keys(SKILL_BY_ID).length} unique ids — the difference is silently shadowed content`);
+    }
+  }
 
   // Every form name any `form` step enters, DERIVED rather than restated — a
   // hand-written list here would go stale the moment a fourth form is authored,
