@@ -80,7 +80,7 @@ export const NECRO_MARROW = [
     id: 'necro_bone_spur', tree: 'necro_marrow', tier: 4, name: 'Bone Spur',
     desc: 'Spurs stand out of the skin. Hitting you costs something.',
     type: 'active', domain: 'physical', prereq: 'necro_spiked_punch',
-    select: 'nearest',   // what it hits; the trigger above is only WHEN
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'ON_HIT_TAKEN' },
     cooldown: T.spurCd,
     compose: [{ kind: 'ward', amount: T.spurAmount, duration: T.spurDuration, reflectPct: T.spurReflect }],
@@ -150,7 +150,7 @@ export const NECRO_MARROW = [
     id: 'necro_marrownaut', tree: 'necro_marrow', tier: 10, name: 'Marrownaut',
     desc: 'The frame closes over you. Whatever is left outside can try.',
     type: 'active', domain: 'spiritual', prereq: 'necro_wrecking_ball',
-    select: 'objective_target',   // what it hits; the trigger above is only WHEN
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.marrowPct },
     cooldown: T.marrowCd,
     compose: [

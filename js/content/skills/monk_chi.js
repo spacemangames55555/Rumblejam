@@ -89,7 +89,7 @@ export const MONK_CHI = [
     id: 'monk_gathering_breath', tree: 'monk_chi', tier: 2, name: 'Gathering Breath',
     desc: 'Spends 6 Chi to restore 12 health when you drop below 70%.',
     type: 'active', domain: 'spiritual', prereq: 'monk_open_palm',
-    select: 'nearest', chi: T.breathChi,
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 70 },
     cooldown: T.breathCd,
     compose: [{ kind: 'heal', amount: T.breathAmount }],
@@ -112,7 +112,7 @@ export const MONK_CHI = [
     id: 'monk_mend', tree: 'monk_chi', tier: 4, name: 'Mend',
     desc: 'Spends 10 Chi to restore 18 health when you drop below 55%.',
     type: 'active', domain: 'spiritual', prereq: 'monk_rolling_fist',
-    select: 'nearest', chi: T.mendChi,
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.mendCd,
     compose: [{ kind: 'heal', amount: T.mendAmount }],
@@ -148,7 +148,7 @@ export const MONK_CHI = [
     id: 'monk_breathe_out', tree: 'monk_chi', tier: 7, name: 'Breathe Out',
     desc: 'Spends 14 Chi. Absorbs 26 over 4.4s.',
     type: 'active', domain: 'spiritual', prereq: 'monk_hammerfall',
-    select: 'nearest', chi: T.outChi,
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.outCd,
     compose: [{ kind: 'ward', amount: T.outAmount, duration: T.outDuration }],
@@ -172,7 +172,7 @@ export const MONK_CHI = [
     id: 'monk_quiet_the_body', tree: 'monk_chi', tier: 9, name: 'Quiet the Body',
     desc: 'Spends 18 Chi to restore 30 health when you drop below 40%.',
     type: 'active', domain: 'spiritual', prereq: 'monk_crane_step',
-    select: 'nearest', chi: T.quietChi,
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 40 },
     cooldown: T.quietCd,
     compose: [{ kind: 'heal', amount: T.quietAmount }],

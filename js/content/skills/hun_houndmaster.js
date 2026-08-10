@@ -73,7 +73,7 @@ export const HUN_HOUNDMASTER = [
     id: 'hun_hound', tree: 'hun_houndmaster', tier: 2, name: 'Hound',
     desc: 'A hound that stays at your heel. Two of them inside 120 wake Alpha.',
     type: 'active', domain: 'physical', prereq: 'hun_whistle_up',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.bayRange },
     cooldown: T.houndCd,
     compose: [{
@@ -107,7 +107,7 @@ export const HUN_HOUNDMASTER = [
     id: 'hun_second_hound', tree: 'hun_houndmaster', tier: 4, name: 'Second Hound',
     desc: 'A second hound at the other heel. Two inside 120 is Alpha: +20% Ferocity and +10% Tempo, to you and to them.',
     type: 'active', domain: 'physical', prereq: 'hun_bay',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.bayRange },
     cooldown: T.hound2Cd,
     compose: [{
@@ -125,7 +125,7 @@ export const HUN_HOUNDMASTER = [
     id: 'hun_feed_the_pack', tree: 'hun_houndmaster', tier: 5, name: 'Feed the Pack',
     desc: 'Restores 15 health when you drop below 65%.',
     type: 'active', domain: 'spiritual', prereq: 'hun_second_hound',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
     cooldown: T.feedCd,
     compose: [{ kind: 'heal', amount: T.feedAmount }],
@@ -161,7 +161,7 @@ export const HUN_HOUNDMASTER = [
     id: 'hun_kennel_guard', tree: 'hun_houndmaster', tier: 8, name: 'Kennel Guard',
     desc: 'Absorbs 26 over 5s and returns 35% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'hun_snare_net',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
     cooldown: T.kennelCd,
     compose: [{

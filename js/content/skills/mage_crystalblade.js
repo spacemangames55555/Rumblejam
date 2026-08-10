@@ -120,7 +120,7 @@ export const MAGE_CRYSTALBLADE = [
     id: 'mage_hardened_edge', tree: 'mage_crystalblade', tier: 4, name: 'Hardened Edge',
     desc: 'Absorbs 22 over 4.6s, +3.6% per crystal, when you drop below 55% health.',
     type: 'active', domain: 'physical', prereq: 'mage_fracture_line',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.hardenCd,
     compose: [{

@@ -154,7 +154,7 @@ export const PRIEST_JUDGMENT = [
     id: 'pri_reliquary_ward', tree: 'priest_judgment', tier: 8, name: 'Reliquary Ward',
     desc: 'A ward that thickens with every mark held. Absorbs 24, +7% per marked enemy, over 5s.',
     type: 'active', domain: 'spiritual', prereq: 'pri_chorus',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
     cooldown: T.reliquaryCd,
     compose: [{

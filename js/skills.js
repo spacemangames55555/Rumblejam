@@ -35,10 +35,12 @@ import { SAMURAI_TACTICS, TUNING as TACTICS_TUNING } from './content/skills/samu
 import { SAMURAI_AGILITY, TUNING as AGILITY_TUNING } from './content/skills/samurai_agility.js';
 import { BARD_REQUIEM, TUNING as BARD_REQ_TUNING } from './content/skills/bard_requiem.js';
 import { MAGE_REFRACTION, TUNING as MAGE_REF_TUNING } from './content/skills/mage_refraction.js';
+import { DRUID_WILDKIN, TUNING as DRUID_WK_TUNING } from './content/skills/druid_wildkin.js';
+import { ASN_RANGE, TUNING as ASN_RANGE_TUNING } from './content/skills/asn_range.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
-import { PRIMITIVE_KINDS, RIDERS_BY_PRIMITIVE } from './compose.js';
+import { PRIMITIVE_KINDS, RIDERS_BY_PRIMITIVE, PRIMITIVE_SELECTS, stepPicksTarget } from './compose.js';
 import { isDomain } from './domains.js';
 import { SELECT_KINDS } from './selectors.js';
 import { MOVE_KINDS } from './minions.js';
@@ -73,6 +75,8 @@ export const TREES = {
   samurai_agility: { id: 'samurai_agility', name: 'Agility', classId: 'toh_samurai', skills: SAMURAI_AGILITY, tuning: AGILITY_TUNING },
   bard_requiem: { id: 'bard_requiem', name: 'Requiem', classId: 'toh_bard', skills: BARD_REQUIEM, tuning: BARD_REQ_TUNING },
   mage_refraction: { id: 'mage_refraction', name: 'Refraction', classId: 'toh_mage', skills: MAGE_REFRACTION, tuning: MAGE_REF_TUNING },
+  druid_wildkin: { id: 'druid_wildkin', name: 'Wild Kin', classId: 'toh_druid', skills: DRUID_WILDKIN, tuning: DRUID_WK_TUNING },
+  asn_range: { id: 'asn_range', name: 'Range', classId: 'toh_assassin', skills: ASN_RANGE, tuning: ASN_RANGE_TUNING },
   necro_summons: { id: 'necro_summons', name: 'Summons', classId: 'toh_necromancer', skills: NECRO_SUMMONS, tuning: SUMMONS_TUNING },
   druid_beasts: { id: 'druid_beasts', name: 'Tapestry of Beasts', classId: 'toh_druid', skills: DRUID_BEASTS, tuning: BEASTS_TUNING },
 };
@@ -294,6 +298,16 @@ function summonStepProblems(s, step) {
 function assertTrees() {
   const problems = [];
 
+  // The derived selector table must not be empty or all-true: either would mean
+  // `Function.prototype.toString` stopped returning source (a minifier in the
+  // chain) and every `self` assertion below would be classifying blind.
+  {
+    const yes = Object.values(PRIMITIVE_SELECTS).filter(Boolean).length;
+    if (yes === 0 || yes === PRIMITIVE_KINDS.length) {
+      problems.push(`PRIMITIVE_SELECTS classified ${yes}/${PRIMITIVE_KINDS.length} primitives as target-picking — it is derived from function source, so an all-or-nothing split means the source is no longer readable and the "self" rule is unenforced`);
+    }
+  }
+
   // IDS ARE UNIQUE ACROSS EVERY TREE, and nothing checked it until a class had
   // three trees to collide within.
   //
@@ -364,6 +378,29 @@ function assertTrees() {
       if (s.prereq && !ids.has(s.prereq)) problems.push(`${s.id}: prereq ${s.prereq} is not in tree ${tree.id} — cross-tree prerequisites are not allowed`);
       if (s.prereq === s.id) problems.push(`${s.id}: prereq points at itself`);
       if (s.type !== 'active' && s.select) problems.push(`${s.id}: passive declares select ${JSON.stringify(s.select)} — a passive hits nothing`);
+
+      // `self` MEANS THE SKILL PICKS NOTHING, AND IT IS CHECKED BOTH WAYS.
+      //
+      // §5.3: `select` is what a skill hits. Six of the fourteen primitives
+      // never consult it — shield, ward, form, shift, heal and summon write the
+      // caster, the party or the field and have no target to choose. Those
+      // skills used to declare `nearest` and ignore it, which read as a real
+      // targeting rule in the data and was not one.
+      //
+      // With `self` in the vocabulary the rule becomes assertable in both
+      // directions, which is the point of adding it: a skill that picks nothing
+      // must SAY it picks nothing, and a skill that picks something must not
+      // claim otherwise. The second half is the one that catches real damage —
+      // a `self` on a strike would make `facing()` aim at nobody.
+      if (s.type === 'active' && Array.isArray(s.compose)) {
+        const picks = s.compose.filter(c => stepPicksTarget(c.kind));
+        if (picks.length && s.select === 'self') {
+          problems.push(`${s.id}: declares select "self" but its ${picks.map(c => c.kind).join('/')} step(s) DO consult a selector — a self selector resolves to no enemy, so those steps would aim at nothing`);
+        }
+        if (!picks.length && s.compose.length && s.select !== 'self') {
+          problems.push(`${s.id}: declares select ${JSON.stringify(s.select)} but every step (${s.compose.map(c => c.kind).join('/')}) ignores the selector — it hits the caster, so it must declare "self" rather than name a targeting rule it does not use`);
+        }
+      }
 
       if (s.type === 'active') {
         const tg = s.trigger;

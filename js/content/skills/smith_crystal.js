@@ -101,7 +101,7 @@ export const SMITH_CRYSTAL = [
     id: 'smith_iron_pyrite', tree: 'smith_crystal', tier: 2, name: 'Iron Pyrite',
     desc: 'At 70% health you go to iron for 7s: +22 Grit, +14 Vitality, and Anvil Strike becomes available.',
     type: 'active', domain: 'physical', prereq: 'smith_hammer_blow',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.pyritePct },
     cooldown: T.pyriteCd,
     compose: [{
@@ -146,7 +146,7 @@ export const SMITH_CRYSTAL = [
     id: 'smith_prism_quartz', tree: 'smith_crystal', tier: 5, name: 'Prism Quartz',
     desc: 'At 55% health you go to glass for 6.5s: +26 Attunement, +18 Ferocity, and Refraction becomes available.',
     type: 'active', domain: 'mental', prereq: 'smith_slag',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.quartzPct },
     cooldown: T.quartzCd,
     compose: [{
@@ -182,7 +182,7 @@ export const SMITH_CRYSTAL = [
     id: 'smith_celestial_calcite', tree: 'smith_crystal', tier: 8, name: 'Celestial Calcite',
     desc: 'At 35% health you go to light for 6s: +40 Recovery, +24 Vitality, and Mend the Seam becomes available.',
     type: 'active', domain: 'spiritual', prereq: 'smith_facet',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.calcitePct },
     cooldown: T.calciteCd,
     compose: [{
@@ -195,7 +195,7 @@ export const SMITH_CRYSTAL = [
     id: 'smith_mend_the_seam', tree: 'smith_crystal', tier: 9, name: 'Mend the Seam',
     desc: 'Only in Celestial Calcite. Restores 26 health — and Calcite\'s own Recovery amplifies it.',
     type: 'active', domain: 'spiritual', prereq: 'smith_celestial_calcite',
-    select: 'nearest', form: 'calcite',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.seamCd,
     compose: [{ kind: 'heal', amount: T.seamAmount }],

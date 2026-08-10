@@ -84,7 +84,7 @@ export const SAV_BLOODBOUND = [
     id: 'sav_thick_hide', tree: 'sav_bloodbound', tier: 3, name: 'Thick Hide',
     desc: 'Absorbs 20 over 4.6s.',
     type: 'active', domain: 'spiritual', prereq: 'sav_bleed_them',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
     cooldown: T.hideCd,
     compose: [{ kind: 'ward', amount: T.hideAmount, duration: T.hideDuration }],
@@ -155,7 +155,7 @@ export const SAV_BLOODBOUND = [
     id: 'sav_wont_go_down', tree: 'sav_bloodbound', tier: 9, name: "Won't Go Down",
     desc: 'Absorbs 30 over 5.2s and returns 30% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'sav_blood_price',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 35 },
     cooldown: T.downCd,
     compose: [{

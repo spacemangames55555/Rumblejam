@@ -70,7 +70,7 @@ export const PRIEST_GRACE = [
     id: 'pri_intercession', tree: 'priest_grace', tier: 2, name: 'Intercession',
     desc: 'Restores 14 health, +8% for every enemy still carrying your mark.',
     type: 'active', domain: 'spiritual', prereq: 'pri_consecrate',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 70 },
     cooldown: T.intercessionCd,
     compose: [{
@@ -83,7 +83,7 @@ export const PRIEST_GRACE = [
     id: 'pri_warding_hand', tree: 'priest_grace', tier: 3, name: 'Warding Hand',
     desc: 'Absorbs 22 over 4.2s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'pri_intercession',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.wardingCd,
     compose: [{ kind: 'shield', amount: T.wardingAmount, duration: T.wardingDuration }],
@@ -144,7 +144,7 @@ export const PRIEST_GRACE = [
     id: 'pri_vigil', tree: 'priest_grace', tier: 8, name: 'Vigil',
     desc: 'Absorbs 30 over 5.2s and returns 40% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'pri_staff_of_office',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.vigilCd,
     compose: [{

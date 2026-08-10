@@ -143,7 +143,7 @@ export const MAGE_REFRACTION = [
     id: 'mage_anneal', tree: 'mage_refraction', tier: 4, name: 'Anneal',
     desc: 'Heat, then cool slowly. Temper pays out once the crystal is already flowing and the question is surviving the supply.',
     type: 'active', domain: 'spiritual', prereq: 'mage_flaw',
-    select: 'nearest',   // a ward reads the caster; `select` is only ever WHAT IT HITS
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.annealPct },
     cooldown: T.annealCd,
     compose: [{ kind: 'shield', amount: T.annealAmount, duration: T.annealDuration, ...CRY }],
@@ -171,7 +171,7 @@ export const MAGE_REFRACTION = [
     id: 'mage_adamant', tree: 'mage_refraction', tier: 10, name: 'Adamant',
     desc: 'CAPSTONE — Temper. At the bottom of the health bar the lattice finishes forming, and what hits it is hit back.',
     type: 'active', domain: 'spiritual', prereq: 'mage_quench',
-    select: 'nearest',   // a ward reads the caster; `select` is only ever WHAT IT HITS
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.adamantPct },
     cooldown: T.adamantCd,
     compose: [{ kind: 'ward', amount: T.adamantAmount, duration: T.adamantDuration, reflectPct: T.adamantReflect, ...CRY }],

@@ -134,7 +134,7 @@ export const WD_EFFIGY = [
     id: 'wd_hollow_man', tree: 'wd_effigy', tier: 6, name: 'Hollow Man',
     desc: 'The doll takes it instead. Absorbs 22 over 4.6s, +6% per point banked, below 55% health.',
     type: 'active', domain: 'spiritual', prereq: 'wd_sympathetic_binding',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.hollowCd,
     compose: [{

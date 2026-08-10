@@ -85,7 +85,7 @@ export const NECRO_SUMMONS = [
     id: 'necro_raise_skeleton', tree: 'necro_summons', tier: 2, name: 'Raise Skeleton',
     desc: 'It remembers how to hold a weapon. It remembers nothing else.',
     type: 'active', domain: 'spiritual', prereq: 'necro_bone_shard',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     // §8.5: Raise Skeleton is triggered by a SOUL TOKEN in range, not by a
     // crowd. The skill throws at the token and the skeleton rises where the
     // throw lands, which is what makes a token a place rather than a counter —
@@ -130,7 +130,7 @@ export const NECRO_SUMMONS = [
     id: 'necro_soul_harvest', tree: 'necro_summons', tier: 4, name: 'Soul Harvest',
     desc: 'What the dead leave behind is still worth something to you.',
     type: 'active', domain: 'spiritual', prereq: 'necro_gravechill',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     // ON_TOKEN, first use. The token is a world resource left by any enemy
     // death — the trigger reads the floor, not a Necromancer counter.
     trigger: { kind: 'ON_TOKEN', range: T.wispTokenRange },
@@ -183,7 +183,7 @@ export const NECRO_SUMMONS = [
     id: 'necro_bone_golem', tree: 'necro_summons', tier: 8, name: 'Bone Golem',
     desc: 'Enough of them, stacked well enough, and it stands on its own.',
     type: 'active', domain: 'physical', prereq: 'necro_charnel_pact',
-    select: 'densest_cluster',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'PROXIMITY', radius: T.golemTrigRadius, count: T.golemTrigCount },
     cooldown: T.golemCd,
     compose: [{

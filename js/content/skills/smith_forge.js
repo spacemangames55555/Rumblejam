@@ -72,7 +72,7 @@ export const SMITH_FORGE = [
     id: 'smith_bellows', tree: 'smith_forge', tier: 2, name: 'Bellows',
     desc: 'Absorbs 22 over 4.8s.',
     type: 'active', domain: 'spiritual', prereq: 'smith_tongs',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
     cooldown: T.bellowsCd,
     compose: [{ kind: 'ward', amount: T.bellowsAmount, duration: T.bellowsDuration }],
@@ -155,7 +155,7 @@ export const SMITH_FORGE = [
     id: 'smith_cold_shut', tree: 'smith_forge', tier: 9, name: 'Cold Shut',
     desc: 'Absorbs 30 over 5.4s and returns 32% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'smith_standing_order',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 40 },
     cooldown: T.shutCd,
     compose: [{

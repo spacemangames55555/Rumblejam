@@ -81,7 +81,7 @@ export const ASN_SHADOW = [
     id: 'asn_vanish', tree: 'asn_shadow', tier: 3, name: 'Vanish',
     desc: 'Absorbs 22 over 4.4s when you drop below 55% health.',
     type: 'active', domain: 'mental', prereq: 'asn_hamstring',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.vanishCd,
     compose: [{ kind: 'shield', amount: T.vanishAmount, duration: T.vanishDuration }],

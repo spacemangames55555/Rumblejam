@@ -72,7 +72,7 @@ export const BARD_ENSEMBLE = [
     id: 'bard_refrain', tree: 'bard_ensemble', tier: 2, name: 'Refrain',
     desc: 'Restores 15 health, +2.5% for every stack you are holding.',
     type: 'active', domain: 'spiritual', prereq: 'bard_sting',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 70 },
     cooldown: T.refrainCd,
     compose: [{
@@ -85,7 +85,7 @@ export const BARD_ENSEMBLE = [
     id: 'bard_traveling_song', tree: 'bard_ensemble', tier: 3, name: 'Traveling Song',
     desc: 'Absorbs 20 over 4.4s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'bard_refrain',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.travelCd,
     compose: [{ kind: 'shield', amount: T.travelAmount, duration: T.travelDuration }],
@@ -149,7 +149,7 @@ export const BARD_ENSEMBLE = [
     id: 'bard_standing_ovation', tree: 'bard_ensemble', tier: 8, name: 'Standing Ovation',
     desc: 'Absorbs 32 over 5.4s and returns 35% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'bard_rondo',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.ovationCd,
     compose: [{

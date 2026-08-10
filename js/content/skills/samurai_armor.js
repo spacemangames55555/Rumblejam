@@ -133,7 +133,7 @@ export const SAMURAI_ARMOR = [
     id: 'sam_iron_sleeve', tree: 'samurai_armor', tier: 3, name: 'Iron Sleeve',
     desc: 'Armour takes the blow you did not. Worth more the longer you have stood.',
     type: 'active', domain: 'physical', prereq: 'sam_set_stance',
-    select: 'nearest',   // what it hits; the trigger above is only WHEN
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'ON_HIT_TAKEN' },
     cooldown: T.sleeveCd,
     compose: [{
@@ -159,7 +159,7 @@ export const SAMURAI_ARMOR = [
     id: 'sam_immovable', tree: 'samurai_armor', tier: 5, name: 'Immovable',
     desc: 'Stand long enough and what comes at you starts coming back.',
     type: 'active', domain: 'mental', prereq: 'sam_sweeping_guard',
-    select: 'nearest',   // what it hits; the trigger above is only WHEN
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'MOVEMENT', mode: 'still', seconds: T.immovableSeconds },
     cooldown: T.immovableCd,
     compose: [{
@@ -208,7 +208,7 @@ export const SAMURAI_ARMOR = [
     id: 'sam_bulwark', tree: 'samurai_armor', tier: 9, name: 'Bulwark',
     desc: 'Once, on the way down.',
     type: 'active', domain: 'mental', prereq: 'sam_crushing',
-    select: 'nearest',   // what it hits; the trigger above is only WHEN
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.bulwarkPct },
     cooldown: T.bulwarkCd,
     compose: [

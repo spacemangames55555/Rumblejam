@@ -166,7 +166,7 @@ export const ASN_KILLBOX = [
     id: 'asn_quiet_exit', tree: 'asn_killbox', tier: 9, name: 'Quiet Exit',
     desc: 'Absorbs 24 over 4.6s, +6% per trap set, when you drop below 50% health.',
     type: 'active', domain: 'mental', prereq: 'asn_blind_angle',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
     cooldown: T.exitCd,
     compose: [{

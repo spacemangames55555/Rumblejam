@@ -646,6 +646,25 @@ export function runCompose(sim, p, skill, rank, grid) {
 
 export const PRIMITIVE_KINDS = Object.keys(PRIMITIVES);
 
+// WHICH PRIMITIVES ACTUALLY CONSULT `select` — DERIVED, never restated.
+//
+// This is what makes the `self` selector checkable rather than a convention.
+// A skill whose every step ignores the selector has no target to choose and
+// must declare `self`; a skill with any step that reads one must declare a real
+// selector. Before `self` existed both cases looked identical in the data and
+// no assertion could tell them apart.
+//
+// Read off the source rather than hand-listed, per §13 rule 12: a list here
+// would be correct until the next primitive learns to aim and then silently
+// wrong, which is the whole failure family this file's assertions exist for.
+// Safe because the project has NO BUILD STEP — nothing minifies these bodies —
+// and `PRIMITIVE_SELECTS` is asserted non-empty at load so a toolchain that
+// ever did minify fails loudly here instead of quietly mis-classifying trees.
+export const PRIMITIVE_SELECTS = Object.fromEntries(
+  Object.entries(PRIMITIVES).map(([k, fn]) => [k, /skill\.select/.test(Function.prototype.toString.call(fn))])
+);
+export function stepPicksTarget(kind) { return PRIMITIVE_SELECTS[kind] === true; }
+
 // Riders that resolve on a hit enemy — valid anywhere damage lands.
 // `mark` is the Priest's write path (§8.3 judgment marks). A rider could write
 // exactly eight enemy fields before it and none of them was a mark, so a

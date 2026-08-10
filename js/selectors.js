@@ -28,6 +28,14 @@ export const SELECT_KINDS = [
   'lowest_hp',         // execute: finish what is nearly dead
   'densest_cluster',   // the crowd answer: aim where the most bodies are
   'objective_target',  // nests, marks, elites, bosses — the thing the level is about
+  // THE HONEST ANSWER FOR A SKILL THAT PICKS NOTHING. `select` means what a
+  // skill hits, and a self-buff hits the caster — it has no target to choose.
+  // Before this existed those skills declared `nearest` and ignored it, which
+  // is the same shape as D-36 and D-37: something declared, nothing reading it,
+  // and nobody noticing because the convention was consistent. It also made the
+  // rule uncheckable — with every skill naming a real selector there was no way
+  // for a load assertion to say "this one should not have".
+  'self',
 ];
 
 // Roles the level cares about, in the order a player would prioritise them.
@@ -90,7 +98,11 @@ function rank(kind, e, list, x, y) {
 
 // ONE target. Returns null when nothing is in range, exactly as grid.nearest()
 // did, so every call site's existing null handling still holds.
+// `self` never resolves to an enemy. Guarded here as well as asserted at load,
+// because a step that reads a selector must never silently inherit a target
+// from a skill that declared it has none.
 export function selectTarget(kind, grid, x, y, range) {
+  if (kind === 'self') return null;
   const list = candidates(grid, x, y, range);
   if (!list.length) return null;
   let best = null, bestScore = -Infinity;
@@ -104,6 +116,7 @@ export function selectTarget(kind, grid, x, y, range) {
 // N targets, best-first by the same rule. Used by multi-bolt steps, which used
 // to take grid.nearestN() and therefore always the N nearest.
 export function selectTargets(kind, grid, x, y, range, count) {
+  if (kind === 'self') return [];
   const list = candidates(grid, x, y, range);
   if (!list.length) return [];
   return list
