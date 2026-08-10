@@ -329,8 +329,25 @@ function formStats(p) {
 // deleted, aimed at the player by their own class. The skill stays slotted and
 // visible; what the form changes is whether its condition can hold — the same
 // shape as the Monk's `chi` cost and `from: 'pet'`'s need for a live beast.
+// `form: 'none'` — THE GAP BETWEEN FORMS, made expressible.
+//
+// This gate could only ever say "fires while Iron Pyrite holds". §8.3's forms
+// enter on SELF_THRESHOLD, so the Blacksmith is strongest when hurt and hollow
+// when healthy, and the interval between forms — cooldown up, health high, no
+// state — was the one condition no skill could name. A tree about that gap
+// could not be written, which is why smith_anvil needed this before it needed
+// content.
+//
+// 'none' is deliberately a VALUE of the existing field rather than a new
+// `noForm` flag: the question "which form does this need" now has an answer
+// meaning "none of them, and that is the point", so one declaration covers both
+// directions and one gate covers both readings. Asserted against FORM_NAMES at
+// load, so a typo'd form name still fails rather than silently reading as this.
+export const FORM_NONE = 'none';
+
 export function formHolds(p, sk) {
   if (!sk || !sk.form) return true;
+  if (sk.form === FORM_NONE) return !p.form;
   return p.form === sk.form;
 }
 

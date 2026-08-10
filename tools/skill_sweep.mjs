@@ -81,7 +81,16 @@ function arena(skill) {
   // a dead trigger. The form is entered rather than assigned: `p.formStats` has
   // to arrive too or the stat half of the state is missing, and the fixture would
   // be testing a form that changes nothing.
-  if (skill.form) {
+  // `form: 'none'` IS THE OPPOSITE STAGING, and the naive read of this block
+  // gets it exactly backwards. `sk.form` used to mean "enter this form"; smith
+  // _anvil's Cold Iron branch declares 'none', meaning it fires only while NO
+  // form holds — so entering one here made three working skills read as dead
+  // triggers. The staging has to answer the declaration rather than assume its
+  // shape.
+  if (skill.form === 'none') {
+    p.form = null; p.formT = 0; p.formStats = null;
+    if (p.engines) p.engines.form = 0;
+  } else if (skill.form) {
     const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === skill.form));
     const step = src && src.compose.find(c => c.kind === 'form');
     p.form = skill.form;

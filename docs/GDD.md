@@ -389,6 +389,8 @@ Any active is data: an ordered list of steps from **fourteen** primitives plus r
 
 **This is a design property, not a defect, and it is recorded because it is invisible until you hit it.** The consequence for authoring is real: a branch built on ground control has a materially narrower rider vocabulary than a branch built on strikes, and a capstone that wanted to stun will have to want something else. `bard_requiem`'s Dirge branch met exactly this — its tier-10 node was authored with `stun` and became a slow. Plan a zone branch's payoff around denial and attrition rather than around control, or put the control on a `strike`/`cone` step in the same skill, which is legal and is the intended escape hatch.
 
+**`form: 'none'` — the gap between forms.** `formHolds` could only ask *"is this the form I need"*, so the interval between forms — cooldowns up, health high, no state — was the one condition no skill could name. Since §8.3's forms enter on `SELF_THRESHOLD`, that interval is most of a good fight, and the Blacksmith is **strongest when hurt and hollow when healthy**. `none` is a VALUE of the existing `form` field rather than a new flag, so one declaration covers both readings and one gate covers both directions; it is asserted against `FORM_NAMES` at load, so a typo'd form name still fails rather than silently reading as "the gap". Gated in `engine_gate` through the real trigger loop — fires out of form, silent in one — before `smith_anvil` was authored against it.
+
 **`mend` — the fifteenth rider, and the pack's only heal.** §5.7's first condition was *demonstrated* rather than asserted: minion HP is written in exactly three places, all structural (full at spawn, full at revive, zero at death), and no primitive touches it — `heal` iterates `sim.livePlayers()`, `drain` heals the caster, `plague` writes the enemy. So a pack could be worn down with no answer in the vocabulary, which is what blocked the Druid's Restoration tree.
 
 The second condition settles it as a **rider rather than a primitive**, and the precedent is one line up in the same function: `healPerHit` is already an impact rider that heals somebody who is not the thing being hit. A pack heal has the two properties a rider needs — a target and a moment — and writes **no caster state**, which is exactly what made `shift`, `trap` and `form` primitives instead. It is additive rather than a reshape of `healPerHit`, because the two have different recipients and five shipped skills declare `healPerHit` as a plain number.
@@ -613,24 +615,24 @@ Two properties worth stating because they are consequences rather than choices. 
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 14 of 14** (33 trees, 330 skills). Four classes are at the ruled three — **Samurai** (Agility), **Bard** (Requiem), **Mage** (Refraction), **Assassin** (Range) — plus the Necromancer, which had three from the start. The **Druid is at two** (Beasts, Wild Kin) and is the only class still short of three. The **Samurai was the first** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 14 of 14** (35 trees, 350 skills). Six classes are at the ruled three — **Samurai** (Agility), **Bard** (Requiem), **Mage** (Refraction), **Assassin** (Range), **Blacksmith** (Anvil), **Witch Doctor** (Swarm) — plus the Necromancer, which had three from the start. The **Druid is at two** (Beasts, Wild Kin) and is the only class still short of three. The **Samurai was the first** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
 | Samurai | Armor, Tactics, **Agility** — the first BRANCHING tree, and the §8.1 shape spec's reference |
 | Bard | Cadence, Ensemble, **Requiem** — what to do when the rhythm breaks |
 | Assassin | Killbox, Shadow, **Range** — output that does not require having arrived first |
+| Blacksmith | Crystal, Forge, **Anvil** — the gap between forms, made playable rather than shorter |
+| Witch Doctor | Effigy, Blight, **Swarm** — what a class built on designating ONE enemy does about a room |
 | Druid | Beasts, **Wild Kin** — what the DRUID does; still one short, see §15 |
 | Mage | Crystalblade, Collapse, **Refraction** — how to fill an engine only the enemy can fill |
 | Necromancer | Marrow, Dark Matter, **Summons** — the only class with three |
 | Wizard | Attunement, Arcana |
 | Priest | Judgment, Grace |
-| Witch Doctor | Effigy, Blight |
 | Sundian | Tidewrack, Reef |
 | Hunter | Longshot, Houndmaster |
 | Monk | Chi, Stone Garden |
 | Savage | Primal Fury, Bloodbound |
-| Blacksmith | Crystal, Forge |
 
 None remain unbuilt.
 
