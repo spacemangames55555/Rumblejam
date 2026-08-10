@@ -544,7 +544,7 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 #### 8.1.1 Tier unlock levels — **PROPOSED**
 
-Measured, not assumed: full runs to victory for all 14 classes end at **level 68–70**, reaching ~21 by the end of floor 1, ~35 by floor 2 and ~52 by floor 3. (Two classes are outliers — Assassin 115 and Priest 102, on 2.7× everyone else's materials. That is an economy defect, not a curve.)
+Measured, not assumed: full runs to victory for all 14 classes end at **level 68–70**, reaching ~21 by the end of floor 1, ~35 by floor 2 and ~52 by floor 3. (Two classes measured as outliers here — Assassin 115 and Priest 102. The Assassin was an economy defect and is fixed: D-34 brings it to 70, inside the band. The Priest's is D-35, still open. Neither is a property of the curve.)
 
 | Tier | Level | Where that lands |
 |---|---|---|
@@ -624,6 +624,14 @@ Every class has a mechanical engine no other class has. Each must interact with 
 | Samurai | **Footing** — see §8.4 |
 | Monk | **Chi loop** — damage skills put Chi in, heals and traps take it out, and at zero Chi the damage skills are at their floor. **The only engine that runs in two directions**, and the only one the player empties on purpose |
 | Assassin | **Killbox** — traps placed inert, detonating when other skills fire nearby. The only engine banked by BEING SOMEWHERE rather than by acting |
+
+**The Assassin's `contract` trait is the roster's one compounding economy, and it is named here so nobody rediscovers it.** Three facts that are individually reasonable close a loop:
+
+1. The Assassin is the **only class with base Greed** (8; the Druid's 5 is the only other non-zero).
+2. The contract **payout scales on Greed** — `5 + Greed` materials per closure.
+3. Greed **drives shop rarity** (`_rollRarity`), so materials buy better items, and better items carry more Greed.
+
+Each step feeds the next, so the trait's income grows superlinearly across a run rather than tracking the fight. Measured, the Assassin ends a shopping run at **Greed 95.5 against the Samurai's 57.5** from the same seed and the same shop offers. D-34 caps the payout per room and strips XP from it, which bounds the loop's output — but **the loop itself is still there**, and any future change that raises Greed, the payout, or rarity's sensitivity to Greed will amplify it again. A second fix is not proposed; a second reader is warned.
 | Hunter | **Two bodies** — a skill may declare `from: 'pet'` and evaluate its trigger at the beast instead of at the player. The engine, `spread`, is the distance between them in bands: **the only engine that measures a relationship rather than a quantity** |
 
 #### Batch order for phase 5 — engine shape decides it
@@ -1651,7 +1659,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
-**Group D holds two open economy defects, D-34 and D-35**, both found by measuring the level curve for the tier gates rather than by a red check — no suite covers per-class income, which is why a class finishing a run at level 124 against a norm of 69 was invisible. D-23 through D-33 are all closed. **D-31 is the only one of them found by a human playing the game rather than by measurement**, which is worth its own line: every gate in the suite passed while the game was unplayable, because every gate provisioned its own fixture. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
+**Group D holds one open item, D-35, and it is an instrumented question rather than a defect.** Both it and D-34 were found by measuring the level curve for the tier gates rather than by a red check — no suite covers per-class income, which is why a class finishing a run at level 124 against a norm of 69 was invisible. D-34 is closed; D-23 through D-33 are all closed. **D-31 is the only one of them found by a human playing the game rather than by measurement**, which is worth its own line: every gate in the suite passed while the game was unplayable, because every gate provisioned its own fixture. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1732,11 +1740,9 @@ They are the same category as the seven checks above, and the same category as D
 
 ### Group D — genuine open defects (0)
 
-#### D-34 — OPEN: the Assassin's trait out-earns the entire kill economy
+#### D-34 — CLOSED: the Assassin's trait out-earned the entire kill economy
 
-Measured across full runs to victory, twelve classes finish at level 68–70 on ~10,300 materials. **The Assassin finishes at 124 on 32,074** — and the cause is not the kill economy, which is normal.
-
-Instrumenting the two `_dropMaterial` call sites apart, with shopping disabled so no item can be blamed:
+Twelve classes finish a run at level 68–70 on ~10,300 materials. The Assassin finished at **124 on 32,074**, and the kill economy was not the cause. Splitting the two `_dropMaterial` call sites apart, with shopping disabled so no item could be blamed:
 
 | | kill path | trait path | kills |
 |---|---|---|---|
@@ -1744,19 +1750,42 @@ Instrumenting the two `_dropMaterial` call sites apart, with shopping disabled s
 | Priest | 9,533 | 0 | 4,723 |
 | **Assassin** | **9,432** | **11,779** | 4,687 |
 
-The Assassin kills the same enemies for the same materials as everyone else. `contract` then pays `5 + Greed` materials **every time a marked target dies**, a mark re-arms after `remarkDelay`, and `contractsDone` resets per room (`traits-toh.js:103`) — so the counter reading 41 is one room's worth, not a run's. Over a run it fires often enough to pay **more than the entire kill economy**.
+It killed the same enemies for the same materials as everyone else. `contract` then paid `5 + Greed` **every time a marked target died** — the mark re-arms after `remarkDelay`, so this is a faucet, not a bonus. (`contractsDone` reads 41 at a run's end because it **resets per room**; that counter is one room's worth and reading it as a run total understates the payout by more than an order of magnitude.)
 
-Two things make it compound rather than merely overpay. The payout scales on Greed, and the Assassin is the only class with base Greed (8); Greed also drives shop rarity, so materials buy better items which raise Greed further — measured, it ends a shopping run at 95.5 against the Samurai's 57.5. And the payout drops through `_dropMaterial(x, y)` with `xpValue` defaulting to `value`, so **every one of those materials carries full XP**. §4.1's rule that extra gold must not become extra XP is enforced at the difficulty multiplier — which deliberately drops XP-less materials — and not here. That is why the outlier appears as a *level* outlier: 124 against 69.
+**Two fixes, both answering rules that already existed elsewhere.**
 
-**Not proposing the fix here.** The shape of it is a §4.1 question (should trait payouts carry XP at all?) and a §8.3 question (is the payout per-mark or per-room?), and both are rulings.
+*Trait materials carry no XP.* §4.1 excludes XP from anything that is not the fight, and the drop path already honoured that for the difficulty multiplier — which deliberately drops its extras with `xpValue` 0 so a harder setting pays more gold and exactly the same XP. This site defaulted `xpValue` to `value` and routed straight around it. **That is the same shape as the difficulty back door: an exclusion enforced at one site while another path walks past it**, and it is why the Assassin read as a *level* outlier rather than a wealth one.
 
-#### D-35 — OPEN: the Priest outlier is the shop loop, not the class
+*The payout is capped at a room's worth.* `payoutsPerRoom: 3` — only the first three closures in a room pay materials, and the counter resets with the room beside `contractsDone`.
 
-The Priest finishes at level 103 on 22,588 materials with shopping on. **With shopping off it finishes at level 65 on 8,997 — indistinguishable from the Samurai's 65 and 8,901.** Its trait drops nothing; its kill-path income per kill is exactly normal (2.20 against the roster's 2.21).
+**The cap is on the money, not on the mark, and that is the load-bearing choice.** The mark drives two systems and only one was broken: `contractsDone` also feeds `s.ferocity += contractsDone * ferPerContract`, which is roughly **650 of the Assassin's 688 Ferocity**. Making the mark itself per-room would have taken that to +15% and gutted the class to fix an economy bug. Contracts keep closing and keep ramping; they stop printing money.
 
-What changes is the number of enemies. With items it kills 10,176 against a norm of ~4,660, and the excess is spread evenly across every archetype — `gemmite(mini)` 1,425 vs 528, `flit` 1,334 vs 572, `lancerfish` 1,160 vs 540 — so its fights contain roughly twice as many bodies rather than richer ones. Its recorded damage *falls* over the same runs (3.0M against 3.9M), so a growing share of those kills is not attributed to the player.
+Measured after, full run, shopping on:
 
-**The mechanism past that point is not established.** The item sets are the same as every other class's — the bot buys what the shop offers — so this is an interaction between the Priest's build and items rather than a single item, and the honest statement is that the class is not an intrinsic economy outlier. Worth separating from D-34 precisely because the ruling is different: D-34 is a trait paying too much, this is the item feedback loop compounding for whoever pulls ahead first, which is a property of the shop rather than of the Priest.
+| | trait payout | XP-carrying | level | Ferocity | materials |
+|---|---|---|---|---|---|
+| before | 11,779 | all of it | **124** | 775 | 31,846 |
+| after | **2,062** | **0** | **70** | 802 | 12,385 |
+
+The trait is now **19.8% of the kill economy** and the Assassin ends **+22% wealthier than the Samurai at the same level** — a wealth bonus, which is what a money class should be. Three is a lever: two would make it ~13%, four ~26%.
+
+The compounding loop behind it is recorded in §8.3 rather than here, because it survives this fix.
+
+#### D-35 — OPEN, INSTRUMENTED: the Priest's extra kills are real and attributed
+
+**The attribution hypothesis is dead, and it was mine.** I reported that the Priest's falling damage against rising kills meant a growing share of kills was not attributed to the player. Measured across full runs by classifying every killing blow: **10,176 of 10,205 kills are attributed to the player — 100%, with 29 unowned.** The Samurai's figure is 4,635 of 4,686. There is no attribution defect and no hidden killer.
+
+What is established:
+
+- **With shopping off the Priest is the control.** 4,723 kills, 8,997 materials, level 65 — against the Samurai's 4,695, 8,901 and 65. Its trait drops nothing and its per-kill income is exactly normal (2.20 against the roster's 2.21).
+- **Same 28 rooms, same seed, same path.** Not more content.
+- **The extra kills are spread proportionally across every node kind** — siege 4,608 vs 2,037 (2.26×), plain combat 3,852 vs 1,634 (2.36×), elite arena 1,310 vs 761 (1.72×). No single objective or mechanism carries it.
+- **Cursed and node HP multipliers are 1.00 for both**, so the fights are not differently modified.
+- The lower average HP of the enemies it kills (floor 4: 115 vs 166) is an **arithmetic consequence** of killing more chaff against a roughly fixed elite population, not an independent cause.
+
+So: more bodies, everywhere, only once items are in play. **The leading hypothesis is the alive/pool ceiling, and it is not yet confirmed.** A wave has a fixed spawn budget but the field has a cap; a build that clears chaff faster frees slots sooner and converts more of that budget into actual bodies, while a slower build leaves it queued and never fielded. That would produce exactly this shape — proportional across node kinds, absent without items, and invisible in a single room.
+
+**The next measurement is named so nobody re-derives it:** count spawn-queue drops and alive-cap rejections per class over a full run. If the Priest fields more of the same budget, this is not a Priest defect at all and the ruling belongs to the spawn ceiling. **No shop change should be proposed before that number exists.**
 
 #### D-33 — CLOSED: the opening card was visible, on top of nothing, and unclickable
 

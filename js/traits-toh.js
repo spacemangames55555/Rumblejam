@@ -65,6 +65,7 @@ export function tohInitPlayer(sim, p) {
   p.stance = 0; p.stanceCd = 0; p.ironBank = 0; p.flowStacks = 0; p.flowLast = -1;
   p.karma = 0; p.spirit = null;
   p.contractId = null; p.contractsDone = 0; p.contractT = 0; p.vanishT = 0;
+  p.contractPaid = 0;          // materials paid by the contract THIS room (D-34)
   p.grace = 0;
   p.voodooId = null; p.voodooDmg = 0; p.stitch = null;
   p.bloodHeat = 0; p.bloodHeatT = 0;   // NOT p.heat — Pulsar owns that name
@@ -101,6 +102,7 @@ export function tohStartFight(sim, p) {
   p.karma = 0; p.spirit = null;
   p.contractId = null; p.contractT = t.key === 'contract' ? 1.5 : 0;
   p.contractsDone = 0; p.vanishT = 0;
+  p.contractPaid = 0;          // the payout cap resets with the room, like contractsDone
   p.grace = 0;
   p.voodooId = null; p.voodooDmg = 0; p.stitch = null;
   p.bloodHeat = 0; p.bloodHeatT = 0;
@@ -609,10 +611,37 @@ export function tohOnKill(sim, p, e) {
       p.contractId = null;
       p.contractT = t.remarkDelay;
       p.contractsDone++;
-      const pay = Math.round(t.payoutBase + Math.max(0, p.stats.greed) * t.payoutGreedScale);
-      for (let i = 0; i < pay; i++) sim._dropMaterial(e.x + (sim.rng.float() * 30 - 15), e.y + (sim.rng.float() * 30 - 15));
+      // D-34, HALF ONE: A ROOM'S WORTH, NOT A FAUCET.
+      //
+      // The mark re-arms after `remarkDelay`, so this fired often enough to pay
+      // 11,779 materials over a run against a kill economy of 9,432 — the trait
+      // out-earned the entire game. Only the first `payoutsPerRoom` closures pay
+      // materials; the counter resets with the room, beside contractsDone.
+      //
+      // THE CAP IS ON THE MONEY, NOT ON THE MARK, and that is deliberate. The
+      // mark drives two systems and only one of them was broken: `contractsDone`
+      // also feeds `s.ferocity += contractsDone * ferPerContract`, which is the
+      // Assassin's whole damage identity — measured, roughly 650 of its 688
+      // Ferocity. Stopping the mark re-arming would have taken that to +15% and
+      // gutted the class to fix an economy bug. Contracts keep closing and keep
+      // ramping; they stop printing money.
+      const paidThisRoom = (p.contractPaid || 0);
+      const pay = paidThisRoom < t.payoutsPerRoom
+        ? Math.round(t.payoutBase + Math.max(0, p.stats.greed) * t.payoutGreedScale) : 0;
+      if (pay > 0) p.contractPaid = paidThisRoom + 1;
+      // D-34, HALF TWO: TRAIT MATERIALS CARRY NO XP.
+      //
+      // §4.1 excludes XP from anything that is not the fight itself, and the
+      // drop path already honours that for the difficulty multiplier — it drops
+      // the extras with `xpValue` 0 so a harder setting pays more gold and
+      // exactly the same XP. This site defaulted `xpValue` to `value` and routed
+      // straight around the same rule, which is why the Assassin read as a LEVEL
+      // outlier (124 against a norm of 69) rather than a wealth one.
+      for (let i = 0; i < pay; i++) sim._dropMaterial(e.x + (sim.rng.float() * 30 - 15), e.y + (sim.rng.float() * 30 - 15), 1, 0);
       sim._recomputeStats(p);
-      sim.pushEvent({ k: 'toast', idx: p.idx, text: `CONTRACT CLOSED — +${pay} ⟡, +${t.ferPerContract}% Ferocity` });
+      sim.pushEvent({ k: 'toast', idx: p.idx,
+        text: pay > 0 ? `CONTRACT CLOSED — +${pay} ⟡, +${t.ferPerContract}% Ferocity`
+                      : `CONTRACT CLOSED — +${t.ferPerContract}% Ferocity` });
     }
   }
   if (t.key === 'voodoo_link' && p.voodooId !== null && e.id === p.voodooId) {

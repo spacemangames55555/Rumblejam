@@ -102,6 +102,9 @@ export const CHARACTERS_TOH = [
     stats: { ferocity: 12, greed: 8, vitality: -25 }, weapon: 'vaultspike',
     trait: {
       key: 'contract', payoutBase: 5, payoutGreedScale: 1.0, ferPerContract: 15,
+      // D-34: how many closures PAY per room. The mark still re-arms without
+      // limit — this caps the money, not the Ferocity ramp. See tohOnKill.
+      payoutsPerRoom: 3,
       openerCritMult: 3, vanishDur: 1.2, remarkDelay: 3,
     },
     desc: 'Contract: one enemy per fight is marked — an elite or boss if there is one, otherwise the healthiest thing alive. Killing it pays 5 + your Greed in materials and grants +15% Ferocity for the rest of the fight, stacking with every contract closed. A new mark appears 3s later. You also never crit at random: granted crits deal ×3, your first hit on any full-health enemy is always a crit, and every kill makes you untargetable for 1.2s.' },
