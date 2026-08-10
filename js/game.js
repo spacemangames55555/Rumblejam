@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
-import { buildArena, waveConfig, PROFILES, isOnboardingNode } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -3135,7 +3135,12 @@ export class Sim {
     // multiplier adds materials that are worth money and no experience (§4.1).
     // Every other caller (tithe, interest, debug) passes nothing and keeps the
     // old behaviour of one XP per material.
-    const xpGain = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100);
+    // …and the onboarding ramp's XP compensation rides here, at the single
+    // point XP is credited, so it touches experience and nothing else. `mats`
+    // above is already banked — the ramp costs the player money and does not
+    // cost them levels.
+    const onbXp = this.arenaNode ? onboardingXpMult(this.floorNum, this.arenaNode.col) : 1;
+    const xpGain = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100) * onbXp;
     p.xp += xpGain;
     p.xpEarned += xpGain;
     while (p.xp >= p.xpNext) {

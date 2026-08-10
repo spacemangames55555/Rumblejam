@@ -407,7 +407,25 @@ function assertTrees() {
       }
     }
 
-    // linear prerequisite chain: every tier above 1 hangs off the one below
+    // STRICT LAYERING — which is NOT the same as a linear chain, and this
+    // comment said "linear prerequisite chain" for four phases while enforcing
+    // something weaker.
+    //
+    // What is actually required is that a prereq sit exactly one tier below.
+    // That forbids a skill skipping a tier; it has never forbidden two skills
+    // at tier 3 sharing a tier-2 parent, which is what BRANCHING is. Tested
+    // rather than assumed: a second tier-3 node added to samurai_tactics under
+    // the same parent loaded clean and swept 0-red.
+    //
+    // So every tree being a 1-per-tier chain today is an authoring convention,
+    // not a constraint — and §8.1's move to branching trees needs no change
+    // here. Layering is what keeps a tree RENDERABLE (tier is the column the
+    // screen lays out on), so it stays. A skill still has exactly one parent:
+    // convergence is ruled out of v1, and `prereq` is a single id everywhere.
+    //
+    // What this does NOT yet check, and must once a branching tree is authored:
+    // that every node is reachable from the root. A chain cannot strand a node;
+    // a branch can, and a stranded node is unbuyable content that looks fine.
     for (const s of byTier) {
       if (s.tier === 1) continue;
       const pre = SKILL_BY_ID[s.prereq];

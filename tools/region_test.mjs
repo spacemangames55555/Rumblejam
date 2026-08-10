@@ -265,5 +265,68 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   }
 }
 
+// ------------------------------------------- the onboarding ramp's XP debt
+//
+// WHAT THIS DEFENDS. Region 1's ramp halves map 1's spawns and cuts its table
+// to three archetypes. Materials fell with them and XP rides materials, so the
+// ramp also halved PROGRESSION — measured either side of the change on one
+// harness, a character left map 1 at level 3 with 1 slot where it had left at
+// level 6 with 2. `ONBOARDING_XP_MULT` pays that back.
+//
+// THE CONSTANT IS MEASURED, SO THE OUTCOME IS WHAT GETS ASSERTED. Density
+// explains a factor of two; the rest is composition — a splitter that paid
+// twice and two injected 2-material archetypes, all now absent — and a
+// splitter's second body is a runtime quantity, not a table mean, so the
+// multiplier cannot be derived from the tables and checked against itself.
+// Asserting 3.4 would only prove someone typed 3.4. This plays the map and
+// reads the character, so ANY change to the rate, the table or the drop path
+// that moves onboarding pacing lands here by name.
+//
+// It nukes rather than fights, deliberately: the question is what the ROOM
+// pays, not whether a level-1 build can beat it — offence_test owns that one.
+{
+  const AR = await import('../js/arenas.js');
+  // the mechanism, separately from the outcome (§13 rule 52) — a compensation
+  // that leaked onto floor 2 would still pass the level check below by
+  // arriving early, and nothing else would notice
+  const shape = [
+    ['floor 1 col 0', AR.onboardingXpMult(1, 0), v => v > 1],
+    ['floor 1 col 2', AR.onboardingXpMult(1, 2), v => v === 1],
+    ['floor 2 col 0', AR.onboardingXpMult(2, 0), v => v === 1],
+  ];
+  const wrong = shape.filter(([, v, ok]) => !ok(v));
+  if (!wrong.length) ok(`XP compensation is scoped to the ramp: ${shape.map(([n, v]) => `${n} x${v}`).join(', ')}`);
+  else fail(`XP compensation is mis-scoped: ${wrong.map(([n, v]) => `${n} x${v}`).join(', ')} — it must pay back exactly where the ramp took, and nowhere else`);
+
+  const sim = new Sim({ seed: 777, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_samurai', color: '#fff' }] });
+  const p = sim.players[0];
+  if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+  sim.god = true;
+  sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+  let t = 0;
+  while (sim.phase === 'arena' && !sim.over && t++ < 200 * 60) {
+    sim.tick();
+    for (const e of sim.enemyPool.items) if (e.active) sim.damageEnemy(e, 900, { owner: p });
+    let g = 0;
+    while (p.pendingOffer && g++ < 60) sim.uiAction(0, { kind: 'levelup', id: p.pendingOffer[0].id });
+    if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
+    // XP is banked on PICKUP, so the probe has to walk the loot — standing
+    // still measures the drop path and reports zero progression.
+    let best = null, bd = 1e18;
+    for (const m of sim.pickups) { const d = (m.x - p.x) ** 2 + (m.y - p.y) ** 2; if (d < bd) { bd = d; best = m; } }
+    if (best) { const dx = best.x - p.x, dy = best.y - p.y, l = Math.hypot(dx, dy) || 1; sim.setInput(0, { mx: dx / l, my: dy / l }); }
+    else sim.setInput(0, { mx: 0, my: 0 });
+    if (!p.downed) p.hp = p.stats.vitality;
+  }
+  const WANT_LEVEL = 6, WANT_SLOTS = 2;
+  const slots = SK.slotsAtLevel(p.level);
+  if (p.level >= WANT_LEVEL && slots >= WANT_SLOTS) {
+    ok(`a character leaves map 1 at level ${p.level} with ${p.skillPoints} unspent point(s) and ${slots} slots — the ramp costs density, not levels`);
+  } else {
+    fail(`a character leaves map 1 at level ${p.level} with ${slots} slot(s), want level ${WANT_LEVEL} and ${WANT_SLOTS} — `
+      + `the onboarding ramp is charging the player PROGRESSION for a density cut, and map 2 is entered on a build that has not grown`);
+  }
+}
+
 console.log(failures ? `\n${failures} REGION-SHELL FAILURE(S)` : '\nALL REGION-SHELL PATHS VERIFIED');
 process.exit(failures ? 1 : 0);
