@@ -16,14 +16,22 @@
 // here — and if it arrives without offence, this fails the moment it does. A
 // sample would have covered the two that work and missed the one that broke.
 //
-// TWENTY SECONDS, NOT TWELVE. At 12 the two characters that CAN fight scored
-// zero and this tool declared an engine failure — a threshold short enough to
-// make a working thing look broken is the same defect as a missing counter,
-// and it nearly sent the fix at the trigger core. A first-fight arena needs
-// roughly this long for enemies to close and a cooldown-gated skill to fire
-// more than once.
+// FORTY SECONDS, NOT TWENTY, NOT TWELVE — AND THE THIRD TIME THIS NUMBER MOVED
+// IT WAS THE ARENA THAT CHANGED, NOT THE THRESHOLD THAT WAS WRONG. At 12 the
+// two characters that could fight scored zero and this tool declared an engine
+// failure; 20 fixed that and held for the whole roster. Then the onboarding
+// ramp cut map 1 to half spawn rate, and six classes went to zero in a single
+// patch — measured, the fixture's 20 seconds now contained FIVE spawns and the
+// first enemy reached the player at second 20. Nothing was wrong with the six.
 //
-// Usage: node tools/offence_test.mjs [seconds]     (default 20)
+// The lesson is not the number. It is that this file measured damage without
+// ever asserting that damage was POSSIBLE, so a zero could mean "this class
+// cannot fight" or "nothing came within reach" and the output could not say
+// which — six classes were named as broken by a change to the spawn table.
+// MIN_EXPOSURE below closes that: the fixture now proves it presented a fight
+// before it is allowed to conclude anything about who won it.
+//
+// Usage: node tools/offence_test.mjs [seconds]     (default 40)
 
 import { Sim } from '../js/game.js';
 import { CHARACTERS, SELECTABLE, isSelectable, unselectableReason } from '../js/content/characters.js';
@@ -31,7 +39,18 @@ import { SKILL_BY_ID, TREES_BY_CLASS, canLearn } from '../js/skills.js';
 import * as SK_UI from '../js/skillsim.js';
 import { learnableSkills, spendSkillPoint } from '../js/skillsim.js';
 
-const SECONDS = parseInt(process.argv[2] || '20', 10);
+const SECONDS = parseInt(process.argv[2] || '40', 10);
+
+// How close an enemy has to get before the fixture counts it as a target it
+// actually offered the player. 400 is generous on purpose — this is not asking
+// whether the class could REACH it, which is the thing under test; it is asking
+// whether the arena put anything in front of it at all.
+const ENGAGE_RANGE = 400;
+// Below this many distinct enemies within that range, a zero says nothing about
+// the class. Measured on the current onboarding ramp: 7-8 at 40s, 2 at 20s —
+// so this sits under the healthy floor with room to spare, and above the window
+// that produced the six false accusations.
+const MIN_EXPOSURE = 3;
 
 let failures = 0;
 const ok = m => console.log(`✓ ${m}`);
@@ -66,13 +85,28 @@ function fight(charId, { arm } = {}) {
   sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
   if (sim.phase !== 'arena') return { charId, substituted, err: 'never entered the arena' };
   let t = 0;
+  const met = new Set();
   while (sim.phase === 'arena' && !sim.over && t++ < SECONDS * 60) {
     sim.tick();
+    // WHAT THE ARENA ACTUALLY OFFERED. Counted every tick rather than sampled
+    // at the end, because an enemy that closed, was killed, and freed its pool
+    // slot is a target this fixture presented — reading the pool afterwards
+    // would credit the fixture only for the enemies nobody dealt with.
+    //
+    // KEYED ON `e.id`, THE SPAWN COUNTER, NOT ON THE OBJECT. The pool recycles
+    // its slots, so the same object is a different enemy after a death and a
+    // Set of objects silently stops counting once the field turns over. Written
+    // that way first, this reported ONE enemy across a whole 200-second room —
+    // a counter that undercounts is worse than no counter, because it would
+    // have made the starvation assertion above fire on healthy arenas.
+    for (const e of sim.enemyPool.items) {
+      if (e.active && !met.has(e.id) && Math.hypot(e.x - p.x, e.y - p.y) < ENGAGE_RANGE) met.add(e.id);
+    }
     // survivability is not the question — a corpse deals no damage either way
     for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
   }
   return {
-    charId, substituted, learned,
+    charId, substituted, learned, exposure: met.size,
     trees: (TREES_BY_CLASS[p.charId] || []).length,
     armed: p.loadout.filter(Boolean).join(',') || 'nothing',
     dealt: Math.round(p.damageDealt), kills: p.kills, cleared: sim.cleared,
@@ -98,6 +132,29 @@ function sweep() {
   if (errored.length) fail(`${errored.length} selectable class(es) could not even reach a fight: `
     + errored.map(r => `${r.charId} (${r.err})`).join(', '));
 
+  // ------------------------------------------------------------------------
+  // DID THE ARENA PRESENT A FIGHT? This has to be answered before any claim
+  // about who dealt damage, because every claim below divides by it.
+  //
+  // §13 rule 40 says a gate's first red is a claim about the FIXTURE until
+  // proven otherwise, and this file had no way to make that claim about itself.
+  // When map 1's spawn rate halved, it reported six classes dealing zero — six
+  // real, working classes, named as broken, because the window it measures in
+  // had stopped containing enemies. The output looked exactly like a genuine
+  // roster failure and pointed at the trees.
+  //
+  // So the fixture asserts its own preconditions in its own voice. Starvation
+  // is a failure of this tool, not of the roster, and it says so.
+  const starved = rows.filter(r => !r.err && r.exposure < MIN_EXPOSURE);
+  if (starved.length) {
+    fail(`FIXTURE, NOT ROSTER: ${starved.length}/${rows.length} fight(s) never had ${MIN_EXPOSURE} enemies come within `
+      + `${ENGAGE_RANGE} in ${SECONDS}s (${starved.map(r => `${r.charId.replace('toh_', '')}:${r.exposure}`).join(' ')}). `
+      + `The arena did not present a fight, so any zero below is this tool's, and the damage assertions are not evidence about the classes`);
+  } else {
+    const ex = rows.filter(r => !r.err).map(r => r.exposure);
+    ok(`every fight presented a fight: ${Math.min(...ex)}-${Math.max(...ex)} enemies within ${ENGAGE_RANGE} in ${SECONDS}s, so a zero below is the class's own`);
+  }
+
   // SELECTABLE MEANS PLAYABLE. A class is offered because it has a tree; if that
   // tree cannot arm a level-1 character, the class is offered and unplayable —
   // exactly the state §15 defect #11 described, one class at a time instead of
@@ -109,7 +166,7 @@ function sweep() {
 
   if (mute.length) {
     fail(`${mute.length}/${rows.length} armed class(es) still deal ZERO in ${SECONDS}s: `
-      + mute.map(r => `${r.charId} (${r.learned})`).join(', '));
+      + mute.map(r => `${r.charId} (${r.learned}, ${r.exposure} enemies within reach)`).join(', '));
   } else ok(`all ${rows.length} selectable class(es) deal damage once armed`);
 
   // ------------------------------------------------------------------------
@@ -171,7 +228,8 @@ function sweep() {
     if (!silent.length) {
       ok(`and all ${raw.length} deal damage on map 1 AS THE GAME PROVISIONS THEM — no armBot, no lent tree, no point the harness spent: the card is answered the way a click answers it`);
     } else {
-      fail(`${silent.length}/${raw.length} class(es) deal ZERO damage on map 1 as a real player receives them: ${silent.map(r => r.charId).join(', ')}. `
+      fail(`${silent.length}/${raw.length} class(es) deal ZERO damage on map 1 as a real player receives them: `
+        + `${silent.map(r => `${r.charId} (${r.exposure} enemies within reach)`).join(', ')}. `
         + `Any class still dealing damage here is doing it on TRAIT damage rather than a skill`);
     }
   }

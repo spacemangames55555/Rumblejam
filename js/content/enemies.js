@@ -107,6 +107,50 @@ export const ELITE_MODS = [
 ];
 
 // Spawn tables per floor: which enemies appear and their weights.
+// REGION 1, MAP 1 — THE ONBOARDING TABLE.
+//
+// A level-1 character has ONE slot, ONE skill and no items, and measured on the
+// live build it meets ~100 enemies drawn from SEVEN archetypes: floor 1's five
+// below, plus `gyre` and `lancerfish` injected by the profile's flanker lever,
+// which bypasses this table entirely. That is the whole game's vocabulary
+// delivered in the first ninety seconds to a build that cannot answer any of it.
+//
+// Three, chosen so the composition TEACHES rather than merely thins:
+//
+//   skulker  — trash. A chaser that walks at you and dies to one hit. The
+//              baseline the other two are read against.
+//   flit     — moves differently. 215 speed against skulker's 125, and 4 HP
+//              against 8: it arrives first and dies fastest, so speed and
+//              durability are visibly independent axes rather than one "danger"
+//              number.
+//   fusehead — the telegraphed threat. A 0.9s fuse and a 90-radius, 14-damage
+//              blast that arms at 70 units: the one enemy on this floor whose
+//              answer is READING A WIND-UP AND LEAVING, which is the lesson §6
+//              exists to teach and the only one of the three that is not
+//              answered by attacking.
+//
+// SLABJAW WAS THE FIRST ANSWER HERE AND IT WAS WRONG. The brief asked for a
+// telegraphing HEAVY, and slabjaw is the only early enemy with a real §6
+// `telegraph` block, so this list was drawn across floor boundaries to get one —
+// with a comment arguing that was fine. It is not: `FLOOR_TABLES[0]` does not
+// contain slabjaw, it is a FLOOR 2 enemy, and a uniform 3-id table made the
+// biggest brute in the early game a THIRD of the tutorial's spawns — 13 of 39,
+// at 30 HP and 10 damage against a level-1 character holding one skill.
+//
+// It was measured, not argued: sim_test's camper statue, a contact tank with a
+// full build standing in the profile that SANCTIONS camping, died in all five
+// templates at 67-80s where it had survived 300. Cutting to three archetypes
+// concentrates whatever is in the list, so importing one enemy from a later
+// floor is not a small change to the mix — it is a third of the map.
+//
+// Floor 1 as authored has no telegraphing heavy. It has a telegraphing LIGHT,
+// and taking the third role from the floor's own roster is the honest reading of
+// a composition meant to teach the floor the player is standing on.
+//
+// `gemmite` is deliberately absent: it SPLITS on death, so it fights the density
+// reduction directly. `gemmite` and `lobber` are the two the ramp restores.
+export const ONBOARDING_TABLE = ['skulker', 'flit', 'fusehead'];
+
 export const FLOOR_TABLES = [
   ['skulker', 'flit', 'gemmite', 'lobber', 'fusehead'],
   ['skulker', 'flit', 'slabjaw', 'lobber', 'gyre', 'fusehead', 'stitcher'],

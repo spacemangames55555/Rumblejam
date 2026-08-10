@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateFloorMap, serializeMap } from './dungeon.js';
-import { buildArena, waveConfig, PROFILES } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -19,7 +19,7 @@ import * as MIN from './minions.js';
 import { EnemyGrid } from './triggers.js';
 import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
-import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES } from './content/enemies.js';
+import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING_TABLE } from './content/enemies.js';
 import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
 import { nodePopulation, nodeModifiers } from './nodebehaviour.js';
 import { REGION_BY_INDEX, depthMult } from './regions.js';
@@ -900,16 +900,25 @@ export class Sim {
       // the telegraph suite, not by node --check, which is the whole argument
       // for running the suites rather than the parser.
       const regionPop = this._regionPick();
-      const table = regionPop
-        ? (REGION_ENEMIES[this.region] ? REGION_ENEMIES[this.region].enemies.map(e => e.id) : FLOOR_TABLES[this.floorNum - 1])
-        : FLOOR_TABLES[this.floorNum - 1];
+      const table = this._spawnTable(regionPop);
       let id = regionPop || table[Math.floor(this.waveRng.float() * table.length)];
       let mortar = false, puddle = false;
       // profile levers shape the roll: flankers become wave citizens,
       // artillery turns Lobbers into mortars, chaff picks up death-puddles
-      if (prof.flankers && this.waveRng.chance(prof.flankers)) {
+      // THE FLANKER LEVER BYPASSES THE TABLE, and on map 1 that is the whole
+      // problem. `gyre` and `lancerfish` are in NO floor-1 table, yet measured on
+      // the live build they were two of the SEVEN archetypes a level-1 character
+      // met — the profile injects them regardless of what the table says. An
+      // onboarding table that did not also close this door would have cut five
+      // archetypes to three and still delivered five.
+      if (!this._onboarding() && prof.flankers && this.waveRng.chance(prof.flankers)) {
         id = this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish';
-      } else if (prof.artillery && this.waveRng.chance(prof.artillery)) {
+      } else if (!this._onboarding() && prof.artillery && this.waveRng.chance(prof.artillery)) {
+        // AND THE ARTILLERY LEVER IS THE SAME DOOR. It hard-assigns `lobber`
+        // regardless of the table, so closing only the flanker one cut seven
+        // archetypes to four rather than three — measured, `lobber` was still
+        // 9-12 of every 39 spawns. Every lever that names an id instead of
+        // drawing from the table has to be closed, and these are both of them.
         id = 'lobber'; mortar = true;
       }
       if (prof.ban && prof.ban.includes(id)) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
@@ -3486,6 +3495,22 @@ export class Sim {
   // Weighted pick from the current region's population, honouring the node
   // type. Returns null when the party is not in a region, so the base floor
   // tables still drive everything that is not region play.
+  // REGION 1, MAP 1 — the onboarding fight. Keyed on node COLUMN, the same
+  // parameter `waveConfig` already uses for its rate ramp, so the density cut and
+  // the archetype cut are indexed by one thing rather than two.
+  _onboarding() {
+    return isOnboardingNode(this.floorNum, this.arenaNode);
+  }
+
+  // Which ids this fight may draw from. The onboarding table is a HARD
+  // restriction rather than a weighting: three archetypes means three, or the
+  // composition stops teaching and becomes a thinner version of the same noise.
+  _spawnTable(regionPop) {
+    if (this._onboarding()) return ONBOARDING_TABLE;
+    if (regionPop && REGION_ENEMIES[this.region]) return REGION_ENEMIES[this.region].enemies.map(e => e.id);
+    return FLOOR_TABLES[this.floorNum - 1];
+  }
+
   _regionPick() {
     if (!this.region) return null;
     const pop = nodePopulation(this.region, this.nodeType || 'horde');
