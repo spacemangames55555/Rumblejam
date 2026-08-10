@@ -49,6 +49,8 @@ Picking 5 of 10 means a region replays with roughly half new content, and gives 
 
 A ramp rather than a one-map discount, because the cliff matters more than the discount. A character finishes map 1 at **level 6 with two slots open and five unspent points**, having entered at level 1 with one slot and one skill — map 1 is the only map in the game played at a single slot. The half-step at map 2 is for the build being *assembled*, not for the slots being open.
 
+**That sentence was briefly false, and the ramp is what made it false.** XP rides materials and materials ride spawns, so halving map 1's density also halved its progression: measured on one harness either side of the change, a character left map 1 at **level 3 with one slot** instead of level 6 with two — entering map 2 on exactly the un-grown build the ramp's own justification claimed map 1 was the last of. `ONBOARDING_XP_MULT` pays that back on XP only; gold is left cut, because fewer enemies paying less money is legible and the shop is priced against a floor's takings rather than against a level. `region_test` asserts the outcome — level 6, two slots, off map 1 — rather than the constant, because the constant cannot be derived: a splitter's second body is a runtime quantity, not a table mean.
+
 Map 1 also draws from a restricted table (`ONBOARDING_TABLE`) rather than the floor's: **skulker, flit, fusehead** — trash, a mover, and the floor's telegraphed threat. Three chosen so the composition teaches rather than merely thins, and drawn from **floor 1's own roster**: a three-id table is uniform, so importing one enemy from a later floor makes it a third of the tutorial. `gemmite` is excluded because it splits on death and so fights the density reduction directly.
 
 Both are arithmetic inside `waveConfig`'s existing `depth` parameter, not a new channel. Every lever that names an enemy id instead of drawing from the table — the profile's `flankers` and `artillery` injections — must be closed here too, or the archetype cut leaks.
@@ -531,7 +533,35 @@ All damage routes through the triangle, including hazard and plague ticks. There
 - **14 classes × 3 trees × ~10 skills ≈ 420 skills.**
 - Trees run tier 1 → tier 10, terminating in a capstone.
 - **1 skill point per level**, spendable freely across all three of a character's trees. No per-tree budget.
-- Prerequisites are linear within a tree. No cross-tree prerequisites.
+- **Trees are branching graphs, in the Diablo 2 sense.** A node may have several children, so a tree offers paths rather than an order. No cross-tree prerequisites.
+- **One prerequisite per node.** Branching comes from a parent having many children, never from a child having many parents — **convergence is out of v1.** A capstone requiring two branches is the part of D2's model that costs the most authoring care for the least legibility, and `prereq` stays a single id.
+- **Tiers unlock by CHARACTER LEVEL; nodes unlock by prerequisite.** Those are the only two gates. There is deliberately **no points-spent-in-tree requirement** — that is WoW's mechanism, and it exists to force specialisation. This game does not want specialisation forced: a player may spread across all three trees freely.
+- **Scarcity is ranks, not branches.** 270 of 280 skills are rank-uncapped. Against a run's ~69 points, unlocking every node of three trees costs 30 — so the build decision is *which few skills absorb twenty ranks each*, not which branch is foreclosed. **Branching is organisation and dependency, not exclusion.** Taking every node at rank 1 is a legitimate build, and a bad one.
+
+**What the engine already allows.** The load assertion requires a prereq to sit exactly one tier below. That forbids skipping a tier; it never forbade two skills sharing a parent. Verified by authoring one: a second tier-3 node under the same tier-2 parent loads clean and sweeps 0-red. Every consumer is single-parent generic — `canLearn` reads `skill.prereq`, `skill_sweep` walks to the root, nothing tree-shaped goes over the wire. **All 28 trees are 1-per-tier chains by authoring convention, not by constraint.** The missing assertion is reachability: a chain cannot strand a node, a branch can.
+
+**Authoring order.** The 14 new trees are authored against a proven shape spec first; the existing 28 are converted in a later pass. The engine does not force a big bang, and a shape spec proven on 14 real trees is a better thing to convert 28 trees to than one proven on paper.
+
+#### 8.1.1 Tier unlock levels — **PROPOSED**
+
+Measured, not assumed: full runs to victory for all 14 classes end at **level 68–70**, reaching ~21 by the end of floor 1, ~35 by floor 2 and ~52 by floor 3. (Two classes are outliers — Assassin 115 and Priest 102, on 2.7× everyone else's materials. That is an economy defect, not a curve.)
+
+| Tier | Level | Where that lands |
+|---|---|---|
+| 1 | 1 | §5.6's opening ability, chosen at character start |
+| 2 | 3 | first map |
+| 3 | 6 | end of map 1 |
+| 4 | 10 | mid floor 1 |
+| 5 | 15 | floor 1, third slot open at 12 |
+| 6 | 21 | **end of floor 1** |
+| 7 | 28 | floor 2 |
+| 8 | 36 | **just past floor 2's 35** |
+| 9 | 48 | floor 3 |
+| 10 | 60 | **floor 4 — the capstone arrives late** |
+
+The first six gates track D2's shape closely: its 6/12/18/24/30 of 99 is 6–30% of the cap, which against 69 is levels 4/8/12/17/21 — within a level or two of the table above. Where this departs from D2 is the top half: D2 stops gating at 30% and this keeps going to 87%, because tiers 7–10 are the payoff and a capstone available at the halfway point is a default rather than a decision.
+
+Two properties worth stating because they are consequences rather than choices. The gate is per-tier and not per-tree, so a player who spreads reaches tier 10 in all three trees at the same level — correct, since branching is not exclusion. And **the shape spec's node count is the real balance lever**: at 3 trees × 10 nodes a player spends 30 of ~69 points on unlocks and has 39 left for ranks; at 14 nodes per tree that becomes 42 and 27. Fixing the gates does not fix the rank budget, and the shape spec has to be read against this table.
 
 ### 8.2 Class roster
 

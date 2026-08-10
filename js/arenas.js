@@ -168,6 +168,39 @@ export function onboardingMult(floorNum, depth) {
   return ONBOARDING_RATE[Math.min(depth, ONBOARDING_RATE.length - 1)];
 }
 
+// XP COMPENSATION — because thinning the room also thinned the CHARACTER.
+//
+// The ramp cut map 1's spawns by half and cut its table to three archetypes.
+// Materials fell with them, and XP rides materials, so the ramp quietly halved
+// progression as well as density. Measured on the same harness either side of
+// the change, a character finishing map 1 went from LEVEL 6 with 5 unspent
+// points and 2 slots to LEVEL 3 with 2 points and 1 slot — so map 2 was being
+// entered at a single slot, which is precisely the state the ramp's own
+// justification claimed map 1 was the last of.
+//
+// Density explains a factor of two of that. The rest is composition: the
+// restricted table drops `gemmite`, which SPLITS on death and so paid twice,
+// and closes the profile levers that used to inject `gyre` and `lobber` at 2
+// materials each. What is left — skulker, flit, fusehead — is a poorer table as
+// well as a smaller one. Measured, map 1 banks 37 materials where it used to
+// bank roughly 110.
+//
+// XP ONLY, DELIBERATELY. Gold is not compensated: fewer enemies paying less
+// money is legible, and the shop is priced against a floor's takings rather
+// than against a level. This restores the PACING the ramp cost, not the loot.
+//
+// The multiplier is measured rather than derived, because the two effects that
+// produce it are not both computable — a splitter's second body is a runtime
+// quantity, not a table mean. That makes it exactly the kind of number that
+// goes stale silently, so region_test asserts the OUTCOME it exists to produce
+// (a fresh character leaves map 1 at level 6 with 2 slots) instead of trusting
+// the constant. Change the table or the rate and that gate names the reason.
+export const ONBOARDING_XP_MULT = [3.4, 1.35, 1];
+export function onboardingXpMult(floorNum, depth) {
+  if (floorNum !== 1) return 1;
+  return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];
+}
+
 // IS THIS THE TUTORIAL ROOM? Lives here, beside the rate it governs, because
 // two very different things need the same answer: the sim, to pick the reduced
 // archetype table, and the tuning gates, to stay OUT of a room that is
