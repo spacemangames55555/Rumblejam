@@ -7,7 +7,7 @@ import { CHAR_BY_ID } from '../content/characters.js';
 import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_NAMES, weaponBasePrice, sellValue } from '../config.js';
 import { escapeHtml } from './screens.js';
 import { glossName, glossShort, glossDetail, glossify } from './gloss.js';
-import { SLOT_LEVELS } from '../skills.js';
+import { SLOT_LEVELS, TIER_LEVELS, tierLevel } from '../skills.js';
 import { sfx } from '../audio.js';
 
 const $ = id => document.getElementById(id);
@@ -544,8 +544,43 @@ function canLearnLocal(meta, sk) {
   if (!sk) return false;
   const rank = (meta.skillRanks || {})[sk.id] || 0;
   if (sk.maxRank !== undefined && rank >= sk.maxRank) return false;
+  // §8.1.1's tier gate, mirrored from canLearn(). The HOST owns the rule — this
+  // is a look, not a gate — but a screen that offers a node the sim will refuse
+  // teaches the player the wrong thing about their own build.
+  if (rank < 1 && (meta.level || 1) < tierLevel(sk.tier)) return false;
   if (!sk.prereq) return true;
   return ((meta.skillRanks || {})[sk.prereq] || 0) >= 1;
+}
+
+// LANES — what turns a prereq graph into something you can look at.
+//
+// A branching tree drawn as a row of cards sorted by tier says "these come in
+// this order", which is the one thing branching does NOT mean. The layout has
+// to say "here the road forks and both sides go somewhere".
+//
+// Tier is the column (the load assertion guarantees tier strictly decreases
+// along every prereq edge, so a parent is always left of its children). The lane
+// is the row: walking down from the root, a node's FIRST child inherits its
+// lane and each further child takes a fresh one, so a branch visibly separates
+// and then runs in parallel. Nothing here reads a class or a tree id.
+function layoutTree(skills) {
+  const byId = {}; for (const s of skills) byId[s.id] = s;
+  const kids = {}; for (const s of skills) if (s.prereq) (kids[s.prereq] ||= []).push(s.id);
+  const tiers = [...new Set(skills.map(s => s.tier))].sort((a, b) => a - b);
+  const col = {}; tiers.forEach((t, i) => { col[t] = i; });
+  const lane = {};
+  let next = 0;
+  const root = skills.find(s => !s.prereq);
+  const walk = (id, myLane) => {
+    lane[id] = myLane;
+    const cs = (kids[id] || []).slice().sort((a, b) => byId[a].tier - byId[b].tier);
+    cs.forEach((c, i) => walk(c, i === 0 ? myLane : ++next));
+  };
+  if (root) walk(root.id, 0);
+  // anything the walk never reached would be a stranded node; the load
+  // assertion refuses those, so this is belt-and-braces rather than a fallback
+  for (const s of skills) if (lane[s.id] === undefined) lane[s.id] = ++next;
+  return { col, lane, lanes: next + 1, tiers, kids, byId };
 }
 
 function skillCard(meta, sk, spendable) {
@@ -560,6 +595,51 @@ function skillCard(meta, sk, spendable) {
     <div class="sk-name">${escapeHtml(sk.name)}${sk.type === 'passive' ? ' <span class="sk-tag">passive</span>' : ''}</div>
     <div class="sk-rank">${rankText}${learnable ? ' · <b>1 pt</b>' : ''}</div>
     <div class="sk-desc">${escapeHtml(sk.desc || '')}</div>
+  </div>`;
+}
+
+// Fixed cell geometry so edge positions are ARITHMETIC rather than measured —
+// nothing here waits for layout, so the panel draws correctly the first frame
+// and inside a hidden container.
+const CELL_W = 132, CELL_H = 104, GAP_X = 38, GAP_Y = 14;
+
+function treeGraph(meta, t, spendable) {
+  const L = layoutTree(t.skills);
+  const w = L.tiers.length * CELL_W + Math.max(0, L.tiers.length - 1) * GAP_X;
+  const h = L.lanes * CELL_H + Math.max(0, L.lanes - 1) * GAP_Y;
+  const xOf = sk => L.col[sk.tier] * (CELL_W + GAP_X);
+  const yOf = sk => L.lane[sk.id] * (CELL_H + GAP_Y);
+
+  // one polyline per prereq edge: out of the parent's right face, across the
+  // gutter, into the child's left face
+  const edges = t.skills.filter(sk => sk.prereq && L.byId[sk.prereq]).map(sk => {
+    const pa = L.byId[sk.prereq];
+    const x1 = xOf(pa) + CELL_W, y1 = yOf(pa) + CELL_H / 2;
+    const x2 = xOf(sk), y2 = yOf(sk) + CELL_H / 2;
+    const mx = x1 + (x2 - x1) / 2;
+    const known = ((meta.skillRanks || {})[pa.id] || 0) >= 1;
+    return `<polyline class="edge ${known ? 'live' : ''}" points="${x1},${y1} ${mx},${y1} ${mx},${y2} ${x2},${y2}" />`;
+  }).join('');
+
+  const cards = t.skills.map(sk =>
+    `<div class="node-at" style="left:${xOf(sk)}px; top:${yOf(sk)}px; width:${CELL_W}px; height:${CELL_H}px;">${skillCard(meta, sk, spendable)}</div>`
+  ).join('');
+
+  // the tier ruler: which gate each column is, and the level that opens it
+  const ruler = L.tiers.map(tr =>
+    `<div class="tier-head" style="left:${L.col[tr] * (CELL_W + GAP_X)}px; width:${CELL_W}px;">T${tr} · lvl ${tierLevel(tr)}</div>`
+  ).join('');
+
+  const branches = Object.values(L.kids).filter(k => k.length > 1).length;
+  return `<div class="tree-block">
+    <div class="tree-name">${escapeHtml(t.name)}${branches ? ` <span class="tree-branchy">${branches} branch point${branches === 1 ? '' : 's'}</span>` : ''}</div>
+    <div class="tree-scroll">
+    <div class="tier-ruler" style="width:${w}px;">${ruler}</div>
+    <div class="tree-graph" style="width:${w}px; height:${h}px;">
+      <svg class="tree-edges" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${edges}</svg>
+      ${cards}
+    </div>
+    </div>
   </div>`;
 }
 
@@ -601,11 +681,7 @@ export function showSkills(meta, charId, trees) {
           </div></div>` : ''}
       </div>
 
-      ${trees.list.map(t => `
-        <div class="tree-block">
-          <div class="tree-name">${escapeHtml(t.name)}</div>
-          <div class="tree-row">${t.skills.map(sk => skillCard(meta, sk, pts > 0)).join('')}</div>
-        </div>`).join('')}
+      ${trees.list.map(t => treeGraph(meta, t, pts > 0)).join('')}
 
       <button id="skills-close">Close</button>
     </div>`;

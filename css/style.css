@@ -387,7 +387,20 @@ h2.rt{font-size:38px; letter-spacing:4px; text-align:center; margin-bottom:4px;}
 .skills-panel .pts-have{color:#ffd45e;}
 .skills-panel .tree-block{margin:10px 0 14px;}
 .skills-panel .tree-name{font-size:12px; letter-spacing:2px; color:var(--dim); margin-bottom:5px;}
-.skills-panel .tree-row{display:flex; gap:6px; overflow-x:auto; padding-bottom:4px;}
+/* THE TREE IS A GRAPH, NOT A ROW. Tier is the column, lane is the row, and the
+   edges are drawn — a flat row of cards sorted by tier communicates ORDER, and
+   the whole point of a branching tree is that it communicates CHOICE. */
+.skills-panel .tree-scroll{overflow-x:auto; padding-bottom:6px;}
+.skills-panel .tier-ruler{position:relative; height:16px; margin-bottom:3px;}
+.skills-panel .tier-head{position:absolute; top:0; font-size:9px; letter-spacing:1px; color:var(--dim); text-align:center;}
+.skills-panel .tree-graph{position:relative;}
+.skills-panel .tree-edges{position:absolute; left:0; top:0; pointer-events:none; overflow:visible;}
+.skills-panel .tree-edges .edge{fill:none; stroke:var(--line); stroke-width:2;}
+/* an edge whose PARENT is owned is a road you can actually walk */
+.skills-panel .tree-edges .edge.live{stroke:#4f8; stroke-width:2.5;}
+.skills-panel .node-at{position:absolute;}
+.skills-panel .node-at .skill-node{width:100%; height:100%; box-sizing:border-box;}
+.skills-panel .tree-branchy{color:#ffd45e; letter-spacing:0; font-size:10px;}
 .skill-node{flex:0 0 auto; width:132px; background:var(--panel2); border:2px solid var(--line); border-radius:8px; padding:7px 8px; font-size:11px; display:flex; flex-direction:column; gap:3px;}
 .skill-node .sk-tier{font-size:9px; color:var(--dim); letter-spacing:1px;}
 .skill-node .sk-name{font-weight:700; font-size:12px; line-height:1.15;}

@@ -315,7 +315,15 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
   let peak = 0, firstDamageT = -1;
   const hp0 = es.reduce((a, e) => a + e.hp, 0);
   for (let i = 0; i < 60 * SECONDS; i++) {
-    g.setInput(0, { mx: 0, my: 0 });
+    // A MOVEMENT/`moving` skill has to be WALKED or it never fires, and a
+    // rider on a skill that never fires reads as a rider that never LANDS —
+    // which is the same sentence this gate prints for a genuinely broken
+    // rider. Alternating direction keeps the player inside the ring of
+    // dummies, so this stays a rider check rather than a pathing one.
+    const tg = (SKILL_BY_ID[skillId] || {}).trigger || {};
+    const mv = tg.kind === 'MOVEMENT' && tg.mode !== 'still';
+    g.setInput(0, mv ? { mx: (i % 2 ? 1 : -1), my: 0 } : { mx: 0, my: 0 });
+    if (tg.kind === 'MOVEMENT' && tg.mode === 'still') p.stillT = tg.seconds + 1;
     if (arm) arm();
     // Re-soak: the rider under test SPENDS the counter, so it has to be there
     // for every cast and not just the first.
