@@ -81,7 +81,7 @@ export const WD_BLIGHT = [
     id: 'wd_fen_shroud', tree: 'wd_blight', tier: 3, name: 'Fen Shroud',
     desc: 'Absorbs 22 over 4.6s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'wd_rot',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.shroudCd,
     compose: [{ kind: 'shield', amount: T.shroudAmount, duration: T.shroudDuration }],
@@ -146,7 +146,7 @@ export const WD_BLIGHT = [
     id: 'wd_drowned_ward', tree: 'wd_blight', tier: 8, name: 'Drowned Ward',
     desc: 'Absorbs 28 over 5.2s and returns 40% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'wd_carrion_choir',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.drownedCd,
     compose: [{

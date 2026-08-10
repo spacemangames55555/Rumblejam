@@ -93,7 +93,7 @@ export const HUN_LONGSHOT = [
     id: 'hun_falconer', tree: 'hun_longshot', tier: 2, name: 'Falconer',
     desc: 'Puts a bird up. It hunts on its own, and the further it ranges the harder you hit.',
     type: 'active', domain: 'physical', prereq: 'hun_sighting_shot',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.sightRange },
     cooldown: T.falconCd,
     compose: [{
@@ -178,7 +178,7 @@ export const HUN_LONGSHOT = [
     id: 'hun_set_and_hold', tree: 'hun_longshot', tier: 8, name: 'Set and Hold',
     desc: 'Absorbs 24 over 4.6s, +6.5% per band between you, below 50% health.',
     type: 'active', domain: 'spiritual', prereq: 'hun_driven_game',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
     cooldown: T.holdCd,
     compose: [{

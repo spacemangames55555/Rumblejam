@@ -83,7 +83,7 @@ export const MAGE_COLLAPSE = [
     id: 'mage_event_horizon', tree: 'mage_collapse', tier: 3, name: 'Event Horizon',
     desc: 'Absorbs 26 over 4.8s when you drop below 60% health.',
     type: 'active', domain: 'mental', prereq: 'mage_gravity_well',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.horizonCd,
     compose: [{ kind: 'shield', amount: T.horizonAmount, duration: T.horizonDuration }],
@@ -143,7 +143,7 @@ export const MAGE_COLLAPSE = [
     id: 'mage_null_geodesic', tree: 'mage_collapse', tier: 8, name: 'Null Geodesic',
     desc: 'Absorbs 30 over 5.2s and returns 40% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'mage_frame_drag',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.geodesicCd,
     compose: [{

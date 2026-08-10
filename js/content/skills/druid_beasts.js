@@ -92,7 +92,7 @@ export const DRUID_BEASTS = [
     id: 'druid_call_wolf', tree: 'druid_beasts', tier: 2, name: 'Call Wolf',
     desc: 'It was already nearby. It usually is.',
     type: 'active', domain: 'physical', prereq: 'druid_thorn_lash',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'PROXIMITY', radius: T.wolfTrigRadius, count: T.wolfTrigCount },
     cooldown: T.wolfCd,
     compose: [{
@@ -133,7 +133,7 @@ export const DRUID_BEASTS = [
     id: 'druid_call_bear', tree: 'druid_beasts', tier: 5, name: 'Call Bear',
     desc: 'Slower to arrive. Considerably harder to remove.',
     type: 'active', domain: 'physical', prereq: 'druid_pack_bond',
-    select: 'densest_cluster',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'PROXIMITY', radius: T.bearTrigRadius, count: T.bearTrigCount },
     cooldown: T.bearCd,
     compose: [{
@@ -164,7 +164,7 @@ export const DRUID_BEASTS = [
     id: 'druid_rejuvenate', tree: 'druid_beasts', tier: 7, name: 'Rejuvenate',
     desc: 'Green comes back into things.',
     type: 'active', domain: 'spiritual', prereq: 'druid_maul',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.rejuvPct },
     cooldown: T.rejuvCd,
     compose: [{ kind: 'heal', amount: T.rejuvAmount, radius: T.rejuvRadius }],
@@ -174,7 +174,7 @@ export const DRUID_BEASTS = [
     id: 'druid_call_hawk', tree: 'druid_beasts', tier: 8, name: 'Call Hawk',
     desc: 'It stays high and picks its moment.',
     type: 'active', domain: 'physical', prereq: 'druid_rejuvenate',
-    select: 'farthest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.hawkTrigRange },
     cooldown: T.hawkCd,
     compose: [{

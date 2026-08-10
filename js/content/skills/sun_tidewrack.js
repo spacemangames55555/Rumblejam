@@ -166,7 +166,7 @@ export const SUN_TIDEWRACK = [
     id: 'sun_breakwater', tree: 'sun_tidewrack', tier: 8, name: 'Breakwater',
     desc: 'A wall of standing water. Absorbs 26 over 4.8s, +4% per stack standing, below 55% health.',
     type: 'active', domain: 'spiritual', prereq: 'sun_millrace',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.breakCd,
     compose: [{

@@ -108,7 +108,7 @@ export const WIZARD_ARCANA = [
     id: 'wiz_arcane_recovery', tree: 'wizard_arcana', tier: 5, name: 'Arcane Recovery',
     desc: 'Draws 16 health back out of the weave when you fall below 65%.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_kindled_ground',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
     cooldown: T.recoveryCd,
     compose: [{ kind: 'heal', amount: T.recoveryAmount }],
@@ -141,7 +141,7 @@ export const WIZARD_ARCANA = [
     id: 'wiz_null_field', tree: 'wizard_arcana', tier: 8, name: 'Null Field',
     desc: 'A shell of nothing. Absorbs 30 over 4.5s when you drop below 45% health.',
     type: 'active', domain: 'mental', prereq: 'wiz_ley_surge',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.nullCd,
     compose: [{ kind: 'shield', amount: T.nullAmount, duration: T.nullDuration }],

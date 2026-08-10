@@ -84,7 +84,7 @@ export const SUN_REEF = [
     id: 'sun_brine_draught', tree: 'sun_reef', tier: 3, name: 'Brine Draught',
     desc: 'Restores 14 health, +2% for every drench stack standing in the room.',
     type: 'active', domain: 'spiritual', prereq: 'sun_shoal',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
     cooldown: T.draughtCd,
     compose: [{
@@ -135,7 +135,7 @@ export const SUN_REEF = [
     id: 'sun_sea_wall', tree: 'sun_reef', tier: 7, name: 'Sea Wall',
     desc: 'Absorbs 24 over 4.8s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'sun_salt_rime',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.wallCd,
     compose: [{ kind: 'shield', amount: T.wallAmount, duration: T.wallDuration }],

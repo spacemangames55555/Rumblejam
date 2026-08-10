@@ -172,7 +172,7 @@ export const SAV_PRIMAL_FURY = [
     id: 'sav_second_wind', tree: 'sav_primal_fury', tier: 8, name: 'Second Wind',
     desc: 'Restores 24 health when you drop below 45%.',
     type: 'active', domain: 'spiritual', prereq: 'sav_alone_with_it',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.windCd,
     compose: [{ kind: 'heal', amount: T.windAmount }],

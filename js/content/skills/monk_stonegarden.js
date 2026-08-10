@@ -103,7 +103,7 @@ export const MONK_STONEGARDEN = [
     id: 'monk_warded_ground', tree: 'monk_stonegarden', tier: 4, name: 'Warded Ground',
     desc: 'Absorbs 22 over 4.2s. Costs no Chi — the one thing that still works when the pool is dry.',
     type: 'active', domain: 'spiritual', prereq: 'monk_turning_elbow',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
     cooldown: T.wardedCd,
     compose: [{ kind: 'ward', amount: T.wardedAmount, duration: T.wardedDuration }],

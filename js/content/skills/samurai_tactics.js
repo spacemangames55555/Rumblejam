@@ -133,7 +133,7 @@ export const SAMURAI_TACTICS = [
     id: 'sam_mountain_stance', tree: 'samurai_tactics', tier: 8, name: 'Mountain Stance',
     desc: 'Four seconds of not moving, and the mountain answers.',
     type: 'active', domain: 'mental', prereq: 'sam_severing_arc',
-    select: 'highest_hp',   // what it hits; the trigger above is only WHEN
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'MOVEMENT', mode: 'still', seconds: T.mountainSeconds },
     cooldown: T.mountainCd,
     compose: [{

@@ -381,9 +381,15 @@ Characters start with **no abilities at all**. The first point spent is the char
 
 ### 5.7 The composed-action schema
 
-Any active is data: an ordered list of steps from thirteen primitives plus riders.
+Any active is data: an ordered list of steps from **fourteen** primitives plus riders.
 
-**Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `heal` · `shield` · `ward` · `drain` · `summon` · `plague` · `shift` · `trap`
+**Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `heal` · `shield` · `ward` · `drain` · `summon` · `plague` · `shift` · `trap` · `form`
+
+**A ZONE HAS NO IMPACT MOMENT, so `hazard` takes only `slow`.** Every other damaging primitive accepts the full impact set — stun, root, knockback, taunt, the weakens, mark, doll, drench, sluice — because each of them has a moment where a hit LANDS on a specific enemy, and that is where a rider hangs. A `hazard` builds a zone with a damage cadence: nothing lands, there is no impact frame and no single target, so `slow` (a field the zone can hold and apply continuously) is the only rider with anywhere to attach.
+
+**This is a design property, not a defect, and it is recorded because it is invisible until you hit it.** The consequence for authoring is real: a branch built on ground control has a materially narrower rider vocabulary than a branch built on strikes, and a capstone that wanted to stun will have to want something else. `bard_requiem`'s Dirge branch met exactly this — its tier-10 node was authored with `stun` and became a slow. Plan a zone branch's payoff around denial and attrition rather than around control, or put the control on a `strike`/`cone` step in the same skill, which is legal and is the intended escape hatch.
+
+**`select` and the `self` selector.** Six of the fourteen primitives — `shield`, `ward`, `form`, `shift`, `heal`, `summon` — never consult `select`: they write the caster, the party or the field and have no target to choose. Those skills declare **`select: 'self'`**. The rule is asserted in both directions from a table DERIVED from the primitive sources (`PRIMITIVE_SELECTS`), so a skill that picks nothing must say so, and a skill that picks something may not claim otherwise.
 
 **Impact riders** (land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mark` · `doll` · `drench` · `sluice`
 **Shape riders** (shape a swing): `arc` · `windUp` · `multiPulse`
@@ -601,20 +607,20 @@ Two properties worth stating because they are consequences rather than choices. 
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 14 of 14** (31 trees, 310 skills). Three classes are at the ruled three — **Samurai** (Agility), **Bard** (Requiem), **Mage** (Refraction) — plus the Necromancer, which had three from the start. The **Samurai was the first** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 14 of 14** (33 trees, 330 skills). Four classes are at the ruled three — **Samurai** (Agility), **Bard** (Requiem), **Mage** (Refraction), **Assassin** (Range) — plus the Necromancer, which had three from the start. The **Druid is at two** (Beasts, Wild Kin) and is the only class still short of three. The **Samurai was the first** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
 | Samurai | Armor, Tactics, **Agility** — the first BRANCHING tree, and the §8.1 shape spec's reference |
 | Bard | Cadence, Ensemble, **Requiem** — what to do when the rhythm breaks |
+| Assassin | Killbox, Shadow, **Range** — output that does not require having arrived first |
+| Druid | Beasts, **Wild Kin** — what the DRUID does; still one short, see §15 |
 | Mage | Crystalblade, Collapse, **Refraction** — how to fill an engine only the enemy can fill |
 | Necromancer | Marrow, Dark Matter, **Summons** — the only class with three |
-| Druid | Beasts — **the only class with one**, see §15 |
 | Wizard | Attunement, Arcana |
 | Priest | Judgment, Grace |
 | Witch Doctor | Effigy, Blight |
 | Sundian | Tidewrack, Reef |
-| Assassin | Killbox, Shadow |
 | Hunter | Longshot, Houndmaster |
 | Monk | Chi, Stone Garden |
 | Savage | Primal Fury, Bloodbound |
@@ -1756,6 +1762,19 @@ They are the same category as the seven checks above, and the same category as D
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-38 — CLOSED: `select` had no way to say "nothing"
+
+Six of the fourteen primitives never consult `select` — `shield`, `ward`, `form`, `shift`, `heal` and `summon` write the caster, the party or the field and have no target to choose. **59 skills declared `select: 'nearest'` and ignored it.**
+
+Same shape as D-36 and D-37: something declared, nothing reading it, and nobody noticing because the convention was *consistent*. It also made the rule unassertable — with every skill naming a real selector there was no way for a check to say "this one should not have".
+
+`select: 'self'` is the honest answer, and adding it makes the rule checkable **in both directions**:
+
+- a skill whose every step ignores the selector must declare `self`;
+- a skill with any step that reads one may **not** declare `self` — that half is the one that catches real damage, since a `self` on a `strike` would make `facing()` aim at nobody.
+
+The discriminator is **derived, not restated** (`PRIMITIVE_SELECTS` reads `skill.select` out of each primitive's source, per §13 rule 12 — safe because the project has no build step, and guarded by an assertion that fails loudly if the split ever comes out all-or-nothing). All 59 existing skills were converted in the same patch: a mixed convention is worse than either convention.
 
 #### D-37 — CLOSED: duplicate skill ids were never asserted, and two shipped
 

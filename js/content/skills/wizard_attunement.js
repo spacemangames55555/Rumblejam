@@ -75,7 +75,7 @@ export const WIZARD_ATTUNEMENT = [
     id: 'wiz_attune_physical', tree: 'wizard_attunement', tier: 2, name: 'Attune: Physical',
     desc: 'Your skills also resolve as Physical, whichever reads better. Lasts until you attune again or leave the room.',
     type: 'active', domain: 'physical', prereq: 'wiz_cinder_bolt',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.cinderRange },
     cooldown: T.attunePhysCd,
     compose: [{ kind: 'shift', domain: 'physical' }],
@@ -101,7 +101,7 @@ export const WIZARD_ATTUNEMENT = [
     id: 'wiz_attune_mental', tree: 'wizard_attunement', tier: 4, name: 'Attune: Mental',
     desc: 'Your skills also resolve as Mental, whichever reads better. Lasts until you attune again or leave the room.',
     type: 'active', domain: 'mental', prereq: 'wiz_refracted_lance',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.cinderRange },
     cooldown: T.attuneMentalCd,
     compose: [{ kind: 'shift', domain: 'mental' }],
@@ -111,7 +111,7 @@ export const WIZARD_ATTUNEMENT = [
     id: 'wiz_prism_ward', tree: 'wizard_attunement', tier: 5, name: 'Prism Ward',
     desc: 'A ward that thickens with attunements. Absorbs 26, +6% per shift banked, over 5s.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_attune_mental',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.prismCd,
     compose: [{
@@ -137,7 +137,7 @@ export const WIZARD_ATTUNEMENT = [
     id: 'wiz_attune_spiritual', tree: 'wizard_attunement', tier: 7, name: 'Attune: Spiritual',
     desc: 'Your skills also resolve as Spiritual, whichever reads better. Lasts until you attune again or leave the room.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_spectral_cascade',
-    select: 'nearest',
+    select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.cinderRange },
     cooldown: T.attuneSpiritCd,
     compose: [{ kind: 'shift', domain: 'spiritual' }],
