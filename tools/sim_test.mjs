@@ -12,7 +12,11 @@
 //  9. co-op downs/revives/wipe; build management; rebalance mechanics
 // 10. DPS gate (±40% of median), stress timing, snapshot serialization
 // Usage: node tools/sim_test.mjs
-import { Sim } from '../js/game.js';
+// FixtureSim, not Sim: the harness answers its own §5.6 opening card rather
+// than letting the anti-softlock floor rescue it 507 times a run. See the
+// header of tools/fixture_sim.mjs for why, and for the proof that it changes
+// nothing this suite measures.
+import { FixtureSim as Sim } from './fixture_sim.mjs';
 import { CHARACTERS, CHAR_BY_ID, SELECTABLE } from '../js/content/characters.js';
 import { ITEMS } from '../js/content/items.js';
 import { WEAPONS } from '../js/content/weapons.js';

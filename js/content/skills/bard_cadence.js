@@ -35,31 +35,31 @@ export const TUNING = {
   openDamage: 4, openSpeed: 520, openRange: 250, openCd: 900,
   // tier 2 — Quickstep
   quickDamage: 4, quickReach: 104, quickArc: 1.8, quickRadius: 130,
-  quickCount: 1, quickCd: 2000, quickPer: 0.035,
+  quickCount: 1, quickCd: 2000, quickWeight: 0.88,
   // tier 3 — Counterpoint
   counterDamage: 5, counterSpeed: 540, counterRange: 255, counterCd: 3600,
-  counterPer: 0.038, counterTargets: 2,
+  counterWeight: 0.95, counterTargets: 2,
   // tier 4 — Syncopation
   syncDamage: 6, syncAngle: 1.6, syncRange: 215, syncRadius: 175,
-  syncCount: 3, syncCd: 5200, syncPer: 0.04, syncSlowMult: 0.76, syncSlowDur: 1200,
+  syncCount: 3, syncCd: 5200, syncSlowMult: 0.76, syncSlowDur: 1200,
   // tier 5 — Perfect Time (passive)
-  perfectPer: 0.015,
+  perfectWeight: 0.375,
   // tier 6 — Drum Line
   drumDamage: 6, drumReach: 112, drumArc: 2.1, drumRadius: 145,
-  drumCount: 2, drumCd: 4400, drumPer: 0.04, drumKnock: 190,
+  drumCount: 2, drumCd: 4400, drumKnock: 190,
   // tier 7 — Running Sixteenths
   sixteenDamage: 4, sixteenSpeed: 560, sixteenRange: 260, sixteenTargets: 3,
-  sixteenCd: 3200, sixteenPer: 0.04,
+  sixteenCd: 3200,
   // tier 8 — Hemiola
   hemiolaDamage: 5, hemiolaWidth: 32, hemiolaLength: 340, hemiolaRadius: 200,
-  hemiolaCount: 2, hemiolaCd: 5600, hemiolaPer: 0.042, hemiolaPulses: 2,
+  hemiolaCount: 2, hemiolaCd: 5600, hemiolaWeight: 1.05, hemiolaPulses: 2,
   // tier 9 — Stretto
   strettoDamage: 7, strettoAngle: 2.3, strettoRange: 230, strettoRadius: 190,
-  strettoCount: 4, strettoCd: 6200, strettoPer: 0.045,
+  strettoCount: 4, strettoCd: 6200, strettoWeight: 1.13,
   strettoWeakenMult: 0.8, strettoWeakenDur: 2200,
   // tier 10 — The Last Bar
   lastDamage: 9, lastAngle: 2.8, lastRange: 250, lastRadius: 210,
-  lastCount: 4, lastCd: 9000, lastPer: 0.05, lastStun: 600,
+  lastCount: 4, lastCd: 9000, lastWeight: 1.25, lastStun: 600,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -93,7 +93,7 @@ export const BARD_CADENCE = [
     cooldown: T.quickCd,
     compose: [{
       kind: 'strike', damage: T.quickDamage, reach: T.quickReach, arc: T.quickArc,
-      scaleWith: 'rhythm', scalePer: T.quickPer, riders: {},
+      scaleWith: 'rhythm', scaleWeight: T.quickWeight, riders: {},
     }],
     ranks: R,
   },
@@ -106,7 +106,7 @@ export const BARD_CADENCE = [
     cooldown: T.counterCd,
     compose: [{
       kind: 'bolt', damage: T.counterDamage, speed: T.counterSpeed, range: T.counterRange,
-      count: T.counterTargets, scaleWith: 'rhythm', scalePer: T.counterPer, riders: {},
+      count: T.counterTargets, scaleWith: 'rhythm', scaleWeight: T.counterWeight, riders: {},
     }],
     ranks: R,
   },
@@ -119,7 +119,7 @@ export const BARD_CADENCE = [
     cooldown: T.syncCd,
     compose: [{
       kind: 'cone', damage: T.syncDamage, angle: T.syncAngle, range: T.syncRange,
-      scaleWith: 'rhythm', scalePer: T.syncPer,
+      scaleWith: 'rhythm',
       riders: { slow: { mult: T.syncSlowMult, dur: T.syncSlowDur } },
     }],
     ranks: R,
@@ -129,7 +129,7 @@ export const BARD_CADENCE = [
     desc: 'Every stack you are holding is worth 1% more to every skill that reads them.',
     type: 'passive', domain: 'mental', prereq: 'bard_syncopation',
     trigger: null, cooldown: 0, compose: [],
-    passive: { rhythmDamageBonus: T.perfectPer },
+    passive: { rhythmScaleWeight: T.perfectWeight },
     // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks —
     // the same shape as Held Edge on Footing, Sympathetic Resonance on shift and
     // Attend the Fallen on marks.
@@ -144,7 +144,7 @@ export const BARD_CADENCE = [
     cooldown: T.drumCd,
     compose: [{
       kind: 'strike', damage: T.drumDamage, reach: T.drumReach, arc: T.drumArc,
-      scaleWith: 'rhythm', scalePer: T.drumPer,
+      scaleWith: 'rhythm',
       riders: { knockback: T.drumKnock },
     }],
     ranks: R,
@@ -162,7 +162,7 @@ export const BARD_CADENCE = [
     cooldown: T.sixteenCd,
     compose: [{
       kind: 'bolt', damage: T.sixteenDamage, speed: T.sixteenSpeed, range: T.sixteenRange,
-      count: T.sixteenTargets, scaleWith: 'rhythm', scalePer: T.sixteenPer, riders: {},
+      count: T.sixteenTargets, scaleWith: 'rhythm', riders: {},
     }],
     ranks: R,
   },
@@ -175,7 +175,7 @@ export const BARD_CADENCE = [
     cooldown: T.hemiolaCd,
     compose: [{
       kind: 'line', damage: T.hemiolaDamage, width: T.hemiolaWidth, length: T.hemiolaLength,
-      scaleWith: 'rhythm', scalePer: T.hemiolaPer,
+      scaleWith: 'rhythm', scaleWeight: T.hemiolaWeight,
       riders: { multiPulse: T.hemiolaPulses },
     }],
     ranks: R,
@@ -189,7 +189,7 @@ export const BARD_CADENCE = [
     cooldown: T.strettoCd,
     compose: [{
       kind: 'cone', damage: T.strettoDamage, angle: T.strettoAngle, range: T.strettoRange,
-      scaleWith: 'rhythm', scalePer: T.strettoPer,
+      scaleWith: 'rhythm', scaleWeight: T.strettoWeight,
       riders: { weakenDamage: { mult: T.strettoWeakenMult, dur: T.strettoWeakenDur } },
     }],
     ranks: R,
@@ -207,7 +207,7 @@ export const BARD_CADENCE = [
     cooldown: T.lastCd,
     compose: [{
       kind: 'cone', damage: T.lastDamage, angle: T.lastAngle, range: T.lastRange,
-      scaleWith: 'rhythm', scalePer: T.lastPer,
+      scaleWith: 'rhythm', scaleWeight: T.lastWeight,
       riders: { stun: T.lastStun },
     }],
     ranks: R,

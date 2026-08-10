@@ -35,25 +35,25 @@ export const TUNING = {
   souseCount: 2, souseCd: 2600, souseStacks: 2,
   // tier 3 — Rip Current
   ripDamage: 8, ripWidth: 34, ripLength: 350, ripRadius: 200,
-  ripCount: 2, ripCd: 3400, ripStacks: 2, ripPer: 0.03,
+  ripCount: 2, ripCd: 3400, ripStacks: 2, ripWeight: 0.86,
   // tier 4 — Sluicegate
   sluiceDamage: 9, sluiceSpeed: 530, sluiceRange: 255, sluiceCd: 3800, sluicePer: 8,
   // tier 5 — Tidemark (passive)
-  tidemarkPer: 0.008,
+  tidemarkWeight: 0.23,
   // tier 6 — Undertow
   underDamage: 9, underReach: 112, underArc: 2.0, underRadius: 142,
-  underCount: 2, underCd: 3600, underStacks: 3, underPer: 0.035, underSlowMult: 0.76, underSlowDur: 1300,
+  underCount: 2, underCd: 3600, underStacks: 3, underSlowMult: 0.76, underSlowDur: 1300,
   // tier 7 — Millrace
   millDamage: 8, millAngle: 2.1, millRange: 225, millRadius: 185,
-  millCount: 3, millCd: 4400, millStacks: 2, millPer: 0.035,
+  millCount: 3, millCd: 4400, millStacks: 2,
   // tier 8 — Breakwater
-  breakAmount: 26, breakDuration: 4800, breakCd: 7600, breakPer: 0.04,
+  breakAmount: 26, breakDuration: 4800, breakCd: 7600, breakWeight: 1.14,
   // tier 9 — Flood Tide
   floodDamage: 10, floodAngle: 2.4, floodRange: 235, floodRadius: 200,
-  floodCount: 3, floodCd: 5600, floodStacks: 3, floodPer: 0.04,
+  floodCount: 3, floodCd: 5600, floodStacks: 3, floodWeight: 1.14,
   // tier 10 — The Whole Sea
   seaDamage: 13, seaAngle: 2.8, seaRange: 250, seaRadius: 215,
-  seaCount: 4, seaCd: 9500, seaPer: 0.05, seaSluicePer: 11, seaStun: 600,
+  seaCount: 4, seaCd: 9500, seaWeight: 1.43, seaSluicePer: 11, seaStun: 600,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -99,7 +99,7 @@ export const SUN_TIDEWRACK = [
     cooldown: T.ripCd,
     compose: [{
       kind: 'line', damage: T.ripDamage, width: T.ripWidth, length: T.ripLength,
-      scaleWith: 'drench', scalePer: T.ripPer,
+      scaleWith: 'drench', scaleWeight: T.ripWeight,
       riders: soak(T.ripStacks),
     }],
     ranks: R,
@@ -126,7 +126,7 @@ export const SUN_TIDEWRACK = [
     desc: 'Every drench stack standing is worth 0.8% more to every skill that reads them.',
     type: 'passive', domain: 'spiritual', prereq: 'sun_sluicegate',
     trigger: null, cooldown: 0, compose: [],
-    passive: { drenchDamageBonus: T.tidemarkPer },
+    passive: { drenchScaleWeight: T.tidemarkWeight },
     // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks.
     // The per-stack number is the smallest of any engine passive because the
     // engine it reads is a room-wide COUNT rather than a per-player cap — twelve
@@ -143,7 +143,7 @@ export const SUN_TIDEWRACK = [
     cooldown: T.underCd,
     compose: [{
       kind: 'strike', damage: T.underDamage, reach: T.underReach, arc: T.underArc,
-      scaleWith: 'drench', scalePer: T.underPer,
+      scaleWith: 'drench',
       riders: { ...soak(T.underStacks), slow: { mult: T.underSlowMult, dur: T.underSlowDur } },
     }],
     ranks: R,
@@ -157,7 +157,7 @@ export const SUN_TIDEWRACK = [
     cooldown: T.millCd,
     compose: [{
       kind: 'cone', damage: T.millDamage, angle: T.millAngle, range: T.millRange,
-      scaleWith: 'drench', scalePer: T.millPer,
+      scaleWith: 'drench',
       riders: soak(T.millStacks),
     }],
     ranks: R,
@@ -171,7 +171,7 @@ export const SUN_TIDEWRACK = [
     cooldown: T.breakCd,
     compose: [{
       kind: 'shield', amount: T.breakAmount, duration: T.breakDuration,
-      scaleWith: 'drench', scalePer: T.breakPer,
+      scaleWith: 'drench', scaleWeight: T.breakWeight,
     }],
     ranks: R,
   },
@@ -184,7 +184,7 @@ export const SUN_TIDEWRACK = [
     cooldown: T.floodCd,
     compose: [{
       kind: 'cone', damage: T.floodDamage, angle: T.floodAngle, range: T.floodRange,
-      scaleWith: 'drench', scalePer: T.floodPer,
+      scaleWith: 'drench', scaleWeight: T.floodWeight,
       riders: soak(T.floodStacks),
     }],
     ranks: R,
@@ -202,7 +202,7 @@ export const SUN_TIDEWRACK = [
     cooldown: T.seaCd,
     compose: [{
       kind: 'cone', damage: T.seaDamage, angle: T.seaAngle, range: T.seaRange,
-      scaleWith: 'drench', scalePer: T.seaPer,
+      scaleWith: 'drench', scaleWeight: T.seaWeight,
       riders: { sluice: { per: T.seaSluicePer }, stun: T.seaStun },
     }],
     ranks: R,

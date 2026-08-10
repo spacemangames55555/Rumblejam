@@ -20,7 +20,7 @@ export const TUNING = {
   consecrateDamage: 8, consecrateAngle: 1.6, consecrateRange: 200,
   consecrateRadius: 160, consecrateCount: 2, consecrateCd: 1100,
   // tier 2 — Intercession
-  intercessionAmount: 14, intercessionCd: 5000, intercessionPer: 0.08,
+  intercessionAmount: 14, intercessionCd: 5000, intercessionWeight: 1.14,
   // tier 3 — Warding Hand
   wardingAmount: 22, wardingDuration: 4200, wardingCd: 7000,
   // tier 4 — Smite
@@ -75,7 +75,7 @@ export const PRIEST_GRACE = [
     cooldown: T.intercessionCd,
     compose: [{
       kind: 'heal', amount: T.intercessionAmount,
-      scaleWith: 'marks', scalePer: T.intercessionPer,
+      scaleWith: 'marks', scaleWeight: T.intercessionWeight,
     }],
     ranks: R,
   },

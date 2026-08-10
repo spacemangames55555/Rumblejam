@@ -61,7 +61,7 @@ export const TUNING = {
   armyBurstDamage: 16, armyBurstAngle: 3.0, armyBurstRange: 210,
   // the burst rides the pack: more bodies standing, harder it lands. Same hook
   // as Footing and armour — see engineScale() in js/compose.js.
-  armyPerPack: 0.06,
+  armyWeight: 0.75,
   armyTrigPct: 45,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
@@ -231,7 +231,7 @@ export const NECRO_SUMMONS = [
       // existing engine hook is the cheapest evidence that they are inside the
       // schema rather than beside it.
       { kind: 'cone', damage: T.armyBurstDamage, angle: T.armyBurstAngle, range: T.armyBurstRange,
-        scaleWith: 'pack', scalePer: T.armyPerPack, riders: {} },
+        scaleWith: 'pack', scaleWeight: T.armyWeight, riders: {} },
     ],
     ranks: R,
   },

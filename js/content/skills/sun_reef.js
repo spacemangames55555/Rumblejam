@@ -26,7 +26,7 @@ export const TUNING = {
   shoalDamage: 5, shoalRadius: 150, shoalCount: 3, shoalDuration: 3800,
   shoalTickMs: 430, shoalCd: 5000, shoalSlowMult: 0.72, shoalSlowDur: 1400,
   // tier 3 — Brine Draught
-  draughtAmount: 14, draughtCd: 5600, draughtPer: 0.02,
+  draughtAmount: 14, draughtCd: 5600, draughtWeight: 0.57,
   // tier 4 — Barnacle
   barnDamage: 9, barnSpeed: 505, barnRange: 250, barnCd: 3200,
   barnDefMult: 0.78, barnDefDur: 2500,
@@ -89,7 +89,7 @@ export const SUN_REEF = [
     cooldown: T.draughtCd,
     compose: [{
       kind: 'heal', amount: T.draughtAmount,
-      scaleWith: 'drench', scalePer: T.draughtPer,
+      scaleWith: 'drench', scaleWeight: T.draughtWeight,
     }],
     ranks: R,
   },

@@ -41,7 +41,7 @@ export const TUNING = {
   brambleDamage: 5, brambleRadius: 130, brambleDuration: 4500, brambleTickMs: 500,
   brambleSlowMult: 0.6, brambleSlowDur: 1400, brambleCd: 6500, brambleTrigCount: 3,
   // tier 4 — Pack Bond (passive)
-  bondPerPack: 0.05,
+  bondWeight: 0.63,
   // tier 5 — Call Bear
   bearHp: 78, bearRadius: 15, bearDamage: 12, bearReach: 60, bearArc: 1.8,
   bearAtkCd: 1500, bearSpawnRadius: 56, bearCd: 7000, bearTaunt: 2200,
@@ -57,8 +57,7 @@ export const TUNING = {
   stampedeDamage: 19, stampedeWidth: 66, stampedeLength: 340, stampedeCd: 8500,
   stampedeKnock: 300, stampedeRadius: 190, stampedeCount: 2,
   // tier 10 — Wild Synergy
-  synergyDamage: 17, synergyAngle: 2.9, synergyRange: 215, synergyCd: 12000,
-  synergyPerPack: 0.08, synergyTrigRadius: 200, synergyTrigCount: 4,
+  synergyDamage: 17, synergyAngle: 2.9, synergyRange: 215, synergyCd: 12000, synergyTrigRadius: 200, synergyTrigCount: 4,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -126,7 +125,7 @@ export const DRUID_BEASTS = [
     trigger: null, cooldown: 0, compose: [],
     // Raises what a pack member is WORTH without touching any step — the same
     // shape as Held Edge for Footing, keyed by engine name, no engine code.
-    passive: { packDamageBonus: T.bondPerPack },
+    passive: { packScaleWeight: T.bondWeight },
     ranks: R,
   },
   {
@@ -212,7 +211,7 @@ export const DRUID_BEASTS = [
     // with no engine change between them is the point.
     compose: [{
       kind: 'cone', damage: T.synergyDamage, angle: T.synergyAngle, range: T.synergyRange,
-      scaleWith: 'pack', scalePer: T.synergyPerPack, riders: {},
+      scaleWith: 'pack', riders: {},
     }],
     ranks: R,
   },

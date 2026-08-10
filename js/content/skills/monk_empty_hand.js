@@ -60,11 +60,11 @@ export const TUNING = {
   // always on regardless. A third tree's T2 passive is the one node of it the
   // DPS gate can see, and it has to be priced against what its engine publishes
   // rather than against the other trees' per-point values.
-  stillnessPerChi: 0.004,
+  stillnessWeight: 0.15,
 
   // ---- branch A: Empty Hand (no chi cost anywhere — the floor, raised) ----
   formlessDamage: 16, formlessReach: 112, formlessArc: 1.8, formlessCd: 2300,
-  hollowPerChi: 0.013,
+  hollowWeight: 0.18,
   cascadeDamage: 19, cascadeArc: 1.6, cascadeRange: 285, cascadeCd: 4100,
   nothingDamage: 27, nothingReach: 140, nothingArc: 2.8, nothingCd: 7400,
   nothingPulses: 2, nothingKnock: 235,
@@ -76,7 +76,7 @@ export const TUNING = {
   // of this branch for exactly that, and it was right — a Monk spending the pool
   // has to be spending it on something the pool does not immediately refill.
   gatherChi: 14, gatherAmount: 26, gatherRadius: 210, gatherPct: 75, gatherCd: 3000,
-  wellPerChi: 0.014,
+  wellWeight: 0.18,
   riverChi: 20, riverAmount: 44, riverDuration: 5000, riverPct: 55, riverCd: 4800,
   oceanChi: 30, oceanAmount: 58, oceanDuration: 5600, oceanReflect: 34, oceanPct: 40, oceanCd: 9000,
 
@@ -85,7 +85,7 @@ export const TUNING = {
 
 const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
-const CHI = { scaleWith: 'chi', scalePer: 0.05 };
+const CHI = { scaleWith: 'chi'};
 
 export const MONK_EMPTY_HAND = [
   {
@@ -103,7 +103,7 @@ export const MONK_EMPTY_HAND = [
     desc: 'The pool is not the person. Both roads out of here are about being at zero.',
     type: 'passive', domain: 'mental', prereq: 'monk_open_hand',
     trigger: null, cooldown: 0, compose: [],
-    passive: { chiDamageBonus: T.stillnessPerChi },
+    passive: { chiScaleWeight: T.stillnessWeight },
     ranks: R,
   },
 
@@ -123,7 +123,7 @@ export const MONK_EMPTY_HAND = [
     desc: 'What is empty can still be moved through.',
     type: 'passive', domain: 'mental', prereq: 'monk_formless',
     trigger: null, cooldown: 0, compose: [],
-    passive: { chiDamageBonus: T.hollowPerChi },
+    passive: { chiScaleWeight: T.hollowWeight },
     ranks: R,
   },
   {
@@ -167,7 +167,7 @@ export const MONK_EMPTY_HAND = [
     desc: 'Deeper, and therefore worth more on the way down.',
     type: 'passive', domain: 'spiritual', prereq: 'monk_gathering',
     trigger: null, cooldown: 0, compose: [],
-    passive: { chiDamageBonus: T.wellPerChi },
+    passive: { chiScaleWeight: T.wellWeight },
     ranks: R,
   },
   {

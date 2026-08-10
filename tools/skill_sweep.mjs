@@ -13,7 +13,10 @@
 // It also fails when a primitive or rider is defined but unreachable, which is
 // the same defect one layer down.
 
-const { Sim } = await import('../js/game.js');
+// FixtureSim, not Sim: the harness answers its own §5.6 opening card instead
+// of tripping the anti-softlock floor at every arena door. Same skill, same
+// tick, no defect line — see tools/fixture_sim.mjs.
+const { FixtureSim: Sim } = await import('./fixture_sim.mjs');
 const SK = await import('../js/skillsim.js');
 const { TREES, SKILL_BY_ID, ALL_SKILLS } = await import('../js/skills.js');
 const { PRIMITIVE_KINDS, IMPACT_RIDERS, SHAPE_RIDERS, BOLT_RIDERS } = await import('../js/compose.js');

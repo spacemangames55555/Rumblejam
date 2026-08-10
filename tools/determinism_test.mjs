@@ -16,7 +16,10 @@
 // counts. Region and non-region play, two players with scripted
 // but DIFFERENT inputs so movement and dodge paths actually run.
 
-const { Sim } = await import('../js/game.js');
+// FixtureSim, not Sim: the harness answers its own §5.6 opening card instead
+// of tripping the anti-softlock floor at every arena door. Same skill, same
+// tick, no defect line — see tools/fixture_sim.mjs.
+const { FixtureSim: Sim } = await import('./fixture_sim.mjs');
 
 let failures = 0;
 const ok = m => console.log(`✓ ${m}`);

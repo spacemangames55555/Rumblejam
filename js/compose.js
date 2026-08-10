@@ -12,6 +12,7 @@
 
 import { domainMult } from './domains.js';
 import { selectTarget, selectTargets } from './selectors.js';
+import { scalePerFor } from './enginescale.js';
 
 // Rank scaling. LINEAR against base, never compounding: `damage *= 1.04` per
 // rank is 4.8x at rank 40 and is the single most likely way to break the patch.
@@ -25,23 +26,32 @@ export function rankedDuration(base, skill, rank) {
   return base * (1 + inc * rank);
 }
 
-// ENGINE SCALING. A step may declare `scaleWith: '<engine>'` and `scalePer`,
-// and its magnitude then rides that engine's current value. It arrived in phase
-// 1 on `shield` alone (Iron Sleeve, absorb scaled by Footing); the Samurai's
-// Tactics tree needs it on `strike` across ten skills, so it is a shared hook
-// rather than a per-primitive special case.
+// ENGINE SCALING. A step may declare `scaleWith: '<engine>'`, and its magnitude
+// then rides that engine's current value. It arrived in phase 1 on `shield`
+// alone (Iron Sleeve, absorb scaled by Footing); the Samurai's Tactics tree
+// needs it on `strike` across ten skills, so it is a shared hook rather than a
+// per-primitive special case.
 //
 // It reads p.engines[name], which is the generic readable-resource bag — NOT a
 // Footing field. Every remaining class engine (cascade, drench, crystallize,
 // Chi, judgment marks, killbox, two bodies) exposes its state the same way and
 // gets this for free.
+//
+// THE PER-POINT VALUE IS DERIVED, NOT DECLARED. It used to be `step.scalePer`,
+// a raw per-point multiplier that only meant anything against its engine's
+// ceiling — and the ceilings run from 1 to 45, so the same number was +5% on
+// one engine and +225% on another. js/enginescale.js publishes each engine's
+// maximum and its intended contribution and derives the rest; a step may
+// declare a dimensionless `scaleWeight` (default 1) to ride heavier or lighter
+// than the standard. `scalePer` is rejected at load.
 export function engineScale(step, p) {
   if (!step.scaleWith) return 1;
   // Passives may raise what a stack is WORTH without touching the step. Held
   // Edge does exactly that for Footing; the bonus is keyed by engine name so a
-  // future tree can do it for any other engine with no code here.
+  // future tree can do it for any other engine with no code here. It arrives
+  // already converted out of weight units by `passiveBonusPer`.
   const bonus = (p.engineScaleBonus && p.engineScaleBonus[step.scaleWith]) || 0;
-  return 1 + ((p.engines && p.engines[step.scaleWith]) || 0) * (step.scalePer + bonus);
+  return 1 + ((p.engines && p.engines[step.scaleWith]) || 0) * (scalePerFor(step) + bonus);
 }
 
 // Magnitude for a step: base, ranked, then scaled by whatever engine it rides.

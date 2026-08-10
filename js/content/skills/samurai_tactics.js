@@ -13,8 +13,7 @@
 
 export const TUNING = {
   // per-stack damage multiplier for a scaleWith step, before Held Edge
-  perFooting: 0.06,
-  perFootingHeavy: 0.09,        // the slower, committed swings pay more for the stance
+  perFootingWeight: 0.67,        // the slower, committed swings pay more for the stance
   // tier 1 — Draw Cut
   drawDamage: 8, drawReach: 95, drawArc: 1.5, drawCd: 850,
   // tier 2 — Measured Breath (passive)
@@ -28,12 +27,12 @@ export const TUNING = {
   readDamage: 12, readReach: 105, readArc: 1.9, readWindow: 400, readCd: 4000,
   readDefMult: 0.75, readDefDur: 2500,
   // tier 6 — Held Edge (passive)
-  heldEdgePerStack: 0.015,
+  heldEdgeWeight: 0.167,
   // tier 7 — Severing Arc
   severDamage: 9, severReach: 125, severArc: 2.9, severRadius: 120, severCount: 3, severCd: 5000,
   // tier 8 — Mountain Stance
   mountainAmount: 22, mountainDuration: 5000, mountainSeconds: 4, mountainCd: 9000,
-  mountainPerFooting: 0.14,
+  mountainWeight: 1.56,
   // tier 9 — Killing Ground
   killDamage: 13, killReach: 100, killArc: 1.2, killPct: 35, killPulses: 2, killCd: 5200,
   // tier 10 — Unsheathed
@@ -45,8 +44,8 @@ export const TUNING = {
 
 const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
-const FOOT = { scaleWith: 'footing', scalePer: T.perFooting };
-const FOOT_HEAVY = { scaleWith: 'footing', scalePer: T.perFootingHeavy };
+const FOOT = { scaleWith: 'footing', scaleWeight: T.perFootingWeight};
+const FOOT_HEAVY = { scaleWith: 'footing'};
 
 export const SAMURAI_TACTICS = [
   {
@@ -116,7 +115,7 @@ export const SAMURAI_TACTICS = [
     desc: 'Every stack of footing is worth more edge than it was.',
     type: 'passive', domain: 'physical', prereq: 'sam_read_the_line',
     trigger: null, cooldown: 0, compose: [],
-    passive: { footingDamageBonus: T.heldEdgePerStack },
+    passive: { footingScaleWeight: T.heldEdgeWeight },
     ranks: R,
   },
   {
@@ -138,7 +137,7 @@ export const SAMURAI_TACTICS = [
     cooldown: T.mountainCd,
     compose: [{
       kind: 'shield', amount: T.mountainAmount, duration: T.mountainDuration,
-      scaleWith: 'footing', scalePer: T.mountainPerFooting,
+      scaleWith: 'footing', scaleWeight: T.mountainWeight,
     }],
     ranks: R,
   },

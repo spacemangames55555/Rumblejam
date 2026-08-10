@@ -32,7 +32,10 @@
 // is the same thing `rider_gate` does for a write path gated before its trees.
 // §13 rule 26: a probe that stages the wrong precondition measures the staging.
 
-import { Sim } from '../js/game.js';
+// FixtureSim, not Sim: the harness answers its own §5.6 opening card instead
+// of tripping the anti-softlock floor at every arena door. Same skill, same
+// tick, no defect line — see tools/fixture_sim.mjs.
+import { FixtureSim as Sim } from './fixture_sim.mjs';
 import { ALL_CHARS } from '../js/content/characters.js';
 import { TREES, TREES_BY_CLASS } from '../js/skills.js';
 import { spendSkillPoint, learnableSkills } from '../js/skillsim.js';

@@ -15,6 +15,7 @@ import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spa
 import { domainMult } from './domains.js';
 import { CONFIG } from './config.js';
 import { tohHitDamage, tohOnHit } from './traits-toh.js';
+import { passiveBonusPer } from './enginescale.js';
 import { ENGINE_TICKS, engineStats, footingShieldFor, resetEnginesForRoom, initEnginePlayer, gainChi, spendChi, chiCostOf, cascadeAdvance, cascadeCooldown, formHolds } from './engines.js';
 
 const S = TRIGGER_TICK_MS / 1000;
@@ -163,6 +164,22 @@ export function setLoadout(sim, p, slot, id) {
   return { ok: true };
 }
 
+// ANSWER THE §5.6 CARD THE WAY A PLAYER DOES — for harnesses.
+//
+// The anti-softlock floor is loud on purpose: if it fires, a real player was
+// offered an opening ability and never got to answer it, which is a defect.
+// That signal is worthless if fixtures trip it constantly, and they do — a
+// harness that constructs a character, travels into an arena and only THEN
+// spends its points arrives unprovisioned for exactly one frame, which is all
+// the floor needs. §13 rule 17: a fixture arriving unprovisioned is the
+// fixture's bug, and the fix is to provision it rather than to quieten the
+// alarm. Call this before travelling.
+export function answerOpening(sim, p) {
+  if (!p || !p.openingOffer || !p.openingOffer.length) return false;
+  sim.uiAction(p.idx, { kind: 'opening', id: p.openingOffer[0].id });
+  return true;
+}
+
 export function grantSkillPoint(sim, p) {
   p.skillPoints++;
   p.metaDirty = true;
@@ -279,19 +296,27 @@ export function tickSkills(sim, dt) {
     const dt_ = p.char.trait;
     p.engines.doll = dt_.key === 'voodoo_link' && p.voodooId !== null
       ? Math.min(dt_.dollCap, (p.voodooDmg || 0) * dt_.dollPer) : 0;
-    p.engineScaleBonus.footing = passiveSum(p, 'footingDamageBonus');
-    p.engineScaleBonus.pack = passiveSum(p, 'packDamageBonus');
-    p.engineScaleBonus.shift = passiveSum(p, 'shiftDamageBonus');
-    p.engineScaleBonus.marks = passiveSum(p, 'marksDamageBonus');
-    p.engineScaleBonus.rhythm = passiveSum(p, 'rhythmDamageBonus');
-    p.engineScaleBonus.crystal = passiveSum(p, 'crystalDamageBonus');
-    p.engineScaleBonus.drench = passiveSum(p, 'drenchDamageBonus');
-    p.engineScaleBonus.killbox = passiveSum(p, 'killboxDamageBonus');
-    p.engineScaleBonus.spread = passiveSum(p, 'spreadDamageBonus');
-    p.engineScaleBonus.doll = passiveSum(p, 'dollDamageBonus');
-    p.engineScaleBonus.chi = passiveSum(p, 'chiDamageBonus');
-    p.engineScaleBonus.cascade = passiveSum(p, 'cascadeDamageBonus');
-    p.engineScaleBonus.form = passiveSum(p, 'formDamageBonus');
+    // WEIGHTS, NOT PER-POINT NUMBERS. A passive that raises what an engine
+    // point is worth had exactly the units problem `scalePer` had — the same
+    // 0.010 was +45% on chi and +1% on form, and the Monk's Empty Hand was
+    // retuned by hand for precisely that before the cause was named. The
+    // declaration is now a dimensionless multiple of the engine's standard
+    // contribution and `passiveBonusPer` converts it; the old
+    // `<engine>DamageBonus` field is rejected at load so a per-point value
+    // cannot be carried across under a name that still reads.
+    p.engineScaleBonus.footing = passiveBonusPer('footing', passiveSum(p, 'footingScaleWeight'));
+    p.engineScaleBonus.pack = passiveBonusPer('pack', passiveSum(p, 'packScaleWeight'));
+    p.engineScaleBonus.shift = passiveBonusPer('shift', passiveSum(p, 'shiftScaleWeight'));
+    p.engineScaleBonus.marks = passiveBonusPer('marks', passiveSum(p, 'marksScaleWeight'));
+    p.engineScaleBonus.rhythm = passiveBonusPer('rhythm', passiveSum(p, 'rhythmScaleWeight'));
+    p.engineScaleBonus.crystal = passiveBonusPer('crystal', passiveSum(p, 'crystalScaleWeight'));
+    p.engineScaleBonus.drench = passiveBonusPer('drench', passiveSum(p, 'drenchScaleWeight'));
+    p.engineScaleBonus.killbox = passiveBonusPer('killbox', passiveSum(p, 'killboxScaleWeight'));
+    p.engineScaleBonus.spread = passiveBonusPer('spread', passiveSum(p, 'spreadScaleWeight'));
+    p.engineScaleBonus.doll = passiveBonusPer('doll', passiveSum(p, 'dollScaleWeight'));
+    p.engineScaleBonus.chi = passiveBonusPer('chi', passiveSum(p, 'chiScaleWeight'));
+    p.engineScaleBonus.cascade = passiveBonusPer('cascade', passiveSum(p, 'cascadeScaleWeight'));
+    p.engineScaleBonus.form = passiveBonusPer('form', passiveSum(p, 'formScaleWeight'));
     // Slots are recomputed from ranks every tick rather than incremented on
     // spend, so respecs, save loads and rank rollbacks cannot leave a player
     // holding slots no skill still pays for.

@@ -42,18 +42,18 @@ export const TUNING = {
   // tier 1 — Grace Note
   graceDamage: 10, graceRange: 260, graceSpeed: 460, graceRadius: 7, graceCd: 1200,
   // tier 2 — Held Breath (passive, the branch point)
-  heldPerStack: 0.010,
+  heldWeight: 0.15,
 
   // ---- branch A: Cadenza (ON_KILL — buy the beat back) ----
   answerDamage: 14, answerReach: 110, answerArc: 1.7, answerCd: 1800,
-  cadenzaPerStack: 0.014,
+  cadenzaWeight: 0.18,
   roundDamage: 16, roundArc: 1.5, roundRange: 300, roundCd: 3400,
   finaleDamage: 26, finaleReach: 140, finaleArc: 2.9, finaleCd: 7200,
   finalePulses: 2, finaleSlowMult: 0.6, finaleSlowDur: 2200,
 
   // ---- branch B: Dirge (ON_HIT_TAKEN — be paid for the interruption) ----
   struckDamage: 15, struckRadius: 150, struckDuration: 3200, struckTickMs: 400, struckCd: 2600,
-  undertowPerStack: 0.014,
+  undertowWeight: 0.18,
   threnodyDamage: 18, threnodyReach: 125, threnodyArc: 2.4, threnodyCd: 4400,
   requiemDamage: 28, requiemRadius: 175, requiemDuration: 4200, requiemTickMs: 400, requiemCd: 7600,
   requiemSlowMult: 0.45, requiemSlowDur: 2600,
@@ -65,7 +65,7 @@ const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
 // Requiem scales on the same engine the other two trees fill. The tree is about
 // what happens to the rhythm, so it would be incoherent for it not to read it.
-const RHY = { scaleWith: 'rhythm', scalePer: 0.05 };
+const RHY = { scaleWith: 'rhythm'};
 
 export const BARD_REQUIEM = [
   {
@@ -83,7 +83,7 @@ export const BARD_REQUIEM = [
     desc: 'The pause before the phrase resolves. Both roads out of here are about what happens when it does not.',
     type: 'passive', domain: 'mental', prereq: 'bard_grace_note',
     trigger: null, cooldown: 0, compose: [],
-    passive: { rhythmDamageBonus: T.heldPerStack },
+    passive: { rhythmScaleWeight: T.heldWeight },
     ranks: R,
   },
 
@@ -103,7 +103,7 @@ export const BARD_REQUIEM = [
     desc: 'The solo passage. Every stack you kept is worth more while you are the only one playing.',
     type: 'passive', domain: 'mental', prereq: 'bard_answering_verse',
     trigger: null, cooldown: 0, compose: [],
-    passive: { rhythmDamageBonus: T.cadenzaPerStack },
+    passive: { rhythmScaleWeight: T.cadenzaWeight },
     ranks: R,
   },
   {
@@ -146,7 +146,7 @@ export const BARD_REQUIEM = [
     desc: 'The line under the melody does not stop when the melody does.',
     type: 'passive', domain: 'mental', prereq: 'bard_struck_chord',
     trigger: null, cooldown: 0, compose: [],
-    passive: { rhythmDamageBonus: T.undertowPerStack },
+    passive: { rhythmScaleWeight: T.undertowWeight },
     ranks: R,
   },
   {

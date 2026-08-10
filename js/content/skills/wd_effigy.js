@@ -36,27 +36,27 @@ export const TUNING = {
   // tier 2 — Pin
   pinDamage: 7, pinSpeed: 500, pinRange: 255, pinCd: 2600,
   // tier 3 — Sympathetic Ache
-  acheDamage: 8, acheSpeed: 520, acheRange: 250, acheCd: 3000, achePer: 0.05,
+  acheDamage: 8, acheSpeed: 520, acheRange: 250, acheCd: 3000, acheWeight: 0.83,
   // tier 4 — Needlework
   needleDamage: 9, needleReach: 108, needleArc: 1.9, needleRadius: 138,
-  needleCount: 2, needleCd: 3600, needlePer: 0.055,
+  needleCount: 2, needleCd: 3600, needleWeight: 0.92,
   needleDefMult: 0.78, needleDefDur: 2400,
   // tier 5 — Sympathetic Binding (passive)
-  bindingPer: 0.02,
+  bindingWeight: 0.333,
   // tier 6 — Hollow Man
-  hollowAmount: 22, hollowDuration: 4600, hollowCd: 7200, hollowPer: 0.06,
+  hollowAmount: 22, hollowDuration: 4600, hollowCd: 7200,
   // tier 7 — Second Skin
   skinDamage: 10, skinAngle: 1.9, skinRange: 225, skinRadius: 180,
-  skinCount: 3, skinCd: 4600, skinPer: 0.06,
+  skinCount: 3, skinCd: 4600,
   // tier 8 — Crooked Thread
   threadDamage: 10, threadWidth: 34, threadLength: 355, threadRadius: 200,
-  threadCount: 3, threadCd: 5400, threadPer: 0.065, threadRoot: 1300,
+  threadCount: 3, threadCd: 5400, threadWeight: 1.08, threadRoot: 1300,
   // tier 9 — What the Doll Knows
   knowsDamage: 11, knowsSpeed: 530, knowsRange: 260, knowsPct: 50,
-  knowsCd: 5000, knowsPer: 0.07,
+  knowsCd: 5000, knowsWeight: 1.17,
   // tier 10 — Everything It Held
   heldDamage: 15, heldAngle: 2.7, heldRange: 245, heldRadius: 210,
-  heldCount: 4, heldCd: 9500, heldPer: 0.08, heldStun: 650,
+  heldCount: 4, heldCd: 9500, heldWeight: 1.33, heldStun: 650,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -101,7 +101,7 @@ export const WD_EFFIGY = [
     cooldown: T.acheCd,
     compose: [{
       kind: 'bolt', damage: T.acheDamage, speed: T.acheSpeed, range: T.acheRange,
-      scaleWith: 'doll', scalePer: T.achePer, riders: {},
+      scaleWith: 'doll', scaleWeight: T.acheWeight, riders: {},
     }],
     ranks: R,
   },
@@ -114,7 +114,7 @@ export const WD_EFFIGY = [
     cooldown: T.needleCd,
     compose: [{
       kind: 'strike', damage: T.needleDamage, reach: T.needleReach, arc: T.needleArc,
-      scaleWith: 'doll', scalePer: T.needlePer,
+      scaleWith: 'doll', scaleWeight: T.needleWeight,
       riders: { weakenDefense: { mult: T.needleDefMult, dur: T.needleDefDur } },
     }],
     ranks: R,
@@ -124,7 +124,7 @@ export const WD_EFFIGY = [
     desc: 'Everything the doll is carrying is worth 2% more to every skill that reads it.',
     type: 'passive', domain: 'spiritual', prereq: 'wd_needlework',
     trigger: null, cooldown: 0, compose: [],
-    passive: { dollDamageBonus: T.bindingPer },
+    passive: { dollScaleWeight: T.bindingWeight },
     // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks —
     // the same shape as Held Edge, Sympathetic Resonance, Attend the Fallen,
     // Perfect Time and Lattice.
@@ -139,7 +139,7 @@ export const WD_EFFIGY = [
     cooldown: T.hollowCd,
     compose: [{
       kind: 'shield', amount: T.hollowAmount, duration: T.hollowDuration,
-      scaleWith: 'doll', scalePer: T.hollowPer,
+      scaleWith: 'doll',
     }],
     ranks: R,
   },
@@ -152,7 +152,7 @@ export const WD_EFFIGY = [
     cooldown: T.skinCd,
     compose: [{
       kind: 'cone', damage: T.skinDamage, angle: T.skinAngle, range: T.skinRange,
-      scaleWith: 'doll', scalePer: T.skinPer, riders: {},
+      scaleWith: 'doll', riders: {},
     }],
     ranks: R,
   },
@@ -165,7 +165,7 @@ export const WD_EFFIGY = [
     cooldown: T.threadCd,
     compose: [{
       kind: 'line', damage: T.threadDamage, width: T.threadWidth, length: T.threadLength,
-      scaleWith: 'doll', scalePer: T.threadPer,
+      scaleWith: 'doll', scaleWeight: T.threadWeight,
       riders: { root: T.threadRoot },
     }],
     ranks: R,
@@ -179,7 +179,7 @@ export const WD_EFFIGY = [
     cooldown: T.knowsCd,
     compose: [{
       kind: 'bolt', damage: T.knowsDamage, speed: T.knowsSpeed, range: T.knowsRange,
-      scaleWith: 'doll', scalePer: T.knowsPer, riders: {},
+      scaleWith: 'doll', scaleWeight: T.knowsWeight, riders: {},
     }],
     ranks: R,
   },
@@ -195,7 +195,7 @@ export const WD_EFFIGY = [
     cooldown: T.heldCd,
     compose: [{
       kind: 'cone', damage: T.heldDamage, angle: T.heldAngle, range: T.heldRange,
-      scaleWith: 'doll', scalePer: T.heldPer,
+      scaleWith: 'doll', scaleWeight: T.heldWeight,
       riders: { stun: T.heldStun },
     }],
     ranks: R,

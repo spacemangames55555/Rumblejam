@@ -30,7 +30,7 @@ export const TUNING = {
   gasDamage: 5, gasRadius: 150, gasCount: 3, gasDuration: 3800,
   gasTickMs: 430, gasCd: 5400, gasSlowMult: 0.72, gasSlowDur: 1400,
   // tier 5 — Leech the Link
-  leechDamage: 8, leechRange: 235, leechHealPct: 0.5, leechCd: 3800, leechPer: 0.05,
+  leechDamage: 8, leechRange: 235, leechHealPct: 0.5, leechCd: 3800, leechWeight: 0.83,
   // tier 6 — Grave Wax
   waxDamage: 10, waxSpeed: 505, waxRange: 255, waxCd: 3400,
   waxWeakenMult: 0.76, waxWeakenDur: 2600,
@@ -112,7 +112,7 @@ export const WD_BLIGHT = [
     cooldown: T.leechCd,
     compose: [{
       kind: 'drain', damage: T.leechDamage, range: T.leechRange, healPct: T.leechHealPct,
-      scaleWith: 'doll', scalePer: T.leechPer,
+      scaleWith: 'doll', scaleWeight: T.leechWeight,
     }],
     ranks: R,
   },

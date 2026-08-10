@@ -12,7 +12,7 @@
 // AGILITY IS NOT A SECOND ENGINE. §8.3 gives the Samurai exactly one, and a
 // tree that invented a rival resource would make the class two classes. What
 // this tree buys instead is the right to keep Footing while moving: its
-// passives feed `footingAccrualPct` and `footingDamageBonus`, the same keys
+// passives feed `footingAccrualPct` and `footingScaleWeight`, the same keys
 // Armor and Tactics read, so nothing here needs a line of engine code. The
 // fantasy is a swordsman who does not have to choose between standing and
 // striking — which is exactly the tension the other two trees create.
@@ -73,7 +73,7 @@ export const TUNING = {
   // tier 4 — Slip Cut
   slipDamage: 16, slipReach: 100, slipArc: 1.3, slipCd: 2400, slipWindow: 900,
   // tier 6 — Dancing Edge (passive)
-  dancePerStack: 0.012,
+  danceWeight: 0.18,
   // tier 8 — Crescent
   crescentDamage: 19, crescentReach: 120, crescentArc: 2.6, crescentCd: 4600, crescentWindow: 1000,
   // tier 10 — Moonfall (capstone)
@@ -88,7 +88,7 @@ const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
 // Agility skills scale on Footing like the rest of the class — the point of the
 // tree is that you keep the stance, not that you trade it away.
-const FOOT = { scaleWith: 'footing', scalePer: 0.05 };
+const FOOT = { scaleWith: 'footing'};
 
 export const SAMURAI_AGILITY = [
   // ------------------------------------------------------------------ root
@@ -174,7 +174,7 @@ export const SAMURAI_AGILITY = [
     desc: 'Every stack of Footing you kept through the dodge sharpens what comes out of it.',
     type: 'passive', domain: 'physical', prereq: 'sam_slip_cut',
     trigger: null, cooldown: 0, compose: [],
-    passive: { footingDamageBonus: T.dancePerStack },
+    passive: { footingScaleWeight: T.danceWeight },
     ranks: R,
   },
   {

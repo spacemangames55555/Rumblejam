@@ -22,7 +22,10 @@
 //
 // Usage: node tools/rider_gate.mjs [--verbose]
 
-import { Sim } from '../js/game.js';
+// FixtureSim, not Sim: the harness answers its own §5.6 opening card instead
+// of tripping the anti-softlock floor at every arena door. Same skill, same
+// tick, no defect line — see tools/fixture_sim.mjs.
+import { FixtureSim as Sim } from './fixture_sim.mjs';
 import { SELECTABLE } from '../js/content/characters.js';
 import { TREES, SKILL_BY_ID, TREES_BY_CLASS, ALL_SKILLS } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';

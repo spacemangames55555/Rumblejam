@@ -35,29 +35,29 @@
 export const TUNING = {
   // tier 1 — Open Palm
   palmDamage: 6, palmReach: 96, palmArc: 1.5, palmRadius: 120,
-  palmCount: 1, palmCd: 1000, palmPer: 0.010,
+  palmCount: 1, palmCd: 1000, palmWeight: 0.83,
   // tier 2 — Gathering Breath
   breathAmount: 12, breathCd: 4200, breathChi: 6,
   // tier 3 — Rolling Fist
   fistDamage: 8, fistReach: 104, fistArc: 1.9, fistRadius: 132,
-  fistCount: 2, fistCd: 2000, fistPer: 0.011,
+  fistCount: 2, fistCd: 2000, fistWeight: 0.92,
   // tier 4 — Mend
   mendAmount: 18, mendCd: 5200, mendChi: 10,
   // tier 5 — Still Water (passive)
-  stillPer: 0.0016,
+  stillWeight: 0.133,
   // tier 6 — Hammerfall
   hammerDamage: 11, hammerReach: 112, hammerArc: 1.7, hammerRadius: 146,
-  hammerCount: 2, hammerCd: 3000, hammerPer: 0.012, hammerKnock: 170,
+  hammerCount: 2, hammerCd: 3000, hammerKnock: 170,
   // tier 7 — Breathe Out
   outAmount: 26, outDuration: 4400, outCd: 6600, outChi: 14,
   // tier 8 — Crane Step
   craneDamage: 12, craneAngle: 1.7, craneRange: 195, craneRadius: 168,
-  craneCount: 3, craneCd: 3600, cranePer: 0.013, craneSlowMult: 0.76, craneSlowDur: 1300,
+  craneCount: 3, craneCd: 3600, craneWeight: 1.08, craneSlowMult: 0.76, craneSlowDur: 1300,
   // tier 9 — Quiet the Body
   quietAmount: 30, quietCd: 7400, quietChi: 18,
   // tier 10 — Empty Hand
   emptyDamage: 17, emptyReach: 124, emptyArc: 2.3, emptyRadius: 178,
-  emptyCount: 3, emptyCd: 8200, emptyPer: 0.015, emptyStun: 620,
+  emptyCount: 3, emptyCd: 8200, emptyWeight: 1.25, emptyStun: 620,
   // rank increments — linear, never compounding
   rankDamage: 0.045, rankDuration: 0.035,
 };
@@ -79,7 +79,7 @@ export const MONK_CHI = [
     cooldown: T.palmCd,
     compose: [{
       kind: 'strike', damage: T.palmDamage, reach: T.palmReach, arc: T.palmArc,
-      scaleWith: 'chi', scalePer: T.palmPer, riders: {},
+      scaleWith: 'chi', scaleWeight: T.palmWeight, riders: {},
     }],
     ranks: R,
   },
@@ -104,7 +104,7 @@ export const MONK_CHI = [
     cooldown: T.fistCd,
     compose: [{
       kind: 'strike', damage: T.fistDamage, reach: T.fistReach, arc: T.fistArc,
-      scaleWith: 'chi', scalePer: T.fistPer, riders: {},
+      scaleWith: 'chi', scaleWeight: T.fistWeight, riders: {},
     }],
     ranks: R,
   },
@@ -125,7 +125,7 @@ export const MONK_CHI = [
     id: 'monk_still_water', tree: 'monk_chi', tier: 5, name: 'Still Water',
     desc: 'Every point of Chi you hold is worth more. +0.16% damage per point, per rank.',
     type: 'passive', domain: 'mental', prereq: 'monk_mend',
-    passive: { chiDamageBonus: T.stillPer },
+    passive: { chiScaleWeight: T.stillWeight },
     ranks: R,
   },
   {
@@ -137,7 +137,7 @@ export const MONK_CHI = [
     cooldown: T.hammerCd,
     compose: [{
       kind: 'strike', damage: T.hammerDamage, reach: T.hammerReach, arc: T.hammerArc,
-      scaleWith: 'chi', scalePer: T.hammerPer, riders: { knockback: T.hammerKnock },
+      scaleWith: 'chi', riders: { knockback: T.hammerKnock },
     }],
     ranks: R,
   },
@@ -163,7 +163,7 @@ export const MONK_CHI = [
     cooldown: T.craneCd,
     compose: [{
       kind: 'cone', damage: T.craneDamage, angle: T.craneAngle, range: T.craneRange,
-      scaleWith: 'chi', scalePer: T.cranePer,
+      scaleWith: 'chi', scaleWeight: T.craneWeight,
       riders: { slow: { mult: T.craneSlowMult, dur: T.craneSlowDur } },
     }],
     ranks: R,
@@ -190,7 +190,7 @@ export const MONK_CHI = [
     cooldown: T.emptyCd,
     compose: [{
       kind: 'strike', damage: T.emptyDamage, reach: T.emptyReach, arc: T.emptyArc,
-      scaleWith: 'chi', scalePer: T.emptyPer, riders: { stun: T.emptyStun },
+      scaleWith: 'chi', scaleWeight: T.emptyWeight, riders: { stun: T.emptyStun },
     }],
     ranks: R,
   },

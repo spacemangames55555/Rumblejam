@@ -34,31 +34,31 @@ export const TUNING = {
   shardCount: 1, shardCd: 1300,
   // tier 2 — Facet Strike
   facetDamage: 5, facetReach: 108, facetArc: 1.8, facetRadius: 135,
-  facetCount: 1, facetCd: 2200, facetPer: 0.03,
+  facetCount: 1, facetCd: 2200, facetWeight: 0.75,
   // tier 3 — Fracture Line
   fractureDamage: 6, fractureReach: 112, fractureArc: 2.0, fractureRadius: 140,
-  fractureCount: 2, fractureCd: 3400, fracturePer: 0.033,
+  fractureCount: 2, fractureCd: 3400, fractureWeight: 0.83,
   fractureDefMult: 0.78, fractureDefDur: 2400,
   // tier 4 — Hardened Edge
-  hardenAmount: 18, hardenDuration: 4600, hardenCd: 7000, hardenPer: 0.036,
+  hardenAmount: 18, hardenDuration: 4600, hardenCd: 7000, hardenWeight: 0.9,
   // tier 5 — Lattice (passive)
-  latticePer: 0.012,
+  latticeWeight: 0.3,
   // tier 6 — Refracted Guard
   guardDamage: 7, guardReach: 116, guardArc: 2.2, guardRadius: 145,
-  guardCount: 2, guardCd: 3800, guardPer: 0.036, guardKnock: 200,
+  guardCount: 2, guardCd: 3800, guardWeight: 0.9, guardKnock: 200,
   // tier 7 — Pressure Front
   pressureDamage: 8, pressureReach: 120, pressureArc: 2.4, pressureRadius: 150,
-  pressureCount: 3, pressureCd: 4600, pressurePer: 0.04,
+  pressureCount: 3, pressureCd: 4600,
   pressureSlowMult: 0.74, pressureSlowDur: 1400,
   // tier 8 — Cleavage Plane
   planeDamage: 8, planeReach: 124, planeArc: 2.6, planeRadius: 155,
-  planeCount: 3, planeCd: 5400, planePer: 0.042, planePulses: 2,
+  planeCount: 3, planeCd: 5400, planeWeight: 1.05, planePulses: 2,
   // tier 9 — Inclusion
   inclusionDamage: 9, inclusionReach: 118, inclusionArc: 2.0, inclusionRadius: 150,
-  inclusionCount: 2, inclusionCd: 5000, inclusionPer: 0.045, inclusionRoot: 1500,
+  inclusionCount: 2, inclusionCd: 5000, inclusionWeight: 1.13, inclusionRoot: 1500,
   // tier 10 — The Whole Stone
   wholeDamage: 12, wholeReach: 132, wholeArc: 3.0, wholeRadius: 165,
-  wholeCount: 3, wholeCd: 9500, wholePer: 0.05, wholeStun: 650,
+  wholeCount: 3, wholeCd: 9500, wholeWeight: 1.25, wholeStun: 650,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -93,7 +93,7 @@ export const MAGE_CRYSTALBLADE = [
     cooldown: T.facetCd,
     compose: [{
       kind: 'strike', damage: T.facetDamage, reach: T.facetReach, arc: T.facetArc,
-      scaleWith: 'crystal', scalePer: T.facetPer, riders: {},
+      scaleWith: 'crystal', scaleWeight: T.facetWeight, riders: {},
     }],
     ranks: R,
   },
@@ -106,7 +106,7 @@ export const MAGE_CRYSTALBLADE = [
     cooldown: T.fractureCd,
     compose: [{
       kind: 'strike', damage: T.fractureDamage, reach: T.fractureReach, arc: T.fractureArc,
-      scaleWith: 'crystal', scalePer: T.fracturePer,
+      scaleWith: 'crystal', scaleWeight: T.fractureWeight,
       riders: { weakenDefense: { mult: T.fractureDefMult, dur: T.fractureDefDur } },
     }],
     ranks: R,
@@ -125,7 +125,7 @@ export const MAGE_CRYSTALBLADE = [
     cooldown: T.hardenCd,
     compose: [{
       kind: 'shield', amount: T.hardenAmount, duration: T.hardenDuration,
-      scaleWith: 'crystal', scalePer: T.hardenPer,
+      scaleWith: 'crystal', scaleWeight: T.hardenWeight,
     }],
     ranks: R,
   },
@@ -134,7 +134,7 @@ export const MAGE_CRYSTALBLADE = [
     desc: 'Every crystal you are carrying is worth 1.2% more to every skill that reads them.',
     type: 'passive', domain: 'mental', prereq: 'mage_hardened_edge',
     trigger: null, cooldown: 0, compose: [],
-    passive: { crystalDamageBonus: T.latticePer },
+    passive: { crystalScaleWeight: T.latticeWeight },
     // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks —
     // the same shape as Held Edge on Footing, Sympathetic Resonance on shift,
     // Attend the Fallen on marks and Perfect Time on rhythm.
@@ -149,7 +149,7 @@ export const MAGE_CRYSTALBLADE = [
     cooldown: T.guardCd,
     compose: [{
       kind: 'strike', damage: T.guardDamage, reach: T.guardReach, arc: T.guardArc,
-      scaleWith: 'crystal', scalePer: T.guardPer,
+      scaleWith: 'crystal', scaleWeight: T.guardWeight,
       riders: { knockback: T.guardKnock },
     }],
     ranks: R,
@@ -163,7 +163,7 @@ export const MAGE_CRYSTALBLADE = [
     cooldown: T.pressureCd,
     compose: [{
       kind: 'strike', damage: T.pressureDamage, reach: T.pressureReach, arc: T.pressureArc,
-      scaleWith: 'crystal', scalePer: T.pressurePer,
+      scaleWith: 'crystal',
       riders: { slow: { mult: T.pressureSlowMult, dur: T.pressureSlowDur } },
     }],
     ranks: R,
@@ -177,7 +177,7 @@ export const MAGE_CRYSTALBLADE = [
     cooldown: T.planeCd,
     compose: [{
       kind: 'strike', damage: T.planeDamage, reach: T.planeReach, arc: T.planeArc,
-      scaleWith: 'crystal', scalePer: T.planePer,
+      scaleWith: 'crystal', scaleWeight: T.planeWeight,
       riders: { multiPulse: T.planePulses },
     }],
     ranks: R,
@@ -191,7 +191,7 @@ export const MAGE_CRYSTALBLADE = [
     cooldown: T.inclusionCd,
     compose: [{
       kind: 'strike', damage: T.inclusionDamage, reach: T.inclusionReach, arc: T.inclusionArc,
-      scaleWith: 'crystal', scalePer: T.inclusionPer,
+      scaleWith: 'crystal', scaleWeight: T.inclusionWeight,
       riders: { root: T.inclusionRoot },
     }],
     ranks: R,
@@ -208,7 +208,7 @@ export const MAGE_CRYSTALBLADE = [
     cooldown: T.wholeCd,
     compose: [{
       kind: 'strike', damage: T.wholeDamage, reach: T.wholeReach, arc: T.wholeArc,
-      scaleWith: 'crystal', scalePer: T.wholePer,
+      scaleWith: 'crystal', scaleWeight: T.wholeWeight,
       riders: { stun: T.wholeStun },
     }],
     ranks: R,

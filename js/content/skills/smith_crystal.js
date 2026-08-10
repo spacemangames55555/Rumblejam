@@ -49,7 +49,7 @@
 export const TUNING = {
   // tier 1 — Hammer Blow
   hammerDamage: 7, hammerReach: 100, hammerArc: 1.5, hammerRadius: 124,
-  hammerCount: 1, hammerCd: 1150, hammerPer: 0.22,
+  hammerCount: 1, hammerCd: 1150, hammerWeight: 0.92,
   // tier 2 — IRON PYRITE, the defensive form
   pyritePct: 70, pyriteDuration: 7000, pyriteCd: 12000,
   pyriteGrit: 22, pyriteVit: 14,
@@ -58,14 +58,14 @@ export const TUNING = {
   anvilCount: 2, anvilCd: 2400, anvilKnock: 190,
   // tier 4 — Slag
   slagDamage: 9, slagAngle: 1.9, slagRange: 195, slagRadius: 168,
-  slagCount: 3, slagCd: 3000, slagPer: 0.24,
+  slagCount: 3, slagCd: 3000,
   // tier 5 — PRISM QUARTZ, the offensive form
   quartzPct: 55, quartzDuration: 6500, quartzCd: 13000,
   quartzAtt: 26, quartzFer: 18,
   // tier 6 — Refraction (Quartz only)
   refractDamage: 13, refractSpeed: 540, refractRange: 250, refractCd: 2600,
   // tier 7 — Facet (passive)
-  facetPer: 0.05,
+  facetWeight: 0.21,
   // tier 8 — CELESTIAL CALCITE, the recovery form
   calcitePct: 35, calciteDuration: 6000, calciteCd: 15000,
   calciteRec: 40, calciteVit: 24,
@@ -73,7 +73,7 @@ export const TUNING = {
   seamAmount: 26, seamCd: 3400,
   // tier 10 — Whole Cloth
   clothDamage: 17, clothReach: 130, clothArc: 2.4, clothRadius: 182,
-  clothCount: 3, clothCd: 8400, clothPer: 0.30, clothStun: 640,
+  clothCount: 3, clothCd: 8400, clothWeight: 1.25, clothStun: 640,
   // rank increments — linear, never compounding
   rankDamage: 0.045, rankDuration: 0.035,
 };
@@ -91,7 +91,7 @@ export const SMITH_CRYSTAL = [
     cooldown: T.hammerCd,
     compose: [{
       kind: 'strike', damage: T.hammerDamage, reach: T.hammerReach, arc: T.hammerArc,
-      scaleWith: 'form', scalePer: T.hammerPer, riders: {},
+      scaleWith: 'form', scaleWeight: T.hammerWeight, riders: {},
     }],
     ranks: R,
   },
@@ -138,7 +138,7 @@ export const SMITH_CRYSTAL = [
     cooldown: T.slagCd,
     compose: [{
       kind: 'cone', damage: T.slagDamage, angle: T.slagAngle, range: T.slagRange,
-      scaleWith: 'form', scalePer: T.slagPer, riders: {},
+      scaleWith: 'form', riders: {},
     }],
     ranks: R,
   },
@@ -171,7 +171,7 @@ export const SMITH_CRYSTAL = [
     id: 'smith_facet', tree: 'smith_crystal', tier: 7, name: 'Facet',
     desc: 'Being crystal is worth more. +5% damage while any form holds, per rank.',
     type: 'passive', domain: 'mental', prereq: 'smith_refraction',
-    passive: { formDamageBonus: T.facetPer },
+    passive: { formScaleWeight: T.facetWeight },
     ranks: R,
   },
   {
@@ -210,7 +210,7 @@ export const SMITH_CRYSTAL = [
     cooldown: T.clothCd,
     compose: [{
       kind: 'strike', damage: T.clothDamage, reach: T.clothReach, arc: T.clothArc,
-      scaleWith: 'form', scalePer: T.clothPer, riders: { stun: T.clothStun },
+      scaleWith: 'form', scaleWeight: T.clothWeight, riders: { stun: T.clothStun },
     }],
     ranks: R,
   },

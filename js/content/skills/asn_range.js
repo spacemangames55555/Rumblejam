@@ -35,19 +35,19 @@
 
 export const TUNING = {
   dartDamage: 10, dartRange: 300, dartSpeed: 520, dartRadius: 6, dartCd: 1100,
-  steadyPerTrap: 0.012,
+  steadyWeight: 0.15,
 
   // ---- branch A: Longline (reach — shoot past what is already on you) ----
   pinDamage: 15, pinRange: 380, pinSpeed: 560, pinRadius: 6, pinCd: 2600,
   pinRoot: 1100,
-  marksmanPerTrap: 0.015,
+  marksmanWeight: 0.18,
   volleyDamage: 17, volleyRange: 400, volleySpeed: 540, volleyRadius: 6, volleyCount: 2, volleyCd: 4200,
   deadfallDamage: 26, deadfallRange: 430, deadfallSpeed: 600, deadfallRadius: 7, deadfallCd: 8200,
   deadfallSplash: { radius: 120, damage: 14 },
 
   // ---- branch B: Overwatch (finish what is already bleeding) ----
   cullDamage: 18, cullRange: 320, cullSpeed: 540, cullRadius: 6, cullPct: 55, cullCd: 2800,
-  coldEyePerTrap: 0.015,
+  coldEyeWeight: 0.18,
   ricochetDamage: 19, ricochetRange: 340, ricochetSpeed: 520, ricochetRadius: 6,
   ricochetCount: 2, ricochetPct: 45, ricochetCd: 4400,
   headhunterDamage: 30, headhunterRange: 360, headhunterSpeed: 620, headhunterRadius: 7,
@@ -58,7 +58,7 @@ export const TUNING = {
 
 const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
-const KB = { scaleWith: 'killbox', scalePer: 0.05 };
+const KB = { scaleWith: 'killbox'};
 
 export const ASN_RANGE = [
   {
@@ -76,7 +76,7 @@ export const ASN_RANGE = [
     desc: 'Every box you left standing is worth something from here. Both roads out of this node are output without setup.',
     type: 'passive', domain: 'physical', prereq: 'asn_dart',
     trigger: null, cooldown: 0, compose: [],
-    passive: { killboxDamageBonus: T.steadyPerTrap },
+    passive: { killboxScaleWeight: T.steadyWeight },
     ranks: R,
   },
 
@@ -99,7 +99,7 @@ export const ASN_RANGE = [
     desc: 'Distance stops costing you anything.',
     type: 'passive', domain: 'physical', prereq: 'asn_pin',
     trigger: null, cooldown: 0, compose: [],
-    passive: { killboxDamageBonus: T.marksmanPerTrap },
+    passive: { killboxScaleWeight: T.marksmanWeight },
     ranks: R,
   },
   {
@@ -142,7 +142,7 @@ export const ASN_RANGE = [
     desc: 'You stopped counting the ones that are going to die anyway.',
     type: 'passive', domain: 'physical', prereq: 'asn_cull',
     trigger: null, cooldown: 0, compose: [],
-    passive: { killboxDamageBonus: T.coldEyePerTrap },
+    passive: { killboxScaleWeight: T.coldEyeWeight },
     ranks: R,
   },
   {
