@@ -47,6 +47,7 @@ import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from '.
 import { PRIMITIVE_KINDS, RIDERS_BY_PRIMITIVE, PRIMITIVE_SELECTS, stepPicksTarget } from './compose.js';
 import { isDomain } from './domains.js';
 import { SELECT_KINDS } from './selectors.js';
+import { ENGINE_SCALE } from './enginescale.js';
 import { MOVE_KINDS } from './minions.js';
 
 export const TREES = {
@@ -106,27 +107,35 @@ for (const t of Object.values(TREES)) (TREES_BY_CLASS[t.classId] ||= []).push(t.
 // "does ranking this buy anything" is exactly "is this key damage or duration".
 // A key absent from this table fails the load assertion rather than defaulting,
 // so adding a passive forces the author to answer the question once.
+// `<engine>ScaleWeight` was `<engine>DamageBonus` and the rename is the point,
+// not tidiness: the old field held a PER-POINT number in the same units as the
+// old `scalePer`, so the same 0.010 was +45% on chi and +1% on form. It now
+// holds a dimensionless multiple of the engine's standard contribution, which
+// `passiveBonusPer` converts. Renaming rather than re-interpreting is what makes
+// the old value impossible to carry across — a stale `chiDamageBonus: 0.004` is
+// rejected by the assertion below instead of quietly reading as a weight of
+// 0.004 and deleting the passive.
 export const PASSIVE_EFFECT = {
   // scale damage — genuine investments, rankable
-  footingDamageBonus: 'damage',   // Held Edge: more damage per Footing stack
+  footingScaleWeight: 'damage',   // Held Edge: more damage per Footing stack
   reflectPerGrit: 'damage',       // Quill: reflected damage scaled by Grit
   // everything else — unlocks, rank-1
   footingAccrualPct: 'other',     // Set Stance / Measured Breath: settle faster
   footingGritBonus: 'other',      // Weight: more Grit per stack
   armorGrit: 'other',             // Calcify, Bone Plate
   armorVit: 'other',              // Calcify, Bone Plate
-  packDamageBonus: 'damage',      // Pack Bond: more damage per standing animal
-  shiftDamageBonus: 'damage',     // Sympathetic Resonance: more per attunement banked
-  marksDamageBonus: 'damage',     // Attend the Fallen: more per mark standing
-  rhythmDamageBonus: 'damage',    // Perfect Time: more per stack held
-  crystalDamageBonus: 'damage',   // Lattice: more per crystal carried
-  dollDamageBonus: 'damage',      // Sympathetic Binding: more per point banked in the doll
-  drenchDamageBonus: 'damage',    // Tidemark: more per drench stack standing
-  killboxDamageBonus: 'damage',   // Dead Ground: more per trap set
-  spreadDamageBonus: 'damage',    // Long Leash: more per span between you and the beast
-  chiDamageBonus: 'damage',       // Still Water: more per point of Chi held
-  cascadeDamageBonus: 'damage',   // Red Memory: more per rank banked in the cascade
-  formDamageBonus: 'damage',      // Facet: more while a crystal form holds
+  packScaleWeight: 'damage',      // Pack Bond: more damage per standing animal
+  shiftScaleWeight: 'damage',     // Sympathetic Resonance: more per attunement banked
+  marksScaleWeight: 'damage',     // Attend the Fallen: more per mark standing
+  rhythmScaleWeight: 'damage',    // Perfect Time: more per stack held
+  crystalScaleWeight: 'damage',   // Lattice: more per crystal carried
+  dollScaleWeight: 'damage',      // Sympathetic Binding: more per point banked in the doll
+  drenchScaleWeight: 'damage',    // Tidemark: more per drench stack standing
+  killboxScaleWeight: 'damage',   // Dead Ground: more per trap set
+  spreadScaleWeight: 'damage',    // Long Leash: more per span between you and the beast
+  chiScaleWeight: 'damage',       // Still Water: more per point of Chi held
+  cascadeScaleWeight: 'damage',   // Red Memory: more per rank banked in the cascade
+  formScaleWeight: 'damage',      // Facet: more while a crystal form holds
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the
@@ -648,6 +657,54 @@ function assertTrees() {
   const claimants = ALL_SKILLS.filter(s => s.rankGrants !== undefined).map(s => s.id);
   if (claimants.length > Object.keys(RANK_GRANTS).length) {
     problems.push(`${claimants.length} skills declare rankGrants (${claimants.join(', ')}) but RANK_GRANTS has ${Object.keys(RANK_GRANTS).length} entries`);
+  }
+
+  // ENGINE SCALING IS DECLARED IN WEIGHTS, AND THE OLD UNITS ARE REFUSED.
+  //
+  // A per-point number only means something against its engine's ceiling, and
+  // the ceilings run from 1 (`form`) to 45 (`chi`). Nine third trees were each
+  // authored with a flat `scalePer: 0.05` copied from the last one, which is
+  // +5% on form and +225% on chi — the per-tree DPS gate read the Monk's Empty
+  // Hand at 625 against a class median of 60. Every one of those trees passed
+  // every check in this file.
+  //
+  // js/enginescale.js publishes each engine's maximum and its intended
+  // contribution and derives the per-point value; content declares only WHICH
+  // engine and, optionally, a dimensionless `scaleWeight` whose default is 1.
+  // These four checks are what make the old mistake unmakeable rather than
+  // merely detectable — there is no longer a per-point field to copy, and an
+  // author reaching for one is stopped at load with the replacement named.
+  for (const s of ALL_SKILLS) {
+    for (const [i, step] of (s.compose || []).entries()) {
+      if ('scalePer' in step) {
+        problems.push(`${s.id} step ${i} declares scalePer — that field is gone. Engine scaling is derived from `
+          + `ENGINE_SCALE in js/enginescale.js; declare scaleWith and, if this step should ride harder or softer `
+          + `than its engine's standard, a dimensionless scaleWeight (1 = standard)`);
+      }
+      if (step.scaleWith !== undefined && !(step.scaleWith in ENGINE_SCALE)) {
+        problems.push(`${s.id} step ${i} scales with '${step.scaleWith}', which is not an engine in ENGINE_SCALE `
+          + `(${Object.keys(ENGINE_SCALE).join(', ')}) — an unknown engine scales by nothing and reads as a working declaration`);
+      }
+      if (step.scaleWeight !== undefined) {
+        if (step.scaleWith === undefined) {
+          problems.push(`${s.id} step ${i} declares scaleWeight with no scaleWith — a weight with no engine is read by nothing`);
+        } else if (!(step.scaleWeight > 0) || step.scaleWeight > 4) {
+          // 4× the engine's standard is far outside the 0.56–1.56 the whole
+          // roster spans. A weight of 0.05 is the tell that somebody has
+          // written the old per-point number into the new field.
+          problems.push(`${s.id} step ${i} declares scaleWeight ${step.scaleWeight} — a weight is a multiple of its `
+            + `engine's standard contribution and every authored one on the roster is between 0.5 and 1.6. `
+            + `A value this far out is almost always an old per-point scalePer number in the new field`);
+        }
+      }
+    }
+    for (const k of Object.keys(s.passive || {})) {
+      const m = /^(\w+)DamageBonus$/.exec(k);
+      if (m && m[1] in ENGINE_SCALE) {
+        problems.push(`${s.id} passive declares ${k} — renamed to ${m[1]}ScaleWeight, and the units changed with it: `
+          + `it is now a multiple of the engine's standard contribution rather than a per-point number`);
+      }
+    }
   }
 
   if (problems.length) {

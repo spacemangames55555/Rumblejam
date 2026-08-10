@@ -35,11 +35,11 @@
 
 export const TUNING = {
   hexDamage: 11, hexRange: 250, hexSpeed: 430, hexRadius: 7, hexCd: 1150,
-  manyPerPoint: 0.011,
+  manyWeight: 0.15,
 
   // ---- branch A: Plague (contact and count, never designation) ----
   contagionDamage: 13, contagionDuration: 3400, contagionRange: 250, contagionCd: 2600,
-  virulencePerPoint: 0.014,
+  virulenceWeight: 0.18,
   miasmaDamage: 16, miasmaRadius: 165, miasmaDuration: 3800, miasmaTickMs: 400, miasmaCd: 4400,
   miasmaSlowMult: 0.55, miasmaSlowDur: 2200,
   pandemicDamage: 26, pandemicDuration: 5200, pandemicRange: 300, pandemicCd: 7800,
@@ -47,7 +47,7 @@ export const TUNING = {
   // ---- branch B: Fetish (stop being outnumbered) ----
   fetishHp: 26, fetishRadius: 12, fetishSpawnRadius: 60, fetishAttackCd: 1.1,
   fetishDamage: 7, fetishMaxAlive: 2, fetishDuration: 14000, fetishPct: 60, fetishCd: 6000,
-  hutPerPoint: 0.014,
+  hutWeight: 0.18,
   gravecallHp: 34, gravecallRadius: 13, gravecallSpawnRadius: 70, gravecallAttackCd: 1.0,
   gravecallDamage: 9, gravecallMaxAlive: 2, gravecallDuration: 15000, gravecallCd: 6600,
   legionHp: 46, legionRadius: 15, legionSpawnRadius: 80, legionAttackCd: 0.9,
@@ -58,7 +58,7 @@ export const TUNING = {
 
 const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
-const DOLL = { scaleWith: 'doll', scalePer: 0.05 };
+const DOLL = { scaleWith: 'doll'};
 
 export const WD_SWARM = [
   {
@@ -76,7 +76,7 @@ export const WD_SWARM = [
     desc: 'One of them was never the problem. Both roads out of here are about the other five.',
     type: 'passive', domain: 'spiritual', prereq: 'wd_scattered_hex',
     trigger: null, cooldown: 0, compose: [],
-    passive: { dollDamageBonus: T.manyPerPoint },
+    passive: { dollScaleWeight: T.manyWeight },
     ranks: R,
   },
 
@@ -96,7 +96,7 @@ export const WD_SWARM = [
     desc: 'What is already in them works faster.',
     type: 'passive', domain: 'spiritual', prereq: 'wd_contagion',
     trigger: null, cooldown: 0, compose: [],
-    passive: { dollDamageBonus: T.virulencePerPoint },
+    passive: { dollScaleWeight: T.virulenceWeight },
     ranks: R,
   },
   {
@@ -145,7 +145,7 @@ export const WD_SWARM = [
     desc: 'Somewhere for them to come from.',
     type: 'passive', domain: 'spiritual', prereq: 'wd_fetish',
     trigger: null, cooldown: 0, compose: [],
-    passive: { dollDamageBonus: T.hutPerPoint },
+    passive: { dollScaleWeight: T.hutWeight },
     ranks: R,
   },
   {

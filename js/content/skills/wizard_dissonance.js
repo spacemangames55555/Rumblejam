@@ -38,18 +38,18 @@
 
 export const TUNING = {
   frayDamage: 11, frayRange: 250, fraySpeed: 440, frayRadius: 7, frayCd: 1150,
-  discordPerShift: 0.010,
+  discordWeight: 0.15,
 
   // ---- branch A: Spread (one of each domain — always something that fits) ----
   ironDamage: 16, ironReach: 112, ironArc: 1.8, ironCd: 2400,          // physical
-  polyPerShift: 0.013,
+  polyWeight: 0.18,
   murmurDamage: 19, murmurRange: 270, murmurSpeed: 460, murmurRadius: 7, murmurCd: 4200,  // mental
   chorusDamage: 27, chorusArc: 2.9, chorusRange: 300, chorusCd: 7600,  // spiritual
   chorusWeaken: { mult: 0.7, dur: 3000 },
 
   // ---- branch B: Conviction (paid for having been wrong) ----
   recoilDamage: 17, recoilRadius: 150, recoilDuration: 3400, recoilTickMs: 400, recoilCd: 2800,
-  temperPerShift: 0.013,
+  temperWeight: 0.18,
   bulwarkAmount: 40, bulwarkDuration: 4800, bulwarkPct: 55, bulwarkCd: 5200,
   reversalAmount: 50, reversalDuration: 5200, reversalReflect: 32, reversalPct: 38, reversalCd: 9000,
 
@@ -58,7 +58,7 @@ export const TUNING = {
 
 const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
-const SHIFT = { scaleWith: 'shift', scalePer: 0.05 };
+const SHIFT = { scaleWith: 'shift'};
 
 export const WIZARD_DISSONANCE = [
   {
@@ -76,7 +76,7 @@ export const WIZARD_DISSONANCE = [
     desc: 'Being wrong is information. Both roads out of here are about the bet that did not land.',
     type: 'passive', domain: 'mental', prereq: 'wiz_fray',
     trigger: null, cooldown: 0, compose: [],
-    passive: { shiftDamageBonus: T.discordPerShift },
+    passive: { shiftScaleWeight: T.discordWeight },
     ranks: R,
   },
 
@@ -96,7 +96,7 @@ export const WIZARD_DISSONANCE = [
     desc: 'Fluent in all three, expert in none, and never silent.',
     type: 'passive', domain: 'mental', prereq: 'wiz_iron_word',
     trigger: null, cooldown: 0, compose: [],
-    passive: { shiftDamageBonus: T.polyPerShift },
+    passive: { shiftScaleWeight: T.polyWeight },
     ranks: R,
   },
   {
@@ -142,7 +142,7 @@ export const WIZARD_DISSONANCE = [
     desc: 'Every wrong guess left something behind.',
     type: 'passive', domain: 'spiritual', prereq: 'wiz_recoil',
     trigger: null, cooldown: 0, compose: [],
-    passive: { shiftDamageBonus: T.temperPerShift },
+    passive: { shiftScaleWeight: T.temperWeight },
     ranks: R,
   },
   {

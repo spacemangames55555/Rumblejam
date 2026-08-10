@@ -36,22 +36,22 @@ export const TUNING = {
   weightDamage: 11, weightReach: 108, weightArc: 1.8, weightRadius: 140,
   weightCount: 2, weightCd: 4000, weightWeakenMult: 0.78, weightWeakenDur: 2500,
   // tier 5 — Attend the Fallen (passive)
-  attendPer: 0.02,
+  attendWeight: 0.286,
   // tier 6 — Sentence
   sentenceDamage: 14, sentenceSpeed: 520, sentenceRange: 260, sentencePct: 50,
   sentenceCd: 4600, sentenceMarkDur: 7000, sentenceMarkHeal: 12, sentenceMarkRadius: 210,
   // tier 7 — Chorus of the Named
   chorusDamage: 10, chorusAngle: 2.2, chorusRange: 235, chorusRadius: 195,
-  chorusCount: 4, chorusCd: 5600, chorusPer: 0.05,
+  chorusCount: 4, chorusCd: 5600, chorusWeight: 0.71,
   // tier 8 — Reliquary Ward
-  reliquaryAmount: 24, reliquaryDuration: 5000, reliquaryCd: 8500, reliquaryPer: 0.07,
+  reliquaryAmount: 24, reliquaryDuration: 5000, reliquaryCd: 8500,
   // tier 9 — The Long Ledger
   ledgerDamage: 12, ledgerWidth: 36, ledgerLength: 380, ledgerRadius: 215,
-  ledgerCount: 3, ledgerCd: 6400, ledgerPer: 0.06,
+  ledgerCount: 3, ledgerCd: 6400, ledgerWeight: 0.86,
   ledgerMarkDur: 8000, ledgerMarkHeal: 8, ledgerMarkRadius: 200,
   // tier 10 — Day of Accounts
   accountsDamage: 17, accountsAngle: 2.8, accountsRange: 255, accountsRadius: 225,
-  accountsCount: 4, accountsCd: 10500, accountsPer: 0.07,
+  accountsCount: 4, accountsCd: 10500,
   accountsMarkDur: 10000, accountsMarkHeal: 16, accountsMarkRadius: 240,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.035,
@@ -118,7 +118,7 @@ export const PRIEST_JUDGMENT = [
     desc: 'Every standing mark is worth 2% more to every skill that reads them.',
     type: 'passive', domain: 'spiritual', prereq: 'pri_weight_of_sin',
     trigger: null, cooldown: 0, compose: [],
-    passive: { marksDamageBonus: T.attendPer },
+    passive: { marksScaleWeight: T.attendWeight },
     // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks —
     // the same shape as Held Edge on Footing and Pack Bond on the pack. A
     // rank-1 cap here would have been the assertion's other complaint.
@@ -146,7 +146,7 @@ export const PRIEST_JUDGMENT = [
     cooldown: T.chorusCd,
     compose: [{
       kind: 'cone', damage: T.chorusDamage, angle: T.chorusAngle, range: T.chorusRange,
-      scaleWith: 'marks', scalePer: T.chorusPer, riders: {},
+      scaleWith: 'marks', scaleWeight: T.chorusWeight, riders: {},
     }],
     ranks: R,
   },
@@ -159,7 +159,7 @@ export const PRIEST_JUDGMENT = [
     cooldown: T.reliquaryCd,
     compose: [{
       kind: 'ward', amount: T.reliquaryAmount, duration: T.reliquaryDuration, reflectPct: 0,
-      scaleWith: 'marks', scalePer: T.reliquaryPer,
+      scaleWith: 'marks',
     }],
     ranks: R,
   },
@@ -172,7 +172,7 @@ export const PRIEST_JUDGMENT = [
     cooldown: T.ledgerCd,
     compose: [{
       kind: 'line', damage: T.ledgerDamage, width: T.ledgerWidth, length: T.ledgerLength,
-      scaleWith: 'marks', scalePer: T.ledgerPer,
+      scaleWith: 'marks', scaleWeight: T.ledgerWeight,
       riders: { mark: { dur: T.ledgerMarkDur, heal: T.ledgerMarkHeal, radius: T.ledgerMarkRadius } },
     }],
     ranks: R,
@@ -186,7 +186,7 @@ export const PRIEST_JUDGMENT = [
     cooldown: T.accountsCd,
     compose: [{
       kind: 'cone', damage: T.accountsDamage, angle: T.accountsAngle, range: T.accountsRange,
-      scaleWith: 'marks', scalePer: T.accountsPer,
+      scaleWith: 'marks',
       riders: { mark: { dur: T.accountsMarkDur, heal: T.accountsMarkHeal, radius: T.accountsMarkRadius } },
     }],
     ranks: R,

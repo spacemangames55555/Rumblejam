@@ -25,7 +25,7 @@ export const TUNING = {
   stingDamage: 5, stingReach: 100, stingArc: 1.5, stingRadius: 125,
   stingCount: 1, stingCd: 1600,
   // tier 2 — Refrain
-  refrainAmount: 15, refrainCd: 5600, refrainPer: 0.04,
+  refrainAmount: 15, refrainCd: 5600,
   // tier 3 — Traveling Song
   travelAmount: 20, travelDuration: 4400, travelCd: 7200,
   // tier 4 — Cutting Remark
@@ -77,7 +77,7 @@ export const BARD_ENSEMBLE = [
     cooldown: T.refrainCd,
     compose: [{
       kind: 'heal', amount: T.refrainAmount,
-      scaleWith: 'rhythm', scalePer: T.refrainPer,
+      scaleWith: 'rhythm',
     }],
     ranks: R,
   },

@@ -457,7 +457,27 @@ A primitive that deals damage is not finished when it has damaged bodies. **`gam
 
 ### 5.8 Engine scaling — `scaleWith`
 
-A step may declare `scaleWith: '<engine>'` and `scalePer`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
+A step may declare `scaleWith: '<engine>'`, reading `p.engines[name]`. **The hook knows no engine by name.** Footing and Marrow's `armor` engine both ride it with zero engine-specific code.
+
+#### The per-point value is derived, not authored
+
+A step used to declare `scalePer` alongside it: a raw per-point multiplier. That number only means something against its engine's ceiling, and **the ceilings run from 1 (`form`) to 45 (`chi`)** — so the same figure is +5% on one engine and +225% on another. Nine third trees were each authored with a flat `scalePer: 0.05` copied from the last one. Every load assertion passed; the class DPS gate could not see it (§8.1.2); the per-tree gate measured the Monk's Empty Hand at **625 DPS against a class median of 60**, riding ×4.64 engine scaling where its own class's other two trees ride ×1.52–1.66.
+
+The older trees were never following a `0.05` convention. Read against their engines' ceilings they agree closely — rhythm +40%, crystal +40%, killbox +36%, chi +54%, form +24%, doll +60% — every one an author who did the arithmetic. **The convention that was actually being followed was invisible, so what got copied was the number, which is the one part of it that does not travel between engines** (§13 rule 60).
+
+`js/enginescale.js` publishes two figures per engine and derives the rest:
+
+| | means | example |
+|---|---|---|
+| `max` | what the engine publishes when full | `chi` 45 = `CHI_CAP 40` + `CHI_FOCUS_STEP 5` |
+| `contribution` | how much of a skill's damage a full engine is worth | `chi` +54% → a Monk at 45 Chi deals ×1.54 |
+| `hard` | whether `max` is enforced or a design reference | eight enforced; `cascade`, `drench`, `shift`, `marks`, `pack`, `armor` have no clamp in the code at all |
+
+Content declares **which** engine and, optionally, a dimensionless `scaleWeight` whose default is 1 — a multiple of that engine's standard. Copying `1` from a chi tree to a form tree is correct, which is the property `scalePer` could never have. The whole roster spans 0.5–1.6.
+
+**`scalePer` is rejected at load**, as is the old `<engine>DamageBonus` passive field, which held a per-point number in the same units and had the same defect — the Monk's `chiDamageBonus: 0.010` was +45% on everything the class did. Passives now declare `<engine>ScaleWeight`. The error is unmakeable rather than detectable: there is no per-point field left to copy, and an author reaching for one is stopped at load with the replacement named.
+
+The initial contributions are the median of what the fourteen older trees' authors had already converged on per engine, so the migration re-scaled nothing that was authored with the arithmetic done — 126 sites moved, and **the worst effective drift across all 181 was 1.0%**. The nine that copied a number were the only content it moved.
 
 This is what makes the remaining class engines data rather than engineering — but only the READ side (§13 rule 29). `shift` and `marks` joined `footing`, `armor` and `pack` on this hook with no change to it at all; what each of them cost was a **publish line**, and two of them cost a write path before that. Every one of them has since given the same two answers — drench, crystallize, killbox, two bodies, Chi, cascade and the forms. None is outstanding.
 
@@ -595,6 +615,28 @@ Enforced in `canLearn` (`TIER_LEVELS` in `js/skills.js`), not merely tabled. Mea
 The first six gates track D2's shape closely: its 6/12/18/24/30 of 99 is 6–30% of the cap, which against 69 is levels 4/8/12/17/21 — within a level or two of the table above. Where this departs from D2 is the top half: D2 stops gating at 30% and this keeps going to 87%, because tiers 7–10 are the payoff and a capstone available at the halfway point is a default rather than a decision.
 
 Two properties worth stating because they are consequences rather than choices. The gate is per-tier and not per-tree, so a player who spreads reaches tier 10 in all three trees at the same level — correct, since branching is not exclusion. And **the shape spec's node count is the real balance lever**: at 3 trees × 10 nodes a player spends 30 of ~69 points on unlocks and has 39 left for ranks; at 14 nodes per tree that becomes 42 and 27. Fixing the gates does not fix the rank budget, and the shape spec has to be read against this table.
+
+#### 8.1.2 The DPS gate could not see a third tree at all
+
+`measureDps` in `sim_test` levels a character to **12** and lets the auto-slotter fill the loadout from every tree the class owns. Level 12 is three slots (`SLOT_LEVELS`), and a class's two older trees reach them first. **No third tree's actives have ever been measured — on any of the fourteen.** Every third tree authored so far was scored on its tier-2 passive alone, because a passive is always on and needs no slot.
+
+That is not a flaw in `measureDps`: it answers "is this CLASS in band", and a class is what a player at level 12 actually fields. It is a *blind spot* of the same kind as crystal's — a gate passing while measuring a world the content does not live in (§13 rule 24) — and it was live across nine authored trees.
+
+`tools/tree_dps.mjs` answers the other question. Three things make its number readable:
+
+1. **Level 60, not 12.** Tier 10 unlocks at 60, so this is the lowest level at which all ten nodes are learnable. Below it the capstones are unmeasurable by construction.
+2. **Slots pinned to the tree** — seven at level 60, filled with that tree's own actives in tier order and nothing else.
+3. **The band is within-class.** A summon tree and a strike tree are not comparable; a roster median would be §13 rule 28 again, an anchor derived from the population it measures. A player picks among exactly three trees, so the class's own median is the only thing "in band" can honestly mean.
+
+And the staging answers declarations rather than assuming them (§13 rule 61): a tree firing on `ON_DODGE`, `SELF_THRESHOLD` or `MOVEMENT` produces zero unstaged, and **a zero meaning "never triggered" reads identically to a zero meaning "deals no damage"**. Every condition the fixture cannot arrange is named in the output, so an unstaged trigger is visible as a gap rather than hiding inside a low number.
+
+**What it found beyond the scaling defect.** Two third trees scale on an engine that is at zero while they play, so their `scaleWith` is inert:
+
+- **`wd_swarm`** declares `scaleWith: 'doll'`, and nothing in the tree feeds the doll. Measured `doll = 0`; the declaration multiplies by exactly 1.
+- **`samurai_agility`** declares `scaleWith: 'footing'` and triggers on `MOVEMENT` — and footing **drops to zero on movement past the grace window**. The tree scales on an engine its own play pattern destroys.
+
+Neither is a tuning error. Both are a tree naming an engine it cannot supply, which is §13 rule 29 from the content side: a generic read tells you nothing about whether anything writes.
+
 
 ### 8.2 Class roster
 
@@ -1683,6 +1725,14 @@ The cheap defence is to make the new value's first content arrive *with* a gate 
 The fix is never to quieten the alarm. Rule 17's principle generalises: **a fixture arriving unprovisioned has the fixture's bug**, and the harness answers the card the way a player does. The trap on the way there is worth recording, because the first attempt fell into it — answering unconditionally at construction silenced all 1005 lines *and* auto-slotted the opening pick into slot 0 before any fixture ran, which at level 1 is the only slot. `sim_test`'s necromancer summon check dropped from 2 minions to 1, the druid pack from 10 deaths to 7, the token check from 3 claims to 1: eight gates still green, all measuring less than they were written to measure. **A change made to remove noise must not move what a gate reads**, and the proof obligation is a full-output diff, not a pass count — the version that shipped is byte-identical across `sim_test`'s 390 checks apart from one wall-clock timing figure.
 
 `tools/fixture_sim.mjs` is one subclass rather than a converted call site per harness, for the reason rule 60 gives: a factory only covers the sites somebody remembered, and the next `new Sim(` written in a harness would silently go back to arriving empty-handed.
+
+63. **A number that can be copied becomes a convention nobody re-examines — so publish the inputs and derive the number.** Nine third trees each carried `scalePer: 0.05`, copied from the one before it. The figure is a per-point multiplier and only means anything against its engine's ceiling; the ceilings run 1 to 45, so one number was **+5% on `form` and +225% on `chi`**. The fourteen older trees had it right — read against their ceilings they agree on +24% to +60% per engine — but *that* convention was arithmetic, and arithmetic does not survive copy-paste. What travelled between files was the only part of it that was engine-specific.
+
+Detecting this is not enough, because an audit only runs when somebody suspects something. **The fix is to delete the field.** `js/enginescale.js` publishes each engine's `max` and its intended `contribution`; content names the engine and, optionally, a dimensionless `scaleWeight` defaulting to 1. Copying `1` between engines is *correct*. There is no per-point number left to get wrong, `scalePer` is rejected at load, and the old passive field `<engine>DamageBonus` — same units, same defect — is rejected too rather than reinterpreted, because a stale value under a name that still reads is worse than one that errors.
+
+The general form: **when a declaration's correct value depends on something the author has to look up, the author will eventually not look it up.** Move the lookup into the code and leave the author a number whose default is right. The tell that a field is in this category is that two sites with the same value mean different things.
+
+Two corollaries this migration produced. **Prove a mechanical migration preserves calibration by re-deriving every site, not by counting them** — 126 sites moved and the worst effective drift across all 181 was 1.0%, which is a claim a diff can support and a pass count cannot. And **a load assertion written against the new units catches the old content by construction**: the codemod faithfully preserved the Monk's broken calibration as `scaleWeight: 4.17`, and the gate refused it on the first load. The migration did not need to know which content was wrong.
 
 ### 13.1 The through-line
 

@@ -32,24 +32,24 @@ export const TUNING = {
   // tier 2 — Caltrops
   caltropDamage: 11, caltropRadius: 88, caltropDuration: 14000, caltropCd: 3000,
   // tier 3 — Cold Read
-  readDamage: 8, readSpeed: 520, readRange: 250, readCd: 2800, readPer: 0.05,
+  readDamage: 8, readSpeed: 520, readRange: 250, readCd: 2800, readWeight: 0.83,
   // tier 4 — Tripwire
   tripDamage: 14, tripRadius: 96, tripDuration: 14000, tripCd: 4200,
   // tier 5 — Dead Ground (passive)
-  deadPer: 0.02,
+  deadWeight: 0.333,
   // tier 6 — Garrote
   garroteDamage: 10, garroteReach: 106, garroteArc: 1.7, garroteRadius: 134,
-  garroteCount: 1, garroteCd: 3400, garrotePer: 0.055, garroteRoot: 1300,
+  garroteCount: 1, garroteCd: 3400, garroteWeight: 0.92, garroteRoot: 1300,
   // tier 7 — Pressure Plate
   plateDamage: 17, plateRadius: 104, plateDuration: 14000, plateCd: 5400,
   // tier 8 — Blind Angle
   blindDamage: 10, blindWidth: 32, blindLength: 345, blindRadius: 195,
-  blindCount: 2, blindCd: 4600, blindPer: 0.06,
+  blindCount: 2, blindCd: 4600,
   // tier 9 — Quiet Exit
-  exitAmount: 24, exitDuration: 4600, exitCd: 7400, exitPer: 0.06,
+  exitAmount: 24, exitDuration: 4600, exitCd: 7400,
   // tier 10 — The Room You Chose
   roomDamage: 12, roomAngle: 2.6, roomRange: 245, roomRadius: 205,
-  roomCount: 3, roomCd: 9000, roomPer: 0.075, roomStun: 620,
+  roomCount: 3, roomCd: 9000, roomWeight: 1.25, roomStun: 620,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -96,7 +96,7 @@ export const ASN_KILLBOX = [
     cooldown: T.readCd,
     compose: [{
       kind: 'bolt', damage: T.readDamage, speed: T.readSpeed, range: T.readRange,
-      scaleWith: 'killbox', scalePer: T.readPer, riders: {},
+      scaleWith: 'killbox', scaleWeight: T.readWeight, riders: {},
     }],
     ranks: R,
   },
@@ -117,7 +117,7 @@ export const ASN_KILLBOX = [
     desc: 'Every trap you have set is worth 2% more to every skill that reads them.',
     type: 'passive', domain: 'mental', prereq: 'asn_tripwire',
     trigger: null, cooldown: 0, compose: [],
-    passive: { killboxDamageBonus: T.deadPer },
+    passive: { killboxScaleWeight: T.deadWeight },
     // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks —
     // the same shape as Held Edge, Sympathetic Resonance, Attend the Fallen,
     // Perfect Time, Lattice, Sympathetic Binding and Tidemark.
@@ -132,7 +132,7 @@ export const ASN_KILLBOX = [
     cooldown: T.garroteCd,
     compose: [{
       kind: 'strike', damage: T.garroteDamage, reach: T.garroteReach, arc: T.garroteArc,
-      scaleWith: 'killbox', scalePer: T.garrotePer,
+      scaleWith: 'killbox', scaleWeight: T.garroteWeight,
       riders: { root: T.garroteRoot },
     }],
     ranks: R,
@@ -158,7 +158,7 @@ export const ASN_KILLBOX = [
     cooldown: T.blindCd,
     compose: [{
       kind: 'line', damage: T.blindDamage, width: T.blindWidth, length: T.blindLength,
-      scaleWith: 'killbox', scalePer: T.blindPer, riders: {},
+      scaleWith: 'killbox', riders: {},
     }],
     ranks: R,
   },
@@ -171,7 +171,7 @@ export const ASN_KILLBOX = [
     cooldown: T.exitCd,
     compose: [{
       kind: 'shield', amount: T.exitAmount, duration: T.exitDuration,
-      scaleWith: 'killbox', scalePer: T.exitPer,
+      scaleWith: 'killbox',
     }],
     ranks: R,
   },
@@ -188,7 +188,7 @@ export const ASN_KILLBOX = [
     cooldown: T.roomCd,
     compose: [{
       kind: 'cone', damage: T.roomDamage, angle: T.roomAngle, range: T.roomRange,
-      scaleWith: 'killbox', scalePer: T.roomPer,
+      scaleWith: 'killbox', scaleWeight: T.roomWeight,
       riders: { stun: T.roomStun },
     }],
     ranks: R,

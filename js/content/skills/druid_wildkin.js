@@ -36,11 +36,11 @@
 
 export const TUNING = {
   rakeDamage: 10, rakeReach: 100, rakeArc: 1.6, rakeCd: 1150,
-  kinshipPerAnimal: 0.012,
+  kinshipWeight: 0.15,
 
   // ---- branch A: Wild Kin (scale on the standing pack) ----
   rendDamage: 15, rendReach: 115, rendArc: 1.8, rendCd: 2500,
-  alphaPerAnimal: 0.015,
+  alphaWeight: 0.18,
   thunderDamage: 18, thunderArc: 1.5, thunderRange: 300, thunderCd: 4200,
   apexDamage: 27, apexReach: 145, apexArc: 2.9, apexCd: 8000,
   apexPulses: 2, apexKnock: 240,
@@ -48,7 +48,7 @@ export const TUNING = {
   // ---- branch B: Earth's Wrath (what is left when the pack is not) ----
   thornDamage: 14, thornRadius: 155, thornDuration: 3600, thornTickMs: 400,
   thornPct: 65, thornCd: 4600, thornSlowMult: 0.55, thornSlowDur: 2000,
-  rootsPerAnimal: 0.015,
+  rootsWeight: 0.18,
   stoneAmount: 42, stoneDuration: 5000, stoneReflect: 25, stonePct: 45, stoneCd: 8600,
   quakeDamage: 25, quakeArc: 3.0, quakeRange: 280, quakePct: 40, quakeCd: 8800,
   quakeStun: 700,
@@ -58,7 +58,7 @@ export const TUNING = {
 
 const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
-const PACK = { scaleWith: 'pack', scalePer: 0.05 };
+const PACK = { scaleWith: 'pack'};
 
 export const DRUID_WILDKIN = [
   {
@@ -76,7 +76,7 @@ export const DRUID_WILDKIN = [
     desc: 'Every animal standing makes you more of one. Both roads out of here are about the Druid rather than the pack.',
     type: 'passive', domain: 'physical', prereq: 'druid_rake',
     trigger: null, cooldown: 0, compose: [],
-    passive: { packDamageBonus: T.kinshipPerAnimal },
+    passive: { packScaleWeight: T.kinshipWeight },
     ranks: R,
   },
 
@@ -96,7 +96,7 @@ export const DRUID_WILDKIN = [
     desc: 'They hunt harder with you in the middle of it.',
     type: 'passive', domain: 'physical', prereq: 'druid_rend',
     trigger: null, cooldown: 0, compose: [],
-    passive: { packDamageBonus: T.alphaPerAnimal },
+    passive: { packScaleWeight: T.alphaWeight },
     ranks: R,
   },
   {
@@ -143,7 +143,7 @@ export const DRUID_WILDKIN = [
     desc: 'What the pack taught you does not leave when the pack does.',
     type: 'passive', domain: 'spiritual', prereq: 'druid_thornwall',
     trigger: null, cooldown: 0, compose: [],
-    passive: { packDamageBonus: T.rootsPerAnimal },
+    passive: { packScaleWeight: T.rootsWeight },
     ranks: R,
   },
   {

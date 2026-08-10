@@ -29,24 +29,24 @@ export const TUNING = {
   attunePhysCd: 5200,
   // tier 3 — Refracted Lance
   lanceDamage: 8, lanceWidth: 30, lanceLength: 330, lanceRadius: 210,
-  lanceCount: 2, lanceCd: 3400, lancePer: 0.05,
+  lanceCount: 2, lanceCd: 3400, lanceWeight: 0.83,
   // tier 4 — Attune: Mental
   attuneMentalCd: 5200,
   // tier 5 — Prism Ward
-  prismAmount: 26, prismDuration: 5000, prismCd: 8000, prismPer: 0.06,
+  prismAmount: 26, prismDuration: 5000, prismCd: 8000,
   // tier 6 — Spectral Cascade
   cascadeDamage: 9, cascadeAngle: 1.5, cascadeRange: 235, cascadeRadius: 190,
-  cascadeCount: 3, cascadeCd: 5200, cascadePer: 0.05,
+  cascadeCount: 3, cascadeCd: 5200, cascadeWeight: 0.83,
   // tier 7 — Attune: Spiritual
   attuneSpiritCd: 5200,
   // tier 8 — Sympathetic Resonance (passive)
-  resonancePer: 0.02,
+  resonanceWeight: 0.333,
   // tier 9 — Unmaking Beam
   unmakeDamage: 8, unmakeWidth: 38, unmakeLength: 400, unmakePulses: 2,
-  unmakeRadius: 220, unmakeCount: 2, unmakeCd: 6800, unmakePer: 0.06,
+  unmakeRadius: 220, unmakeCount: 2, unmakeCd: 6800,
   // tier 10 — The Third Reading
   thirdDamage: 15, thirdAngle: 2.6, thirdRange: 250, thirdRadius: 200,
-  thirdCount: 4, thirdCd: 9500, thirdPer: 0.07,
+  thirdCount: 4, thirdCd: 9500, thirdWeight: 1.17,
   thirdWeakenMult: 0.78, thirdWeakenDur: 2600,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
@@ -93,7 +93,7 @@ export const WIZARD_ATTUNEMENT = [
     cooldown: T.lanceCd,
     compose: [{
       kind: 'line', damage: T.lanceDamage, width: T.lanceWidth, length: T.lanceLength,
-      scaleWith: 'shift', scalePer: T.lancePer, riders: {},
+      scaleWith: 'shift', scaleWeight: T.lanceWeight, riders: {},
     }],
     ranks: R,
   },
@@ -116,7 +116,7 @@ export const WIZARD_ATTUNEMENT = [
     cooldown: T.prismCd,
     compose: [{
       kind: 'ward', amount: T.prismAmount, duration: T.prismDuration, reflectPct: 0,
-      scaleWith: 'shift', scalePer: T.prismPer,
+      scaleWith: 'shift',
     }],
     ranks: R,
   },
@@ -129,7 +129,7 @@ export const WIZARD_ATTUNEMENT = [
     cooldown: T.cascadeCd,
     compose: [{
       kind: 'cone', damage: T.cascadeDamage, angle: T.cascadeAngle, range: T.cascadeRange,
-      scaleWith: 'shift', scalePer: T.cascadePer, riders: {},
+      scaleWith: 'shift', scaleWeight: T.cascadeWeight, riders: {},
     }],
     ranks: R,
   },
@@ -151,7 +151,7 @@ export const WIZARD_ATTUNEMENT = [
     desc: 'Every attunement is worth 2% more to every skill that reads them.',
     type: 'passive', domain: 'mental', prereq: 'wiz_attune_spiritual',
     trigger: null, cooldown: 0, compose: [],
-    passive: { shiftDamageBonus: T.resonancePer },
+    passive: { shiftScaleWeight: T.resonanceWeight },
     // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks —
     // the same shape as Held Edge on Footing and Pack Bond on the pack. A
     // rank-1 cap here would have been the assertion's other complaint.
@@ -166,7 +166,7 @@ export const WIZARD_ATTUNEMENT = [
     cooldown: T.unmakeCd,
     compose: [{
       kind: 'line', damage: T.unmakeDamage, width: T.unmakeWidth, length: T.unmakeLength,
-      scaleWith: 'shift', scalePer: T.unmakePer,
+      scaleWith: 'shift',
       riders: { multiPulse: T.unmakePulses },
     }],
     ranks: R,
@@ -180,7 +180,7 @@ export const WIZARD_ATTUNEMENT = [
     cooldown: T.thirdCd,
     compose: [{
       kind: 'cone', damage: T.thirdDamage, angle: T.thirdAngle, range: T.thirdRange,
-      scaleWith: 'shift', scalePer: T.thirdPer,
+      scaleWith: 'shift', scaleWeight: T.thirdWeight,
       riders: { weakenDamage: { mult: T.thirdWeakenMult, dur: T.thirdWeakenDur } },
     }],
     ranks: R,

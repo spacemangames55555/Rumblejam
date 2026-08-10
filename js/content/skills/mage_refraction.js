@@ -44,19 +44,19 @@ export const TUNING = {
   // tier 1 — Splinter
   splinterDamage: 11, splinterRange: 240, splinterSpeed: 430, splinterRadius: 7, splinterCd: 1150,
   // tier 2 — Inclusion (passive, the branch point)
-  inclusionPerCrystal: 0.010,
+  inclusionWeight: 0.15,
 
   // ---- branch A: Invite (taunt — make something come and hit you) ----
   provokeDamage: 13, provokeRange: 250, provokeSpeed: 420, provokeRadius: 7, provokeCd: 2300,
   provokeTaunt: 2400,
-  attractorPerCrystal: 0.013,
+  attractorWeight: 0.18,
   drawDamage: 17, drawArc: 2.2, drawRange: 260, drawCd: 4300, drawTaunt: 2800,
   causticDamage: 27, causticArc: 3.0, causticRange: 300, causticCd: 7800,
   causticTaunt: 3200, causticWeaken: { mult: 0.7, dur: 3000 },
 
   // ---- branch B: Temper (SELF_THRESHOLD — survive the supply) ----
   annealAmount: 26, annealDuration: 4200, annealPct: 70, annealCd: 5200,
-  hardnessPerCrystal: 0.013,
+  hardnessWeight: 0.18,
   quenchDamage: 19, quenchReach: 120, quenchArc: 2.5, quenchPct: 55, quenchCd: 4800,
   adamantAmount: 46, adamantDuration: 5200, adamantReflect: 35, adamantPct: 40, adamantCd: 9200,
 
@@ -67,7 +67,7 @@ const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
 // Refraction reads the engine the other two spend. A tree about keeping the
 // supply on would be incoherent if it did not scale on the supply.
-const CRY = { scaleWith: 'crystal', scalePer: 0.05 };
+const CRY = { scaleWith: 'crystal'};
 
 export const MAGE_REFRACTION = [
   {
@@ -85,7 +85,7 @@ export const MAGE_REFRACTION = [
     desc: 'The flaw inside the stone is what makes it catch the light. Both roads out of here are about being hit on purpose.',
     type: 'passive', domain: 'spiritual', prereq: 'mage_splinter',
     trigger: null, cooldown: 0, compose: [],
-    passive: { crystalDamageBonus: T.inclusionPerCrystal },
+    passive: { crystalScaleWeight: T.inclusionWeight },
     ranks: R,
   },
 
@@ -108,7 +108,7 @@ export const MAGE_REFRACTION = [
     desc: 'Every inclusion in the lattice pulls a little harder.',
     type: 'passive', domain: 'spiritual', prereq: 'mage_provoke',
     trigger: null, cooldown: 0, compose: [],
-    passive: { crystalDamageBonus: T.attractorPerCrystal },
+    passive: { crystalScaleWeight: T.attractorWeight },
     ranks: R,
   },
   {
@@ -154,7 +154,7 @@ export const MAGE_REFRACTION = [
     desc: 'What survived the last blow is denser than what went into it.',
     type: 'passive', domain: 'spiritual', prereq: 'mage_anneal',
     trigger: null, cooldown: 0, compose: [],
-    passive: { crystalDamageBonus: T.hardnessPerCrystal },
+    passive: { crystalScaleWeight: T.hardnessWeight },
     ranks: R,
   },
   {

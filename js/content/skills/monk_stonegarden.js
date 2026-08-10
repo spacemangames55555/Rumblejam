@@ -34,7 +34,7 @@ export const TUNING = {
   // tier 4 — Warded Ground
   wardedAmount: 22, wardedDuration: 4200, wardedCd: 6200,
   // tier 5 — Long Garden (passive)
-  gardenPer: 0.05,
+  gardenWeight: 0.83,
   // tier 6 — Iron Bell
   bellDamage: 10, bellAngle: 2.0, bellRange: 200, bellRadius: 172,
   bellCount: 3, bellCd: 3300, bellTaunt: 1500,
@@ -113,7 +113,7 @@ export const MONK_STONEGARDEN = [
     id: 'monk_long_garden', tree: 'monk_stonegarden', tier: 5, name: 'Long Garden',
     desc: 'Every stone you have set makes you hit harder. +5% damage per stone standing, per rank.',
     type: 'passive', domain: 'mental', prereq: 'monk_warded_ground',
-    passive: { killboxDamageBonus: T.gardenPer },
+    passive: { killboxScaleWeight: T.gardenWeight },
     ranks: R,
   },
   {

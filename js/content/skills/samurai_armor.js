@@ -77,7 +77,7 @@ export const TUNING = {
   // above); it is now purely an accrual passive, and rank-1-only per §1.3.
   stanceAccrualPct: 0.20,
   // tier 3 — Iron Sleeve
-  sleeveAmount: 14, sleeveDuration: 4000, sleeveCd: 5000, sleevePerFooting: 0.12,
+  sleeveAmount: 14, sleeveDuration: 4000, sleeveCd: 5000, sleeveWeight: 1.33,
   // tier 4 — Sweeping Guard
   sweepDamage: 8, sweepReach: 115, sweepArc: 2.6, sweepRadius: 110,
   sweepCount: 3, sweepCd: 4500, sweepKnock: 260,
@@ -138,7 +138,7 @@ export const SAMURAI_ARMOR = [
     cooldown: T.sleeveCd,
     compose: [{
       kind: 'shield', amount: T.sleeveAmount, duration: T.sleeveDuration,
-      scaleWith: 'footing', scalePer: T.sleevePerFooting,
+      scaleWith: 'footing', scaleWeight: T.sleeveWeight,
     }],
     ranks: R,
   },

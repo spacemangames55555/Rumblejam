@@ -45,25 +45,25 @@ export const TUNING = {
   falconDamage: 4, falconArc: 1.5, falconReach: 46,
   falconReviveBase: 6, falconRevivePer: 1.5, falconCd: 4000,
   // tier 3 — Spotter's Call
-  callDamage: 7, callSpeed: 530, callRange: 255, callCd: 2600, callPer: 0.05,
+  callDamage: 7, callSpeed: 530, callRange: 255, callCd: 2600, callWeight: 0.83,
   // tier 4 — Enfilade
   enfDamage: 9, enfWidth: 32, enfLength: 360, enfRadius: 200, enfCount: 2,
-  enfCd: 3400, enfPer: 0.055,
+  enfCd: 3400, enfWeight: 0.92,
   // tier 5 — Long Leash (passive)
-  leashPer: 0.02,
+  leashWeight: 0.333,
   // tier 6 — Crossfire
   crossDamage: 10, crossSpeed: 545, crossRange: 265, crossTargets: 2,
-  crossCd: 3800, crossPer: 0.06,
+  crossCd: 3800,
   // tier 7 — Driven Game
   drivenDamage: 10, drivenAngle: 1.9, drivenRange: 230, drivenRadius: 190,
-  drivenCount: 3, drivenCd: 4400, drivenPer: 0.06, drivenSlowMult: 0.74, drivenSlowDur: 1300,
+  drivenCount: 3, drivenCd: 4400, drivenSlowMult: 0.74, drivenSlowDur: 1300,
   // tier 8 — Set and Hold
-  holdAmount: 24, holdDuration: 4600, holdCd: 7200, holdPer: 0.065,
+  holdAmount: 24, holdDuration: 4600, holdCd: 7200, holdWeight: 1.08,
   // tier 9 — Culling Shot
-  cullDamage: 12, cullSpeed: 560, cullRange: 270, cullPct: 45, cullCd: 4800, cullPer: 0.07,
+  cullDamage: 12, cullSpeed: 560, cullRange: 270, cullPct: 45, cullCd: 4800, cullWeight: 1.17,
   // tier 10 — Both Barrels
   bothDamage: 16, bothSpeed: 570, bothRange: 275, bothTargets: 3,
-  bothCd: 9200, bothPer: 0.08, bothStun: 600,
+  bothCd: 9200, bothWeight: 1.33, bothStun: 600,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -119,7 +119,7 @@ export const HUN_LONGSHOT = [
     cooldown: T.callCd,
     compose: [{
       kind: 'bolt', damage: T.callDamage, speed: T.callSpeed, range: T.callRange,
-      scaleWith: 'spread', scalePer: T.callPer, riders: {},
+      scaleWith: 'spread', scaleWeight: T.callWeight, riders: {},
     }],
     ranks: R,
   },
@@ -132,7 +132,7 @@ export const HUN_LONGSHOT = [
     cooldown: T.enfCd,
     compose: [{
       kind: 'line', damage: T.enfDamage, width: T.enfWidth, length: T.enfLength,
-      scaleWith: 'spread', scalePer: T.enfPer, riders: {},
+      scaleWith: 'spread', scaleWeight: T.enfWeight, riders: {},
     }],
     ranks: R,
   },
@@ -141,7 +141,7 @@ export const HUN_LONGSHOT = [
     desc: 'Every band of ground between you and your beast is worth 2% more to every skill that reads it.',
     type: 'passive', domain: 'mental', prereq: 'hun_enfilade',
     trigger: null, cooldown: 0, compose: [],
-    passive: { spreadDamageBonus: T.leashPer },
+    passive: { spreadScaleWeight: T.leashWeight },
     // Classified 'damage' in PASSIVE_EFFECT, so it is an INVESTMENT and ranks —
     // the same shape as Held Edge, Sympathetic Resonance, Attend the Fallen,
     // Perfect Time, Lattice, Sympathetic Binding, Tidemark and Dead Ground.
@@ -156,7 +156,7 @@ export const HUN_LONGSHOT = [
     cooldown: T.crossCd,
     compose: [{
       kind: 'bolt', damage: T.crossDamage, speed: T.crossSpeed, range: T.crossRange,
-      count: T.crossTargets, scaleWith: 'spread', scalePer: T.crossPer, riders: {},
+      count: T.crossTargets, scaleWith: 'spread', riders: {},
     }],
     ranks: R,
   },
@@ -169,7 +169,7 @@ export const HUN_LONGSHOT = [
     cooldown: T.drivenCd,
     compose: [{
       kind: 'cone', damage: T.drivenDamage, angle: T.drivenAngle, range: T.drivenRange,
-      scaleWith: 'spread', scalePer: T.drivenPer,
+      scaleWith: 'spread',
       riders: { slow: { mult: T.drivenSlowMult, dur: T.drivenSlowDur } },
     }],
     ranks: R,
@@ -183,7 +183,7 @@ export const HUN_LONGSHOT = [
     cooldown: T.holdCd,
     compose: [{
       kind: 'shield', amount: T.holdAmount, duration: T.holdDuration,
-      scaleWith: 'spread', scalePer: T.holdPer,
+      scaleWith: 'spread', scaleWeight: T.holdWeight,
     }],
     ranks: R,
   },
@@ -196,7 +196,7 @@ export const HUN_LONGSHOT = [
     cooldown: T.cullCd,
     compose: [{
       kind: 'bolt', damage: T.cullDamage, speed: T.cullSpeed, range: T.cullRange,
-      scaleWith: 'spread', scalePer: T.cullPer, riders: {},
+      scaleWith: 'spread', scaleWeight: T.cullWeight, riders: {},
     }],
     ranks: R,
   },
@@ -211,7 +211,7 @@ export const HUN_LONGSHOT = [
     cooldown: T.bothCd,
     compose: [{
       kind: 'bolt', damage: T.bothDamage, speed: T.bothSpeed, range: T.bothRange,
-      count: T.bothTargets, scaleWith: 'spread', scalePer: T.bothPer,
+      count: T.bothTargets, scaleWith: 'spread', scaleWeight: T.bothWeight,
       riders: { stun: T.bothStun },
     }],
     ranks: R,

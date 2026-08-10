@@ -38,30 +38,30 @@
 export const TUNING = {
   // tier 1 — Rip
   ripDamage: 3, ripReach: 98, ripArc: 1.5, ripRadius: 122,
-  ripCount: 1, ripCd: 1050, ripPer: 0.020,
+  ripCount: 1, ripCd: 1050, ripWeight: 0.72,
   // tier 2 — Run Down
-  runDamage: 4, runRange: 250, runCd: 2200, runPer: 0.022,
+  runDamage: 4, runRange: 250, runCd: 2200, runWeight: 0.79,
   // tier 3 — Wide Swing
   wideDamage: 5, wideAngle: 2.0, wideRange: 190, wideRadius: 165,
-  wideCount: 3, wideCd: 2600, widePer: 0.024,
+  wideCount: 3, wideCd: 2600, wideWeight: 0.86,
   // tier 4 — Gore
   goreDamage: 5, goreReach: 106, goreArc: 1.4, gorePct: 60,
-  goreRange: 200, goreCd: 3000, gorePer: 0.026, goreKnock: 160,
+  goreRange: 200, goreCd: 3000, goreWeight: 0.94, goreKnock: 160,
   // tier 5 — Red Memory (passive)
-  memoryPer: 0.0035,
+  memoryWeight: 0.126,
   // tier 6 — Break Line
   breakDamage: 5, breakWidth: 36, breakLength: 330, breakRadius: 185,
-  breakCount: 2, breakCd: 3400, breakPer: 0.028, breakRoot: 1100,
+  breakCount: 2, breakCd: 3400, breakWeight: 1.01, breakRoot: 1100,
   // tier 7 — Alone With It
   aloneDamage: 7, aloneReach: 116, aloneArc: 1.8, aloneRadius: 150,
-  aloneCount: 2, aloneCd: 3800, alonePer: 0.030,
+  aloneCount: 2, aloneCd: 3800, aloneWeight: 1.08,
   // tier 8 — Second Wind
   windAmount: 24, windCd: 6800,
   // tier 9 — Hooked
-  hookedDamage: 6, hookedRange: 235, hookedHealPct: 0.4, hookedCd: 4200, hookedPer: 0.032,
+  hookedDamage: 6, hookedRange: 235, hookedHealPct: 0.4, hookedCd: 4200, hookedWeight: 1.15,
   // tier 10 — Nothing Left
   nothingDamage: 9, nothingAngle: 2.6, nothingRange: 230, nothingRadius: 200,
-  nothingCount: 4, nothingCd: 8600, nothingPer: 0.036, nothingStun: 600,
+  nothingCount: 4, nothingCd: 8600, nothingWeight: 1.3, nothingStun: 600,
   // rank increments — linear, never compounding
   rankDamage: 0.045, rankDuration: 0.035,
 };
@@ -83,7 +83,7 @@ export const SAV_PRIMAL_FURY = [
     cooldown: T.ripCd,
     compose: [{
       kind: 'strike', damage: T.ripDamage, reach: T.ripReach, arc: T.ripArc,
-      scaleWith: 'cascade', scalePer: T.ripPer, riders: {},
+      scaleWith: 'cascade', scaleWeight: T.ripWeight, riders: {},
     }],
     ranks: R,
   },
@@ -96,7 +96,7 @@ export const SAV_PRIMAL_FURY = [
     cooldown: T.runCd,
     compose: [{
       kind: 'drain', damage: T.runDamage, range: T.runRange, healPct: 0.15,
-      scaleWith: 'cascade', scalePer: T.runPer,
+      scaleWith: 'cascade', scaleWeight: T.runWeight,
     }],
     ranks: R,
   },
@@ -109,7 +109,7 @@ export const SAV_PRIMAL_FURY = [
     cooldown: T.wideCd,
     compose: [{
       kind: 'cone', damage: T.wideDamage, angle: T.wideAngle, range: T.wideRange,
-      scaleWith: 'cascade', scalePer: T.widePer, riders: {},
+      scaleWith: 'cascade', scaleWeight: T.wideWeight, riders: {},
     }],
     ranks: R,
   },
@@ -125,7 +125,7 @@ export const SAV_PRIMAL_FURY = [
     cooldown: T.goreCd,
     compose: [{
       kind: 'strike', damage: T.goreDamage, reach: T.goreReach, arc: T.goreArc,
-      scaleWith: 'cascade', scalePer: T.gorePer, riders: { knockback: T.goreKnock },
+      scaleWith: 'cascade', scaleWeight: T.goreWeight, riders: { knockback: T.goreKnock },
     }],
     ranks: R,
   },
@@ -133,7 +133,7 @@ export const SAV_PRIMAL_FURY = [
     id: 'sav_red_memory', tree: 'sav_primal_fury', tier: 5, name: 'Red Memory',
     desc: 'Every rank you are holding is worth more. +0.35% damage per rank, per rank of this.',
     type: 'passive', domain: 'mental', prereq: 'sav_gore',
-    passive: { cascadeDamageBonus: T.memoryPer },
+    passive: { cascadeScaleWeight: T.memoryWeight },
     ranks: R,
   },
   {
@@ -145,7 +145,7 @@ export const SAV_PRIMAL_FURY = [
     cooldown: T.breakCd,
     compose: [{
       kind: 'line', damage: T.breakDamage, width: T.breakWidth, length: T.breakLength,
-      scaleWith: 'cascade', scalePer: T.breakPer, riders: { root: T.breakRoot },
+      scaleWith: 'cascade', scaleWeight: T.breakWeight, riders: { root: T.breakRoot },
     }],
     ranks: R,
   },
@@ -161,7 +161,7 @@ export const SAV_PRIMAL_FURY = [
     cooldown: T.aloneCd,
     compose: [{
       kind: 'strike', damage: T.aloneDamage, reach: T.aloneReach, arc: T.aloneArc,
-      scaleWith: 'cascade', scalePer: T.alonePer, riders: {},
+      scaleWith: 'cascade', scaleWeight: T.aloneWeight, riders: {},
     }],
     ranks: R,
   },
@@ -187,7 +187,7 @@ export const SAV_PRIMAL_FURY = [
     cooldown: T.hookedCd,
     compose: [{
       kind: 'drain', damage: T.hookedDamage, range: T.hookedRange, healPct: T.hookedHealPct,
-      scaleWith: 'cascade', scalePer: T.hookedPer,
+      scaleWith: 'cascade', scaleWeight: T.hookedWeight,
     }],
     ranks: R,
   },
@@ -200,7 +200,7 @@ export const SAV_PRIMAL_FURY = [
     cooldown: T.nothingCd,
     compose: [{
       kind: 'cone', damage: T.nothingDamage, angle: T.nothingAngle, range: T.nothingRange,
-      scaleWith: 'cascade', scalePer: T.nothingPer, riders: { stun: T.nothingStun },
+      scaleWith: 'cascade', scaleWeight: T.nothingWeight, riders: { stun: T.nothingStun },
     }],
     ranks: R,
   },

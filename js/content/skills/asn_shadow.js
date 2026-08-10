@@ -31,7 +31,7 @@ export const TUNING = {
   veinDamage: 9, veinSpeed: 515, veinRange: 255, veinCd: 3200,
   veinDotDamage: 9, veinDotDur: 2800,
   // tier 5 — Last Word
-  lastDamage: 12, lastSpeed: 540, lastRange: 260, lastPct: 45, lastCd: 4600, lastPer: 0.06,
+  lastDamage: 12, lastSpeed: 540, lastRange: 260, lastPct: 45, lastCd: 4600,
   // tier 6 — Mark of Debt
   debtDamage: 10, debtSpeed: 505, debtRange: 255, debtCd: 3400,
   debtDefMult: 0.74, debtDefDur: 2600,
@@ -112,7 +112,7 @@ export const ASN_SHADOW = [
     cooldown: T.lastCd,
     compose: [{
       kind: 'bolt', damage: T.lastDamage, speed: T.lastSpeed, range: T.lastRange,
-      scaleWith: 'killbox', scalePer: T.lastPer, riders: {},
+      scaleWith: 'killbox', riders: {},
     }],
     ranks: R,
   },

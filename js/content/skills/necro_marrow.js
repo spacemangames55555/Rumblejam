@@ -34,7 +34,7 @@ export const TUNING = {
   ballCd: 8000, ballKnock: 420, ballStun: 800,
   // tier 10 — Marrownaut
   marrowShield: 34, marrowShieldDur: 6000, marrowWard: 28, marrowWardDur: 6000,
-  marrowReflect: 0.6, marrowPct: 40, marrowCd: 14000, marrowPerArmor: 0.02,
+  marrowReflect: 0.6, marrowPct: 40, marrowCd: 14000,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -156,7 +156,7 @@ export const NECRO_MARROW = [
     compose: [
       // the SECOND engine name in the game, through the same hook as Footing
       { kind: 'shield', amount: T.marrowShield, duration: T.marrowShieldDur,
-        scaleWith: 'armor', scalePer: T.marrowPerArmor },
+        scaleWith: 'armor'},
       { kind: 'ward', amount: T.marrowWard, duration: T.marrowWardDur, reflectPct: T.marrowReflect },
     ],
     ranks: R,

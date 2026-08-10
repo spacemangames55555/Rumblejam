@@ -44,18 +44,18 @@
 
 export const TUNING = {
   tapDamage: 11, tapReach: 105, tapArc: 1.5, tapCd: 1100,
-  patiencePerForm: 0.011,
+  patienceWeight: 0.15,
 
   // ---- branch A: Cold Iron (form: 'none' — the interval itself) ----
   coldDamage: 16, coldReach: 115, coldArc: 1.9, coldCd: 2400,
-  hammerPerForm: 0.014,
+  hammerWeight: 0.18,
   swageDamage: 19, swageArc: 1.6, swageRange: 290, swageCd: 4200,
   proofDamage: 28, proofReach: 145, proofArc: 2.9, proofCd: 7600,
   proofPulses: 2, proofKnock: 250,
 
   // ---- branch B: Tempering (SELF_THRESHOLD — competes with the forms) ----
   quenchAmount: 34, quenchDuration: 4600, quenchPct: 60, quenchCd: 5000,
-  grainPerForm: 0.014,
+  grainWeight: 0.18,
   drawDamage: 20, drawReach: 125, drawArc: 2.4, drawPct: 50, drawCd: 4600,
   weldAmount: 52, weldDuration: 5400, weldReflect: 30, weldPct: 35, weldCd: 9000,
 
@@ -67,7 +67,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 // Anvil reads `form` like the other two trees. A tree about the gap that could
 // not see the engine would be a tree about nothing in particular — and reading
 // it is what makes Cold Iron's silence during a form legible rather than a bug.
-const FORM = { scaleWith: 'form', scalePer: 0.05 };
+const FORM = { scaleWith: 'form'};
 
 export const SMITH_ANVIL = [
   {
@@ -85,7 +85,7 @@ export const SMITH_ANVIL = [
     desc: 'Most of the work happens between the heats. Both roads out of here are about the interval.',
     type: 'passive', domain: 'physical', prereq: 'smith_tap',
     trigger: null, cooldown: 0, compose: [],
-    passive: { formDamageBonus: T.patiencePerForm },
+    passive: { formScaleWeight: T.patienceWeight },
     ranks: R,
   },
 
@@ -106,7 +106,7 @@ export const SMITH_ANVIL = [
     desc: 'The hand knows the shape whether or not the metal is glowing.',
     type: 'passive', domain: 'physical', prereq: 'smith_cold_work',
     trigger: null, cooldown: 0, compose: [],
-    passive: { formDamageBonus: T.hammerPerForm },
+    passive: { formScaleWeight: T.hammerWeight },
     ranks: R,
   },
   {
@@ -151,7 +151,7 @@ export const SMITH_ANVIL = [
     desc: 'What the heat did to the structure stays done.',
     type: 'passive', domain: 'physical', prereq: 'smith_quenching',
     trigger: null, cooldown: 0, compose: [],
-    passive: { formDamageBonus: T.grainPerForm },
+    passive: { formScaleWeight: T.grainWeight },
     ranks: R,
   },
   {
