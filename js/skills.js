@@ -39,6 +39,8 @@ import { DRUID_WILDKIN, TUNING as DRUID_WK_TUNING } from './content/skills/druid
 import { ASN_RANGE, TUNING as ASN_RANGE_TUNING } from './content/skills/asn_range.js';
 import { SMITH_ANVIL, TUNING as SMITH_ANVIL_TUNING } from './content/skills/smith_anvil.js';
 import { WD_SWARM, TUNING as WD_SWARM_TUNING } from './content/skills/wd_swarm.js';
+import { MONK_EMPTY_HAND, TUNING as MONK_EH_TUNING } from './content/skills/monk_empty_hand.js';
+import { WIZARD_DISSONANCE, TUNING as WIZ_DIS_TUNING } from './content/skills/wizard_dissonance.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
@@ -81,6 +83,8 @@ export const TREES = {
   asn_range: { id: 'asn_range', name: 'Range', classId: 'toh_assassin', skills: ASN_RANGE, tuning: ASN_RANGE_TUNING },
   smith_anvil: { id: 'smith_anvil', name: 'Anvil', classId: 'toh_blacksmith', skills: SMITH_ANVIL, tuning: SMITH_ANVIL_TUNING },
   wd_swarm: { id: 'wd_swarm', name: 'Swarm', classId: 'toh_witch_doctor', skills: WD_SWARM, tuning: WD_SWARM_TUNING },
+  monk_empty_hand: { id: 'monk_empty_hand', name: 'Empty Hand', classId: 'toh_monk', skills: MONK_EMPTY_HAND, tuning: MONK_EH_TUNING },
+  wizard_dissonance: { id: 'wizard_dissonance', name: 'Dissonance', classId: 'toh_wizard', skills: WIZARD_DISSONANCE, tuning: WIZ_DIS_TUNING },
   necro_summons: { id: 'necro_summons', name: 'Summons', classId: 'toh_necromancer', skills: NECRO_SUMMONS, tuning: SUMMONS_TUNING },
   druid_beasts: { id: 'druid_beasts', name: 'Tapestry of Beasts', classId: 'toh_druid', skills: DRUID_BEASTS, tuning: BEASTS_TUNING },
 };
