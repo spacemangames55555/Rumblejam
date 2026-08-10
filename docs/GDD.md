@@ -571,6 +571,8 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 **What the assertions enforce** (all at import, all throwing): exactly `TREE_NODES` nodes; exactly one tier-1 node and it must be a damaging active (§5.6's opening pick); every prereq in the same tree; tier strictly decreasing along every prereq edge; every tier within `TIER_LEVELS`, so no node exists that no level unlocks; and every node reachable from the root. They enforce **structure, not shape** — nothing requires a tree to branch, because the 27 chains are still legal until they are converted.
 
+**A THIRD TREE'S TIER-2 PASSIVE IS THE ONE NODE THE DPS GATE CAN SEE, so price it against what its engine PUBLISHES.** `measureDps` runs at level 12: the tier gate reaches tier 4, and a class's two older trees fill all three slots first, so none of a third tree's actives are ever slotted there. The tier-2 passive is always on regardless. Monk Empty Hand's `chiDamageBonus` at 0.010 against an engine publishing up to 45 (CHI_CAP 40 + the focus step) is **+45% on everything** — measured, exactly the outlier the gate reported, and cutting the branch's damage numbers moved the reading by zero. Per-point passive values are not comparable between trees; only value × published maximum is.
+
 **Authoring order.** The 14 new trees are authored against a proven shape spec first; the existing 28 are converted in a later pass. The engine does not force a big bang, and a shape spec proven on 14 real trees is a better thing to convert 28 trees to than one proven on paper.
 
 #### 8.1.1 Tier unlock levels — RULED AND ENFORCED
@@ -615,7 +617,7 @@ Two properties worth stating because they are consequences rather than choices. 
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 14 of 14** (35 trees, 350 skills). Six classes are at the ruled three — **Samurai** (Agility), **Bard** (Requiem), **Mage** (Refraction), **Assassin** (Range), **Blacksmith** (Anvil), **Witch Doctor** (Swarm) — plus the Necromancer, which had three from the start. The **Druid is at two** (Beasts, Wild Kin) and is the only class still short of three. The **Samurai was the first** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 14 of 14** (37 trees, 370 skills). Eight classes are at the ruled three — **Samurai** (Agility), **Bard** (Requiem), **Mage** (Refraction), **Assassin** (Range), **Blacksmith** (Anvil), **Witch Doctor** (Swarm), **Monk** (Empty Hand), **Wizard** (Dissonance) — plus the Necromancer, which had three from the start. The **Druid is at two** (Beasts, Wild Kin) and is the only class still short of three. The **Samurai was the first** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
@@ -624,14 +626,14 @@ The Sundian's `classId` remains `atlantean` internally for save compatibility. *
 | Assassin | Killbox, Shadow, **Range** — output that does not require having arrived first |
 | Blacksmith | Crystal, Forge, **Anvil** — the gap between forms, made playable rather than shorter |
 | Witch Doctor | Effigy, Blight, **Swarm** — what a class built on designating ONE enemy does about a room |
+| Monk | Chi, Stone Garden, **Empty Hand** — what a Monk at zero Chi still is, when the ROOM did the emptying |
+| Wizard | Attunement, Arcana, **Dissonance** — the cost of a shift that bet wrong |
 | Druid | Beasts, **Wild Kin** — what the DRUID does; still one short, see §15 |
 | Mage | Crystalblade, Collapse, **Refraction** — how to fill an engine only the enemy can fill |
 | Necromancer | Marrow, Dark Matter, **Summons** — the only class with three |
-| Wizard | Attunement, Arcana |
 | Priest | Judgment, Grace |
 | Sundian | Tidewrack, Reef |
 | Hunter | Longshot, Houndmaster |
-| Monk | Chi, Stone Garden |
 | Savage | Primal Fury, Bloodbound |
 
 None remain unbuilt.
@@ -1669,6 +1671,12 @@ Two handling rules come out of it. **Give the vocabulary a way to say "nothing"*
 And **derive the discriminator from the code that actually reads it, then guard the derivation.** `PRIMITIVE_SELECTS` reads `skill.select` out of each primitive's own source rather than restating a list, so it cannot drift from the behaviour it classifies (§13 rule 12) — and because that trick depends on `Function.prototype.toString` returning real source, an assertion fails loudly if the split ever comes out all-or-nothing. A derived fact with no guard is one toolchain change away from silently classifying everything the same way, which is the same failure one level up.
 
 **The audit that finds this class of defect is a census, not a review**: for every declared thing, count the content using it and the code reading it. Zero on either side is the signal. It found `ON_KILL` (declared, wired, no content — safe to build on), `pierce` (no content *by design*, §5.9), and the 59. Run it before authoring, not after.
+
+61. **A fixture that infers a declaration's meaning from its shape breaks the moment the field gains a value — and that is rule 60 one level up.** `sk.form` meant "enter this form" for every value that had ever existed, so `skill_sweep` and `rider_gate` both staged one whenever the field was present. When `form: 'none'` arrived meaning *the opposite* — fires only while NO form holds — both fixtures dutifully entered a form and three working skills read as dead triggers while two riders read as never landing. Neither fixture was wrong about anything it had seen; they had generalised from a set of examples that happened to be unanimous, which is exactly rule 60's camouflage applied to test code instead of content.
+
+It is the second time in three patches: `select` gained `self` and 59 skills had to be converted, `form` gained `none` and two fixtures had to be taught. **The engine change is never the whole change.** When a field gains a value, grep every reader — including the harnesses — and ask each one whether it is *reading* the declaration or *assuming* it. A fixture that stages a precondition has to answer what the skill declared, not what skills have historically declared, and the tell is a staging block written as `if (sk.field)` rather than `if (sk.field === X)`.
+
+The cheap defence is to make the new value's first content arrive *with* a gate that exercises both readings — `engine_gate` asserts `form: 'none'` fires out of form and is silent in one, through the real trigger loop. A gate that only proves the new value works will pass while every fixture around it quietly mis-stages.
 
 ### 13.1 The through-line
 
