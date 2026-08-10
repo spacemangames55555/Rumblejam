@@ -440,6 +440,31 @@ function contactDamage(sim, p, m, i) {
   }
 }
 
+// HEALING A LIVE MINION — the one thing nothing in the game could do.
+//
+// Minion HP was written in exactly three places before this, all of them
+// structural: full at spawn, full at revive, zero at death. No primitive
+// touched it — `heal` iterates `sim.livePlayers()`, `drain` heals the caster,
+// `plague` writes the enemy — so a pack could be worn down and there was no
+// answer in the vocabulary. That is §5.7 condition 1, demonstrated rather than
+// asserted, and it is what admits the `mend` rider.
+//
+// It lives here rather than in compose.js because a minion's fields belong to
+// this module; compose asks for an effect and does not reach into the pack.
+// Returns HP actually restored, so the rider can report a real number and a
+// gate can measure one — overhealing a full pack returns 0 and says so.
+export function healMinions(p, amount) {
+  if (!(amount > 0)) return 0;
+  let healed = 0;
+  for (const m of p.minions || []) {
+    if (m.dead || !(m.hp > 0) || !(m.maxHp > 0)) continue;
+    const before = m.hp;
+    m.hp = Math.min(m.maxHp, m.hp + amount);
+    healed += m.hp - before;
+  }
+  return healed;
+}
+
 export function killMinion(sim, p, m, i) {
   sim.fx.deaths.push({ x: Math.round(m.x), y: Math.round(m.y), c: m.color, r: m.radius });
   p.minionStats.died++;

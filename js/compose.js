@@ -521,6 +521,21 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
   if (r.weakenDamage) { e.weakDmgT = r.weakenDamage.dur / MS; e.weakDmgMult = r.weakenDamage.mult; out.statuses++; }
   if (r.weakenDefense) { e.defDownT = r.weakenDefense.dur / MS; e.defDownMult = r.weakenDefense.mult; out.statuses++; }
   if (r.healPerHit) { p.hp = Math.min(p.stats.vitality, p.hp + r.healPerHit); out.states++; }
+  // MEND — the same shape as healPerHit above, with a different recipient.
+  //
+  // §5.7 condition 2 asks whether a rider will do, and the precedent one line
+  // up settles it: `healPerHit` is already an impact rider that heals somebody
+  // who is not the thing being hit. A pack heal has the two properties a rider
+  // needs — a target and a moment — and writes no caster state, which is what
+  // made `shift`, `trap` and `form` primitives instead. So this is a rider.
+  //
+  // Additive rather than a reshape of healPerHit: the two effects have
+  // different recipients, and five shipped skills declare healPerHit as a plain
+  // number. Widening it into a channel object would migrate all five to buy
+  // nothing.
+  // Routed through `sim` because minions.js imports THIS module — the arrow
+  // only runs one way, and game.js already owns the forwarding facade.
+  if (r.mend) { out.states += sim.healMinions(p, r.mend) > 0 ? 1 : 0; }
   // JUDGMENT MARK. The mark is state on the ENEMY and it names its owner, its
   // payout and its reach, because the thing that reads it is `_killEnemy` —
   // which runs long after this step, possibly from somebody else's killing blow.
@@ -670,7 +685,7 @@ export function stepPicksTarget(kind) { return PRIMITIVE_SELECTS[kind] === true;
 // exactly eight enemy fields before it and none of them was a mark, so a
 // skill-placed mark had nowhere to live and no detonation site — every death
 // hook in `_killEnemy` read `killer.hookAgg`, the ITEM aggregate.
-export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mark', 'doll', 'drench', 'sluice'];
+export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mend', 'mark', 'doll', 'drench', 'sluice'];
 // Riders that shape the swing itself rather than the target.
 export const SHAPE_RIDERS = ['windUp', 'multiPulse'];
 // Riders that need a projectile: a flight to pierce, an impact point to splash.
