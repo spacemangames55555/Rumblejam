@@ -601,17 +601,17 @@ Two properties worth stating because they are consequences rather than choices. 
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 14 of 14** (29 trees, 290 skills). The **Samurai is the first class at the ruled three** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+**Built: 14 of 14** (31 trees, 310 skills). Three classes are at the ruled three — **Samurai** (Agility), **Bard** (Requiem), **Mage** (Refraction) — plus the Necromancer, which had three from the start. The **Samurai was the first** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
 
 | Class | Trees as built |
 |---|---|
 | Samurai | Armor, Tactics, **Agility** — the first BRANCHING tree, and the §8.1 shape spec's reference |
+| Bard | Cadence, Ensemble, **Requiem** — what to do when the rhythm breaks |
+| Mage | Crystalblade, Collapse, **Refraction** — how to fill an engine only the enemy can fill |
 | Necromancer | Marrow, Dark Matter, **Summons** — the only class with three |
 | Druid | Beasts — **the only class with one**, see §15 |
 | Wizard | Attunement, Arcana |
 | Priest | Judgment, Grace |
-| Bard | Cadence, Ensemble |
-| Mage | Crystalblade, Collapse |
 | Witch Doctor | Effigy, Blight |
 | Sundian | Tidewrack, Reef |
 | Assassin | Killbox, Shadow |
@@ -1756,6 +1756,16 @@ They are the same category as the seven checks above, and the same category as D
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-37 — CLOSED: duplicate skill ids were never asserted, and two shipped
+
+`SKILL_BY_ID` is built with `Object.fromEntries`, which **keeps the last entry and drops the first**. That map resolves every prerequisite, every loadout slot and every fire, so a repeated id does not throw anywhere — it *shadows* a real skill, leaving it unreachable by prereq, by loadout and by fire, while some other tree's node quietly answers to its name.
+
+Nothing checked it. Authoring two third trees at once produced two collisions immediately: `bard_finale` against `bard_ensemble`, and `mage_inclusion` against `mage_crystalblade` — because **a third tree draws on the same vocabulary the first two already spent.** The count of the defect was visible the whole time and nothing read it: `ALL_SKILLS` held 310 while `SKILL_BY_ID` held 308.
+
+It surfaced as two *unrelated-looking* failures in `skill_sweep` — one skill reporting a trigger it does not declare, one crashing on a null trigger — which is exactly why the pair was chosen with non-interacting engines. A single tree would have produced one confusing failure; two produced a pattern.
+
+Now asserted both ways: by name (which two trees collided) and by count (`ALL_SKILLS.length` against unique ids), so a collision that somehow escapes the first check still fails the second. With eleven trees left to author against the same class vocabularies this was a certainty rather than a risk.
 
 #### D-36 — CLOSED: half the MOVEMENT trigger was wired to nothing
 
