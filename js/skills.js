@@ -461,7 +461,13 @@ function assertTrees() {
     // one. Tiers strictly decrease along prereq edges, which rules out cycles,
     // and a tier-N node's parent is a tier-(N−1) node that is reachable by the
     // same argument. Writing this as though it were catching something would be
-    // the exact defect this file keeps finding elsewhere.
+    // the exact defect this file keeps finding elsewhere — and specifically the
+    // one twenty lines up, where a comment saying "linear prerequisite chain"
+    // sat over an assertion that never enforced linearity and survived 28 trees
+    // because nobody re-read it against the code. A comment that overstates a
+    // check is how that happens, so this one understates nothing: **today this
+    // is a guard against a rule that will be relaxed, not a check against a
+    // defect that exists.**
     //
     // IT IS HERE BECAUSE LAYERING IS THE RULE THAT WILL BE RELAXED. The first
     // author who wants a long branch — a tier-5 node hanging off a tier-3 one,
