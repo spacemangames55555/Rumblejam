@@ -148,6 +148,43 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 // dur seconds, then silence; the fight ends when the field is cleared.
 // rate(t) = r0 → r1 (enemies/sec, pre-co-op-scaling), linear.
 
+// THE ONBOARDING RAMP. Region 1's first maps carry a fraction of the normal
+// spawn rate, indexed by node column — 50% on map 1, 75% on map 2, full from
+// map 3.
+//
+// WHY A RAMP AND NOT A ONE-MAP DISCOUNT. Measured on the live build, a character
+// finishes map 1 at LEVEL 6 with two slots open and five unspent points, having
+// entered it at level 1 with one slot and one skill. So map 1 is the only map in
+// the game played at a single slot, and the cliff a flat discount would create
+// lands exactly where the player has the slots but has not yet spent the points
+// or learned what any of them do. The half-step at map 2 is for the build being
+// ASSEMBLED rather than for the slots being open.
+//
+// Depth is `node.col`, which `waveConfig` already receives — this is arithmetic
+// inside an existing parameter, not a new channel.
+export const ONBOARDING_RATE = [0.5, 0.75, 1];
+export function onboardingMult(floorNum, depth) {
+  if (floorNum !== 1) return 1;
+  return ONBOARDING_RATE[Math.min(depth, ONBOARDING_RATE.length - 1)];
+}
+
+// IS THIS THE TUTORIAL ROOM? Lives here, beside the rate it governs, because
+// two very different things need the same answer: the sim, to pick the reduced
+// archetype table, and the tuning gates, to stay OUT of a room that is
+// deliberately unrepresentative.
+//
+// difficulty_gate is the reason this is exported rather than private to the
+// sim. It fights "the first non-shop node" and measures how much enemy each
+// setting puts in front of the player — and that node is floor 1 column 0, the
+// one room in the game now built to field half the enemies and three of the
+// archetypes. It did not fail because difficulty stopped working; it failed
+// because its sample moved into the tutorial. A gate that cannot ask whether it
+// is standing in the exception will silently measure the exception, and this is
+// the second caller that makes the question a function instead of a comment.
+export function isOnboardingNode(floorNum, node) {
+  return floorNum === 1 && !!node && node.col === 0 && node.kind !== 'siege';
+}
+
 export function waveConfig(floorNum, depth, kind) {
   const elite = kind === 'elite';
   const siege = kind === 'siege';
@@ -161,8 +198,9 @@ export function waveConfig(floorNum, depth, kind) {
   // fight"). §2.4 is now the single definition of what an elite node is, and
   // it arrives through nodeModifiers(); leaving this bump in place would have
   // multiplied against it rather than agreeing with it.
-  const r0 = 0.5 + 0.25 * (floorNum - 1);
-  const r1 = 1.2 + 0.55 * (floorNum - 1) + 0.18 * depth;
+  const onb = onboardingMult(floorNum, depth);
+  const r0 = (0.5 + 0.25 * (floorNum - 1)) * onb;
+  const r1 = (1.2 + 0.55 * (floorNum - 1) + 0.18 * depth) * onb;
   return {
     t: 0, acc: 0, dur, r0, r1,
     rampT: siege ? 150 : dur,          // sieges plateau at 150s and hold

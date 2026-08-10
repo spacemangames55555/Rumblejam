@@ -698,6 +698,11 @@ never loads them:
   harness that kills the enemies for you cannot answer this, and that gap let
   §15 defect #11 sit behind a green suite. Also asserts that a retired or
   unplayable charId throws instead of silently becoming someone else.
+  Since the region-1 onboarding ramp it also asserts its own **exposure** —
+  how many enemies came within reach — before it is allowed to conclude
+  anything from a zero. At half spawn rate its old 20-second window contained
+  five spawns and named six working classes as dealing no damage; the window is
+  now 40s and a starved arena fails as a *fixture* fault, in those words.
 - **`tools/sim_test.mjs` cannot tell you whether a player can win a fight.** It
   clears fights with `clearFieldForSetup()`, which kills the enemies on the
   player's behalf so flow tests can reach the next phase. That is legitimate
@@ -707,6 +712,15 @@ never loads them:
   `assertPlayerCleared()` refuses to let a nuked sim carry a combat result.
   Every run prints how many fights the harness ended. Offence lives in
   `offence_test.mjs`, never here.
+- **Fixtures that measure a *ratio* must not stand in the onboarding room.**
+  Region 1 map 1 is deliberately atypical (half density, three archetypes), and
+  most fixtures used to reach for a room with `nodes.find(...)` — which is
+  always floor 1 column 0. Six went red on the ramp patch without anything they
+  measure having changed. `representativeNode()` in `sim_test.mjs` and
+  `isOnboardingNode()` in `js/arenas.js` exist so a fixture can select against
+  the exception and *assert* that it did. Anything measuring the first room a
+  player actually walks into — `offence_test`'s map-1 provisioning check — still
+  takes column 0 on purpose.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).

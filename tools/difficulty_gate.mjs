@@ -26,6 +26,7 @@ import { SELECTABLE } from '../js/content/characters.js';
 import { TREES } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
 import { DIFFICULTIES, DEFAULT_DIFFICULTY } from '../js/worldmap.js';
+import { isOnboardingNode } from '../js/arenas.js';
 
 const VERBOSE = process.argv.includes('--verbose');
 let failures = 0;
@@ -49,6 +50,26 @@ const LEVEL = 30;    // enough tree to kill at a rate that makes a payout sample
 // materials per enemy, from which it computed a gold ratio of ×0.58 against a
 // table saying ×0.9 and called the game wrong. The game was not wrong; the
 // denominator was a bot's walking pattern.
+//
+// AND THE ROOM IS REPRESENTATIVE ON PURPOSE — a third fixture choice, forced by
+// a third wrong answer. This used to take "the first non-shop node", which is
+// floor 1 column 0. When the onboarding ramp made that node field half the
+// enemies from three archetypes, this gate went red on two axes at once: mean
+// HP inverted (×1.06 against a table saying ×0.85) and the ladder stopped being
+// monotonic. Neither was true of difficulty. The sample had moved into the
+// tutorial, where a 3-archetype mix over ~30 enemies lets one heavy swing the
+// mean harder than the ×0.85 the setting applies, and where halving the count
+// squeezes four settings into a range too narrow to order.
+//
+// So the node is chosen for representativeness rather than for being first, and
+// the choice is ASSERTED rather than assumed: `isOnboardingNode` is the sim's
+// own predicate, so if the exception's definition ever grows, this fails
+// pointing at itself instead of accusing the difficulty table.
+function pickRepresentativeNode(g) {
+  const eligible = g.floor.nodes.filter(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+  return eligible.find(x => !isOnboardingNode(g.floorNum, x)) || null;
+}
+
 function room(difficultyId, seed) {
   const charId = SELECTABLE[0].id;
   const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }] });
@@ -57,10 +78,12 @@ function room(difficultyId, seed) {
   p.level = LEVEL;
   const tree = Object.values(TREES).find(t => t.classId === charId);
   if (tree) for (const s of [...tree.skills].sort((a, b) => a.tier - b.tier)) { p.skillPoints++; spendSkillPoint(g, p, s.id); }
-  const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+  const node = pickRepresentativeNode(g);
+  if (!node) return { noRoom: true };
   node.kind = 'combat';
   g.god = true;
   g._travelTo(node.id);
+  const onboarding = g._onboarding();
 
   let n = 0, hp = 0, dmg = 0;
   const xp0 = p.xpEarned, matsC0 = p.matsCollected;
@@ -83,7 +106,7 @@ function room(difficultyId, seed) {
   // end-to-end check that the split survives the pickup path.
   const k = Math.max(1, g.payout.kills);
   return {
-    count: n,
+    onboarding, count: n,
     hp: hp / Math.max(1, n),
     dmg: dmg / Math.max(1, n),
     kills: g.payout.kills,
@@ -97,6 +120,15 @@ function room(difficultyId, seed) {
 console.log(`difficulty gate — ${DIFFICULTIES.length} settings, one room each, ${SECONDS}s\n`);
 
 const base = room(DEFAULT_DIFFICULTY, SEED);
+if (base.noRoom) {
+  fail('no representative combat node exists on floor 1 — every eligible node is the onboarding room, so this gate has nowhere to measure');
+} else if (base.onboarding) {
+  // The fixture asked for a representative room and got the tutorial anyway.
+  // Say so BEFORE the ratios, because every number below would then be a
+  // property of the onboarding ramp wearing the difficulty table's name.
+  fail('the fixture landed on the ONBOARDING node despite selecting against it — the ratios below measure the tutorial ramp, not difficulty');
+} else ok('the fixture is measuring a representative room, not the onboarding node');
+
 if (base.count > 0 && base.kills > 20) ok(`baseline room fielded ${base.count} enemies at ${base.hp.toFixed(1)} HP and the fixture killed ${base.kills} — the payout ratios below have a sample`);
 else fail(`baseline fielded ${base.count} enemies and killed ${base.kills}; every ratio below would be noise`);
 

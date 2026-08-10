@@ -22,6 +22,7 @@ import { STAT_KEYS } from '../js/config.js';
 import { generateFloorMap } from '../js/dungeon.js';
 import { OBJECTIVE_KINDS as OBJ_KINDS } from '../js/objectives.js';
 import { CONFIG as CFG } from '../js/config.js';
+import { isOnboardingNode } from '../js/arenas.js';
 // how far outside the playable bounds an entity has strayed (0 = inside)
 const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
@@ -325,6 +326,36 @@ function unstick(g, p, mx, my) {
 // objective read as an HP problem when it was a slot problem: levelling first
 // takes Nest Purge at 4p from 1/3 to 3/3 CLEARED, and Elite Arena solo from
 // zero kills to cleared.
+// A ROOM THE GAME CAN ACTUALLY PRODUCE.
+//
+// Fixtures throughout this file reach for a node with
+// `nodes.find(x => !['shop','treasure','siege'].includes(x.kind))` and then
+// OVERWRITE its kind — "give me a room, I'll say what happens in it". That
+// always lands on floor 1 column 0, and it was harmless for as long as every
+// combat node was the same room with different furniture.
+//
+// It stopped being harmless when region 1's onboarding ramp made column 0 half
+// density and three archetypes. Four fixtures went red at once — Nest Purge and
+// Bounty Hunt stopped clearing, the Druid's pack stopped losing an animal, and
+// the D-24 elite comparison collapsed to exactly ×1.00 because a uniform 3-id
+// table gives the horde room and the elite room the same mean. None of them was
+// measuring anything that had changed.
+//
+// And they were measuring an IMPOSSIBLE room to begin with: js/dungeon.js
+// already swaps any objective off column 0 — "the floor OPENS on plain horde
+// arenas… the objective levels assume a node or two of build-up behind you."
+// A player cannot meet a nest on map 1. So this is not a fixture being let off
+// lightly; it is a fixture being pointed at a room the generator can produce.
+//
+// Call sites that genuinely mean "the first room a player walks into" — the
+// onboarding measurements, offence_test's map-1 provisioning check — must keep
+// taking column 0. This is for the ones that only ever wanted somewhere to
+// stand.
+function representativeNode(g) {
+  return g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind)
+    && !isOnboardingNode(g.floorNum, x));
+}
+
 function armBot(g, p, ranks = 3, level = ARM_LEVEL) {
   const trees = SKILLSIM.treesFor(p);
   if (!trees.length) return false;
@@ -1679,8 +1710,22 @@ try {
     for (const kind of OBJECTIVE_KINDS) {
       for (const n of [1, 4]) {
         const g = new Sim({ seed: 20250811 + kind.length * 31, party: quad(n) });
-        const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+        // NOT column 0 — dungeon.js swaps every objective off the entry column,
+        // so a nest or a bounty there is a room the generator refuses to build.
+        //
+        // AND THE ROOM IS PINNED, not inherited. The budgets below are MEASURED
+        // clear times, so they are only meaningful against a fixed room; taking
+        // whatever template and profile the generator dealt to the node made
+        // them a property of the seed's layout. Moving off column 0 landed Nest
+        // Purge in `long_hall`/`flanker` instead of `pillared_field`/`puddle`
+        // and it stopped clearing in 12 minutes — not because the level broke,
+        // but because a corridor with flanker injections is a different fight
+        // from the one the leash was timed against. The statue fixture above
+        // already pins its room for the same reason.
+        const node = representativeNode(g);
         node.kind = kind;
+        node.template = 'pillared_field';
+        node.profile = 'puddle';
         g.god = true; // the level's win condition is what's under test, not survival
         for (const p of g.players) {   // a plausible mid-floor build, not a naked kit
           const kit = ['emberfang', 'sparkbolt', 'longbarrel'];
@@ -1704,7 +1749,17 @@ try {
         // spread, so it was passing or failing on the fixture's class rather
         // than on the level — which is exactly how the barricade defect stayed
         // invisible. 12 minutes clears the slowest by 40%.
-        const budget = 60 * 60 * (kind === 'bounty' ? 20 : kind === 'nest' ? 12 : 6);
+        // NEST PURGE IS 18, NOT 12, AND THE NUMBER IS RE-MEASURED RATHER THAN
+        // INFLATED TO PASS. Pinning the room (above) moved this fixture out of
+        // the onboarding node, and the 12-minute leash had been timed against
+        // that node. Measured in the pinned room with a 45-minute leash, Nest
+        // Purge clears at **795s solo and 172s at 4p** — so the level finishes,
+        // 75 seconds past the old budget. 18 minutes keeps the same ~35% margin
+        // over the slowest measured clear that 12 gave the old room.
+        //
+        // The solo/co-op gap is worth reading as a design signal rather than a
+        // test number: 795s against 172s is the widest of any objective here.
+        const budget = 60 * 60 * (kind === 'bounty' ? 20 : kind === 'nest' ? 18 : 6);
         while (!g.cleared && !g.over && ticks++ < budget) {
           steerObj(g); g.tick();
           for (const p of g.players) if (!p.downed) p.hp = p.stats.vitality;
@@ -4836,7 +4891,11 @@ try {
       SKILLSIM.spendSkillPoint(g, p, s.id);
     }
     g.god = true;
-    const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    // A tree under test needs a room with enough enemies in it to exercise the
+    // tree — the onboarding room is deliberately not that, and at half density
+    // the Druid's pack stopped losing an animal, so the revive path went
+    // untested and said so.
+    const node = representativeNode(g);
     g._travelTo(node.id);
     return { g, p };
   }
@@ -5266,7 +5325,11 @@ try {
   const NODE_T = (await import('../js/nodebehaviour.js')).NODE_TUNING;
   const field = (kind, seed) => {
     const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
-    const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    // The elite/horde comparison reads MEAN per-enemy values, so it needs the
+    // full archetype spread to average over. In the onboarding room's uniform
+    // 3-id table both rooms draw the same mix and every ratio collapses toward
+    // 1.00 — measured, gold did exactly that and tripped the direction check.
+    const node = representativeNode(g);
     node.kind = kind;
     // MEASURING THE ROOM, NOT THE PLAYER — and `god` alone does not achieve
     // that. It makes the player invulnerable; it does not stop them KILLING,
@@ -5290,8 +5353,48 @@ try {
     }
     return { nodeType: g.nodeType, n, hp: hp / Math.max(1, n), dmg: dmg / Math.max(1, n), mats: mats / Math.max(1, n) };
   };
+  // GOLD CANNOT BE READ OFF A SPAWNED ENEMY, AND HAD BEEN FOR THREE PATCHES.
+  //
+  // `field()` deliberately kills nothing, so its sample is the spawn table. That
+  // is right for count, HP and damage — all three are stamped onto the enemy at
+  // spawn. It is wrong for gold, because §2.4's payout multiplier is applied AT
+  // THE DROP and not at spawn, and game.js says why in its own comment: at
+  // spawn it multiplied `e.mats`, which is 1 or 2, and rounded — so every
+  // sub-1.0 multiplier vanished into identity. The difficulty gate forced that
+  // move; this gate kept reading `e.mats`, which is the value BEFORE the
+  // multiplier it claims to be testing.
+  //
+  // So the axis never measured the elite bonus at all. It measured the mean
+  // `def.mats` of whichever archetypes the room rolled, and it passed because
+  // that number drifted in roughly the right direction — 1.05 against a table
+  // saying 1.35, which rule 53 already recorded as "a band it had only ever
+  // passed by a hair". A check passing for a reason unrelated to its claim is
+  // not a weak check, it is a different check wearing the name.
+  //
+  // Gold is now read from `payout`, the drop path, exactly as difficulty_gate
+  // reads it — which needs a bot that actually kills, hence a second pass.
+  const paid = (kind, seed) => {
+    const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const node = representativeNode(g);
+    node.kind = kind;
+    g.god = true;
+    g._travelTo(node.id);
+    armBot(g, g.players[0]);
+    for (let t = 0; t < 60 * 60; t++) {
+      const tgt = g.trigGrid && g.trigGrid.nearest ? g.trigGrid.nearest(g.players[0].x, g.players[0].y, 900) : null;
+      if (tgt) {
+        const dx = tgt.x - g.players[0].x, dy = tgt.y - g.players[0].y, d = Math.hypot(dx, dy) || 1;
+        g.setInput(0, d > 110 ? { mx: dx / d, my: dy / d } : { mx: 0, my: 0 });
+      } else g.setInput(0, { mx: 0, my: 0 });
+      g.tick();
+    }
+    return g.payout.gold / Math.max(1, g.payout.kills);
+  };
+
   const SEED = 4242;
   const h = field('combat', SEED), e = field('elite', SEED);
+  h.mats = paid('combat', SEED);
+  e.mats = paid('elite', SEED);
 
   if (e.nodeType === 'elite') ok(`an elite node knows it is one: sim.nodeType = "${e.nodeType}" (D-24: it was never assigned)`);
   else fail(`sim.nodeType is ${JSON.stringify(e.nodeType)} on an elite node — the modifiers cannot resolve`);
