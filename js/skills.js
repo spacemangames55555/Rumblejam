@@ -158,6 +158,11 @@ export function isDamaging(skill) {
 // ---------------------------------------------------------------- loadout
 
 // Slot unlocks by level. 8 is the hard ceiling.
+// §8.1's shape spec. Ten nodes per tree, thirty across a character's three,
+// against a run's measured ~69 skill points — see the assertion in
+// assertTrees() for why this is a budget and not a house style.
+export const TREE_NODES = 10;
+
 export const SLOT_LEVELS = [1, 5, 12, 21, 31, 42, 54, 66];
 export function slotsAtLevel(level) {
   let n = 0;
@@ -265,6 +270,24 @@ function assertTrees() {
 
   for (const tree of Object.values(TREES)) {
     const byTier = [...tree.skills].sort((a, b) => a.tier - b.tier);
+
+    // §8.1's SHAPE SPEC: ten nodes, and the number is a budget rather than a
+    // preference. A run banks ~69 skill points (measured, all fourteen classes,
+    // full runs to victory). Three trees at ten nodes costs 30 points to unlock
+    // everything and leaves 39 for ranks — which is the two-skills-at-twenty
+    // shape the design wants, since 270 of 280 skills are rank-uncapped and
+    // ranks are the only real sink.
+    //
+    // The arithmetic is why this is asserted rather than left to taste. At
+    // FOURTEEN nodes a tree, unlocks cost 42 of 69 and the rank budget drops to
+    // 27 — the build stops being a choice about depth and becomes a checklist.
+    // Branching makes a wider tree cheap to author and there is nothing else in
+    // the codebase that would notice, so the ceiling has to be stated where a
+    // tree is loaded.
+    if (tree.skills.length !== TREE_NODES) {
+      problems.push(`${tree.id}: ${tree.skills.length} nodes, want exactly ${TREE_NODES} — §8.1's shape spec is a POINT BUDGET, `
+        + `not a house style: three trees at ${TREE_NODES} spend ${TREE_NODES * 3} of a run's ~69 points on unlocks and leave the rest for ranks`);
+    }
 
     // 6.3: every tree's tier-1 node is a damaging active — the opening pick
     const t1 = byTier.filter(s => s.tier === 1);
@@ -423,14 +446,52 @@ function assertTrees() {
     // screen lays out on), so it stays. A skill still has exactly one parent:
     // convergence is ruled out of v1, and `prereq` is a single id everywhere.
     //
-    // What this does NOT yet check, and must once a branching tree is authored:
-    // that every node is reachable from the root. A chain cannot strand a node;
-    // a branch can, and a stranded node is unbuyable content that looks fine.
     for (const s of byTier) {
       if (s.tier === 1) continue;
       const pre = SKILL_BY_ID[s.prereq];
       if (!pre) problems.push(`${s.id}: tier ${s.tier} with no prerequisite`);
       else if (pre.tier !== s.tier - 1) problems.push(`${s.id}: prereq ${pre.id} is tier ${pre.tier}, want ${s.tier - 1}`);
+    }
+
+    // REACHABILITY — and an honest account of when it can actually fire.
+    //
+    // TODAY IT CANNOT. Given the three rules above — exactly one tier-1 node, a
+    // prereq that is in this tree, and a prereq exactly one tier below — every
+    // node is reachable by induction, so this walk can never find a stranded
+    // one. Tiers strictly decrease along prereq edges, which rules out cycles,
+    // and a tier-N node's parent is a tier-(N−1) node that is reachable by the
+    // same argument. Writing this as though it were catching something would be
+    // the exact defect this file keeps finding elsewhere.
+    //
+    // IT IS HERE BECAUSE LAYERING IS THE RULE THAT WILL BE RELAXED. The first
+    // author who wants a long branch — a tier-5 node hanging off a tier-3 one,
+    // which is an ordinary shape in a Diablo 2 tree — will hit
+    // `pre.tier !== s.tier - 1` and the natural fix is to loosen it. The moment
+    // that happens the induction collapses and cycles become expressible.
+    // Verified rather than argued: with layering relaxed and two nodes made each
+    // other's prereq, every other assertion in this file passes and only this
+    // one fires.
+    //
+    // Nothing downstream would notice either. `canLearn` answers about one node
+    // at a time and correctly says "no", the screen renders it greyed, and the
+    // sweep never fires it because it can never be learned — a stranded node
+    // looks exactly like content the player has not got to yet. So the closure
+    // is walked from the root, and anything left over is content that has been
+    // authored, ranked, balanced and shipped that no player can ever buy.
+    const reached = new Set(t1.map(s => s.id));
+    for (let pass = 0; pass < byTier.length; pass++) {
+      let grew = false;
+      for (const s of byTier) {
+        if (reached.has(s.id) || !s.prereq || !reached.has(s.prereq)) continue;
+        reached.add(s.id); grew = true;
+      }
+      if (!grew) break;
+    }
+    const stranded = tree.skills.filter(s => !reached.has(s.id));
+    if (stranded.length) {
+      problems.push(`${tree.id}: ${stranded.length} node(s) cannot be reached from the tier-1 root by spending points — `
+        + stranded.map(s => `${s.id} (tier ${s.tier}, prereq ${JSON.stringify(s.prereq)})`).join(', ')
+        + `. Every other check passes on a stranded node: it renders, it validates, and it is unbuyable`);
     }
   }
 

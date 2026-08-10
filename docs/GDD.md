@@ -1651,7 +1651,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **The count did not move when the Wizard and the Priest landed, and one line inside it did.** `DPS gate` closed (Group A), and the weapon-cap pair renamed itself — see Group C. Registering two classes turned `nest (1p)` red on the way, which was **D-27**, a real defect, now closed below.
 
-**Group D is empty.** D-23 through D-33 are all closed. **D-31 is the only one of them found by a human playing the game rather than by measurement**, which is worth its own line: every gate in the suite passed while the game was unplayable, because every gate provisioned its own fixture. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
+**Group D holds two open economy defects, D-34 and D-35**, both found by measuring the level curve for the tier gates rather than by a red check — no suite covers per-class income, which is why a class finishing a run at level 124 against a norm of 69 was invisible. D-23 through D-33 are all closed. **D-31 is the only one of them found by a human playing the game rather than by measurement**, which is worth its own line: every gate in the suite passed while the game was unplayable, because every gate provisioned its own fixture. Every one was found by measurement rather than by a red check, and the last two were found by a gate written *before* the content it guards — D-25 by an item gate built ahead of the item pool, D-26 by a rider gate built to generalise a defect the item gate had stumbled into. That is the argument for keeping the measuring tools between patches, and for writing the gate first.
 
 **A failing check and an open question are not the same thing**, and this section previously counted them together. Group B below lists six items; only three of them are red lines. The other three are decisions with nothing currently failing, marked *no failing check*.
 
@@ -1731,6 +1731,32 @@ They are the same category as the seven checks above, and the same category as D
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
 ### Group D — genuine open defects (0)
+
+#### D-34 — OPEN: the Assassin's trait out-earns the entire kill economy
+
+Measured across full runs to victory, twelve classes finish at level 68–70 on ~10,300 materials. **The Assassin finishes at 124 on 32,074** — and the cause is not the kill economy, which is normal.
+
+Instrumenting the two `_dropMaterial` call sites apart, with shopping disabled so no item can be blamed:
+
+| | kill path | trait path | kills |
+|---|---|---|---|
+| Samurai | 9,398 | 0 | 4,695 |
+| Priest | 9,533 | 0 | 4,723 |
+| **Assassin** | **9,432** | **11,779** | 4,687 |
+
+The Assassin kills the same enemies for the same materials as everyone else. `contract` then pays `5 + Greed` materials **every time a marked target dies**, a mark re-arms after `remarkDelay`, and `contractsDone` resets per room (`traits-toh.js:103`) — so the counter reading 41 is one room's worth, not a run's. Over a run it fires often enough to pay **more than the entire kill economy**.
+
+Two things make it compound rather than merely overpay. The payout scales on Greed, and the Assassin is the only class with base Greed (8); Greed also drives shop rarity, so materials buy better items which raise Greed further — measured, it ends a shopping run at 95.5 against the Samurai's 57.5. And the payout drops through `_dropMaterial(x, y)` with `xpValue` defaulting to `value`, so **every one of those materials carries full XP**. §4.1's rule that extra gold must not become extra XP is enforced at the difficulty multiplier — which deliberately drops XP-less materials — and not here. That is why the outlier appears as a *level* outlier: 124 against 69.
+
+**Not proposing the fix here.** The shape of it is a §4.1 question (should trait payouts carry XP at all?) and a §8.3 question (is the payout per-mark or per-room?), and both are rulings.
+
+#### D-35 — OPEN: the Priest outlier is the shop loop, not the class
+
+The Priest finishes at level 103 on 22,588 materials with shopping on. **With shopping off it finishes at level 65 on 8,997 — indistinguishable from the Samurai's 65 and 8,901.** Its trait drops nothing; its kill-path income per kill is exactly normal (2.20 against the roster's 2.21).
+
+What changes is the number of enemies. With items it kills 10,176 against a norm of ~4,660, and the excess is spread evenly across every archetype — `gemmite(mini)` 1,425 vs 528, `flit` 1,334 vs 572, `lancerfish` 1,160 vs 540 — so its fights contain roughly twice as many bodies rather than richer ones. Its recorded damage *falls* over the same runs (3.0M against 3.9M), so a growing share of those kills is not attributed to the player.
+
+**The mechanism past that point is not established.** The item sets are the same as every other class's — the bot buys what the shop offers — so this is an interaction between the Priest's build and items rather than a single item, and the honest statement is that the class is not an intrinsic economy outlier. Worth separating from D-34 precisely because the ruling is different: D-34 is a trait paying too much, this is the item feedback loop compounding for whoever pulls ahead first, which is a property of the shop rather than of the Priest.
 
 #### D-33 — CLOSED: the opening card was visible, on top of nothing, and unclickable
 
