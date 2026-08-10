@@ -118,7 +118,16 @@ function stageFor(g, p, sk) {
   // Pyrite; staged out of form it never fires, and the gate reported a working
   // rider DROPPED. The form is entered with the stats the authoring step gives
   // it, so the fixture is the state the skill is actually played in.
-  if (sk.form) {
+  // `form: 'none'` IS THE OPPOSITE STAGING, and the naive read of this block
+  // gets it exactly backwards. `sk.form` used to mean "enter this form"; smith
+  // _anvil's Cold Iron branch declares 'none', meaning it fires only while NO
+  // form holds — so entering one here made three working skills read as dead
+  // triggers. The staging has to answer the declaration rather than assume its
+  // shape.
+  if (sk.form === 'none') {
+    p.form = null; p.formT = 0; p.formStats = null;
+    if (p.engines) p.engines.form = 0;
+  } else if (sk.form) {
     const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === sk.form));
     const step = src && src.compose.find(c => c.kind === 'form');
     p.form = sk.form;

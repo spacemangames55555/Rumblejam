@@ -37,6 +37,8 @@ import { BARD_REQUIEM, TUNING as BARD_REQ_TUNING } from './content/skills/bard_r
 import { MAGE_REFRACTION, TUNING as MAGE_REF_TUNING } from './content/skills/mage_refraction.js';
 import { DRUID_WILDKIN, TUNING as DRUID_WK_TUNING } from './content/skills/druid_wildkin.js';
 import { ASN_RANGE, TUNING as ASN_RANGE_TUNING } from './content/skills/asn_range.js';
+import { SMITH_ANVIL, TUNING as SMITH_ANVIL_TUNING } from './content/skills/smith_anvil.js';
+import { WD_SWARM, TUNING as WD_SWARM_TUNING } from './content/skills/wd_swarm.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
@@ -77,6 +79,8 @@ export const TREES = {
   mage_refraction: { id: 'mage_refraction', name: 'Refraction', classId: 'toh_mage', skills: MAGE_REFRACTION, tuning: MAGE_REF_TUNING },
   druid_wildkin: { id: 'druid_wildkin', name: 'Wild Kin', classId: 'toh_druid', skills: DRUID_WILDKIN, tuning: DRUID_WK_TUNING },
   asn_range: { id: 'asn_range', name: 'Range', classId: 'toh_assassin', skills: ASN_RANGE, tuning: ASN_RANGE_TUNING },
+  smith_anvil: { id: 'smith_anvil', name: 'Anvil', classId: 'toh_blacksmith', skills: SMITH_ANVIL, tuning: SMITH_ANVIL_TUNING },
+  wd_swarm: { id: 'wd_swarm', name: 'Swarm', classId: 'toh_witch_doctor', skills: WD_SWARM, tuning: WD_SWARM_TUNING },
   necro_summons: { id: 'necro_summons', name: 'Summons', classId: 'toh_necromancer', skills: NECRO_SUMMONS, tuning: SUMMONS_TUNING },
   druid_beasts: { id: 'druid_beasts', name: 'Tapestry of Beasts', classId: 'toh_druid', skills: DRUID_BEASTS, tuning: BEASTS_TUNING },
 };
@@ -448,8 +452,11 @@ function assertTrees() {
         // fires — the wired-to-nothing shape, one layer up from a dead primitive.
         if (s.form !== undefined) {
           if (typeof s.form !== 'string' || !s.form) problems.push(`${s.id}: form ${JSON.stringify(s.form)} is not a form name`);
-          else if (!FORM_NAMES.has(s.form)) {
-            problems.push(`${s.id}: gated on form "${s.form}", which no \`form\` step anywhere enters — known forms: ${[...FORM_NAMES].join('/') || '(none)'}`);
+          // `none` is the gap between forms — a legal answer to "which form",
+          // meaning the Blacksmith is in none of them. Everything else must
+          // name a form some `form` step actually enters.
+          else if (s.form !== 'none' && !FORM_NAMES.has(s.form)) {
+            problems.push(`${s.id}: gated on form "${s.form}", which no \`form\` step anywhere enters — known forms: ${[...FORM_NAMES].join('/') || '(none)'}, plus "none" for the gap between them`);
           }
         }
         // REQUIRED, NEVER DEFAULTED. `select` is what the skill hits; the

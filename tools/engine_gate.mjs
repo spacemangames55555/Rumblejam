@@ -1021,5 +1021,55 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
   }
 }
 
+// ---------------------------------------------------------------------------
+// `form: 'none'` — THE GAP BETWEEN FORMS, ASSERTED IN BOTH DIRECTIONS.
+//
+// §8.3's forms enter on SELF_THRESHOLD, so the Blacksmith is strongest when
+// hurt and hollow when healthy, and the interval between forms was the one
+// condition no skill could name — `formHolds` could only ask "is this the form
+// I need". smith_anvil's Cold Iron branch IS that interval, so the gate has to
+// prove the gate: a `form: 'none'` skill fires with no form held and goes
+// silent while one does.
+//
+// BOTH DIRECTIONS, because a gate that always says yes and a gate that always
+// says no both produce a tree that looks plausible in the data. One of them
+// would be a branch that never stops; the other a branch that never starts.
+{
+  const cases = [
+    ['no form held, gated none', { form: null }, { form: 'none' }, true],
+    ['a form held, gated none', { form: 'pyrite' }, { form: 'none' }, false],
+    ['a form held, gated on it', { form: 'pyrite' }, { form: 'pyrite' }, true],
+    ['a form held, gated on another', { form: 'pyrite' }, { form: 'calcite' }, false],
+    ['no form held, ungated', { form: null }, {}, true],
+  ];
+  const wrong = cases.filter(([, pl, sk, want]) => ENG.formHolds(pl, sk) !== want);
+  if (!wrong.length) ok(`the form gate answers all ${cases.length} readings, including "none" — the gap between forms is expressible and does not leak into the ungated case`);
+  else fail(`form gate wrong on: ${wrong.map(c => c[0]).join('; ')}`);
+
+  // …and through the REAL fire path, not just the predicate. A Blacksmith with
+  // the Cold Iron opener slotted must fire it out of form and refuse it in.
+  const cold = 'smith_cold_work';
+  const runFor = (formValue) => {
+    const { g, p } = stage('toh_blacksmith', [cold]);
+    for (const e of [...g.enemyPool]) if (e.active) { e.hp = 0; e.active = false; }
+    g.spawnEnemyById('skulker', p.x + 70, p.y);
+    p.fireLog = [];
+    for (let i = 0; i < 60 * 4; i++) {
+      p.hp = p.stats.vitality;                 // never let a form enter on its own
+      p.form = formValue; p.formT = formValue ? 9 : 0;
+      g.setInput(0, { mx: 0, my: 0 });
+      g.tick();
+    }
+    return (p.fireLog || []).filter(f => f === cold || (f && f.id === cold)).length;
+  };
+  const outOfForm = runFor(null), inForm = runFor('pyrite');
+  if (outOfForm > 0 && inForm === 0) {
+    ok(`\`form: 'none'\` bites through the real trigger loop: ${cold} fired ${outOfForm}x with no form held and ${inForm}x while Iron Pyrite did — the Cold Iron branch is literally the interval`);
+  } else {
+    fail(`\`form: 'none'\` does not gate: ${cold} fired ${outOfForm}x out of form and ${inForm}x in form (want >0 and exactly 0) — `
+      + `a branch authored against this would either never stop or never start`);
+  }
+}
+
 console.log(failures ? `\n${failures} ENGINE GATE FAILURE(S)` : '\nEVERY CLASS ENGINE IS FILLED BY PLAY AND MULTIPLIES SOMETHING, AND EVERY WRITE PATH PRODUCES IT');
 process.exit(failures ? 1 : 0);
