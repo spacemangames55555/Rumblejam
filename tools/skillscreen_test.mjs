@@ -115,16 +115,42 @@ try {
       await P.exec(`document.getElementById('btn-start').click(); return 1;`);
       await P.waitFor(`return window.uv.mode==='run' && !!window.uv.sim ?1:0`, 8000, 'run');
       await sleep(900);
+      // REACHABLE BY A POINTER, not merely visible. `offsetParent` caught the
+      // hidden-container case; it does NOT catch the one that shipped, where the
+      // card rendered, was visible, had `pointer-events: auto` — and the MAP
+      // SCREEN painted over it, because `.overlay` declares no z-index while
+      // `#screen-map` declares 5. Measured, elementFromPoint at the card's own
+      // centre returned `screen`, so every real click fell through to the map and
+      // the anti-softlock floor granted the ability instead.
+      //
+      // `.click()` cannot see this — it dispatches straight at the node and
+      // bypasses hit-testing entirely, which is why the previous sweep was green.
       const seen = await P.exec(`const el=document.getElementById('overlay-opening');
         const card = el.querySelector('.boon-card');
-        return {vis: (card && card.offsetParent !== null) ? 1 : 0, cards: el.querySelectorAll('.boon-card').length,
+        if (!card) return {vis:0, reach:0, cards:0, top:'none', offer:(window.uv.sim.players[0].openingOffer||[]).length};
+        const r = card.getBoundingClientRect();
+        const at = document.elementFromPoint(r.left + r.width/2, r.top + r.height/2);
+        return {vis: card.offsetParent !== null ? 1 : 0,
+                reach: (at === card || card.contains(at)) ? 1 : 0,
+                top: at ? (at.id || at.className || at.tagName) : 'none',
+                cards: el.querySelectorAll('.boon-card').length,
                 offer: (window.uv.sim.players[0].openingOffer||[]).length};`);
-      if (!seen.vis) dead.push(`${id.replace('toh_', '')}(offer ${seen.offer}, cards ${seen.cards}, not visible)`);
+      if (!seen.vis || !seen.reach) {
+        dead.push(`${id.replace('toh_', '')}(offer ${seen.offer}, cards ${seen.cards}, visible ${seen.vis}, reachable ${seen.reach}, topmost "${seen.top}")`);
+      }
       await P.exec(`const c=document.querySelector('#overlay-opening .boon-card'); if(c) c.click(); return 1;`);
       await sleep(250);
     }
-    if (!dead.length) ok(`the §5.6 card is VISIBLE on screen for all ${SELECTABLE_IDS.length} classes — asserted on offsetParent, because at the broken commit the cards existed inside a hidden panel and any count-based check was green`);
-    else no(`${dead.length}/${SELECTABLE_IDS.length} class(es) show no visible opening card: ${dead.join(', ')}`);
+    if (!dead.length) ok(`the §5.6 card is VISIBLE AND CLICKABLE for all ${SELECTABLE_IDS.length} classes — elementFromPoint at the card's own centre returns the card, which is the check that catches a panel the map screen paints over`);
+    else no(`${dead.length}/${SELECTABLE_IDS.length} class(es) have an opening card a player cannot click: ${dead.join(', ')}`);
+
+    // THE FLOOR IS THE OTHER HALF, and it is asserted here rather than trusted.
+    // It fired on every run that shipped — the card was unreachable — and the
+    // only symptom was a toast that read like a normal part of starting a run.
+    // On a page where the card IS reachable it must never fire at all.
+    const floored = await P.exec(`return window.uv.sim.openingFloored || 0;`);
+    if (!floored) ok('and the anti-softlock floor never fired across the sweep — with a reachable card the net has nothing to catch, which is the only state in which it is not reporting a defect');
+    else no(`the floor fired ${floored} time(s) during the sweep — every one means a card that was presented and not answered`);
   }
 } catch (e) {
   no(`crashed: ${e.message}`);

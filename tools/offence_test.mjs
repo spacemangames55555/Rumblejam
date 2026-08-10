@@ -54,6 +54,14 @@ function fight(charId, { arm } = {}) {
   if (arm) {
     const pick = openingPick(p);
     if (pick) { sim.uiAction(0, { kind: 'learnSkill', id: pick.id }); learned = pick.id; }
+  } else if (p.openingOffer) {
+    // THE PLAYER PATH, and it is now the ONLY path. §5.6's card must be answered
+    // before the map will let anyone travel, so "provisioned exactly as the game
+    // provisions one" means answering it through `uiAction` the way a click does
+    // — not skipping it and letting the anti-softlock floor rescue the run. That
+    // is what this branch used to measure without saying so.
+    sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+    learned = Object.keys(p.skillRanks).find(k => p.skillRanks[k] > 0) || null;
   }
   sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
   if (sim.phase !== 'arena') return { charId, substituted, err: 'never entered the arena' };
@@ -68,6 +76,7 @@ function fight(charId, { arm } = {}) {
     trees: (TREES_BY_CLASS[p.charId] || []).length,
     armed: p.loadout.filter(Boolean).join(',') || 'nothing',
     dealt: Math.round(p.damageDealt), kills: p.kills, cleared: sim.cleared,
+    floored: sim.openingFloored || 0,
   };
 }
 
@@ -149,8 +158,18 @@ function sweep() {
     const raw = ids.map(id => fight(id, { arm: false }));
     const silent = raw.filter(r => !r.err && r.dealt === 0);
     console.log(`  as the game provisions them (nothing spent): ${raw.map(r => `${r.charId.replace('toh_', '')}:${r.err ? 'ERR' : r.dealt}`).join('  ')}`);
+    // THE NET MUST NOT BE THE THING THAT ANSWERED. `openingFloored` counts every
+    // time the anti-softlock floor granted an ability, and on the normal path it
+    // must be ZERO. Without this the damage assertion below cannot tell a working
+    // §5.6 card from a dead one the floor rescued — which is exactly the state
+    // that shipped, where the card was unreachable behind the map screen and
+    // every run was quietly floored (§13 rules 56 and 57).
+    const floored = raw.filter(r => (r.floored || 0) > 0);
+    if (!floored.length) ok(`and the anti-softlock floor fired ZERO times across all ${raw.length} classes — the §5.6 card did the work, not the net`);
+    else fail(`the floor rescued ${floored.length}/${raw.length} class(es): ${floored.map(r => r.charId).join(', ')}. The floor firing at all is a DEFECT — it means the card was not answered, so check that it is reachable rather than merely rendered`);
+
     if (!silent.length) {
-      ok(`and all ${raw.length} deal damage on map 1 AS THE GAME PROVISIONS THEM — no armBot, no lent tree, no point the harness spent. A player who answers nothing still arrives armed`);
+      ok(`and all ${raw.length} deal damage on map 1 AS THE GAME PROVISIONS THEM — no armBot, no lent tree, no point the harness spent: the card is answered the way a click answers it`);
     } else {
       fail(`${silent.length}/${raw.length} class(es) deal ZERO damage on map 1 as a real player receives them: ${silent.map(r => r.charId).join(', ')}. `
         + `Any class still dealing damage here is doing it on TRAIT damage rather than a skill`);
@@ -178,6 +197,9 @@ function sweep() {
     // client can send anything; the rule has to bite in `setLoadout` or it is
     // decoration. Both directions, because "always refuses" would pass a
     // one-sided check and break the game.
+    // Answer §5.6 the way a click answers it, so the §5.5 check below measures a
+    // player who made their choice rather than one the floor rescued.
+    if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
     sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
     const learned = Object.keys(p.skillRanks).find(k => p.skillRanks[k] > 0);
     const inFight = SK_UI.setLoadout(sim, p, 0, learned || null);

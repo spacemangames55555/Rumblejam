@@ -135,6 +135,11 @@ export function spendSkillPoint(sim, p, id) {
     const free = p.loadout.findIndex((x, i) => x === null && i < slotsAtLevel(p.level));
     if (free >= 0) p.loadout[free] = id;
   }
+  // THE §5.6 OFFER IS SERVED BY ANY SPEND, not only by clicking its card. The
+  // skill screen can spend the same point, and the map refuses to travel while
+  // an offer is outstanding — so an offer left standing after the point was
+  // spent elsewhere is a player stuck on the map screen with nothing to answer.
+  p.openingOffer = null;
   sim._recomputeStats(p);
   p.metaDirty = true;         // the build changed; the skill screen reads it off meta
   sim.pushEvent({ k: 'skillLearned', idx: p.idx, id, rank: p.skillRanks[id] });
