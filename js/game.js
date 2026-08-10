@@ -2916,6 +2916,9 @@ export class Sim {
   skillDamage(e, amount, p, skill) { return SK.skillDamage(this, e, amount, p, skill); }
   skillSplash(p, skill, x, y, r, dmg, exclude) { return SK.skillSplash(this, p, skill, x, y, r, dmg, exclude); }
   spawnSkillProj(p, skill, step, rank, angle, range) { return SK.spawnSkillProj(this, p, skill, step, rank, angle, range); }
+  // §5.7's `mend` rider: heal this player's live pack. Forwarded rather than
+  // imported into compose.js, which minions.js already depends on.
+  healMinions(p, amount) { return MIN.healMinions(p, amount); }
   applyPlague(e, dmg, dur, p, skill) { return SK.applyPlague(this, e, dmg, dur, p, skill); }
   applySlow(e, mult, dur, owner = null) { return SK.applySlow(this, e, mult, dur, owner); }
   queueSkillStep(p, skill, step, rank, delay) { return SK.queueSkillStep(this, p, skill, step, rank, delay); }

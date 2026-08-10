@@ -26,6 +26,7 @@ import { Sim } from '../js/game.js';
 import { SELECTABLE } from '../js/content/characters.js';
 import { TREES, SKILL_BY_ID, TREES_BY_CLASS, ALL_SKILLS } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
+import { spawnMinions } from '../js/minions.js';
 import { ENEMIES } from '../js/content/enemies.js';
 import { IMPACT_RIDERS, SHAPE_RIDERS, BOLT_RIDERS } from '../js/compose.js';
 import { CONFIG } from '../js/config.js';
@@ -214,6 +215,13 @@ const OBSERVERS = {
   // enemy dies — the mark's whole purpose, measured where it lands.
   mark:          { what: 'an ally is healed when the marked enemy dies', markHeal: true },
   healPerHit:    { what: 'the player heals on hit',        player: (g, p) => p.hp, hurtSelf: true },
+  // §5.7's newest write path. The observable is TOTAL LIVE PACK HP: `mend`
+  // heals every standing minion, so a pack staged below full and left alone is
+  // measurably higher with the rider than without it. Staged hurt ONCE rather
+  // than re-soaked every tick the way `drench` is — re-applying the damage
+  // would undo exactly the effect being measured.
+  mend:          { what: "the caster's live pack heals", needsHurtPack: true,
+                   player: (g, p) => (p.minions || []).reduce((a, m) => a + (m.dead ? 0 : m.hp), 0) },
   pierce:        { what: 'total damage across three targets in a line', pierceLine: true },
   // THE DOLL IS TWO CLAIMS, and this gate can only honestly measure one of them.
   // "An enemy is designated" is a flag; "the mirror then pays into the one the
@@ -276,6 +284,17 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
   // nothing and would read as a mark that never detonated.
   // `healPerHit` heals the caster, and a heal on a full-HP player moves nothing.
   if (obs.hurtSelf) p.hp = Math.max(1, Math.round(p.stats.vitality * 0.25));
+  // A PACK TO MEND. The synthetic host is somebody else's strike skill, so the
+  // caster has no minions of its own — one is borrowed from whichever tree
+  // declares a summon step, exactly as skill_sweep lends the Hunter its beast.
+  if (obs.needsHurtPack) {
+    const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'summon'));
+    const step = src && src.compose.find(c => c.kind === 'summon');
+    if (step) {
+      spawnMinions(g, p, src, step, 2);
+      for (const m of p.minions || []) m.hp = Math.max(1, Math.round(m.maxHp * 0.4));
+    }
+  }
   // A PAYOUT NEEDS SOMETHING TO PAY OUT. `sluice` cashes drench stacks and
   // clears them, so a skill staged ALONE — which is this gate's whole idiom,
   // because a rider landing is only attributable when nothing else could have
@@ -393,6 +412,9 @@ const SYNTH_PAYLOAD = {
   // they are probed together because a counter with no payout is a number and a
   // payout with no counter is a multiplier. The synthetic host carries BOTH, so
   // the observable below sees the burst that only exists when both landed.
+  // `mend` heals the pack per landing hit; 9 is large enough to read against a
+  // pack staged at 40% and small enough not to top them off in one landing.
+  mend: 9,
   drench: { stacks: 3, cap: 12, dur: 9000 },
   sluice: { per: 9, radius: 30 },
 };
