@@ -25,7 +25,7 @@ import { Sim } from '../js/game.js';
 import { SELECTABLE } from '../js/content/characters.js';
 import { TREES } from '../js/skills.js';
 import { spendSkillPoint } from '../js/skillsim.js';
-import { DIFFICULTIES, DEFAULT_DIFFICULTY } from '../js/worldmap.js';
+import { DIFFICULTIES, DEFAULT_DIFFICULTY, difficultyOf } from '../js/worldmap.js';
 import { isOnboardingNode } from '../js/arenas.js';
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -70,7 +70,24 @@ function pickRepresentativeNode(g) {
   return eligible.find(x => !isOnboardingNode(g.floorNum, x)) || null;
 }
 
-function room(difficultyId, seed) {
+// THE WINDOW IS A PARAMETER, AND THE TWO QUESTIONS NEED DIFFERENT ONES.
+//
+// The LADDER axes — enemies fielded, HP, damage — are cumulative counts, so
+// they are only comparable across settings on an IDENTICAL window. The XP
+// RATIO is a per-kill quantity, and it needs a big enough denominator to mean
+// anything: XP per kill is quantised by the integer XP a material carries, so
+// on a short window a soft setting lands cents away from flat by rounding.
+//
+// Running one window for both is what broke this. At Gentle's half density the
+// shared 60s window produced **12 kills against Standard's 50**, and the
+// flatness check reported a 20.5% spread with nothing scaling XP at all — the
+// sample had collapsed (§13 rule 66: out of band under one reading is the
+// instrument). Scaling the window per setting fixed the ratio and immediately
+// broke all four ladder checks, because a longer run fields more enemies.
+//
+// So: the ladder runs the fixed window, and the XP pass runs a long one that is
+// the SAME for every setting. Different questions, different fixtures.
+function room(difficultyId, seed, seconds = SECONDS) {
   const charId = SELECTABLE[0].id;
   const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }] });
   g.difficulty = difficultyId;
@@ -87,7 +104,7 @@ function room(difficultyId, seed) {
 
   let n = 0, hp = 0, dmg = 0;
   const xp0 = p.xpEarned, matsC0 = p.matsCollected;
-  for (let t = 0; t < 60 * SECONDS; t++) {
+  for (let t = 0; t < 60 * seconds; t++) {
     for (const e of g.enemyPool) {
       if (!e.active || e._dg) continue;
       e._dg = 1; n++; hp += e.maxHp; dmg += e.dmg;
@@ -178,14 +195,21 @@ for (const { d, r } of rows) {
 // that rate falls on harder settings BY DESIGN and an assertion on it fails on
 // a working game. The quantity §4.1 fixes is experience per enemy killed.
 {
-  const rates = rows.map(({ d, r }) => [d.name, r.xpPerKill]);
-  const lo = Math.min(...rates.map(x => x[1])), hi = Math.max(...rates.map(x => x[1]));
-  const spread = hi / Math.max(1e-9, lo) - 1;
   // A 10% band, not exact equality: the settings field different densities and
   // therefore slightly different enemy MIXES, and enemy types carry different
   // base material values. What must not appear is a multiplier's worth of
   // difference tracking the ladder.
-  if (spread <= 0.10) ok(`XP per kill is flat across all four settings (${rates.map(([n, v]) => `${n} ${v.toFixed(2)}`).join(', ')}) — §4.1's exclusion holds in the fight, not just in the table`);
+  const XP_SECONDS = SECONDS * 4;   // same for every setting; only the sample grows
+  const xpRows = DIFFICULTIES.map(d => ({ d, r: room(d.id, SEED, XP_SECONDS) })).filter(x => !x.r.noRoom);
+  const rates = xpRows.map(({ d, r }) => [d.name, r.xpPerKill]);
+  const lo = Math.min(...rates.map(x => x[1])), hi = Math.max(...rates.map(x => x[1]));
+  const spread = hi > 0 ? (hi - lo) / hi : 0;
+  const thin = xpRows.filter(({ r }) => r.kills < 25).map(({ d, r }) => `${d.name} ${r.kills}`);
+  if (thin.length) fail(`too few kills to read a ratio on: ${thin.join(', ')} — XP per kill is quantised by the `
+    + `integer XP a material carries, so a thin row lands cents away from flat and reads as a defect. `
+    + `Lengthen the window before believing the number`);
+  else ok(`every setting fielded a readable sample over ${XP_SECONDS}s (${xpRows.map(({ d, r }) => `${d.name} ${r.kills}`).join(', ')} kills)`);
+  if (spread <= 0.10) ok(`XP per kill is flat across all settings (${rates.map(([n, v]) => `${n} ${v.toFixed(2)}`).join(', ')}) — §4.1's exclusion holds in the fight, not just in the table`);
   else fail(`XP per kill varies by ${(spread * 100).toFixed(1)}% across settings (${rates.map(([n, v]) => `${n} ${v.toFixed(2)}`).join(', ')}) — difficulty is paying XP, and the hardest setting becomes the only correct choice`);
 
   // And the same claim once more, end to end: does the split survive the pickup
@@ -214,6 +238,68 @@ for (const { d, r } of rows) {
   if (mono) ok(`the ladder is monotonic in the FIGHT: ${ordered.map(o => `${o.d.name} ${o.r.count}@${o.r.hp.toFixed(0)}`).join(' → ')}`);
   else fail(`the ladder is not monotonic in the fight: ${ordered.map(o => `${o.d.name} ${o.r.count}@${o.r.hp.toFixed(0)}`).join(' → ')} — two settings are the same choice`);
 }
+
+// ---- REACHABLE BY A PLAYER (§13 rule 54) ----------------------------------
+//
+// Everything above proves the ladder WORKS. None of it proves anybody can
+// choose a rung, and for five phases nobody could: `DIFFICULTIES` was a table,
+// `difficultyOf` read it, and **`app.lobby.difficulty` was assigned by nothing
+// in the codebase.** Every run ever played resolved to Standard through the
+// fallback, and a player looking for an easier setting found a lobby with two
+// buttons on it. Reported from play, and this gate had been green throughout —
+// the third time a working system has surfaced nowhere, after the §5.6 opening
+// card and unspent skill points.
+//
+// So the last leg drives a real page. Three claims, and the first two can pass
+// while the setting still does nothing: that the control EXISTS, that clicking
+// it MOVES THE FIELD, and that the field reaches the SIM and changes the fight.
+try {
+  const { Page, bootHttpd, loadPeerjs, sleep } = await import('./cdp_harness.mjs');
+  const peer = loadPeerjs();
+  if (!peer) {
+    console.warn('⚠ reachability leg SKIPPED — no local peerjs (set PEERJS_LOCAL).');
+  } else {
+    const PORT = 8600 + (process.pid % 97);
+    bootHttpd(PORT);
+    const P = await new Page('diff', 9791, peer).open();
+    try {
+      await P.goto(`http://localhost:${PORT}/index.html`);
+      await P.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden')?1:0`, 10000, 'title');
+      await P.exec(`document.getElementById('name-input').value='D'; document.getElementById('btn-host').click(); return 1;`);
+      await P.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')?1:0`, 8000, 'lobby');
+      await sleep(400);
+
+      const picks = await P.exec(`
+        const b = [...document.querySelectorAll('#screen-lobby .diff-pick')];
+        return { n: b.length, ids: b.map(x => x.dataset.diff),
+                 on: b.filter(x => x.classList.contains('on')).map(x => x.dataset.diff),
+                 // visible pixels, not just present in the DOM
+                 area: b.reduce((a, x) => a + Math.round(x.getBoundingClientRect().width * x.getBoundingClientRect().height), 0) };`);
+      if (picks.n === DIFFICULTIES.length && picks.area > 500) {
+        ok(`the lobby offers all ${picks.n} settings (${picks.ids.join(', ')}), ${picks.area}px of them, with ${picks.on.join('/') || 'none'} selected`);
+      } else fail(`the difficulty picker is not reachable in the lobby: ${JSON.stringify(picks)}`);
+
+      // CLICK THE SOFTEST ONE, through the real handler.
+      await P.exec(`const b = document.querySelector('#screen-lobby .diff-pick[data-diff="gentle"]'); if (b) b.click(); return 1;`);
+      await sleep(400);
+      const after = await P.exec(`return { field: String(window.uv.lobby && window.uv.lobby.difficulty),
+        on: [...document.querySelectorAll('#screen-lobby .diff-pick.on')].map(x => x.dataset.diff).join(',') };`);
+      if (after.field === 'gentle' && after.on === 'gentle') ok('clicking it moves the field AND the selection — app.lobby.difficulty = "gentle"');
+      else fail(`clicking the picker did not take: ${JSON.stringify(after)} — the field this writes was unassigned for five phases, so an unwired button here is the same defect again`);
+
+      // AND IT HAS TO REACH THE FIGHT. A lobby field that the run ignores is
+      // the same class of defect one layer further on.
+      await P.exec(`document.querySelector('.char-card:not([data-locked])').click(); return 1;`);
+      await sleep(300);
+      await P.exec(`document.getElementById('btn-start').click(); return 1;`);
+      await P.waitFor(`return window.uv.mode==='run' && !!window.uv.sim ?1:0`, 8000, 'run');
+      await sleep(600);
+      const inRun = await P.exec(`return String(window.uv.sim.difficulty);`);
+      if (inRun === 'gentle') ok('and the run starts on it — sim.difficulty = "gentle", so the choice survives the lobby');
+      else fail(`the lobby said gentle and the sim says "${inRun}" — the setting is chosen and discarded`);
+    } finally { await P.close(); }
+  }
+} catch (e) { fail(`reachability leg could not run: ${e.message}`); }
 
 console.log(failures ? `\n${failures} DIFFICULTY GATE FAILURE(S)` : '\nEVERY DIFFICULTY SETTING CHANGES THE FIGHT, AND NONE OF THEM CHANGES XP');
 process.exit(failures ? 1 : 0);

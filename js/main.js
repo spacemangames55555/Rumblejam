@@ -22,6 +22,7 @@ import { initScreens, showTitle, showLobby, showResults, hideScreens, currentNam
 import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
+import { DEFAULT_DIFFICULTY } from './worldmap.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening, showSkills, closeSkills, isSkillsOpen, updateSkillsMeta } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
 import { tohSnapshot, tohMarks, tohState, TOH_STANCE_NAMES } from './traits-toh.js';
@@ -85,6 +86,18 @@ const actions = {
   backToLobby: hostReturnToLobby,
   pickChar: charId => sendUi({ kind: 'pick', charId }),
   toggleReady: () => sendUi({ kind: 'ready' }),
+  // §4.1's ladder, finally with a writer. `app.lobby.difficulty` was READ at the
+  // lobby heartbeat and assigned nowhere in the codebase, so the field was
+  // always undefined and every run resolved to Standard through
+  // `difficultyOf`'s fallback. Host-only: the run is host-authoritative and a
+  // party plays one difficulty. Guests see the choice on their own lobby
+  // through the heartbeat that already carried the field.
+  setDifficulty: (id) => {
+    if (app.role !== 'host') return;
+    app.lobby.difficulty = id;
+    refreshLobby();
+    broadcastLobby();
+  },
   startGame: hostStartRun,
 };
 // Sprites start loading NOW, at page load, while the player is still reading
@@ -497,9 +510,14 @@ function hostStartRun() {
     const seed = randomRunSeed();
     app.party = app.lobby.players.map((p, i) => ({ idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color }));
     app.myIdx = 0;
-    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, party: app.party });
+    // The difficulty rides the start message as well as the Sim. Clients do not
+    // simulate today — `app.sim` is assigned on the host only — so this is not
+    // a desync guard; it is so a client KNOWS what it agreed to play, and so a
+    // later client-side predictor inherits the setting rather than defaulting.
+    const difficulty = app.lobby.difficulty || DEFAULT_DIFFICULTY;
+    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, party: app.party, difficulty });
     startRunCommon();
-    app.sim = new Sim({ seed, party: app.party });
+    app.sim = new Sim({ seed, party: app.party, difficulty });
     drainSimOutputs(true); // deliver initial floor/room events
   });
 }
@@ -651,6 +669,8 @@ function clientOnMessage(msg) {
       break;
     case 'start': {
       if (!Array.isArray(msg.party)) break;
+      // `msg.difficulty` is carried for display and for whatever simulates on
+      // this side later; a client runs no Sim of its own at present.
       const party = msg.party.slice(0, CONFIG.MAX_PLAYERS).map(sanitizeMember);
       const me = party.find(p => p.key === app.myKey);
       if (!me || !me.charId) { // raced the host's START before our hello landed — bail cleanly

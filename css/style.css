@@ -444,3 +444,16 @@ h2.rt{font-size:38px; letter-spacing:4px; text-align:center; margin-bottom:4px;}
 .slot-pick{margin-top:7px;}
 .slot-choices{display:flex; gap:5px; flex-wrap:wrap;}
 .slot-choice{font-size:11px; padding:4px 8px;}
+
+
+/* ---------- lobby difficulty picker (§4.1) ---------- */
+/* The ladder existed as a table for five phases with nothing in the DOM to
+   reach it. This is the affordance; `difficultyOf` is still the enforcement. */
+.diff-row{margin-top:12px; padding-top:10px; border-top:1px solid var(--line);}
+.diff-label{font-size:11px; letter-spacing:2px; color:var(--dim); margin-bottom:6px;}
+.diff-picks{display:flex; flex-wrap:wrap; gap:6px;}
+.diff-pick{padding:6px 12px; font-size:12px; letter-spacing:1px; opacity:.72; min-height:34px;}
+.diff-pick:hover{opacity:1;}
+.diff-pick.on{opacity:1; border-color:var(--gold); color:var(--gold); background:#191c2a;}
+.diff-desc{margin-top:6px; min-height:16px;}
+body.touch-on .diff-pick{min-height:44px; font-size:13px; padding:8px 14px;}

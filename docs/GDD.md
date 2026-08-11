@@ -167,6 +167,12 @@ Region 1 is played more than regions 6, 7 and 8 combined — every new save star
 
 ### 4.1 Three separate axes
 
+**GENTLE — the floor below the ladder (×0.5 on HP, damage and density).** The four settings are a preference ladder tuned around Standard, and the softest of them is ×0.85 — a lighter touch, not an easier game. A playtester learning a class, or a player who needs one, cannot use a 15% discount. Gentle is deliberately outside that tuning and is not a rebalance of it: **nothing about Measured, Standard, Harrowed or Unmade changed.**
+
+It obeys both of §4.1's rules rather than being excused from them. Gold is 0.7, because the ladder is asserted strictly monotonic on all four axes and a floor paying Measured's 0.9 would not be below it. It declares no `xp`, because the exclusion is what stops the hardest setting becoming the only correct choice — and an easiest setting that paid less XP would turn the accessibility option into a penalty. Measured in a real fight: 28 enemies at 6 HP against Standard's 60 at 11, and XP per kill flat at 1.83 against 1.76.
+
+**And the ladder is now reachable, which it had never been.** See §13 rule 71.
+
 | Axis | Granularity | Controls |
 |---|---|---|
 | Region band | Coarse, permanent | Baseline enemy HP, damage, density, archetypes |
@@ -1812,6 +1818,12 @@ That is rule 68's shape at the level of prose. There, knowing a failure mode mad
 **And most of it was mechanically checkable the whole time.** Not one divergence in the report was a matter of judgement; all but three were a number that had moved, and every one of those numbers exists in the code — trees, skills, classes, primitives, riders, selectors, triggers, engines, the tier table, the instruments in `tools/`. `doc_gate.mjs` compares them and fails when they disagree. It reads counts, never meaning: prose is not assertable and pretending otherwise would produce a gate nobody trusts.
 
 Three properties earn it its place. A claim it cannot FIND fails rather than passes, because a silently-absent assertion is how §16 lost a whole instrument for a draft. It checks membership as well as arity — every tree, primitive and engine must be *named*, since a count can be right about a set with the wrong members (rule 43). And it caught an error in the reconciliation that created it, on its first run: this pass wrote the Druid's second tree as "Beasts" where the registry says "Tapestry of Beasts". **A gate written to catch the last four drafts' mistakes caught the fifth before it shipped**, which is the only evidence that a new instrument is real.
+
+71. **A field that is read and never written fails silently forever, and the gate that owns it can be green the whole time if the gate assigns the field itself.** §4.1's four difficulty settings worked: `DIFFICULTIES` was a table, `difficultyOf` read it, `difficulty_gate` proved all four axes moved in a real fight. **`this.difficulty` was assigned by no constructor and `app.lobby.difficulty` by no code at all.** Every run in the game's history was Standard through a fallback, and a player looking for an easier setting found a lobby with two buttons on it — reported from play, five phases in.
+
+The gate was green because it did `g.difficulty = difficultyId` by hand. That is rule 17 pointed at a product rather than a fixture: **the harness provisioned what the game never does**, so it measured a configuration no player could reach. The tell is available cheaply — grep the field, and if every write is inside `tools/`, the feature is a fixture's.
+
+This is the third instance of the larger pattern, after the §5.6 opening card and unspent skill points, and the three together say something the individual fixes did not: **a system is not shipped when it works, it is shipped when a player can reach it.** The check that catches it can only be a browser one, and it has to assert the chain rather than its ends — the control exists, clicking it moves the field, *and* the field survives into the run. `difficulty_gate` now drives a real page for exactly those three, and the third caught a second missing writer the first two would have passed.
 
 ### 13.1 The through-line
 
