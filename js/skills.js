@@ -43,6 +43,9 @@ import { MONK_EMPTY_HAND, TUNING as MONK_EH_TUNING } from './content/skills/monk
 import { WIZARD_DISSONANCE, TUNING as WIZ_DIS_TUNING } from './content/skills/wizard_dissonance.js';
 import { PRIEST_RECKONING, TUNING as PRI_REC_TUNING } from './content/skills/priest_reckoning.js';
 import { SUN_UNDERTOW, TUNING as SUN_UND_TUNING } from './content/skills/sun_undertow.js';
+import { SAV_AFTERMATH, TUNING as SAV_AFT_TUNING } from './content/skills/sav_aftermath.js';
+import { HUN_PINCER, TUNING as HUN_PIN_TUNING } from './content/skills/hun_pincer.js';
+import { DRUID_RESTORATION, TUNING as DRUID_RES_TUNING } from './content/skills/druid_restoration.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
@@ -72,10 +75,12 @@ export const TREES = {
   asn_shadow: { id: 'asn_shadow', name: 'Shadow', classId: 'toh_assassin', skills: ASN_SHADOW, tuning: ASN_SH_TUNING },
   hun_longshot: { id: 'hun_longshot', name: 'Longshot', classId: 'toh_hunter', skills: HUN_LONGSHOT, tuning: HUN_LS_TUNING },
   hun_houndmaster: { id: 'hun_houndmaster', name: 'Houndmaster', classId: 'toh_hunter', skills: HUN_HOUNDMASTER, tuning: HUN_HM_TUNING },
+  hun_pincer: { id: 'hun_pincer', name: 'Pincer', classId: 'toh_hunter', skills: HUN_PINCER, tuning: HUN_PIN_TUNING },
   monk_chi: { id: 'monk_chi', name: 'Chi', classId: 'toh_monk', skills: MONK_CHI, tuning: MONK_CHI_TUNING },
   monk_stonegarden: { id: 'monk_stonegarden', name: 'Stone Garden', classId: 'toh_monk', skills: MONK_STONEGARDEN, tuning: MONK_SG_TUNING },
   sav_primal_fury: { id: 'sav_primal_fury', name: 'Primal Fury', classId: 'toh_savage', skills: SAV_PRIMAL_FURY, tuning: SAV_PF_TUNING },
   sav_bloodbound: { id: 'sav_bloodbound', name: 'Bloodbound', classId: 'toh_savage', skills: SAV_BLOODBOUND, tuning: SAV_BB_TUNING },
+  sav_aftermath: { id: 'sav_aftermath', name: 'Aftermath', classId: 'toh_savage', skills: SAV_AFTERMATH, tuning: SAV_AFT_TUNING },
   smith_crystal: { id: 'smith_crystal', name: 'Crystal', classId: 'toh_blacksmith', skills: SMITH_CRYSTAL, tuning: SMITH_CR_TUNING },
   smith_forge: { id: 'smith_forge', name: 'Forge', classId: 'toh_blacksmith', skills: SMITH_FORGE, tuning: SMITH_FG_TUNING },
   samurai_armor: { id: 'samurai_armor', name: 'Armor', classId: 'toh_samurai', skills: SAMURAI_ARMOR, tuning: SAMURAI_TUNING },
@@ -92,6 +97,7 @@ export const TREES = {
   wizard_dissonance: { id: 'wizard_dissonance', name: 'Dissonance', classId: 'toh_wizard', skills: WIZARD_DISSONANCE, tuning: WIZ_DIS_TUNING },
   necro_summons: { id: 'necro_summons', name: 'Summons', classId: 'toh_necromancer', skills: NECRO_SUMMONS, tuning: SUMMONS_TUNING },
   druid_beasts: { id: 'druid_beasts', name: 'Tapestry of Beasts', classId: 'toh_druid', skills: DRUID_BEASTS, tuning: BEASTS_TUNING },
+  druid_restoration: { id: 'druid_restoration', name: 'Restoration', classId: 'toh_druid', skills: DRUID_RESTORATION, tuning: DRUID_RES_TUNING },
 };
 
 export const ALL_SKILLS = Object.values(TREES).flatMap(t => t.skills);

@@ -139,6 +139,29 @@ function stageFor(g, p, sk) {
     p.engines.form = CONFIG.FORM_POWER;
     g._recomputeStats(p);
   }
+  // A `from: 'pet'` SKILL ASKS ITS QUESTION AT THE BEAST, so with no beast on
+  // the field `triggerOrigin` returns null and the skill never fires — and this
+  // gate reports the RIDER as dropped, which is a sentence about the wrong
+  // thing entirely. skill_sweep has lent the Hunter its beast since the write
+  // path shipped; this file never had to, because until `hun_quarry` not one
+  // `from: 'pet'` skill carried a rider.
+  //
+  // That is §13 rule 67's shape a second time in one patch: the staging was
+  // correct about `from` alone and correct about riders alone, and the content
+  // combined them. The beast is not a favour — the summon is in this skill's own
+  // prereq chain and was learned above, so lending the body only casts a node
+  // the fixture already owns.
+  if (sk.from === 'pet' && !(p.minions || []).length) {
+    // walk this skill's own prereq chain; fall back to the class's other trees,
+    // which is the cross-tree supply §8.1 intends (§13 rule 65)
+    const own = [];
+    for (let c = sk; c; c = ALL_SKILLS.find(x => x.id === c.prereq)) own.push(c);
+    const mine = (TREES_BY_CLASS[p.charId] || []).flatMap(id => TREES[id].skills);
+    const src = own.find(x => (x.compose || []).some(c => c.kind === 'summon'))
+      || mine.find(x => (x.compose || []).some(c => c.kind === 'summon'));
+    const step = src && src.compose.find(c => c.kind === 'summon');
+    if (step) spawnMinions(g, p, src, step, 1);
+  }
   const put = (n, r) => {
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
