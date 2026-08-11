@@ -189,6 +189,22 @@ function measureTree(treeId) {
   }
   if (!dummies.length) { bad(`${treeId}: no dummies spawned — nothing was measured`); return null; }
 
+  // ENGINE SUPPLY, WATCHED THROUGH THE RUN (§13 rule 29, content side).
+  //
+  // A `scaleWith` declaration is a READ. Nothing anywhere guarantees a WRITE,
+  // and this cannot be checked at load: whether a tree's own play reaches its
+  // engine is a property of the call graph and the room, not of the data. Two
+  // shipped trees declared an engine they structurally could not supply and
+  // every load assertion passed on both.
+  //
+  // So it is measured. The engine's peak over the whole window is recorded, and
+  // a peak of zero means the declaration multiplied by exactly 1 for the entire
+  // fight — a scaling clause that is decoration.
+  const declared = new Set();
+  for (const sk of tree.skills) for (const c of (sk.compose || [])) if (c.scaleWith) declared.add(c.scaleWith);
+  const peak = {};
+  for (const k of declared) peak[k] = 0;
+
   for (let i = 0; i < TICKS; i++) {
     // Hold every staged condition true for the whole window rather than once:
     // these are triggers on cooldowns from 1.1s to 9s, and a condition set on
@@ -209,11 +225,86 @@ function measureTree(treeId) {
     }
     if (plan.status) for (const d of dummies) if (!(d.e.plagueT > 0)) sim.applyPlague(d.e, 20, 5, p, plan.status);
     sim.tick();
+    for (const k of declared) peak[k] = Math.max(peak[k], (p.engines && p.engines[k]) || 0);
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
   }
   // novaDamage is the trait's, not the tree's — same subtraction measureDps makes.
   const dps = (p.damageDealt - (p.novaDamage || 0)) / SECONDS;
-  return { treeId, classId: tree.classId, dps, actives: actives.length, slotted: Math.min(actives.length, slots), plan };
+  return { treeId, classId: tree.classId, dps, actives: actives.length,
+           slotted: Math.min(actives.length, slots), plan, peak, declared: [...declared] };
+}
+
+// One character with EVERY tree of its class spent and a broad loadout — the
+// build a player actually reaches, rather than the pinned single tree the band
+// needs. Staged loosely on purpose: this asks whether the engine can ever be
+// non-zero, so a generous room is the right room.
+function supplyRun(classId, keys, w) {
+  const treeIds = TREES_BY_CLASS[classId] || [];
+  const sim = new Sim({ seed: 4242, allowUnplayable: true,
+    party: [{ idx: 0, key: 'k', name: 'S', charId: classId, color: '#fff' }] });
+  sim.god = true;
+  const fight = sim.floor.nodes.find(n => n.kind === 'combat');
+  fight.template = 'open_expanse';
+  sim._travelTo(fight.id);
+  sim.wave.done = true; sim.spawnQueue.length = 0;
+  for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
+  const p = sim.players[0];
+  p.level = LEVEL;
+  const all = treeIds.flatMap(id => (TREES[id] || {}).skills || []).sort((a, b) => a.tier - b.tier);
+  for (const sk of all) { p.skillPoints++; SKILLSIM.spendSkillPoint(sim, p, sk.id); }
+  // Slot the class's actives across every tree, widest spread first, so no one
+  // tree monopolises the loadout the way the auto-slotter does.
+  const slots = slotsAtLevel(LEVEL);
+  const acts = treeIds.flatMap(id => ((TREES[id] || {}).skills || []))
+    .filter(s => s.type === 'active').sort((a, b) => a.tier - b.tier).map(s => s.id);
+  p.loadout = new Array(8).fill(null);
+  // WINDOW `w` OF THE CLASS'S ACTIVES, not the first seven. Seven slots against
+  // ~28 actives means most of a class never fires, and the first version of
+  // this pass reported the Necromancer as unable to produce `pack` and the
+  // Hunter as unable to produce `spread` — both false, and both because the
+  // summon that makes the minion was never slotted. §13 rule 17: a fixture
+  // arriving unprovisioned is the fixture's bug. The caller sweeps every window
+  // and takes the best, so a class is judged on what it CAN do rather than on
+  // which seven skills happened to sort first.
+  for (let i = 0; i < slots; i++) { const id = acts[(w * slots + i) % acts.length]; if (id) p.loadout[i] = id; }
+  if (p.char.trait.key === 'singularity') p.crystal = p.char.trait.crystalCap;
+  const cx = sim.W / 2, cy = sim.H / 2, dummies = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI * 2 / 6;
+    const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * 110, cy + Math.sin(a) * 110, { noMats: true });
+    if (e) { e.spd = 0; e.dmg = 0; dummies.push({ e, x: e.x, y: e.y }); }
+  }
+  const peak = {}; for (const k of keys) peak[k] = 0;
+  for (let i = 0; i < TICKS; i++) {
+    // Both halves of every either/or condition, alternating: a class that needs
+    // to move for one engine and stand still for another gets both, because the
+    // question is "can this ever be non-zero" rather than "is it now".
+    const walking = Math.floor(i / 180) % 2 === 1;
+    sim.setInput(0, walking ? { mx: (i % 2 ? 1 : -1), my: 0 } : { mx: 0, my: 0 });
+    if (!walking) p.stillT = 99;
+    // AND THE PLAYER CHANGES ENDS. `spread` is the DISTANCE between the Hunter
+    // and its beast (SPREAD_UNIT 90 per step), and a fixture that pins the
+    // player in one spot has the beast standing on them — so the engine reads 0
+    // and the class looks unable to produce what it plainly produces. A pinned
+    // player cannot stage a distance engine. The beast trails the jump, which
+    // is the separation the engine exists to measure.
+    const side = Math.floor(i / 200) % 2 ? 1 : -1;
+    p.x = cx + side * 320; p.y = cy;
+    p.trigEvents.dodgeT = sim.time; p.trigEvents.hitTaken = 1; p.trigEvents.kill = 1;
+    if (i % 300 < 150) p.hp = Math.max(1, p.stats.vitality * 0.25); else p.hp = p.stats.vitality;
+    // dummies ride with the player: this pass measures supply, and an engine
+    // that needs a body in reach must always have one
+    for (let j = 0; j < dummies.length; j++) {
+      const a = j * Math.PI * 2 / dummies.length;
+      const d = dummies[j];
+      d.e.x = p.x + Math.cos(a) * 110; d.e.y = p.y + Math.sin(a) * 110;
+      d.e.knockX = d.e.knockY = 0; d.e.hp = 5e8; d.e.maxHp = 1e9;
+    }
+    sim.tick();
+    for (const k of keys) peak[k] = Math.max(peak[k], (p.engines && p.engines[k]) || 0);
+    if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
+  }
+  return peak;
 }
 
 // ---------------------------------------------------------------- run
@@ -225,7 +316,7 @@ for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
   if (rows.length) byClass.set(classId, rows);
 }
 
-let unstaged = 0;
+let unstaged = 0, starved = 0;
 for (const [classId, rows] of byClass) {
   const vals = rows.map(r => r.dps).sort((a, b) => a - b);
   const med = vals[Math.floor(vals.length / 2)];
@@ -235,6 +326,23 @@ for (const [classId, rows] of byClass) {
     const tag = `${r.treeId} ${r.dps.toFixed(1).padStart(8)}  ${(dev >= 0 ? '+' : '') + (dev * 100).toFixed(0)}%  ${r.slotted}/${r.actives} actives slotted`;
     if (VERBOSE && r.plan.staged.length) console.log(`      staged: ${r.plan.staged.join(', ')}`);
     for (const u of r.plan.unstageable) { unstaged++; console.log(`      NOT STAGED — ${u}`); }
+    // Engine supply is NOT judged here — see the class pass below. In isolation
+    // a tree that reads an engine its SIBLING supplies reads as starved, and
+    // that is the probe's pinning rather than a defect: `asn_shadow` reads
+    // `killbox` because the Assassin sets traps in Killbox, and a player owns
+    // all three trees. Judging supply per tree flagged ten trees, of which most
+    // were this. Reported as information only.
+    // THE ENGINE, AS THE TREE'S OWN PLAY LEAVES IT. Printed always, not under
+    // --verbose, because the class pass cannot see this one: an engine the
+    // class supplies easily can still be ZERO at the moment these particular
+    // skills fire. `samurai_agility` read `footing` while every trigger it owns
+    // was MOVEMENT, and movement drops footing to zero in one step — full right
+    // up until the instant the tree could use it. A zero here next to a healthy
+    // class-level supply is that shape, and it is worth a human looking at.
+    for (const k of r.declared) {
+      const v = r.peak[k];
+      console.log(`      ${k}: peak ${v.toFixed(2)} while this tree plays${v > 0 ? '' : '   <- ZERO: its own triggers may be emptying it'}`);
+    }
     // A tree measuring zero is never "in band", however wide the band: it means
     // the tree's actives did nothing, and the unstaged list above says whether
     // that is the tree's fault or the fixture's.
@@ -245,6 +353,56 @@ for (const [classId, rows] of byClass) {
   console.log('');
 }
 
+// ---------------------------------------------------------------- supply
+//
+// CAN THE CLASS SUPPLY WHAT ITS TREES READ? (§13 rule 29, from the content side.)
+//
+// A `scaleWith` declaration is a READ. Nothing guarantees a WRITE, and this
+// cannot be asked at load: whether a class's own play reaches its engine is a
+// property of the call graph and the room, not of the data.
+//
+// THE UNIT IS THE CLASS, NOT THE TREE, and getting that wrong is instructive.
+// Asked per tree — with the loadout pinned, as the band requires — ten trees
+// looked starved, and most were reading an engine a SIBLING tree supplies:
+// `asn_shadow` reads `killbox` because the Assassin's traps live in Killbox,
+// `priest_grace` reads `marks` because the marks live in Judgment. A player
+// owns all three trees and spreads freely (§8.1), so cross-tree supply is the
+// design rather than a defect. Pinning is right for measuring output and wrong
+// for measuring supply, and one fixture cannot answer both questions.
+//
+// What survives is the real thing: an engine NO tree of the class can produce.
+console.log('ENGINE SUPPLY — every `scaleWith` a class declares, against what the whole class can produce\n');
+for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
+  const want = new Map();          // engine -> trees that read it
+  for (const id of treeIds) for (const sk of (TREES[id] || {}).skills || [])
+    for (const c of (sk.compose || [])) if (c.scaleWith) (want.get(c.scaleWith) || want.set(c.scaleWith, []).get(c.scaleWith)).push(id);
+  if (!want.size) continue;
+  // Sweep every slot window and take the peak: the question is whether the
+  // class can EVER produce the engine, so the best window is the answer.
+  const nActs = treeIds.flatMap(id => ((TREES[id] || {}).skills || [])).filter(s => s.type === 'active').length;
+  const windows = Math.max(1, Math.ceil(nActs / slotsAtLevel(LEVEL)));
+  const peak = {};
+  for (const k of want.keys()) peak[k] = 0;
+  for (let w = 0; w < windows; w++) {
+    const r = supplyRun(classId, [...want.keys()], w);
+    for (const k of want.keys()) peak[k] = Math.max(peak[k], r[k]);
+  }
+  const short = [...want.keys()].filter(k => !(peak[k] > 0));
+  if (!short.length) {
+    ok(`${classId.replace('toh_', '').padEnd(13)} supplies all ${want.size}: ` +
+       [...want.keys()].map(k => `${k} ${peak[k].toFixed(1)}`).join(', '));
+  } else for (const k of short) {
+    starved++;
+    bad(`${classId.replace('toh_', '')} reads scaleWith: '${k}' in ${[...new Set(want.get(k))].join(', ')} and NOTHING the class owns produces it — `
+      + `peak 0 with every tree of the class spent and slotted. The clause multiplies by exactly 1 forever (§13 rule 29)`);
+  }
+}
+console.log('');
+
+if (starved) {
+  console.log(`${starved} tree(s) scale on an engine their own play never produces. That is not a tuning`);
+  console.log(`error — the clause is inert, and the tree reads as scaling while it does not.\n`);
+}
 if (unstaged) {
   console.log(`${unstaged} trigger condition(s) this fixture cannot arrange. A tree carrying one is measured`);
   console.log(`on its remaining actives only, and the reading is a FLOOR rather than the tree's output.\n`);

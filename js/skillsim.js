@@ -305,6 +305,10 @@ export function tickSkills(sim, dt) {
     // `<engine>DamageBonus` field is rejected at load so a per-point value
     // cannot be carried across under a name that still reads.
     p.engineScaleBonus.footing = passiveBonusPer('footing', passiveSum(p, 'footingScaleWeight'));
+    // `armor` was the one engine initialised in engineScaleBonus and never
+    // assigned — a declared-with-no-writer field of exactly the shape this
+    // codebase keeps finding. samurai_agility is the first content to need it.
+    p.engineScaleBonus.armor = passiveBonusPer('armor', passiveSum(p, 'armorScaleWeight'));
     p.engineScaleBonus.pack = passiveBonusPer('pack', passiveSum(p, 'packScaleWeight'));
     p.engineScaleBonus.shift = passiveBonusPer('shift', passiveSum(p, 'shiftScaleWeight'));
     p.engineScaleBonus.marks = passiveBonusPer('marks', passiveSum(p, 'marksScaleWeight'));
