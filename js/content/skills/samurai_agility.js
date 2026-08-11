@@ -12,7 +12,7 @@
 // AGILITY IS NOT A SECOND ENGINE. §8.3 gives the Samurai exactly one, and a
 // tree that invented a rival resource would make the class two classes. What
 // this tree buys instead is the right to keep Footing while moving: its
-// passives feed `footingAccrualPct` and `footingScaleWeight`, the same keys
+// passives feed `footingAccrualPct` and `armorScaleWeight`, the same keys
 // Armor and Tactics read, so nothing here needs a line of engine code. The
 // fantasy is a swordsman who does not have to choose between standing and
 // striking — which is exactly the tension the other two trees create.
@@ -86,9 +86,29 @@ export const TUNING = {
 
 const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
-// Agility skills scale on Footing like the rest of the class — the point of the
-// tree is that you keep the stance, not that you trade it away.
-const FOOT = { scaleWith: 'footing'};
+// AGILITY SCALES ON GRIT, NOT FOOTING — and the comment this replaces asserted
+// the opposite of what the code did.
+//
+// It read: "Agility skills scale on Footing like the rest of the class — the
+// point of the tree is that you keep the stance, not that you trade it away."
+// Nothing in the tree keeps the stance. Footing accrues while standing still
+// and drops to ZERO in one step on movement past the grace window
+// (`js/engines.js`), and every trigger on this side of the tree is
+// MOVEMENT/moving. Measured over 30s of the tree's own play: footing peak 0.
+// Every scaling clause multiplied by exactly 1, for the whole fight, forever.
+//
+// This is not the class failing to supply the engine — the Samurai reaches
+// footing 10 easily, and the class-level supply pass in `tools/tree_dps.mjs`
+// says so. It is narrower and nastier: the engine is full right up until the
+// instant these skills can fire, and firing them is what empties it. A tree
+// whose trigger destroys its own scaling term.
+//
+// `armor` is the honest answer rather than a flat number. It publishes
+// `max(0, Grit)` for every player every tick (`js/skillsim.js`), Grit is the
+// Samurai's other resource and the one thing a moving Samurai keeps, and
+// `necro_marrow` already establishes it as a real scaling engine. A Samurai in
+// motion has left its stance behind and is still wearing its armour.
+const FOOT = { scaleWith: 'armor' };
 
 export const SAMURAI_AGILITY = [
   // ------------------------------------------------------------------ root
@@ -171,10 +191,10 @@ export const SAMURAI_AGILITY = [
   },
   {
     id: 'sam_dancing_edge', tree: 'samurai_agility', tier: 6, name: 'Dancing Edge',
-    desc: 'Every stack of Footing you kept through the dodge sharpens what comes out of it.',
+    desc: 'The armour goes with you. What the stance gave up, the plate keeps.',
     type: 'passive', domain: 'physical', prereq: 'sam_slip_cut',
     trigger: null, cooldown: 0, compose: [],
-    passive: { footingScaleWeight: T.danceWeight },
+    passive: { armorScaleWeight: T.danceWeight },
     ranks: R,
   },
   {

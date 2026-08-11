@@ -118,6 +118,7 @@ for (const t of Object.values(TREES)) (TREES_BY_CLASS[t.classId] ||= []).push(t.
 export const PASSIVE_EFFECT = {
   // scale damage — genuine investments, rankable
   footingScaleWeight: 'damage',   // Held Edge: more damage per Footing stack
+  armorScaleWeight: 'damage',     // Dancing Edge: more damage per point of Grit
   reflectPerGrit: 'damage',       // Quill: reflected damage scaled by Grit
   // everything else — unlocks, rank-1
   footingAccrualPct: 'other',     // Set Stance / Measured Breath: settle faster
