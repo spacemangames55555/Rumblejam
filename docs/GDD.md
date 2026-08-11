@@ -1,6 +1,8 @@
 # Rumblejam — Game Design Document
 
-**Draft 10 · August 2026**
+**Draft 11 · August 2026**
+
+*Reconciled against the code end to end. Draft 11 corrected 22 divergences accumulated since Draft 10 — every one of them an edit that added a claim without deleting the one it replaced. `tools/doc_gate.mjs` now checks the document's counts against the code on every run (§13 rule 70).*
 **Status: authoritative.** This file supersedes all prior drafts. Where this document and any other source disagree, this document wins — except for tuning constants, where the per-tree `TUNING` blocks in code are authoritative and this document records intent.
 
 **Reference convention:** a bare §N means this document. Any other source must be named inline.
@@ -335,6 +337,7 @@ select:  'highest_hp',                                    // what
 | `lowest_hp` | Weakest — finishers, execution |
 | `densest_cluster` | The point maximising enemies hit |
 | `objective_target` | Role-tagged objective entities: nest → mark → boss → elite, distance as tiebreak |
+| `self` | Nothing. The honest declaration for a step that writes the caster, the party or the field and picks no target — see §5.7 |
 
 #### Why selectors exist
 
@@ -416,19 +419,21 @@ Gated before any tree was authored against it, per the sequence every prior writ
 
 **`select` and the `self` selector.** Six of the fourteen primitives — `shield`, `ward`, `form`, `shift`, `heal`, `summon` — never consult `select`: they write the caster, the party or the field and have no target to choose. Those skills declare **`select: 'self'`**. The rule is asserted in both directions from a table DERIVED from the primitive sources (`PRIMITIVE_SELECTS`), so a skill that picks nothing must say so, and a skill that picks something may not claim otherwise.
 
-**Impact riders** (land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mark` · `doll` · `drench` · `sluice`
-**Shape riders** (shape a swing): `arc` · `windUp` · `multiPulse`
-**Projectile riders:** `pierce` · `splash` · `impactDot` · `defenseDown`
+**Impact riders** (13, land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mend` · `mark` · `doll` · `drench` · `sluice`
+**Shape riders** (2, shape a swing): `windUp` · `multiPulse`
+**Projectile riders** (4): `pierce` · `splash` · `impactDot` · `defenseDown`
+
+**`arc` is a step PARAMETER, not a rider**, and it was listed here as one for several drafts. It is a required field on `strike` and `cone` — the width of the swing — read directly off the step by the primitive. Riders are optional keys inside a step's `riders` object and are enumerated in `IMPACT_RIDERS` / `SHAPE_RIDERS` / `BOLT_RIDERS`; `arc` is in none of them. The distinction matters because `rider_gate` iterates those three lists, so anything called a rider here that is not in them is a capability nobody checks.
 
 This decomposition replaced an earlier per-primitive rider split that could not express a bolt carrying `weakenDamage`.
 
 **Hard rule: every number lives in its tree's `TUNING` block. No constant is ever inline in behaviour code.**
 
-**Result:** 280 skills across 28 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
+**Result:** 420 skills across 42 trees, zero bespoke handlers. Summons were the largest bespoke category in the source project and cost one primitive and one trigger (§8.5). The Wizard and the Priest each cost a write path ruled ahead of their trees and then nothing else — two publish lines apiece.
 
-#### The primitive set is OPEN, and what admits a twelfth
+#### The primitive set is OPEN, and what admits a fifteenth
 
-The set was eleven from phase 1 to phase 5 and the discipline that kept it there is worth stating, because it is now twelve and will not stop on its own.
+The set was eleven from phase 1 to phase 5 and the discipline that kept it there is worth stating, because it is now fourteen and will not stop on its own.
 
 **A primitive is admitted when a class engine needs a WRITE PATH no existing primitive provides.** Not when a skill would read nicely as one, not when a class has a distinctive verb — those are compose steps, and the whole point of the schema is that a distinctive verb is a list of existing steps. The bar is that content cannot produce the state at all.
 
@@ -442,6 +447,13 @@ The set was eleven from phase 1 to phase 5 and the discipline that kept it there
 
 **The twelfth is `shift`** (§8.3, the Wizard). Recorded here rather than in a commit message so the thirteenth has to argue against the same three conditions.
 
+**The thirteenth is `trap`** (§8.3, the Assassin), and it argued against them. Both cheaper options were tested first and both were rejected on the conditions rather than on taste:
+
+- **Could `hazard` carry it with a dormant flag?** No — and the demonstration is what a zone IS, not what it looks like. `addZone` makes `{t, acc, x, y, r, dps, dur, hurts}`, and the zone tick advances a clock, accumulates against a cadence, damages everything inside every 0.4 s, applies the slow rider and splices the zone at `t >= dur`. A trap does **none** of that: no cadence, no damage while it sits there, and it ends by being **consumed** rather than by expiring. Carrying it on `hazard` means a dormant flag, a branch in the tick that skips every single thing the tick does, a payload the tick must ignore, and a consumption path — at which point the object shares its geometry with a zone and not one of its behaviours. That is condition 1 answered by demonstration: no existing primitive writes an inert object.
+- **Is the detonation a rider on the triggering skill?** No, and **condition 2 is exactly the test**. Riders resolve on a target at the moment of impact; a detonation has neither. The skill that sets a trap off may be a heal, a shield, a ward or a shift — none of which touches an enemy — so there is no impact to hang it on. What the moment has is a *cast at a position*, which is caster state. By the same condition that made the Wizard's shift a primitive rather than a rider, the detonation is a property of the **object**, checked in `fireSkill` where casts are already observed.
+
+There was also a cost that is not aesthetic: `fireSkill` runs on every cast in the game, so scanning `sim.zones` — which holds enemy hazards, objective hazards and every player's ground — to find one class's traps would be O(all zones) on every cast forever. `sim.traps` is O(traps).
+
 
 **The fourteenth is `form`** (§8.3, the Blacksmith), and it is the last one phase 5 needs. It was ruled the same way, after an archaeology pass rather than from taste:
 
@@ -450,13 +462,6 @@ The set was eleven from phase 1 to phase 5 and the discipline that kept it there
 - **Gated before the trees.** `engine_gate` asserts the primitive enters the state, that the state reaches the sheet, that entering a second form *replaces* the first, that the engine reads identically fresh and nearly-expired, that expiry releases the stats, and that a `form`-gated skill fires in its form and no other.
 
 **Fourteen is where the set closes for phase 5** — every class in §8.2 is built and no fifteenth is needed. That is worth stating because the set was declared OPEN and the conditions were written to keep it honest; the record is that it grew by three across eleven classes, and each one had to demonstrate rather than assert.
-
-**The thirteenth is `trap`** (§8.3, the Assassin), and it argued against them. Both cheaper options were tested first and both were rejected on the conditions rather than on taste:
-
-- **Could `hazard` carry it with a dormant flag?** No — and the demonstration is what a zone IS, not what it looks like. `addZone` makes `{t, acc, x, y, r, dps, dur, hurts}`, and the zone tick advances a clock, accumulates against a cadence, damages everything inside every 0.4 s, applies the slow rider and splices the zone at `t >= dur`. A trap does **none** of that: no cadence, no damage while it sits there, and it ends by being **consumed** rather than by expiring. Carrying it on `hazard` means a dormant flag, a branch in the tick that skips every single thing the tick does, a payload the tick must ignore, and a consumption path — at which point the object shares its geometry with a zone and not one of its behaviours. That is condition 1 answered by demonstration: no existing primitive writes an inert object.
-- **Is the detonation a rider on the triggering skill?** No, and **condition 2 is exactly the test**. Riders resolve on a target at the moment of impact; a detonation has neither. The skill that sets a trap off may be a heal, a shield, a ward or a shift — none of which touches an enemy — so there is no impact to hang it on. What the moment has is a *cast at a position*, which is caster state. By the same condition that made the Wizard's shift a primitive rather than a rider, the detonation is a property of the **object**, checked in `fireSkill` where casts are already observed.
-
-There was also a cost that is not aesthetic: `fireSkill` runs on every cast in the game, so scanning `sim.zones` — which holds enemy hazards, objective hazards and every player's ground — to find one class's traps would be O(all zones) on every cast forever. `sim.traps` is O(traps).
 
 #### What a primitive owes the world, not just the enemy
 
@@ -587,9 +592,7 @@ All damage routes through the triangle, including hazard and plague ticks. There
 - **Trees are branching graphs, in the Diablo 2 sense.** A node may have several children, so a tree offers paths rather than an order. No cross-tree prerequisites.
 - **One prerequisite per node.** Branching comes from a parent having many children, never from a child having many parents — **convergence is out of v1.** A capstone requiring two branches is the part of D2's model that costs the most authoring care for the least legibility, and `prereq` stays a single id.
 - **Tiers unlock by CHARACTER LEVEL; nodes unlock by prerequisite.** Those are the only two gates. There is deliberately **no points-spent-in-tree requirement** — that is WoW's mechanism, and it exists to force specialisation. This game does not want specialisation forced: a player may spread across all three trees freely.
-- **Scarcity is ranks, not branches.** 270 of 280 skills are rank-uncapped. Against a run's ~69 points, unlocking every node of three trees costs 30 — so the build decision is *which few skills absorb twenty ranks each*, not which branch is foreclosed. **Branching is organisation and dependency, not exclusion.** Taking every node at rank 1 is a legitimate build, and a bad one.
-
-**What the engine already allows.** The load assertion requires a prereq to sit exactly one tier below. That forbids skipping a tier; it never forbade two skills sharing a parent. Verified by authoring one: a second tier-3 node under the same tier-2 parent loads clean and sweeps 0-red. Every consumer is single-parent generic — `canLearn` reads `skill.prereq`, `skill_sweep` walks to the root, nothing tree-shaped goes over the wire. **All 28 trees are 1-per-tier chains by authoring convention, not by constraint.** The missing assertion is reachability: a chain cannot strand a node, a branch can.
+- **Scarcity is ranks, not branches.** 407 of 420 skills are rank-uncapped. Against a run's ~69 points, unlocking every node of three trees costs 30 — so the build decision is *which few skills absorb twenty ranks each*, not which branch is foreclosed. **Branching is organisation and dependency, not exclusion.** Taking every node at rank 1 is a legitimate build, and a bad one.
 
 **THE SHAPE SPEC, established by `samurai_agility` and asserted at load.** The first branching tree is the reference every remaining tree is authored against:
 
@@ -602,15 +605,17 @@ All damage routes through the triangle, including hazard and plague ticks. There
 | **Nodes per tier** | 1, 1, 2, 2, 2, 2 | the two branches run in parallel through the last four tiers |
 | **Capstones** | **2**, one per branch | symmetric — both branches end at tier 10 |
 
-**Sparse tiers are what make the spec and the gate table compatible, and this was the ruling the first tree forced.** Ten nodes across ten *dense* tiers is one node per tier, which is a chain — the shape spec and §8.1.1 are in direct conflict unless a tree may skip tiers. Tier is therefore a **level gate, not a depth counter**, and the load assertion relaxed from "prereq exactly one tier below" to "prereq at a strictly lower tier". That relaxation is precisely the one the reachability check was written in advance of, and it armed the check in the same patch that needed it.
+**Sparse tiers are what make the spec and the gate table compatible.** Ten nodes across ten *dense* tiers is one node per tier, which is a chain — the shape spec and §8.1.1 conflict outright unless a tree may skip tiers. **Tier is a level gate, not a depth counter**, and the enforced rule is that a prereq sits at a *strictly lower* tier, not at the tier immediately below.
+
+*History, once:* that rule was "exactly one tier below" until the first branching tree forced the question, and the reachability assertion had been written in advance of precisely this relaxation — a chain cannot strand a node, a branch can. The check armed in the same patch that loosened the rule it guards.
 
 **Symmetric on purpose.** An asymmetric tree — one long branch carrying the only capstone — is a main line with a detour, not a choice. Both branches are four nodes deep and both terminate at tier 10, so the tier-2 decision is which capstone arrives first. With ~69 points against 30 nodes a player eventually owns both sides; what the branch buys is the ORDER, which at one point per level is most of a run.
 
-**What the assertions enforce** (all at import, all throwing): exactly `TREE_NODES` nodes; exactly one tier-1 node and it must be a damaging active (§5.6's opening pick); every prereq in the same tree; tier strictly decreasing along every prereq edge; every tier within `TIER_LEVELS`, so no node exists that no level unlocks; and every node reachable from the root. They enforce **structure, not shape** — nothing requires a tree to branch, because the 27 chains are still legal until they are converted.
+**What the assertions enforce** (all at import, all throwing): exactly `TREE_NODES` nodes; exactly one tier-1 node and it must be a damaging active (§5.6's opening pick); every prereq in the same tree; tier strictly decreasing along every prereq edge; every tier within `TIER_LEVELS`, so no node exists that no level unlocks; and every node reachable from the root. They enforce **structure, not shape** — nothing requires a tree to branch. Measured: **14 branching trees and 28 chains**, and the chains stay legal until they are converted.
 
 **A THIRD TREE'S TIER-2 PASSIVE IS THE ONE NODE THE DPS GATE CAN SEE, so price it against what its engine PUBLISHES.** `measureDps` runs at level 12: the tier gate reaches tier 4, and a class's two older trees fill all three slots first, so none of a third tree's actives are ever slotted there. The tier-2 passive is always on regardless. Monk Empty Hand's `chiDamageBonus` at 0.010 against an engine publishing up to 45 (CHI_CAP 40 + the focus step) is **+45% on everything** — measured, exactly the outlier the gate reported, and cutting the branch's damage numbers moved the reading by zero. Per-point passive values are not comparable between trees; only value × published maximum is.
 
-**Authoring order.** The 14 new trees are authored against a proven shape spec first; the existing 28 are converted in a later pass. The engine does not force a big bang, and a shape spec proven on 14 real trees is a better thing to convert 28 trees to than one proven on paper.
+**Authoring order — DONE, and the conversion is what remains.** The 14 new trees were authored against the proven shape spec first; the original 28 are converted in a later pass. The engine never forced a big bang, and a spec proven on 14 real trees is a better thing to convert 28 trees to than one proven on paper. All fourteen are built; **no chain has been converted yet**, and that is the only outstanding §8.1 work.
 
 #### 8.1.1 Tier unlock levels — RULED AND ENFORCED
 
@@ -657,47 +662,38 @@ Neither is a tuning error. Both are a tree naming an engine it cannot supply, wh
 
 ### 8.2 Class roster
 
-| # | Class | Home | Tree 1 | Tree 2 | Tree 3 |
-|---|---|---|---|---|---|
-| 1 | Blacksmith | Munich | Tank | DPS | Runes / Crystal Forms |
-| 2 | Wizard | Cairo | Soul | Mystic | Ethereal |
-| 3 | Necromancer | Murmansk | Marrow | Summons | Dark Matter |
-| 4 | Druid | Enumclaw | Tapestry of Beasts | Restoration | Wild Kin & Earth's Wrath |
-| 5 | Mage | Moscow | Arcane Warrior | Buffs / Debuffs | Quantum / Spacetime |
-| 6 | Bard | London | Harmony | Instrument Melee | Sonic / Resonance |
-| 7 | Witch Doctor | Kinshasa | Voodoo Mastery | Alchemy of Decay | Spirit Whisperer |
-| 8 | Samurai | Kyoto | Armor | Tactics | Agility |
-| 9 | Monk | Lhasa | Melee Heals | Gauntlets | Traps |
-| 10 | Assassin | Dubai | Traps | Stealth | Range |
-| 11 | Priest | Rome | Light | Rebuke | Vanquish |
-| 12 | Savage | Mexico City | Primal Fury | Swift Reckoning | Bloodbound Guardian |
-| 13 | Hunter | Sydney | Melee | Marksmanship | Beast Control |
-| 14 | Sundian | Bali | Tide | Regalia | Deluge |
+**Built: 14 of 14 — 42 trees, 420 skills, every class at the ruled three.** Phase 5's class authoring is complete.
+
+The original design named three aspirational trees per class (Blacksmith: Tank / DPS / Runes; Monk: Melee Heals / Gauntlets / Traps; and so on). **Those names are superseded by the built ones below and the table has been removed.** Keeping both invites a reader to cite the target instead of the thing — which is how the README came to describe Footing as granting Reflex.
 
 The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
 
-**Built: 14 of 14** (37 trees, 370 skills). Eight classes are at the ruled three — **Samurai** (Agility), **Bard** (Requiem), **Mage** (Refraction), **Assassin** (Range), **Blacksmith** (Anvil), **Witch Doctor** (Swarm), **Monk** (Empty Hand), **Wizard** (Dissonance) — plus the Necromancer, which had three from the start. The **Druid is at two** (Beasts, Wild Kin) and is the only class still short of three. The **Samurai was the first** — Armor, Tactics and **Agility**, the branching proving ground. The Necromancer has three, the Druid one, and the remaining eleven are still on two. Where a built tree's name differs from the aspiration above, the built name is the one in the code and the one this document uses elsewhere:
+| # | Class | Home | Trees as built |
+|---|---|---|---|
+| 1 | Necromancer | Murmansk | Dark Matter, Marrow, Summons — the only class that shipped with three |
+| 2 | Samurai | Kyoto | Armor, Tactics, **Agility** — the first BRANCHING tree, and §8.1's shape-spec reference |
+| 3 | Bard | London | Cadence, Ensemble, **Requiem** — what to do when the rhythm breaks |
+| 4 | Mage | Moscow | Crystalblade, Collapse, **Refraction** — output that does not require being hit first |
+| 5 | Assassin | Dubai | Killbox, Shadow, **Range** — output that does not require having arrived first |
+| 6 | Blacksmith | Munich | Crystal, Forge, **Anvil** — the gap between forms, made playable rather than shorter |
+| 7 | Witch Doctor | Kinshasa | Effigy, Blight, **Swarm** — what a class built on designating ONE enemy does about a room |
+| 8 | Monk | Lhasa | Chi, Stone Garden, **Empty Hand** — what a Monk at zero Chi still is |
+| 9 | Wizard | Cairo | Attunement, Arcana, **Dissonance** — the cost of a domain shift that lands wrong |
+| 10 | Priest | Rome | Judgment, Grace, **Reckoning** — what the class is worth alone, when a mark has nobody to heal |
+| 11 | Sundian | Bali | Tidewrack, Reef, **Undertow** — the fight that ends before a soak is worth cashing |
+| 12 | Savage | Mexico City | Primal Fury, Bloodbound, **Aftermath** — the sawtooth, and what survives the break |
+| 13 | Hunter | Sydney | Longshot, Houndmaster, **Pincer** — the middle distance the trait abandons |
+| 14 | Druid | Enumclaw | Tapestry of Beasts, Wild Kin, **Restoration** — keeping an animal alive rather than waiting out its revive |
 
-| Class | Trees as built |
-|---|---|
-| Samurai | Armor, Tactics, **Agility** — the first BRANCHING tree, and the §8.1 shape spec's reference |
-| Bard | Cadence, Ensemble, **Requiem** — what to do when the rhythm breaks |
-| Assassin | Killbox, Shadow, **Range** — output that does not require having arrived first |
-| Blacksmith | Crystal, Forge, **Anvil** — the gap between forms, made playable rather than shorter |
-| Witch Doctor | Effigy, Blight, **Swarm** — what a class built on designating ONE enemy does about a room |
-| Monk | Chi, Stone Garden, **Empty Hand** — what a Monk at zero Chi still is, when the ROOM did the emptying |
-| Wizard | Attunement, Arcana, **Dissonance** — the cost of a shift that bet wrong |
-| Druid | Beasts, **Wild Kin** — what the DRUID does; still one short, see §15 |
-| Mage | Crystalblade, Collapse, **Refraction** — how to fill an engine only the enemy can fill |
-| Necromancer | Marrow, Dark Matter, **Summons** — the only class with three |
-| Priest | Judgment, Grace |
-| Sundian | Tidewrack, Reef |
-| Hunter | Longshot, Houndmaster |
-| Savage | Primal Fury, Bloodbound |
+**Bold is the third tree**, authored in phase 5 against §8.1's shape spec. All fourteen branch; all fourteen carry ten nodes across tiers 1/2/4/6/8/10 with one branch point and two capstones.
 
-None remain unbuilt.
+**Every third tree answers a question its first two pose.** That is the authoring rule, not a theme requirement: the Monk's two trees fill and spend Chi and neither says who decides, so Empty Hand is what a Monk at zero still is; the Hunter's trait pays at both ends of the leash and nothing between, so Pincer is the band it abandons. A third tree that added a fourth flavour instead would be content, not an answer.
 
 ### 8.3 Class engines
+
+**EVERY ENGINE WRITE-UP BELOW PREDATES §5.8's DERIVED SCALING, and one sentence updates all of them.** These sections were written when a step declared `scalePer` — a per-point multiplier chosen by whoever authored the tree — and several of them still read as though the per-point value is a design decision of the engine's. **It is not, and cannot be.** Each engine now publishes two numbers in `js/enginescale.js`: its `max` (what it reads when full) and its `contribution` (how much of a skill's damage that full engine is worth). The per-point value is their quotient and nobody chooses it.
+
+What content declares is which engine a step rides and, optionally, a dimensionless `scaleWeight` — a multiple of that engine's standard, defaulting to 1. So where a write-up below says an engine is "worth 0.06 a stack" or similar, read it as *the engine's contribution at full*, and the authoring lever as the weight. `scalePer` is rejected at load. The ceilings that make this necessary are exactly the thing these write-ups differ on: `form` publishes 1 and `chi` publishes 45, so the same per-point number was +5% on one and +225% on the other.
 
 Every class has a mechanical engine no other class has. Each must interact with the trigger system differently — that is the test for whether an engine is real.
 
@@ -1795,6 +1791,14 @@ And the regression test has to be shown to fail. This one was: with both halves 
 
 The false alarm is the other half of the entry. A first draft of the horizontal check measured `panel.scrollWidth` and reported a tier-10 node as 451px past the edge with no way to reach it. The scroller is `.tree-scroll`, per tree, and it offers exactly the 484px needed. **Measuring the wrong element reports a working screen as broken just as readily as a broken one as working**, and the tell was the same one rule 66 names: a finding that arrives with no corroborating symptom from play. The check now names the scroller it asserts about.
 
+70. **A document with no gate drifts faster than the code it governs, and every drift is an edit that added a claim without deleting its predecessor.** Draft 11 was a full reconciliation and the findings were monotonous: §8.2 said the Druid was the only class short of three trees in one sentence and that it had one tree in the next; §5.7's heading asked what admits a *twelfth* primitive above three sections documenting the twelfth, thirteenth and fourteenth; §15 declared Group A "closed for good" and then listed four classes it was waiting on. Four drafts, nineteen instruments on the code, **none on the document that rules it.**
+
+That is rule 68's shape at the level of prose. There, knowing a failure mode made the fix dodge its instance and not its shape; here, knowing a fact made the edit *add* it without asking what it replaced. **An edit to a spec is a replacement, not an append**, and the tell is a paragraph that reads correctly on its own and contradicts the one above it — which no author ever sees, because nobody reads a spec end to end except when reconciling it.
+
+**And most of it was mechanically checkable the whole time.** Not one divergence in the report was a matter of judgement; all but three were a number that had moved, and every one of those numbers exists in the code — trees, skills, classes, primitives, riders, selectors, triggers, engines, the tier table, the instruments in `tools/`. `doc_gate.mjs` compares them and fails when they disagree. It reads counts, never meaning: prose is not assertable and pretending otherwise would produce a gate nobody trusts.
+
+Three properties earn it its place. A claim it cannot FIND fails rather than passes, because a silently-absent assertion is how §16 lost a whole instrument for a draft. It checks membership as well as arity — every tree, primitive and engine must be *named*, since a count can be right about a set with the wrong members (rule 43). And it caught an error in the reconciliation that created it, on its first run: this pass wrote the Druid's second tree as "Beasts" where the registry says "Tapestry of Beasts". **A gate written to catch the last four drafts' mistakes caught the fifth before it shipped**, which is the only evidence that a new instrument is real.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1819,7 +1823,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **9 failing checks**: 0 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 9 with nothing double-counted, and all NINETEEN focused instruments are green — `offence_test`, `skillscreen_test` (the first that drives a real page), `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, plus `validate_items`.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **9 failing checks**: 0 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 9 with nothing double-counted, and all TWENTYONE focused instruments are green — `offence_test`, `skillscreen_test` (the first that drives a real page), `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, `tree_dps`, `doc_gate`, plus `validate_items`.
 
 **Group A closed on the Hunter patch, and that is the whole of the 10 → 9 move.** The set diff added nothing: `expected 2 beasts across 2 Hunters` left, and the two reds the patch created along the way — a `penalty_roll` crash and a DPS outlier at +93% — were both closed inside the same patch as **D-30** and the free-beast retune (§8.3), rather than being carried.
 
@@ -1845,7 +1849,6 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 **GROUP A IS NOW CLOSED FOR GOOD.** With the Blacksmith the roster is complete — fourteen of fourteen built, all selectable, all inside the DPS band — so there is no longer any class this group could be waiting on. It stays in the document as the record of how the group behaved, not as a live section.
 
-**GROUP A WAS EMPTY EVEN BEFORE THAT.** Every check that was waiting on a phase-5 tree has closed, and the four classes that still have no trees — Blacksmith, Monk, Savage and the phase-5 remainder — no longer hold a red line open. The group stays in this document because the next four classes will refill it, and because the exit pattern is worth keeping: of the entries that left, **two closed purely by content arriving, and three needed the fixture corrected as well.** A check labelled "waiting on content" is a check nobody has run against real content, so half of them were also staging bugs. That is not a reason to distrust the label; it is a reason to re-read the fixture on the patch that closes the entry, rather than assuming the content did it.
 
 ### Group B — waiting on a design decision (2 failing, 3 open questions)
 
@@ -1904,7 +1907,7 @@ They are the same category as the seven checks above, and the same category as D
 
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
-### Group D — genuine open defects (0)
+### Group D — genuine open defects (1)
 
 #### D-38 — CLOSED: `select` had no way to say "nothing"
 
@@ -2291,10 +2294,10 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 
 | System | Status |
 |---|---|
-| Trigger system, 11 kinds | Built, gated, measured — `ON_TOKEN` added with summoning |
-| Selectors, 6 rules | Built, required field, no default |
-| Composed-action schema | Built, 11 primitives, **zero bespoke handlers across 60 skills** — scanned, with a negative control |
-| `scaleWith` engine hook | Built, generalised across three engines — footing, armor, pack |
+| Trigger system, 11 kinds | Built, gated, measured — `ON_TOKEN` added with summoning; `MOVEMENT`'s `moving` half was dead until D-36 |
+| Selectors, 7 rules | Built, required field, no default — `self` is the seventh and the honest answer for a step that picks nothing (§5.7) |
+| Composed-action schema | Built, **14 primitives, 13 impact riders**, zero bespoke handlers across **420 skills** — scanned, with a negative control |
+| `scaleWith` engine hook | Built across **14 engines**, and the per-point value is **derived, not authored** — `js/enginescale.js` publishes each engine's max and intended contribution; content declares the engine and an optional dimensionless `scaleWeight` (§5.8). `scalePer` rejected at load |
 | Damage triangle | Built, all damage routed |
 | Telegraphs | Built, 9 telegraphing types, density floor enforced over the REGION TABLE so an undeclared population fails by name |
 | Footing | Built, three-way measured, decision live |
@@ -2308,7 +2311,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Offence gate | Built — `offence_test.mjs` never kills on the player's behalf |
 | Stat gate | Built — `stat_gate.mjs` proves each CHANNEL by effect; **11 of 11 across 10 stats**, Reflex measured on both defence and crit |
 | Item gate | Built **before** the phase-4 pool — `item_gate.mjs`, three layers: coverage, effect, grant. **48 of 48 hook kinds live across 173 items** (D-25 closed) |
-| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect. **124 of 124 land across 15 classes** (D-26 closed). Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair |
+| Rider gate | Built — `rider_gate.mjs`: every declared rider on every skill, asserted by effect, across **13 impact / 2 shape / 4 projectile** riders. Riders content has not taken up yet are probed on a synthetic host, and one whose write path belongs to a TRAIT puts that trait in the chair. `mend` was proven here before the Druid's Restoration was authored against it |
 | Trait gate | Built **after** D-28, which is the wrong order and is why it exists — `trait_gate.mjs`: every trait on the roster reached by the live path and moving its own observable, against a control with the trait key switched off. **14 of 14** |
 | Engine gate | Built **before** phase 5 — `engine_gate.mjs`: every key in `p.engines` filled by play, read by a skill, and claimed by content. **14 of 14** — `footing`, `armor`, `pack`, `shift`, `marks`, `rhythm`, `crystal`, `doll`, `drench`, `killbox`, `spread`, `chi`, `cascade`, `form`. Also asserts, by effect: Grit's anti-synergy with crystallize, the killbox inert-then-consumed pair, the Hunter's trigger origin moving to the beast and refusing to fall back when none is alive, both directions of the Chi loop with its step at zero, the cascade's variety-in / repeat-breaks pair with its asymptotic floor asserted three ways, that no non-Savage can reach the cooldown exemption, the form's enter/replace/binary/expire/gate properties, and the engine-tick registry including the negative case (§8.3) |
 | Difficulty gate | Built — `difficulty_gate.mjs` fights one room per setting; four axes move, XP per kill flat |
@@ -2319,13 +2322,16 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
 | Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
-| Classes 3–14 | **COMPLETE — 14 of 14 built** (28 trees, 280 skills, 14 selectable). Every content-shaped, write-path and tick-shaped class is authored, gated and inside the DPS band. Phase 5's class work is done; what remains for phase 5 is regions 3–8, blocked on `PIXELLAB_API_KEY` |
+| Classes 3–14 | **COMPLETE — 14 of 14 built** (42 trees, 420 skills, 14 selectable). Every class is at the ruled three; all fourteen third trees branch. Phase 5's class work is done. **Outstanding: the original 28 chains are not yet converted to the branching spec** (§8.1) |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |
 | Stats | **All ten live** — §9.5 records intent; Ferocity, Ingenuity and Attunement given their jobs |
 | Modifier tiers | **Magnitude and rider wired** — 16 hooks reconnected to the skill path, read sites recorded in §9.2 |
 | Crit | **Built and ruled** — a roll in `skillDamage()`; chance from Reflex + items, multiplier from `CONFIG.CRIT_MULT_BASE` + items, on a dedicated seeded stream |
 | Economy | **Built** — 27 new items across four tiers, rolled penalties, upgrades, respec, late weighting. `econ_gate` green |
+| Per-tree DPS gate | Built — `tree_dps.mjs`: one tree at a time at level 60 with slots **pinned to that tree**, banded against the **class's own median** rather than a roster median. Exists because `measureDps` runs at level 12 with three slots, which a class's two older trees fill first — **no third tree's actives had ever been measured, on any of the fourteen** (§8.1.2). Also asserts, per class, that every engine its trees READ can actually be SUPPLIED by that class (§13 rule 65) |
+| Immortal / mortal fixture pairing | Built — `tree_dps --mortal`. The default ring is immortal so a tree measures output rather than kill speed; that makes every accumulating effect meaningless, because `applyPlague` adds to `plagueDps` while only refreshing the clock. The mortal ring removes the accumulation and adds its own distortion (overkill is not counted). **Neither is a tuning target alone: out of band under both is real, out of band under one is the instrument** (§13 rule 66) |
+| Skill screen | Built and **driven in a browser** — `skillscreen_test.mjs`: the §5.6 card for all 14 classes, the branching graph asserted by GEOMETRY (edges, lanes, forked columns) rather than by card count, §5.5's map-end spend step opening above the shop, the ◆ unspent-points badge measured on the corner rail, and the panel **staying scrolled** through 1.5 s of meta updates with the deepest node clickable there (§13 rule 69) |
 | Econ gate | Built — `econ_gate.mjs`: cooldown ban, zero-stat rule, stream isolation, respec ladder, reroll escalation and weighting, all by effect |
 
 ---
