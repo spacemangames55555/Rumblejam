@@ -96,7 +96,7 @@ export const MONK_CHI = [
     ranks: R,
   },
   {
-    id: 'monk_rolling_fist', tree: 'monk_chi', tier: 3, name: 'Rolling Fist',
+    id: 'monk_rolling_fist', tree: 'monk_chi', tier: 4, name: 'Rolling Fist',
     desc: 'A turning strike through two. Deals 8 damage, +1.1% per point of Chi.',
     type: 'active', domain: 'physical', prereq: 'monk_gathering_breath',
     select: 'densest_cluster',
@@ -111,7 +111,7 @@ export const MONK_CHI = [
   {
     id: 'monk_mend', tree: 'monk_chi', tier: 4, name: 'Mend',
     desc: 'Spends 10 Chi to restore 18 health when you drop below 55%.',
-    type: 'active', domain: 'spiritual', prereq: 'monk_rolling_fist',
+    type: 'active', domain: 'spiritual', prereq: 'monk_gathering_breath',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.mendCd,
@@ -122,7 +122,7 @@ export const MONK_CHI = [
     // The engine's own investment node — the one passive in the tree, and the
     // only registered way to make a point of Chi worth more without touching a
     // step. Rankable, because it is a damage investment (§8.3).
-    id: 'monk_still_water', tree: 'monk_chi', tier: 5, name: 'Still Water',
+    id: 'monk_still_water', tree: 'monk_chi', tier: 6, name: 'Still Water',
     desc: 'Every point of Chi you hold is worth more. +0.16% damage per point, per rank.',
     type: 'passive', domain: 'mental', prereq: 'monk_mend',
     passive: { chiScaleWeight: T.stillWeight },
@@ -131,7 +131,7 @@ export const MONK_CHI = [
   {
     id: 'monk_hammerfall', tree: 'monk_chi', tier: 6, name: 'Hammerfall',
     desc: 'A dropping heel that throws the front rank back. 11 damage, +1.2% per point of Chi.',
-    type: 'active', domain: 'physical', prereq: 'monk_still_water',
+    type: 'active', domain: 'physical', prereq: 'monk_rolling_fist',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.hammerRadius, count: T.hammerCount },
     cooldown: T.hammerCd,
@@ -145,9 +145,9 @@ export const MONK_CHI = [
     // A `ward` rather than a passive mitigation, for the same reason the
     // Priest's Litany and the Hunter's Blood Trail are actives: `regen` is an
     // ITEM hook, not a registered passive key (§8.3).
-    id: 'monk_breathe_out', tree: 'monk_chi', tier: 7, name: 'Breathe Out',
+    id: 'monk_breathe_out', tree: 'monk_chi', tier: 8, name: 'Breathe Out',
     desc: 'Spends 14 Chi. Absorbs 26 over 4.4s.',
-    type: 'active', domain: 'spiritual', prereq: 'monk_hammerfall',
+    type: 'active', domain: 'spiritual', prereq: 'monk_still_water',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.outCd,
@@ -157,7 +157,7 @@ export const MONK_CHI = [
   {
     id: 'monk_crane_step', tree: 'monk_chi', tier: 8, name: 'Crane Step',
     desc: 'A sweeping turn that leaves the crowd crawling at 76% for 1.3s. 12 damage, +1.3% per point of Chi.',
-    type: 'active', domain: 'physical', prereq: 'monk_breathe_out',
+    type: 'active', domain: 'physical', prereq: 'monk_hammerfall',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.craneRadius, count: T.craneCount },
     cooldown: T.craneCd,
@@ -169,9 +169,9 @@ export const MONK_CHI = [
     ranks: R,
   },
   {
-    id: 'monk_quiet_the_body', tree: 'monk_chi', tier: 9, name: 'Quiet the Body',
+    id: 'monk_quiet_the_body', tree: 'monk_chi', tier: 10, name: 'Quiet the Body',
     desc: 'Spends 18 Chi to restore 30 health when you drop below 40%.',
-    type: 'active', domain: 'spiritual', prereq: 'monk_crane_step',
+    type: 'active', domain: 'spiritual', prereq: 'monk_breathe_out',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 40 },
     cooldown: T.quietCd,
@@ -184,7 +184,7 @@ export const MONK_CHI = [
     // capstone that spent would have made the tree's own end its own drain.
     id: 'monk_empty_hand', tree: 'monk_chi', tier: 10, name: 'Empty Hand',
     desc: 'Everything at once and nothing held back. 17 damage in a wide arc, +1.5% per point of Chi, and what it touches is stunned for 0.6s.',
-    type: 'active', domain: 'physical', prereq: 'monk_quiet_the_body',
+    type: 'active', domain: 'physical', prereq: 'monk_crane_step',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.emptyRadius, count: T.emptyCount },
     cooldown: T.emptyCd,
