@@ -130,7 +130,7 @@ export const SAMURAI_ARMOR = [
     ranks: R,
   },
   {
-    id: 'sam_iron_sleeve', tree: 'samurai_armor', tier: 3, name: 'Iron Sleeve',
+    id: 'sam_iron_sleeve', tree: 'samurai_armor', tier: 4, name: 'Iron Sleeve',
     desc: 'Armour takes the blow you did not. Worth more the longer you have stood.',
     type: 'active', domain: 'physical', prereq: 'sam_set_stance',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -145,7 +145,7 @@ export const SAMURAI_ARMOR = [
   {
     id: 'sam_sweeping_guard', tree: 'samurai_armor', tier: 4, name: 'Sweeping Guard',
     desc: 'A wide sweep that buys back the ground around you.',
-    type: 'active', domain: 'physical', prereq: 'sam_iron_sleeve',
+    type: 'active', domain: 'physical', prereq: 'sam_set_stance',
     select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.sweepRadius, count: T.sweepCount },
     cooldown: T.sweepCd,
@@ -156,9 +156,9 @@ export const SAMURAI_ARMOR = [
     ranks: R,
   },
   {
-    id: 'sam_immovable', tree: 'samurai_armor', tier: 5, name: 'Immovable',
+    id: 'sam_immovable', tree: 'samurai_armor', tier: 8, name: 'Immovable',
     desc: 'Stand long enough and what comes at you starts coming back.',
-    type: 'active', domain: 'mental', prereq: 'sam_sweeping_guard',
+    type: 'active', domain: 'mental', prereq: 'sam_weight',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'MOVEMENT', mode: 'still', seconds: T.immovableSeconds },
     cooldown: T.immovableCd,
@@ -171,7 +171,7 @@ export const SAMURAI_ARMOR = [
   {
     id: 'sam_rebuke', tree: 'samurai_armor', tier: 6, name: 'Rebuke',
     desc: 'The answer to a blow that missed. The one skill here that pays you for moving.',
-    type: 'active', domain: 'physical', prereq: 'sam_immovable',
+    type: 'active', domain: 'physical', prereq: 'sam_sweeping_guard',
     select: 'nearest',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'ON_DODGE', window: T.rebukeWindow },
     cooldown: T.rebukeCd,
@@ -182,9 +182,9 @@ export const SAMURAI_ARMOR = [
     ranks: R,
   },
   {
-    id: 'sam_weight', tree: 'samurai_armor', tier: 7, name: 'Weight of Armor',
+    id: 'sam_weight', tree: 'samurai_armor', tier: 6, name: 'Weight of Armor',
     desc: 'Every stack of footing is worth more grit than it was.',
-    type: 'passive', domain: 'physical', prereq: 'sam_rebuke',
+    type: 'passive', domain: 'physical', prereq: 'sam_iron_sleeve',
     trigger: null, cooldown: 0, compose: [],
     passive: { footingGritBonus: T.weightGritPerStack },
     // §1.3: grants no damage and no duration, so a second point buys nothing.
@@ -194,7 +194,7 @@ export const SAMURAI_ARMOR = [
   {
     id: 'sam_crushing', tree: 'samurai_armor', tier: 8, name: 'Crushing Descent',
     desc: 'Finish what the guard already broke.',
-    type: 'active', domain: 'physical', prereq: 'sam_weight',
+    type: 'active', domain: 'physical', prereq: 'sam_rebuke',
     select: 'lowest_hp',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.crushPct, range: T.crushReach },
     cooldown: T.crushCd,
@@ -205,9 +205,9 @@ export const SAMURAI_ARMOR = [
     ranks: R,
   },
   {
-    id: 'sam_bulwark', tree: 'samurai_armor', tier: 9, name: 'Bulwark',
+    id: 'sam_bulwark', tree: 'samurai_armor', tier: 10, name: 'Bulwark',
     desc: 'Once, on the way down.',
-    type: 'active', domain: 'mental', prereq: 'sam_crushing',
+    type: 'active', domain: 'mental', prereq: 'sam_immovable',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.bulwarkPct },
     cooldown: T.bulwarkCd,
@@ -220,7 +220,7 @@ export const SAMURAI_ARMOR = [
   {
     id: 'sam_unbroken', tree: 'samurai_armor', tier: 10, name: 'Unbroken Line',
     desc: 'The line does not move. Neither do you.',
-    type: 'active', domain: 'physical', prereq: 'sam_bulwark',
+    type: 'active', domain: 'physical', prereq: 'sam_crushing',
     select: 'objective_target',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.unbrokenRadius, count: T.unbrokenCount },
     cooldown: T.unbrokenCd,
