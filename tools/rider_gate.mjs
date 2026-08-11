@@ -448,7 +448,30 @@ for (const u of UNCLAIMED) {
   if (SYNTH_PAYLOAD[u]) CASES.push({ skill: null, kind: 'synthetic', rider: u, cls: '(engine)', synth: true });
 }
 for (const c of CASES) {
-  const obs = OBSERVERS[c.rider];
+  let obs = OBSERVERS[c.rider];
+  // A RIDER WHOSE OBSERVABLE ITS OWN STEP CONSUMES.
+  //
+  // `drench` is watched as standing stacks on an enemy. `sun_undertow`'s Riptide
+  // branch declares `drench` and `sluice` on the SAME step — deliberately, since
+  // the branch exists to complete the soak/hold/cash loop inside one cast for
+  // chaff that will not live through three beats — and `applyImpactRiders` runs
+  // drench first, then sluice, which clears what drench just applied. The peak
+  // is therefore 0 and the gate reported three working skills as never landing.
+  //
+  // The rider does land; its evidence is just somewhere else. Measured on
+  // `sun_undertow_cut`: 204 damage with the sluice stripped, 215 as authored,
+  // and the target's stacks 12 versus 0. So when a step spends what it applies,
+  // the honest observation is the one `sluice` already uses — strip the rider
+  // and compare damage — rather than reading a counter that was never going to
+  // survive the same tick. §13 rule 61's shape once more: the observer inferred
+  // the rider's meaning from every previous instance, and the field gained a
+  // combination.
+  if (c.rider === 'drench' && c.skill) {
+    const sk = SKILL_BY_ID[c.skill];
+    const spends = (sk.compose || []).some(st => st.riders && st.riders.drench && st.riders.sluice);
+    if (spends) obs = { ...obs, peak: undefined, stripped: true,
+      what: 'a step that soaks and cashes in one cast deals more than one that only soaks' };
+  }
   if (!obs) continue;
   let got = NaN, without = null, err = null;
   try {
