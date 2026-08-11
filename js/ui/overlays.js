@@ -647,6 +647,19 @@ export function showSkills(meta, charId, trees) {
   if (!meta || !trees) return;
   SKILLS_STATE = { meta, charId, pickSlot: SKILLS_STATE.pickSlot };
   const el = $('overlay-skills');
+  // SCROLL POSITION SURVIVES THE RE-RENDER.
+  //
+  // This function replaces the panel's whole innerHTML, and `updateSkillsMeta`
+  // calls it on every meta update — which in an arena is many times a second.
+  // Each rebuild destroyed the scrolled element, so `scrollTop` went back to 0
+  // before the player's thumb had left the glass. Reported from playtest as
+  // "won't scroll — snaps back to the top", and the lower tiers of every tree
+  // were unreachable: measured 578px of panel against 817px of content, so a
+  // third of every tree was permanently off-screen and unclickable.
+  //
+  // Captured from the OLD panel and reapplied to the NEW one, because the
+  // element the browser was scrolling does not exist after the assignment.
+  const prevScroll = (el.querySelector('.skills-panel') || {}).scrollTop || 0;
   el.classList.remove('hidden');
   const pts = meta.skillPoints || 0;
   const slots = meta.skillSlots || 0;
@@ -686,6 +699,11 @@ export function showSkills(meta, charId, trees) {
       <button id="skills-close">Close</button>
     </div>`;
 
+  // Reapplied after the DOM exists. Clamped by the browser, so a shorter tree
+  // after a re-render lands at the bottom rather than out of range.
+  const panelEl = el.querySelector('.skills-panel');
+  if (panelEl && prevScroll) panelEl.scrollTop = prevScroll;
+
   el.querySelectorAll('.skill-node[data-buy="1"]').forEach(n => {
     n.onclick = () => { sfx.click(); A.learnSkill(n.dataset.id); };
   });
@@ -712,8 +730,27 @@ export function showSkills(meta, charId, trees) {
 // Redraw in place when the host sends a new meta — a spend or a slot change is
 // answered by the sim, so the screen must show what the HOST agreed to rather
 // than what the click hoped for.
+// AND THE RE-RENDER ONLY HAPPENS WHEN THIS SCREEN'S OWN INPUTS CHANGE.
+//
+// Preserving `scrollTop` fixes the reported bug on its own, but rebuilding the
+// entire panel at meta cadence is what created it — and a full innerHTML swap
+// many times a second also drops hover, focus and any in-flight tap. The meta
+// channel carries the whole player: materials tick, HP ticks, engines tick, and
+// none of that is on this screen.
+//
+// So the panel redraws when one of the six fields it actually displays moves.
+// Cheap and total: a signature over exactly what `showSkills` reads.
+let SKILLS_SIG = null;
+function skillsSignature(meta) {
+  return JSON.stringify([meta.skillPoints, meta.skillSlots, meta.level,
+    meta.materials, meta.canSlot, meta.loadout, meta.skillRanks]);
+}
 export function updateSkillsMeta(meta, trees) {
-  if ($('overlay-skills').classList.contains('hidden')) return;
+  if ($('overlay-skills').classList.contains('hidden')) { SKILLS_SIG = null; return; }
+  if (!meta) return;
+  const sig = skillsSignature(meta);
+  if (sig === SKILLS_SIG) { SKILLS_STATE.meta = meta; return; }
+  SKILLS_SIG = sig;
   showSkills(meta, SKILLS_STATE.charId, trees);
 }
 
