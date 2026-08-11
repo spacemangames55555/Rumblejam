@@ -41,6 +41,8 @@ import { SMITH_ANVIL, TUNING as SMITH_ANVIL_TUNING } from './content/skills/smit
 import { WD_SWARM, TUNING as WD_SWARM_TUNING } from './content/skills/wd_swarm.js';
 import { MONK_EMPTY_HAND, TUNING as MONK_EH_TUNING } from './content/skills/monk_empty_hand.js';
 import { WIZARD_DISSONANCE, TUNING as WIZ_DIS_TUNING } from './content/skills/wizard_dissonance.js';
+import { PRIEST_RECKONING, TUNING as PRI_REC_TUNING } from './content/skills/priest_reckoning.js';
+import { SUN_UNDERTOW, TUNING as SUN_UND_TUNING } from './content/skills/sun_undertow.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
@@ -56,6 +58,7 @@ export const TREES = {
   wizard_arcana: { id: 'wizard_arcana', name: 'Arcana', classId: 'toh_wizard', skills: WIZARD_ARCANA, tuning: WIZ_ARC_TUNING },
   priest_judgment: { id: 'priest_judgment', name: 'Judgment', classId: 'toh_priest', skills: PRIEST_JUDGMENT, tuning: PRI_JUD_TUNING },
   priest_grace: { id: 'priest_grace', name: 'Grace', classId: 'toh_priest', skills: PRIEST_GRACE, tuning: PRI_GRA_TUNING },
+  priest_reckoning: { id: 'priest_reckoning', name: 'Reckoning', classId: 'toh_priest', skills: PRIEST_RECKONING, tuning: PRI_REC_TUNING },
   bard_cadence: { id: 'bard_cadence', name: 'Cadence', classId: 'toh_bard', skills: BARD_CADENCE, tuning: BARD_CAD_TUNING },
   bard_ensemble: { id: 'bard_ensemble', name: 'Ensemble', classId: 'toh_bard', skills: BARD_ENSEMBLE, tuning: BARD_ENS_TUNING },
   mage_crystalblade: { id: 'mage_crystalblade', name: 'Crystalblade', classId: 'toh_mage', skills: MAGE_CRYSTALBLADE, tuning: MAGE_CRY_TUNING },
@@ -64,6 +67,7 @@ export const TREES = {
   wd_blight: { id: 'wd_blight', name: 'Blight', classId: 'toh_witch_doctor', skills: WD_BLIGHT, tuning: WD_BLI_TUNING },
   sun_tidewrack: { id: 'sun_tidewrack', name: 'Tidewrack', classId: 'toh_sundian', skills: SUN_TIDEWRACK, tuning: SUN_TID_TUNING },
   sun_reef: { id: 'sun_reef', name: 'Reef', classId: 'toh_sundian', skills: SUN_REEF, tuning: SUN_REEF_TUNING },
+  sun_undertow: { id: 'sun_undertow', name: 'Undertow', classId: 'toh_sundian', skills: SUN_UNDERTOW, tuning: SUN_UND_TUNING },
   asn_killbox: { id: 'asn_killbox', name: 'Killbox', classId: 'toh_assassin', skills: ASN_KILLBOX, tuning: ASN_KB_TUNING },
   asn_shadow: { id: 'asn_shadow', name: 'Shadow', classId: 'toh_assassin', skills: ASN_SHADOW, tuning: ASN_SH_TUNING },
   hun_longshot: { id: 'hun_longshot', name: 'Longshot', classId: 'toh_hunter', skills: HUN_LONGSHOT, tuning: HUN_LS_TUNING },

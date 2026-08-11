@@ -1773,6 +1773,12 @@ The fix is not a better fixture; it is a second one that fails differently. `--m
 
 The discipline this generalises: before tuning content to a gate, move one of the gate's assumptions and see whether the finding survives. That is cheaper than the retune and it is the only thing that distinguishes a defect from a fixture. It also caught a smaller instance in the same pass — the fixture staged `ON_STATUS` by calling `applyPlague` with a magnitude, and `applyPlague` credits its damage to the caster, so **29% of the Necromancer's class median was damage the harness dealt on the player's behalf**. The yardstick was inside the thing being measured.
 
+67. **A rider whose observable its own step consumes reads as a rider that never landed.** `rider_gate` watches `drench` as standing stacks on an enemy. `sun_undertow`'s Riptide branch declares `drench` and `sluice` on the same step — deliberately, because the branch exists to fit the soak/hold/cash loop inside one cast for chaff that will not survive three beats — and `applyImpactRiders` runs drench first, then sluice, which clears what drench just applied. Peak 0, and three working skills reported as doing less than they say.
+
+The rider lands; its evidence is somewhere else. Measured: 204 damage with the sluice stripped against 215 as authored, and the target's stacks 12 against 0. So the honest observation is the one `sluice` itself already uses — strip the rider and compare damage — rather than reading a counter that was never going to survive the same tick.
+
+This is rule 61 in a third costume. The observer generalised from every previous instance of `drench`, all of which stood alone, and **the field did not gain a value this time — it gained a COMBINATION.** A fixture can be correct about each declaration in isolation and wrong about them together, and that is a larger surface than new values: `n` riders admit `n²` pairs, and nothing enumerates them. The defence that worked here is the one rule 61 already names — the new content arrived with a gate run, and the gate failed loudly rather than quietly measuring the wrong thing.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
