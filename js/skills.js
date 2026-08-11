@@ -45,6 +45,7 @@ import { PRIEST_RECKONING, TUNING as PRI_REC_TUNING } from './content/skills/pri
 import { SUN_UNDERTOW, TUNING as SUN_UND_TUNING } from './content/skills/sun_undertow.js';
 import { SAV_AFTERMATH, TUNING as SAV_AFT_TUNING } from './content/skills/sav_aftermath.js';
 import { HUN_PINCER, TUNING as HUN_PIN_TUNING } from './content/skills/hun_pincer.js';
+import { DRUID_RESTORATION, TUNING as DRUID_RES_TUNING } from './content/skills/druid_restoration.js';
 import { NECRO_SUMMONS, TUNING as SUMMONS_TUNING } from './content/skills/necro_summons.js';
 import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_beasts.js';
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
@@ -96,6 +97,7 @@ export const TREES = {
   wizard_dissonance: { id: 'wizard_dissonance', name: 'Dissonance', classId: 'toh_wizard', skills: WIZARD_DISSONANCE, tuning: WIZ_DIS_TUNING },
   necro_summons: { id: 'necro_summons', name: 'Summons', classId: 'toh_necromancer', skills: NECRO_SUMMONS, tuning: SUMMONS_TUNING },
   druid_beasts: { id: 'druid_beasts', name: 'Tapestry of Beasts', classId: 'toh_druid', skills: DRUID_BEASTS, tuning: BEASTS_TUNING },
+  druid_restoration: { id: 'druid_restoration', name: 'Restoration', classId: 'toh_druid', skills: DRUID_RESTORATION, tuning: DRUID_RES_TUNING },
 };
 
 export const ALL_SKILLS = Object.values(TREES).flatMap(t => t.skills);
