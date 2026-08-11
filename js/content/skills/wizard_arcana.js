@@ -77,7 +77,7 @@ export const WIZARD_ARCANA = [
     ranks: R,
   },
   {
-    id: 'wiz_mind_spike', tree: 'wizard_arcana', tier: 3, name: 'Mind Spike',
+    id: 'wiz_mind_spike', tree: 'wizard_arcana', tier: 4, name: 'Mind Spike',
     desc: 'Finds the weakest thing in range and finishes it. 11 damage below 55% health.',
     type: 'active', domain: 'mental', prereq: 'wiz_frost_nail',
     select: 'lowest_hp',
@@ -89,7 +89,7 @@ export const WIZARD_ARCANA = [
   {
     id: 'wiz_kindled_ground', tree: 'wizard_arcana', tier: 4, name: 'Kindled Ground',
     desc: 'The floor burns where the crowd is thickest. 5 damage a tick over 3.4s.',
-    type: 'active', domain: 'physical', prereq: 'wiz_mind_spike',
+    type: 'active', domain: 'physical', prereq: 'wiz_frost_nail',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.kindleRadius, count: T.kindleCount },
     cooldown: T.kindleCd,
@@ -105,7 +105,7 @@ export const WIZARD_ARCANA = [
     // adding a reader in `skillsim.js`, which is engine code this pair is not
     // supposed to need. The `heal` primitive already exists and says the same
     // thing about the character.
-    id: 'wiz_arcane_recovery', tree: 'wizard_arcana', tier: 5, name: 'Arcane Recovery',
+    id: 'wiz_arcane_recovery', tree: 'wizard_arcana', tier: 6, name: 'Arcane Recovery',
     desc: 'Draws 16 health back out of the weave when you fall below 65%.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_kindled_ground',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -117,7 +117,7 @@ export const WIZARD_ARCANA = [
   {
     id: 'wiz_shatterpoint', tree: 'wizard_arcana', tier: 6, name: 'Shatterpoint',
     desc: 'A close arc that cracks armour. 13 damage, and what it touches takes 24% more for 2.4s.',
-    type: 'active', domain: 'mental', prereq: 'wiz_arcane_recovery',
+    type: 'active', domain: 'mental', prereq: 'wiz_mind_spike',
     select: 'highest_hp',
     trigger: { kind: 'PROXIMITY', radius: T.shatterRadius, count: T.shatterCount },
     cooldown: T.shatterCd,
@@ -128,9 +128,9 @@ export const WIZARD_ARCANA = [
     ranks: R,
   },
   {
-    id: 'wiz_ley_surge', tree: 'wizard_arcana', tier: 7, name: 'Ley Surge',
+    id: 'wiz_ley_surge', tree: 'wizard_arcana', tier: 10, name: 'Ley Surge',
     desc: 'A wave of spirit through the crowd. 10 damage in a 1.9-radian fan.',
-    type: 'active', domain: 'spiritual', prereq: 'wiz_shatterpoint',
+    type: 'active', domain: 'spiritual', prereq: 'wiz_null_field',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.leyRadius, count: T.leyCount },
     cooldown: T.leyCd,
@@ -140,7 +140,7 @@ export const WIZARD_ARCANA = [
   {
     id: 'wiz_null_field', tree: 'wizard_arcana', tier: 8, name: 'Null Field',
     desc: 'A shell of nothing. Absorbs 30 over 4.5s when you drop below 45% health.',
-    type: 'active', domain: 'mental', prereq: 'wiz_ley_surge',
+    type: 'active', domain: 'mental', prereq: 'wiz_arcane_recovery',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.nullCd,
@@ -148,9 +148,9 @@ export const WIZARD_ARCANA = [
     ranks: R,
   },
   {
-    id: 'wiz_starfall', tree: 'wizard_arcana', tier: 9, name: 'Starfall',
+    id: 'wiz_starfall', tree: 'wizard_arcana', tier: 8, name: 'Starfall',
     desc: 'Three falling motes, each leaving a burn. 12 damage plus 9 over 2.4s.',
-    type: 'active', domain: 'spiritual', prereq: 'wiz_null_field',
+    type: 'active', domain: 'spiritual', prereq: 'wiz_shatterpoint',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.starRadius, count: T.starCount },
     cooldown: T.starCd,
