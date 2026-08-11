@@ -109,6 +109,134 @@ try {
     ok(`clicking a node SPENDS a point through the real path: ${before.pts} → ${after.pts} points, ${before.ranks} → ${after.ranks} learned`);
   } else no(`spending did not work: buyable ${before.buyable}, ${before.pts}→${after.pts} pts, ${before.ranks}→${after.ranks} ranks`);
 
+  // ------------------------------------------------------------------------
+  // IT HAS TO SCROLL, AND STAY SCROLLED (§13 rule 54).
+  //
+  // Reported from playtest: the screen snapped back to the top on every attempt
+  // and the lower tiers of every tree were unreachable. `showSkills` replaces
+  // the panel's whole innerHTML and `updateSkillsMeta` called it on every meta
+  // update — many times a second in an arena — so the element the browser was
+  // scrolling stopped existing before the thumb left the glass. Measured 578px
+  // of panel against 817px of content: a third of every tree permanently off
+  // screen, on a screen whose entire job is choosing between nodes.
+  //
+  // Three claims, because two of them can pass while the screen is still
+  // broken: that it CAN scroll, that the scroll SURVIVES the re-render, and
+  // that the node down there is CLICKABLE where it now sits. The third is the
+  // check that caught the §5.6 card being visible and unreachable.
+  await P.exec(`
+    const p = window.uv.sim.players[0];
+    p.level = 60; p.skillPoints = 40; p.metaDirty = true; return 1;`);
+  await sleep(700);
+  const deep = await P.exec(`
+    const el = document.getElementById('overlay-skills');
+    const panel = el.querySelector('.skills-panel');
+    // the lowest node on the screen — whatever needs scrolling to reach
+    let best = null, bestY = -1;
+    for (const n of el.querySelectorAll('.node-at')) {
+      const t = n.offsetTop + (n.offsetParent ? n.offsetParent.offsetTop : 0);
+      if (t > bestY) { bestY = t; best = n; }
+    }
+    if (best) best.dataset.uvDeep = '1';
+    const inner = best ? best.querySelector('.skill-node') : null;
+    return { has: best ? 1 : 0, id: inner ? inner.dataset.id : (best ? '(card with no .skill-node)' : null),
+             canScroll: Math.round(panel.scrollHeight - panel.clientHeight),
+             clientH: Math.round(panel.clientHeight), scrollH: Math.round(panel.scrollHeight) };`);
+  if (deep.has && deep.canScroll > 0) ok(`the panel has ${deep.canScroll}px to scroll (${deep.clientH} visible of ${deep.scrollH}) and a deepest node "${deep.id}"`);
+  else no(`nothing to scroll or no node to reach: ${JSON.stringify(deep)} — if the content fits, this check is measuring the wrong layout`);
+
+  await P.exec(`
+    const el = document.getElementById('overlay-skills');
+    const panel = el.querySelector('.skills-panel');
+    const n = el.querySelector('.node-at[data-uv-deep="1"]');
+    panel.scrollTop = panel.scrollHeight;   // all the way down, as a thumb would
+    if (n) n.scrollIntoView({ block: 'center' });
+    return 1;`);
+  // long enough for several meta updates to land — the whole point of the bug
+  await sleep(1500);
+  const held = await P.exec(`
+    const el = document.getElementById('overlay-skills');
+    const panel = el.querySelector('.skills-panel');
+    const n = el.querySelector('.node-at[data-uv-deep="1"]');
+    if (!n) return { gone: 1, top: Math.round(panel.scrollTop) };
+    const r = n.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+    const cx = Math.round(r.left + r.width / 2), cy = Math.round(r.top + r.height / 2);
+    const hit = document.elementFromPoint(cx, cy);
+    return {
+      gone: 0,
+      top: Math.round(panel.scrollTop),
+      inView: (r.top >= pr.top - 1 && r.bottom <= pr.bottom + 1) ? 1 : 0,
+      // clickable where it now sits: the point resolves to the node itself
+      clickable: hit && (hit === n || n.contains(hit)) ? 1 : 0,
+      hit: hit ? (hit.className || hit.tagName) : 'none',
+    };`);
+  console.log('  ', JSON.stringify(held));
+  if (!held.gone && held.top > 0) ok(`the scroll SURVIVES the re-render — still at ${held.top}px after 1.5s of meta updates`);
+  else no(`the panel scrolled back to ${held.top} — this is the reported defect: showSkills replaces the DOM and the scrolled element stops existing`);
+  if (held.inView) ok('the deepest node is inside the panel viewport at that scroll position');
+  else no('the deepest node scrolled out of view again');
+  if (held.clickable) ok('and it is CLICKABLE there — elementFromPoint at its centre returns the node, not whatever is painted over it');
+  else no(`the node is visible but unreachable: elementFromPoint returned "${held.hit}" — the §5.6 defect's shape on a different panel`);
+
+  // AND IT MUST STILL SPEND FROM DOWN THERE. Visible and clickable is two of
+  // three; the third is that the click reaches the host.
+  const spend = await P.exec(`
+    const before = window.uv.sim.players[0].skillPoints;
+    const n = document.querySelector('#overlay-skills .node-at[data-uv-deep="1"] .skill-node[data-buy="1"]')
+      || document.querySelector('#overlay-skills .skill-node[data-buy="1"]');
+    if (n) n.click();
+    return { before, clicked: n ? 1 : 0 };`);
+  await sleep(500);
+  const spent = await P.exec(`return window.uv.sim.players[0].skillPoints;`);
+  if (spend.clicked && spent < spend.before) ok(`and a node clicked at that scroll position spends: ${spend.before} → ${spent}`);
+  else no(`clicking from the scrolled position did not spend: ${JSON.stringify(spend)} → ${spent}`);
+
+  // AND THE FAR TIERS HAVE TO BE REACHABLE SIDEWAYS TOO.
+  //
+  // Six tier columns at CELL_W 132 + GAP_X 38 is roughly 1020px of graph, and a
+  // landscape phone is 740-844 wide. The vertical half of this bug was reported
+  // from play; this is the same question on the other axis, asked because the
+  // node cards are ABSOLUTELY POSITIONED — an absolutely-positioned child does
+  // not contribute to its scroll container's scrollWidth, so a column can sit
+  // outside the panel with the browser reporting nothing to scroll to. Visible
+  // in the DOM, present in every count, and unreachable by any gesture.
+  //
+  // THE SCROLLER IS `.tree-scroll`, PER TREE — not the panel. The first draft of
+  // this check measured `panel.scrollWidth` and reported a working screen as
+  // broken, which is the same mistake this suite exists to catch one level up.
+  const wide = await P.exec(`
+    const el = document.getElementById('overlay-skills');
+    const out = [];
+    for (const sc of el.querySelectorAll('.tree-scroll')) {
+      const graph = sc.querySelector('.tree-graph');
+      const sr = sc.getBoundingClientRect();
+      let worstOver = 0, worst = null;
+      // measured against the SCROLLER's box, at its current scroll offset
+      for (const n of sc.querySelectorAll('.node-at')) {
+        const over = Math.round(n.offsetLeft + n.offsetWidth - sc.clientWidth);
+        if (over > worstOver) { worstOver = over; worst = n; }
+      }
+      out.push({
+        graphW: graph ? Math.round(graph.getBoundingClientRect().width) : 0,
+        viewW: Math.round(sc.clientWidth),
+        canScrollX: Math.round(sc.scrollWidth - sc.clientWidth),
+        worstOver,
+        id: worst ? ((worst.querySelector('.skill-node') || {}).dataset || {}).id || '?' : null,
+      });
+    }
+    return out;`);
+  console.log('  ', JSON.stringify(wide));
+  const unreachable = wide.filter(r => r.worstOver > 0 && r.canScrollX < r.worstOver);
+  if (!wide.length) no('no .tree-scroll containers — the horizontal scroller this check names does not exist');
+  else if (!unreachable.length) {
+    const widest = wide.reduce((a, b) => (b.worstOver > a.worstOver ? b : a));
+    ok(`every tier is reachable sideways — widest tree overhangs its ${widest.viewW}px view by ${widest.worstOver}px `
+      + `and .tree-scroll offers ${widest.canScrollX}px (the absolutely-positioned cards DO extend its scrollWidth)`);
+  } else {
+    no(`${unreachable.length} tree(s) have a column no gesture can reach, worst "${unreachable[0].id}" `
+      + `${unreachable[0].worstOver}px past a scroller offering ${unreachable[0].canScrollX}px`);
+  }
+
   await P.exec(`document.getElementById('skills-close').click(); return 1;`);
   await sleep(200);
   const closed = await P.exec(`return document.getElementById('overlay-skills').classList.contains('hidden')?1:0`);
