@@ -20,6 +20,20 @@ import { canEnter } from './saves.js';
 // because gold is a per-run resource a player can choose to gamble on; levels
 // are permanent and must not be.
 export const DIFFICULTIES = [
+  // GENTLE IS A FLOOR, NOT A RUNG. The four settings below it are a preference
+  // ladder tuned around Standard; this one is a testing and accessibility
+  // setting and is deliberately outside that tuning. Half HP, half damage, half
+  // density — Measured's ×0.85 is a lighter touch, not an easier game, and a
+  // playtester or a player who needs one cannot use a 15% discount.
+  //
+  // It obeys both of §4.1's rules rather than being excused from them. Gold is
+  // 0.7 because the ladder is asserted STRICTLY monotonic on all four axes, so
+  // a floor that paid Measured's 0.9 would not be below it; and it declares no
+  // `xp`, because the exclusion is what stops the hardest setting becoming the
+  // only correct choice and an easiest one that paid less XP would make the
+  // accessibility setting a penalty.
+  { id: 'gentle', name: 'Gentle', hp: 0.5, dmg: 0.5, density: 0.5, gold: 0.7,
+    desc: 'Half of everything that can hurt you. For learning the vault, and for playing it on a bad day.' },
   { id: 'measured', name: 'Measured', hp: 0.85, dmg: 0.85, density: 0.85, gold: 0.9,
     desc: 'The vault takes its time with you.' },
   { id: 'standard', name: 'Standard', hp: 1.0, dmg: 1.0, density: 1.0, gold: 1.0,

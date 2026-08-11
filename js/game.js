@@ -23,7 +23,7 @@ import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING
 import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
 import { nodePopulation, nodeModifiers } from './nodebehaviour.js';
 import { REGION_BY_INDEX, depthMult } from './regions.js';
-import { difficultyOf } from './worldmap.js';
+import { difficultyOf, DEFAULT_DIFFICULTY } from './worldmap.js';
 import { BOSS_BY_FLOOR } from './content/bosses.js';
 import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
@@ -52,10 +52,17 @@ const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', domain: 'mental', behavior
 const TIER_WEIGHTS = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 40, 20]];
 
 export class Sim {
-  constructor({ seed, party, allowUnplayable = false }) {
+  constructor({ seed, party, allowUnplayable = false, difficulty = DEFAULT_DIFFICULTY }) {
     // see _makePlayer: an explicit, named opt-out for tests that measure a
     // class's TRAIT rather than whether it can win a fight
     this.allowUnplayable = allowUnplayable;
+    // §4.1. THIS FIELD WAS READ AND NEVER WRITTEN. `_spawnEnemy` has called
+    // `difficultyOf(this.difficulty)` since phase 2 and no constructor ever set
+    // it, so it was `undefined` on every Sim in the game's history and the
+    // lookup fell through to Standard. The gate that owns §4.1 was green
+    // throughout, because it constructed its own Sims and assigned the field by
+    // hand — a fixture provisioning what the product does not (§13 rule 17).
+    this.difficulty = difficulty;
     this.seed = seed >>> 0;
 
     // THE SIM STREAM. Every incidental roll the simulation makes — spawn

@@ -9,6 +9,7 @@ import { TIER_NAMES } from '../config.js';
 import { glossify, glossName } from './gloss.js';
 import { getVolume, setVolume, sfx } from '../audio.js';
 import { getTouchMode, setTouchMode } from '../touch.js';
+import { DIFFICULTIES, DEFAULT_DIFFICULTY } from '../worldmap.js';
 
 const $ = id => document.getElementById(id);
 let A = null; // actions
@@ -137,6 +138,14 @@ export function showLobby(lobby, isHost, myKey) {
         </div>`;
       }).join('')}
       </div>
+      ${isHost ? `<div class="diff-row">
+        <div class="diff-label">DIFFICULTY</div>
+        <div class="diff-picks">${DIFFICULTIES.map(d => `
+          <button class="diff-pick ${(lobby.difficulty || DEFAULT_DIFFICULTY) === d.id ? 'on' : ''}"
+                  data-diff="${d.id}" title="${escapeHtml(d.desc)}">${escapeHtml(d.name)}</button>`).join('')}</div>
+        <div class="diff-desc dim small">${escapeHtml((DIFFICULTIES.find(d => d.id === (lobby.difficulty || DEFAULT_DIFFICULTY)) || {}).desc || '')}</div>
+      </div>` : `<div class="diff-row"><div class="diff-label">DIFFICULTY</div>
+        <div class="dim small">${escapeHtml((DIFFICULTIES.find(d => d.id === (lobby.difficulty || DEFAULT_DIFFICULTY)) || {}).name || '')} — the host chooses</div></div>`}
       <div class="row spread" style="margin-top:14px;">
         <button id="btn-leave">Leave</button>
         <div class="row">
@@ -151,6 +160,17 @@ export function showLobby(lobby, isHost, myKey) {
     // too — this is the affordance, not the enforcement.
     if (card.dataset.locked) return;
     card.onclick = () => { sfx.click(); A.pickChar(card.dataset.char); };
+  });
+  // §4.1's ladder, reachable. It existed as a table, `difficultyOf` read it, and
+  // `app.lobby.difficulty` was assigned by NOTHING — so every run in the game's
+  // history has been Standard, and a player looking for an easier setting found
+  // a lobby with two buttons on it. Same shape as the §5.6 opening card and the
+  // unspent skill points: a system that works and nothing surfaces (§13 rule 54).
+  //
+  // Host-only because the run is host-authoritative and one party plays one
+  // difficulty; the guest sees the choice rather than a blank.
+  el.querySelectorAll('.diff-pick').forEach(b => {
+    b.onclick = () => { sfx.click(); A.setDifficulty(b.dataset.diff); };
   });
   $('btn-leave').onclick = () => { sfx.click(); A.leave(); };
   const rb = $('btn-ready');
