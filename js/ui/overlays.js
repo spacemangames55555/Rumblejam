@@ -718,7 +718,15 @@ export function updateSkillsMeta(meta, trees) {
 }
 
 export function isSkillsOpen() { return !$('overlay-skills').classList.contains('hidden'); }
-export function closeSkills() { $('overlay-skills').classList.add('hidden'); SKILLS_STATE.pickSlot = null; }
+// Closing the tree screen is also the map-end spend step's exit (§5.5). Told to
+// the host unconditionally: if no step is open the host drops it, and making
+// the close path conditional would mean the one panel with two ways to open it
+// had two ways to close it, only one of which the host hears.
+export function closeSkills() {
+  $('overlay-skills').classList.add('hidden');
+  SKILLS_STATE.pickSlot = null;
+  if (A && A.spendDone) A.spendDone();
+}
 
 // ---------------- character sheet ----------------
 // Live view of one player's build: all sixteen stats (base shown where it

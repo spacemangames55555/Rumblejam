@@ -296,6 +296,7 @@ export class Sim {
       lastKillT: -10, roomFirstKillT: -10,
       critCounter: 0, critArmed: false, jesterOdds: 0,
       boonCounts: {}, boonOffer: null, boonTemp: null, openingOffer: null,
+      spendOffer: 0,       // §5.5 map-end spend step: points waiting when the room cleared
       // ToH per-player state is stamped on by tohInitPlayer below
       roomVitGain: 0,      // Vesper per-room overheal→Vitality cap tracker
       carrying: null, channelT: 0, // Overseer turret carry/redeploy
@@ -1039,6 +1040,9 @@ export class Sim {
     }
     // the valley after every peak: extraction includes a shop browse
     for (const p of this.livePlayers()) tohClearFight(this, p);   // Blacksmith: infuse a crystal
+    // POINTS, THEN ITEMS. Both are opened here; the ordering is the client's
+    // stacking rather than a host-side gate — see _offerSpend.
+    for (const p of this.livePlayers()) this._offerSpend(p);
     for (const p of this.livePlayers()) this._openShop(p, 'clear');
     // The extraction portal — leave via the same consent countdown. Breach is
     // the exception: its far gate IS the portal, so there is no mid-map hatch
@@ -1080,6 +1084,7 @@ export class Sim {
     this.pushEvent({ k: 'lootOver', collected: this.fightLoot, lost });
     if (this.floorNum >= CONFIG.FLOORS) { this.pendingEnd = 0.8; return; }
     this.hatch = this._openSpot(this.W / 2, this.H / 2); // descend from here
+    for (const p of this.livePlayers()) this._offerSpend(p);   // points, then items
     for (const p of this.livePlayers()) this._openShop(p, 'boss');
   }
 
@@ -1115,8 +1120,9 @@ export class Sim {
     this.pickups.length = 0; this.decoys.length = 0;
     this.telegraphs.length = 0; this.zones.length = 0; this.vortexes.length = 0;
     this.hazards = [];
-    // boons expire with the fight
-    for (const p of this.players) { p.boonTemp = null; p.boonOffer = null; }
+    // boons expire with the fight, and so does the map-end spend step — the
+    // moment has passed, and the ◆ badge is what carries unspent points forward
+    for (const p of this.players) { p.boonTemp = null; p.boonOffer = null; p.spendOffer = 0; }
     for (const p of this.livePlayers()) this._recomputeStats(p);
     this._mapEvent();
   }
@@ -1928,7 +1934,7 @@ export class Sim {
   // owner can see NEVER moves on its own.
   _tickStructureRecall(p, dt) {
     // paused, not cancelled, while an overlay owns the player's attention
-    const busy = p.downed || p.shop || p.pendingOffer || p.treasureOffer || p.boonOffer || p.openingOffer;
+    const busy = p.downed || p.shop || p.pendingOffer || p.treasureOffer || p.boonOffer || p.openingOffer || p.spendOffer;
     if (busy) return;                       // hold the timer where it is
     if (p.moving) { p.relocT = 0; return; } // any movement cancels outright
     const offscreen = this._ownedStructures(p).some(s => this._structOffscreen(p, s));
@@ -3371,6 +3377,31 @@ export class Sim {
     this.pushEvent({ k: 'opening', idx: p.idx, picks });
   }
 
+  // §5.5's MAP-END SPEND STEP — points before purchases.
+  //
+  // The tree screen has existed since phase 1 and nothing in the run ever
+  // pointed at it. Reported from play: level 7 after map 1 of region 1, six
+  // unspent points, never once prompted. A build system the player has to
+  // remember to open is a build system most players never use.
+  //
+  // The moment is the post-clear lull, which already hosts the shop — and the
+  // ORDER matters rather than merely the presence: what you slot changes what
+  // you want to buy, so the spend comes first and the shop opens behind it.
+  //
+  // THIS DOES NOT GATE THE SHOP, and that is the §5.6 lesson rather than
+  // timidity. D-32 was a live offer whose panel never rendered; had the shop
+  // been held behind it, a client that misses this panel would lose the shop
+  // too. The host offers both, `pend` carries presence, and the client stacks
+  // skills above the shop (`#overlay-skills` z-index 26 against the shop's 10).
+  // Worst case is a missed prompt, never a stalled run — and `tools/
+  // skillscreen_test.mjs` drives it in a browser, because a thing the player
+  // must SEE is not proven by a sim assertion that the offer exists (rule 54).
+  _offerSpend(p) {
+    if (p.gone || p.skillPoints <= 0) return;
+    p.spendOffer = p.skillPoints;
+    this.pushEvent({ k: 'spend', idx: p.idx, points: p.skillPoints });
+  }
+
   // THE ANTI-SOFTLOCK FLOOR, and it is the same rule `setLoadout` already
   // enforces one layer up: never leave a player with no way to deal damage.
   // A panel is a thing a client can miss — dismissed, disconnected, never
@@ -4009,6 +4040,11 @@ export class Sim {
         SK.spendSkillPoint(this, p, pick.id);
         break;
       }
+      // The spend step's only exit. Unlike the boon card there is nothing to
+      // consume — the points are spent through `learn`, one at a time, and this
+      // just says the player is done looking. A player who closes it with
+      // points still unspent is making a choice, and the ◆ badge keeps saying so.
+      case 'spendDone': { p.spendOffer = 0; break; }
       case 'boon': {
         if (!p.boonOffer) return;
         const pick = p.boonOffer.find(o => o.id === msg.id) || p.boonOffer[0];
@@ -4365,6 +4401,10 @@ export class Sim {
           // That is closed defect #4's shape — a lost open — reached by a new
           // route. Presence here is the truth for this panel too.
           p.openingOffer ? 1 : 0,
+          // AND THE MAP-END SPEND STEP, for the same reason as every row above
+          // it: presence is the truth, so a lost close costs nothing and a lost
+          // open is recovered by the next snapshot rather than being permanent.
+          p.spendOffer ? 1 : 0,
         ]),
         // The run being over is the most load-bearing edge there is: a client
         // that missed `end` sits in a dead run with no results and no way out.

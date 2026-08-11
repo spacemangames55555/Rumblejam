@@ -375,6 +375,23 @@ Passives are always on; actives must be slotted.
 
 Loadout changes happen at the world map, at Shrine nodes, and between rooms — never mid-fight.
 
+#### The map-end spend step — points before items
+
+**Nothing in the run ever pointed at the tree screen.** Reported from play: level 7 after map 1 of region 1, six unspent points, never once prompted. The screen had existed since phase 1, the points were correct, and every sim assertion about them passed — because "the player has points" was never the claim in doubt.
+
+The moment is the post-clear lull in `_clearArena`, which already hosts the shop. **The order is the ruling, not merely the presence:** what you slot changes what you want to buy, so the spend step is raised before `_openShop`. The same at the siege's `_tickLoot`.
+
+The rule above already permits it and needed no change — the map-end lull *is* "between rooms". Checked at the instant rather than assumed from the phase: `canSlot` is `!(phase === 'arena' && !cleared)`, and `this.cleared` is set before the shop opens, so the loadout row is unlocked there despite `phase` still being `'arena'`.
+
+**It does not gate the shop, and that is §5.6's lesson rather than timidity.** D-32 was a live offer whose panel never rendered; had the shop been held behind this one, a client that misses the panel would lose the shop too. The host opens both, `pend` carries presence, and the client stacks skills (z 26) above the shop (z 10). Worst case is a missed prompt, never a stalled run — and what the player experiences as "first" is therefore entirely the stacking, which is why the browser check asserts `elementFromPoint` at the panel's centre lands inside it.
+
+**And a moment can be dismissed, so the state outlives it.** The ◆ button carries a pulsing count whenever `skillPoints > 0` — a count rather than a dot, because six waiting and one waiting are different decisions.
+
+Two things found while building it, both invisible to the sim:
+
+- **`#skills-btn` had no CSS rule at all.** Its three neighbours on the bottom-right rail are absolutely positioned; the button that opens the build screen was the one that was never placed, so it sat in the document flow. The badge check asserts geometry — button on the rail, badge on the button — because a badge anchored to an unplaced button is a badge nobody finds.
+- **The panel shipped in the client's `st.pend` block alone and never rendered in solo.** That is D-32 verbatim, on a new panel, three paragraphs below a comment in the same file explaining that the host never applies `st` to itself. The browser suite caught it inside one run. See §13 rule 64.
+
 ### 5.6 The opening ability
 
 Characters start with **no abilities at all**. The first point spent is the character's opening ability, chosen from the tier-1 nodes of their trees. **Every tree's tier-1 node must be a damaging active**, asserted at load.
@@ -1733,6 +1750,12 @@ Detecting this is not enough, because an audit only runs when somebody suspects 
 The general form: **when a declaration's correct value depends on something the author has to look up, the author will eventually not look it up.** Move the lookup into the code and leave the author a number whose default is right. The tell that a field is in this category is that two sites with the same value mean different things.
 
 Two corollaries this migration produced. **Prove a mechanical migration preserves calibration by re-deriving every site, not by counting them** — 126 sites moved and the worst effective drift across all 181 was 1.0%, which is a claim a diff can support and a pass count cannot. And **a load assertion written against the new units catches the old content by construction**: the codemod faithfully preserved the Monk's broken calibration as `scaleWeight: 4.17`, and the gate refused it on the first load. The migration did not need to know which content was wrong.
+
+64. **A known defect's fix does not generalise on its own — the next thing built on the same route walks into it again.** D-32 was a live §5.6 offer whose panel never rendered in solo: the host derives nothing from the state block it builds, so panels driven off `st.pend` work for clients and are invisible to the host. It was found, fixed, and written up in a fourteen-line comment. §5.5's map-end spend step then shipped in the `st.pend` block alone — **three paragraphs below that comment, in the same function** — and was invisible in solo for exactly the same reason.
+
+The comment was not ignored; it was read as a description of a closed defect rather than as a constraint on every panel that follows. **A postmortem explains what went wrong once. Only a check refuses it twice.** The browser suite caught this inside one run and named the state precisely — `offer: 5, skillsOpen: 0` — which is the whole argument for rule 54 restated from the other end: the sim assertions were green the entire time, and they were green about a different claim.
+
+The practical form: when a fix hardens ONE consumer of a shared route, ask what else takes that route, and write the check at the route rather than at the consumer. Here that means every entry in `pend` needs a host-side presence read, and the browser test asserts panels *render*, not that offers *exist*.
 
 ### 13.1 The through-line
 

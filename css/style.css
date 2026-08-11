@@ -268,6 +268,26 @@ body.touch-on .overlay.overlay-boon{padding-bottom:calc(20vh + 8px);}
 #sheet-btn{position:absolute; right:102px; bottom:10px; width:38px; height:38px; border-radius:50%; font-size:16px; opacity:.7;}
 #sheet-btn:hover{opacity:1; border-color:var(--gold);}
 
+/* THE ◆ SKILLS BUTTON HAD NO RULE AT ALL. Its three neighbours are absolutely
+   positioned along the bottom-right; this one was never given a position, so it
+   sat in the document flow instead of on the corner rail — the button that opens
+   the build screen was the one button not placed. Found while adding the badge. */
+#skills-btn{position:absolute; right:148px; bottom:10px; width:38px; height:38px; border-radius:50%; font-size:16px; opacity:.7;}
+#skills-btn:hover{opacity:1; border-color:var(--xp);}
+
+/* UNSPENT POINTS, ALWAYS VISIBLE (§5.5). The map-end step is a moment and a
+   moment can be dismissed; this is the state that outlives it. A count rather
+   than a dot because "6 waiting" and "1 waiting" are different decisions, and
+   pulsing rather than static because the whole defect was a thing on screen
+   that nobody looked at. */
+#skills-btn.has-points{opacity:1; border-color:var(--xp); color:var(--xp);}
+#skills-pts{position:absolute; right:140px; bottom:38px; min-width:18px; height:18px; padding:0 4px;
+  border-radius:9px; background:var(--xp); color:#0a0b12; font-weight:bold; font-size:12px; line-height:18px;
+  text-align:center; pointer-events:none; z-index:41; animation:ptspulse 1.6s ease-in-out infinite;}
+@keyframes ptspulse{0%,100%{transform:scale(1);}50%{transform:scale(1.18);}}
+body.touch-on #skills-btn{width:48px; height:48px; right:172px; font-size:20px; opacity:.85;}
+body.touch-on #skills-pts{right:162px; bottom:48px;}
+
 /* ---------- owned build (shop) + character sheet ---------- */
 .owned-head{margin-top:12px; margin-bottom:5px; font-size:13px; letter-spacing:1px; color:var(--gold);}
 .owned-row{display:flex; flex-wrap:wrap; gap:6px; max-height:132px; overflow-y:auto; padding:2px;}
