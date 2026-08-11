@@ -31,6 +31,26 @@
 //    player picks among exactly those three and the class's own median is the
 //    only thing "in band" can honestly mean here.
 //
+// THE DUMMIES ARE IMMORTAL BY DEFAULT, AND THAT IS A LOAD-BEARING ASSUMPTION
+// RATHER THAN A CONVENIENCE. It stops a tree that clears the room in ten
+// seconds from measuring its kill speed instead of its output — and it makes
+// every reading of an ACCUMULATING effect meaningless. `applyPlague` does
+// `plagueDps += amt / dur` while only refreshing `plagueT`, so a stacking dot
+// compounds without limit on a body that never dies; and a trigger condition
+// held true every tick for thirty seconds (`p.trigEvents.kill = 1`) is a state
+// no room produces. Measured on `wd_swarm`: 52 unstaged, 1251 with `kill` held,
+// 1587 with `kill` and the HP threshold both held, and **12 when the enemies
+// actually die**. The gate read 2266 and called it +5012%.
+//
+// So `--mortal` is the cross-check, and neither reading is a tuning target on
+// its own: the immortal ring inflates anything that accumulates, and the mortal
+// ring caps every tree at its overkill (damage past an enemy's last hit point
+// is not counted, so it compresses the roster toward kill rate). **A tree out
+// of band under both is genuinely hot. A tree out of band under one is telling
+// you about the fixture.** Under `--mortal` all thirty-seven are in band, which
+// is why the base-damage pass those eight red rows seemed to demand was not
+// made: there was nothing under them.
+//
 // AND THE STAGING ANSWERS DECLARATIONS RATHER THAN ASSUMING THEM (§13 rule 61).
 // A tree whose actives fire on ON_DODGE, SELF_THRESHOLD or MOVEMENT produces
 // zero in an unstaged run, and a zero that means "never triggered" reads
@@ -45,6 +65,18 @@ import { CONFIG } from '../js/config.js';
 import * as SKILLSIM from '../js/skillsim.js';
 
 const VERBOSE = process.argv.includes('--verbose');
+// MORTAL DUMMIES — the cross-check, not the default.
+//
+// The default ring is immortal so a tree that clears the room in ten seconds
+// measures its output rather than its kill speed. That is right for comparing
+// trees and WRONG for anything that accumulates on a body: `applyPlague` does
+// `plagueDps += amt/dur` while only refreshing `plagueT`, so a stacking dot
+// compounds without limit on a target that never dies. Under `--mortal` the
+// dummies die and respawn at a fixed HP, which is the shape a real room has.
+// A tree out of band under BOTH readings is genuinely hot; a tree out of band
+// only under the immortal one is telling you about the fixture.
+const MORTAL = process.argv.includes('--mortal');
+const MORTAL_HP = 900;
 const LEVEL = 60;            // tier 10 unlocks here; every node learnable
 const SECONDS = 30;          // long enough for a 9s capstone to come round thrice
 const TICKS = SECONDS * 60;
@@ -218,12 +250,28 @@ function measureTree(treeId) {
     if (plan.hurtPct !== undefined) p.hp = Math.max(1, p.stats.vitality * (plan.hurtPct - 10) / 100);
     for (const d of dummies) {
       d.e.x = d.x; d.e.y = d.y; d.e.knockX = d.e.knockY = 0;
-      d.e.maxHp = 2e9;
-      // A wounded target for TARGET_THRESHOLD; full otherwise. Held rather
-      // than set once, for the same reason as the conditions above.
-      d.e.hp = plan.wounded ? 2e8 : 1e9;
+      if (MORTAL) {
+        // respawn on death, statuses cleared with the body — a new enemy is
+        // not the old one carrying forty stacks of someone else's plague
+        d.e.maxHp = MORTAL_HP;
+        if (!(d.e.hp > 0) || !d.e.active) {
+          d.e.hp = plan.wounded ? MORTAL_HP * 0.2 : MORTAL_HP;
+          d.e.plagueDps = 0; d.e.plagueT = 0; d.e.slowT = 0; d.e.markT = 0;
+        }
+      } else {
+        d.e.maxHp = 2e9;
+        // A wounded target for TARGET_THRESHOLD; full otherwise. Held rather
+        // than set once, for the same reason as the conditions above.
+        d.e.hp = plan.wounded ? 2e8 : 1e9;
+      }
     }
-    if (plan.status) for (const d of dummies) if (!(d.e.plagueT > 0)) sim.applyPlague(d.e, 20, 5, p, plan.status);
+    // A STATUS, NOT A SOURCE OF DAMAGE. `applyPlague` attributes its damage to
+    // the caster, so staging it with a magnitude put ~20 dps of the FIXTURE's
+    // own damage into `p.damageDealt` — on `necro_dark_matter` and
+    // `sun_tidewrack`, which are both their class's median and therefore the
+    // yardstick every other tree is measured against. Magnitude 0 leaves
+    // `plagueT` set, which is all an ON_STATUS trigger reads.
+    if (plan.status) for (const d of dummies) if (!(d.e.plagueT > 0)) sim.applyPlague(d.e, 0, 5, p, plan.status);
     sim.tick();
     for (const k of declared) peak[k] = Math.max(peak[k], (p.engines && p.engines[k]) || 0);
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
@@ -308,7 +356,8 @@ function supplyRun(classId, keys, w) {
 }
 
 // ---------------------------------------------------------------- run
-console.log(`PER-TREE DPS — level ${LEVEL}, ${slotsAtLevel(LEVEL)} slots pinned to the tree, ${SECONDS}s window\n`);
+console.log(`PER-TREE DPS — level ${LEVEL}, ${slotsAtLevel(LEVEL)} slots pinned to the tree, ${SECONDS}s window` +
+  `${MORTAL ? `, MORTAL dummies (${MORTAL_HP} HP, respawning)` : ', immortal dummies'}\n`);
 
 const byClass = new Map();
 for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
