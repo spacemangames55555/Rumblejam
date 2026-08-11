@@ -111,6 +111,9 @@ initOverlays({
   pickBoon: id => sendUi({ kind: 'boon', id }),
   pickOpening: id => sendUi({ kind: 'opening', id }),
   learnSkill: id => sendUi({ kind: 'learnSkill', id }),
+  // The map-end spend step's only exit (§5.5). Sent on every close of the tree
+  // screen, not just the prompted one — the host drops it when no step is open.
+  spendDone: () => sendUi({ kind: 'spendDone' }),
   setSlot: (slot, id) => sendUi({ kind: 'setSlot', slot, id }),
   combine: (a, b, id, tier) => sendUi({ kind: 'combine', a, b, id, tier }),
   sellWeapon: (slot, id, tier) => sendUi({ kind: 'sellWeapon', slot, id, tier }),
@@ -836,6 +839,13 @@ function applySnapState(snap) {
     if (!mine[2]) closeTreasure();
     if (!mine[3]) closeBoon();
     if (!mine[4]) closeOpening(); else showOpeningFromPend();
+    // §5.5's MAP-END SPEND STEP. Presence, like every row above — but unlike
+    // the card panels this one OPENS ONCE rather than every snapshot: the tree
+    // screen is interactive (slot picker, node clicks) and re-rendering it at
+    // 15 Hz would eat every click. `spendSeen` is the edge; the pend row is
+    // still what closes it, so a lost close costs nothing.
+    if (!mine[5]) { app.spendSeen = false; }
+    else if (!app.spendSeen) { app.spendSeen = true; toggleSkills(true); }
   }
 
   // ---- the run being over ----
@@ -992,6 +1002,16 @@ function drainSimOutputs(initial = false) {
     if (me && !me.gone) {
       if (me.openingOffer) showOpeningFromPend();
       else closeOpening();
+      // AND §5.5's MAP-END SPEND STEP, for exactly the reason written above it.
+      // This was shipped in the `st.pend` block alone and the browser suite
+      // caught it inside one run: the offer was live with five points and the
+      // panel never rendered in solo, because the host reads its own players
+      // rather than the state block it just built. That is D-32 verbatim, on a
+      // new panel, three paragraphs under a comment describing it — which is
+      // why "a thing the player must see needs a browser check" is a rule and
+      // not a preference (§13 rule 54).
+      if (me.spendOffer) { if (!app.spendSeen) { app.spendSeen = true; toggleSkills(true); } }
+      else app.spendSeen = false;
     }
   }
 }

@@ -115,6 +115,126 @@ try {
   if (closed) ok('and it closes on its own button'); else no('the close button did not close it');
 
   // ------------------------------------------------------------------------
+  // THE BADGE — unspent points, visible without opening anything (§5.5).
+  //
+  // Reported from play: level 7 after map 1 of region 1 with six unspent points
+  // and no prompt anywhere. Every sim assertion about skill points passed the
+  // whole time, because "the player has points" was never the claim in doubt.
+  // This is the claim in doubt, so it is measured the only way it can be: by
+  // reading the rendered page (§13 rule 54).
+  //
+  // Geometry, not just presence. The ◆ button had NO CSS rule at all — its
+  // three neighbours on the corner rail are absolutely positioned and it was
+  // never given a position, so the button that opens the build screen was the
+  // one button not placed. A badge anchored to an unplaced button is a badge
+  // nobody finds, so this asserts the button is ON the rail and the badge is ON
+  // the button rather than merely in the DOM.
+  await P.exec(`
+    const p = window.uv.sim.players[0];
+    p.skillPoints = 6; p.metaDirty = true; return 1;`);
+  await sleep(700);
+  const badge = await P.exec(`
+    const b = document.getElementById('skills-pts'), btn = document.getElementById('skills-btn');
+    const bb = b.getBoundingClientRect(), rb = btn.getBoundingClientRect();
+    const sheet = document.getElementById('sheet-btn').getBoundingClientRect();
+    return {
+      shown: b.classList.contains('hidden') ? 0 : 1,
+      text: b.textContent,
+      lit: btn.classList.contains('has-points') ? 1 : 0,
+      // visible pixels, not just a class
+      area: Math.round(bb.width * bb.height),
+      // the badge overlaps the button it belongs to
+      onButton: (bb.left < rb.right + 12 && bb.right > rb.left - 12 && bb.top < rb.bottom + 12 && bb.bottom > rb.top - 12) ? 1 : 0,
+      // and the button sits on the same bottom rail as its neighbour
+      onRail: Math.abs(rb.bottom - sheet.bottom) < 14 ? 1 : 0,
+      btnArea: Math.round(rb.width * rb.height),
+    };`);
+  console.log('  ', JSON.stringify(badge));
+  if (badge.shown && badge.text === '6' && badge.lit && badge.area > 200) {
+    ok(`the badge shows the COUNT without opening anything: "${badge.text}" over a lit ◆, ${badge.area}px of it`);
+  } else no(`unspent points are not visible on the HUD: ${JSON.stringify(badge)}`);
+  if (badge.onRail && badge.onButton) {
+    ok(`the ◆ button is on the corner rail and the badge is on the button (${badge.btnArea}px button)`);
+  } else no(`placement is wrong — onRail ${badge.onRail}, onButton ${badge.onButton}. A badge on an unplaced button is a badge nobody finds`);
+
+  // and it goes away when the points are gone, or it becomes decoration
+  await P.exec(`const p = window.uv.sim.players[0]; p.skillPoints = 0; p.metaDirty = true; return 1;`);
+  await sleep(700);
+  const gone = await P.exec(`
+    return {shown: document.getElementById('skills-pts').classList.contains('hidden')?0:1,
+            lit: document.getElementById('skills-btn').classList.contains('has-points')?1:0};`);
+  if (!gone.shown && !gone.lit) ok('and it clears when there is nothing to spend — a badge that never goes out is decoration');
+  else no(`the badge survived spending down to zero: ${JSON.stringify(gone)}`);
+
+  // ------------------------------------------------------------------------
+  // THE MAP-END SPEND STEP, DRIVEN (§5.5).
+  //
+  // The sim proves the offer is raised and raised before the shop. It cannot
+  // prove the panel arrives on screen, and that is precisely the claim D-32
+  // falsified once already: a live `openingOffer` with six sim assertions green
+  // and nothing rendered, because the host never applies its own state block.
+  // The spend step reaches the client by the same route, so it earns the same
+  // check rather than inheriting confidence from the one next to it.
+  //
+  // ABOVE THE SHOP is half the ruling. "Points first, then items" is not a
+  // host-side gate — the host opens both, deliberately, so a client that misses
+  // this panel still gets the shop — which means the ORDER the player
+  // experiences is entirely the stacking. `elementFromPoint` at the panel's own
+  // centre is the check that catches a panel something else paints over; it is
+  // what caught the §5.6 card behind the map screen's z-index.
+  await P.exec(`
+    const s = window.uv.sim, p = s.players[0];
+    const fight = s.floor.nodes.find(n => n.kind === 'combat' && !s.visited.has(n.id));
+    s._travelTo(fight.id);
+    p.skillPoints = 5; p.metaDirty = true;
+    return 1;`);
+  await sleep(400);
+  await P.exec(`
+    const s = window.uv.sim;
+    s.wave.done = true; s.spawnQueue.length = 0;
+    for (const e of [...s.enemyPool]) s.enemyPool.release(e);
+    s.players[0].skillPoints = 5;
+    return 1;`);
+  await sleep(1400);
+  const step = await P.exec(`
+    const sk = document.getElementById('overlay-skills'), sh = document.getElementById('overlay-shop');
+    const open = !sk.classList.contains('hidden');
+    const r = sk.getBoundingClientRect();
+    const hit = open ? document.elementFromPoint(Math.round(r.left + r.width/2), Math.round(r.top + 24)) : null;
+    return {
+      cleared: window.uv.sim.cleared ? 1 : 0,
+      offer: window.uv.sim.players[0].spendOffer || 0,
+      skillsOpen: open ? 1 : 0,
+      shopOpen: sh.classList.contains('hidden') ? 0 : 1,
+      // both offered, and the one the player must answer first is on top
+      zSkills: +getComputedStyle(sk).zIndex || 0,
+      zShop: +getComputedStyle(sh).zIndex || 0,
+      // nothing is painting over it
+      onTop: hit ? (sk.contains(hit) ? 1 : 0) : 0,
+      hit: hit ? (hit.id || hit.className || hit.tagName) : 'none',
+    };`);
+  console.log('  ', JSON.stringify(step));
+  if (step.cleared && step.offer === 5 && step.skillsOpen) {
+    ok(`the spend step OPENS ITSELF at the map end — ${step.offer} points, panel on screen without the player knowing the tree screen exists`);
+  } else no(`the spend step did not appear at the clear: ${JSON.stringify(step)}`);
+  if (step.shopOpen && step.zSkills > step.zShop && step.onTop) {
+    ok(`points before items: the shop is open behind it (z ${step.zShop}) and the spend panel is on top (z ${step.zSkills}), unobstructed — elementFromPoint lands inside it`);
+  } else no(`the ordering the player experiences is wrong: skills z${step.zSkills} shop z${step.zShop}, shopOpen ${step.shopOpen}, onTop ${step.onTop} (hit "${step.hit}")`);
+
+  await P.exec(`document.getElementById('skills-close').click(); return 1;`);
+  await sleep(600);
+  const after2 = await P.exec(`
+    return {offer: window.uv.sim.players[0].spendOffer || 0,
+            skills: document.getElementById('overlay-skills').classList.contains('hidden')?0:1,
+            shop: document.getElementById('overlay-shop').classList.contains('hidden')?0:1,
+            badge: document.getElementById('skills-pts').classList.contains('hidden')?0:1};`);
+  if (!after2.offer && !after2.skills && after2.shop) {
+    ok('closing it answers the step and reveals the shop underneath — one panel dismissed, not two');
+  } else no(`closing the spend step left the run in a bad state: ${JSON.stringify(after2)}`);
+  if (after2.badge) ok('and the ◆ badge still says points are waiting — the moment can be dismissed, the state cannot');
+  else no('the badge vanished when the step was dismissed, which is the original defect with extra steps');
+
+  // ------------------------------------------------------------------------
   // EVERY CLASS, IN THE BROWSER — because one class is not coverage.
   //
   // This suite tested the Samurai and the Samurai only, and a playtest of the

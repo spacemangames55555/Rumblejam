@@ -5445,5 +5445,102 @@ if (SETUP_CLEARS.length) {
   for (const [r, n] of byReason) console.log(`  x${n}  ${r}`);
   console.log('  Whether a player can win a fight is measured by tools/offence_test.mjs, never here.');
 }
+// ---- 17. §5.5's map-end spend step: points before purchases ----
+//
+// Reported from play: level 7 after map 1 of region 1, six unspent points, and
+// nothing in the run ever pointed at the tree screen. The screen had existed
+// since phase 1.
+//
+// What this file can prove is the FLOW — that the offer is raised at the clear,
+// that it is raised before the shop, and that it is not raised when there is
+// nothing to spend. What it deliberately does NOT claim is that a player can
+// see it: `tools/skillscreen_test.mjs` drives the badge and the panel in a real
+// browser, because "the offer exists" and "the offer is on screen" are
+// different claims and D-32 was the second one failing while the first passed
+// (§13 rule 54).
+try {
+  const sim = new Sim({ seed: 606, party: [{ idx: 0, key: 'k', name: 'SP', charId: T1_REFERENCE, color: '#fff' }] });
+  const p = sim.players[0];
+  SKILLSIM.answerOpening(sim, p);
+  const fight = sim.floor.nodes.find(n => n.kind === 'combat');
+  sim._travelTo(fight.id);
+
+  // ORDER, NOT JUST PRESENCE. Both offers are opened in the same frame by
+  // design — the host must never gate the shop behind a panel a client might
+  // not render — so "first" is the order of the calls, and the client's
+  // z-index is what the player experiences. Recorded here so a reorder of
+  // _clearArena is a red check rather than a silent inversion.
+  const order = [];
+  // SAMPLED AT THE CLEAR, NOT AFTER IT. `clearArena` runs the harness all the
+  // way through extraction, and `_finishNode` drops the step on the way out —
+  // correctly, since the moment has passed. Reading `p.spendOffer` at the end
+  // of the helper measures the teardown rather than the offer, which is §13
+  // rule 59's shape: the reader ends up on the wrong side of the thing it
+  // claims to check and reports a working feature as absent.
+  let atClear = null, pendAtClear = null, canSlotAtClear = null;
+  const realShop = sim._openShop.bind(sim), realSpend = sim._offerSpend.bind(sim);
+  sim._openShop = (q, c) => { if (q.idx === 0) order.push('shop'); return realShop(q, c); };
+  sim._offerSpend = (q) => {
+    if (q.idx !== 0) return realSpend(q);
+    order.push('spend');
+    const r = realSpend(q);
+    atClear = q.spendOffer;
+    canSlotAtClear = sim.getMeta(q).canSlot;
+    pendAtClear = (sim.getSnapshot().st.pend || []).find(x => x[0] === 0);
+    return r;
+  };
+
+  // NOT `clearArena`. That helper calls `drain`, which spends every point the
+  // moment it appears — a bot that plays the build system perfectly, which is
+  // right for flow tests and exactly wrong here: the case under test is a
+  // player who has NOT spent, and the helper makes that state unreachable.
+  p.skillPoints = 4;
+  for (let i = 0; i < 60 * 300 && sim.phase === 'arena' && !sim.cleared; i++) {
+    sim.tick();
+    for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
+    if (i % 240 === 0) clearFieldForSetup(sim, p, 'the spend-step fixture needs a cleared room, not a won fight');
+  }
+
+  if (atClear === 4) ok(`the spend step is offered at the clear, carrying the count: ${atClear} point(s)`);
+  else fail(`spend step not offered at the clear: spendOffer ${JSON.stringify(atClear)} with 4 points unspent`);
+
+  const iSpend = order.indexOf('spend'), iShop = order.indexOf('shop');
+  if (iSpend >= 0 && iShop >= 0 && iSpend < iShop) ok('points before items: the spend step is raised ahead of the shop');
+  else fail(`spend/shop order wrong: ${JSON.stringify(order)} — §5.5 asks for the build decision first`);
+
+  // §5.5's own rule, checked at the instant the step opens rather than assumed
+  // from the phase. `cleared` is set before the shop opens, so the loadout is
+  // unlocked here even though phase is still 'arena'.
+  if (canSlotAtClear === true) ok('the loadout is unlocked at the map-end step — §5.5\'s "between rooms", inside a still-arena phase');
+  else fail(`canSlot is ${canSlotAtClear} at the map-end spend step — the step would open a screen whose loadout row is locked`);
+
+  if (pendAtClear && pendAtClear[5] === 1) ok('the spend step rides `pend` — presence, so a lost close costs nothing (closed defect #4)');
+  else fail(`the spend step is not in the snapshot's pend row: ${JSON.stringify(pendAtClear)}`);
+
+  p.spendOffer = 3;
+  sim.uiAction(0, { kind: 'spendDone' });
+  if (!p.spendOffer) ok('spendDone is an exit that always works — nothing to consume, so it cannot be double-spent');
+  else fail('spendDone did not clear the step');
+
+  // AND IT MUST NOT FIRE ON AN EMPTY POCKET. A prompt that opens with nothing
+  // to spend is the same defect as no prompt at all, one step further on.
+  const sim2 = new Sim({ seed: 607, party: [{ idx: 0, key: 'k', name: 'SP', charId: T1_REFERENCE, color: '#fff' }] });
+  const p2 = sim2.players[0];
+  SKILLSIM.answerOpening(sim2, p2);
+  sim2._travelTo(sim2.floor.nodes.find(n => n.kind === 'combat').id);
+  let opened2 = false;
+  const realSpend2 = sim2._offerSpend.bind(sim2);
+  sim2._offerSpend = (q) => { const r = realSpend2(q); if (q.idx === 0 && q.spendOffer) opened2 = true; return r; };
+  p2.skillPoints = 0;
+  for (let i = 0; i < 60 * 300 && sim2.phase === 'arena' && !sim2.cleared; i++) {
+    sim2.tick();
+    for (const q of sim2.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
+    if (i % 240 === 0) clearFieldForSetup(sim2, p2, 'the spend-step fixture needs a cleared room, not a won fight');
+    p2.skillPoints = 0;   // held at zero: banked levels would otherwise fund it
+  }
+  if (!opened2) ok('no spend step with nothing to spend');
+  else fail('the spend step opened with no points — an empty prompt is the same defect one step on');
+} catch (e) { fail('map-end spend step', e); }
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');
 process.exit(failures ? 1 : 0);

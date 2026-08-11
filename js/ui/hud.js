@@ -14,6 +14,7 @@ export function showHud(on) {
   $('leave-btn').classList.toggle('hidden', !on);
   $('sheet-btn').classList.toggle('hidden', !on);
   $('skills-btn').classList.toggle('hidden', !on);
+  if (!on) $('skills-pts').classList.add('hidden');
   if (!on) {
     $('hud-players').innerHTML = '';
     $('hud-toasts').innerHTML = '';
@@ -61,6 +62,22 @@ export function updateHud(meta, view, hctx) {
     top += ` — <b style="color:var(--danger)">${escapeHtml(hctx.boss.name)}</b> ${bossBar(hctx.boss)}`;
   }
   $('hud-floor').innerHTML = top;
+  // UNSPENT SKILL POINTS, ON SCREEN AT ALL TIMES (§5.5).
+  //
+  // Reported from play: level 7 after map 1 of region 1 with six unspent points
+  // and no prompt anywhere. The tree screen existed the whole time; nothing
+  // said to open it. The map-end spend step is the moment, and this is the
+  // state that outlives it — a moment can be dismissed, and a player who
+  // dismisses it still has to be able to see that points are waiting.
+  //
+  // Driven in a browser by tools/skillscreen_test.mjs rather than asserted in
+  // the sim, because "the points exist" and "the player can see the points" are
+  // different claims and only the second one is the defect (§13 rule 54).
+  const pts = meta ? (meta.skillPoints || 0) : 0;
+  const ptsEl = $('skills-pts');
+  ptsEl.classList.toggle('hidden', !(pts > 0));
+  if (pts > 0) ptsEl.textContent = String(pts);
+  $('skills-btn').classList.toggle('has-points', pts > 0);
   $('hud-materials').innerHTML = meta ? `◆ ${meta.materials} <span class="dim" style="font-size:13px">· lvl ${meta.level}${meta.banked > 0 ? ` · <b style="color:var(--xp)">+${meta.banked} level-up${meta.banked > 1 ? 's' : ''} banked</b>` : ''}</span>` : '';
   // the enemy counter: "incoming" while the spawn budget flows, then the exact
   // number alive — the switch is the sweep signal (leave stragglers, run for money)
