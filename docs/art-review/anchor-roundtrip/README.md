@@ -130,3 +130,58 @@ not as a ruling:
 
 Rerunning after a clause edit is 8 more generations. That is the loop to be in
 until a generated unit sits next to the Druid, and only then a batch.
+
+---
+
+# Attempt 2 — the clause was rewritten to name value structure. It did not land.
+
+Same enemy, same anchor cell, same seed, same 8 generations and 117 s. The
+clause was rewritten to lead with value rather than palette: *low-key value
+structure, true black outline and shadow mass at the darkest value in the
+palette, body in low mid-tones below middle grey, highlights sparing and small
+in area, never a pale or washed-out body*, with palette demoted to *held low in
+value*.
+
+| | target (Druid) | attempt 1 | attempt 2 |
+|---|---|---|---|
+| luma median | **56** | 119 | **109** |
+| luma p25 | **24** | 56 | 49 |
+| luma p95 | 174 | 173 | 189 |
+| darkest 15% mean | **0.3** | 16.2 | **17.1** |
+| saturation median | 0.42 | 0.52 | 0.56 |
+| near-grey | 13.7% | 2.3% | 2.1% |
+
+- [`03-attempt2-vs-anchor.png`](03-attempt2-vs-anchor.png) — Druid, attempt 1,
+  attempt 2, south facing at 1×/2×/3×.
+- [`04-attempt2-facings.png`](04-attempt2-facings.png) — south beside north.
+- [`attempt2-sources/`](attempt2-sources/), [`hulk-sheet-attempt2.png`](hulk-sheet-attempt2.png).
+
+**Ten points of median against the fifty-three needed.** The black floor moved
+the wrong way (16.2 → 17.1) and so did saturation. Visually it is the same pale
+peach body with slightly more green in the mid-mass.
+
+**So the finding is about the lever, not the wording.** The value structure was
+named four separate ways — leading the clause, naming the floor, placing the
+body, forbidding "pale or washed-out" by name — and bought almost nothing. It is
+not that we failed to say it clearly.
+
+Two levers have never been tried, and both speak the API's own vocabulary
+instead of free text:
+
+1. **`style_strength` is 50.** The reference is the Druid's own cell, which
+   already carries the target distribution exactly. At 50 it is not dominating
+   the text prompt. 75 or 90 is one flag.
+2. **`outline`, `shading` and `detail` are typed enum parameters this endpoint
+   exposes**, and nothing in this pipeline has ever set one — `gen_unit.mjs`
+   passes them through as flags already. The live enum includes
+   `"single color black outline"`, which is precisely the missing thing, asked
+   for in the API's terms rather than in a sentence.
+
+We have been describing in prose what the endpoint takes as parameters.
+
+**North is still frontal in attempt 2.** Same failure, and
+[`04-attempt2-facings.png`](04-attempt2-facings.png) makes it a one-glance call
+— which is what `gen_facing_review.mjs` was added for after the ratio talked the
+eye down at 2.58.
+
+**Still stopped. 16 generations spent, no batch.**

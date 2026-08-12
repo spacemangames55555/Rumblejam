@@ -38,7 +38,7 @@ Everything between the two markers is copied byte-for-byte into every prompt by
 drift, and it is invisible until forty sprites disagree.
 
 <!-- STYLE-CLAUSE-START -->
-grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon
+grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon
 <!-- STYLE-CLAUSE-END -->
 
 **This clause was written from the Druid, and it has now been round-tripped
@@ -66,11 +66,70 @@ anchor's identity is the distribution: dark floor, broad mid-tone, small bright
 tail. "strong dark outline and deep shadow mass" is carrying that whole claim
 and is not getting it.
 
-**No batch may run against this clause.** The loop is: edit the clause,
+**No batch may run against an unproven clause.** The loop is: edit the clause,
 regenerate one unit (8 generations), compare. Only when a generated unit sits
 next to the Druid does a batch start. The silhouette notes are NOT implicated —
 the shape brief came back accurately — so this is a clause edit, not a content
 one.
+
+### Attempt 2 — the clause now names value structure
+
+The clause above was rewritten after that result. **The anchor's identity is
+where the darks are, and the old clause never said so.** It named a palette
+("muted earthy greens browns and leather") and left the value distribution to
+"strong dark outline and deep shadow mass", which was carrying the entire claim
+and did not get it. Four changes:
+
+1. **Value structure leads**, before any colour word: *low-key value structure*.
+2. **The black floor is named as a floor** — *true black outline and shadow mass
+   at the darkest value in the palette*. The failure was shadows landing on
+   midtone; the clause now says where the bottom is.
+3. **The body is placed** — *low mid-tones below middle grey* — and highlights
+   are bounded to *sparing and small in area*, which is the small bright tail.
+4. **The observed failure is forbidden by name**: *never a pale or washed-out
+   body*. Palette is demoted to a modifier of value — *held low in value*.
+
+**These are the numbers the round trip is judged against**, taken from the
+anchor itself rather than from taste. Landing the value distribution is the pass
+condition — not to the digit, but it has to stop being a quartile too bright
+with no black in it.
+
+### It did not land. THE CLAUSE ABOVE IS TESTED AND FAILING.
+
+| | target (the Druid) | attempt 1 | attempt 2 (this clause) |
+|---|---|---|---|
+| luma median | **~56** | 119 | **109** |
+| luma p25 | **~24** | 56 | 49 |
+| luma p95 | 174 | 173 | 189 |
+| darkest 15% mean | **~0** | 16.2 | **17.1** |
+| saturation median | ~0.42 | 0.52 | 0.56 |
+| near-grey | 13.7% | 2.3% | 2.1% |
+
+A 10-point median shift against the 53 needed. The black floor moved the wrong
+way; so did saturation. Naming the value structure four separate ways — leading
+with it, naming the floor, placing the body, forbidding the failure outright —
+bought essentially nothing.
+
+**The conclusion is about the lever, not the wording.** Prose is not what
+governs value here. Two things have never been tried, and both speak the API's
+own vocabulary instead of free text:
+
+1. **`style_strength` is 50.** The reference image is the Druid's own cell,
+   which already *has* the target distribution exactly. At 50 it is plainly not
+   dominating the text. 75 or 90 is one flag and 8 generations.
+2. **`outline`, `shading` and `detail` are typed enum parameters this API
+   exposes, and nothing in this pipeline has ever set one.** `gen_unit.mjs`
+   already passes them through as flags. `outline: "single color black outline"`
+   addresses the exact thing that is missing, in the API's own terms, rather
+   than asking for it in a sentence.
+
+We have been describing in prose what the endpoint takes as parameters. That is
+the next experiment, and it is a ruling to make rather than one for me to spend
+on.
+
+**This clause stays in place, marked failing rather than reverted** — the
+previous one failed too, and its reasoning is worth keeping for whoever runs
+attempt 3. No batch may run against it.
 
 ## What the anchor actually measures
 

@@ -67,12 +67,52 @@ if (!ids.length) { console.error(`✗ nothing matches ${selectors.join(' ')}`); 
 // No luminance, saturation or contrast maths lives here any more. What remains
 // measures whether the FILE is well formed, which is a question with an answer.
 
-// Eight rows that are not eight distinct drawings. Calibrated on the chained-
-// rotation experiment, not on any art direction — a single-hop rotation
-// measured 0.55 and a chained one 1.03, so this band separates a working method
-// from a broken one and does not express a preference about how art looks. It
-// survives the retirement of the aesthetic bands for that reason.
+// COLLAPSE DETECTION — eight rows that are not eight distinct drawings. That is
+// all this measures, and the claim has been narrowed to it.
+//
+// It used to say this band "separates a working method from a broken one",
+// calibrated on a single-hop rotation at 0.55 against a chained one at 1.03.
+// The anchor round trip disproved that directly: `enemy.pnw_bark_hulk`, chain-
+// rotated, scored **2.58** — better than the hand-supplied Druid's 1.05 — while
+// its north facing plainly shows the creature's face, jaw and chest. See
+// docs/art-review/anchor-roundtrip/README.md.
+//
+// The number was not wrong; the sentence around it was. Opposite-over-adjacent
+// difference answers "are these eight drawings distinct", and a rotation that
+// returns a DIFFERENT FRONTAL POSE is distinct — it scores high precisely
+// because it differs. Distinctness is not correctness, and a metric that
+// outranks the eye while being wrong is worse than none (§13 rule 73).
+//
+// So: kept, because collapse is a real failure and this does catch it; claim
+// cut back to what it can support; and the question it cannot answer is now
+// routed to a human — see NORTH IS HUMAN-JUDGED below.
 const MIN_FACING_RATIO = 0.85;
+
+// NORTH IS HUMAN-JUDGED, AND THIS IS THE RECORD OF WHY.
+//
+// "Is the north facing actually a back view" has no check here. One principled
+// hypothesis was tried and measured before giving up on it: a face is
+// high-frequency, so front views should carry more local contrast in the head
+// region than back views. Mean gradient magnitude over the top 45% of content
+// bounds, south-over-north, across all fourteen hand-supplied character sheets
+// — every one of them a known-good 8-way set:
+//
+//   min 1.10 (hunter) · median 1.58 · max 2.07 (assassin)
+//   samurai 1.13, blacksmith 1.14 — correct sheets, near the bottom
+//
+// The known-bad Bark Hulk scores **1.26**: inside that range, and above three
+// sheets that are right. No threshold admits all fourteen and rejects it, so
+// the hypothesis is dead rather than untuned. Recorded so the next person does
+// not spend the same afternoon on it.
+//
+// Anything better would have to be semantic ("is a face visible"), and it would
+// have to hold across a quadruped bear, a floating boss and a plant — with
+// exactly one known-bad example to validate against. That is not a gate, it is
+// a guess with a number on it.
+//
+// `tools/gen_facing_review.mjs` puts south beside north at review size so the
+// judgement has a fixed place to happen. The eye was right about the Bark Hulk
+// the first time and the metric talked it down; this arrangement stops that.
 
 // Mean per-pixel difference between two cells, counting a pixel present in one
 // and absent in the other as maximally different.
@@ -171,16 +211,21 @@ for (const id of ids) {
     }
   }
 
-  // ---- facing separation ----
+  // ---- facing COLLAPSE (not facing correctness — see MIN_FACING_RATIO) ----
   // Eight rows that are not eight distinct drawings is the failure that looks
-  // almost right in motion. Opposite facings (front/back) must differ MORE than
-  // neighbouring ones; when a rotation collapses, they differ less.
+  // almost right in motion. Opposite facings must differ MORE than neighbouring
+  // ones; when a rotation collapses, they differ less.
+  //
+  // Passing says the eight cells are distinct. It does NOT say any of them
+  // faces the right way — the Bark Hulk cleared this at 2.58 with a frontal
+  // north. Facing correctness is human-judged from gen_facing_review.mjs.
   if (directions === 8 && frames >= 1) {
     const sep = facingSeparation(img, spec);
     if (sep.ratio < MIN_FACING_RATIO) {
       judge(id, `${id}: opposite facings differ by ${sep.opposite.toFixed(0)} but neighbours by ${sep.adjacent.toFixed(0)} `
-        + `(ratio ${sep.ratio.toFixed(2)}, need ${MIN_FACING_RATIO}) — front and back are near-duplicates, so this is not really eight facings. `
-        + 'Rotate in 45-degree hops rather than one turn from the base view.');
+        + `(ratio ${sep.ratio.toFixed(2)}, need ${MIN_FACING_RATIO}) — the eight cells have COLLAPSED into near-duplicates. `
+        + 'Rotate in 45-degree hops rather than one turn from the base view. '
+        + '(A passing ratio does not mean the facings are CORRECT — that is judged by eye.)');
     }
   }
 }
