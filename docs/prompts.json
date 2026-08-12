@@ -4,6 +4,18 @@
   "styleClause": "grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon",
   "template": "{subject}, {silhouette}, {STYLE CLAUSE}, {view}, {w}px, transparent background, no ground shadow, no outline glow",
   "prompts": {
+    "beast.bear": {
+      "batch": 1,
+      "subject": "Bear, a hunter's bonded combat beast, quadruped",
+      "silhouette": "a heavy quadruped with a humped shoulder line higher than its head",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Bear, a hunter's bonded combat beast, quadruped, a heavy quadruped with a humped shoulder line higher than its head, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
     "boss.broodmother_viv": {
       "batch": 2,
       "subject": "Broodmother Viv, a floor-3 dungeon boss",
@@ -40,6 +52,18 @@
       ],
       "prompt": "The Ossuary Hulk, a floor-1 dungeon boss, a mountain of fused bone, asymmetric, one arm far larger than the other, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
     },
+    "boss.pnw_boss": {
+      "batch": 2,
+      "subject": "The Ceder Mother, a two-phase region boss, Pacific Northwest region",
+      "silhouette": "a broad rooted torso crowned by a canopy of splayed limbs, wider at the top than the base",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        64,
+        64
+      ],
+      "prompt": "The Ceder Mother, a two-phase region boss, Pacific Northwest region, a broad rooted torso crowned by a canopy of splayed limbs, wider at the top than the base, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
+    },
     "boss.vault_regent": {
       "batch": 2,
       "subject": "The Vault Regent, a floor-4 dungeon boss",
@@ -51,6 +75,18 @@
         64
       ],
       "prompt": "The Vault Regent, a floor-4 dungeon boss, a tall crowned throne-form, floating, cape falling to a single point, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
+    },
+    "boss.xib_boss": {
+      "batch": 2,
+      "subject": "Ixkik, the Blood Moon, a two-phase region boss, Central America region",
+      "silhouette": "a tall thin figure inside a broken crescent ring that arcs overhead",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        64,
+        64
+      ],
+      "prompt": "Ixkik, the Blood Moon, a two-phase region boss, Central America region, a tall thin figure inside a broken crescent ring that arcs overhead, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
     },
     "char.toh_assassin": {
       "batch": 0,
@@ -316,6 +352,78 @@
       ],
       "prompt": "Lobber, a spitter dungeon monster, a bulbous sac body with one raised firing tube, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
+    "enemy.pnw_bark_hulk": {
+      "batch": 3,
+      "subject": "Bark Hulk, a brute monster, Pacific Northwest region",
+      "silhouette": "a squat trunk-bodied mass with two enormous knuckled forelimbs",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Bark Hulk, a brute monster, Pacific Northwest region, a squat trunk-bodied mass with two enormous knuckled forelimbs, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.pnw_cedar_warden": {
+      "batch": 3,
+      "subject": "Cedar Warden, a dasher monster, Pacific Northwest region",
+      "silhouette": "a forward-leaning wedge trailing a single long cedar-plank tail",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Cedar Warden, a dasher monster, Pacific Northwest region, a forward-leaning wedge trailing a single long cedar-plank tail, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.pnw_elk": {
+      "batch": 3,
+      "subject": "Rootbound Elk, a warden monster, Pacific Northwest region",
+      "silhouette": "a narrow body under a vast branching antler crown twice its width",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Rootbound Elk, a warden monster, Pacific Northwest region, a narrow body under a vast branching antler crown twice its width, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.pnw_mistwalker": {
+      "batch": 3,
+      "subject": "Mistwalker, a spitter monster, Pacific Northwest region",
+      "silhouette": "a tall hooded column that frays into nothing below the waist",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Mistwalker, a spitter monster, Pacific Northwest region, a tall hooded column that frays into nothing below the waist, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.pnw_sapling": {
+      "batch": 3,
+      "subject": "Sapling, a chaser monster, Pacific Northwest region",
+      "silhouette": "a slender upright stalk with two drooping frond arms and no head",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Sapling, a chaser monster, Pacific Northwest region, a slender upright stalk with two drooping frond arms and no head, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.pnw_thornhound": {
+      "batch": 3,
+      "subject": "Thornhound, a sprinter monster, Pacific Northwest region",
+      "silhouette": "long and low on four legs, spine ridged with backswept quills",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Thornhound, a sprinter monster, Pacific Northwest region, long and low on four legs, spine ridged with backswept quills, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
     "enemy.skulker": {
       "batch": 3,
       "subject": "Skulker, a chaser dungeon monster",
@@ -375,6 +483,78 @@
         128
       ],
       "prompt": "Wombden, a nest dungeon monster, rooted and radial, splayed with no legs at all, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.xib_ashmoth": {
+      "batch": 3,
+      "subject": "Ashmoth, a orbiter monster, Central America region",
+      "silhouette": "a small body between two ragged wings held in a shallow V",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Ashmoth, a orbiter monster, Central America region, a small body between two ragged wings held in a shallow V, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.xib_bloodpriest": {
+      "batch": 3,
+      "subject": "Bloodpriest, a warden monster, Central America region",
+      "silhouette": "a straight-backed figure under a tall fan-shaped feathered headdress",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Bloodpriest, a warden monster, Central America region, a straight-backed figure under a tall fan-shaped feathered headdress, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.xib_censer": {
+      "batch": 3,
+      "subject": "Censer Bearer, a spitter monster, Central America region",
+      "silhouette": "a stooped figure with one long chain hanging from an outstretched arm",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Censer Bearer, a spitter monster, Central America region, a stooped figure with one long chain hanging from an outstretched arm, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.xib_howler": {
+      "batch": 3,
+      "subject": "Howler, a chaser monster, Central America region",
+      "silhouette": "a hunched biped with an oversized open jaw taking up half the head",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Howler, a chaser monster, Central America region, a hunched biped with an oversized open jaw taking up half the head, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.xib_jade_colossus": {
+      "batch": 3,
+      "subject": "Jade Colossus, a brute monster, Central America region",
+      "silhouette": "a blocky stepped monolith of stacked rectangles with no neck",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Jade Colossus, a brute monster, Central America region, a blocky stepped monolith of stacked rectangles with no neck, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.xib_obsidian_lancer": {
+      "batch": 3,
+      "subject": "Obsidian Lancer, a dasher monster, Central America region",
+      "silhouette": "a lean angular runner holding one long lance flat and forward",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Obsidian Lancer, a dasher monster, Central America region, a lean angular runner holding one long lance flat and forward, grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     }
   }
 }

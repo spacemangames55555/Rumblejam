@@ -12,6 +12,7 @@
 // can actually be played, and the assertions below do not pretend otherwise.
 
 import { DOMAINS } from './domains.js';
+import { REGION_ENEMY_BY_ID, REGION_BOSS_BY_ID } from './content/regions-enemies.js';
 
 export const CROSS_LINK_CHANCE = 0.45;
 
@@ -46,8 +47,8 @@ export const REGIONS = [
     tileset: 'xibalba',
     hazard: 'bloodmire',               // damaging ground: route around, do not cross
     cursedModifier: 'bloodprice',      // no HP restore between rooms
-    enemies: ['ca_jaguar_priest', 'ca_bloodletter', 'ca_xib_shade', 'ca_obsidian_knight', 'ca_howler', 'ca_skull_rack'],
-    boss: 'ca_boss',
+    enemies: ['xib_howler', 'xib_ashmoth', 'xib_censer', 'xib_jade_colossus', 'xib_bloodpriest', 'xib_obsidian_lancer'],
+    boss: 'xib_boss',
     tuning: { hpMult: 1.15, damageMult: 1.1, densityMult: 1.05 },
     contentReady: true,
   },
@@ -75,6 +76,23 @@ function assertRegions() {
     if (!(r.expectedLevel >= 1)) problems.push(`${r.id}: expectedLevel ${r.expectedLevel}`);
     if (r.enemies.length !== 6) problems.push(`${r.id}: ${r.enemies.length} enemy archetypes, want 6`);
     if (!r.boss) problems.push(`${r.id}: no boss`);
+    // A COUNT IS NOT A SET (§13 rule 43). The line above counted six and passed
+    // for central_america while all six ids — ca_jaguar_priest, ca_bloodletter,
+    // ca_xib_shade, ca_obsidian_knight, ca_howler, ca_skull_rack — named
+    // content that was never authored; the region actually ships xib_*. The
+    // names were placeholders from when this file predated the populations
+    // (see the header), and nothing ever resolved them, so they stayed wrong
+    // through both regions going contentReady.
+    //
+    // Only applied to regions that HAVE a population: regions 3-8 are names
+    // with no content by design, and this must not demand art that the roadmap
+    // says does not exist yet.
+    if (r.contentReady) {
+      const dead = r.enemies.filter(id => !REGION_ENEMY_BY_ID[id]);
+      if (dead.length) problems.push(`${r.id}: declares ${dead.length} enemy id(s) that no population defines: ${dead.join(', ')} `
+        + '— a contentReady region naming content that does not exist is a count passing over a set nobody resolved');
+      if (!REGION_BOSS_BY_ID[r.boss]) problems.push(`${r.id}: boss "${r.boss}" is not defined in any region population`);
+    }
     if (!r.hazard) problems.push(`${r.id}: no hazard`);
     if (!r.cursedModifier) problems.push(`${r.id}: no cursed modifier`);
     const sk = r.domainSkew;

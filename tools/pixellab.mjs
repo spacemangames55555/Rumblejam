@@ -20,8 +20,11 @@
 //   POST /inpaint, /estimate-skeleton
 //   GET  /balance
 //
-// Usage is metered in "generations" (1.0 per call), which is a different meter
-// from the USD balance — a $0.00 USD balance does not mean generation fails.
+// Usage is metered in "generations" (1.0 per call) OR in USD, per account:
+// every response's `usage` is `{type: "usd"|"generations", usd, generations}`
+// with the unused field null, and `GET /balance` returns `{type, usd}`. Count
+// with `newSpend`/`spend`/`spendReport` below rather than reading one field —
+// see the note there for why.
 
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, rmSync, mkdtempSync } from 'node:fs';
@@ -106,3 +109,44 @@ export async function balance() {
 
 export const b64 = buf => ({ type: 'base64', base64: Buffer.from(buf).toString('base64') });
 export const fromB64 = img => Buffer.from(img.base64, 'base64');
+
+// ---------------------------------------------------------------- the meter
+//
+// A COST INSTRUMENT THAT READS ZERO ON A METERED ACCOUNT IS A GATE LYING ABOUT
+// MONEY. The live `Usage` schema is `{ type: "usd" | "generations", usd,
+// generations }` — the account decides which meter it is on, and the OTHER
+// field comes back null. Callers counted `res.usage?.generations || 0`, so on a
+// usd-metered account every run reported `0 generation(s)` while spending real
+// money, and the number that would have stopped a runaway batch was the number
+// that could never move.
+//
+// `spend()` accumulates both fields and remembers which one the API actually
+// used, so the report says what was spent in the unit the account is billed in
+// and admits when the API told it nothing.
+export function newSpend() {
+  return { generations: 0, usd: 0, calls: 0, seen: new Set(), silent: 0 };
+}
+
+export function spend(acc, res) {
+  acc.calls++;
+  const u = res && res.usage;
+  if (!u) { acc.silent++; return acc; }
+  if (typeof u.generations === 'number') acc.generations += u.generations;
+  if (typeof u.usd === 'number') acc.usd += u.usd;
+  if (u.type) acc.seen.add(u.type);
+  // A response carrying a usage block with neither number is not "free" — it is
+  // the API declining to say, and that must read differently from zero.
+  if (typeof u.generations !== 'number' && typeof u.usd !== 'number') acc.silent++;
+  return acc;
+}
+
+export function spendReport(acc) {
+  const parts = [];
+  if (acc.generations) parts.push(`${acc.generations} generation(s)`);
+  if (acc.usd) parts.push(`$${acc.usd.toFixed(4)}`);
+  if (!parts.length) parts.push('no cost reported by the API');
+  let s = `${acc.calls} call(s), ${parts.join(' + ')}`;
+  if (acc.seen.size) s += ` [meter: ${[...acc.seen].join('/')}]`;
+  if (acc.silent) s += ` — ! ${acc.silent} call(s) returned no usable usage figure, so this total is a FLOOR, not the bill`;
+  return s;
+}

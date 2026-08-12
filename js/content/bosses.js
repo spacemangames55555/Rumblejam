@@ -8,6 +8,8 @@
 // Regent ends the run, so it is meant to be an endurance test rather than one
 // more fight; the other three floors are unchanged.
 
+import { ALL_REGION_BOSSES } from './regions-enemies.js';
+
 export const BOSSES = [
   { id: 'ossuary_hulk', name: 'The Ossuary Hulk', kit: 'hulk', floor: 1,
     hp: 1240, dmg: 10, spd: 62, radius: 46, shape: 'square', color: '#c05e4c', mats: 30,
@@ -44,3 +46,17 @@ export const BOSS_BY_FLOOR = Object.fromEntries(BOSSES.map(b => [b.floor, b]));
 
 // Sprite ids. Bosses are authored at 96x96, twice an ordinary enemy.
 for (const b of BOSSES) b.spriteId = `boss.${b.id}`;
+
+// EVERY BOSS, the way enemies.js publishes every enemy.
+//
+// `enemies.js` has `ALL_ENEMY_DEFS` — base roster plus every region — and
+// `bosses.js` had no counterpart, so "all bosses" had no name and every
+// consumer reached for `BOSSES`, which is the four floor bosses. That
+// asymmetry is what let the two region bosses fall out of the manifest, out
+// of `docs/prompts.json` and out of the gate that claims to check every def.
+// A missing name is not a small thing: consumers reach for the name that
+// exists, and the next region's boss would have been missed the same way.
+//
+// Region bosses carry their own spriteId (assigned in regions-enemies.js),
+// so this composes rather than tags.
+export const ALL_BOSS_DEFS = [...BOSSES, ...ALL_REGION_BOSSES];

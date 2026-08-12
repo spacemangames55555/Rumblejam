@@ -1,7 +1,7 @@
 # Style anchor
 
 One unit is approved as the reference, and every subsequent generation reuses
-its style clause **verbatim**. Consistency drift across 298 assets is the primary
+its style clause **verbatim**. Consistency drift across 312 assets is the primary
 failure mode of the art phase, and this is the only defence against it.
 
 The anchor is **the Druid** — `char.toh_druid`, Thrones of Heaven roster.

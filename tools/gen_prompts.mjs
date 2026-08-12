@@ -20,9 +20,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { ALL_CHARS } from '../js/content/characters.js';
-import { ENEMIES } from '../js/content/enemies.js';
-import { BOSSES } from '../js/content/bosses.js';
-import { PYLON_SPRITE } from '../js/content/sprites.js';
+import { ALL_ENEMY_DEFS } from '../js/content/enemies.js';
+import { ALL_BOSS_DEFS } from '../js/content/bosses.js';
+import { REGION_ENEMIES } from '../js/content/regions-enemies.js';
+import { REGION_BY_ID } from '../js/regions.js';
+import { PYLON_SPRITE, BEAST_SPRITE } from '../js/content/sprites.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ANCHOR = join(ROOT, 'docs', 'STYLE_ANCHOR.md');
@@ -47,12 +49,43 @@ const silhouettes = JSON.parse(readFileSync(SIL, 'utf8'));
 const manifest = JSON.parse(readFileSync(join(ROOT, 'assets', 'assets.json'), 'utf8'));
 
 // ---- subjects, from the live content tables ----
+//
+// ALL_ENEMY_DEFS / ALL_BOSS_DEFS rather than the base tables: the region
+// populations are units with sheets to draw, and reading the narrow tables is
+// what left fourteen of them with no prompt at all.
+//
+// A region unit names its REGION in its subject. "Sapling, a chaser dungeon
+// monster" is a true sentence that throws away the entire premise — the
+// Pacific Northwest and Xibalba are the visual identity of their populations,
+// and a generator told only the behaviour will draw the same monster twice in
+// two regions that are supposed to look nothing alike.
+const regionOf = {};
+for (const [regionId, pop] of Object.entries(REGION_ENEMIES)) {
+  const name = REGION_BY_ID[regionId]?.name || regionId;
+  for (const e of pop.enemies) regionOf[e.id] = name;
+  regionOf[pop.boss.id] = name;
+}
+
 const subject = {};
 const roleWords = c => (c.roles || []).join(' ');
 for (const c of ALL_CHARS) subject[c.spriteId] = `${c.name}, a ${roleWords(c)} dungeon adventurer`;
-for (const e of ENEMIES) subject[e.spriteId] = `${e.name}, a ${e.behavior} dungeon monster`;
+// The region goes in as an apposition rather than "of the {name}" — region
+// names take different articles ("the Pacific Northwest", "Central America")
+// and the alternative is authoring a second, prompt-only name per region.
+for (const e of ALL_ENEMY_DEFS) {
+  subject[e.spriteId] = regionOf[e.id]
+    ? `${e.name}, a ${e.behavior} monster, ${regionOf[e.id]} region`
+    : `${e.name}, a ${e.behavior} dungeon monster`;
+}
 subject[PYLON_SPRITE] = 'Ward Pylon, an immobile arcane siege structure';
-for (const b of BOSSES) subject[b.spriteId] = `${b.name}, a floor-${b.floor} dungeon boss`;
+for (const b of ALL_BOSS_DEFS) {
+  subject[b.spriteId] = regionOf[b.id]
+    ? `${b.name}, a two-phase region boss, ${regionOf[b.id]} region`
+    : `${b.name}, a floor-${b.floor} dungeon boss`;
+}
+// Combat pets are units with eight facings like any other; `beast.bear` was
+// manifested, silhouetted by nobody and skipped here as if it were an icon.
+for (const id of Object.values(BEAST_SPRITE)) subject[id] = 'Bear, a hunter\'s bonded combat beast, quadruped';
 
 // ---- batches, from docs/ART-GENERATION.md §5 ----
 //
@@ -65,7 +98,9 @@ export const STYLE_ANCHOR_ID = 'char.toh_assassin';
 function batchOf(id) {
   if (id === STYLE_ANCHOR_ID) return 0;
   const ns = id.slice(0, id.indexOf('.'));
-  return { char: 1, boss: 2, enemy: 3, proj: 5, fx: 5, prop: 6, item: 7, ui: 8 }[ns];
+  // `beast` rides with batch 1: a combat pet is a character's unit and is
+  // reviewed next to the character it belongs to, not on its own.
+  return { char: 1, beast: 1, boss: 2, enemy: 3, proj: 5, fx: 5, prop: 6, item: 7, ui: 8 }[ns];
 }
 
 const out = {
@@ -76,14 +111,19 @@ const out = {
   prompts: {},
 };
 
-const noSubject = [], noSilhouette = [];
+const noSubject = [], noSilhouette = [], noUnitSubject = [];
 for (const [id, spec] of Object.entries(manifest.sprites)) {
   const batch = batchOf(id);
   const sub = subject[id];
   const sil = silhouettes[id];
   const dirs = spec.directions > 1 ? spec.directions : 1;
   const view = dirs > 1 ? `${dirs}-directional` : 'single view';
-  if (!sub) { noSubject.push(id); continue; }       // non-units: no prompt yet, by design
+  // Non-units have no prompt yet, by design — they need a generator PixelLab
+  // does not cover. But a DIRECTIONAL id is a unit sheet, and a unit sheet with
+  // no subject is a sheet this pipeline cannot generate; skipping it silently
+  // is how `beast.bear` sat in the manifest as an eight-facing grid with no
+  // prompt while this tool reported success. Loud, not skipped (§13 rule 17).
+  if (!sub) { (dirs > 1 ? noUnitSubject : noSubject).push(id); continue; }
   if (!sil) noSilhouette.push(id);
   out.prompts[id] = {
     batch,
@@ -97,6 +137,11 @@ for (const [id, spec] of Object.entries(manifest.sprites)) {
   };
 }
 
+if (noUnitSubject.length) {
+  console.error(`✗ ${noUnitSubject.length} DIRECTIONAL sprite id(s) have no subject — they are unit sheets this pipeline cannot generate: ${noUnitSubject.join(', ')}`);
+  console.error('  Add them to the subject map above from whatever content table defines them.');
+  process.exit(1);
+}
 if (noSilhouette.length) {
   console.error(`✗ ${noSilhouette.length} unit(s) have no silhouette note in docs/silhouettes.json: ${noSilhouette.slice(0, 6).join(', ')}`);
   process.exit(1);

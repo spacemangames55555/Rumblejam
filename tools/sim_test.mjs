@@ -3512,16 +3512,60 @@ try {
   const man = manifest.sprites;
 
   // -- every definition table carries a well-formed spriteId --
+  //
+  // ALL_ENEMY_DEFS / ALL_BOSS_DEFS, not ENEMIES / BOSSES. This gate read the
+  // narrow tables and reported "spriteId on every def: … 12 enemies, 4 bosses"
+  // while fourteen region units had no spriteId at all — green, and green about
+  // a set less than half the size of the one it named.
+  //
+  // That is the third instance of one shape (§13 rule 73): `doc_gate` was added
+  // because the GDD's counts were right about sets with the wrong members,
+  // `reach_gate` because nineteen `uiAction` kinds included one nothing could
+  // send, and this because a table-driven check enumerated its own inputs. A
+  // check that lists what it looks at can only ever be as complete as that
+  // list, and the list is maintained by whoever remembers it exists.
+  const { ALL_ENEMY_DEFS } = await import('../js/content/enemies.js');
+  const { ALL_BOSS_DEFS } = await import('../js/content/bosses.js');
   const tagged = [
     ...SPR_CHARS.map(c => [`char ${c.id}`, c.spriteId]),
-    ...ENEMIES.map(e => [`enemy ${e.id}`, e.spriteId]),
-    ...BOSSES.map(b => [`boss ${b.id}`, b.spriteId]),
+    ...ALL_ENEMY_DEFS.map(e => [`enemy ${e.id}`, e.spriteId]),
+    ...ALL_BOSS_DEFS.map(b => [`boss ${b.id}`, b.spriteId]),
     ...WEAPONS.map(w => [`weapon ${w.id}`, w.spriteId]),
     ...ITEMS.map(i => [`item ${i.id}`, i.spriteId]),
   ];
   const badId = tagged.filter(([, id]) => !id || !NS_RE.test(id));
   if (badId.length) fail(`spriteId missing or malformed on ${badId.length}: ${badId.slice(0, 4).map(x => x[0]).join(', ')}`);
-  else ok(`spriteId on every def: ${SPR_CHARS.length} characters (both rosters), ${ENEMIES.length} enemies, ${BOSSES.length} bosses, ${WEAPONS.length} weapons, ${ITEMS.length} items`);
+  else ok(`spriteId on every def: ${SPR_CHARS.length} characters (both rosters), ${ALL_ENEMY_DEFS.length} enemies (${ENEMIES.length} base + ${ALL_ENEMY_DEFS.length - ENEMIES.length} region), ${ALL_BOSS_DEFS.length} bosses (${BOSSES.length} floor + ${ALL_BOSS_DEFS.length - BOSSES.length} region), ${WEAPONS.length} weapons, ${ITEMS.length} items`);
+
+  // -- AND THE SAME PROPERTY, ASKED FROM OUTSIDE THE TABLES --
+  //
+  // Widening the imports above fixes today's miss and nothing else: the next
+  // population added to content and not to that list fails exactly the same
+  // way, silently. So the set is also derived from an authority that is
+  // authored independently of any sprite plumbing — the REGION TABLE. A region
+  // that exists and has a population must have art ids for all of it, and
+  // `js/regions.js` is written by whoever adds a region, not by whoever
+  // maintains this gate.
+  //
+  // This is the check that would have caught the original defect. It is not
+  // circular with the manifest: the manifest is generated FROM the defs, so
+  // asking the manifest proves only that the generator ran.
+  const { REGIONS } = await import('../js/regions.js');
+  const { REGION_ENEMIES } = await import('../js/content/regions-enemies.js');
+  {
+    const populated = REGIONS.filter(r => REGION_ENEMIES[r.id]?.enemies?.length);
+    const untagged = [];
+    for (const r of populated) {
+      const pop = REGION_ENEMIES[r.id];
+      for (const e of pop.enemies) if (!e.spriteId || !NS_RE.test(e.spriteId) || !man[e.spriteId]) untagged.push(`${r.id}/${e.id}`);
+      if (!pop.boss?.spriteId || !NS_RE.test(pop.boss.spriteId) || !man[pop.boss.spriteId]) untagged.push(`${r.id}/${pop.boss?.id ?? 'boss'}`);
+    }
+    if (!populated.length) fail('no region in js/regions.js has a population — this check reads nothing and would pass on an empty world');
+    else if (untagged.length) fail(`${untagged.length} region unit(s) have no usable sprite id or are absent from the manifest: ${untagged.slice(0, 6).join(', ')} — `
+      + 'the art pipeline cannot address a def it cannot name, so these would be unreachable rather than merely undrawn');
+    else ok(`every unit of all ${populated.length} populated region(s) carries a manifested sprite id `
+      + `(${populated.map(r => `${r.id} ${REGION_ENEMIES[r.id].enemies.length}+boss`).join(', ')}) — asked from the region table, not from a list this gate keeps`);
+  }
 
   // -- the manifest is the art inventory: everything askable is listed --
   const askable = new Set([
@@ -4212,10 +4256,24 @@ try {
     const prompts = JSON.parse(rf(nodePath.join(REPO, 'docs', 'prompts.json'), 'utf8'));
     const units = Object.keys(prompts.prompts);
     const sil = JSON.parse(rf(nodePath.join(REPO, 'docs', 'silhouettes.json'), 'utf8'));
+    const MAN_PATH = nodePath.join(REPO, 'assets', 'assets.json');
     const noSil = units.filter(id => !sil[id]);
-    const expect = ALL_CHARS_N + ENEMIES.length + 1 + BOSSES.length;
-    if (units.length === expect && !noSil.length) ok(`every one of the ${units.length} unit ids has a hand-written silhouette note — the whole readability budget at small size`);
-    else fail(`prompts: ${units.length} of ${expect} units, ${noSil.length} without a silhouette`);
+    // WHAT COUNTS AS A UNIT is the manifest's own `directions`, not a sum of
+    // content tables. This line read `ALL_CHARS_N + ENEMIES.length + 1 +
+    // BOSSES.length` — the same hand-composed arity that let fourteen region
+    // units go unnoticed two checks up (§13 rule 73), and it would have gone on
+    // being wrong by exactly the units nobody remembered to add. A sheet needs
+    // a prompt if and only if it is a directional grid, and the manifest is the
+    // inventory of those.
+    const manifestUnits = Object.entries(JSON.parse(rf(MAN_PATH, 'utf8')).sprites)
+      .filter(([, s]) => (s.directions || 1) > 1).map(([id]) => id);
+    const noPrompt = manifestUnits.filter(id => !prompts.prompts[id]);
+    if (units.length === manifestUnits.length && !noSil.length && !noPrompt.length) {
+      ok(`every one of the ${units.length} unit sheets in the manifest has a prompt and a hand-written silhouette note — the whole readability budget at small size`);
+    } else {
+      fail(`prompts: ${units.length} prompts against ${manifestUnits.length} directional sprite ids, `
+        + `${noSil.length} without a silhouette${noPrompt.length ? `, ${noPrompt.length} unit(s) with NO prompt at all: ${noPrompt.slice(0, 5).join(', ')}` : ''}`);
+    }
     const texts = units.map(id => sil[id].toLowerCase().replace(/[^a-z ]/g, ''));
     if (new Set(texts).size === texts.length) ok('and no two units are described the same way — identical descriptions draw identical sprites');
     else fail('duplicate silhouette notes');

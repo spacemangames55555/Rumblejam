@@ -25,7 +25,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { post, balance, b64, fromB64, ROW_DIRECTIONS, ROW_FILENAMES } from './pixellab.mjs';
+import { post, balance, b64, fromB64, newSpend, spend, spendReport, ROW_DIRECTIONS, ROW_FILENAMES } from './pixellab.mjs';
 import { decodePng } from './pngkit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -87,7 +87,7 @@ for (const k of ['outline', 'shading', 'detail']) if (flags[k]) styleParams[k] =
 if (flags.guidance) styleParams.text_guidance_scale = Number(flags.guidance);
 if (flags.negative) styleParams.negative_description = flags.negative;
 
-let generations = 0;
+const cost = newSpend();
 const t0 = Date.now();
 
 // ---- 1. the base south view ----
@@ -108,7 +108,7 @@ if (flags.base && existsSync(join(flags.base, `${ROW_FILENAMES[SOUTH]}.png`))) {
   } else {
     res = await post('/generate-image-pixflux', body);
   }
-  generations += res.usage?.generations || 0;
+  spend(cost, res);
   basePng = fromB64(res.image);
   console.log(`${((Date.now() - t0) / 1000).toFixed(0)}s`);
 }
@@ -146,7 +146,7 @@ for (const chain of CHAINS) {
       from_direction: ROW_DIRECTIONS[fromRow], to_direction: ROW_DIRECTIONS[toRow],
       image_guidance_scale: ROTATE_GUIDANCE,
     });
-    generations += res.usage?.generations || 0;
+    spend(cost, res);
     writeFileSync(join(outDir, `${ROW_FILENAMES[toRow]}.png`), fromB64(res.image));
     console.log(`${((Date.now() - t0) / 1000).toFixed(0)}s`);
   }
@@ -163,7 +163,8 @@ for (let row = 0; row < 8; row++) {
   if (!transparent) problems.push(`${ROW_FILENAMES[row]}: fully opaque (matte)`);
 }
 
-console.log(`\n${problems.length ? '!' : '✓'} ${outDir} — 8 files, ${generations} generation(s), ${((Date.now() - t0) / 1000).toFixed(0)}s total`);
+console.log(`\n${problems.length ? '!' : '✓'} ${outDir} — 8 files, ${((Date.now() - t0) / 1000).toFixed(0)}s total`);
+console.log(`  cost: ${spendReport(cost)}`);
 if (problems.length) console.log(`  problems: ${problems.join(', ')}`);
 console.log(`  next: node tools/process_sprite.mjs ${spriteId} ${outDir}`);
 if (seed !== undefined) console.log(`  seed ${seed} — record it in docs/STYLE_ANCHOR.md if this run is approved`);
