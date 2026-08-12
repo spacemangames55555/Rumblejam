@@ -155,6 +155,31 @@ rather than tunable: 115 colours against 1,639 is a different rendering mode,
 not a mis-set parameter. The anchor is a tight hand-authored palette; this
 endpoint produces near-continuous shading through every lever it exposes.
 
+### Attempt 4 — `flat shading`, no reference. The mode is controllable; the anchor was not reached.
+
+**Distinct colours 1,639 → 491.** Smooth blending was the mechanism, `flat
+shading` is the API's word for not doing it, and the palette fell 3.3× the
+moment it was set. The hypothesis was right — the endpoint changes rendering
+mode on request. (Which also retires the "different rendering mode, no
+parameter reaches it" reading written above after attempt 3: a parameter does
+reach it. It just does not land on the anchor.)
+
+115 colours **at 45.6% hard edges** is a tight palette in dense crisp bands;
+attempt 4 is 491 colours at **9.2%** — large smooth regions, further from the
+anchor on edge density than anything before it. Value overshot the other way:
+median **27** against 56, after three attempts near 100. And with no style
+reference the subject drifted — the Bark Hulk came back a generic brown brute,
+the mirror of attempt 3 wearing the Druid's antlers.
+
+**What is now established:** `shading` governs palette size, `outline` governs
+the black floor, and the style reference governs subject fidelity — trading
+subject-drift against prop-contamination. None of them governs tight-palette-
+plus-dense-banding together, which may be a property of hand-authoring rather
+than a parameter.
+
+**Four attempts, four different misses, 32 generations, nothing installed.**
+Stopped by instruction; no fifth attempted.
+
 Full record and images:
 [`art-review/anchor-roundtrip/`](art-review/anchor-roundtrip/README.md).
 

@@ -270,3 +270,85 @@ yours — the options are a fourth parameter arm, a different anchor that this A
 something else.
 
 **24 generations spent across three attempts. Nothing installed.**
+
+---
+
+# Attempt 4 — flat shading, no style reference. The colour count collapsed 3.3×, and the answer is still no.
+
+One arm, authorised to settle one number. `shading="flat shading"`, no
+`--style` at all (so pixflux, and `style_strength` out of the picture entirely).
+`outline` and `detail` held at attempt 3's values so the delta is exactly the
+two things under test.
+
+**The decisive number: 1,639 → 491.**
+
+| | TARGET | att1 | att2 | att3 | **att4** |
+|---|---|---|---|---|---|
+| **distinct colours** | **115** | 1436 | 1523 | 1639 | **491** |
+| hard-edge % | **45.6** | 29.7 | 28.6 | 37.7 | **9.2** |
+| luma median | **56** | 119 | 109 | 99 | **27** |
+| luma p25 | **24** | 56 | 49 | 58 | **15** |
+| darkest 15% mean | **0.3** | 16.2 | 17.1 | 9.4 | 8.9 |
+| saturation median | 0.42 | 0.52 | 0.56 | 0.50 | 0.58 |
+| near-grey | 13.7% | 2.3% | 2.1% | 5.6% | **0.6%** |
+
+[`07-attempt4-flat-no-reference.png`](07-attempt4-flat-no-reference.png),
+[`attempt4-sources/`](attempt4-sources/),
+[`hulk-sheet-attempt4.png`](hulk-sheet-attempt4.png).
+
+## What the number says
+
+**The mechanism was real and it is controllable.** Smooth blending was averaging
+the darks away, `flat shading` is the API's word for not doing that, and the
+palette fell by a factor of 3.3 the moment it was set. That is not a nudge; it
+is the endpoint changing rendering mode on request. The hypothesis was right.
+
+**And it still did not reach the anchor.** 491 is neither 115 nor 1,600 — it
+landed between the two poles this arm was meant to choose between, and the
+honest reading is that the question was slightly the wrong shape. Colour count
+alone does not locate the anchor's mode, because the anchor is **115 colours
+*and* 45.6% hard edges**: a tight palette laid down in dense, crisp bands.
+Attempt 4 is 491 colours at **9.2%** hard edges — large smooth regions. It
+traded one kind of wrong for another and moved *further* from the anchor on
+edge density than any previous attempt.
+
+**It also overshot value in the other direction.** Median 27 against a target of
+56 — now half as bright as the anchor, having been twice as bright three times
+running. Nothing has landed on 56; three attempts sat near 100 and this one sat
+near 27.
+
+**And dropping the reference cost the subject.** Without a style image the
+result stopped being a Bark Hulk: no bark, no trunk body, none of the silhouette
+brief beyond the heavy forelimbs. It is a generic brown brute in a loincloth.
+That is the mirror of attempt 3's failure — at style_strength 85 the reference
+bled its props in; with no reference at all, the subject drifted out. Neither
+end of that axis produced the right unit.
+
+## Where this leaves it
+
+Four configurations, four different misses, nothing installable:
+
+| | failure |
+|---|---|
+| att1–2 (prose) | too bright, no black, ~1,500 colours |
+| att3 (params + strong reference) | black floor arrives; wears the Druid's staff and antlers |
+| att4 (flat, no reference) | palette collapses; too dark, no edge density, subject drifts |
+
+**The rendering mode is controllable — the anchor's particular mode was not
+reached.** Whether a fifth configuration exists that hits 115 colours at 45.6%
+hard edges with a median of 56 *and* keeps the subject is not something four
+data points can answer, and it is not being tried: the instruction was one arm
+and stop, and that is the right call regardless of how the number came out.
+
+What is now established rather than assumed:
+
+- `shading` governs palette size, strongly and predictably.
+- `outline` governs the black floor.
+- the style reference governs *subject fidelity*, and its strength trades
+  subject-drift against prop-contamination with no obviously safe middle tried.
+- none of them governs the anchor's combination of tight palette **with** dense
+  crisp banding, which may be a property of hand-authoring rather than a
+  parameter.
+
+**32 generations across four attempts. Nothing installed.** Every shipped asset
+in this game is still hand-supplied.
