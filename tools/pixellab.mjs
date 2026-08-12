@@ -58,14 +58,42 @@ function curlJson(url, bodyObj, timeoutSec) {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
+// THE NAME IS CASE-SENSITIVE, AND "NOT SET" WAS THE WRONG DIAGNOSIS.
+//
+// The key arrived on the environment record as `Pixellab_API_KEY`. Linux
+// environment variables are case-sensitive, so `process.env.PIXELLAB_API_KEY`
+// was undefined and this function said "PIXELLAB_API_KEY is not set" — which is
+// true, useless, and points at the wrong problem. The key was there; the name
+// differed by capitalisation, and the message sent you looking for a missing
+// secret instead of a mis-typed variable name.
+//
+// A near-miss is now NAMED rather than silently accepted or silently refused.
+// The run proceeds, because refusing over capitalisation helps nobody, but it
+// says loudly what it found so the record gets fixed instead of every future
+// session depending on this fallback (§13 rule 26: a diagnostic gets named for
+// what it actually asserts).
+const CANONICAL = 'PIXELLAB_API_KEY';
+
+let warned = false;   // apiKey() is called per request; the warning is per run
+
 export function apiKey() {
-  const k = process.env.PIXELLAB_API_KEY;
-  if (!k) {
-    console.error('✗ PIXELLAB_API_KEY is not set.\n'
-      + '  export PIXELLAB_API_KEY=... in your shell. Never commit it, and never write it to a file in this repo.');
-    process.exit(1);
+  const exact = process.env[CANONICAL];
+  if (exact) return exact;
+
+  const near = Object.keys(process.env).find(k => k.toUpperCase() === CANONICAL && process.env[k]);
+  if (near) {
+    if (!warned) {
+      warned = true;
+      console.error(`! ${CANONICAL} is not set, but ${near} IS — the names differ only by case, and environment `
+        + `variables are case-sensitive.\n  Using it, but rename it to ${CANONICAL} on the environment record: `
+        + 'everything else in this pipeline reads the canonical spelling.');
+    }
+    return process.env[near];
   }
-  return k;
+
+  console.error(`✗ ${CANONICAL} is not set, and no variable differs from it only by case.\n`
+    + `  Set ${CANONICAL} on the environment record. Never commit it, and never write it to a file in this repo.`);
+  process.exit(1);
 }
 
 // The subject facings the API understands, in OUR row order. Row index is the
@@ -79,7 +107,7 @@ export const ROW_FILENAMES = ['east', 'south_east', 'south', 'south_west', 'west
 // on transport and server errors; never retry a 4xx, which is a request we got
 // wrong and would get wrong again.
 export async function post(path, body, { retries = 3, timeoutMs = 300000 } = {}) {
-  let lastErr = null;
+  let lastErr = null, prevErr = null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt) {
       const wait = 2000 * 2 ** (attempt - 1);
@@ -97,6 +125,23 @@ export async function post(path, body, { retries = 3, timeoutMs = 300000 } = {})
       if (/HTTP 4/.test(err.message)) throw err;
       lastErr = err.message.slice(0, 160);
     }
+    // THE SAME ERROR TWICE IS NOT A TRANSIENT ERROR.
+    //
+    // "Never retry a 4xx, which is a request we got wrong" was the right idea
+    // and the wrong test: this API returns **500** for a malformed request.
+    // `style_image must be size (128, 128), not torch.Size([248, 248])` is our
+    // fault, cannot succeed on a retry, and burned three attempts and 14s of
+    // backoff saying so identically each time.
+    //
+    // Rather than pattern-match the vendor's error prose — which would be one
+    // more thing to maintain — compare the error to the last one. A genuinely
+    // transient 5xx varies or clears; a deterministic rejection repeats
+    // verbatim. Two identical bodies is enough to stop.
+    if (lastErr === prevErr) {
+      throw new Error(`${path} — ${lastErr}\n  Identical on two consecutive attempts, so it is a rejection of the request `
+        + 'rather than a transient fault. Not retried further.');
+    }
+    prevErr = lastErr;
   }
   throw new Error(`${path} failed after ${retries} retries — ${lastErr}`);
 }

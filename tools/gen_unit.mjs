@@ -26,7 +26,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { post, balance, b64, fromB64, newSpend, spend, spendReport, ROW_DIRECTIONS, ROW_FILENAMES } from './pixellab.mjs';
-import { decodePng } from './pngkit.mjs';
+import { decodePng, encodePng, subImage, resizeBox } from './pngkit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -63,15 +63,49 @@ if (!prompt) {
 
 const view = flags.view || 'low top-down';
 const seed = flags.seed ? Number(flags.seed) : undefined;
+// THE STYLE REFERENCE MUST BE EXACTLY THE TARGET CELL SIZE.
+//
+// Found by running it: bitforge answers `HTTP 500 style_image must be size
+// (128, 128), not torch.Size([248, 248])`. The API takes one image at one size,
+// not "a picture of the style" — so handing it the anchor's hand-supplied
+// source facing (248x248) fails, and handing it the whole sheet (128x1024)
+// would be worse: eight stacked facings read as one drawing.
+//
+// Reconciled here rather than left to the caller, because "which file is the
+// anchor" is the thing an author should be thinking about and "what pixel
+// dimensions does bitforge want" is not.
+//
+//   exact size          -> used as-is
+//   a directional grid  -> the SOUTH cell is cut out of it, no resampling.
+//                          South because it is the facing the anchor was
+//                          reviewed at and the one a unit shows before it moves.
+//   anything else       -> box-filtered down, and said out loud, because
+//                          resampling pixel art is lossy and the reviewer
+//                          should know the reference was not the original.
 const styleFile = flags.style;
-const styleImage = styleFile ? b64(readFileSync(styleFile)) : null;
+let styleImage = null;
+if (styleFile) {
+  const img = decodePng(readFileSync(styleFile));
+  const [cw, ch] = [spec.w, spec.h];
+  if (img.width === cw && img.height === ch) {
+    styleImage = b64(readFileSync(styleFile));
+    console.log(`  style reference: ${styleFile} — ${cw}x${ch}, exactly the cell size, used verbatim`);
+  } else if (img.width === cw && img.height === ch * ROW_DIRECTIONS.length) {
+    const row = ROW_DIRECTIONS.indexOf('south');
+    styleImage = b64(encodePng(subImage(img, 0, row * ch, cw, ch)));
+    console.log(`  style reference: ${styleFile} — an ${img.width}x${img.height} grid; cut the SOUTH cell (row ${row}) at ${cw}x${ch}, no resampling`);
+  } else {
+    styleImage = b64(encodePng(resizeBox(img, cw, ch)));
+    console.log(`  ! style reference: ${styleFile} is ${img.width}x${img.height} and the cell is ${cw}x${ch} — `
+      + 'box-filtered down to fit. bitforge requires an exact match. This RESAMPLES pixel art; prefer a source already at the cell size.');
+  }
+}
 
 const outDir = flags.out;
 mkdirSync(outDir, { recursive: true });
 
 console.log(`${spriteId} — ${spec.w}x${spec.h}, 8 facings, view "${view}"${seed !== undefined ? `, seed ${seed}` : ''}`);
 console.log(`  prompt: ${prompt}`);
-if (styleImage) console.log(`  style reference: ${styleFile} (strength ${flags['style-strength'] || 50})`);
 console.log(`  balance before: ${JSON.stringify(await balance())}`);
 
 const common = { image_size: { width: spec.w, height: spec.h }, no_background: true };
