@@ -39,6 +39,22 @@ export const ALL_REGION_BOSSES = Object.values(REGION_ENEMIES).map(r => r.boss);
 export const REGION_ENEMY_BY_ID = Object.fromEntries(ALL_REGION_ENEMIES.map(e => [e.id, e]));
 export const REGION_BOSS_BY_ID = Object.fromEntries(ALL_REGION_BOSSES.map(b => [b.id, b]));
 
+// SPRITE IDS, DERIVED — the same two lines enemies.js and bosses.js already run
+// over the base roster, applied to the populations they do not reach.
+//
+// These fourteen defs had NO spriteId at all, and the consequence was not a
+// missing sprite: it was that the entire art pipeline could not address them.
+// They were absent from `assets/assets.json` (the manifest generator imports
+// `ENEMIES`, which is the base twelve), absent from `docs/prompts.json`, and
+// absent from the gate that reports "spriteId on every def" — which was green
+// because it counted `ENEMIES.length` and had never heard of this file.
+//
+// Derived rather than authored per def for the reason `scalePer` is derived
+// (§13 rule 63): a field every def must carry and no def chooses is a field
+// that should not be typeable. A new region gets its ids by existing.
+for (const e of ALL_REGION_ENEMIES) e.spriteId = `enemy.${e.id}`;
+for (const b of ALL_REGION_BOSSES) b.spriteId = `boss.${b.id}`;
+
 // Telegraphing share of a population, by encounter weight. Exported so the
 // gate and the report read the same number rather than two implementations.
 export function telegraphWeight(enemies) {

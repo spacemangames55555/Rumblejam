@@ -1,7 +1,7 @@
 # Art generation phase
 
 Follows `patch-sprite-pipeline` and `patch-directional-sprites`. The pipeline is
-live, the manifest holds 298 ids, and units are 8-direction grids. This document
+live, the manifest holds 312 ids, and units are 8-direction grids. This document
 covers filling them.
 
 Canonical technical reference is [`SPRITES.md`](SPRITES.md). Where this document
@@ -12,58 +12,97 @@ updated by whoever changes it.
 
 ## 1. Generator coverage
 
-**Status: no image generator is connected to this environment.** The session's
-connectors are Gmail, Google Calendar and Google Drive; there is no PixelLab
-MCP, and no image-generation tool of any kind. Outbound HTTPS is also blocked by
-the environment's network policy (the proxy answers 403 to CONNECT for every
-external host), so the PixelLab API cannot be reached directly either, and its
-pricing page cannot be read.
+**Status: the API is reachable; the key is not present.** That is a narrower
+block than this section used to describe, and the difference matters.
 
-Batches 0–8 are therefore blocked on a generator being made available. Nothing
-in this document can start until then. Everything that does *not* depend on
-which generator is chosen has been built and is listed in §10.
+Verified against the live service, not inferred:
 
-When a generator does appear, the first action is still to introspect its live
-tool schemas rather than trust any README, and to revise this table:
+| probe | answer |
+|---|---|
+| `GET api.pixellab.ai/v1/balance` | `401 Invalid API token` |
+| `POST /v1/generate-image-pixflux`, via `tools/pixellab.mjs`'s own curl path | `401 Invalid API token` |
+| `GET api.pixellab.ai/v1/openapi.json` | `200` |
+| `www.pixellab.ai` | `403` on CONNECT — still blocked |
 
-| Asset class | ids | Covered by PixelLab's four documented tools? |
+A 401 is the API refusing a request; a 403 on CONNECT is the gateway refusing a
+host. **Transport works end to end, including the stdin-config curl path the
+client actually uses.** Only the *marketing* host is blocked, which means the
+pricing page cannot be read from here while the meter can: every generate and
+rotate response carries `usage`, and `GET /balance` returns the account balance.
+
+So batches 0–8 are blocked on `PIXELLAB_API_KEY` alone. It lives in the
+environment (see §11), and nothing else is missing.
+
+**The endpoint surface has not moved.** All four endpoints the client calls
+still exist, and every parameter it sends is still in the live schema —
+including `style_image`/`style_strength`, `image_guidance_scale`, all eight
+`Direction` values and `"low top-down"`. Two deltas worth knowing:
+
+- `/rotate` has **no `no_background`**. `gen_unit.mjs` spreads it in; the schema
+  sets no `additionalProperties: false`, so it is ignored rather than rejected.
+  The seven rotated facings inherit transparency from their source image, which
+  is what the matte check exists to catch.
+- Canvas caps are **pixflux 400, bitforge 200, rotate 200**. Enemy cells are 128
+  and boss cells 64, so a region generates comfortably. The two character sheets
+  that shipped at 256 (Bard, Necromancer) could *not* be regenerated at their
+  own cell size through either style-referenced path.
+
+| Asset class | ids | Covered by the four endpoints? |
 |---|---|---|
-| Characters, enemies, bosses | **64** | Yes — `create_character(n_directions=8)` + `animate_character` |
-| Ground / environment tiles | — | Yes, if tiled floors are wanted |
+| Characters, enemies, bosses, pets | **46** | Yes — pixflux/bitforge base + `/rotate` ×7 |
+| Ground / environment tiles | 5 | Yes, if tiled floors are wanted |
 | Projectiles, FX | 30 | **No** |
 | Props, structures | 24 | **No** |
-| Item and weapon icons | 172 | **No** |
+| Item and weapon icons | 199 | **No** |
 | UI chrome | 8 | **No** |
 
-If those four tools are all there is, the 234 non-unit ids need a second
-generator. That is a separate decision and must not block the character
-batches — the 64 unit sheets are both the highest-value art in the game and the
-only part PixelLab is actually built for.
+The 266 non-unit ids need a second generator. That is a separate decision and
+must not block the unit batches — the 46 unit sheets are both the highest-value
+art in the game and the only part PixelLab is built for.
 
-> **Count correction.** The earlier draft estimated ~8 bosses and ~35 regular
-> enemies. The live catalog has **4 bosses** and **13 enemy sheets** (12 types
-> plus the siege Ward Pylon). Total units is **64**, not ~90. Batch 3 is a
-> quarter the size it was budgeted for.
+> **Count corrections, twice over.** An early draft estimated ~8 bosses and ~35
+> regular enemies; a later one recorded **64** units against a roster that has
+> since been replaced. The live figure is **46** directional units: 14
+> characters, 25 enemies (12 base + 12 region + the siege Ward Pylon), 6 bosses
+> (4 floor + 2 region) and 1 combat pet. Item icons are **199**, not 172.
+>
+> Fourteen of those 46 — every region enemy and both region bosses — were
+> invisible to this pipeline until `patch-region-art-plumbing`: they carried no
+> `spriteId`, so they were absent from the manifest, absent from
+> `prompts.json`, and `gen_unit.mjs` refused them by name. See §13 rule 73.
 
 ---
 
 ## 2. Style anchor
 
-**Generate exactly one unit first and stop.** Pulsar — close-combat nova
-character, the reference implementation of engine-not-multiplier, and the most
-visually distinctive thing in the roster.
+**The anchor is the Druid** — `char.toh_druid`, installed and shipping. Pulsar
+carried it under the retired arcade palette; that decision and its cost are
+recorded in [`STYLE_ANCHOR.md`](STYLE_ANCHOR.md), and the id the pipeline
+actually uses is the `STYLE_ANCHOR_ID` constant in `gen_prompts.mjs`.
 
-1. Generate Pulsar alone, 8 directions, idle only. Iterate until approved.
-2. Record the returned asset id and the exact final prompt in
-   [`STYLE_ANCHOR.md`](STYLE_ANCHOR.md).
-3. Every later generation references that anchor — via the API's reference
-   parameter if one exists, and via verbatim reuse of the style clause either
-   way.
-4. **Never re-roll the anchor once batch 1 begins.** A changed anchor
+1. Every generation references the anchor: `--style=<one facing of the anchor>`,
+   and verbatim reuse of the style clause, which is pasted in mechanically.
+2. **Never re-roll the anchor once a batch begins.** A changed anchor
    invalidates everything generated before it.
 
-Consistency drift across 298 assets is the primary failure mode of this phase.
+Consistency drift across 312 assets is the primary failure mode of this phase.
 The anchor is the only defence.
+
+> **The anchor has never been round-tripped, and the first spend must be that
+> and nothing else.** Every sheet in the game arrived as a file: the Druid's
+> eight facings were hand-supplied, and so were all thirteen batch-1
+> characters — "nothing was regenerated, resampled or retouched". So
+> `gen_unit.mjs` has produced no committed asset, and the style clause in
+> `STYLE_ANCHOR.md` was *written from* the Druid by measuring him rather than
+> *verified against* him. Generate one unit — 8 generations — with
+> `--style=docs/art-review/druid/sources/south.png` and put it next to him
+> before anything else. If the clause does not reproduce him, that is the
+> cheapest possible place to find out; 56 generations into a region is the most
+> expensive.
+>
+> Pass the **cell**, not the sheet. `--style=` base64s whatever file it is
+> given, so `assets/sprites/char/toh_druid.png` hands the model a 128×1024 grid
+> of eight stacked facings as its style reference.
 
 The discipline is enforced mechanically: `tools/gen_prompts.mjs` reads the style
 clause out of `STYLE_ANCHOR.md` between two markers and pastes it into every
@@ -90,8 +129,8 @@ no ground shadow, no outline glow
   "needle-narrow, the thinnest profile in the cast"). At Rumblejam's density
   silhouette is the entire readability budget — at ~36 css px on a dark floor
   with 200 enemies alive, outline is all a player resolves. Colour and interior
-  detail are secondary. All 64 are written, and the generator fails if two units
-  share a description.
+  detail are secondary. All 78 are written, and the generator fails if two units
+  share a description, or if a directional id has no subject at all.
 - Transparent background, no baked shadow. The renderer composites.
 
 `docs/prompts.json` is generated and holds the exact prompt for every unit,
@@ -154,14 +193,14 @@ hand assembly is how they get in.
 
 | # | Batch | Count | Notes |
 |---|---|---|---|
-| 0 | Style anchor — Pulsar, idle | 1 | Approve before anything else |
-| 1 | Player characters, idle | 46 | First real look at directional in play |
-| 2 | Bosses, idle | 4 | |
-| 3 | Regular enemies, idle | 13 | Direction-count decision lands here |
+| 0 | Style anchor round-trip — one unit from the Druid clause | 1 | **Never done.** Approve before anything else (§2) |
+| 1 | Player characters + combat pets, idle | 14 | All hand-supplied and installed |
+| 2 | Bosses, idle | 6 | 4 floor + 2 region |
+| 3 | Regular enemies, idle | 25 | 12 base + 12 region + pylon. Direction-count decision lands here |
 | 4 | Animations for approved units | — | Only after all idles are approved |
 | 5 | Projectiles, FX, pickups | 30 | Needs a non-character generator |
 | 6 | Props, structures | 24 | Needs a non-character generator |
-| 7 | Item and weapon icons | 172 | **Blocked on shop-UI DOM wiring** |
+| 7 | Item and weapon icons | 199 | **Blocked on shop-UI DOM wiring** |
 | 8 | UI chrome | 8 | Last |
 
 **Idles across the whole roster before any animation.** Animation multiplies
@@ -243,17 +282,31 @@ blank row is how a mis-assembled grid hides.
 
 ## 9. Budget
 
-**Not answerable from this environment.** Outbound HTTPS is blocked by the
-network policy, so PixelLab's pricing page and API docs both return 403 before
-any request reaches them.
+**The quantity is exact; the unit price is one authenticated call away.**
 
-This needs checking by hand before batch 1, not during it. The quantities to
-price against:
+`gen_unit.mjs` generates one base view and chain-rotates it seven times. That is
+**8 API calls per unit**, strictly serial — the two rotation chains are awaited
+in sequence, and the tool takes one sprite id per process, so parallelism across
+units is the caller's to add.
 
-| | count | at 8 directions | with 4 animation frames |
+| | units | calls | wall clock, serial |
 |---|---|---|---|
-| Unit sheets | 64 | 512 direction-images | 2,048 cells |
-| Non-unit assets | 234 | — | — |
+| one unit | 1 | **8** | ~3.5–5.5 min |
+| a region: 6 enemies + 1 boss | 7 | **56** | ~25–40 min |
+| both built regions | 14 | 112 | ~1 hr |
+| all 46 unit sheets, idle | 46 | 368 | — |
+| the six unbuilt regions | 42 | 336 | — |
+
+USD cannot be read here — `www.pixellab.ai` is still blocked — but it does not
+need to be guessed. `GET /v1/balance` returns the account's balance in its own
+unit, and every response carries `usage`, which `tools/pixellab.mjs` accumulates
+in **both** meters (see the note on `newSpend`/`spend` there: reading only
+`usage.generations` reported `0` for every run on a usd-metered account, which
+is a cost instrument lying about money).
+
+**56 is the per-round figure, not the cost.** §6 rejects a batch as a unit, so
+the real budget is 56 × rounds-to-approval — and no round has ever been run
+under the current anchor. See §2.
 
 ---
 
@@ -269,9 +322,44 @@ moment one exists.
 | `tools/verify_art_batch.mjs` | §8 acceptance 1, 4, 5 plus matte and empty-cell detection, and coverage counts |
 | `tools/gen_contact_sheet.mjs` | §6 contact sheet, generated |
 | `tools/gen_prompts.mjs` | §3 prompt assembly with the anchor gate |
-| `docs/silhouettes.json` | all 64 silhouette notes, hand-authored, uniqueness-checked |
+| `docs/silhouettes.json` | all 78 silhouette notes, hand-authored, uniqueness-checked |
+| `tools/secret_gate.mjs` | §11 — no credential in the tree, the index or the ignore rules |
 | `docs/STYLE_ANCHOR.md` | §2 anchor record, currently `PENDING` |
 | `assets/sprite-overrides.json` | per-sprite manifest overrides, merged by the manifest generator |
 
 All of it is covered by gates in `tools/sim_test.mjs`, which build synthetic
 sprite sheets, run them through the real tools, and assert the results.
+
+---
+
+## 11. The key
+
+`PIXELLAB_API_KEY` is read from the environment by `tools/pixellab.mjs` and
+nowhere else. **Supply it as an environment variable on the environment record**
+— the session container is ephemeral, so anything set per-session is gone with
+it, and anything pasted into a conversation is in that conversation forever.
+
+What already keeps it out of the repo, mechanically rather than by care:
+
+- `apiKey()` reads `process.env` and there is no config file to write it to.
+- It reaches curl through a **stdin config** (`-K -`), so it is never in `argv`
+  and never in `ps`.
+- Request bodies go to a temp dir outside the working tree, removed in a
+  `finally`. Nothing logs the header.
+
+And the two things that stop the *reflex* rather than the tool:
+
+- `.gitignore` covers the shapes of a credentials file (`.env`, `*.key`,
+  `*.pem`, `secrets.json`), because the failure mode is a key pasted into a
+  scratch file and swept up by `git add -A` — exactly how the browser suite's
+  sprite fixtures got committed twice.
+- `tools/secret_gate.mjs` covers what `.gitignore` cannot: **files that are
+  already tracked**, where an ignore rule has no effect. It asserts the key's
+  literal bytes appear in no tracked file and no staged change, that no tracked
+  file assigns a value to a credential-shaped name (documented placeholders like
+  `export PIXELLAB_API_KEY=...` pass, values do not), and that the `.gitignore`
+  block is still there. `--history` scans every commit; it is clean.
+
+**A gate cannot un-commit a secret.** It runs at the last point where prevention
+is possible — the tree and the index. Once a key is pushed, rotation is the only
+fix, and a key that has appeared in a conversation should be treated as pushed.

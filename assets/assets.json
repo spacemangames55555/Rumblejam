@@ -31,8 +31,20 @@
       "h": 64,
       "directions": 8
     },
+    "boss.pnw_boss": {
+      "file": "boss/pnw_boss.png",
+      "w": 64,
+      "h": 64,
+      "directions": 8
+    },
     "boss.vault_regent": {
       "file": "boss/vault_regent.png",
+      "w": 64,
+      "h": 64,
+      "directions": 8
+    },
+    "boss.xib_boss": {
+      "file": "boss/xib_boss.png",
       "w": 64,
       "h": 64,
       "directions": 8
@@ -239,6 +251,42 @@
       "h": 128,
       "directions": 8
     },
+    "enemy.pnw_bark_hulk": {
+      "file": "enemy/pnw_bark_hulk.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.pnw_cedar_warden": {
+      "file": "enemy/pnw_cedar_warden.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.pnw_elk": {
+      "file": "enemy/pnw_elk.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.pnw_mistwalker": {
+      "file": "enemy/pnw_mistwalker.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.pnw_sapling": {
+      "file": "enemy/pnw_sapling.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.pnw_thornhound": {
+      "file": "enemy/pnw_thornhound.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
     "enemy.skulker": {
       "file": "enemy/skulker.png",
       "w": 128,
@@ -265,6 +313,42 @@
     },
     "enemy.wombden": {
       "file": "enemy/wombden.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.xib_ashmoth": {
+      "file": "enemy/xib_ashmoth.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.xib_bloodpriest": {
+      "file": "enemy/xib_bloodpriest.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.xib_censer": {
+      "file": "enemy/xib_censer.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.xib_howler": {
+      "file": "enemy/xib_howler.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.xib_jade_colossus": {
+      "file": "enemy/xib_jade_colossus.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.xib_obsidian_lancer": {
+      "file": "enemy/xib_obsidian_lancer.png",
       "w": 128,
       "h": 128,
       "directions": 8

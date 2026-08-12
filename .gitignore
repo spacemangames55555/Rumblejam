@@ -19,3 +19,25 @@ docs/art-review/scratch/
 assets/sprites/enemy/skulker.png
 assets/sprites/enemy/flit.png
 assets/sprites/fx/material.png
+
+# CREDENTIALS — there is no key file in this repo, and these lines exist to
+# keep it that way.
+#
+# PIXELLAB_API_KEY lives in the environment. tools/pixellab.mjs reads
+# process.env and passes it to curl through a stdin config (`-K -`), so it is
+# never in argv, never in `ps` and never written to disk; the request body goes
+# to a temp dir outside the working tree. None of that stops somebody pasting
+# the key into a file "just for a minute" and then running `git add -A` — which
+# is exactly how the sprite fixtures above got committed twice.
+#
+# Same principle as that block: ignoring the shape makes the mistake
+# UNAVAILABLE rather than merely detectable. tools/secret_gate.mjs checks the
+# other half — that no tracked file or staged change carries the key already,
+# since .gitignore does nothing about a file that is already tracked.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+pixellab.key

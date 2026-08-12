@@ -14,8 +14,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { ALL_CHARS } from '../js/content/characters.js';
-import { ENEMIES } from '../js/content/enemies.js';
-import { BOSSES } from '../js/content/bosses.js';
+// ALL_ENEMY_DEFS, not ENEMIES: the base twelve PLUS every region population.
+// This import was `ENEMIES` and that is why fourteen region units — twelve
+// enemies and two bosses across the two built regions — were not in the
+// inventory this file exists to be. Nothing downstream could ask for art that
+// the manifest does not list.
+import { ALL_ENEMY_DEFS } from '../js/content/enemies.js';
+import { ALL_BOSS_DEFS } from '../js/content/bosses.js';
 import { WEAPONS } from '../js/content/weapons.js';
 import { ITEMS } from '../js/content/items.js';
 import {
@@ -55,12 +60,13 @@ function add(id, extra = {}) {
 // ---- characters: both rosters, one sheet each ----
 for (const c of ALL_CHARS) add(c.spriteId);
 
-// ---- enemies, plus the pylon whose def is inline in the engine ----
-for (const e of ENEMIES) add(e.spriteId);
+// ---- enemies (base roster + every region), plus the pylon whose def is
+//      inline in the engine ----
+for (const e of ALL_ENEMY_DEFS) add(e.spriteId);
 add(PYLON_SPRITE);
 
-// ---- bosses (96x96) ----
-for (const b of BOSSES) add(b.spriteId);
+// ---- bosses: the four floor bosses and one two-phase boss per region ----
+for (const b of ALL_BOSS_DEFS) add(b.spriteId);
 
 // ---- projectiles: every id projSpriteFor() can return ----
 for (const id of allProjSpriteIds()) add(id);
