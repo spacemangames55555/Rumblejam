@@ -15,38 +15,38 @@
     },
     "boss.broodmother_viv": {
       "file": "boss/broodmother_viv.png",
-      "w": 64,
-      "h": 64,
+      "w": 192,
+      "h": 192,
       "directions": 8
     },
     "boss.choir_of_eyes": {
       "file": "boss/choir_of_eyes.png",
-      "w": 64,
-      "h": 64,
+      "w": 192,
+      "h": 192,
       "directions": 8
     },
     "boss.ossuary_hulk": {
       "file": "boss/ossuary_hulk.png",
-      "w": 64,
-      "h": 64,
+      "w": 192,
+      "h": 192,
       "directions": 8
     },
     "boss.pnw_boss": {
       "file": "boss/pnw_boss.png",
-      "w": 64,
-      "h": 64,
+      "w": 192,
+      "h": 192,
       "directions": 8
     },
     "boss.vault_regent": {
       "file": "boss/vault_regent.png",
-      "w": 64,
-      "h": 64,
+      "w": 192,
+      "h": 192,
       "directions": 8
     },
     "boss.xib_boss": {
       "file": "boss/xib_boss.png",
-      "w": 64,
-      "h": 64,
+      "w": 192,
+      "h": 192,
       "directions": 8
     },
     "char.toh_assassin": {
