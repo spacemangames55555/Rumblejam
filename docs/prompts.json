@@ -23,10 +23,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        64,
-        64
+        192,
+        192
       ],
-      "prompt": "Broodmother Viv, a floor-3 dungeon boss, a bloated radial abdomen carried on six thin splayed legs, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Broodmother Viv, a floor-3 dungeon boss, a bloated radial abdomen carried on six thin splayed legs, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "boss.choir_of_eyes": {
       "batch": 2,
@@ -35,10 +35,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        64,
-        64
+        192,
+        192
       ],
-      "prompt": "Choir of Eyes, a floor-2 dungeon boss, a floating cluster of unblinking eyes, no limbs at all, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Choir of Eyes, a floor-2 dungeon boss, a floating cluster of unblinking eyes, no limbs at all, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "boss.ossuary_hulk": {
       "batch": 2,
@@ -47,10 +47,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        64,
-        64
+        192,
+        192
       ],
-      "prompt": "The Ossuary Hulk, a floor-1 dungeon boss, a mountain of fused bone, asymmetric, one arm far larger than the other, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
+      "prompt": "The Ossuary Hulk, a floor-1 dungeon boss, a mountain of fused bone, asymmetric, one arm far larger than the other, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "boss.pnw_boss": {
       "batch": 2,
@@ -59,10 +59,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        64,
-        64
+        192,
+        192
       ],
-      "prompt": "The Ceder Mother, a two-phase region boss, Pacific Northwest region, a broad rooted torso crowned by a canopy of splayed limbs, wider at the top than the base, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
+      "prompt": "The Ceder Mother, a two-phase region boss, Pacific Northwest region, a broad rooted torso crowned by a canopy of splayed limbs, wider at the top than the base, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "boss.vault_regent": {
       "batch": 2,
@@ -71,10 +71,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        64,
-        64
+        192,
+        192
       ],
-      "prompt": "The Vault Regent, a floor-4 dungeon boss, a tall crowned throne-form, floating, cape falling to a single point, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
+      "prompt": "The Vault Regent, a floor-4 dungeon boss, a tall crowned throne-form, floating, cape falling to a single point, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "boss.xib_boss": {
       "batch": 2,
@@ -83,10 +83,10 @@
       "directions": 8,
       "frames": 1,
       "size": [
-        64,
-        64
+        192,
+        192
       ],
-      "prompt": "Ixkik, the Blood Moon, a two-phase region boss, Central America region, a tall thin figure inside a broken crescent ring that arcs overhead, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 64px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Ixkik, the Blood Moon, a two-phase region boss, Central America region, a tall thin figure inside a broken crescent ring that arcs overhead, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "char.toh_assassin": {
       "batch": 0,

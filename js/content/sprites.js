@@ -44,7 +44,7 @@ export const DIRECTIONAL_NAMESPACES = new Set(['char', 'enemy', 'boss', 'beast']
 // 36 css px at the reference viewport — so a 64px sheet would be downscaled
 // 56% and throw away more than half the pixels it was authored with, which is
 // most of why early anchor art read as soft. 32px is a hair under the draw
-// size and stays crisp. Bosses are drawn at ~92 css px, so they take 64.
+// size and stays crisp.
 //
 // That reasoning was applied to CHARACTERS and quietly assumed to hold for
 // enemies, where it does not:
@@ -62,11 +62,25 @@ export const DIRECTIONAL_NAMESPACES = new Set(['char', 'enemy', 'boss', 'beast']
 // This is a source-resolution change ONLY. Painted size is unchanged: the
 // composed scale divides by the cell width, so a bigger cell cancels out
 // exactly. No radius, no hitbox, nothing on the wire.
-
+//
+// BOSSES WERE LEFT BEHIND BY THAT FIX, and the paragraph above diagnoses why:
+// the character reasoning was assumed to hold and was never checked. Measured,
+// in source pixels available per painted world unit:
+//
+//   chaff enemies (r 12-15)     4.3 - 5.3     a comfortable downscale
+//   heavy enemies (r 25-27)     2.4 - 2.6     still a downscale
+//   BOSSES at 64 (r 46-48)      0.67 - 0.70   a 1.5x UPSCALE
+//
+// The biggest thing on the field was drawn from the smallest cell — a sevenfold
+// disparity, the wrong way round, on the one unit a player looks at longest.
+// 192 puts bosses at 2.0-2.1, alongside the heaviest enemies, and costs 1.13 MB
+// decoded each against 0.13 at 64. Changed here rather than later because NO
+// BOSS ART EXISTS: 0 of 6 boss ids have a file, so this is free today and
+// means redrawing six sheets the moment it is not.
 export const SPRITE_SIZE = {
   char: [32, 32],
   enemy: [128, 128],
-  boss: [64, 64],
+  boss: [192, 192],
   proj: [32, 32],
   fx: [32, 32],
   item: [32, 32],
