@@ -82,7 +82,7 @@ export const BARD_ENSEMBLE = [
     ranks: R,
   },
   {
-    id: 'bard_traveling_song', tree: 'bard_ensemble', tier: 3, name: 'Traveling Song',
+    id: 'bard_traveling_song', tree: 'bard_ensemble', tier: 4, name: 'Traveling Song',
     desc: 'Absorbs 20 over 4.4s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'bard_refrain',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -94,7 +94,7 @@ export const BARD_ENSEMBLE = [
   {
     id: 'bard_cutting_remark', tree: 'bard_ensemble', tier: 4, name: 'Cutting Remark',
     desc: 'A barb at the fattest thing in range. 7 damage, and it deals 22% less for 2.6s.',
-    type: 'active', domain: 'mental', prereq: 'bard_traveling_song',
+    type: 'active', domain: 'mental', prereq: 'bard_refrain',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.remarkRange },
     cooldown: T.remarkCd,
@@ -109,9 +109,9 @@ export const BARD_ENSEMBLE = [
     // Litany is one: `regen` is an ITEM hook, not a registered passive key, and
     // inventing a passive key means a reader in `skillsim.js` — the engine code
     // a content-shaped class is not supposed to cost. See §8.3.
-    id: 'bard_answering_chorus', tree: 'bard_ensemble', tier: 5, name: 'Answering Chorus',
+    id: 'bard_answering_chorus', tree: 'bard_ensemble', tier: 6, name: 'Answering Chorus',
     desc: 'Deals 6 damage and returns half of it as health.',
-    type: 'active', domain: 'spiritual', prereq: 'bard_cutting_remark',
+    type: 'active', domain: 'spiritual', prereq: 'bard_traveling_song',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.chorusRange },
     cooldown: T.chorusCd,
@@ -121,7 +121,7 @@ export const BARD_ENSEMBLE = [
   {
     id: 'bard_dirge', tree: 'bard_ensemble', tier: 6, name: 'Dirge',
     desc: 'A slow tune that hangs on the ground, slowing to 74% for 1.3s. 4 damage a tick over 3.8s.',
-    type: 'active', domain: 'mental', prereq: 'bard_answering_chorus',
+    type: 'active', domain: 'mental', prereq: 'bard_cutting_remark',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.dirgeRadius, count: T.dirgeCount },
     cooldown: T.dirgeCd,
@@ -133,7 +133,7 @@ export const BARD_ENSEMBLE = [
     ranks: R,
   },
   {
-    id: 'bard_rondo', tree: 'bard_ensemble', tier: 7, name: 'Rondo',
+    id: 'bard_rondo', tree: 'bard_ensemble', tier: 8, name: 'Rondo',
     desc: 'A returning phrase that heals 5 for every enemy it touches. Deals 8 damage.',
     type: 'active', domain: 'spiritual', prereq: 'bard_dirge',
     select: 'densest_cluster',
@@ -148,7 +148,7 @@ export const BARD_ENSEMBLE = [
   {
     id: 'bard_standing_ovation', tree: 'bard_ensemble', tier: 8, name: 'Standing Ovation',
     desc: 'Absorbs 32 over 5.4s and returns 35% of what it stops.',
-    type: 'active', domain: 'spiritual', prereq: 'bard_rondo',
+    type: 'active', domain: 'spiritual', prereq: 'bard_answering_chorus',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.ovationCd,
@@ -159,7 +159,7 @@ export const BARD_ENSEMBLE = [
     ranks: R,
   },
   {
-    id: 'bard_marching_order', tree: 'bard_ensemble', tier: 9, name: 'Marching Order',
+    id: 'bard_marching_order', tree: 'bard_ensemble', tier: 10, name: 'Marching Order',
     desc: 'A line that holds what it crosses in place for 1.3s. Deals 7 damage.',
     type: 'active', domain: 'mental', prereq: 'bard_standing_ovation',
     select: 'farthest',
@@ -174,7 +174,7 @@ export const BARD_ENSEMBLE = [
   {
     id: 'bard_finale', tree: 'bard_ensemble', tier: 10, name: 'Finale',
     desc: 'The whole room told to leave. 10 damage, 6 health back for every enemy it touches, and they go with it.',
-    type: 'active', domain: 'physical', prereq: 'bard_marching_order',
+    type: 'active', domain: 'physical', prereq: 'bard_rondo',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.finaleRadius, count: T.finaleCount },
     cooldown: T.finaleCd,

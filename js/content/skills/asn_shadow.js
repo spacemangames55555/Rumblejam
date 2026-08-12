@@ -78,7 +78,7 @@ export const ASN_SHADOW = [
     ranks: R,
   },
   {
-    id: 'asn_vanish', tree: 'asn_shadow', tier: 3, name: 'Vanish',
+    id: 'asn_vanish', tree: 'asn_shadow', tier: 4, name: 'Vanish',
     desc: 'Absorbs 22 over 4.4s when you drop below 55% health.',
     type: 'active', domain: 'mental', prereq: 'asn_hamstring',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -88,7 +88,7 @@ export const ASN_SHADOW = [
     ranks: R,
   },
   {
-    id: 'asn_open_vein', tree: 'asn_shadow', tier: 4, name: 'Open Vein',
+    id: 'asn_open_vein', tree: 'asn_shadow', tier: 6, name: 'Open Vein',
     desc: 'A blade that keeps working. 9 damage plus 9 over 2.8s.',
     type: 'active', domain: 'physical', prereq: 'asn_vanish',
     select: 'highest_hp',
@@ -104,9 +104,9 @@ export const ASN_SHADOW = [
     // The tree's one engine reader, and deliberately the EXECUTE: a field the
     // Assassin has not spent still pays it something, which is the only reason
     // holding a full box while fighting elsewhere is worth doing.
-    id: 'asn_last_word', tree: 'asn_shadow', tier: 5, name: 'Last Word',
+    id: 'asn_last_word', tree: 'asn_shadow', tier: 8, name: 'Last Word',
     desc: 'Finishes what is nearly gone. 12 damage below 45% health, +6% per trap still set.',
-    type: 'active', domain: 'mental', prereq: 'asn_open_vein',
+    type: 'active', domain: 'mental', prereq: 'asn_cutpurse',
     select: 'lowest_hp',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.lastPct, range: T.lastRange },
     cooldown: T.lastCd,
@@ -117,9 +117,9 @@ export const ASN_SHADOW = [
     ranks: R,
   },
   {
-    id: 'asn_mark_of_debt', tree: 'asn_shadow', tier: 6, name: 'Mark of Debt',
+    id: 'asn_mark_of_debt', tree: 'asn_shadow', tier: 4, name: 'Mark of Debt',
     desc: 'Opens the fattest thing in range — it takes 26% more for 2.6s. Deals 10 damage.',
-    type: 'active', domain: 'mental', prereq: 'asn_last_word',
+    type: 'active', domain: 'mental', prereq: 'asn_hamstring',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.debtRange },
     cooldown: T.debtCd,
@@ -134,7 +134,7 @@ export const ASN_SHADOW = [
     // Litany, the Bard's Answering Chorus, the Mage's Accretion and the
     // Sundian's Sump are: `regen` is an ITEM hook, not a registered passive key
     // (§8.3).
-    id: 'asn_cutpurse', tree: 'asn_shadow', tier: 7, name: 'Cutpurse',
+    id: 'asn_cutpurse', tree: 'asn_shadow', tier: 6, name: 'Cutpurse',
     desc: 'Deals 9 damage and takes 45% of it back as health.',
     type: 'active', domain: 'physical', prereq: 'asn_mark_of_debt',
     select: 'nearest',
@@ -146,7 +146,7 @@ export const ASN_SHADOW = [
   {
     id: 'asn_two_blades', tree: 'asn_shadow', tier: 8, name: 'Two Blades',
     desc: 'Two cuts on the same beat. Deals 8 damage a pulse.',
-    type: 'active', domain: 'physical', prereq: 'asn_cutpurse',
+    type: 'active', domain: 'physical', prereq: 'asn_open_vein',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.twoRadius, count: T.twoCount },
     cooldown: T.twoCd,
@@ -157,7 +157,7 @@ export const ASN_SHADOW = [
     ranks: R,
   },
   {
-    id: 'asn_nightwork', tree: 'asn_shadow', tier: 9, name: 'Nightwork',
+    id: 'asn_nightwork', tree: 'asn_shadow', tier: 10, name: 'Nightwork',
     desc: 'Ground glass underfoot that slows to 76% for 1.2s. 6 damage a tick over 3.6s.',
     type: 'active', domain: 'physical', prereq: 'asn_two_blades',
     select: 'densest_cluster',
@@ -175,7 +175,7 @@ export const ASN_SHADOW = [
     // Assassin does not clear rooms, it removes one thing from them.
     id: 'asn_the_contract', tree: 'asn_shadow', tier: 10, name: 'The Contract',
     desc: 'One name, one blade. 20 damage to the fattest thing in range, and it is stunned for 0.7s.',
-    type: 'active', domain: 'mental', prereq: 'asn_nightwork',
+    type: 'active', domain: 'mental', prereq: 'asn_last_word',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.contractRange },
     cooldown: T.contractCd,

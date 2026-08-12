@@ -617,7 +617,7 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 **Symmetric on purpose.** An asymmetric tree — one long branch carrying the only capstone — is a main line with a detour, not a choice. Both branches are four nodes deep and both terminate at tier 10, so the tier-2 decision is which capstone arrives first. With ~69 points against 30 nodes a player eventually owns both sides; what the branch buys is the ORDER, which at one point per level is most of a run.
 
-**What the assertions enforce** (all at import, all throwing): exactly `TREE_NODES` nodes; exactly one tier-1 node and it must be a damaging active (§5.6's opening pick); every prereq in the same tree; tier strictly decreasing along every prereq edge; every tier within `TIER_LEVELS`, so no node exists that no level unlocks; and every node reachable from the root. They enforce **structure, not shape** — nothing requires a tree to branch. Conversion is in progress: **18 branching trees and 24 chains**, and the chains stay legal until they are converted.
+**What the assertions enforce** (all at import, all throwing): exactly `TREE_NODES` nodes; exactly one tier-1 node and it must be a damaging active (§5.6's opening pick); every prereq in the same tree; tier strictly decreasing along every prereq edge; every tier within `TIER_LEVELS`, so no node exists that no level unlocks; and every node reachable from the root. They enforce **structure, not shape** — nothing requires a tree to branch. Conversion is in progress: **20 branching trees and 22 chains**, and the chains stay legal until they are converted.
 
 **A THIRD TREE'S TIER-2 PASSIVE IS THE ONE NODE THE DPS GATE CAN SEE, so price it against what its engine PUBLISHES.** `measureDps` runs at level 12: the tier gate reaches tier 4, and a class's two older trees fill all three slots first, so none of a third tree's actives are ever slotted there. The tier-2 passive is always on regardless. Monk Empty Hand's `chiDamageBonus` at 0.010 against an engine publishing up to 45 (CHI_CAP 40 + the focus step) is **+45% on everything** — measured, exactly the outlier the gate reported, and cutting the branch's damage numbers moved the reading by zero. Per-point passive values are not comparable between trees; only value × published maximum is.
 
@@ -1932,6 +1932,24 @@ They are the same category as the seven checks above, and the same category as D
 **Recorded here so it is a decision rather than a rediscovery.** §16's line that "the archived classic roster is design reference, not data" states the intent; this states the disposal.
 
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
+
+### Group E — built, working, and unreachable by a player (3)
+
+**THE RULE 71 SWEEP.** Three defects in a row had one shape: a sim-side system that worked, a gate that was green because it provisioned what the game never does, and no path from a real browser to it. The §5.6 opening card, unspent skill points and §4.1's difficulty ladder were each found by somebody playing rather than by a check. This group is the audit for the shape rather than the instances, and the answer was **several**, so it is a patch of its own rather than something folded into the tree conversion.
+
+The mechanical half is cheap and covers the whole surface: **every `kind` the sim's `uiAction` accepts should have a sender somewhere in `js/`.** Nineteen kinds, one with no sender.
+
+| What | State | Evidence |
+|---|---|---|
+| **Respec at 1000 gold** (§9.4) | handler at `game.js:4174`, **no sender anywhere in `js/`** | `econ_gate` proves the respec ladder works; nothing can ask for it |
+| **The Shrine's choice** — a skill point or a guaranteed reroll (§2.4) | `shrineOffer()` exported from `nodebehaviour.js`, **called by nothing in `js/` or `tools/`** | the offer is constructed and never presented; the node resolves without the choice |
+| **World map region selection** (§3) | `worldMapState()` exported, **called by nothing** | §16 already says "Rules built, **no DOM**" — the one of the three that is documented rather than silent |
+
+**Reachable, checked, and fine:** shop rerolls (`#shop-reroll`), item upgrades (the shop's buy path upgrades in place), loadout changes (the ◆ button, wherever `canSlot` holds), difficulty (fixed this patch).
+
+**Not a member of this group: save export/import.** There is no export or import in `js/saves.js` — persistence is localStorage only. That is a feature never built, which is a different thing from one built and unreachable, and filing it here would make the group mean two things.
+
+**What the group is waiting on is a decision per row, not code.** Respec wants a home — the shop screen is the obvious one and the §5.5 map-end step is the other. The Shrine wants a card like the boon's. The world map wants a screen. None is hard; all three are design surface rather than wiring, which is why they are listed rather than fixed.
 
 ### Group D — genuine open defects (1)
 
