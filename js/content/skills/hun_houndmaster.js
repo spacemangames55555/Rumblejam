@@ -88,7 +88,7 @@ export const HUN_HOUNDMASTER = [
     ranks: R,
   },
   {
-    id: 'hun_bay', tree: 'hun_houndmaster', tier: 3, name: 'Bay',
+    id: 'hun_bay', tree: 'hun_houndmaster', tier: 4, name: 'Bay',
     desc: 'The pack gives tongue and pulls the crowd onto you for 1.6s. Deals 8 damage.',
     type: 'active', domain: 'spiritual', prereq: 'hun_hound',
     select: 'densest_cluster',
@@ -106,7 +106,7 @@ export const HUN_HOUNDMASTER = [
     // once rather than growing.
     id: 'hun_second_hound', tree: 'hun_houndmaster', tier: 4, name: 'Second Hound',
     desc: 'A second hound at the other heel. Two inside 120 is Alpha: +20% Ferocity and +10% Tempo, to you and to them.',
-    type: 'active', domain: 'physical', prereq: 'hun_bay',
+    type: 'active', domain: 'physical', prereq: 'hun_hound',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.bayRange },
     cooldown: T.hound2Cd,
@@ -122,7 +122,7 @@ export const HUN_HOUNDMASTER = [
     ranks: R,
   },
   {
-    id: 'hun_feed_the_pack', tree: 'hun_houndmaster', tier: 5, name: 'Feed the Pack',
+    id: 'hun_feed_the_pack', tree: 'hun_houndmaster', tier: 6, name: 'Feed the Pack',
     desc: 'Restores 15 health when you drop below 65%.',
     type: 'active', domain: 'spiritual', prereq: 'hun_second_hound',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -132,9 +132,9 @@ export const HUN_HOUNDMASTER = [
     ranks: R,
   },
   {
-    id: 'hun_boarspear', tree: 'hun_houndmaster', tier: 6, name: 'Boarspear',
+    id: 'hun_boarspear', tree: 'hun_houndmaster', tier: 8, name: 'Boarspear',
     desc: 'A braced thrust that throws the front rank off the pack. Deals 11 damage.',
-    type: 'active', domain: 'physical', prereq: 'hun_feed_the_pack',
+    type: 'active', domain: 'physical', prereq: 'hun_snare_net',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.spearRadius, count: T.spearCount },
     cooldown: T.spearCd,
@@ -145,9 +145,9 @@ export const HUN_HOUNDMASTER = [
     ranks: R,
   },
   {
-    id: 'hun_snare_net', tree: 'hun_houndmaster', tier: 7, name: 'Snare Net',
+    id: 'hun_snare_net', tree: 'hun_houndmaster', tier: 6, name: 'Snare Net',
     desc: 'A cast net that holds what it crosses for 1.4s. Deals 9 damage.',
-    type: 'active', domain: 'mental', prereq: 'hun_boarspear',
+    type: 'active', domain: 'mental', prereq: 'hun_bay',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.netRadius, count: T.netCount },
     cooldown: T.netCd,
@@ -158,9 +158,9 @@ export const HUN_HOUNDMASTER = [
     ranks: R,
   },
   {
-    id: 'hun_kennel_guard', tree: 'hun_houndmaster', tier: 8, name: 'Kennel Guard',
+    id: 'hun_kennel_guard', tree: 'hun_houndmaster', tier: 10, name: 'Kennel Guard',
     desc: 'Absorbs 26 over 5s and returns 35% of what it stops.',
-    type: 'active', domain: 'spiritual', prereq: 'hun_snare_net',
+    type: 'active', domain: 'spiritual', prereq: 'hun_boarspear',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
     cooldown: T.kennelCd,
@@ -175,9 +175,9 @@ export const HUN_HOUNDMASTER = [
     // Litany, the Bard's Answering Chorus, the Mage's Accretion, the Sundian's
     // Sump and the Assassin's Cutpurse are: `regen` is an ITEM hook, not a
     // registered passive key (§8.3).
-    id: 'hun_blood_trail', tree: 'hun_houndmaster', tier: 9, name: 'Blood Trail',
+    id: 'hun_blood_trail', tree: 'hun_houndmaster', tier: 8, name: 'Blood Trail',
     desc: 'Deals 9 damage and takes half of it back as health.',
-    type: 'active', domain: 'physical', prereq: 'hun_kennel_guard',
+    type: 'active', domain: 'physical', prereq: 'hun_feed_the_pack',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.trailRange },
     cooldown: T.trailCd,

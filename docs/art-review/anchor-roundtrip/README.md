@@ -185,3 +185,170 @@ We have been describing in prose what the endpoint takes as parameters.
 eye down at 2.58.
 
 **Still stopped. 16 generations spent, no batch.**
+
+---
+
+# Attempt 3 — the API's own parameters. Closer, contaminated, still not landed.
+
+`style_strength=85`, `outline="single color black outline"`,
+`shading="medium shading"`, `detail="highly detailed"`. Same enemy, anchor cell
+and seed. 8 generations, 115 s.
+
+`shading` was chosen against the anchor rather than by feel, and the measurement
+reversed the obvious guess. The Druid uses **115 distinct colours** with **45.6%
+hard-edge pixels**; the generated attempts use ~1,500 colours at ~29%. The
+anchor is tight, banded and crisp-stepped — the generations are smooth and
+blended. So `"medium shading"`, not the `"detailed shading"` instinct suggested:
+smooth blending is what averages the darks away.
+
+| | target (Druid) | att1 prose | att2 prose | **att3 params** |
+|---|---|---|---|---|
+| luma median | **56** | 119 | 109 | **99** |
+| luma p25 | **24** | 56 | 49 | 58 |
+| luma p05 | **0** | 12 | 14 | **7** |
+| darkest 15% mean | **0.3** | 16.2 | 17.1 | **9.4** |
+| saturation median | 0.42 | 0.52 | 0.56 | 0.50 |
+| near-grey | 13.7% | 2.3% | 2.1% | **5.6%** |
+| distinct colours | **115** | 1436 | 1523 | **1639** |
+
+- [`05-all-three-vs-anchor.png`](05-all-three-vs-anchor.png) — Druid and all
+  three attempts, south at 1×/2×/3×.
+- [`06-attempt3-facings.png`](06-attempt3-facings.png) — south beside north.
+- [`attempt3-sources/`](attempt3-sources/), [`hulk-sheet-attempt3.png`](hulk-sheet-attempt3.png).
+
+## Which lever moved the number
+
+Both were changed at once, so this is inference from the shape of the change
+rather than a controlled comparison — but the shape is unusually legible.
+
+**The enums moved it, and specifically `outline`.** The darkest-15% mean nearly
+halved (17.1 → 9.4) and p05 fell 14 → 7. That is the black floor arriving, and
+it is precisely what `"single color black outline"` asks for. Near-grey more
+than doubled toward the target. Body value moved 109 → 99 — the same order the
+prose rewrite managed, so the enums did not fix the body either.
+
+**`style_strength=85` moved iconography, not value — and that is a failure, not
+a null result.** The attempt-3 Bark Hulk is carrying **the Druid's staff, his
+crossbelt sash, and antlers**. At 85 the reference bled its *content* into the
+subject; what came back is a green ogre holding somebody else's walking stick.
+
+**And the colour count settles it.** We pushed 85/100 toward a reference with
+**115 colours** and got **1,639** — more than either prose attempt. If style
+transfer governed palette or value at all, that number would have collapsed
+toward the reference. It went up.
+
+So, in the terms this was framed in: the enums did it, and **the reference image
+may not need to be the Druid** — stronger than that, at high strength it is
+actively harmful, because it transfers props rather than style.
+
+## Three negative results, and the decision that follows
+
+Median 56 target; 119 → 109 → 99 across three attempts. **Not landed. Stopped at
+three as agreed, no fourth.**
+
+The honest read is not "nothing works" — the black floor genuinely improved, and
+one more arm (body value alone: `"flat shading"`, low or no style reference) is
+a coherent experiment. But three attempts on one target is the point at which
+the question changes, and the evidence now points at something structural rather
+than at tuning:
+
+**115 colours against 1,639 is not a tuning gap, it is a different rendering
+mode.** The anchor is a tight hand-authored palette with crisp value steps.
+This endpoint produces near-continuous shading, and it did so through prose,
+through a rewritten clause, and through its own typed style parameters at high
+strength. Nothing available moved it below ~1,400 colours.
+
+That is consistent with the pipeline's own history: **every shipped asset in
+this game was hand-supplied.** The Druid's eight facings, all thirteen batch-1
+characters, the bear. `gen_unit.mjs` has now been run three times and produced
+nothing installable.
+
+The decision is therefore not "which parameter next" but whether this API is the
+right source for units at all, given the anchor it has to match. That is
+yours — the options are a fourth parameter arm, a different anchor that this API
+*can* reproduce, or continuing to hand-supply units and using generation for
+something else.
+
+**24 generations spent across three attempts. Nothing installed.**
+
+---
+
+# Attempt 4 — flat shading, no style reference. The colour count collapsed 3.3×, and the answer is still no.
+
+One arm, authorised to settle one number. `shading="flat shading"`, no
+`--style` at all (so pixflux, and `style_strength` out of the picture entirely).
+`outline` and `detail` held at attempt 3's values so the delta is exactly the
+two things under test.
+
+**The decisive number: 1,639 → 491.**
+
+| | TARGET | att1 | att2 | att3 | **att4** |
+|---|---|---|---|---|---|
+| **distinct colours** | **115** | 1436 | 1523 | 1639 | **491** |
+| hard-edge % | **45.6** | 29.7 | 28.6 | 37.7 | **9.2** |
+| luma median | **56** | 119 | 109 | 99 | **27** |
+| luma p25 | **24** | 56 | 49 | 58 | **15** |
+| darkest 15% mean | **0.3** | 16.2 | 17.1 | 9.4 | 8.9 |
+| saturation median | 0.42 | 0.52 | 0.56 | 0.50 | 0.58 |
+| near-grey | 13.7% | 2.3% | 2.1% | 5.6% | **0.6%** |
+
+[`07-attempt4-flat-no-reference.png`](07-attempt4-flat-no-reference.png),
+[`attempt4-sources/`](attempt4-sources/),
+[`hulk-sheet-attempt4.png`](hulk-sheet-attempt4.png).
+
+## What the number says
+
+**The mechanism was real and it is controllable.** Smooth blending was averaging
+the darks away, `flat shading` is the API's word for not doing that, and the
+palette fell by a factor of 3.3 the moment it was set. That is not a nudge; it
+is the endpoint changing rendering mode on request. The hypothesis was right.
+
+**And it still did not reach the anchor.** 491 is neither 115 nor 1,600 — it
+landed between the two poles this arm was meant to choose between, and the
+honest reading is that the question was slightly the wrong shape. Colour count
+alone does not locate the anchor's mode, because the anchor is **115 colours
+*and* 45.6% hard edges**: a tight palette laid down in dense, crisp bands.
+Attempt 4 is 491 colours at **9.2%** hard edges — large smooth regions. It
+traded one kind of wrong for another and moved *further* from the anchor on
+edge density than any previous attempt.
+
+**It also overshot value in the other direction.** Median 27 against a target of
+56 — now half as bright as the anchor, having been twice as bright three times
+running. Nothing has landed on 56; three attempts sat near 100 and this one sat
+near 27.
+
+**And dropping the reference cost the subject.** Without a style image the
+result stopped being a Bark Hulk: no bark, no trunk body, none of the silhouette
+brief beyond the heavy forelimbs. It is a generic brown brute in a loincloth.
+That is the mirror of attempt 3's failure — at style_strength 85 the reference
+bled its props in; with no reference at all, the subject drifted out. Neither
+end of that axis produced the right unit.
+
+## Where this leaves it
+
+Four configurations, four different misses, nothing installable:
+
+| | failure |
+|---|---|
+| att1–2 (prose) | too bright, no black, ~1,500 colours |
+| att3 (params + strong reference) | black floor arrives; wears the Druid's staff and antlers |
+| att4 (flat, no reference) | palette collapses; too dark, no edge density, subject drifts |
+
+**The rendering mode is controllable — the anchor's particular mode was not
+reached.** Whether a fifth configuration exists that hits 115 colours at 45.6%
+hard edges with a median of 56 *and* keeps the subject is not something four
+data points can answer, and it is not being tried: the instruction was one arm
+and stop, and that is the right call regardless of how the number came out.
+
+What is now established rather than assumed:
+
+- `shading` governs palette size, strongly and predictably.
+- `outline` governs the black floor.
+- the style reference governs *subject fidelity*, and its strength trades
+  subject-drift against prop-contamination with no obviously safe middle tried.
+- none of them governs the anchor's combination of tight palette **with** dense
+  crisp banding, which may be a property of hand-authoring rather than a
+  parameter.
+
+**32 generations across four attempts. Nothing installed.** Every shipped asset
+in this game is still hand-supplied.
