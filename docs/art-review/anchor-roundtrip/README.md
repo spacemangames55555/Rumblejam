@@ -185,3 +185,88 @@ We have been describing in prose what the endpoint takes as parameters.
 eye down at 2.58.
 
 **Still stopped. 16 generations spent, no batch.**
+
+---
+
+# Attempt 3 — the API's own parameters. Closer, contaminated, still not landed.
+
+`style_strength=85`, `outline="single color black outline"`,
+`shading="medium shading"`, `detail="highly detailed"`. Same enemy, anchor cell
+and seed. 8 generations, 115 s.
+
+`shading` was chosen against the anchor rather than by feel, and the measurement
+reversed the obvious guess. The Druid uses **115 distinct colours** with **45.6%
+hard-edge pixels**; the generated attempts use ~1,500 colours at ~29%. The
+anchor is tight, banded and crisp-stepped — the generations are smooth and
+blended. So `"medium shading"`, not the `"detailed shading"` instinct suggested:
+smooth blending is what averages the darks away.
+
+| | target (Druid) | att1 prose | att2 prose | **att3 params** |
+|---|---|---|---|---|
+| luma median | **56** | 119 | 109 | **99** |
+| luma p25 | **24** | 56 | 49 | 58 |
+| luma p05 | **0** | 12 | 14 | **7** |
+| darkest 15% mean | **0.3** | 16.2 | 17.1 | **9.4** |
+| saturation median | 0.42 | 0.52 | 0.56 | 0.50 |
+| near-grey | 13.7% | 2.3% | 2.1% | **5.6%** |
+| distinct colours | **115** | 1436 | 1523 | **1639** |
+
+- [`05-all-three-vs-anchor.png`](05-all-three-vs-anchor.png) — Druid and all
+  three attempts, south at 1×/2×/3×.
+- [`06-attempt3-facings.png`](06-attempt3-facings.png) — south beside north.
+- [`attempt3-sources/`](attempt3-sources/), [`hulk-sheet-attempt3.png`](hulk-sheet-attempt3.png).
+
+## Which lever moved the number
+
+Both were changed at once, so this is inference from the shape of the change
+rather than a controlled comparison — but the shape is unusually legible.
+
+**The enums moved it, and specifically `outline`.** The darkest-15% mean nearly
+halved (17.1 → 9.4) and p05 fell 14 → 7. That is the black floor arriving, and
+it is precisely what `"single color black outline"` asks for. Near-grey more
+than doubled toward the target. Body value moved 109 → 99 — the same order the
+prose rewrite managed, so the enums did not fix the body either.
+
+**`style_strength=85` moved iconography, not value — and that is a failure, not
+a null result.** The attempt-3 Bark Hulk is carrying **the Druid's staff, his
+crossbelt sash, and antlers**. At 85 the reference bled its *content* into the
+subject; what came back is a green ogre holding somebody else's walking stick.
+
+**And the colour count settles it.** We pushed 85/100 toward a reference with
+**115 colours** and got **1,639** — more than either prose attempt. If style
+transfer governed palette or value at all, that number would have collapsed
+toward the reference. It went up.
+
+So, in the terms this was framed in: the enums did it, and **the reference image
+may not need to be the Druid** — stronger than that, at high strength it is
+actively harmful, because it transfers props rather than style.
+
+## Three negative results, and the decision that follows
+
+Median 56 target; 119 → 109 → 99 across three attempts. **Not landed. Stopped at
+three as agreed, no fourth.**
+
+The honest read is not "nothing works" — the black floor genuinely improved, and
+one more arm (body value alone: `"flat shading"`, low or no style reference) is
+a coherent experiment. But three attempts on one target is the point at which
+the question changes, and the evidence now points at something structural rather
+than at tuning:
+
+**115 colours against 1,639 is not a tuning gap, it is a different rendering
+mode.** The anchor is a tight hand-authored palette with crisp value steps.
+This endpoint produces near-continuous shading, and it did so through prose,
+through a rewritten clause, and through its own typed style parameters at high
+strength. Nothing available moved it below ~1,400 colours.
+
+That is consistent with the pipeline's own history: **every shipped asset in
+this game was hand-supplied.** The Druid's eight facings, all thirteen batch-1
+characters, the bear. `gen_unit.mjs` has now been run three times and produced
+nothing installable.
+
+The decision is therefore not "which parameter next" but whether this API is the
+right source for units at all, given the anchor it has to match. That is
+yours — the options are a fourth parameter arm, a different anchor that this API
+*can* reproduce, or continuing to hand-supply units and using generation for
+something else.
+
+**24 generations spent across three attempts. Nothing installed.**

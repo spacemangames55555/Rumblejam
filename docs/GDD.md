@@ -1846,6 +1846,16 @@ Widening the imports fixes today's miss and nothing else — the next population
 
 That second check earned itself immediately. `js/regions.js` declared `central_america`'s population as six `ca_*` ids — `ca_jaguar_priest`, `ca_bloodletter`, `ca_xib_shade`, `ca_obsidian_knight`, `ca_howler`, `ca_skull_rack` — none of which any file defines; the region actually ships `xib_*`. They were placeholders from when the table predated the content, and the load assertion beside them checked `r.enemies.length !== 6`, counted six and passed for both regions. **Rule 43 with a gate attached**: the count was right, the set was fiction. The assertion now resolves every id against the population for any region marked `contentReady`.
 
+74. **When an API exposes a typed parameter for a property, prose asking for that property is the weaker lever, and it should not be the first thing tried.** Read the schema before writing the sentence.
+
+Two full round trips — sixteen generations — went into wording a thing the endpoint had a field for. The Druid's style clause asked, in English, for "strong dark outline and deep shadow mass". PixelLab's `/generate-image-bitforge` takes `outline` as an **enum** whose values include `"single color black outline"`, and `shading` as an enum from `"flat shading"` to `"highly detailed shading"`. Nothing in this pipeline had ever set either. When attempt 1 came back a quartile too bright with no black in it, the response was to rewrite the sentence — leading with value structure, naming the floor, placing the body, forbidding "pale or washed-out" by name — and attempt 2 moved the median ten points against the fifty-three needed.
+
+**The tell is a failure that does not respond to being said more clearly.** Prose enters a text encoder and competes with every other clause for the same budget; a typed parameter is read by the endpoint as a parameter. Saying it four ways does not make it four times louder — it makes the request longer. If restating a requirement more precisely buys nothing, stop restating it and go and look at what the schema accepts.
+
+This generalises past art. The same shape is any place we describe in a string what an interface takes as structure: a config value passed inside a free-text field, a constraint written into a comment when the type system could carry it, an intent explained in a prompt when the callee has an argument for it. `openapi.json` was already being read in this repo for endpoint *shapes*; it was not being read for what those endpoints let you *ask*.
+
+**And it is cheap to check.** The parameters were three lines of schema away for the whole of both attempts. Reading the enum takes a minute; two round trips took thirty-two generations of budget and two rounds of wrong conclusions about the anchor.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.

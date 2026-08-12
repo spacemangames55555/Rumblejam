@@ -128,8 +128,35 @@ the next experiment, and it is a ruling to make rather than one for me to spend
 on.
 
 **This clause stays in place, marked failing rather than reverted** — the
-previous one failed too, and its reasoning is worth keeping for whoever runs
-attempt 3. No batch may run against it.
+previous one failed too, and its reasoning is worth keeping. No batch may run
+against it.
+
+### Attempt 3 — the typed parameters. Closer, contaminated, still not landed.
+
+`style_strength=85`, `outline="single color black outline"`,
+`shading="medium shading"`, `detail="highly detailed"`.
+
+| | target | att1 | att2 | att3 |
+|---|---|---|---|---|
+| luma median | **56** | 119 | 109 | **99** |
+| darkest 15% mean | **0.3** | 16.2 | 17.1 | **9.4** |
+| near-grey | 13.7% | 2.3% | 2.1% | **5.6%** |
+| distinct colours | **115** | 1436 | 1523 | **1639** |
+
+**`outline` moved the black floor** — darkest-15% nearly halved, p05 14 → 7.
+The typed parameter did in one field what two clause rewrites could not (§13
+rule 74). **`style_strength=85` transferred the Druid's staff, sash and
+antlers onto the Bark Hulk** — content, not style — and the colour count rose
+to 1,639 against a 115-colour reference, which means the style transfer is not
+governing palette or value at all.
+
+**Three attempts, not landed, stopped.** The remaining gap looks structural
+rather than tunable: 115 colours against 1,639 is a different rendering mode,
+not a mis-set parameter. The anchor is a tight hand-authored palette; this
+endpoint produces near-continuous shading through every lever it exposes.
+
+Full record and images:
+[`art-review/anchor-roundtrip/`](art-review/anchor-roundtrip/README.md).
 
 ## What the anchor actually measures
 
