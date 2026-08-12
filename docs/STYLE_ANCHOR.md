@@ -41,13 +41,36 @@ drift, and it is invisible until forty sprites disagree.
 grounded naturalistic fantasy, muted earthy palette of greens browns and leather, desaturated next to arcade colour, strong dark outline and deep shadow mass, warm mid-tone highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon
 <!-- STYLE-CLAUSE-END -->
 
-**This clause is written from the Druid, not verified against him.** It was
-derived by measuring the shipped sheet (below) and describing what is there. It
-has never been round-tripped — nobody has generated a unit from it and checked
-that the result sits next to the Druid. **Do that on the first character of
-batch 1 and compare before generating the other twelve.** If it does not
-reproduce him, fix the clause then, while one sheet is downstream instead of
-thirteen.
+**This clause was written from the Druid, and it has now been round-tripped
+against him. IT DOES NOT REPRODUCE HIM.** Full record and images:
+[`art-review/anchor-roundtrip/`](art-review/anchor-roundtrip/README.md).
+
+One unit — `enemy.pnw_bark_hulk` — generated from this clause with the anchor's
+own south cell as the style reference. 8 generations, 117 s. Against the anchor:
+
+| | Druid | from the clause |
+|---|---|---|
+| luma median | 56 | **119** |
+| luma p25 | 24 | **56** — the shadows land on the anchor's midtone |
+| darkest 15% mean | **0.3** | **16.2** — the true black is simply absent |
+| saturation median | 0.42 | 0.52 |
+| near-grey | 13.7% | 2.3% |
+
+The body came back pale peach where the anchor is dark green and leather. That
+is the failure this document already predicted for the *previous* anchor's
+metric — "maximising it rewards a uniformly pale body, which is the opposite
+failure and one the gate cannot see" — arrived at from the other direction.
+
+The clause names a **palette** and never names a **value structure**, and the
+anchor's identity is the distribution: dark floor, broad mid-tone, small bright
+tail. "strong dark outline and deep shadow mass" is carrying that whole claim
+and is not getting it.
+
+**No batch may run against this clause.** The loop is: edit the clause,
+regenerate one unit (8 generations), compare. Only when a generated unit sits
+next to the Druid does a batch start. The silhouette notes are NOT implicated —
+the shape brief came back accurately — so this is a clause edit, not a content
+one.
 
 ## What the anchor actually measures
 
