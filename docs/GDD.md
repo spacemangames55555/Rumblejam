@@ -617,7 +617,7 @@ All damage routes through the triangle, including hazard and plague ticks. There
 
 **Symmetric on purpose.** An asymmetric tree — one long branch carrying the only capstone — is a main line with a detour, not a choice. Both branches are four nodes deep and both terminate at tier 10, so the tier-2 decision is which capstone arrives first. With ~69 points against 30 nodes a player eventually owns both sides; what the branch buys is the ORDER, which at one point per level is most of a run.
 
-**What the assertions enforce** (all at import, all throwing): exactly `TREE_NODES` nodes; exactly one tier-1 node and it must be a damaging active (§5.6's opening pick); every prereq in the same tree; tier strictly decreasing along every prereq edge; every tier within `TIER_LEVELS`, so no node exists that no level unlocks; and every node reachable from the root. They enforce **structure, not shape** — nothing requires a tree to branch. Conversion is in progress: **20 branching trees and 22 chains**, and the chains stay legal until they are converted.
+**What the assertions enforce** (all at import, all throwing): exactly `TREE_NODES` nodes; exactly one tier-1 node and it must be a damaging active (§5.6's opening pick); every prereq in the same tree; tier strictly decreasing along every prereq edge; every tier within `TIER_LEVELS`, so no node exists that no level unlocks; and every node reachable from the root. They enforce **structure, not shape** — nothing requires a tree to branch. Conversion is in progress: **22 branching trees and 20 chains**, and the chains stay legal until they are converted.
 
 **A THIRD TREE'S TIER-2 PASSIVE IS THE ONE NODE THE DPS GATE CAN SEE, so price it against what its engine PUBLISHES.** `measureDps` runs at level 12: the tier gate reaches tier 4, and a class's two older trees fill all three slots first, so none of a third tree's actives are ever slotted there. The tier-2 passive is always on regardless. Monk Empty Hand's `chiDamageBonus` at 0.010 against an engine publishing up to 45 (CHI_CAP 40 + the focus step) is **+45% on everything** — measured, exactly the outlier the gate reported, and cutting the branch's damage numbers moved the reading by zero. Per-point passive values are not comparable between trees; only value × published maximum is.
 
@@ -1825,6 +1825,14 @@ The gate was green because it did `g.difficulty = difficultyId` by hand. That is
 
 This is the third instance of the larger pattern, after the §5.6 opening card and unspent skill points, and the three together say something the individual fixes did not: **a system is not shipped when it works, it is shipped when a player can reach it.** The check that catches it can only be a browser one, and it has to assert the chain rather than its ends — the control exists, clicking it moves the field, *and* the field survives into the run. `difficulty_gate` now drives a real page for exactly those three, and the third caught a second missing writer the first two would have passed.
 
+72. **An audit that found something is a gate you have not written yet.** The rule 71 sweep was a one-off grep: every `kind` the sim's `uiAction` switch accepts, against what anything in `js/` actually sends. Nineteen kinds, one dead — the 1000-gold respec, whose handler works and which `econ_gate` proves the ladder for, and which no player can ask for. Two more turned up by hand: `shrineOffer()` and `worldMapState()` are exported and called by nothing.
+
+The finding is not the point. **The grep is**, because the twentieth kind will ship unreachable exactly the way the first nineteen did, and the next person to notice will be somebody playing. `tools/reach_gate.mjs` is that grep, run every time.
+
+Three properties, and the middle one is what makes it survive contact with a backlog. **Known-unreachable is an allowlist with reasons**, so the gate is GREEN on the filed state and a NEW dead action is a red line rather than one more entry in a list nobody reads — a gate that ships red is a gate that gets ignored (rule 62). **It is asserted both ways**: a filed row that gains a caller fails too, because a stale exemption keeps a fixed thing filed as broken. And **it states what it does not prove** — a sender in `js/` means the code can produce the action, not that a button exists, is on screen, or is clickable. Only a browser answers that. This is the cheap half, and it catches what all three known instances actually were: no path at all.
+
+Both failure directions were driven as negative controls before the gate was believed, which is the standard rule 69 set on this project after a fork count that could not move.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
@@ -1849,7 +1857,7 @@ Phase 5 is the bulk of remaining work by volume, but phases 1–3 established th
 
 ## 15. Open Items
 
-**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **9 failing checks**: 0 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 9 with nothing double-counted, and all TWENTYONE focused instruments are green — `offence_test`, `skillscreen_test` (the first that drives a real page), `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, `tree_dps`, `doc_gate`, plus `validate_items`.
+**None of the current sim_test red is a defect.** `tools/sim_test.mjs` reports **9 failing checks**: 0 are content not authored, 2 await a design decision, 7 are weapon leftovers waiting on a ruling. The counts sum to 9 with nothing double-counted, and all 22 focused instruments are green — `offence_test`, `skillscreen_test` (the first that drives a real page), `determinism_test`, `snapstate_test`, `region_test`, `room_reg_test`, `uiack_test`, `telegraph_test`, `skill_sweep`, `footing_grace_test`, `phase2_gates`, `stat_gate`, `difficulty_gate`, `item_gate`, `rider_gate`, `econ_gate`, `engine_gate`, `trait_gate`, `tree_dps`, `doc_gate`, `reach_gate`, plus `validate_items`.
 
 **Group A closed on the Hunter patch, and that is the whole of the 10 → 9 move.** The set diff added nothing: `expected 2 beasts across 2 Hunters` left, and the two reds the patch created along the way — a `penalty_roll` crash and a DPS outlier at +93% — were both closed inside the same patch as **D-30** and the free-beast retune (§8.3), rather than being carried.
 
@@ -1948,6 +1956,12 @@ The mechanical half is cheap and covers the whole surface: **every `kind` the si
 **Reachable, checked, and fine:** shop rerolls (`#shop-reroll`), item upgrades (the shop's buy path upgrades in place), loadout changes (the ◆ button, wherever `canSlot` holds), difficulty (fixed this patch).
 
 **Not a member of this group: save export/import.** There is no export or import in `js/saves.js` — persistence is localStorage only. That is a feature never built, which is a different thing from one built and unreachable, and filing it here would make the group mean two things.
+
+**AND THE GROUP IS NOW GATED.** `tools/reach_gate.mjs` reads every branch of the sim's `uiAction` switch and requires each to have a sender in `js/`. Nineteen kinds; one dead. That is the same arity check `doc_gate` runs on the document — a declared thing with no counterpart — and it exists because the twentieth kind would otherwise ship unreachable exactly the way the first nineteen did.
+
+The three rows here are an **allowlist with reasons**, so the gate is green on the known state and a NEW unreachable action is a red line rather than one more entry in a list nobody reads. It is asserted both ways: a filed row that gains a caller also fails, because a stale exemption keeps a fixed thing filed as broken. Both directions were driven as negative controls before the gate was believed.
+
+**What it does not prove:** that a control is visible, on screen, or clickable. A sender in `js/` means the code can produce the action. Only a browser answers the rest, which is why `difficulty_gate`, `skillscreen_test` and `uiack_test` drive real pages. This is the cheap half, and it catches the case all three known instances actually were — no path at all.
 
 **What the group is waiting on is a decision per row, not code.** Respec wants a home — the shop screen is the obvious one and the §5.5 map-end step is the other. The Shrine wants a card like the boon's. The world map wants a screen. None is hard; all three are design surface rather than wiring, which is why they are listed rather than fixed.
 

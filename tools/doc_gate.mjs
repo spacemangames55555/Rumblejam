@@ -107,7 +107,10 @@ claim('§16 engine gate', /`engine_gate\.mjs`: every key in `p\.engines`[^|]*?\*
   const m = DOC.match(/all (\w+) focused instruments are green — ([^.]*?)\.\s/s);
   if (!m) { fails++; console.log('✗ §15 instrument count: the sentence this checks is gone'); }
   else {
-    const spelled = NUM[m[1].toLowerCase()];
+    // digits OR a word. The word list needed a new entry every time an
+    // instrument was added — a maintenance trap in the gate that exists to stop
+    // maintenance traps — so the document may now simply write the number.
+    const spelled = /^\d+$/.test(m[1]) ? Number(m[1]) : NUM[m[1].toLowerCase()];
     const named = [...m[2].matchAll(/`(\w+)`/g)].map(x => x[1]);
     const files = readdirSync(new URL('../tools/', import.meta.url));
     const missing = named.filter(n => !files.includes(n + '.mjs'));
