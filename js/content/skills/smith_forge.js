@@ -79,7 +79,7 @@ export const SMITH_FORGE = [
     ranks: R,
   },
   {
-    id: 'smith_quench', tree: 'smith_forge', tier: 3, name: 'Quench',
+    id: 'smith_quench', tree: 'smith_forge', tier: 4, name: 'Quench',
     desc: 'Steam and shock. 9 damage, and what it touches crawls at 68% for 1.5s.',
     type: 'active', domain: 'physical', prereq: 'smith_bellows',
     select: 'densest_cluster',
@@ -92,7 +92,7 @@ export const SMITH_FORGE = [
     ranks: R,
   },
   {
-    id: 'smith_sparks', tree: 'smith_forge', tier: 4, name: 'Sparks',
+    id: 'smith_sparks', tree: 'smith_forge', tier: 6, name: 'Sparks',
     desc: 'Catches, and keeps burning for 3.4s. Deals 8 up front.',
     type: 'active', domain: 'physical', prereq: 'smith_quench',
     select: 'highest_hp',
@@ -107,9 +107,9 @@ export const SMITH_FORGE = [
   {
     // maxRank: 1 — `armorGrit` is 'other' in PASSIVE_EFFECT, an unlock rather
     // than an investment. Same registry refusal the Savage's Old Scars hit.
-    id: 'smith_deadweight', tree: 'smith_forge', tier: 5, name: 'Deadweight',
+    id: 'smith_deadweight', tree: 'smith_forge', tier: 4, name: 'Deadweight',
     desc: 'Nothing moves you and nothing ever has. +7 Grit.',
-    type: 'passive', domain: 'physical', prereq: 'smith_sparks',
+    type: 'passive', domain: 'physical', prereq: 'smith_bellows',
     passive: { armorGrit: T.deadGrit },
     maxRank: 1,
   },
@@ -127,7 +127,7 @@ export const SMITH_FORGE = [
     ranks: R,
   },
   {
-    id: 'smith_draw_the_heat', tree: 'smith_forge', tier: 7, name: 'Draw the Heat',
+    id: 'smith_draw_the_heat', tree: 'smith_forge', tier: 8, name: 'Draw the Heat',
     desc: 'Deals 11 damage and takes 45% of it back as health.',
     type: 'active', domain: 'physical', prereq: 'smith_swage_block',
     select: 'nearest',
@@ -141,7 +141,7 @@ export const SMITH_FORGE = [
     // onto itself is the one thing a Blacksmith can do that nobody else survives.
     id: 'smith_standing_order', tree: 'smith_forge', tier: 8, name: 'Standing Order',
     desc: 'Everything comes to you for 1.6s. Deals 10 damage.',
-    type: 'active', domain: 'spiritual', prereq: 'smith_draw_the_heat',
+    type: 'active', domain: 'spiritual', prereq: 'smith_sparks',
     select: 'densest_cluster',
     trigger: { kind: 'ON_HIT_TAKEN' },
     cooldown: T.orderCd,
@@ -152,9 +152,9 @@ export const SMITH_FORGE = [
     ranks: R,
   },
   {
-    id: 'smith_cold_shut', tree: 'smith_forge', tier: 9, name: 'Cold Shut',
+    id: 'smith_cold_shut', tree: 'smith_forge', tier: 10, name: 'Cold Shut',
     desc: 'Absorbs 30 over 5.4s and returns 32% of what it stops.',
-    type: 'active', domain: 'spiritual', prereq: 'smith_standing_order',
+    type: 'active', domain: 'spiritual', prereq: 'smith_draw_the_heat',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 40 },
     cooldown: T.shutCd,
@@ -166,7 +166,7 @@ export const SMITH_FORGE = [
   {
     id: 'smith_strike_while_hot', tree: 'smith_forge', tier: 10, name: "Strike While It's Hot",
     desc: 'The whole weight of the shop behind it. 16 damage in a wide arc, and a 0.6s stun.',
-    type: 'active', domain: 'physical', prereq: 'smith_cold_shut',
+    type: 'active', domain: 'physical', prereq: 'smith_standing_order',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.hotRadius, count: T.hotCount },
     cooldown: T.hotCd,
