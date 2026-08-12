@@ -78,7 +78,7 @@ export const WD_BLIGHT = [
     ranks: R,
   },
   {
-    id: 'wd_fen_shroud', tree: 'wd_blight', tier: 3, name: 'Fen Shroud',
+    id: 'wd_fen_shroud', tree: 'wd_blight', tier: 4, name: 'Fen Shroud',
     desc: 'Absorbs 22 over 4.6s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'wd_rot',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -88,7 +88,7 @@ export const WD_BLIGHT = [
     ranks: R,
   },
   {
-    id: 'wd_marsh_gas', tree: 'wd_blight', tier: 4, name: 'Marsh Gas',
+    id: 'wd_marsh_gas', tree: 'wd_blight', tier: 6, name: 'Marsh Gas',
     desc: 'A low cloud that drags the crowd to 72% speed for 1.4s. 5 damage a tick over 3.8s.',
     type: 'active', domain: 'mental', prereq: 'wd_fen_shroud',
     select: 'densest_cluster',
@@ -104,9 +104,9 @@ export const WD_BLIGHT = [
   {
     // The tree's one engine reader, and deliberately the sustain: the debt in
     // the doll pays the Witch Doctor back rather than paying the room.
-    id: 'wd_leech_the_link', tree: 'wd_blight', tier: 5, name: 'Leech the Link',
+    id: 'wd_leech_the_link', tree: 'wd_blight', tier: 4, name: 'Leech the Link',
     desc: 'Deals 8 damage, +5% per point the doll is carrying, and returns half of it as health.',
-    type: 'active', domain: 'spiritual', prereq: 'wd_marsh_gas',
+    type: 'active', domain: 'spiritual', prereq: 'wd_rot',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.leechRange },
     cooldown: T.leechCd,
@@ -130,9 +130,9 @@ export const WD_BLIGHT = [
     ranks: R,
   },
   {
-    id: 'wd_carrion_choir', tree: 'wd_blight', tier: 7, name: 'Carrion Choir',
+    id: 'wd_carrion_choir', tree: 'wd_blight', tier: 10, name: 'Carrion Choir',
     desc: 'A fan of flies that returns 4 health for every enemy it touches. Deals 10 damage.',
-    type: 'active', domain: 'spiritual', prereq: 'wd_grave_wax',
+    type: 'active', domain: 'spiritual', prereq: 'wd_spoil',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.choirRadius, count: T.choirCount },
     cooldown: T.choirCd,
@@ -145,7 +145,7 @@ export const WD_BLIGHT = [
   {
     id: 'wd_drowned_ward', tree: 'wd_blight', tier: 8, name: 'Drowned Ward',
     desc: 'Absorbs 28 over 5.2s and returns 40% of what it stops.',
-    type: 'active', domain: 'spiritual', prereq: 'wd_carrion_choir',
+    type: 'active', domain: 'spiritual', prereq: 'wd_marsh_gas',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.drownedCd,
@@ -156,9 +156,9 @@ export const WD_BLIGHT = [
     ranks: R,
   },
   {
-    id: 'wd_spoil', tree: 'wd_blight', tier: 9, name: 'Spoil',
+    id: 'wd_spoil', tree: 'wd_blight', tier: 8, name: 'Spoil',
     desc: 'A deeper rot with a wider reach. 7 damage a second for 4.2s, spreading to 175.',
-    type: 'active', domain: 'spiritual', prereq: 'wd_drowned_ward',
+    type: 'active', domain: 'spiritual', prereq: 'wd_grave_wax',
     select: 'densest_cluster',
     trigger: { kind: 'NEAREST', range: T.waxRange },
     cooldown: T.spoilCd,
@@ -170,7 +170,7 @@ export const WD_BLIGHT = [
   {
     id: 'wd_the_long_rot', tree: 'wd_blight', tier: 10, name: 'The Long Rot',
     desc: 'Everything in front of you goes over at once. 15 damage in a wide fan, and they go with it.',
-    type: 'active', domain: 'physical', prereq: 'wd_spoil',
+    type: 'active', domain: 'physical', prereq: 'wd_drowned_ward',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.longRadius, count: T.longCount },
     cooldown: T.longCd,
