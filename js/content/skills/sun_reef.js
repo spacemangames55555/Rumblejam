@@ -81,7 +81,7 @@ export const SUN_REEF = [
     // The tree's one engine reader, and deliberately the sustain: a wet room
     // keeps the Sundian standing, which is the only place soaking pays the
     // character rather than the burst.
-    id: 'sun_brine_draught', tree: 'sun_reef', tier: 3, name: 'Brine Draught',
+    id: 'sun_brine_draught', tree: 'sun_reef', tier: 4, name: 'Brine Draught',
     desc: 'Restores 14 health, +2% for every drench stack standing in the room.',
     type: 'active', domain: 'spiritual', prereq: 'sun_shoal',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -96,7 +96,7 @@ export const SUN_REEF = [
   {
     id: 'sun_barnacle', tree: 'sun_reef', tier: 4, name: 'Barnacle',
     desc: 'Crusts the fattest thing in range — it takes 22% more for 2.5s. Deals 9 damage.',
-    type: 'active', domain: 'physical', prereq: 'sun_brine_draught',
+    type: 'active', domain: 'physical', prereq: 'sun_shoal',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.barnRange },
     cooldown: T.barnCd,
@@ -107,9 +107,9 @@ export const SUN_REEF = [
     ranks: R,
   },
   {
-    id: 'sun_kelp_snare', tree: 'sun_reef', tier: 5, name: 'Kelp Snare',
+    id: 'sun_kelp_snare', tree: 'sun_reef', tier: 6, name: 'Kelp Snare',
     desc: 'A line of weed that holds what it crosses for 1.4s. Deals 9 damage.',
-    type: 'active', domain: 'mental', prereq: 'sun_barnacle',
+    type: 'active', domain: 'mental', prereq: 'sun_brine_draught',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.snareRadius, count: T.snareCount },
     cooldown: T.snareCd,
@@ -122,7 +122,7 @@ export const SUN_REEF = [
   {
     id: 'sun_salt_rime', tree: 'sun_reef', tier: 6, name: 'Salt Rime',
     desc: 'A crust that spreads to everything within 150. 6 damage a second for 3.8s.',
-    type: 'active', domain: 'spiritual', prereq: 'sun_kelp_snare',
+    type: 'active', domain: 'spiritual', prereq: 'sun_barnacle',
     select: 'densest_cluster',
     trigger: { kind: 'NEAREST', range: T.barnRange },
     cooldown: T.rimeCd,
@@ -132,9 +132,9 @@ export const SUN_REEF = [
     ranks: R,
   },
   {
-    id: 'sun_sea_wall', tree: 'sun_reef', tier: 7, name: 'Sea Wall',
+    id: 'sun_sea_wall', tree: 'sun_reef', tier: 8, name: 'Sea Wall',
     desc: 'Absorbs 24 over 4.8s when you drop below 60% health.',
-    type: 'active', domain: 'spiritual', prereq: 'sun_salt_rime',
+    type: 'active', domain: 'spiritual', prereq: 'sun_kelp_snare',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.wallCd,
@@ -144,7 +144,7 @@ export const SUN_REEF = [
   {
     id: 'sun_riptooth', tree: 'sun_reef', tier: 8, name: 'Riptooth',
     desc: 'A raking sweep that throws the front rank back. Deals 11 damage.',
-    type: 'active', domain: 'physical', prereq: 'sun_sea_wall',
+    type: 'active', domain: 'physical', prereq: 'sun_salt_rime',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.riptoothRadius, count: T.riptoothCount },
     cooldown: T.riptoothCd,
@@ -159,9 +159,9 @@ export const SUN_REEF = [
     // Litany, the Bard's Answering Chorus and the Mage's Accretion are: `regen`
     // is an ITEM hook, not a registered passive key, and inventing one means a
     // reader in `skillsim.js` (§8.3).
-    id: 'sun_sump', tree: 'sun_reef', tier: 9, name: 'Sump',
+    id: 'sun_sump', tree: 'sun_reef', tier: 10, name: 'Sump',
     desc: 'Deals 9 damage and draws half of it back as health.',
-    type: 'active', domain: 'spiritual', prereq: 'sun_riptooth',
+    type: 'active', domain: 'spiritual', prereq: 'sun_sea_wall',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.sumpRange },
     cooldown: T.sumpCd,
@@ -171,7 +171,7 @@ export const SUN_REEF = [
   {
     id: 'sun_longshore', tree: 'sun_reef', tier: 10, name: 'Longshore',
     desc: 'The whole shelf moves. 14 damage in a wide fan, and what it touches crawls at 66% for 1.8s.',
-    type: 'active', domain: 'physical', prereq: 'sun_sump',
+    type: 'active', domain: 'physical', prereq: 'sun_riptooth',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.longRadius, count: T.longCount },
     cooldown: T.longCd,

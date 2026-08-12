@@ -80,7 +80,7 @@ export const MAGE_COLLAPSE = [
     ranks: R,
   },
   {
-    id: 'mage_event_horizon', tree: 'mage_collapse', tier: 3, name: 'Event Horizon',
+    id: 'mage_event_horizon', tree: 'mage_collapse', tier: 4, name: 'Event Horizon',
     desc: 'Absorbs 26 over 4.8s when you drop below 60% health.',
     type: 'active', domain: 'mental', prereq: 'mage_gravity_well',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -92,7 +92,7 @@ export const MAGE_COLLAPSE = [
   {
     id: 'mage_redshift', tree: 'mage_collapse', tier: 4, name: 'Redshift',
     desc: 'A stretched shot at the fattest thing in range. 10 damage, and it deals 24% less for 2.6s.',
-    type: 'active', domain: 'spiritual', prereq: 'mage_event_horizon',
+    type: 'active', domain: 'spiritual', prereq: 'mage_gravity_well',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.redshiftRange },
     cooldown: T.redshiftCd,
@@ -107,9 +107,9 @@ export const MAGE_COLLAPSE = [
     // Litany and the Bard's Answering Chorus are: `regen` is an ITEM hook, not a
     // registered passive key, and inventing one means a reader in `skillsim.js`
     // — the engine code a content-shaped class is not supposed to cost (§8.3).
-    id: 'mage_accretion', tree: 'mage_collapse', tier: 5, name: 'Accretion',
+    id: 'mage_accretion', tree: 'mage_collapse', tier: 6, name: 'Accretion',
     desc: 'Deals 9 damage and pulls 45% of it back as health.',
-    type: 'active', domain: 'spiritual', prereq: 'mage_redshift',
+    type: 'active', domain: 'spiritual', prereq: 'mage_event_horizon',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.accretionRange },
     cooldown: T.accretionCd,
@@ -119,7 +119,7 @@ export const MAGE_COLLAPSE = [
   {
     id: 'mage_tidal_shear', tree: 'mage_collapse', tier: 6, name: 'Tidal Shear',
     desc: 'A fan of pulled space across the crowd. Deals 11 damage.',
-    type: 'active', domain: 'mental', prereq: 'mage_accretion',
+    type: 'active', domain: 'mental', prereq: 'mage_redshift',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.shearRadius, count: T.shearCount },
     cooldown: T.shearCd,
@@ -127,7 +127,7 @@ export const MAGE_COLLAPSE = [
     ranks: R,
   },
   {
-    id: 'mage_frame_drag', tree: 'mage_collapse', tier: 7, name: 'Frame Drag',
+    id: 'mage_frame_drag', tree: 'mage_collapse', tier: 8, name: 'Frame Drag',
     desc: 'A line that holds what it crosses in place for 1.4s. Deals 11 damage.',
     type: 'active', domain: 'mental', prereq: 'mage_tidal_shear',
     select: 'farthest',
@@ -142,7 +142,7 @@ export const MAGE_COLLAPSE = [
   {
     id: 'mage_null_geodesic', tree: 'mage_collapse', tier: 8, name: 'Null Geodesic',
     desc: 'Absorbs 30 over 5.2s and returns 40% of what it stops.',
-    type: 'active', domain: 'spiritual', prereq: 'mage_frame_drag',
+    type: 'active', domain: 'spiritual', prereq: 'mage_accretion',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.geodesicCd,
@@ -153,9 +153,9 @@ export const MAGE_COLLAPSE = [
     ranks: R,
   },
   {
-    id: 'mage_spaghettification', tree: 'mage_collapse', tier: 9, name: 'Spaghettification',
+    id: 'mage_spaghettification', tree: 'mage_collapse', tier: 10, name: 'Spaghettification',
     desc: 'Three drawn-out shots, each leaving a tear. 12 damage plus 9 over 2.4s.',
-    type: 'active', domain: 'spiritual', prereq: 'mage_null_geodesic',
+    type: 'active', domain: 'spiritual', prereq: 'mage_frame_drag',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.spagRadius, count: T.spagTargets },
     cooldown: T.spagCd,
@@ -169,7 +169,7 @@ export const MAGE_COLLAPSE = [
   {
     id: 'mage_heat_death', tree: 'mage_collapse', tier: 10, name: 'Heat Death',
     desc: 'The end of the argument. 17 damage in a wide fan, and what it touches is stunned for 0.7s.',
-    type: 'active', domain: 'mental', prereq: 'mage_spaghettification',
+    type: 'active', domain: 'mental', prereq: 'mage_null_geodesic',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.heatRadius, count: T.heatCount },
     cooldown: T.heatCd,
