@@ -32,7 +32,12 @@ export const REGIONS = [
     cursedModifier: 'pnw_gloom',       // heavily reduced visibility
     enemies: ['pnw_sapling', 'pnw_elk', 'pnw_bark_hulk', 'pnw_mistwalker', 'pnw_thornhound', 'pnw_cedar_warden'],
     boss: 'pnw_boss',
-    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
+    // `nestWallHpMult` is region tuning, not a property of a barricade: the
+    // wall entity is identical everywhere and it is REGION 1 that is meant to
+    // be the gentle introduction to Nest Purge. Putting the halving on the wall
+    // would make every later region's barricade carry a number explaining
+    // something about the first one.
+    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0, nestWallHpMult: 0.5 },
     // Six enemies, a two-phase boss and a cursed modifier all exist and are
     // registered; the population clears the 50% telegraph-density floor.
     contentReady: true,

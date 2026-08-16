@@ -6,6 +6,7 @@
 // is guaranteed unless it is engineered against from the first patch, so the
 // checks here run at import time and throw rather than warn.
 
+import { CONFIG } from './config.js';
 import { NECRO_DARK_MATTER, TUNING as NECRO_TUNING } from './content/skills/necro_dark_matter.js';
 import { WIZARD_ATTUNEMENT, TUNING as WIZ_ATT_TUNING } from './content/skills/wizard_attunement.js';
 import { WIZARD_ARCANA, TUNING as WIZ_ARC_TUNING } from './content/skills/wizard_arcana.js';
@@ -237,6 +238,28 @@ export function slotsAtLevel(level) {
 // rather than `1 + inc * (rank - 1)`. Followed as written; flagged in the
 // report because it means base damage is a number no rank ever deals.
 export function skillRank(p, id) { return (p.skillRanks && p.skillRanks[id]) || 0; }
+
+// A SKILL'S OWN COOLDOWN, SHORTENED BY ITS OWN RANK (§4.2).
+//
+// Multiplicative and floored: `base * 0.97^(rank-1)`, never below 70% of base.
+// Rank 1 is exactly base, which matters because it means this function changes
+// nothing for a freshly-learned skill and every existing tuning number still
+// describes the skill as first acquired.
+//
+// It lives here, next to `skillRank`, because it is a property of ranks — and
+// it is a pure function of (base, rank) so the UI can show the same number the
+// sim uses without reaching into a player. The only other thing that shortens a
+// cooldown is the Savage's cascade, which composes multiplicatively with this
+// and keeps its own separate floor.
+//
+// Cooldown ONLY. Not projectile speed, not cast animation, not the tick
+// interval of a damage-over-time — a dot that ticks faster is a damage buff
+// wearing a cooldown's clothes, and that is a different decision.
+export function rankCooldown(base, rank) {
+  if (!(rank > 1)) return base;
+  const r = base * Math.pow(1 - CONFIG.SKILL_RANK_CD_RATE, rank - 1);
+  return Math.max(base * CONFIG.SKILL_RANK_CD_FLOOR, r);
+}
 
 export function canLearn(p, skill) {
   if (!skill) return false;

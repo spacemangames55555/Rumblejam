@@ -1,3 +1,4 @@
+import { STAT_NAME } from '../../config.js';
 // SAVAGE — Aftermath. The third tree, and the answer to the half of the engine
 // that the engine's own code describes and neither existing tree mentions.
 //
@@ -159,7 +160,7 @@ export const SAV_AFTERMATH = [
   // ------------------------------------ branch B: Bedrock (outlive the fall)
   {
     id: 'sav_bedrock', tree: 'sav_aftermath', tier: 4, name: 'Bedrock',
-    desc: 'Bedrock never reads the chain. Grit does not reset because a skill fired twice running.',
+    desc: `Bedrock never reads the chain. ${STAT_NAME.grit} does not reset because a skill fired twice running.`,
     type: 'active', domain: 'physical', prereq: 'sav_sawtooth',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.bedrockPct },

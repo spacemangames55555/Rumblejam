@@ -1,3 +1,4 @@
+import { STAT_NAME } from '../../config.js';
 // BLACKSMITH — Crystal tree. The last class.
 //
 // THE ENGINE IS A STATE, NOT A QUANTITY, AND IT IS THE ONLY ONE. Every engine
@@ -99,7 +100,7 @@ export const SMITH_CRYSTAL = [
     // THE FIRST FORM, and the shallowest threshold — the one a Blacksmith is in
     // most often. Grit and Vitality, because Pyrite is the trait's Grit crystal.
     id: 'smith_iron_pyrite', tree: 'smith_crystal', tier: 2, name: 'Iron Pyrite',
-    desc: 'At 70% health you go to iron for 7s: +22 Grit, +14 Vitality, and Anvil Strike becomes available.',
+    desc: `At 70% health you go to iron for 7s: +22 ${STAT_NAME.grit}, +14 Vitality, and Anvil Strike becomes available.`,
     type: 'active', domain: 'physical', prereq: 'smith_hammer_blow',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.pyritePct },
@@ -144,7 +145,7 @@ export const SMITH_CRYSTAL = [
   },
   {
     id: 'smith_prism_quartz', tree: 'smith_crystal', tier: 5, name: 'Prism Quartz',
-    desc: 'At 55% health you go to glass for 6.5s: +26 Attunement, +18 Ferocity, and Refraction becomes available.',
+    desc: `At 55% health you go to glass for 6.5s: +26 ${STAT_NAME.attunement}, +18 ${STAT_NAME.ferocity}, and Refraction becomes available.`,
     type: 'active', domain: 'mental', prereq: 'smith_slag',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.quartzPct },

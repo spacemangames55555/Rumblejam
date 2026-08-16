@@ -322,7 +322,12 @@ Three properties define it, and each one is a ruling rather than an implementati
 
 **`chi` — *what the skill costs*.** A skill may declare `chi: N`, and it does not fire unless the caster can pay. The check sits one line after the cooldown check, in the same function and in the same shape: a skill that cannot pay costs one number comparison and is skipped. Two things are refused at load — a **damaging** skill declaring a cost, because damage generates Chi and a skill doing both funds and drains the same loop in one cast; and a cost on any class with no `monk_chi` tree to generate any, because a cost nothing can pay is a skill that never fires. The full ruling, including why refusing beats clamping at zero, is in §8.3.
 
-**Cooldowns may be SHORTENED in exactly one place.** Items may not (§9.2), ranks may not (§4.2), and no engine but the Savage's does. `cascadeCooldown` in `js/engines.js` is the only function in the game that returns less than a skill's declared cooldown, it is gated on the tree that pays for it, and `engine_gate` asserts both that it works and that no other class can reach it. The exemption and the asymptote that makes it safe are ruled in §8.3.
+**Cooldowns may be SHORTENED in exactly two places, and one of them is new.** Items still may not (§9.2), and no engine but the Savage's does.
+
+1. **A skill's own rank shortens its own cooldown** — `rankCooldown` in `js/skills.js`, `base × 0.97^(rank−1)`, floored at 70% of base. Rank 1 is exactly base, so no authored cooldown in the game changed meaning. This **reverses the old §4.2 rule** that ranks may not touch cooldown; the reason for that rule was that buyable attack speed lets a narrow build purchase back its own uptime, and what makes this version safe is that it is **per skill and bounded**. Ranking Bone Shard speeds up Bone Shard and nothing else, so it cannot compound across a loadout the way a stat would. It is deliberately **not** routed through `tempo`: a global fire-rate term there would stack multiplicatively with the Bard's Rhythm engine, which is the precise interaction the old rule existed to prevent. The rule moved; its reason did not, and `tempo` remains movement only.
+2. **The Savage's cascade** — `cascadeCooldown` in `js/engines.js`, gated on the tree that pays for it, with its own asymptote and floor. Ruled in §8.3.
+
+The two compose multiplicatively and each keeps its own floor. `patch_gate` asserts the rank half by **counting casts over a fixed window at rank 1 against rank 5**, not by reading the constant back; `engine_gate` asserts the cascade half and that no other class can reach it.
 
 **`form` — *what the player must BE*.** A skill may declare `form: 'pyrite'` and then fires only while that form holds, checked one line after the cooldown and Chi checks. It is deliberately **not** a loadout change: §5.5 permits those between rooms only, and a form that swapped slotted skills would be §9.2's deleted trigger-swap item pointed at the player by their own class. The skill stays slotted and visible; what the form changes is whether its condition can hold. A `form` naming a state no `form` step anywhere enters fails at load.
 
@@ -930,7 +935,7 @@ Measured in the DPS harness, which soaks its own dummies: **24 stacks standing, 
 
 The general form is §13 rule 25's neighbour: **a taxonomy read generically is a contract with everything that reads it. Adding a member is not a local decision.**
 
-**The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat play rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor. **This is now the only cooldown reduction in the game**, it lives in one function, and `engine_gate` asserts both that it works and that no other class can reach it.
+**The Savage cascade is exempt from the no-cooldown-reduction rule** because its ranks are banked by in-combat play rather than point investment. Uncapped linear reduction would run away with no investment cost, so the reduction is asymptotic with a hard floor. It lives in one function and `engine_gate` asserts both that it works and that no other class can reach it. It is no longer the *only* cooldown reduction in the game — per-skill rank reduction was added and §4.2 rewritten to allow it — but it remains the only **engine** that shortens a cooldown, and the only one whose reduction is earned in combat rather than bought with points.
 
 #### The Blacksmith: the only engine that is a state, and the archaeology that ruled its shape
 
@@ -1448,36 +1453,60 @@ Three stats are currently dead (D-23) and one is half-live. Their entries below 
 
 #### The ten
 
-| Stat | Job | Reads |
+This table is keyed by the INTERNAL KEY, which is what saves, item tags, the
+wire format and every gate match on. The player-facing label is the second
+column and is the only thing the renames touched — see §4.1.1.
+
+| Key | Shown as | Job | Reads |
+|---|---|---|---|
+| `vitality` | Vitality | How much punishment the body absorbs before it stops | Max HP, room-start restore, `hpAbove`/`hpBelow` conditions, objective %-max true damage |
+| `ferocity` | **Damage** | The general offence stat — **multiplies all composed damage** | The compose damage path, via `ferocityMult` |
+| `tempo` | **Speed** | How fast the body moves. **Movement only** | Move speed, Wizard decree tick |
+| `grit` | **Defense** | Damage mitigation and staying put | Mitigation, knockback resistance, Quill reflect, and `p.engines.armor` for `scaleWith` |
+| `reflex` | **Dodge** | Avoiding a hit outright | Dodge roll in `hurtPlayer` |
+| `recovery` | Recovery | How much healing is worth | `_heal()`, every healing source; Priest shield scaling |
+| `ingenuity` | **Summons** | **The summoner stat** — minion damage and minion HP | Every summoned actor's damage and HP |
+| `attunement` | **Elemental Damage** | **Status potency** — the strength and duration of slows, weakens, and damage-over-time | Wherever a status is written, including the composed path |
+| `greed` | Greed | Wealth and luck | Tithe on fight clear, rarity bias in `_rollRarity`; Assassin contract payout |
+| `reach` | Reach | How far the body's influence extends | Pickup magnetism, ToH trait radii |
+
+*The Reads column for `ferocity`, `ingenuity` and `attunement` read "Dead. Intended: …" for four drafts after those three channels were connected. `stat_gate` proves all ten by effect (11 channels across 10 stats), so the table was describing a state the code had left; corrected here rather than left standing.*
+
+#### 4.1.1 Display names
+
+Seven stats were relabelled. **Only the label moved.** Keys are unchanged — renaming one would break every save in existence, unmatch the mechanical tables above, and shift the wire format.
+
+| Internal key | Was shown as | Now shown as |
 |---|---|---|
-| **Vitality** | How much punishment the body absorbs before it stops | Max HP, room-start restore, `hpAbove`/`hpBelow` conditions, objective %-max true damage |
-| **Ferocity** | The general offence stat — **multiplies all composed damage** | *Dead. Intended: a multiplier applied in the compose damage path, the counterpart to Vitality* |
-| **Tempo** | How fast the body moves. **Movement only** | Move speed, Wizard decree tick |
-| **Grit** | Damage mitigation and staying put | Mitigation, knockback resistance, Quill reflect, and `p.engines.armor` for `scaleWith` |
-| **Reflex** | Avoiding a hit outright | Dodge roll in `hurtPlayer` |
-| **Recovery** | How much healing is worth | `_heal()`, every healing source; Priest shield scaling |
-| **Ingenuity** | **The summoner stat** — minion damage and minion HP | *Dead. Intended: applied to every summoned actor's damage and HP* |
-| **Attunement** | **Status potency** — the strength and duration of slows, weakens, and damage-over-time | *Dead. Intended: applied wherever a status is written, including the composed path* |
-| **Greed** | Wealth and luck | Tithe on fight clear, rarity bias in `_rollRarity`; Assassin contract payout |
-| **Reach** | How far the body's influence extends | Pickup magnetism, ToH trait radii |
+| `attunement` | Attunement | **Elemental Damage** |
+| `ferocity` | Ferocity | **Damage** |
+| `tempo` | Tempo | **Speed** |
+| `grit` | Grit | **Defense** |
+| `reflex` | Reflex | **Dodge** |
+| `recovery` | Recovery | Recovery *(unchanged)* |
+| `ingenuity` | Ingenuity | **Summons** |
 
-#### Tempo is movement, and the label is the bug
+There is one source of truth: `STATS[].name` in `js/config.js`, from which `STAT_NAME` is derived. Every label a player sees resolves through it — including item and skill descriptions, which are template literals interpolating `STAT_NAME` rather than prose containing the word. `statname_gate` asserts that no retired name survives anywhere a player can read one, and that the render layer contains no stat word at all.
 
-Tempo reaches only move speed. **That is correct and should not be changed.**
+**One filed collision:** the Wizard's skill tree is *named* **Attunement**. It is a proper noun about shifting damage domains, not a reference to the stat, and it keeps its name; the gate allowlists it explicitly with that reason and fails if the tree is ever renamed, so the exemption cannot go stale.
 
-An "attack speed" stat would be cooldown reduction wearing a different name, and §4.2 keeps cooldown reduction off ranks and off items because it is the only thing preventing a narrow build from buying back its uptime. A stat item granting Tempo would reintroduce it through the back door.
+#### `tempo` is movement, and the label was the bug — now fixed
 
-**The defect is the UI claiming attack speed, not the implementation withholding it.** Fix the label.
+`tempo` reaches only move speed. **That is correct and has not changed.** It is now *shown as* **Speed**, which says so on the character sheet instead of requiring the glossary to explain it.
 
-#### The three dead stats and their intended jobs
+An "attack speed" stat on `tempo` would be global cooldown reduction wearing a different name, and it would stack multiplicatively with the Bard's Rhythm engine. That is why §4.2's rewrite put cooldown reduction on a skill's **own rank** instead: per skill, bounded at 70% of base, and unable to compound across a loadout. Items still may not touch cooldown at all (§9.2).
 
-Each dead stat's old read-sites point at what it was for, and each has a natural home in the skill era:
+**The defect was the UI claiming attack speed while the implementation withheld it.** Both halves are now answered — the label tells the truth, and the thing players actually wanted has a home that does not break the Bard.
 
-- **Ferocity** was weapon damage. Its skill-era job is the same one generalised: **a multiplier on all composed damage.** It is the offence stat the way Vitality is the defence stat, and it is the one every class wants some of.
-- **Ingenuity** was read only by `_summonStats` — the summon stat, in a game that then had no summons. §8.5 gives it a job: **minion damage and minion HP.** The class that just gained summons currently ignores the summon stat.
-- **Attunement** was applied by `_applySlow` but not by `applySlow`, the one every composed skill calls. Its job is **status potency** — how hard a slow slows, how long a weaken lasts, how much a plague ticks.
+#### The three stats that were dead, and how they were revived
 
-**A stat is defined by what it multiplies, not by which function happens to call it.** All three were alive in the weapon era and were left behind by a migration that moved the damage path; none is a new stat needing a new design.
+`ferocity`, `ingenuity` and `attunement` were all alive in the weapon era and left behind by the migration that moved the damage path. None was a new stat needing a new design, and each old read-site pointed at what it was for:
+
+- **`ferocity`** (shown as *Damage*) was weapon damage; its skill-era job is the same one generalised — a multiplier on all composed damage, the offence counterpart to Vitality.
+- **`ingenuity`** (shown as *Summons*) was read only by `_summonStats` — the summon stat in a game that then had no summons. §8.5 gave it minion damage and minion HP.
+- **`attunement`** (shown as *Elemental Damage*) was applied by `_applySlow` but not by `applySlow`, the one every composed skill calls. Its job is status potency.
+
+**A stat is defined by what it multiplies, not by which function happens to call it.** All three are now live and asserted by effect in `stat_gate`.
 
 #### Minion HP is duration
 

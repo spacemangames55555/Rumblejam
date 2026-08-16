@@ -10,7 +10,7 @@
 import { EnemyGrid, triggerHolds, triggerConsume, triggerOrigin, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
 import { selectTarget } from './selectors.js';
 import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
-import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn } from './skills.js';
+import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn, rankCooldown } from './skills.js';
 import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
 import { CONFIG } from './config.js';
@@ -428,10 +428,15 @@ function fireSkill(sim, p, sk) {
   // why that ordering is the engine's built-in cost rather than a generosity.
   cascadeAdvance(sim, p, sk.id);
   // AND THIS IS THE ONLY PLACE IN THE GAME A COOLDOWN IS EVER SHORTENED. Items
-  // may not (§9.2), ranks may not (§4.2), and no other engine touches it. The
+  // may not (§9.2); RANKS NOW MAY, per skill and bounded, which is the §4.2
+  // rewrite — see CONFIG.SKILL_RANK_CD_RATE for why that is safe where a global
+  // fire-rate stat would not be. No other engine touches it. The
   // Savage is the single exemption and `cascadeCooldown` is a no-op for every
   // other class, which is what keeps the exemption from leaking.
-  p.skillCd[sk.id] = cascadeCooldown(p, sk) / 1000;
+  // Rank first, then the cascade: both are multiplicative so the order does not
+  // change the product, but reading it this way says what it is — the skill's
+  // own cooldown, then the Savage's exemption applied to it.
+  p.skillCd[sk.id] = cascadeCooldown(p, { ...sk, cooldown: rankCooldown(sk.cooldown, rank) }) / 1000;
   // What the fire SPENDS, before what it does. A token is taken off the floor
   // by the skill that read it — the same shape as ON_KILL's counter being
   // cleared by the tick that saw it. Keyed by trigger kind in triggers.js.

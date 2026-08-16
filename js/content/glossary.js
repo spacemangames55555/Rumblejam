@@ -1,3 +1,4 @@
+import { STAT_NAME } from '../config.js';
 // Stat glossary — the single source of truth for what each stat MEANS, in
 // plain language for regular people. Every piece of UI that explains a stat
 // (character sheet, level-up cards, character select, weapon/item tooltips)
@@ -17,11 +18,11 @@ export const STAT_GLOSS = {
   },
   tempo: {
     short: 'How fast you move.',
-    detail: 'Makes you run faster. It does NOT make your skills fire faster — skills fire on their own cooldowns, and nothing in the game shortens those. Positioning is what Tempo buys.',
+    detail: `Makes you run faster, and nothing else. It does NOT make your skills fire faster — the only thing that shortens a skill's cooldown is ranking up that skill. Positioning is what ${STAT_NAME.tempo} buys.`,
   },
   grit: {
     short: 'Toughness — shrug off damage and knockback.',
-    detail: 'Reduces every hit you take and makes you harder to push around. A few heavy weapons hit harder the more Grit you have.',
+    detail: `Reduces every hit you take and makes you harder to push around. A few heavy weapons hit harder the more ${STAT_NAME.grit} you have.`,
   },
   reflex: {
     short: 'Your chance to dodge a hit completely.',

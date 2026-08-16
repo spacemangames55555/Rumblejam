@@ -1,3 +1,4 @@
+import { STAT_NAME } from '../../config.js';
 // SAVAGE — Bloodbound tree.
 //
 // The other half, and — like Arcana, Grace, Ensemble, Collapse, Blight, Reef,
@@ -110,7 +111,7 @@ export const SAV_BLOODBOUND = [
     // second point in a flat stat grant buys the same flat grant again and
     // reads as depth that is not there.
     id: 'sav_old_scars', tree: 'sav_bloodbound', tier: 5, name: 'Old Scars',
-    desc: 'Everything that has hit you made you harder to hit. +6 Grit.',
+    desc: `Everything that has hit you made you harder to hit. +6 ${STAT_NAME.grit}.`,
     type: 'passive', domain: 'spiritual', prereq: 'sav_scent_of_it',
     passive: { armorGrit: T.scarsGrit },
     maxRank: 1,

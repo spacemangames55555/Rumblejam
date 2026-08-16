@@ -1,3 +1,4 @@
+import { STAT_NAME } from '../config.js';
 // The THRONES OF HEAVEN roster — 14 warriors, an alternate cast for the same
 // game. Same schema as the classic roster: a stat spread on top of the base
 // sheet (80 Vitality, everything else 0), one starting weapon, one signature
@@ -22,7 +23,7 @@ export const CHARACTERS_TOH = [
       key: 'crystal_infusion', contactBase: 3, gritPct: 0.25, vitPct: 0.05, hitbox: 1.4,
       pyriteGrit: 2, quartzAtt: 4, calciteRec: 5, detonateEvery: 3, detonateRadius: 90,
     },
-    desc: 'Crystal Infusion: cannot be pushed, but a far bigger target (hitbox ×1.4). Enemies touching you take 3 + 25% of Grit + 5% of Vitality contact damage. After every fight, infuse one crystal permanently — Iron Pyrite (+2 Grit), Prism Quartz (+4% Attunement) or Celestial Calcite (+5% Recovery). Infusions never cap. Every third Prism Quartz makes your contact damage detonate for attuned damage in a 90 radius.' },
+    desc: `Crystal Infusion: cannot be pushed, but a far bigger target (hitbox ×1.4). Enemies touching you take 3 + 25% of ${STAT_NAME.grit} + 5% of Vitality contact damage. After every fight, infuse one crystal permanently — Iron Pyrite (+2 ${STAT_NAME.grit}), Prism Quartz (+4% ${STAT_NAME.attunement}) or Celestial Calcite (+5% Recovery). Infusions never cap. Every third Prism Quartz makes your contact damage detonate for attuned damage in a 90 radius.` },
 
   { id: 'toh_wizard', name: 'Wizard', sym: '♨', roles: ['status', 'support'],
     stats: { attunement: 15, reach: 20, ferocity: -10 }, weapon: 'magmalob',
@@ -30,7 +31,7 @@ export const CHARACTERS_TOH = [
       key: 'decree', intervalSec: 7, calamityBase: 14, plagueDps: 4, plagueDur: 3,
       plagueRadius: 120, miracleHeal: 8, miracleFer: 10, miracleDur: 4, miracleRadius: 220,
     },
-    desc: 'Decree: every 7s (faster with Tempo) a Decree fires, alternating, starting with Calamity. Calamity deals 14 attuned damage to every enemy on screen and anything it kills spreads a plague — 4 attuned damage per second for 3s to enemies within 120. Miracle heals 8 and grants +10% Ferocity for 4s to every ally within 220 + half your Reach.' },
+    desc: `Decree: every 7s (faster with ${STAT_NAME.tempo}) a Decree fires, alternating, starting with Calamity. Calamity deals 14 attuned damage to every enemy on screen and anything it kills spreads a plague — 4 attuned damage per second for 3s to enemies within 120. Miracle heals 8 and grants +10% ${STAT_NAME.ferocity} for 4s to every ally within 220 + half your Reach.` },
 
   { id: 'toh_necromancer', name: 'Necromancer', sym: '⚙', roles: ['summons'],
     stats: { ingenuity: 10 }, weapon: null,
@@ -38,7 +39,7 @@ export const CHARACTERS_TOH = [
       key: 'bonelord', mounts: 4, boneDustRadius: 200, boneDustRepair: 6,
       marrownautGritShare: 1.0, marrownautVitShare: 0.5,
     },
-    desc: 'Bonelord: no weapons — 4 summon mounts instead. Summons inherit 100% of your stats on top of Ingenuity, combine in the shop, and can be picked up (E) and redeployed. Enemies dying within 200 drop bone-dust that repairs your most damaged summon by 6 HP. Combine all four mounts into one and it becomes the Marrownaut: while it stands you gain 100% of its Grit and 50% of its Vitality.' },
+    desc: `Bonelord: no weapons — 4 summon mounts instead. Summons inherit 100% of your stats on top of ${STAT_NAME.ingenuity}, combine in the shop, and can be picked up (E) and redeployed. Enemies dying within 200 drop bone-dust that repairs your most damaged summon by 6 HP. Combine all four mounts into one and it becomes the Marrownaut: while it stands you gain 100% of its ${STAT_NAME.grit} and 50% of its Vitality.` },
 
   { id: 'toh_druid', name: 'Druid', sym: '◐', roles: ['economy', 'summons'],
     stats: { greed: 5 }, weapon: 'fanblade',
@@ -59,7 +60,7 @@ export const CHARACTERS_TOH = [
       // roughly 170, which is about a room's worth of standing in it.
       crystalPer: 0.06, crystalCap: 10,
     },
-    desc: 'Singularity: every 9th attack collapses a singularity where it lands — enemies within 110 + half your Reach are dragged in for 1.5s, then it bursts for 16 attuned damage. Anything caught inside takes +25% damage from every source, allies included. Crystalblade: while an enemy is within 90 you gain +5 Grit and singularities form on you instead of on the target.' },
+    desc: `Singularity: every 9th attack collapses a singularity where it lands — enemies within 110 + half your Reach are dragged in for 1.5s, then it bursts for 16 attuned damage. Anything caught inside takes +25% damage from every source, allies included. Crystalblade: while an enemy is within 90 you gain +5 ${STAT_NAME.grit} and singularities form on you instead of on the target.` },
 
   { id: 'toh_bard', name: 'Bard', sym: '➶', roles: ['speed', 'support'],
     stats: { tempo: 15, vitality: -10 }, weapon: 'twinlash',
@@ -67,7 +68,7 @@ export const CHARACTERS_TOH = [
       key: 'rhythm', windowSec: 1.5, maxStacks: 10, tempoPer: 4, ferPer: 3,
       ensembleRadius: 160, ensembleShare: 0.5, soloMult: 2,
     },
-    desc: 'Rhythm: keep attacking with no gap longer than 1.5s and stacks build to 10, each worth +4% Tempo and +3% Ferocity. Miss the window and every stack drops at once. Ensemble: with an ally within 160 + half your Reach they receive half your stack bonuses. Alone, your own bonuses are doubled instead.' },
+    desc: `Rhythm: keep attacking with no gap longer than 1.5s and stacks build to 10, each worth +4% ${STAT_NAME.tempo} and +3% ${STAT_NAME.ferocity}. Miss the window and every stack drops at once. Ensemble: with an ally within 160 + half your Reach they receive half your stack bonuses. Alone, your own bonuses are doubled instead.` },
 
   { id: 'toh_witch_doctor', name: 'Witch Doctor', sym: '〜', roles: ['sustain', 'status'],
     stats: { recovery: 6, attunement: 5 }, weapon: 'bogflask',
@@ -89,7 +90,7 @@ export const CHARACTERS_TOH = [
       key: 'three_stances', ironGrit: 6, ironRefundPct: 0.2, precisionBleedDur: 4,
       precisionBleedFerScale: 0.15, flowTempoPer: 8, flowMax: 5, swapCooldown: 0.5,
     },
-    desc: 'Three Stances: swap freely (Q, or the stance button on touch) with a half-second cooldown. IRON — +6 Grit, and a fifth of everything your Grit absorbs is banked onto your next attack. PRECISION — your first hit on any enemy crits and bleeds it for 4s at 15% of your Ferocity per second. FLOW — every consecutive hit on a NEW enemy grants +8% Tempo up to 5 stacks; hitting the same enemy twice in a row resets it.' },
+    desc: `Three Stances: swap freely (Q, or the stance button on touch) with a half-second cooldown. IRON — +6 ${STAT_NAME.grit}, and a fifth of everything your ${STAT_NAME.grit} absorbs is banked onto your next attack. PRECISION — your first hit on any enemy crits and bleeds it for 4s at 15% of your ${STAT_NAME.ferocity} per second. FLOW — every consecutive hit on a NEW enemy grants +8% ${STAT_NAME.tempo} up to 5 stacks; hitting the same enemy twice in a row resets it.` },
 
   { id: 'toh_monk', name: 'Monk', sym: '𖤓', roles: ['dodge', 'sustain'],
     stats: { reflex: 12, recovery: 6, grit: 2 }, weapon: 'twinlash',
@@ -107,7 +108,7 @@ export const CHARACTERS_TOH = [
       payoutsPerRoom: 3,
       openerCritMult: 3, vanishDur: 1.2, remarkDelay: 3,
     },
-    desc: 'Contract: one enemy per fight is marked — an elite or boss if there is one, otherwise the healthiest thing alive. Killing it pays 5 + your Greed in materials and grants +15% Ferocity for the rest of the fight, stacking with every contract closed. A new mark appears 3s later. You also never crit at random: granted crits deal ×3, your first hit on any full-health enemy is always a crit, and every kill makes you untargetable for 1.2s.' },
+    desc: `Contract: one enemy per fight is marked — an elite or boss if there is one, otherwise the healthiest thing alive. Killing it pays 5 + your Greed in materials and grants +15% ${STAT_NAME.ferocity} for the rest of the fight, stacking with every contract closed. A new mark appears 3s later. You also never crit at random: granted crits deal ×3, your first hit on any full-health enemy is always a crit, and every kill makes you untargetable for 1.2s.` },
 
   { id: 'toh_priest', name: 'Priest', sym: '✚', roles: ['support', 'sustain'],
     stats: { recovery: 8, vitality: 10 }, weapon: 'sparkbolt',
@@ -123,7 +124,7 @@ export const CHARACTERS_TOH = [
       key: 'blood_dance', heatPer: 8, heatMax: 120, heatDecaySec: 3,
       bloodPerMissing: 0.8, leechPct: 0.08, heavyBonus: 0.15, heavyCd: 1.5,
     },
-    desc: 'Blood Dance: every attack that connects grants +8% Ferocity up to +120%, and all of it falls off 3s after your last connecting hit. On top of that: +0.8% Ferocity for every 1% of health you are missing, 8% of all damage you deal comes back as healing, and any weapon with a base cooldown of 1.5s or longer hits 15% harder.' },
+    desc: `Blood Dance: every attack that connects grants +8% ${STAT_NAME.ferocity} up to +120%, and all of it falls off 3s after your last connecting hit. On top of that: +0.8% ${STAT_NAME.ferocity} for every 1% of health you are missing, 8% of all damage you deal comes back as healing, and any weapon with a base cooldown of 1.5s or longer hits 15% harder.` },
 
   { id: 'toh_hunter', name: 'Hunter', sym: '⬡', roles: ['summons', 'ranged'],
     stats: { ingenuity: 5, reach: 20 }, weapon: 'pebbleshot',
@@ -137,7 +138,7 @@ export const CHARACTERS_TOH = [
       alphaMinBeasts: 2, alphaFer: 20, alphaTempo: 10,
       marksmanRadius: 250, marksmanPierce: 1, marksmanDmgPerBeast: 8,
     },
-    desc: 'Pack Tactics: a free beast joins you at the start of every floor, up to four. ALPHA — with 2 or more beasts within 120 of you, you and every beast gain +20% Ferocity and +10% Tempo. MARKSMAN — with no beast within 250 of you, your shots pierce one more target and hit 8% harder per living beast. A beast combined in the shop counts as two.' },
+    desc: `Pack Tactics: a free beast joins you at the start of every floor, up to four. ALPHA — with 2 or more beasts within 120 of you, you and every beast gain +20% ${STAT_NAME.ferocity} and +10% ${STAT_NAME.tempo}. MARKSMAN — with no beast within 250 of you, your shots pierce one more target and hit 8% harder per living beast. A beast combined in the shop counts as two.` },
 
   { id: 'toh_sundian', name: 'Sundian', sym: '≋', roles: ['status', 'speed'],
     stats: { attunement: 10, tempo: 8, vitality: -10 }, weapon: 'pikefang',
@@ -146,7 +147,7 @@ export const CHARACTERS_TOH = [
       nodeDps: 5, nodeCap: 8, linkRange: 100, wallHp: 40,
       dashRefreshTempo: 15, dashRefreshDur: 2,
     },
-    desc: 'Coral Growth: every 4th attack plants a coral node where it lands, for 8s. Nodes slow enemies within 60 by 35% and burn them for 5 attuned damage a second. Two nodes within 100 of each other grow a coral wall with 40 HP that stops enemies and their shots — but never yours. Walking through your own node refreshes it and grants +15% Tempo for 2s. Eight nodes at once, no more.' },
+    desc: `Coral Growth: every 4th attack plants a coral node where it lands, for 8s. Nodes slow enemies within 60 by 35% and burn them for 5 attuned damage a second. Two nodes within 100 of each other grow a coral wall with 40 HP that stops enemies and their shots — but never yours. Walking through your own node refreshes it and grants +15% ${STAT_NAME.tempo} for 2s. Eight nodes at once, no more.` },
 ];
 
 export const TOH_BY_ID = Object.fromEntries(CHARACTERS_TOH.map(c => [c.id, c]));

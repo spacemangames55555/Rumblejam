@@ -472,18 +472,48 @@ export function tohOnFire(sim, p, ctx) {
     sim.addTelegraph({ shape: 'circle', x, y, r: t.pullRadius, dur: t.pullDur });
     return;
   }
-  if (t.key === 'coral_growth') {
-    p.tohAtk++;
-    if (p.tohAtk % t.everyNth !== 0) return;
-    // Hard cap on live nodes: they are world entities on every snapshot, and
-    // an uncapped planter at high Tempo is both a perf and a bandwidth problem.
-    if (sim.corals.length >= t.nodeCap) sim.corals.shift();
-    sim.corals.push({
-      x: ctx.tx, y: ctx.ty, owner: p.idx, t: t.nodeDur, dur: t.nodeDur,
-      r: t.nodeRadius, slow: t.nodeSlowPct / 100, dps: t.nodeDps,
-      link: t.linkRange, wallHp: t.wallHp,
-    });
-  }
+  // CORAL COUNTS LANDINGS, NOT LAUNCHES — see plantCoral() below. A shot that
+  // misses plants nothing, and a shot that hits three things plants on all
+  // three. That hook is tohOnHit/tohOnWallHit, not here.
+}
+
+// ---------------------------------------------------------------- coral hits
+//
+// THE TRIGGER IS A HIT, AND ONE INCREMENT PER HIT.
+//
+// It used to count on FIRE, which made the Sundian's engine a function of
+// cooldowns rather than of connecting: a player missing every shot planted reef
+// at exactly the same rate as one landing every shot, and a piercing bolt
+// through six enemies counted once. Neither reads as "the reef grows where you
+// fight".
+//
+// A piercing projectile through three enemies ticks three times because
+// `skillDamage` runs three times; a shot that hits an enemy and then a wall
+// ticks twice, once from each path. Misses and expiries call nothing at all,
+// which is the whole point.
+//
+// The node lands where the blow landed rather than where the selector pointed,
+// which is both more honest and cheaper — the hit already knows its position.
+export function plantCoral(sim, p, x, y) {
+  const t = p.char && p.char.trait;
+  if (!t || t.key !== 'coral_growth') return;
+  p.tohAtk++;
+  if (p.tohAtk % t.everyNth !== 0) return;
+  // Hard cap on live nodes: they are world entities on every snapshot, and an
+  // uncapped planter is both a perf and a bandwidth problem.
+  if (sim.corals.length >= t.nodeCap) sim.corals.shift();
+  sim.corals.push({
+    x, y, owner: p.idx, t: t.nodeDur, dur: t.nodeDur,
+    r: t.nodeRadius, slow: t.nodeSlowPct / 100, dps: t.nodeDps,
+    link: t.linkRange, wallHp: t.wallHp,
+  });
+}
+
+// A barricade is a legitimate landing. The Sundian chewing through a Nest Purge
+// wall grows reef out of it, the same as hitting a body.
+export function tohOnWallHit(sim, p, w) {
+  if (!p) return;
+  plantCoral(sim, p, w.x + w.w / 2, w.y + w.h / 2);
 }
 
 // Damage about to land, before mitigation on the enemy. Returns the new number.
@@ -528,6 +558,7 @@ export function tohOnHit(sim, p, e, dmg, ctx) {
       break;
     case 'voodoo_link': voodooMirror(sim, p, e, dmg, t, ctx); break;
     case 'karma': if (p.spirit) spiritEcho(sim, p, e, dmg, t); break;
+    case 'coral_growth': plantCoral(sim, p, e.x, e.y); break;
   }
 }
 

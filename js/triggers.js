@@ -191,6 +191,54 @@ export function triggerOrigin(sim, p, skill) {
   return best;
 }
 
+// A BARRICADE IS SOMETHING TO SWING AT, AND A TRIGGER THAT COUNTS ONLY BODIES
+// CANNOT SWING AT ONE.
+//
+// The reported defect was "Blacksmith melee cannot damage nest walls", and the
+// obvious suspect was the damage filter. It is not: `strike` and `cone` both
+// call `chewWalls` and it works. Measured — a Blacksmith beside a wall with no
+// enemies nearby did 0 damage over ten seconds; the same Blacksmith beside the
+// same wall with one enemy in range took it down immediately.
+//
+// The skill never FIRED. Melee skills trigger on PROXIMITY or NEAREST, both of
+// which ask the enemy grid, and a bare barricade is not in the enemy grid. So a
+// player standing at a wall with the room already cleared has no way to attack
+// it — which is exactly the Nest Purge situation, where the barricade is the
+// thing between you and the last spawner.
+//
+// The reach used here is the SAME `+12` tolerance `_sweepWalls` applies, so the
+// trigger and the damage agree about what is in range. If the trigger were more
+// generous the skill would fire, spend its cooldown, and hit nothing.
+//
+// Scoped to melee, not to every skill: `strike` and `cone` are the primitives
+// that chew walls, so those are the ones a wall can legitimately satisfy. A
+// bolt skill firing at a barricade would be inventing behaviour rather than
+// restoring it — the same reasoning that keeps `drain` out of chewWalls.
+//
+// And a wall satisfies the condition regardless of `count`. PROXIMITY's count
+// asks for a crowd; a barricade is not three enemies and pretending otherwise
+// would let one wall stand in for a mob. What it is, is something in reach
+// worth hitting, and that is what the trigger is being asked.
+const MELEE_REACH_KEY = { strike: 'reach', cone: 'range' };
+
+function meleeWallInReach(sim, o, skill) {
+  if (!sim.walls || !sim.walls.length) return false;
+  for (const step of skill.compose || []) {
+    const key = MELEE_REACH_KEY[step.kind];
+    if (!key) continue;
+    const reach = (step[key] || 0) + 12;
+    if (reach <= 12) continue;
+    for (const w of sim.walls) {
+      if (w.hp <= 0) continue;
+      const cx = Math.min(Math.max(o.x, w.x), w.x + w.w);
+      const cy = Math.min(Math.max(o.y, w.y), w.y + w.h);
+      const dx = cx - o.x, dy = cy - o.y;
+      if (dx * dx + dy * dy <= reach * reach) return true;
+    }
+  }
+  return false;
+}
+
 // Does one trigger's condition hold right now?
 //
 // COOLDOWN IS TESTED BY THE CALLER, BEFORE THIS IS REACHED. That ordering is
@@ -204,10 +252,10 @@ export function triggerHolds(sim, p, skill, st, grid) {
   if (!o) return false;
   switch (t.kind) {
     case 'NEAREST':
-      return !!grid.nearest(o.x, o.y, t.range);
+      return !!grid.nearest(o.x, o.y, t.range) || meleeWallInReach(sim, o, skill);
 
     case 'PROXIMITY':
-      return grid.countWithin(o.x, o.y, t.radius) >= t.count;
+      return grid.countWithin(o.x, o.y, t.radius) >= t.count || meleeWallInReach(sim, o, skill);
 
     case 'ISOLATED':
       // "fewer than count within radius" is true in an empty room too, which is
