@@ -113,7 +113,7 @@ export const NECRO_SUMMONS = [
     ranks: R,
   },
   {
-    id: 'necro_gravechill', tree: 'necro_summons', tier: 3, name: 'Gravechill',
+    id: 'necro_gravechill', tree: 'necro_summons', tier: 4, name: 'Gravechill',
     desc: 'The ground goes cold and stays cold.',
     type: 'active', domain: 'spiritual', prereq: 'necro_raise_skeleton',
     select: 'densest_cluster',
@@ -129,7 +129,7 @@ export const NECRO_SUMMONS = [
   {
     id: 'necro_soul_harvest', tree: 'necro_summons', tier: 4, name: 'Soul Harvest',
     desc: 'What the dead leave behind is still worth something to you.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_gravechill',
+    type: 'active', domain: 'spiritual', prereq: 'necro_raise_skeleton',
     select: 'self',   // writes the caster, picks no target (§5.3)
     // ON_TOKEN, first use. The token is a world resource left by any enemy
     // death — the trigger reads the floor, not a Necromancer counter.
@@ -146,7 +146,7 @@ export const NECRO_SUMMONS = [
     ranks: R,
   },
   {
-    id: 'necro_bone_plate', tree: 'necro_summons', tier: 5, name: 'Bone Plate',
+    id: 'necro_bone_plate', tree: 'necro_summons', tier: 6, name: 'Bone Plate',
     desc: 'You wear the parts that did not get up.',
     type: 'passive', domain: 'physical', prereq: 'necro_soul_harvest',
     trigger: null, cooldown: 0, compose: [],
@@ -155,7 +155,7 @@ export const NECRO_SUMMONS = [
     ranks: R,
   },
   {
-    id: 'necro_grave_bolt', tree: 'necro_summons', tier: 6, name: 'Grave Bolt',
+    id: 'necro_grave_bolt', tree: 'necro_summons', tier: 8, name: 'Grave Bolt',
     desc: 'It lands, and then it keeps happening.',
     type: 'active', domain: 'spiritual', prereq: 'necro_bone_plate',
     select: 'highest_hp',
@@ -168,7 +168,7 @@ export const NECRO_SUMMONS = [
     ranks: R,
   },
   {
-    id: 'necro_charnel_pact', tree: 'necro_summons', tier: 7, name: 'Charnel Pact',
+    id: 'necro_charnel_pact', tree: 'necro_summons', tier: 10, name: 'Charnel Pact',
     desc: 'You spend a soul the way other people spend a coin.',
     type: 'active', domain: 'spiritual', prereq: 'necro_grave_bolt',
     select: 'densest_cluster',
@@ -180,9 +180,9 @@ export const NECRO_SUMMONS = [
     ranks: R,
   },
   {
-    id: 'necro_bone_golem', tree: 'necro_summons', tier: 8, name: 'Bone Golem',
+    id: 'necro_bone_golem', tree: 'necro_summons', tier: 6, name: 'Bone Golem',
     desc: 'Enough of them, stacked well enough, and it stands on its own.',
-    type: 'active', domain: 'physical', prereq: 'necro_charnel_pact',
+    type: 'active', domain: 'physical', prereq: 'necro_gravechill',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'PROXIMITY', radius: T.golemTrigRadius, count: T.golemTrigCount },
     cooldown: T.golemCd,
@@ -198,7 +198,7 @@ export const NECRO_SUMMONS = [
     ranks: R,
   },
   {
-    id: 'necro_dread_howl', tree: 'necro_summons', tier: 9, name: 'Dread Howl',
+    id: 'necro_dread_howl', tree: 'necro_summons', tier: 8, name: 'Dread Howl',
     desc: 'Every skull in the room opens at once.',
     type: 'active', domain: 'spiritual', prereq: 'necro_bone_golem',
     select: 'densest_cluster',
