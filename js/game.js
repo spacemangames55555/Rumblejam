@@ -30,7 +30,7 @@ import { updateEnemy } from './entities/enemies.js';
 import { BEAST, initBeast, updateBeast, beastUp, beastBlocks, beastAbsorbs, hurtBeast } from './entities/beast.js';
 import {
   tohInitPlayer, tohStartingGear, tohStartFight, tohStats, tohTick, tohOnFire,
-  tohHitDamage, tohOnHit, tohOnHurt, tohOnDodge, tohOnHeal, tohOnKill, tohEnemyDied,
+  tohHitDamage, tohOnHit, tohOnWallHit, tohOnHurt, tohOnDodge, tohOnHeal, tohOnKill, tohEnemyDied,
   tohClearFight, tohTakeBoon, tohBoonPermanent, tohSnapshot, tohMarks, tohMeter,
   tohState, tohSwapStance, coralBlocks,
 } from './traits-toh.js';
@@ -1319,6 +1319,11 @@ export class Sim {
   damageWall(w, dmg, owner) {
     if (!w || w.hp <= 0) return;
     w.hp -= dmg;
+    // A barricade is a landing too. The trait layer observes hits on bodies in
+    // skillDamage; this is the same observation for the other thing a skill can
+    // legitimately connect with, and it is why a Sundian cutting through a Nest
+    // Purge ring grows reef out of it.
+    if (owner && owner.char) tohOnWallHit(this, owner, w);
     this.fx.hits.push({ x: Math.round(w.x + w.w / 2), y: Math.round(w.y + w.h / 2), a: Math.round(dmg), c: 0 });
     if (w.hp > 0) return;
     w.hp = 0;

@@ -24,7 +24,7 @@ import { ENEMIES } from '../js/content/enemies.js';
 import { BOSSES } from '../js/content/bosses.js';
 import { STAT_KEYS } from '../js/config.js';
 import { generateFloorMap } from '../js/dungeon.js';
-import { OBJECTIVE_KINDS as OBJ_KINDS } from '../js/objectives.js';
+import { OBJECTIVE_KINDS as OBJ_KINDS, BOUNTY_HP_MULT } from '../js/objectives.js';
 import { CONFIG as CFG } from '../js/config.js';
 import { isOnboardingNode } from '../js/arenas.js';
 // how far outside the playable bounds an entity has strayed (0 = inside)
@@ -2565,7 +2565,7 @@ try {
     if (!bad) ok(`Breach: doors on a clock, the wall closes to a slit against each one — ${notes.join(' · ')}`);
   }
 
-  // --- 4. Bounty Hunt: 10x HP stalkers with their own stream ---
+  // --- 4. Bounty Hunt: BOUNTY_HP_MULT-x HP stalkers with their own stream ---
   {
     let bad = 0;
     const notes = [];
@@ -2576,10 +2576,16 @@ try {
       for (let i = 0; i < 200; i++) { for (const p of g.players) g.setInput(p.idx, { mx: 0, my: 0 }); g.tick(); }
       const mark = g.enemyById(g.obj.markId);
       if (!mark) { bad++; fail(`no bounty mark after 3s (${n}p f${fl})`); continue; }
-      // the anchor: ~60-70% of the floor boss, floor-ramped, then x10
+      // the anchor: ~60-70% of the floor boss, floor-ramped, then xBOUNTY_HP_MULT
       const anchor = (BBF[g.floorNum].bountyAnchor || BBF[g.floorNum].hp) * g.coopHp * g.greedHp * CFG.enemyHpMult;
       const ratio = mark.maxHp / anchor;
-      if (ratio < 3 || ratio > 7.5) { bad++; fail(`mark HP is ${ratio.toFixed(1)}x the floor boss (want ~4.2-7 after the x10)`); }
+      // BAND DERIVED FROM THE CONSTANT, not typed beside it. This read
+      // `3 .. 7.5` against a hardcoded x10 and went red the moment the ruling
+      // moved to x4 — a test encoding a tuning decision it does not own. The
+      // fraction is 0.60-0.70 ramped by 0.70-1.00, so the true range is
+      // 0.42-0.70 of the multiplier; the band adds slack either side.
+      const lo = 0.40 * BOUNTY_HP_MULT, hi = 0.75 * BOUNTY_HP_MULT;
+      if (ratio < lo || ratio > hi) { bad++; fail(`mark HP is ${ratio.toFixed(1)}x the floor boss (want ${lo.toFixed(1)}-${hi.toFixed(1)} at x${BOUNTY_HP_MULT})`); }
       if (mark.spd > 56) { bad++; fail(`bounty mark speed ${Math.round(mark.spd)} is not a slow stalker`); }
       // the stream pours out of the mark's own position, and it is capped
       const near = [...g.enemyPool].filter(e => !e.bounty && Math.hypot(e.x - mark.x, e.y - mark.y) < 700).length;

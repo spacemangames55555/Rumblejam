@@ -147,6 +147,26 @@ export const CONFIG = {
   // cross zero at rank 12.5; this one is still above half at rank 1000.
   CASCADE_CD_RATE: 0.08,
   CASCADE_CD_FLOOR: 0.5,
+
+  // RANK SHORTENS THE SKILL'S OWN COOLDOWN, and §4.2 was rewritten to allow it.
+  //
+  // The old rule was "ranks may not touch cooldown", and its reason was sound:
+  // an attack-speed term buyable with points lets a narrow build purchase back
+  // its own uptime. What makes this version safe is that it is PER SKILL and
+  // bounded — ranking Bone Shard speeds up Bone Shard and nothing else, and it
+  // cannot compound across a loadout the way a global stat would.
+  //
+  // Deliberately NOT routed through `tempo`. A global fire-rate term on that
+  // stat would stack multiplicatively with the Bard's Rhythm engine, which is
+  // the exact interaction §4.2 existed to prevent; the rule moved, the reason
+  // for it did not. `tempo` remains movement only.
+  //
+  // 0.97 per rank, floored at 70% of base: a rank-10 skill fires about 24%
+  // faster, a rank-5 one about 11%. The floor binds at rank 12+, which no
+  // skill reaches today — it is there so the number cannot run away if the
+  // rank ceiling ever moves.
+  SKILL_RANK_CD_RATE: 0.03,
+  SKILL_RANK_CD_FLOOR: 0.70,
   // The leak, and the only part of cascade that is actually a tick. Ranks fall
   // off after a gap with no fires at all — a Savage who stops fighting loses the
   // chain, which is what stops a cascade being carried between rooms inside one.
@@ -346,20 +366,35 @@ export const PALETTE = {
 
 // Stat registry — the ten player stats (the Great Rebalance sheet).
 // `pct` controls tooltip formatting; `base` is the pre-modifier value.
+// KEY IS THE IDENTITY, `name` IS ONLY THE LABEL.
+//
+// The seven renames below are a DISPLAY change and nothing else. Every key here
+// is load-bearing in a way a label is not: saves store stats by key, item and
+// weapon tags scale by key, `doc_gate` matches the GDD's mechanical tables by
+// key, and the wire format carries them by index. Renaming a key would break
+// every save in existence and silently unmatch half the gates; renaming a label
+// costs nothing, because `STAT_NAME` is derived from this table and every piece
+// of UI in the game reads it (js/ui/gloss.js `glossName`, `glossify`).
+//
+// The old names were flavour where the player needed function. "Ferocity" and
+// "Attunement" are not distinguishable without the glossary open; "Damage" and
+// "Elemental Damage" are. `tools/statname_gate.mjs` asserts none of the seven
+// retired words survives anywhere a player can read one.
 export const STATS = [
   { key: 'vitality',   name: 'Vitality',   pct: false, base: 80 }, // hit points
-  { key: 'ferocity',   name: 'Ferocity',   pct: true,  base: 0 },  // universal damage %
+  { key: 'ferocity',   name: 'Damage',     pct: true,  base: 0 },  // universal damage %  (was Ferocity)
   // MOVEMENT ONLY, and the label was the defect (§9.5). An "attack speed" stat
-  // is cooldown reduction renamed, and §4.2 keeps that off ranks and off items
-  // because it is the only thing stopping a narrow build buying back its
-  // uptime. The implementation was right; this comment claimed otherwise, and
-  // so did the glossary the player reads.
-  { key: 'tempo',      name: 'Tempo',      pct: true,  base: 0 },  // move speed
-  { key: 'grit',       name: 'Grit',       pct: false, base: 0 },  // mitigation + knockback resist
-  { key: 'reflex',     name: 'Reflex',     pct: true,  base: 0 },  // dodge (cap 60)
+  // is cooldown reduction renamed — and as of this patch, per-skill RANKS do
+  // shorten their own cooldown (§4.2), which is deliberately NOT routed through
+  // this stat: a global fire-rate term here would compound with the Bard's
+  // Rhythm engine, which is exactly what §4.2 kept off it. Movement is all this
+  // buys, and "Speed" says that more plainly than "Tempo" did.
+  { key: 'tempo',      name: 'Speed',      pct: true,  base: 0 },  // move speed          (was Tempo)
+  { key: 'grit',       name: 'Defense',    pct: false, base: 0 },  // mitigation + knockback resist (was Grit)
+  { key: 'reflex',     name: 'Dodge',      pct: true,  base: 0 },  // dodge (cap 60)      (was Reflex)
   { key: 'recovery',   name: 'Recovery',   pct: true,  base: 0 },  // amplifies ALL healing received
-  { key: 'ingenuity',  name: 'Ingenuity',  pct: false, base: 0 },  // summon dmg+HP ×(1+0.1×I)
-  { key: 'attunement', name: 'Attunement', pct: true,  base: 0 },  // burn/chill/chain/nova power
+  { key: 'ingenuity',  name: 'Summons',    pct: false, base: 0 },  // summon dmg+HP ×(1+0.1×I) (was Ingenuity)
+  { key: 'attunement', name: 'Elemental Damage', pct: true, base: 0 }, // burn/chill/chain/nova (was Attunement)
   { key: 'greed',      name: 'Greed',      pct: false, base: 0 },  // rarity bias + floor(G/2) mats per clear
   { key: 'reach',      name: 'Reach',      pct: false, base: 0 },  // weapon reach + pickup radius
 ];

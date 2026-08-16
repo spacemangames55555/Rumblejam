@@ -1,3 +1,4 @@
+import { STAT_NAME } from '../../config.js';
 // BLACKSMITH — Forge tree.
 //
 // The other half, and — like Arcana, Grace, Ensemble, Collapse, Blight, Reef,
@@ -108,7 +109,7 @@ export const SMITH_FORGE = [
     // maxRank: 1 — `armorGrit` is 'other' in PASSIVE_EFFECT, an unlock rather
     // than an investment. Same registry refusal the Savage's Old Scars hit.
     id: 'smith_deadweight', tree: 'smith_forge', tier: 4, name: 'Deadweight',
-    desc: 'Nothing moves you and nothing ever has. +7 Grit.',
+    desc: `Nothing moves you and nothing ever has. +7 ${STAT_NAME.grit}.`,
     type: 'passive', domain: 'physical', prereq: 'smith_bellows',
     passive: { armorGrit: T.deadGrit },
     maxRank: 1,

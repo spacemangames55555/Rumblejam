@@ -18,6 +18,7 @@ import { clamp, dist2 } from './util.js';
 import { hordeTotalSpawns } from './arenas.js';
 import { BOSS_BY_FLOOR } from './content/bosses.js';
 import { FLOOR_TABLES } from './content/enemies.js';
+import { REGION_BY_INDEX } from './regions.js';
 
 const { WALL } = CONFIG;
 
@@ -412,7 +413,13 @@ function buildNests(sim, o) {
   const floorHp = Math.pow(CONFIG.FLOOR_HP_MULT, sim.floorNum - 1);
   // A barricade has to be worth swinging at: two of them (one per ring) is
   // the toll for reaching a nest, and that toll is comparable to the nest.
-  const wallHp = Math.round(210 * floorHp * sim.coopHp * CONFIG.enemyHpMult);
+  // REGION TUNING, read here rather than baked into the wall. Region 1 halves
+  // it (regions.js): Nest Purge is where a party first meets a barricade, and
+  // the toll for reaching a nest should teach the mechanic before it tests it.
+  // Regions with no multiplier are unchanged, which is every other one.
+  const region = REGION_BY_INDEX[sim.regionIndex] || null;
+  const wallMult = (region && region.tuning && region.tuning.nestWallHpMult) || 1;
+  const wallHp = Math.round(210 * floorHp * sim.coopHp * CONFIG.enemyHpMult * wallMult);
   const spots = nestSpots(sim, o.total);
   o.total = Math.max(1, spots.length);   // a cramped arena fits fewer fortresses
   o.alive = o.total;
@@ -490,7 +497,14 @@ function tickNest(sim, o, dt) {
 // anyone down, so the fight is entirely on the party's terms — except that
 // the mark never stops calling reinforcements to its own position, so
 // standing off and plinking it means fighting the stream the whole time.
-const BOUNTY_HP_MULT = 10;      // on top of the floor-ramped boss fraction
+// THE MARK'S MULTIPLIER, AND IT IS ONE TERM. Was 10, which measured as too
+// much: the open Bounty Hunt balance question, now closed at 4. Replaced rather
+// than layered — a x10 with a x0.4 correction bolted on top reads as two
+// decisions and hides which one is the ruling (§13 rule 43's cousin: a number
+// arrived at by cancellation is a number nobody can check). Flat at every party
+// size; the stream already scales with the party and the mark is meant to be
+// the same wall for everyone.
+export const BOUNTY_HP_MULT = 4;   // on top of the floor-ramped boss fraction
 const BOUNTY_SPD_CAP = 55;      // slower than anything else on the floor
 const BOUNTY_STREAM = 1.5;      // stream spawns/second at solo, party-scaled
 const BOUNTY_PAY_CAP = 100;     // stream kills that pay materials, per mark
@@ -536,8 +550,8 @@ function tickBounty(sim, o, dt) {
   const p = spot(sim, sim.W / 2 + Math.cos(a) * sim.W * 0.36,
     sim.H / 2 + Math.sin(a) * sim.H * 0.36, 46);
   // ~60–70% of a (doubled) floor boss, eased on the early floors (see above),
-  // and then ten times that: a mark is no longer a big elite, it is a siege
-  // in its own right. The floor ramp still scales off this new base.
+  // and then BOUNTY_HP_MULT times that: a mark is not a big elite, it is a
+  // fight of its own. The floor ramp still scales off this base.
   const target = bossHp(sim) * bountyFraction(sim, rnd(sim)) * BOUNTY_HP_MULT;
   const base = sim.spawnEnemyById(table[Math.floor(rnd(sim) * table.length)], p.x, p.y,
     { elite: true, mod: sim.waveRng.pick(sim.eliteMods()) });

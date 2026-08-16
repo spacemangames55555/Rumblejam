@@ -1,3 +1,4 @@
+import { STAT_NAME } from '../../config.js';
 // HUNTER — Houndmaster tree.
 //
 // The other half, and — like Arcana, Grace, Ensemble, Collapse, Blight, Reef and
@@ -105,7 +106,7 @@ export const HUN_HOUNDMASTER = [
     // within 120, so this is the tier where the tree's whole bonus arrives at
     // once rather than growing.
     id: 'hun_second_hound', tree: 'hun_houndmaster', tier: 4, name: 'Second Hound',
-    desc: 'A second hound at the other heel. Two inside 120 is Alpha: +20% Ferocity and +10% Tempo, to you and to them.',
+    desc: `A second hound at the other heel. Two inside 120 is Alpha: +20% ${STAT_NAME.ferocity} and +10% ${STAT_NAME.tempo}, to you and to them.`,
     type: 'active', domain: 'physical', prereq: 'hun_hound',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.bayRange },
