@@ -88,8 +88,31 @@ export function cursedModifierFor(region) {
 export function nodePopulation(regionId, nodeType) {
   const pop = REGION_ENEMIES[regionId];
   if (!pop) return null;
-  const heavies = pop.enemies.filter(e => e.telegraph);
-  const chaff = pop.enemies.filter(e => !e.telegraph);
+  // "THE REGION'S HEAVY HALF" — and an elite node has to satisfy TWO rules at
+  // once, which only became visible when light telegraphers arrived.
+  //
+  // It used to read `e.telegraph`, which was the same predicate as "heavy" only
+  // while every telegrapher was also a slab. Splitting on HP alone is wrong the
+  // other way: region 1's Mistwalker is above the median and does not commit, so
+  // an HP-only split put an unreadable unit into the champion draw and dropped
+  // the elite room to 37% telegraphing against a 58% baseline — caught by the
+  // load assertion below, which says an elite node must be MORE readable rather
+  // than the same fight with bigger numbers.
+  //
+  // A champion is heavy AND it commits. Both, not either.
+  const median = (xs) => {
+    const a = [...xs].sort((x, y) => x - y);
+    const m = a.length >> 1;
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  };
+  const med = median(pop.enemies.map(e => e.hp));
+  const isChampion = e => !!e.telegraph && e.hp >= med;
+  let heavies = pop.enemies.filter(isChampion);
+  // A roster whose telegraphers are all light has no champions by that test.
+  // Fall back to every telegrapher rather than to nothing: readability is the
+  // rule an elite node exists to raise, and weight is the one it can miss.
+  if (!heavies.length) heavies = pop.enemies.filter(e => e.telegraph);
+  const chaff = pop.enemies.filter(e => !heavies.includes(e));
   if (nodeType !== 'elite') return pop.enemies.map(e => ({ def: e, w: e.w }));
   // Elite: reweight toward the heavies rather than swapping the roster, so the
   // room still reads as this region.

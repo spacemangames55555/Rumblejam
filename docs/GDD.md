@@ -293,6 +293,8 @@ Authored per region band, not computed from a global curve. Expected player leve
 
 If a party arrives significantly above or below the anchor, that is the difficulty setting doing its job, not a bug.
 
+**The weight has to be in the multiplier, not in the units.** Region 1 replaces floor 1 at ×1.00, so its roster should weigh what floor 1's table weighed — and the first version did not: ×2.14 the weighted mean HP and ×1.69 the damage, all of it authored into the units. The cause was a coupling rather than a tuning error. §3.5 requires ≥50% telegraph density for readability, and the only behaviours permitted to telegraph were the three the roster had authored as slabs, so **a readability goal imported a weight goal.** Telegraph is an animation and timing property; it has no necessary relationship to HP. Region 1 needs the most density and the least weight, and it had the most of both. `tools/roster_weight_gate.mjs` now asserts both halves together, because either alone is satisfiable by breaking the other.
+
 **The multipliers those anchors buy** (`REGION_HP_MULT` / `REGION_DMG_MULT` in `js/regions.js`), measured by `tools/region_curve.mjs` against composed player output at each anchor, targeting flat time-to-kill:
 
 | Region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
@@ -1914,6 +1916,18 @@ This generalises past art. The same shape is any place we describe in a string w
 `js/worldmap.js` was imported by `js/main.js` and `js/ui/screens.js`, so an import-graph walk from `index.html` reported 92 of 93 modules live. Both importers wanted `DIFFICULTIES`. `worldMapState`, `partyCanEnter`, and through them every export of `js/saves.js` — `park`, `unpark`, `canEnter`, `onRegionCleared`, `recordUnlock`, `exportBundle`, `importBundle` — had no caller anywhere. **The region layer had never executed in 165 commits**, and the one thing that would have said so was a check on the EXPORT surface rather than on the file list.
 
 `reach_gate` had two rows for this, naming `shrineOffer` and `worldMapState` individually, and that framing is what let it hide: the gate stayed green about one function while the module behind it was equally dead. It now asserts every export of both progression files. **Name the surface, not the instance** — the instances you write down are the ones you already know about.
+
+77. **A set's NAME is a claim, and content will be authored to it.** `HEAVY_BEHAVIORS` governed which units may telegraph — a timing property — and every roster authored to the word.
+
+The rule it enforced was readability: at least half a region's population, by encounter weight, must commit visibly so the hold-or-break decision is a read rather than arithmetic. The only way to raise that share was to add units from the permitted set, and the set was called *heavy*, so the Pacific Northwest came out at **×2.14 the HP and ×1.69 the damage** of the floor-1 table it replaces, at a world multiplier of ×1.00. A level-12 contact tank that held ground on floor 1 indefinitely died in 46 seconds. Nothing in the rules said a telegrapher must be tough; the name did, and the name is what got read.
+
+It is `COMMITTING_BEHAVIORS` now, with the same three members and both rules unchanged. **When a predicate is named for one property and gates another, the content will drift toward the name** — and the drift is invisible, because every individual unit looks reasonable and only the weighted mean says otherwise.
+
+78. **A weighted mean can land on target while the fight still plays wrong, and the way to know is to measure time, not tables.** HP parity did not fix the room on its own.
+
+Re-authored to ×1.06 mean HP and ×1.03 mean damage, region 1's camper still died — at 71s instead of 46s, with **58% of everything reaching it coming from telegraph zones**. The stat table said parity; the fight said a 7 HP unit was landing 9 damage every 2.2 seconds, hitting harder per commit than a 34 HP Bark Hulk does per second. A unit's PUNISH has to be sized to its cost, not only its hit points, and no mean over `hp` and `dmg` can see that — the telegraph's damage and cooldown are not in either column.
+
+Instrument time-to-kill and time-to-die. The means are the mechanism; the clock is the claim.
 
 76. **Every lever that names an id instead of drawing from the table has to be closed, and there is always one more.** This is the third time the same sentence has been written in this repo about a different lever.
 

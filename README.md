@@ -648,6 +648,13 @@ never loads them:
 - `node tools/telegraph_test.mjs` — the telegraph state machine through live
   ticks, every case staged from four seeds at four positions. Includes the
   siege-boss regression (known defect #5) and the `windupMs` reaction floor.
+- `node tools/roster_weight_gate.mjs [--verbose]` — **telegraph density and
+  roster weight, asserted together**, because either alone is satisfiable by
+  breaking the other. A region's telegraphing share must clear the 50% floor;
+  region 1's weighted mean HP and damage must sit within ±15% of the floor-1
+  table it replaces at ×1.00; and at least two of its telegraphers must be below
+  its own median HP, so the read can be learned on something that dies. Later
+  regions are reported with their world multiplier composed in, not gated.
 - `node tools/region_wire_gate.mjs` — **the region layer, asserted by effect from
   the entry point `main.js` uses.** Every check constructs `new Sim({seed, party,
   regionIndex})` and reads what came out; none assigns a region by hand. Five maps
