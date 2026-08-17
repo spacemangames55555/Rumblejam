@@ -2595,6 +2595,12 @@ export class Sim {
     if (!e.boss && e.def.behavior !== 'warden') {
       for (const w of this.enemyPool) {
         if (w.boss || w.def.behavior !== 'warden' || w === e) continue;
+        // `shieldR > 0` GUARDED, not assumed. A warden's ally aura is optional —
+        // region 1's Sapling is a 7 HP warden with no aura at all — and without
+        // this the comparison is `dist2 < NaN`, which is false by accident
+        // rather than by intent. An optional field should be checked, not
+        // survive on the shape of IEEE 754.
+        if (!(w.def.shieldR > 0)) continue;
         if (dist2(w.x, w.y, e.x, e.y) < w.def.shieldR * w.def.shieldR) { amount = Math.max(1, Math.round(amount * (1 - w.def.shieldReduce))); break; }
       }
     }
@@ -3747,29 +3753,32 @@ export class Sim {
   // be three of the SAME SHAPE from the Pacific Northwest, not three creatures
   // from a dungeon the player is not in.
   //
-  // Derived, not authored, so region 3 gets one by existing: THE REGION'S
-  // CHAFF — every archetype that does not telegraph.
+  // Derived, not authored, so region 3 gets one by existing: THE REGION'S THREE
+  // LIGHTEST ARCHETYPES.
   //
-  // That is the base table's own composition, read off rather than guessed at.
-  // `skulker`, `flit`, `fusehead` are floor 1's three non-telegraphing types at
-  // 8/4/6 HP and 1/1/2 materials, and `regions-enemies.js` asserts the same
-  // split for every region ("EVERY heavy or elite archetype telegraphs; chaff
-  // stays undodgeable"), so "the chaff" is a well-defined thing to ask a region
-  // for. The Pacific Northwest's three are sapling, thornhound and mistwalker
-  // at 9/6/10 HP and 1/1/2 — trash, a mover, and a ranged threat, which is the
-  // shape §2.2 says the trio is for.
+  // This read "the region's chaff" — every unit that does not telegraph — which
+  // was the same predicate as "the light ones" only while telegraphing implied
+  // slab HP. Once region 1 gained two 7 HP telegraphers the two stopped
+  // agreeing, and the chaff reading broke twice over: it returned only two ids
+  // (so map 1 fell back to the base roster's dungeon creatures in a cedar
+  // forest), and it excluded the very units map 1 exists to teach.
   //
-  // AN EARLIER VERSION TOOK TWO CHAFF PLUS THE GENTLEST TELEGRAPHER, and
-  // `region_test` caught it by outcome rather than by constant: the Cedar
-  // Warden carries 15 HP against the Fusehead's 6, so map 1 paid out slower and
-  // a character left it at LEVEL 2 with one slot instead of level 6 with two —
-  // exactly the progression debt `ONBOARDING_XP_MULT` exists to prevent, re-
-  // incurred by changing the table underneath it.
+  // Lightness is what the trio was ever about. `skulker`, `flit`, `fusehead`
+  // are floor 1's three lightest at 8/4/6 HP — the tutorial's composition is
+  // "three things that die", not "three things you cannot read". The Pacific
+  // Northwest's three are thornhound (6, a mover), sapling (7, a light
+  // telegrapher) and cedar warden (7, another) — so map 1 now contains the
+  // wind-up it is supposed to teach, which the old trio did not.
+  //
+  // Ties broken by id so the table is stable across runs; two units at 7 HP
+  // must not reorder because a sort was unspecified.
   _onboardingTable() {
     const pop = this.region && REGION_ENEMIES[this.region];
-    if (!pop) return ONBOARDING_TABLE;
-    const chaff = pop.enemies.filter(e => !e.telegraph).map(e => e.id);
-    return chaff.length === ONBOARDING_TABLE.length ? chaff : ONBOARDING_TABLE;
+    if (!pop || pop.enemies.length < ONBOARDING_TABLE.length) return ONBOARDING_TABLE;
+    return [...pop.enemies]
+      .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))
+      .slice(0, ONBOARDING_TABLE.length)
+      .map(e => e.id);
   }
 
   _regionPick() {

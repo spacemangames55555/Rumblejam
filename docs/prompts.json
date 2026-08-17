@@ -402,7 +402,7 @@
     },
     "enemy.pnw_sapling": {
       "batch": 3,
-      "subject": "Sapling, a chaser monster, Pacific Northwest region",
+      "subject": "Sapling, a warden monster, Pacific Northwest region",
       "silhouette": "a slender upright stalk with two drooping frond arms and no head",
       "directions": 8,
       "frames": 1,
@@ -410,7 +410,7 @@
         128,
         128
       ],
-      "prompt": "Sapling, a chaser monster, Pacific Northwest region, a slender upright stalk with two drooping frond arms and no head, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Sapling, a warden monster, Pacific Northwest region, a slender upright stalk with two drooping frond arms and no head, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.pnw_thornhound": {
       "batch": 3,

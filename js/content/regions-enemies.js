@@ -27,7 +27,29 @@ export const MIN_TELEGRAPH_WEIGHT = 0.5;
 // The behaviours that must commit. A "heavy" is anything whose answer is
 // positioning rather than kiting; if a new behaviour belongs in that set it
 // goes here, and the assertion below then requires a telegraph for it.
-export const HEAVY_BEHAVIORS = new Set(['brute', 'warden', 'dasher']);
+// WHICH BEHAVIOURS MAY COMMIT. This was `HEAVY_BEHAVIORS`, and the name was
+// the whole defect.
+//
+// The set governs one thing: which units are allowed to telegraph. That is a
+// TIMING property — a wind-up, a committed zone, a recovery window you can
+// punish. Calling it "heavy" made it read as a statement about mass, and the
+// rosters were authored to match the name: every unit permitted to telegraph
+// was also given slab HP. So rule 2 below, which is a READABILITY floor ("at
+// least half the population must be dodgeable"), could only be met by adding
+// WEIGHT — and the Pacific Northwest came out at ×2.14 the HP of the floor-1
+// table it replaces, at a world multiplier of ×1.00.
+//
+// Nothing about a wind-up requires HP. A unit that telegraphs and dies in two
+// hits is the ideal teacher, and region 1 — where a player learns to read
+// wind-ups at all — wants the most density and the least weight. It had the
+// most of both.
+//
+// The membership is unchanged and rules 1 and 3 are unchanged: brute, warden
+// and dasher are the behaviours that commit, and chaff must stay undodgeable or
+// holding stance is always punished. Only the claim the name was making is
+// gone. `tools/roster_weight_gate.mjs` asserts both halves together, because
+// either alone is satisfiable by breaking the other.
+export const COMMITTING_BEHAVIORS = new Set(['brute', 'warden', 'dasher']);
 
 export const REGION_ENEMIES = {
   pacific_northwest: { enemies: PNW_ENEMIES, boss: PNW_BOSS },
@@ -119,12 +141,12 @@ function assertRegionEnemies() {
         if (e[k] === undefined || e[k] === null) problems.push(`${e.id}: behaviour "${e.behavior}" reads def.${k} every tick and it is missing — this crashes the sim the moment one spawns`);
       }
 
-      // RULE 1: every heavy commits.
-      if (HEAVY_BEHAVIORS.has(e.behavior) && !e.telegraph) {
-        problems.push(`${e.id}: behaviour "${e.behavior}" is a heavy and must telegraph — a heavy that cannot be read is undodgeable damage wearing a big silhouette`);
+      // RULE 1: every committing behaviour telegraphs.
+      if (COMMITTING_BEHAVIORS.has(e.behavior) && !e.telegraph) {
+        problems.push(`${e.id}: behaviour "${e.behavior}" commits and must telegraph — a committed attack that cannot be read is undodgeable damage`);
       }
       // RULE 3: chaff does not.
-      if (!HEAVY_BEHAVIORS.has(e.behavior) && e.telegraph) {
+      if (!COMMITTING_BEHAVIORS.has(e.behavior) && e.telegraph) {
         problems.push(`${e.id}: behaviour "${e.behavior}" is chaff and must NOT telegraph — if everything commits, holding stance is always punished and Footing collapses into "always break"`);
       }
       if (e.telegraph) checkTelegraph(e.id, e.telegraph, problems);

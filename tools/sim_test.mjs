@@ -1731,7 +1731,16 @@ try {
             if (mine) goal = [o.altar.x, o.altar.y, 26];
             else { const free = o.relics.find(r => r.carrier < 0); if (free) goal = [free.x, free.y, 20]; }
           } else if (o.type === 'bounty' && o.markId !== null) {
-            const e = g.enemyById(o.markId); if (e) goal = [e.x, e.y, 110];
+            // STOP AT THE MARK'S BODY, not at a constant. 110 was a fixed
+            // centre-to-centre distance, and a mark's radius is its archetype's
+            // ×1.55 — so the gap a melee class actually has to close ranged
+            // from 71 units against a Bark Hulk mark to 91 against a
+            // Thornhound. Rebalancing region 1's draw away from the heavies
+            // moved the mark's expected size, the samurai's reach fell on the
+            // wrong side of the new gap, and a bounty that clears in six
+            // minutes read as never clearing in twenty. The constant was
+            // measuring the mark's silhouette, not the level.
+            const e = g.enemyById(o.markId); if (e) goal = [e.x, e.y, 40 + e.radius];
           } else if (o.type === 'nest') goal = nestGoal(g, o, p);
         }
         if (!goal) {   // elite arena and anything else: killing IS the job
@@ -5539,36 +5548,45 @@ try {
   // Directions come from NODE_TUNING rather than from literals here, so a
   // retune of the design moves the test with it.
   //
-  // GOLD CARRIES A SECOND TERM NOW, AND IT IS NOT AN ERROR. §2.4's elite node
-  // does two things: it multiplies the payout by 1.35, and it reweights the
-  // roster so 75% comes from the region's HEAVY half. Heavies carry more base
-  // `mats`, so an elite node in a live region pays 1.35 × (heavy mats / mixed
-  // mats), which measured ×1.72 the first time a region population reached the
-  // field. Before the region layer was wired `_regionPick` returned null and
-  // both rooms drew the same table, so the roster term was exactly 1 and the
-  // multiplier was the whole answer.
+  // EVERY PER-ENEMY AXIS CARRIES A SECOND TERM, AND IT IS NOT AN ERROR. §2.4's
+  // elite node does two things: it applies a multiplier, and it reweights the
+  // roster so 75% comes from the region's HEAVY half. So the measured ratio is
+  // the multiplier TIMES how much heavier that half is — for every property the
+  // enemy carries, not just for gold.
   //
-  // The expectation is derived from `nodePopulation` rather than hardcoded, so
-  // it moves with the design instead of pinning today's roster.
-  const matsMean = pop => pop.reduce((a, x) => a + x.w * x.def.mats, 0) / pop.reduce((a, x) => a + x.w, 0);
-  const rosterTerm = (() => {
+  // The gold axis learned this first, when the region layer was wired and
+  // `_regionPick` stopped returning null. HP and damage stayed correct only
+  // because the roster's light and heavy ends were close together; once region
+  // 1 gained two 7 HP telegraphers beside a 34 HP Bark Hulk, the heavy half was
+  // 2.7× the mixed mean and the HP axis read ×5.69 against a multiplier of 2.4.
+  // Nothing was broken — the check was comparing a two-term quantity to one
+  // term. Correcting one axis and leaving two is how a fixture stays wrong.
+  //
+  // COUNT IS DELIBERATELY NOT CORRECTED: `eliteCountMult` is applied to the
+  // spawn budget and has nothing to do with which archetypes fill it.
+  //
+  // Every term is derived from `nodePopulation` rather than hardcoded, so it
+  // moves with the design instead of pinning today's roster.
+  const popMean = (pop, f) => pop.reduce((a, x) => a + x.w * f(x.def), 0) / pop.reduce((a, x) => a + x.w, 0);
+  const rosterTerm = (f) => {
     const g0 = new Sim({ seed: SEED, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
     if (!g0.region) return 1;
-    return matsMean(NODE_POP(g0.region, 'elite')) / matsMean(NODE_POP(g0.region, 'horde'));
-  })();
+    return popMean(NODE_POP(g0.region, 'elite'), f) / popMean(NODE_POP(g0.region, 'horde'), f);
+  };
+  const tHp = rosterTerm(d => d.hp), tDmg = rosterTerm(d => d.dmg), tMats = rosterTerm(d => d.mats);
   const axes = [
-    ['count', e.n / Math.max(1, h.n), NODE_T.eliteCountMult, 'fewer'],
-    ['HP', e.hp / Math.max(1e-9, h.hp), NODE_T.eliteHpMult, 'tougher'],
-    ['damage', e.dmg / Math.max(1e-9, h.dmg), NODE_T.eliteDmgMult, 'harder-hitting'],
-    ['gold', e.mats / Math.max(1e-9, h.mats), NODE_T.eliteGoldMult * rosterTerm, 'better-paying'],
+    ['count', e.n / Math.max(1, h.n), NODE_T.eliteCountMult, 'fewer', 1],
+    ['HP', e.hp / Math.max(1e-9, h.hp), NODE_T.eliteHpMult * tHp, 'tougher', tHp],
+    ['damage', e.dmg / Math.max(1e-9, h.dmg), NODE_T.eliteDmgMult * tDmg, 'harder-hitting', tDmg],
+    ['gold', e.mats / Math.max(1e-9, h.mats), NODE_T.eliteGoldMult * tMats, 'better-paying', tMats],
   ];
-  for (const [name, got, want, word] of axes) {
+  for (const [name, got, want, word, term] of axes) {
     // A generous band — spawn tables, rounding and floor scaling all sit
     // between the multiplier and the measurement — but the DIRECTION is
     // absolute: below 1 must stay below 1, above 1 must stay above 1.
     const rightSide = (want < 1) ? got < 1 : got > 1;
     const close = Math.abs(got - want) / want <= 0.25;
-    if (rightSide && close) ok(`elite is measurably ${word}: ${name} ×${got.toFixed(2)} against horde (§2.4 asks ×${want.toFixed(2)}${name === 'gold' && rosterTerm !== 1 ? `, being 1.35 × ${rosterTerm.toFixed(2)} for the heavier roster` : ''})`);
+    if (rightSide && close) ok(`elite is measurably ${word}: ${name} ×${got.toFixed(2)} against horde (§2.4 asks ×${want.toFixed(2)}${term !== 1 ? `, being the multiplier × ${term.toFixed(2)} for the heavier roster` : ''})`);
     else if (!rightSide) fail(`elite ${name} ×${got.toFixed(2)} is on the WRONG SIDE of 1 — §2.4 asks ×${want.toFixed(2)}. An elite node that is horde with a bigger number asks the same build question`);
     else fail(`elite ${name} ×${got.toFixed(2)} is more than 25% off §2.4's ×${want.toFixed(2)}`);
   }
