@@ -67,6 +67,12 @@ export const CONFIG = {
   MINION_ORBIT_RATE: 1.6,      // rad/s for orbiters
   MINION_ORBIT_LERP: 8,        // how hard an orbiter corrects toward its station
   MINION_CONTACT_CD: 1,        // s between contact hits from one enemy onto one minion
+  // A pack reads as a pack at roughly 3 body-widths apart; minion radius is 10,
+  // so bodies touch at 20 and this leaves daylight between them without
+  // scattering them off the target. The force is well under MINION_SPEED so
+  // separation nudges the formation and never overrides the chase.
+  MINION_SEPARATION: 58,       // u; closer than this and packmates push apart
+  MINION_SEPARATION_FORCE: 95, // u/s of sideways push at full overlap
 
   // ---- soul tokens ----
   // A world resource read by the ON_TOKEN trigger. Not a Necromancer field: any

@@ -61,12 +61,27 @@ function dist2(a, x, y) { const dx = a.x - x, dy = a.y - y; return dx * dx + dy 
 // The candidate set is whatever the grid already returns for this range — the
 // selector re-ranks, it never widens the search. A selector that could reach
 // past a skill's range would silently give every skill infinite reach.
-function candidates(grid, x, y, range) {
+//
+// LINE OF SIGHT IS PART OF THE CANDIDATE SET, NOT PART OF THE RANKING. `los`
+// is a predicate the caller supplies (it owns the geometry; this module has no
+// `sim`), and a target it rejects is not a worse target — it is not a target.
+// Ranking it and then discarding the winner would silently hand the skill to
+// whatever placed second, which is a different bug wearing the same fix.
+//
+// WHY THIS LAYER. `losBlocked` and `_nearestVisibleEnemy` have existed since
+// patch 9 and are correct; the live attack path simply never reached them.
+// Weapons were removed and `_fireWeapon` — the one caller that tested sight —
+// stopped running with them (js/config.js says so in as many words). Every
+// composed skill selects through here, so this is the single place the rule
+// can be stated once and hold for all fourteen primitives. §13 rule 75: the
+// module was imported and still a graveyard.
+function candidates(grid, x, y, range, los) {
   const out = [];
   const r2 = range * range;
   for (const e of grid.near(x, y, range)) {
     if (!attackable(e)) continue;
     if (dist2(e, x, y) > r2) continue;
+    if (los && !los(e)) continue;
     out.push(e);
   }
   return out;
@@ -101,9 +116,9 @@ function rank(kind, e, list, x, y) {
 // `self` never resolves to an enemy. Guarded here as well as asserted at load,
 // because a step that reads a selector must never silently inherit a target
 // from a skill that declared it has none.
-export function selectTarget(kind, grid, x, y, range) {
+export function selectTarget(kind, grid, x, y, range, los) {
   if (kind === 'self') return null;
-  const list = candidates(grid, x, y, range);
+  const list = candidates(grid, x, y, range, los);
   if (!list.length) return null;
   let best = null, bestScore = -Infinity;
   for (const e of list) {
@@ -115,9 +130,9 @@ export function selectTarget(kind, grid, x, y, range) {
 
 // N targets, best-first by the same rule. Used by multi-bolt steps, which used
 // to take grid.nearestN() and therefore always the N nearest.
-export function selectTargets(kind, grid, x, y, range, count) {
+export function selectTargets(kind, grid, x, y, range, count, los) {
   if (kind === 'self') return [];
-  const list = candidates(grid, x, y, range);
+  const list = candidates(grid, x, y, range, los);
   if (!list.length) return [];
   return list
     .map(e => ({ e, sc: rank(kind, e, list, x, y) }))

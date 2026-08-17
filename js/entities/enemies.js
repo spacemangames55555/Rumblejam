@@ -94,7 +94,14 @@ export function updateEnemy(sim, e, dt) {
     if (Math.abs(e.knockY) < 5) e.knockY = 0;
     sim.clampToRoom(e);
   }
-  if (e.boss) { updateBoss(sim, e, dt, spd); return; }
+  if (e.boss) {
+    // The commit rule is not a mob rule. A boss winding up must not step and
+    // must not reaim either — bosses reach updateBoss before the check below,
+    // so it is repeated here rather than inherited.
+    if (telegraphBusy(e)) return;
+    updateBoss(sim, e, dt, spd);
+    return;
+  }
 
   // Skill statuses that stop a body moving. Stun halts everything; root allows
   // attacks but not movement, so it is checked inside the movement helpers'
@@ -150,10 +157,20 @@ export function updateEnemy(sim, e, dt) {
     case 'sprinter': {
       if (p) {
         if (rush) { rushMove(sim, e, p, spd, dt); break; }
-        // weave: sine offset perpendicular to approach
+        // weave: sine offset perpendicular to approach.
+        //
+        // Expressed as a WAYPOINT rather than a raw heading so it goes through
+        // `sim.walk` — and therefore through the wall-aware mover — like every
+        // other closer. Calling `walkAngle` directly is what left the sprinter
+        // out: traced against a 70x317 pillar it pinned itself at 167 units
+        // and oscillated in place for the full 40s, because the weave walked
+        // it into the face and nothing steered it round. The heading is
+        // identical when nothing is in the way (angleTo(e, waypoint) is a+wob
+        // by construction), so the weave itself is unchanged.
         const a = angleTo(e.x, e.y, p.x, p.y);
         const wob = Math.sin(e.t * 6 + e.id) * 0.7;
-        sim.walkAngle(e, a + wob, spd, dt);
+        const reach = Math.max(80, dist(e.x, e.y, p.x, p.y));
+        sim.walk(e, e.x + Math.cos(a + wob) * reach, e.y + Math.sin(a + wob) * reach, spd, dt);
       }
       break;
     }
@@ -515,6 +532,63 @@ function updateBoss(sim, e, dt, spd) {
           for (let i = 0; i < b.p2.addCount; i++) sim.spawnEnemyById(b.p2.addId, e.x + Math.cos(i * 2.6) * 90, e.y + Math.sin(i * 2.6) * 90, { noMats: true });
         }
       }
+      break;
+    }
+
+    // THE REGION BOSSES. Both of them declared `telegraph` and `p2` and no
+    // `kit`, and this switch had no default — so The Cedar Mother matched no
+    // case, ran no code, and stood exactly where it spawned. Measured before
+    // the fix: parked a player 700 units away for 60 seconds and the boss
+    // travelled 0 units, spent 0 frames winding up and dealt 0 damage. It was
+    // not "beatable from out of reach"; it was beatable from anywhere, by
+    // anything, because it was inert.
+    //
+    // Two halves, and the second is the one the defect is actually about.
+    //
+    // THE COMMITTED ZONE is now driven by `tickTelegraphs` (see telegraphOf) —
+    // the authored circle, and the cone it becomes at half HP. That threatens
+    // a player who comes into reach and nobody else.
+    //
+    // THE CHARGE is what threatens a player who does not. A boss that only
+    // walks cannot answer kiting: at 58 u/s it never closes on anyone, so
+    // standing at range was a winning strategy no matter how hard the slam
+    // hit. The charge commits to a LANE — the bearing is taken once, when the
+    // beam appears, and the boss travels that same fixed bearing when it
+    // fires. It does not steer, it does not re-home, and a player who moves
+    // off the line is not hit. That is region 1's own lesson (read the zone,
+    // leave the zone) asked at a distance instead of in melee, which is the
+    // only way to threaten a kiter without breaking the rule the whole
+    // telegraph system exists to enforce.
+    default: {
+      const c = b.charge;
+      if (s.charging) {
+        e.x += e.vx * dt; e.y += e.vy * dt;
+        sim.clampToRoom(e);
+        s.chargeT -= dt;
+        for (const pl of sim.players) {
+          if (pl.downed || pl.gone) continue;
+          if (dist(e.x, e.y, pl.x, pl.y) < e.radius + pl.radius + 6) sim.hurtPlayer(pl, c.dmg * e.dmgScale, e);
+        }
+        if (s.chargeT <= 0) s.charging = false;
+        return;
+      }
+      if (!c) { if (p && !s.busyT) sim.walk(e, p.x, p.y, spd * mult, dt); break; }
+      const cd = (s.phase2 && b.p2 && b.p2.chargeCd) ? b.p2.chargeCd : c.cd;
+      s.chargeCd = (s.chargeCd ?? cd * 0.6) - dt;
+      // Only worth committing a lane at someone out past melee — inside that,
+      // the slam is the right answer and a charge would be a second way to do
+      // the same job.
+      if (s.chargeCd <= 0 && p && dist(e.x, e.y, p.x, p.y) > c.minDist) {
+        s.chargeCd = cd; s.busyT = c.windup;
+        const a = angleTo(e.x, e.y, p.x, p.y);   // FIXED HERE. Never read again.
+        sim.addTelegraph({
+          shape: 'beam', x: e.x, y: e.y, angle: a, w: c.width, len: c.speed * c.dur + 60,
+          dur: c.windup, follow: e,
+          onFire: () => { s.charging = true; s.chargeT = c.dur; e.vx = Math.cos(a) * c.speed; e.vy = Math.sin(a) * c.speed; },
+        });
+        break;
+      }
+      if (p && !s.busyT) sim.walk(e, p.x, p.y, spd * mult, dt);
       break;
     }
   }

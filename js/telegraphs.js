@@ -95,8 +95,39 @@ function buildZone(sim, e, t) {
 // hanging before it got to the siege runs, so the only evidence was a shorter
 // partial run. This helper is now the single place that answers the question,
 // and nothing below reads e.def directly.
+// A BOSS'S TELEGRAPH BLOCK WAS DEAD DATA. `_spawnSiegeBoss` builds its slot
+// with `def: null` and a `bossDef` instead, and this helper only ever looked at
+// `e.def` — so `tickTelegraphs` skipped every boss, and the authored
+// `telegraph` and `p2.telegraph` on both region bosses never fired once. The
+// comment above was right that nothing should read `e.def` directly and wrong
+// about what the answer is for a boss: it is `bossDef`, not null.
+//
+// Phase 2 swaps the block, which is how "phase 2 changes the zone SHAPE rather
+// than its numbers" is expressed in data — pnw_boss goes circle 165 -> cone
+// 130x260 at half HP.
 function telegraphOf(e) {
-  return (e && e.def && e.def.telegraph) || null;
+  if (!e) return null;
+  if (e.def && e.def.telegraph) return e.def.telegraph;
+  const b = e.boss ? e.bossDef : null;
+  if (!b) return null;
+  if (e.bs && e.bs.phase2 && b.p2 && b.p2.telegraph) return b.p2.telegraph;
+  return b.telegraph || null;
+}
+
+// A COMMITTED ZONE IS A BLAST, AND BLASTS DO NOT REACH THROUGH WALLS. The rule
+// already holds everywhere else this game deals area damage — `_areaDamage*`
+// tests sight from the blast's own centre — and it held for the PLAYER's cone
+// primitive. It did not hold here, so region 1's Sapling landed 12 of 12
+// wind-ups on a player standing behind a 143-unit block, for 150 damage.
+//
+// THIS IS NOT REAIMING AND DOES NOT WEAKEN THE COMMIT RULE. The test is taken
+// from `z.x, z.y` — the origin frozen at commit — never from the enemy's
+// current position. The zone still does not move, still does not follow, and
+// still promises exactly the ground it promised. Cover simply counts as ground
+// the promise never covered.
+function zoneSees(sim, z, x, y) {
+  if (!sim.obstacles.length) return true;
+  return !sim.losBlocked(z.x, z.y, x, y);
 }
 
 // `sim` is required, not optional: the initial cooldown scatter is a seeded
@@ -177,7 +208,7 @@ export function tickTelegraphs(sim, dt) {
         const caught = new Set();
         for (const p of sim.livePlayers()) {
           if (p.downed) continue;
-          if (inZone(zone, p.x, p.y, p.radius)) caught.add(p.idx);
+          if (inZone(zone, p.x, p.y, p.radius) && zoneSees(sim, zone, p.x, p.y)) caught.add(p.idx);
         }
         // AN ENEMY DOES NOT WIND UP A SLAM AT NOBODY. The first version gated
         // the commit on "a target within reach + commitSlack", which let it
@@ -191,6 +222,10 @@ export function tickTelegraphs(sim, dt) {
         e.telT = t.windupMs / 1000;
         e.telZone = zone;
         e.telCaught = caught;
+        // The NUMBER is fixed at commit for the same reason the zone is. A
+        // boss that crosses its phase threshold mid-wind-up would otherwise
+        // resolve a phase-1 zone for phase-2 damage.
+        e.telDamage = t.damage;
         sim.telStats.committed++;
         break;
       }
@@ -234,11 +269,11 @@ function resolveTelegraph(sim, e, t) {
   sim.fx.telResolve.push({ x: Math.round(z.x), y: Math.round(z.y), kind: z.kind, domain: z.domain });
   for (const p of sim.livePlayers()) {
     if (p.downed) continue;
-    const inside = inZone(z, p.x, p.y, p.radius);
+    const inside = inZone(z, p.x, p.y, p.radius) && zoneSees(sim, z, p.x, p.y);
     const wasCaught = e.telCaught && e.telCaught.has(p.idx);
     if (inside) {
       // routed through the triangle like every other damage source
-      sim.hurtPlayer(p, t.damage * domainMult(z.domain, null), e, { telegraph: true });
+      sim.hurtPlayer(p, (e.telDamage ?? t.damage) * domainMult(z.domain, null), e, { telegraph: true });
       sim.telDodgeLog.push({ p: p.idx, e: e.id, kind: z.kind, dodged: false, wasCaught: !!wasCaught, t: sim.time });
     } else if (wasCaught) {
       // INSIDE at commit, OUTSIDE at resolve. That is the whole rule: it is

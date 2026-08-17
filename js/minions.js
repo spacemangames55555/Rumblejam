@@ -390,6 +390,44 @@ export function tickMinions(sim, dt) {
   }
 }
 
+// A PACK IS SEVERAL BODIES, NOT ONE. Every minion ran the same query against
+// the same grid from nearly the same spot, so it picked the same target and
+// walked the same line: an 8-skeleton pack overlapped at least one pair in 82%
+// of frames and arrived as a single point of contact. Separation is the fix
+// because the clumping is the cause — the burst was a symptom of the stack,
+// and tuning per-minion damage to compensate would have made a SPREAD pack
+// weaker to fix a problem the spread already solves.
+//
+// Deterministic by construction: a pairwise push with no random jitter, so two
+// hosts running the same tick get the same pack. Seeded noise would also be
+// deterministic but would spend rng draws the snapshot has to stay in step
+// with, and there is nothing here that needs to be unpredictable.
+function separate(p, m, dt) {
+  const want = CONFIG.MINION_SEPARATION;
+  let px = 0, py = 0;
+  for (const o of p.minions) {
+    if (o === m || o.down) continue;
+    const dx = m.x - o.x, dy = m.y - o.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= want * want) continue;
+    if (d2 < 1e-6) {
+      // Exactly co-located: push along a stable axis derived from identity, so
+      // the pair separates instead of dividing by zero, and does it the same
+      // way on every machine.
+      const a = (m.id ?? 0) * 1.7;
+      px += Math.cos(a); py += Math.sin(a);
+      continue;
+    }
+    const d = Math.sqrt(d2);
+    const push = (want - d) / want;      // 0 at the edge, 1 when co-located
+    px += (dx / d) * push; py += (dy / d) * push;
+  }
+  if (!px && !py) return;
+  const pl = Math.hypot(px, py);
+  m.x += (px / pl) * CONFIG.MINION_SEPARATION_FORCE * dt;
+  m.y += (py / pl) * CONFIG.MINION_SEPARATION_FORCE * dt;
+}
+
 function moveMinion(sim, p, m, dt) {
   const spd = CONFIG.MINION_SPEED;
   if (m.move === 'orbit') {
@@ -405,9 +443,20 @@ function moveMinion(sim, p, m, dt) {
     const stop = e ? m.radius + e.radius : CONFIG.MINION_HEEL_RANGE;
     if (d > stop) { m.x += (tx - m.x) / d * spd * dt; m.y += (ty - m.y) / d * spd * dt; }
   }
+  separate(p, m, dt);
   // Every kind still obeys the room.
   m.x = clamp(m.x, CONFIG.WALL + m.radius, sim.W - CONFIG.WALL - m.radius);
   m.y = clamp(m.y, CONFIG.WALL + m.radius, sim.H - CONFIG.WALL - m.radius);
+  // AND EVERY KIND OBEYS THE FURNITURE. This line is the whole of defect 2.
+  // `_pushOut` is how players (game.js), enemies (via clampToRoom) and the
+  // Hunter's beast all stop at a pillar; minions were the one mobile family
+  // that never called it, so a skeleton walked through a 143-unit block in a
+  // straight line. It is not necromancer-specific and never was — `moveMinion`
+  // is the single mover for every summon in the game, so the druid's animals
+  // and the hunter's hounds did it too. Measured: 3 of 3 druid animals and the
+  // hunter's hound crossed the same block; a minion dropped inside one was not
+  // ejected, while an enemy in the same spot was.
+  sim._pushOut(m, m.radius);
   m.actor.x = m.x; m.actor.y = m.y;
 }
 
@@ -419,8 +468,31 @@ function attackMinion(sim, p, m, dt) {
   if (!m.attack) return;
   if ((m.cd -= dt) > 0) return;
   const reach = m.attack.reach || m.attack.range || m.attack.length || 0;
-  const target = sim.trigGrid.nearest(m.x, m.y, reach);
-  if (!target) return;
+  // A minion runs the player's primitives, so it obeys the player's sight rule:
+  // `_nearestVisibleEnemy` walks candidates in distance order and returns the
+  // first one the shot can actually reach.
+  const target = sim._nearestVisibleEnemy(m.x, m.y, reach);
+  if (!target) {
+    // A BARRICADE IN REACH IS STRUCK REGARDLESS, exactly as `chewWalls` does
+    // for a player's sweep, and for the same reason: a wall nothing attacks is
+    // a wall nobody can break.
+    //
+    // This is here because giving minions obstacle collision took something
+    // away. A hound used to drift into a Nest Purge barricade and chew it as a
+    // side effect of swinging at whatever was on the far side; `_pushOut` now
+    // ejects it, and the Hunter — already the slowest class at this by a wide
+    // margin, 36s against the next-worst 42s — dropped from breaking a
+    // barricade to 6 of 135 damage in 150 seconds. Making the pack's swing at
+    // furniture DELIBERATE is the honest replacement for an accident.
+    if (sim.walls.length && (m.attack.damage || 0) > 0) {
+      const wp = sim._nearestWallPoint(m.x, m.y, reach + m.radius);
+      if (wp) {
+        m.cd = m.attackCd;
+        sim._sweepWalls(m.x, m.y, 0, reach + m.radius, Math.PI * 2, m.attack.damage, m.actor);
+      }
+    }
+    return;
+  }
   m.cd = m.attackCd;
   m.actor.aimA = Math.atan2(target.y - m.y, target.x - m.x);
   const prim = PRIMITIVES[m.attack.kind];
