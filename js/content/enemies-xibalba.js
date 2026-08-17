@@ -133,8 +133,13 @@ export const XIB_BOSS = {
     windupMs: 640, recoverMs: 520, cooldownMs: 2800, retryFrac: 0.25, recoverFrozen: true,
     shape: { kind: 'cone', angle: 120, range: 300 }, damage: 44, domain: 'spiritual',
   },
+  // Same reach fix as region 1's, at region 2's numbers. Its phase-1 cone
+  // already reaches 300, so the lane starts further out (minDist 300, not 210)
+  // — the charge answers kiting, it does not duplicate the cone.
+  charge: { cd: 5.0, windup: 0.85, dur: 0.75, speed: 660, width: 84, dmg: 44, minDist: 300 },
   p2: {
     atFrac: 0.5, spdMult: 1.2,
+    chargeCd: 3.8,
     telegraph: {
       windupMs: 470, recoverMs: 400, cooldownMs: 2200, retryFrac: 0.25, recoverFrozen: true,
       shape: { kind: 'line', width: 95, length: 460 }, damage: 40, domain: 'spiritual',

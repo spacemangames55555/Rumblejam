@@ -1955,6 +1955,24 @@ Both are now roles rather than ids: the levers resolve `behavior` against the re
 
 **And it is cheap to check.** The parameters were three lines of schema away for the whole of both attempts. Reading the enum takes a minute; two round trips took thirty-two generations of budget and two rounds of wrong conclusions about the anchor.
 
+81. **When a subsystem is removed, the rules that only ever ran inside it leave with it — silently, because nothing deletes the code.** Weapons were retired and `_tickWeapons` stopped being called. `_fireWeapon` was its only caller, and `_fireWeapon` held three rules nothing else did: attacks test line of sight, a barricade competes as a target so a wall nothing shoots at is a wall nobody can break, and auto-aim never picks something the shot cannot reach.
+
+`js/config.js` even says so in as many words — "_tickWeapons is never called, so _fireWeapon -> _scalingBonus -> SCALING_RATES was reachable only from a test that calls _fireWeapon directly to check line of sight." That sentence was written about a scaling table and is equally true of the line-of-sight rule sitting beside it. `losBlocked` and `_nearestVisibleEnemy` were correct the whole time, fully tested, and reachable only from a gate that called the dead function on purpose. Composed skills — the live path — selected and struck through walls for the entire skill era.
+
+**When a subsystem is retired, list the rules it enforced, not the functions it owned.** A function with a caller looks alive; a rule with no caller does not look like anything at all. §13 rule 75 is the general form and this is its sharpest instance: the graveyard had a test suite.
+
+82. **A gate's fixture can make its subject unreachable, and then the gate measures the fixture.** Four separate probes in this patch reported "no defect" about rooms where the defect could not occur.
+
+Enemies were probed before the wave spawned, so a line-of-sight check ran against an empty field. A "do enemies lose the player" check used a stationary player, and a body cannot lose something that never moves. An arrival check picked whatever enemy was first in the pool and got a spitter holding `keepDist` and a mortar in its 340–640 stand-off band — units for which not arriving is correct behaviour. A boss's zone-tracking check orbited the player at 380 units against a 165-radius circle, so the boss correctly never committed and the check proved nothing.
+
+Every one of those returned a clean number. **Before believing a green probe, ask what it would have taken for that probe to go red** — and state the staging preconditions as assertions inside the gate, so a fixture that fails to stage says so instead of passing.
+
+83. **Two systems can each be right and still leave a hole between them, and the hole is usually a category the shared vocabulary does not have.** Adding line of sight to target selection made two ranged classes unable to break a Nest Purge barricade at all.
+
+`addWall` pushes barricades into `sim.obstacles`, which is correct — they stop swings, blasts and committed zones. Selection then consulted the same list, which is also correct, and the combination said "do not shoot at something behind a barricade". But a shot at something behind a barricade is not a shot through it: the projectile tick puts it *into* the wall and calls `damageWall`. The missing category was *destructible*: permanent geometry is cover, a barricade is a target. `losBlockedPermanent` is that category, and everything downstream got simpler once it existed.
+
+**The same patch produced the mirror of this.** Giving minions obstacle collision — a plain fix for a plain defect — took away the Hunter's only route to a barricade, because its hounds used to chew one as a side effect of drifting into it. sim_test's own comment had already recorded that the mechanism was accidental: "a bolt only touches a wall when the dummy it was aimed at happens to be on the far side." **An accident that a gate depends on is load-bearing, and removing it is a behaviour change whether or not it was ever designed.** The replacement has to be deliberate: a minion with nothing in reach now strikes the barricade in front of it, the way `chewWalls` has always done for a player.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.

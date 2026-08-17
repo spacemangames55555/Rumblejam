@@ -149,15 +149,28 @@ export const PNW_ENEMIES = [
 // Two-phase boss. Phase 2 is not a stat multiplier: the zone shape changes, so
 // the read a player learned in phase 1 stops being the right one.
 export const PNW_BOSS = {
-  id: 'pnw_boss', name: 'The Ceder Mother', domain: 'physical',
+  id: 'pnw_boss', name: 'The Cedar Mother', domain: 'physical',
   hp: 900, spd: 58, dmg: 14, radius: 46, mats: 30,
   shape: 'hex', color: '#3f5d3a',
   telegraph: {
     windupMs: 700, recoverMs: 560, cooldownMs: 3000, retryFrac: 0.25, recoverFrozen: true,
     shape: { kind: 'circle', radius: 165 }, damage: 34, domain: 'physical',
   },
+  // THE ANSWER TO KITING, and the only one that does not break the commit
+  // rule. `windupMs` here is longer than the slam's because the lane is longer
+  // and a player has further to travel to leave it: 900ms to read a 78-wide
+  // corridor is the same generosity the 700ms slam gives at radius 165.
+  //
+  // Damage sits at the slam's 34 rather than above it. This is a REACH fix,
+  // not a difficulty raise — a player who stood in melee and read the circle
+  // faces exactly what they always faced, and a player who stood at 700 units
+  // faces the same number instead of nothing at all.
+  charge: { cd: 5.2, windup: 0.9, dur: 0.75, speed: 620, width: 78, dmg: 34, minDist: 210 },
   p2: {
     atFrac: 0.5, spdMult: 1.15,
+    // Phase 2 shortens the gap between lanes rather than widening or
+    // strengthening them — same read, less time to sit still between reads.
+    chargeCd: 4.0,
     telegraph: {
       windupMs: 520, recoverMs: 420, cooldownMs: 2400, retryFrac: 0.25, recoverFrozen: true,
       shape: { kind: 'cone', angle: 130, range: 260 }, damage: 30, domain: 'physical',

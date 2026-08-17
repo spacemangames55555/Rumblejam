@@ -51,6 +51,10 @@ const FLANKER_BEHAVIORS = new Set(['orbiter', 'dasher', 'sprinter']);
 const ARTILLERY_BEHAVIORS = new Set(['spitter', 'sniper']);
 const ING_SCALE = 0.1; // +10% summon damage & HP per Ingenuity point
 const VOTE_TIME = 4;   // consent countdown (node picks and extraction)
+// How long a body commits to one way round an obstacle before trying the other,
+// and the ceiling that search grows to. See _steerAround.
+const SLIDE_PATIENCE = 1.6;
+const SLIDE_PATIENCE_MAX = 8;
 // the Siege's ward pylon — a destructible structure, not a roster enemy
 const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', domain: 'mental', behavior: 'pylon', hp: 260, spd: 0, dmg: 0, radius: 26, mats: 6, shape: 'square', color: '#c05eff' };
 // SHOP TIER WEIGHTS PER REGION — chance out of 100 for tiers I–IV, eight rows.
@@ -511,11 +515,15 @@ export class Sim {
   // 0.25s recompute cadence, so timed windows use sim time stamps).
   _condMet(p, cond) {
     switch (cond.kind) {
+      // "Near" means near AND reachable. An item that arms itself because a
+      // body stands on the far side of a pillar is arming on a fight the
+      // player is not in — and `noEnemyNear` had the same hole inverted,
+      // refusing to arm while safely behind cover.
       case 'enemyNear': {
-        const e = this._nearestEnemy(p.x, p.y, cond.r || 60);
+        const e = this._nearestVisibleEnemy(p.x, p.y, cond.r || 60);
         return !!e;
       }
-      case 'noEnemyNear': return !this._nearestEnemy(p.x, p.y, cond.r || 150);
+      case 'noEnemyNear': return !this._nearestVisibleEnemy(p.x, p.y, cond.r || 150);
       case 'hpAbove': return p.hp >= (p.stats ? p.stats.vitality : 80) * (cond.pct / 100);
       case 'hpBelow': return p.hp < (p.stats ? p.stats.vitality : 80) * (cond.pct / 100);
       case 'afterKill': return this.time - p.lastKillT < (cond.dur || 3);
@@ -1345,6 +1353,7 @@ export class Sim {
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0, healTarget: null, brood: null, shape: PYLON_DEF.shape, color: PYLON_DEF.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
+      slideSide: 0,   // pooled slots must not inherit a half-rounded corner
     });
     this.pylonId = e.id;
     this.enemyBuff = 1.3; // while the pylon stands, everything hits harder
@@ -1372,6 +1381,7 @@ export class Sim {
       drench: 0, drenchT: 0, drenchBy: -1,
       burnT: 0, hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
+      slideSide: 0,   // pooled slots must not inherit a half-rounded corner
     });
     this.boss = e;
     this.addTelegraph({ shape: 'circle', x, y: this.H * 0.3, r: def.radius + 60, dur: 1.5 });
@@ -1526,6 +1536,32 @@ export class Sim {
     return false;
   }
 
+  // A DESTRUCTIBLE BARRICADE IS NOT COVER, and that distinction is the whole
+  // difference between "walls block targeting" and "Nest Purge is impossible".
+  //
+  // `addWall` pushes barricades into `this.obstacles`, so `losBlocked` counts
+  // them — correct for a swing, a blast and a committed zone, all of which
+  // genuinely stop at one. It is wrong for CHOOSING A TARGET. A shot fired at
+  // something behind a barricade is not a shot through the barricade: the
+  // friendly projectile tick puts it INTO the wall and calls `damageWall`.
+  // Refusing to take the shot is what removed every ranged class's only way to
+  // break one — `toh_hunter` and `toh_wizard` went to 0 of 135 damage in 150
+  // seconds the moment selection started consulting `losBlocked`.
+  //
+  // So selection asks the narrower question: is something PERMANENT in the
+  // way? A pillar, yes — that shot can never land and the player would never
+  // take it. A barricade, no — that shot lands on the barricade, which is
+  // exactly what a player standing in front of one wants.
+  losBlockedPermanent(x0, y0, x1, y1) {
+    for (const o of this.obstacles) {
+      if (Math.max(x0, x1) < o.x || Math.min(x0, x1) > o.x + o.w
+        || Math.max(y0, y1) < o.y || Math.min(y0, y1) > o.y + o.h) continue;
+      if (o.destructible) continue;                  // a barricade: shoot it
+      if (segHitsRect(x0, y0, x1, y1, o.x, o.y, o.w, o.h)) return true;
+    }
+    return false;
+  }
+
   // clip a ray to the first wall it hits (sniper beams, etc.)
   losClipLen(x, y, a, len) {
     if (!this.obstacles.length) return len;
@@ -1548,7 +1584,11 @@ export class Sim {
       if (d < range * range) cands.push({ d: d * this._aimWeight(e), e });
     }
     cands.sort((a, b) => a.d - b.d);
-    for (const c of cands) if (!this.losBlocked(x, y, c.e.x, c.e.y)) return c.e;
+    // Permanent obstacles only — same rule as compose.js selection. A shot at
+    // something behind a BARRICADE lands on the barricade and breaks it, which
+    // is the point; refusing to take it is how a summoned pack stopped being
+    // able to chew its way into a Nest Purge ring.
+    for (const c of cands) if (!this.losBlockedPermanent(x, y, c.e.x, c.e.y)) return c.e;
     return null;
   }
 
@@ -1640,6 +1680,7 @@ export class Sim {
       hitFlash: 0, knockX: 0, knockY: 0, contactCd: 0, fusing: false, blockT: 0,
       fireT: 0.8 + this.rng.float(), healTarget: null, brood: null, shape: def.shape, color: def.color,
       hitStamps: {}, echoCd: 0, bulwarkCd: 0,
+      slideSide: 0,   // pooled slots must not inherit a half-rounded corner
       // THE TELEGRAPH MACHINE, RESET. Same recycling hazard as the objective
       // flags below, and it shipped: only the siege boss cleared these, so an
       // ordinary chaff slot could inherit telState=WINDUP from the slabjaw that
@@ -4817,7 +4858,76 @@ export class Sim {
   }
 
   // sim helpers used by behaviors
-  walk(e, tx, ty, spd, dt) { this.walkAngle(e, angleTo(e.x, e.y, tx, ty), spd, dt); }
+  //
+  // WHY A BODY APPEARED TO LOSE THE PLAYER. There is no stale target anywhere
+  // in the enemy tick — `tauntTarget` is re-read every frame by every
+  // behaviour, so a periodic retarget would have fixed nothing and hidden
+  // this. The cause is that `walk` was a straight line and nothing else: an
+  // enemy whose line to the player crossed a pillar walked into it, and
+  // `_pushOut` ejected it along the SHORTEST axis out of the rect — which is
+  // perpendicular to the approach and has no idea where the player is. The
+  // body then slid along the face in whichever direction the geometry
+  // happened to favour, which is what reads as wandering off.
+  //
+  // This is local avoidance, NOT pathfinding, and the distinction is load
+  // bearing: there is still no graph, no route and no memory of the room. A
+  // body probes a short distance along its heading, and if that is solid it
+  // sweeps outward for the first heading that is not, committing to one side
+  // so it does not oscillate at a corner. A concave pocket can still trap it —
+  // `rushMove`'s stall detector remains the answer for that, unchanged.
+  walk(e, tx, ty, spd, dt) {
+    this.walkAngle(e, this._steerAround(e, tx, ty), spd, dt);
+  }
+
+  // The heading to actually use, given where the body wants to go.
+  _steerAround(e, tx, ty) {
+    const a = angleTo(e.x, e.y, tx, ty);
+    if (!this.obstacles.length) return a;
+    // WHAT ENDS THE DETOUR IS THE LINE, NOT THE NEXT STEP. Keying the reset to
+    // a short forward probe was the first version and it stalled 3 of 9 runs:
+    // a body sliding along a face reaches the corner, its next step reads
+    // clear, it turns back toward the player, and walks straight into the same
+    // wall a few units further along. Holding the detour until the whole line
+    // to the target is open is what actually gets a body round a pillar.
+    if (!this.losBlocked(e.x, e.y, tx, ty)) { e.slideSide = 0; return a; }
+    const probe = e.radius + 34;
+    const r = e.radius * 0.6;                       // the radius _pushOut uses
+    const clear = ang => !this._inObstacle(e.x + Math.cos(ang) * probe, e.y + Math.sin(ang) * probe, r);
+    const d = Math.hypot(tx - e.x, ty - e.y);
+    // Pick a side once and keep it: the SHORTER way round, then commit.
+    // Re-deciding every frame is what makes a body jitter at a corner.
+    if (!e.slideSide) {
+      let cw = 0, ccw = 0;
+      for (let k = 1; k <= 8; k++) if (clear(a + k * 0.32)) { cw = k; break; }
+      for (let k = 1; k <= 8; k++) if (clear(a - k * 0.32)) { ccw = k; break; }
+      e.slideSide = (cw && (!ccw || cw <= ccw)) ? 1 : (ccw ? -1 : 1);
+      e.slideT0 = this.time; e.slideD = d; e.slidePatience = SLIDE_PATIENCE;
+    } else if (this.time - e.slideT0 > (e.slidePatience || SLIDE_PATIENCE)) {
+      // THE CHOSEN SIDE CAN BE A DEAD END and looking one step ahead cannot
+      // see that. An arena template put a 70x377 pillar flush against the top
+      // wall; a Bark Hulk rounded it upward, reached the corner and stopped,
+      // because every heading on that side stayed walkable and none of them
+      // made progress. Committing to a side is right; committing to it
+      // forever is not.
+      //
+      // PATIENCE GROWS ON EACH FLIP, and that is the part that makes it work
+      // rather than merely move. A fixed window turned the stall into a
+      // patrol: at 66 u/s a 1.6s window buys 106 units, the pillar was 377
+      // tall, so the body reversed before it could clear either end and slid
+      // up and down the same face for the full 40s. Doubling means the search
+      // widens until it is longer than whatever is in the way.
+      if (d >= e.slideD - 8) {
+        e.slideSide = -e.slideSide;
+        e.slidePatience = Math.min(SLIDE_PATIENCE_MAX, (e.slidePatience || SLIDE_PATIENCE) * 2);
+      }
+      e.slideT0 = this.time; e.slideD = d;
+    }
+    for (let k = 0; k <= 8; k++) { const off = k * 0.32 * e.slideSide; if (clear(a + off)) return a + off; }
+    // that side is walled too — try the other before walking into it anyway
+    for (let k = 1; k <= 8; k++) { const off = -k * 0.32 * e.slideSide; if (clear(a + off)) return a + off; }
+    e.slideSide = 0;
+    return a;
+  }
   walkAngle(e, a, spd, dt) {
     const x0 = e.x, y0 = e.y;
     e.x += Math.cos(a) * spd * dt;

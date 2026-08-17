@@ -367,12 +367,47 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
   else if (!spawned) fail('no siege boss spawned, so this proves nothing — restage it');
   else {
     ok(`a siege boss (def: null, bossDef set) ticks for 4s alongside the telegraph machine without throwing`);
-    // and it is genuinely outside the system rather than accidentally inside it
-    if (!telegraphBusy(g.boss) && g.telegraphZones().every(z => z.id !== g.boss.id)) {
-      ok('...and it is outside the telegraph system entirely — never busy, never a zone');
-    } else {
-      fail('the boss ended up inside the telegraph machine');
+    // WHICH SIDE OF THE MACHINE A BOSS IS ON IS DECIDED BY ITS DATA, NOT BY
+    // ITS `def` BEING NULL. This check used to read "...and it is outside the
+    // telegraph system entirely", and it passed for the wrong reason: region 4
+    // falls back to a LEGACY kit boss, which carries no `telegraph` block, so
+    // the assertion was true of this fixture and false of the thing it was
+    // being read as a statement about. Both region bosses declared a
+    // `telegraph` AND a `p2.telegraph` and neither ever fired, because
+    // `telegraphOf` only looked at `e.def`. §13 rule 79: a check that passes
+    // because its subject is absent is not a check on its subject.
+    const legacyIn = telegraphBusy(g.boss) || g.telegraphZones().some(z => z.id === g.boss.id);
+    if (!g.boss.bossDef.telegraph && !legacyIn) ok(`...and a legacy kit boss (${g.boss.bossDef.id}, no telegraph block) stays outside it`);
+    else if (g.boss.bossDef.telegraph) ok(`...and ${g.boss.bossDef.id} carries a telegraph block, so it belongs inside — see the region-boss check below`);
+    else fail('a kit boss with no telegraph block ended up inside the telegraph machine');
+  }
+}
+
+// ---------------------------------------------------------- region bosses
+//
+// The mirror of the check above, and the one that would have caught the defect.
+// A region boss's authored telegraph has to actually fire.
+{
+  for (const ri of [1, 2]) {
+    const g = new Sim({ seed: 5, regionIndex: ri, party: [{ idx: 0, key: 'k', name: 'T', charId: 'toh_samurai', color: '#fff' }] });
+    g.god = true;
+    g._travelTo(g.floor.bossId);
+    let spawned = false;
+    for (let i = 0; i < 60 * 400 && !spawned; i++) { g.tick(); spawned = !!g.boss; }
+    if (!spawned) { fail(`region ${ri}: no boss spawned, so this proves nothing — restage it`); continue; }
+    const b = g.boss;
+    const name = b.bossDef.name;
+    let committed = 0, moved = 0, lx = b.x, ly = b.y;
+    for (let i = 0; i < 60 * 60; i++) {
+      g.tick();
+      if (b.telState === 1) committed++;
+      moved += Math.hypot(b.x - lx, b.y - ly); lx = b.x; ly = b.y;
+      if (!b.active) break;
     }
+    if (committed > 0) ok(`region ${ri}: ${name} commits its authored telegraph (${committed} wind-up frames in 60s)`);
+    else fail(`region ${ri}: ${name} declares a telegraph and never commits it — the block is dead data`);
+    if (moved > 0) ok(`region ${ri}: ${name} moves (${moved.toFixed(0)}u in 60s) — it is not furniture`);
+    else fail(`region ${ri}: ${name} travelled 0 units in 60s; updateBoss has no case for it`);
   }
 }
 

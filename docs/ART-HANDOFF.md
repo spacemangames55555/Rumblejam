@@ -143,7 +143,7 @@ been alive.*
 | 4 | `enemy.pnw_bark_hulk` | 128×128 | a squat trunk-bodied mass with two enormous knuckled forelimbs |
 | 5 | `enemy.pnw_elk` | 128×128 | a narrow body under a vast branching antler crown twice its width |
 | 6 | `enemy.pnw_cedar_warden` | 128×128 | a forward-leaning wedge trailing a single long cedar-plank tail |
-| 7 | `boss.pnw_boss` — *The Ceder Mother* | **192×192** | a broad rooted torso crowned by a canopy of splayed limbs, wider at the top than the base |
+| 7 | `boss.pnw_boss` — *The Cedar Mother* | **192×192** | a broad rooted torso crowned by a canopy of splayed limbs, wider at the top than the base |
 
 ### Region 2 — Central America (Xibalba)
 *tileset `xibalba`, hazard `bloodmire` (damaging ground), primary domain

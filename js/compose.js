@@ -130,11 +130,69 @@ export function inZone(z, x, y, pad = 0) {
 
 function aimAt(p, e) { return Math.atan2(e.y - p.y, e.x - p.x); }
 
+// THE SIGHT PREDICATE every selection in this file passes down. Returns null
+// when the room has no obstacles, so a room without cover pays nothing: the
+// selector skips the test entirely rather than calling a function that always
+// says yes. In a room WITH cover this is one segment-vs-rect raycast per
+// candidate already inside the skill's range, not a widened search.
+// `losBlockedPermanent`, not `losBlocked`: a destructible barricade is a thing
+// to shoot, not cover to respect. See the comment on that method in game.js.
+function sightFrom(sim, x, y) {
+  if (!sim.obstacles.length) return null;
+  return e => !sim.losBlockedPermanent(x, y, e.x, e.y);
+}
+
+// A BARRICADE IS A TARGET, NOT ONLY AN OCCLUDER, and forgetting that is how
+// adding line of sight broke Nest Purge for two classes. Destructible walls are
+// pushed into `sim.obstacles`, so the moment selection started testing sight,
+// `toh_hunter` and `toh_wizard` went to 0/135 damage on a barricade in 150
+// seconds. The mechanism is worth stating because it is not the obvious one:
+// those classes never aimed at walls on purpose even before this patch. They
+// broke them by ACCIDENT — sim_test's own comment says so, "a bolt only
+// touches a wall when the dummy it was aimed at happens to be on the far
+// side". Sight removed the accident and left nothing in its place.
+//
+// `_fireWeapon` had the deliberate version and stated the reason: "this game
+// aims for you, so a wall nothing ever shoots at is a wall nobody can break."
+// That rule died with weapons. Restored here, including its weighting — 0.25
+// on SQUARED distance, so a barricade competes as if half as far and standing
+// at one means chewing it, while chaff in your face still wins.
+//
+// RAY-DELIVERED SKILLS ONLY. `strike` and `cone` already chew through
+// `chewWalls`, which sweeps a full circle and ignores facing entirely, so
+// pointing them at a wall would cost them their enemies and buy nothing. A
+// bolt and a beam are the two things a barricade actually stops.
+// A BARRICADE IS STILL A TARGET, for the case sight alone cannot cover: a
+// player standing at a wall with nothing else reachable. `_fireWeapon` had this
+// rule and stated the reason — "this game aims for you, so a wall nothing ever
+// shoots at is a wall nobody can break" — and it died with weapons. The
+// weighting is its: 0.25 on SQUARED distance, so a barricade competes as if
+// half as far and chaff in your face still wins.
+//
+// Ray-delivered primitives only. `strike` and `cone` chew through `chewWalls`,
+// which sweeps a full circle and ignores facing, so aiming them at a wall would
+// cost them their enemies and buy nothing.
+function aimPoint(sim, p, grid, select, range) {
+  const sighted = selectTarget(select, grid, p.x, p.y, range, sightFrom(sim, p.x, p.y));
+  if (!sim.walls.length) return sighted;
+  const wp = sim._nearestWallPoint(p.x, p.y, range);
+  if (!wp) return sighted;
+  if (!sighted) {
+    // Nothing reachable: shoot the barricade only if something is out there.
+    // A skill should not fire at scenery in an empty room.
+    return selectTarget(select, grid, p.x, p.y, range) ? wp : null;
+  }
+  const dt2 = (sighted.x - p.x) ** 2 + (sighted.y - p.y) ** 2;
+  return wp.d2 * 0.25 < dt2 ? wp : sighted;
+}
+
 // The aim direction follows the SKILL'S OWN selector. It used to be
 // grid.nearest() unconditionally, which meant a reach build's cone still
 // pointed at whatever was standing on the player (§15 defect #13).
-function facing(sim, p, grid, range, select) {
-  const t = selectTarget(select, grid, p.x, p.y, range);
+// `walls: true` for the ray-delivered primitives — see aimPoint.
+function facing(sim, p, grid, range, select, walls = false) {
+  const t = walls ? aimPoint(sim, p, grid, select, range)
+    : selectTarget(select, grid, p.x, p.y, range, sightFrom(sim, p.x, p.y));
   if (t) return aimAt(p, t);
   const d = grid.densestAngle(p.x, p.y, range);
   return d !== null ? d : p.aimA;
@@ -203,6 +261,10 @@ export const PRIMITIVES = {
         const dx = e.x - p.x, dy = e.y - p.y;
         if (dx * dx + dy * dy > (reach + e.radius) * (reach + e.radius)) continue;
         if (Math.abs(angleDelta(Math.atan2(dy, dx), a0)) > arc / 2) continue;
+        // `cone` has always had this line and `strike` never did. A short reach
+        // is not a substitute for the test: a pillar between two bodies 60
+        // units apart is exactly the case a player expects cover to answer.
+        if (sim.losBlocked(p.x, p.y, e.x, e.y)) continue;
         sim.skillDamage(e, dmg, p, skill);
         applyImpactRiders(sim, p, skill, r, e, rank, Math.atan2(dy, dx), out);
         out.hits++;
@@ -220,9 +282,23 @@ export const PRIMITIVES = {
     // machinery because `bolt` already fans to a target list. Read only in
     // `_fireWeapon` until D-25.
     const count = (step.count || 1) + ((p.hookAgg && p.hookAgg.extraProjectiles) || 0);
+    // A bolt at an occluded target was never through-wall damage — the
+    // projectile tick already releases a shot that enters an obstacle. It was
+    // a WASTED shot, on cooldown, at something the player could not have hit.
+    const sight = sightFrom(sim, p.x, p.y);
     const targets = count > 1
-      ? selectTargets(skill.select, grid, p.x, p.y, range, count)
-      : [selectTarget(skill.select, grid, p.x, p.y, range)].filter(Boolean);
+      ? selectTargets(skill.select, grid, p.x, p.y, range, count, sight)
+      : [selectTarget(skill.select, grid, p.x, p.y, range, sight)].filter(Boolean);
+    // A barricade competes as a target — see aimPoint. A VOLLEY STILL FANS:
+    // the wall takes one slot of the fan rather than the whole thing, so a
+    // multi-bolt build keeps its crowd clear and still chews.
+    const aim = aimPoint(sim, p, grid, skill.select, range);
+    if (aim && aim.wall) {
+      if (targets.length >= count) targets.pop();
+      targets.unshift(aim);
+    } else if (!targets.length && aim) {
+      targets.push(aim);
+    }
     // §9.2 SELECTOR-ADD. The skill ALSO strikes what a second selector picks —
     // it does not stop striking what its own picked. A crowd-clearing build
     // that finds one gains an elite-killer without losing its crowd clear and
@@ -234,7 +310,7 @@ export const PRIMITIVES = {
     // silent range upgrade.
     const adds = (p.hookAgg && p.hookAgg.selectorAdd) || [];
     for (const sel of adds) {
-      const extra = selectTarget(sel, grid, p.x, p.y, range);
+      const extra = selectTarget(sel, grid, p.x, p.y, range, sight);
       if (extra && !targets.includes(extra)) targets.push(extra);
     }
     if (!targets.length) return;
@@ -273,7 +349,7 @@ export const PRIMITIVES = {
     const dmg = stepDamage(step, skill, rank, p);
     const r = step.riders || {};
     const pulses = r.multiPulse || 1;
-    const a0 = facing(sim, p, grid, step.length, skill.select);
+    const a0 = facing(sim, p, grid, step.length, skill.select, true);
     const len = sim.losClipLen(p.x, p.y, a0, step.length);
     const half = step.width / 2;
     const ca = Math.cos(a0), sa = Math.sin(a0);
@@ -336,7 +412,7 @@ export const PRIMITIVES = {
     // Placed where the skill's own selector is looking, so a trap goes where the
     // Assassin is aiming rather than where it is standing — the difference
     // between setting a killbox ahead of a fight and dropping one on your feet.
-    const target = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.radius);
+    const target = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.radius, sightFrom(sim, p.x, p.y));
     const x = target ? target.x : p.x, y = target ? target.y : p.y;
     sim.addTrap({
       x, y, owner: p.idx,
@@ -352,7 +428,7 @@ export const PRIMITIVES = {
   // Ground pool that ticks. Routed through the triangle like everything else —
   // hazard ticks are exactly the kind of damage that quietly escapes a rule.
   hazard(sim, p, skill, step, rank, grid, out) {
-    const target = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.radius || skill.trigger.range || step.radius);
+    const target = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.radius || skill.trigger.range || step.radius, sightFrom(sim, p.x, p.y));
     const x = target ? target.x : p.x, y = target ? target.y : p.y;
     const r = step.riders || {};
     sim.addZone({
@@ -401,7 +477,7 @@ export const PRIMITIVES = {
   // Damage that returns a fraction as healing. Unused in phase 1.
   drain(sim, p, skill, step, rank, grid, out) {
     const dmg = stepDamage(step, skill, rank, p);
-    const t = selectTarget(skill.select, grid, p.x, p.y, step.range);
+    const t = selectTarget(skill.select, grid, p.x, p.y, step.range, sightFrom(sim, p.x, p.y));
     if (!t) return;
     const dealt = sim.skillDamage(t, dmg, p, skill);
     p.hp = Math.min(p.stats.vitality, p.hp + dealt * step.healPct);
