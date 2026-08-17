@@ -82,7 +82,7 @@ export const SAV_BLOODBOUND = [
     ranks: R,
   },
   {
-    id: 'sav_thick_hide', tree: 'sav_bloodbound', tier: 3, name: 'Thick Hide',
+    id: 'sav_thick_hide', tree: 'sav_bloodbound', tier: 4, name: 'Thick Hide',
     desc: 'Absorbs 20 over 4.6s.',
     type: 'active', domain: 'spiritual', prereq: 'sav_bleed_them',
     select: 'self',   // writes the caster, picks no target (§5.3)
@@ -97,7 +97,7 @@ export const SAV_BLOODBOUND = [
     // something other than the last thing to fire.
     id: 'sav_scent_of_it', tree: 'sav_bloodbound', tier: 4, name: 'Scent of It',
     desc: 'Thrown, for whatever is running. Deals 5 damage.',
-    type: 'active', domain: 'physical', prereq: 'sav_thick_hide',
+    type: 'active', domain: 'physical', prereq: 'sav_bleed_them',
     select: 'lowest_hp',
     trigger: { kind: 'NEAREST', range: T.scentRange },
     cooldown: T.scentCd,
@@ -110,16 +110,16 @@ export const SAV_BLOODBOUND = [
     // when it was written rankable, which is the registry doing its job: a
     // second point in a flat stat grant buys the same flat grant again and
     // reads as depth that is not there.
-    id: 'sav_old_scars', tree: 'sav_bloodbound', tier: 5, name: 'Old Scars',
+    id: 'sav_old_scars', tree: 'sav_bloodbound', tier: 6, name: 'Old Scars',
     desc: `Everything that has hit you made you harder to hit. +6 ${STAT_NAME.grit}.`,
-    type: 'passive', domain: 'spiritual', prereq: 'sav_scent_of_it',
+    type: 'passive', domain: 'spiritual', prereq: 'sav_thick_hide',
     passive: { armorGrit: T.scarsGrit },
     maxRank: 1,
   },
   {
     id: 'sav_drag_down', tree: 'sav_bloodbound', tier: 6, name: 'Drag Down',
     desc: 'Takes the legs out. 5 damage, and what it touches crawls at 70% for 1.5s.',
-    type: 'active', domain: 'physical', prereq: 'sav_old_scars',
+    type: 'active', domain: 'physical', prereq: 'sav_scent_of_it',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.dragRadius, count: T.dragCount },
     cooldown: T.dragCd,
@@ -130,9 +130,9 @@ export const SAV_BLOODBOUND = [
     ranks: R,
   },
   {
-    id: 'sav_answer_it', tree: 'sav_bloodbound', tier: 7, name: 'Answer It',
+    id: 'sav_answer_it', tree: 'sav_bloodbound', tier: 8, name: 'Answer It',
     desc: 'Fires the moment something lands on you, and pulls the rest onto you for 1.4s. Deals 6 damage.',
-    type: 'active', domain: 'spiritual', prereq: 'sav_drag_down',
+    type: 'active', domain: 'spiritual', prereq: 'sav_old_scars',
     select: 'densest_cluster',
     trigger: { kind: 'ON_HIT_TAKEN' },
     cooldown: T.answerCd,
@@ -145,7 +145,7 @@ export const SAV_BLOODBOUND = [
   {
     id: 'sav_blood_price', tree: 'sav_bloodbound', tier: 8, name: 'Blood Price',
     desc: 'Deals 6 damage and takes 55% of it back as health.',
-    type: 'active', domain: 'physical', prereq: 'sav_answer_it',
+    type: 'active', domain: 'physical', prereq: 'sav_drag_down',
     select: 'nearest',
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.priceCd,
@@ -153,9 +153,9 @@ export const SAV_BLOODBOUND = [
     ranks: R,
   },
   {
-    id: 'sav_wont_go_down', tree: 'sav_bloodbound', tier: 9, name: "Won't Go Down",
+    id: 'sav_wont_go_down', tree: 'sav_bloodbound', tier: 10, name: "Won't Go Down",
     desc: 'Absorbs 30 over 5.2s and returns 30% of what it stops.',
-    type: 'active', domain: 'spiritual', prereq: 'sav_blood_price',
+    type: 'active', domain: 'spiritual', prereq: 'sav_answer_it',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 35 },
     cooldown: T.downCd,
@@ -167,7 +167,7 @@ export const SAV_BLOODBOUND = [
   {
     id: 'sav_everything_at_once', tree: 'sav_bloodbound', tier: 10, name: 'Everything At Once',
     desc: 'No technique left in it at all. 8 damage in a huge arc, and everything goes backwards.',
-    type: 'active', domain: 'physical', prereq: 'sav_wont_go_down',
+    type: 'active', domain: 'physical', prereq: 'sav_blood_price',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.allRadius, count: T.allCount },
     cooldown: T.allCd,

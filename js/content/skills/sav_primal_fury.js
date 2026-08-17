@@ -101,7 +101,7 @@ export const SAV_PRIMAL_FURY = [
     ranks: R,
   },
   {
-    id: 'sav_wide_swing', tree: 'sav_primal_fury', tier: 3, name: 'Wide Swing',
+    id: 'sav_wide_swing', tree: 'sav_primal_fury', tier: 4, name: 'Wide Swing',
     desc: 'For when there are enough of them. Deals 5 damage in a wide fan, +2.4% per rank.',
     type: 'active', domain: 'physical', prereq: 'sav_run_down',
     select: 'densest_cluster',
@@ -119,7 +119,7 @@ export const SAV_PRIMAL_FURY = [
     // precisely because it cannot be the skill that fires twice.
     id: 'sav_gore', tree: 'sav_primal_fury', tier: 4, name: 'Gore',
     desc: 'Goes for something already bleeding. Deals 5 damage and throws it, +2.6% per rank.',
-    type: 'active', domain: 'physical', prereq: 'sav_wide_swing',
+    type: 'active', domain: 'physical', prereq: 'sav_run_down',
     select: 'lowest_hp',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.gorePct, range: T.goreRange },
     cooldown: T.goreCd,
@@ -130,16 +130,16 @@ export const SAV_PRIMAL_FURY = [
     ranks: R,
   },
   {
-    id: 'sav_red_memory', tree: 'sav_primal_fury', tier: 5, name: 'Red Memory',
+    id: 'sav_red_memory', tree: 'sav_primal_fury', tier: 8, name: 'Red Memory',
     desc: 'Every rank you are holding is worth more. +0.35% damage per rank, per rank of this.',
-    type: 'passive', domain: 'mental', prereq: 'sav_gore',
+    type: 'passive', domain: 'mental', prereq: 'sav_break_line',
     passive: { cascadeScaleWeight: T.memoryWeight },
     ranks: R,
   },
   {
     id: 'sav_break_line', tree: 'sav_primal_fury', tier: 6, name: 'Break Line',
     desc: 'Through the middle of them, and what it crosses stays put for 1.1s. 5 damage, +2.8% per rank.',
-    type: 'active', domain: 'physical', prereq: 'sav_red_memory',
+    type: 'active', domain: 'physical', prereq: 'sav_wide_swing',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.breakRadius, count: T.breakCount },
     cooldown: T.breakCd,
@@ -153,9 +153,9 @@ export const SAV_PRIMAL_FURY = [
     // ISOLATED — true when there are FEWER than `count` nearby, which is the
     // exact complement of the PROXIMITY nodes. This is the skill that carries the
     // chain through the quiet moments when Rip and Wide Swing have nothing.
-    id: 'sav_alone_with_it', tree: 'sav_primal_fury', tier: 7, name: 'Alone With It',
+    id: 'sav_alone_with_it', tree: 'sav_primal_fury', tier: 6, name: 'Alone With It',
     desc: 'For one at a time, with nobody else close. Deals 7 damage, +3% per rank.',
-    type: 'active', domain: 'physical', prereq: 'sav_break_line',
+    type: 'active', domain: 'physical', prereq: 'sav_gore',
     select: 'nearest',
     trigger: { kind: 'ISOLATED', radius: T.aloneRadius, count: T.aloneCount },
     cooldown: T.aloneCd,
@@ -179,7 +179,7 @@ export const SAV_PRIMAL_FURY = [
     ranks: R,
   },
   {
-    id: 'sav_hooked', tree: 'sav_primal_fury', tier: 9, name: 'Hooked',
+    id: 'sav_hooked', tree: 'sav_primal_fury', tier: 10, name: 'Hooked',
     desc: 'Deals 6 damage and takes 40% of it back, +3.2% per rank.',
     type: 'active', domain: 'physical', prereq: 'sav_second_wind',
     select: 'highest_hp',
@@ -194,7 +194,7 @@ export const SAV_PRIMAL_FURY = [
   {
     id: 'sav_nothing_left', tree: 'sav_primal_fury', tier: 10, name: 'Nothing Left',
     desc: 'The end of the chain. 9 damage in a huge fan, +3.6% per rank, and what it touches is stunned for 0.6s.',
-    type: 'active', domain: 'physical', prereq: 'sav_hooked',
+    type: 'active', domain: 'physical', prereq: 'sav_red_memory',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.nothingRadius, count: T.nothingCount },
     cooldown: T.nothingCd,
