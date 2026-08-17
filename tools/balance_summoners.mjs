@@ -8,7 +8,7 @@
 // summoner clear a room in the same time as the classes we already tuned" does.
 //
 // THE FIXTURE ARRIVES AS A PLAYER ARRIVES (§13 rule 20): level 12, which is
-// three loadout slots (SLOT_LEVELS = [1, 5, 12, …]) and sits just past region
+// four loadout slots (SLOT_LEVELS = [1, 3, 5, 11, …]) and sits just past region
 // 2's expectedLevel of 10 — a party a couple of maps into the second region,
 // not one that has just pressed START and not an artificial level-40 god.
 //

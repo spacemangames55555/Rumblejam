@@ -75,9 +75,12 @@ const T2 = _SEL.some(c => c.id === T2_REFERENCE) ? T2_REFERENCE : _SEL[1 % _SEL.
 // hardcoded lists of retired classic characters; those tests care about party
 // SIZE and mixture, never about which retired trait was in slot 3.
 const pickN = n => Array.from({ length: n }, (_, i) => _SEL[i % _SEL.length].id);
-// The level an armed bot arrives at. 12 is the third loadout slot (SLOT_LEVELS
-// = [1, 5, 12, …]) — a party a few rooms into a floor, not one that has just
-// pressed START.
+// The level an armed bot arrives at. 12 is the FOURTH loadout slot on the
+// shared ladder (SLOT_LEVELS = [1, 3, 5, 11, …]) — it was the third when slots
+// ran on their own schedule. A party a few rooms into a floor, not one that has
+// just pressed START. The level is unchanged deliberately: it is a statement
+// about where a party is, and moving it to chase the new slot count would
+// re-baseline every check downstream of it for no reason.
 const ARM_LEVEL = 12;
 // A retired id, assembled so no search-and-replace over character names can
 // reach it. Two passes of bulk editing rewrote this literal into a valid class
@@ -5164,6 +5167,50 @@ try {
     const registered = RANK_GRANTS[victim.rankGrants] === victim.id;
     if (!registered) ok(`a second skill declaring rankGrants "${victim.rankGrants}" is not its registered owner — the load assertion would reject it`);
     else fail(`the registry accepted a second claimant for ${victim.rankGrants} — the lock does not lock`);
+  }
+
+  // -- ONE LADDER: tiers and slots unlock on the same schedule --
+  //
+  // The ladder used to top out at 60 for tiers and 66 for slots, against a
+  // measured run end of 68-70 — so the eight-slot loadout the design is written
+  // around existed for the last four levels of a run and nothing was ever
+  // balanced inside it. It now completes at 36, and these assert that.
+  //
+  // The table identity is a LOAD assertion (assertTrees); what is checked here
+  // is the behaviour a player meets, through the same call the sim uses.
+  {
+    const { TIER_LEVELS: TL, SLOT_LEVELS: SL, tierLevel: tlv, TREES_BY_CLASS: SK_BY_CLASS } = await import('../js/skills.js');
+    const TOP = TL[TL.length - 1];
+
+    // Every class's three trees answer to the same gates. There is one global
+    // table, so this is asking whether that is still true rather than whether
+    // three tables agree — a per-tree ladder would show up as a tree whose
+    // deepest node needs a different level from its siblings'.
+    const perClass = [];
+    for (const [cid, trees] of Object.entries(SK_BY_CLASS)) {
+      const tops = trees.map(t => tlv(Math.max(...SK_TREES[t].skills.map(s => s.tier))));
+      if (new Set(tops).size !== 1) perClass.push(`${cid}: ${trees.map((t, i) => `${t}@${tops[i]}`).join(', ')}`);
+    }
+    if (!perClass.length) ok(`all 3 trees of every class top out at the same level (${TOP}) — one ladder, not three`);
+    else fail(`trees within a class unlock their last node at different levels: ${perClass.join(' | ')}`);
+
+    const offLadder = SL.filter(lv => !TL.includes(lv));
+    if (!offLadder.length) ok(`the slot ladder is drawn from the tier ladder: ${SL.join('/')} ⊂ ${TL.join('/')}`);
+    else fail(`slot thresholds ${offLadder.join(', ')} are not tier gates — that is two schedules again`);
+
+    // THE BOUNDARY, ASSERTED ON BOTH SIDES. One-sided ("8 slots at 36") passes
+    // for a ladder that hands out eight slots at level 1.
+    const at35 = SKILLSIM.slotsAtLevel(35), at36 = SKILLSIM.slotsAtLevel(36);
+    if (at35 === 7 && at36 === 8) ok(`the 8th slot is locked at 35 (${at35} slots) and open at 36 (${at36})`);
+    else fail(`slot count across the 35/36 boundary is ${at35} → ${at36}, want 7 → 8`);
+
+    // And the claim the whole change exists to make true.
+    const maxTier = Math.max(...Object.values(SK_TREES).flatMap(t => t.skills.map(s => s.tier)));
+    if (tlv(maxTier) === TOP && SKILLSIM.slotsAtLevel(TOP) === 8) {
+      ok(`at level ${TOP} nothing is level-locked: tier ${maxTier} open and all 8 slots — everything after is rank investment`);
+    } else {
+      fail(`level ${TOP} does not open everything: deepest tier ${maxTier} wants ${tlv(maxTier)}, slots ${SKILLSIM.slotsAtLevel(TOP)}/8`);
+    }
   }
 
   // -- Necromancer: skeletons stand, fight, and are attributed to their owner --
