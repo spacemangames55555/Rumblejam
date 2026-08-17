@@ -457,3 +457,26 @@ h2.rt{font-size:38px; letter-spacing:4px; text-align:center; margin-bottom:4px;}
 .diff-pick.on{opacity:1; border-color:var(--gold); color:var(--gold); background:#191c2a;}
 .diff-desc{margin-top:6px; min-height:16px;}
 body.touch-on .diff-pick{min-height:44px; font-size:13px; padding:8px 14px;}
+
+/* ---- the world map (region select) ---- */
+/* Eight cards, in order, with a stated reason on every locked one. A locked
+   door with no explanation reads as a bug rather than as a goal — the rule is
+   js/worldmap.js's and this is where it becomes visible. */
+#screen-world{background:#0a0b12e0; z-index:6;}
+.world-panel{width:min(96vw,1080px);}
+.world-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-top:16px;}
+.world-card{padding:12px 14px; border-radius:12px; background:var(--panel2);
+  border:2px solid var(--line); opacity:.5; cursor:default; position:relative;}
+.world-card.enterable{opacity:1; border-color:#5ee0a8; cursor:pointer; box-shadow:0 0 14px #5ee0a822;}
+.world-card.enterable:hover{transform:translateY(-2px); background:#1c2436;}
+.world-card.wc-cleared{border-color:var(--gold);}
+.world-card.wc-unbuilt{border-style:dashed;}
+.wc-head{display:flex; align-items:baseline; gap:8px;}
+.wc-num{font-size:22px; color:var(--gold); min-width:22px;}
+.wc-name{font-size:15px; letter-spacing:2px; text-transform:uppercase;}
+.wc-state{font-size:10px; letter-spacing:2px; color:var(--gold); margin-top:4px;}
+.wc-reason{font-size:11.5px; color:var(--dim); margin:4px 0 6px;}
+.wc-facts{display:flex; flex-wrap:wrap; gap:8px; font-size:11px; color:var(--dim);}
+.wc-parked{color:#5ee0a8;}
+.wc-content{margin-top:6px; font-size:10.5px;}
+.world-foot{margin-top:14px;}

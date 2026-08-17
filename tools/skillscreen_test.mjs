@@ -12,7 +12,7 @@
 // the panel never rendered in solo, because the host never applies its own state
 // block and the opening event fires before the handler is listening. Six
 // sim-level assertions passed while the screen was dark (§13 rule 54).
-const { Page, bootHttpd, loadPeerjs, sleep } = await import('./cdp_harness.mjs');
+const { Page, bootHttpd, loadPeerjs, sleep, startRun } = await import('./cdp_harness.mjs');
 
 const PORT = 8990 + (process.pid % 77);
 const peerjsB64 = loadPeerjs();
@@ -38,7 +38,7 @@ try {
   await P.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden') ? 1 : 0`, 8000, 'lobby');
   await P.exec(`document.querySelector('.char-card[data-char="toh_samurai"]').click(); return 1;`);
   await sleep(300);
-  await P.exec(`document.getElementById('btn-start').click(); return 1;`);
+  await startRun(P);
   await P.waitFor(`return window.uv.mode==='run' && !!window.uv.sim ? 1 : 0`, 8000, 'run started');
 
   // the §5.6 card should be up first
@@ -393,7 +393,7 @@ try {
       await P.waitFor(`return window.uv.mode==='lobby'?1:0`, 6000, 'lobby');
       await P.exec(`document.querySelector('.char-card[data-char="${id}"]').click(); return 1;`);
       await sleep(200);
-      await P.exec(`document.getElementById('btn-start').click(); return 1;`);
+      await startRun(P);
       await P.waitFor(`return window.uv.mode==='run' && !!window.uv.sim ?1:0`, 8000, 'run');
       await sleep(900);
       // REACHABLE BY A POINTER, not merely visible. `offsetParent` caught the

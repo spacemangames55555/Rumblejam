@@ -34,12 +34,25 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
       trees++;
       const problems = NT.assertTree(t);
       if (problems.length) { bad++; if (bad <= 3) fail(`tree ${r.id}/${s}: ${problems.join('; ')}`); }
-      for (const n of t.nodes) {
-        types[n.type] = (types[n.type] || 0) + 1;
-        if (n.type === 'shrine' || n.type === 'cursed') shrineCursedCols[n.col] = (shrineCursedCols[n.col] || 0) + 1;
-        if (n.col < NT.COLUMNS) crossLinks.push(n.next.length === 2 ? 1 : 0);
+      // RE-KEYED TO THE TREE THAT SHIPS. `type` is `mix`, `next` is `edges`,
+      // and `col` is now the GRAPH column — which counts the two stop bands —
+      // so every placement rule reads `depth`, the fight index, instead. The
+      // rules themselves are unchanged; they were always about which FIGHT a
+      // node is, and `col` only happened to equal that while nothing sat
+      // between the columns.
+      const fights = t.nodes.filter(n => n.depth !== null);
+      for (const n of fights) {
+        types[n.mix] = (types[n.mix] || 0) + 1;
+        if (n.mix === 'shrine' || n.mix === 'cursed') shrineCursedCols[n.depth] = (shrineCursedCols[n.depth] || 0) + 1;
+        // Only combat→combat edges carry the cross-link roll. Edges into and
+        // out of a stop band are FORCED — a band is on every route by
+        // construction — so counting them would drag the measured rate toward
+        // zero and read as the roll being broken.
+        if (n.depth < NT.COLUMNS && !NT.STOP_BANDS.some(b => b.after === n.depth)) {
+          crossLinks.push(n.edges.length === 2 ? 1 : 0);
+        }
       }
-      routes.add(t.nodes.map(n => n.type[0]).join(''));
+      routes.add(fights.map(n => n.mix[0]).join(''));
     }
   }
   if (!bad) ok(`${trees} node trees generated across 2 regions x 500 seeds x 4 rerolls — every distribution assertion holds`);
@@ -51,8 +64,8 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   if (mixOk) ok(`the mix is exact on every tree, not on average: ${Object.entries(wantMix).map(([k, v]) => `${v} ${k}`).join(', ')}`);
   else fail(`mix drifted: ${JSON.stringify(per)}`);
 
-  if (!shrineCursedCols[1]) ok(`shrine and cursed never land in column 1 (${trees * 2} placements, columns ${Object.keys(shrineCursedCols).sort().join('/')})`);
-  else fail(`${shrineCursedCols[1]} shrine/cursed nodes in column 1`);
+  if (!shrineCursedCols[1]) ok(`shrine and cursed never land at map 1 (${trees * 2} placements, depths ${Object.keys(shrineCursedCols).sort().join('/')})`);
+  else fail(`${shrineCursedCols[1]} shrine/cursed nodes at map 1`);
 
   const crossRate = crossLinks.reduce((a, b) => a + b, 0) / crossLinks.length;
   const want = RG.CROSS_LINK_CHANCE;
@@ -64,7 +77,7 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
 
   // depth scaling escalates and resets per region
   const t = NT.generateTree(4242, RG.REGIONS[0], 0);
-  const byCol = [1, 2, 3, 4, 5].map(c => t.nodes.find(n => n.col === c).depthMult);
+  const byCol = [1, 2, 3, 4, 5].map(c => t.nodes.find(n => n.depth === c).depthMult);
   const rising = byCol.every((v, i) => i === 0 || v > byCol[i - 1]);
   if (rising && byCol[0] === 1) ok(`depth scaling escalates across the five columns and starts at 1.0: ${byCol.join(' -> ')}`);
   else fail(`depth multipliers ${byCol.join('/')}`);
@@ -293,9 +306,9 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   // that leaked onto floor 2 would still pass the level check below by
   // arriving early, and nothing else would notice
   const shape = [
-    ['floor 1 col 0', AR.onboardingXpMult(1, 0), v => v > 1],
-    ['floor 1 col 2', AR.onboardingXpMult(1, 2), v => v === 1],
-    ['floor 2 col 0', AR.onboardingXpMult(2, 0), v => v === 1],
+    ['region 1 map 1', AR.onboardingXpMult(1, 0), v => v > 1],
+    ['region 1 map 3', AR.onboardingXpMult(1, 2), v => v === 1],
+    ['region 2 map 1', AR.onboardingXpMult(2, 0), v => v === 1],
   ];
   const wrong = shape.filter(([, v, ok]) => !ok(v));
   if (!wrong.length) ok(`XP compensation is scoped to the ramp: ${shape.map(([n, v]) => `${n} x${v}`).join(', ')}`);

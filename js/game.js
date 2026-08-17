@@ -5,7 +5,7 @@
 import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, STATS, STAT_BASE, STAT_IS_PCT, ROLL_TABLE } from './config.js';
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
-import { generateFloorMap, serializeMap } from './dungeon.js';
+import { generateTree, serializeMap } from './nodetree.js';
 import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
@@ -21,10 +21,10 @@ import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './tel
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING_TABLE } from './content/enemies.js';
 import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
-import { nodePopulation, nodeModifiers } from './nodebehaviour.js';
-import { REGION_BY_INDEX, depthMult } from './regions.js';
+import { nodePopulation, nodeModifiers, shrineOffer, applyShrine } from './nodebehaviour.js';
+import { REGION_BY_INDEX, depthMult, regionHpMult, regionDmgMult, bossForRegion, TOTAL_REGIONS } from './regions.js';
 import { difficultyOf, DEFAULT_DIFFICULTY } from './worldmap.js';
-import { BOSS_BY_FLOOR } from './content/bosses.js';
+
 import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
 import { BEAST, initBeast, updateBeast, beastUp, beastBlocks, beastAbsorbs, hurtBeast } from './entities/beast.js';
@@ -44,15 +44,36 @@ const SPAWN_CAPS = {
   wombden: 2, aegimand: 3, stitcher: 3, deadeye: 4, slabjaw: 6,
   lobber: 22, gemmite: 18, gyre: 16, fusehead: 10, lancerfish: 14,
 };
+// The two profile levers, as ROLES rather than as ids. `gyre` and `lancerfish`
+// are the base roster's orbiter and dasher; `lobber` is its spitter. Naming the
+// behaviour is what lets a region supply its own.
+const FLANKER_BEHAVIORS = new Set(['orbiter', 'dasher', 'sprinter']);
+const ARTILLERY_BEHAVIORS = new Set(['spitter', 'sniper']);
 const ING_SCALE = 0.1; // +10% summon damage & HP per Ingenuity point
 const VOTE_TIME = 4;   // consent countdown (node picks and extraction)
 // the Siege's ward pylon — a destructible structure, not a roster enemy
 const PYLON_DEF = { id: '_pylon', name: 'Ward Pylon', domain: 'mental', behavior: 'pylon', hp: 260, spd: 0, dmg: 0, radius: 26, mats: 6, shape: 'square', color: '#c05eff' };
-// shop tier weights per floor (chance out of 100 for tiers I–IV)
-const TIER_WEIGHTS = [[80, 20, 0, 0], [50, 35, 15, 0], [20, 45, 30, 5], [5, 35, 40, 20]];
+// SHOP TIER WEIGHTS PER REGION — chance out of 100 for tiers I–IV, eight rows.
+//
+// The four-row version was floors 1–4 and its ENDPOINTS are the design: tier I
+// is nearly all a starting party can use, tier IV is an endgame shelf. Those
+// two rows are kept exactly (region 1 = old floor 1, region 8 = old floor 4)
+// and the six between them are authored rather than interpolated, so tier IV
+// arrives at region 4 rather than at region 2.5 — a fractional row is not a
+// thing a shop can stock.
+const TIER_WEIGHTS = [
+  [80, 20, 0, 0],   // 1  the starting shelf, unchanged
+  [62, 32, 6, 0],   // 2
+  [48, 38, 14, 0],  // 3
+  [34, 42, 21, 3],  // 4  tier IV first appears
+  [24, 43, 27, 6],  // 5
+  [16, 41, 33, 10], // 6
+  [9, 38, 38, 15],  // 7
+  [5, 35, 40, 20],  // 8  the endgame shelf, unchanged
+];
 
 export class Sim {
-  constructor({ seed, party, allowUnplayable = false, difficulty = DEFAULT_DIFFICULTY }) {
+  constructor({ seed, party, allowUnplayable = false, difficulty = DEFAULT_DIFFICULTY, regionIndex = 1, objectiveHistory = [], tree = null, cleared = [] }) {
     // see _makePlayer: an explicit, named opt-out for tests that measure a
     // class's TRAIT rather than whether it can win a fight
     this.allowUnplayable = allowUnplayable;
@@ -155,7 +176,28 @@ export class Sim {
     // whole party for one round; player-side effects live on the buyer
     this.curseEnemyHp = 1; this.curseEnemySpd = 1; this.curseBarrage = 0;
 
-    this.floorNum = 0;
+    // ---- THE REGION. Assigned at construction, from the world map. ----
+    //
+    // These three fields were READ AT SIX SITES AND WRITTEN AT NONE for the
+    // whole life of the region layer: `_spawnTable` fell through to the floor
+    // tables, `_regionPick` returned null, `regionFightMods` looked up
+    // `REGION_BY_INDEX[undefined]`, and the nest's wall multiplier resolved to
+    // 1. Every one of those was a working code path taking its default branch
+    // forever, which is why nothing ever failed.
+    this.regionIndex = Math.max(1, Math.min(TOTAL_REGIONS, regionIndex | 0));
+    const reg = REGION_BY_INDEX[this.regionIndex] || null;
+    this.region = reg ? reg.id : null;   // the id — `REGION_ENEMIES` is keyed by it
+    this.regionColumn = 1;               // the fight's depth, 1..COLUMNS
+    // Objectives dealt in EARLIER regions of this run, one array per region.
+    // The tree's draw biases against what the player has seen lately, and this
+    // is the only thing it reads that is not the seed — see nodetree.js.
+    this.objectiveHistory = objectiveHistory.map(x => [...x]);
+    // §11.3 — A PARKED REGION IS RESUMED, NOT RE-ROLLED. A character partway
+    // through a region carries its tree and its cleared nodes in the save; a
+    // regenerated tree would be a different region wearing the same name, and
+    // the cleared list would point at nodes that moved.
+    this._parkedTree = tree;
+    this._parkedCleared = cleared;
     this.pendingEnd = 0;
     // ---- Gauntlet flow state ----
     this.phase = 'map';       // 'map' (node screen) | 'arena' (fighting)
@@ -185,7 +227,7 @@ export class Sim {
     this.payout = { kills: 0, gold: 0, xp: 0 };
     this.holdCircle = null;   // {x,y,r,held} — spawn-choke sub-objective
     this.pylonId = null; this.enemyBuff = 1;
-    this._startFloor(1);
+    this._startRegion();
     for (const p of this.players) this._initStartingGear(p);
   }
 
@@ -295,7 +337,7 @@ export class Sim {
       contactAuraAcc: 0, regenAcc: 0, healAcc: 0,
       damageDealt: 0, kills: 0,
       pendingOffer: null, treasureOffer: null,
-      shop: null, shopLocksCarry: [], shopVisit: 0, rerollFlat: false,
+      shop: null, shopLocksCarry: [], shopVisit: 0, rerollFlat: false, shrineOffer: null, shrineRerolls: 0,
       // rebalance trait state
       meter: 0,            // Onrush movement meter 0..1
       resonCharge: 0,      // Resonant hit charge
@@ -589,18 +631,38 @@ export class Sim {
     return base * (1 + (p.stats.attunement + p.hookAgg.statusBoost) / 100);
   }
 
-  // ---------------- floors & rooms ----------------
+  // ---------------- the region & its rooms ----------------
 
-  _startFloor(n) {
-    // The opening pick is offered once, on the first floor, before any node is
-    // chosen — §5.6 says "at character start", and the map screen is the first
-    // thing a character sees.
-    if (n === 1) for (const p of this.players) if (!p.gone) this._offerOpening(p);
-    this.floorNum = n;
-    this.floor = generateFloorMap(this.seed, n);
+  // A RUN IS ONE REGION. `_startFloor(n)` used to roll a fresh 14-node floor
+  // map and be called again on extraction, four times; a region is entered
+  // once, its tree is walked once, and the run ends at its boss. Advancing to
+  // the next region is the WORLD MAP's job, not the sim's — the party leaves,
+  // the frontier moves, and the next region is a new Sim with a new tree.
+  _startRegion() {
+    // The opening pick is offered once, before any node is chosen — §5.6 says
+    // "at character start", and the map screen is the first thing a character
+    // sees.
+    for (const p of this.players) if (!p.gone) this._offerOpening(p);
+    const reg = REGION_BY_INDEX[this.regionIndex];
+    this.floor = this._parkedTree
+      || generateTree(this.seed, reg || { id: `region_${this.regionIndex}`, index: this.regionIndex },
+        0, { recent: this.objectiveHistory });
     this.phase = 'map';
     this.currentNode = null;
     this.visited = new Set();
+    // A resumed region re-enters at the deepest node already cleared, so the
+    // route continues rather than restarting.
+    if (this._parkedCleared && this._parkedCleared.length) {
+      const byKey = new Map(this.floor.nodes.map(n => [n.key, n]));
+      let last = null;
+      for (const key of this._parkedCleared) {
+        const nd = byKey.get(key);
+        if (!nd) continue;
+        this.visited.add(nd.id);
+        if (!last || nd.col > last.col) last = nd;
+      }
+      if (last) this.currentNode = last.id;
+    }
     this.nodeVote = null;
     this.arenaNode = null;
     this.cleared = false;
@@ -609,23 +671,32 @@ export class Sim {
     this.holdCircle = null; this.pylonId = null; this.enemyBuff = 1;
     for (const p of this.players) {
       if (p.gone) continue;
-      // overlays close on floor transition — re-surface any unresolved offers
       if (p.pendingOffer) this.pushEvent({ k: 'offer', idx: p.idx, picks: p.pendingOffer, banked: p.banked });
       if (p.treasureOffer) this.pushEvent({ k: 'treasure', idx: p.idx, kind: p.treasureOffer.kind, picks: p.treasureOffer.picks });
       p.secondWindUsed = false;
-      if (n > 1) {
-        // heal half of missing HP between floors (a source — Recovery applies)
-        this._heal(p, Math.ceil((p.stats.vitality - p.hp) * 0.5));
-        for (const fs of p.hookAgg.floorStats) this._applyPerm(p, fs.stats);
-        if (p.char.trait.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
-        if (p.char.trait.key === 'pack_tactics') {
-          const t2 = p.char.trait;
-          const alive = this.summons.filter(sm => sm.owner === p.idx && !sm.dead).length;
-          if (alive < t2.maxBeasts) this._spawnSummon(p, 'guard_drone', 1, 'beast');
-        }
-      }
     }
     this._mapEvent();
+  }
+
+  // THE BETWEEN-MAPS BEAT, which used to be the between-floors beat. A region
+  // has five maps where the run had four floors, so the half-heal and the
+  // per-floor trait grants move here — to the node transition — rather than
+  // being lost with `_startFloor`. `free_drone_floor` and `pack_tactics` were
+  // authored as "once per floor"; once per map is the same cadence in the
+  // structure that replaced it, and it is the only reading that keeps them
+  // firing at all.
+  _betweenMaps() {
+    for (const p of this.players) {
+      if (p.gone) continue;
+      this._heal(p, Math.ceil((p.stats.vitality - p.hp) * 0.5));
+      for (const fs of p.hookAgg.floorStats) this._applyPerm(p, fs.stats);
+      if (p.char.trait.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
+      if (p.char.trait.key === 'pack_tactics') {
+        const t2 = p.char.trait;
+        const alive = this.summons.filter(sm => sm.owner === p.idx && !sm.dead).length;
+        if (alive < t2.maxBeasts) this._spawnSummon(p, 'guard_drone', 1, 'beast');
+      }
+    }
   }
 
   // ---------------- the node map (between fights) ----------------
@@ -647,7 +718,8 @@ export class Sim {
   // snapshots, with a clean console, while the host played on.
   _mapState() {
     return {
-      layout: serializeMap(this.floor), floorNum: this.floorNum,
+      layout: serializeMap(this.floor), regionIndex: this.regionIndex,
+      regionName: (REGION_BY_INDEX[this.regionIndex] || {}).name || `Region ${this.regionIndex}`,
       current: this.currentNode, visited: [...this.visited], reachable: this.reachableNodes(),
     };
   }
@@ -690,7 +762,7 @@ export class Sim {
     this.currentNode = nodeId;
     this.visited.add(nodeId);
     this.nodeVote = null;
-    if (node.kind === 'combat' || node.kind === 'elite' || node.kind === 'siege' || IS_OBJECTIVE[node.kind]) {
+    if (node.kind === 'combat' || node.kind === 'elite' || node.kind === 'cursed' || node.kind === 'siege' || IS_OBJECTIVE[node.kind]) {
       this._enterArena(node);
       return;
     }
@@ -699,6 +771,9 @@ export class Sim {
       for (const p of this.livePlayers()) this._openShop(p, `node${nodeId}`);
     } else if (node.kind === 'treasure') {
       for (const p of this.livePlayers()) this._offerTreasure(p, 'treasure');
+    } else if (node.kind === 'shrine') {
+      // §2.4's shrine: no combat, one choice, never both and never rolled.
+      for (const p of this.livePlayers()) this._offerShrine(p);
     }
     this._mapEvent(); // next choices open immediately behind the stop
   }
@@ -707,7 +782,7 @@ export class Sim {
 
   _enterArena(node) {
     for (const p of this.livePlayers()) this._floorOpeningAbility(p);
-    const arena = buildArena(this.seed, this.floorNum, node, this.players.length);
+    const arena = buildArena(this.seed, this.regionIndex, node, this.players.length);
     this.phase = 'arena';
     this.arenaNode = node;
     this.W = arena.w; this.H = arena.h;
@@ -727,7 +802,7 @@ export class Sim {
     this.decoys.length = 0;
     this.boss = null;
     this.roomEnteredT = this.time;
-    this.waveRng = subRng(this.seed, 'wave', this.floorNum, node.id);
+    this.waveRng = subRng(this.seed, 'wave', this.regionIndex, node.id);
     // D-24. `nodeType` was read in two places and assigned in none, so every
     // fight in the game computed 'horde' and §2.4's node modifiers were
     // unreachable. Assigned here, at the one moment the node is known.
@@ -736,7 +811,15 @@ export class Sim {
     // change mid-room, and a per-spawn call would put a region lookup inside
     // the spawn loop.
     this.fightMods = this.regionFightMods();
-    this.wave = waveConfig(this.floorNum, node.col, node.kind);
+    // MAP INDEX, ZERO-BASED — the same parameter the floor map passed as
+    // `node.col`. A tree node's `depth` is 1..5 where a floor column was 0..5,
+    // so the −1 is what keeps map 1 sitting on exactly the numbers column 0
+    // sat on: the onboarding ramp's 50%, and `waveConfig`'s shortest duration.
+    // Passing `depth` raw would silently move every wave in the game by one
+    // column's worth of rate and duration.
+    this.regionColumn = node.depth || 1;
+    const mapIdx = (node.depth || 1) - 1;
+    this.wave = waveConfig(this.regionIndex, mapIdx, node.kind);
     // the fight's pressure profile: sieges are always high-friction; stops
     // have none; combat/elite carry the recipe rolled at map generation
     this.profile = node.kind === 'siege' ? PROFILES.siege : (PROFILES[node.profile] || PROFILES.mixed);
@@ -881,7 +964,7 @@ export class Sim {
           w.eliteT = 2; // ceiling bound — the champion waits for a slot
         } else {
           w.eliteT = w.eliteEvery;
-          const table = FLOOR_TABLES[this.floorNum - 1];
+          const table = this._spawnTable(true);
           const id = this.waveRng.pick(table.filter(t => t !== 'wombden'));
           const pos = this._spawnWavePos();
           this.spawnQueue.push({ t: 0.7, id, elite: true, mod: this.waveRng.pick(ELITE_MODS), x: pos.x, y: pos.y });
@@ -919,15 +1002,29 @@ export class Sim {
       // met — the profile injects them regardless of what the table says. An
       // onboarding table that did not also close this door would have cut five
       // archetypes to three and still delivered five.
+      //
+      // AND THE SAME DOOR IS OPEN AT THE REGION. Wiring regions made this the
+      // third instance: both levers name BASE-ROSTER ids, so a Pacific
+      // Northwest fight fielded `gyre` and `lancerfish` beside its saplings and
+      // a Xibalba fight fielded `lobber` — measured, both showed up in the
+      // wiring gate's own sample. The onboarding fix closed the door for one
+      // room; the levers were still a hole in every region.
+      //
+      // The lever's INTENT survives: it asks for a flanker-shaped or
+      // artillery-shaped spawn, which is a role rather than an id. Resolved
+      // against the region's own roster by `behavior`, a region keeps its
+      // pressure and stops borrowing somebody else's monsters. `_leverPick`
+      // returns null when there is no region or no match, and the base ids are
+      // then exactly what they always were.
       if (!this._onboarding() && prof.flankers && this.waveRng.chance(prof.flankers)) {
-        id = this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish';
+        id = this._leverPick(FLANKER_BEHAVIORS) || (this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish');
       } else if (!this._onboarding() && prof.artillery && this.waveRng.chance(prof.artillery)) {
         // AND THE ARTILLERY LEVER IS THE SAME DOOR. It hard-assigns `lobber`
         // regardless of the table, so closing only the flanker one cut seven
         // archetypes to four rather than three — measured, `lobber` was still
         // 9-12 of every 39 spawns. Every lever that names an id instead of
         // drawing from the table has to be closed, and these are both of them.
-        id = 'lobber'; mortar = true;
+        id = this._leverPick(ARTILLERY_BEHAVIORS) || 'lobber'; mortar = true;
       }
       if (prof.ban && prof.ban.includes(id)) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
       const cap = SPAWN_CAPS[id] && Math.round(SPAWN_CAPS[id] * CONFIG.spawnBudgetMult);
@@ -1060,6 +1157,13 @@ export class Sim {
       : this._openSpot(this.W / 2, this.H / 2);
   }
 
+  // What a save parks: the STABLE KEYS of the nodes already walked, not their
+  // ids. Ids are indices into a generated array and a regeneration renumbers
+  // them; `1A` is `1A` forever.
+  clearedKeys() {
+    return [...this.visited].map(id => this.floor.nodes[id]).filter(Boolean).map(n => n.key);
+  }
+
   _openSpot(x, y) {
     // nudge a point out of any obstacle
     for (let tries = 0; tries < 20 && this._inObstacle(x, y, 60); tries++) {
@@ -1089,8 +1193,18 @@ export class Sim {
     this.lootT = null;
     const lost = this._fizzleLoot();
     this.pushEvent({ k: 'lootOver', collected: this.fightLoot, lost });
-    if (this.floorNum >= CONFIG.FLOORS) { this.pendingEnd = 0.8; return; }
-    this.hatch = this._openSpot(this.W / 2, this.H / 2); // descend from here
+    // THE REGION BOSS ENDS THE RUN. There is no floor 2 to descend to: a run is
+    // one region, and what follows is the world map, the frontier advance and
+    // the class unlock — none of which the sim owns. The post-boss shop still
+    // opens, because the spoils of the boss are spent before leaving.
+    this.regionCleared = true;
+    this.pushEvent({ k: 'regionCleared', regionIndex: this.regionIndex,
+      regionId: this.region, objectives: this.floor.objectives || [] });
+    // The post-boss shop still opens and the portal still appears — the spoils
+    // of the boss are spent before leaving, exactly as they were between
+    // floors. What changed is where the portal GOES: out of the region, to the
+    // world map, rather than down to a floor that no longer exists.
+    this.hatch = this._openSpot(this.W / 2, this.H / 2);
     for (const p of this.livePlayers()) this._offerSpend(p);   // points, then items
     for (const p of this.livePlayers()) this._openShop(p, 'boss');
   }
@@ -1111,7 +1225,10 @@ export class Sim {
       this.extract.t -= dt;
       if (this.extract.t <= 0) {
         this.extract = null;
-        if (this.afterSiege) this._startFloor(this.floorNum + 1);
+        // Leaving the boss room leaves the REGION. The run is over and it is a
+        // win; the frontier advance, the class unlock and the next region are
+        // the world map's business.
+        if (this.afterSiege) this._finish(true);
         else this._finishNode();
       }
     }
@@ -1131,7 +1248,40 @@ export class Sim {
     // moment has passed, and the ◆ badge is what carries unspent points forward
     for (const p of this.players) { p.boonTemp = null; p.boonOffer = null; p.spendOffer = 0; }
     for (const p of this.livePlayers()) this._recomputeStats(p);
+    // The between-maps beat: half of missing HP back, the per-map trait grants.
+    // Between FLOORS is where these used to live, and a region has no floors —
+    // dropping them would have quietly retired `free_drone_floor`,
+    // `pack_tactics` and every `floorStats` item in the catalogue.
+    this._betweenMaps();
     this._mapEvent();
+  }
+
+  // §2.4's SHRINE. No combat. The party chooses one: a skill point, or one
+  // guaranteed shop reroll. Never both, never rolled — the two options are
+  // fixed, which is what makes it a decision rather than a drop.
+  //
+  // `shrineOffer()` has existed in nodebehaviour.js since the region shell and
+  // had no caller, because no structure in the game could place a shrine node.
+  // The tree places one per region.
+  _offerShrine(p) {
+    if (p.shrineOffer) return;
+    p.shrineOffer = shrineOffer();
+    this.pushEvent({ k: 'shrine', idx: p.idx, choices: p.shrineOffer.choices });
+  }
+
+  _takeShrine(p, id) {
+    if (!p.shrineOffer) return;
+    const grant = applyShrine(id);
+    if (!grant) return;                 // not one of the two — ignore, keep the offer
+    p.shrineOffer = null;
+    for (let i = 0; i < grant.skillPoints; i++) SK.grantSkillPoint(this, p);
+    // NOT `p.hookAgg.freeRerolls` — that field is recomputed from items on
+    // every stat pass and anything added to it is erased at the next one. The
+    // shrine's reroll is a granted resource, so it gets its own counter and the
+    // shop adds the two together.
+    p.shrineRerolls = (p.shrineRerolls || 0) + grant.rerolls;
+    this.pushEvent({ k: 'toast', idx: p.idx,
+      text: grant.skillPoints ? `+${grant.skillPoints} skill point` : `+${grant.rerolls} free reroll` });
   }
 
   // ---------------- the Siege (mutations, sub-objectives, the boss) ----------------
@@ -1183,7 +1333,7 @@ export class Sim {
   _spawnPylon(x, y) {
     const e = this.enemyPool.alloc();
     if (!e) return;
-    const hp = Math.round(PYLON_DEF.hp * Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1) * this.coopHp * CONFIG.enemyHpMult);
+    const hp = Math.round(PYLON_DEF.hp * regionHpMult(this.regionIndex) * this.coopHp * CONFIG.enemyHpMult);
     Object.assign(e, {
       id: ++this.spawnCounter, def: PYLON_DEF, typeIdx: -2, boss: false, bossDef: null,
       x, y, hp, maxHp: hp, radius: PYLON_DEF.radius, spd: 0, dmg: 0, dmgScale: 1,
@@ -1202,7 +1352,7 @@ export class Sim {
   }
 
   _spawnSiegeBoss() {
-    const def = BOSS_BY_FLOOR[this.floorNum];
+    const def = bossForRegion(this.regionIndex);
     const e = this.enemyPool.alloc();
     if (!e) return;
     // enter away from the party's centroid
@@ -1463,8 +1613,8 @@ export class Sim {
     if (!def) return null;
     const e = this.enemyPool.alloc();
     if (!e) return null;
-    const fl = Math.pow(CONFIG.FLOOR_HP_MULT, this.floorNum - 1);
-    const dmgScale = Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1)
+    const fl = regionHpMult(this.regionIndex);
+    const dmgScale = regionDmgMult(this.regionIndex) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1)
       * ((this.fightMods && this.fightMods.dmg) || 1);      // §2.4 node damage
     let hp = def.hp * fl * this.coopHp * this.greedHp * CONFIG.enemyHpMult * (opts.elite ? CONFIG.ELITE_HP_MULT : 1);
     hp *= (this.fightMods && this.fightMods.hp) || 1;      // §2.4: and each one TOUGHER
@@ -1856,7 +2006,7 @@ export class Sim {
       const y = clamp(t.y + (this.rng.float() - 0.5) * 320, WALL + 40, this.H - WALL - 40);
       this.addTelegraph({
         shape: 'circle', x, y, r: 74, dur: 1.5 + i * 0.12,
-        boom: { dmg: Math.round(12 * Math.pow(CONFIG.FLOOR_DMG_MULT, this.floorNum - 1)), radius: 74 },
+        boom: { dmg: Math.round(12 * regionDmgMult(this.regionIndex)), radius: 74 },
       });
     }
     this.pushEvent({ k: 'toast', idx: -1, text: 'CURSED BARRAGE INCOMING' });
@@ -3170,7 +3320,7 @@ export class Sim {
     // point XP is credited, so it touches experience and nothing else. `mats`
     // above is already banked — the ramp costs the player money and does not
     // cost them levels.
-    const onbXp = this.arenaNode ? onboardingXpMult(this.floorNum, this.arenaNode.col) : 1;
+    const onbXp = this.arenaNode ? onboardingXpMult(this.regionIndex, (this.arenaNode.depth || 1) - 1) : 1;
     const xpGain = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100) * onbXp;
     p.xp += xpGain;
     p.xpEarned += xpGain;
@@ -3326,7 +3476,7 @@ export class Sim {
   _maybeOffer(p) {
     if (p.gone || p.banked <= 0 || p.pendingOffer) return;
     const n = 4 + (p.hookAgg.extraChoice || 0);
-    const rng = subRng(this.seed, 'offer', this.floorNum, this.currentNode ?? -1, p.idx, p.level, p.banked);
+    const rng = subRng(this.seed, 'offer', this.regionIndex, this.currentNode ?? -1, p.idx, p.level, p.banked);
     const picks = [];
     const used = new Set();
     let guard = 0;
@@ -3343,7 +3493,7 @@ export class Sim {
   }
 
   _offerTreasure(p, kind) {
-    const rng = subRng(this.seed, 'treas', this.floorNum, this.currentNode ?? -1, p.idx);
+    const rng = subRng(this.seed, 'treas', this.regionIndex, this.currentNode ?? -1, p.idx);
     const picks = [];
     const used = new Set();
     let guard = 0;
@@ -3451,7 +3601,7 @@ export class Sim {
 
   _offerBoon(p) {
     const t = p.char.trait;
-    const rng = subRng(this.seed, 'boon', this.floorNum, this.currentNode ?? -1, p.idx);
+    const rng = subRng(this.seed, 'boon', this.regionIndex, this.currentNode ?? -1, p.idx);
     const picks = [];
     const used = new Set();
     let guard = 0;
@@ -3490,16 +3640,16 @@ export class Sim {
 
   _openShop(p, context = 'shop') {
     if (p.gone) return;
-    if (!p.shop || p.shop.key !== `${this.floorNum}:${context}:${this.currentNode ?? -1}`) {
+    if (!p.shop || p.shop.key !== `${this.regionIndex}:${context}:${this.currentNode ?? -1}`) {
       // locked offers survive into the next shop even if the overlay was never
       // explicitly closed (e.g. the party walked out mid-browse)
       if (p.shop) p.shopLocksCarry = p.shop.stock.filter(s => s.locked && !s.sold);
       p.shopVisit++;
-      const rng = subRng(this.seed, 'shop', this.floorNum, this.currentNode ?? -1, p.idx, p.shopVisit);
+      const rng = subRng(this.seed, 'shop', this.regionIndex, this.currentNode ?? -1, p.idx, p.shopVisit);
       p.shop = {
-        key: `${this.floorNum}:${context}:${this.currentNode ?? -1}`,
+        key: `${this.regionIndex}:${context}:${this.currentNode ?? -1}`,
         rng, rerolls: 0,
-        freeLeft: p.hookAgg.freeRerolls,
+        freeLeft: p.hookAgg.freeRerolls + (p.shrineRerolls || 0),
         stock: [],
         // Trader NODES are the Black Market: 6 slots, cheaper rerolls, and
         // richer guarantees — a destination, now that every extraction shops
@@ -3535,7 +3685,7 @@ export class Sim {
     // stocking at least one card nobody could buy.
     const needW = !this._stocksWeapons(p) ? 0
       : t.key === 'arsenal_doctrine' ? 0
-      : (shop.black ? 2 : (this.floorNum === 1 ? 2 : 1));
+      : (shop.black ? 2 : (this.regionIndex === 1 ? 2 : 1));
     let weapons = shop.stock.filter(s => s.kind === 'weapon').length;
     for (let i = shop.stock.length - 1; i >= 0 && weapons < needW; i--) {
       const s = shop.stock[i];
@@ -3560,19 +3710,81 @@ export class Sim {
   // parameter `waveConfig` already uses for its rate ramp, so the density cut and
   // the archetype cut are indexed by one thing rather than two.
   _onboarding() {
-    return isOnboardingNode(this.floorNum, this.arenaNode);
+    return isOnboardingNode(this.regionIndex, this.arenaNode);
   }
 
   // Which ids this fight may draw from. The onboarding table is a HARD
   // restriction rather than a weighting: three archetypes means three, or the
   // composition stops teaching and becomes a thinner version of the same noise.
   _spawnTable(regionPop) {
-    if (this._onboarding()) return ONBOARDING_TABLE;
+    if (this._onboarding()) return this._onboardingTable();
     if (regionPop && REGION_ENEMIES[this.region]) return REGION_ENEMIES[this.region].enemies.map(e => e.id);
-    return FLOOR_TABLES[this.floorNum - 1];
+    // THE FALLBACK FOR A REGION WITH NO POPULATION. Regions 3-8 have no roster
+    // yet; the four legacy floor tables are real, tuned enemy sets and they
+    // spread across the first four regions, with the hardest repeating beyond.
+    // A region that reaches this line is unfinished content, and drawing the
+    // deepest legacy table is the right way to be wrong — a level-64 party
+    // meeting floor-1 trash would read as a bug, not as a gap.
+    return FLOOR_TABLES[Math.min(FLOOR_TABLES.length, Math.max(1, this.regionIndex)) - 1];
+  }
+
+  // A profile lever's ROLE, resolved from the region's own population. Null
+  // when the party is not in a region or the region has nothing of that shape,
+  // which is what keeps the base-roster fallback honest rather than silent.
+  _leverPick(behaviors) {
+    if (!this.region) return null;
+    const pop = REGION_ENEMIES[this.region];
+    if (!pop) return null;
+    const matches = pop.enemies.filter(e => behaviors.has(e.behavior));
+    if (!matches.length) return null;
+    return matches[Math.floor(this.waveRng.float() * matches.length)].id;
+  }
+
+  // MAP 1'S THREE ARCHETYPES, DRAWN FROM THE REGION.
+  //
+  // `ONBOARDING_TABLE` is the base roster's three — skulker, flit, fusehead:
+  // trash, a mover, and the floor's telegraphed threat. Region 1's map 1 should
+  // be three of the SAME SHAPE from the Pacific Northwest, not three creatures
+  // from a dungeon the player is not in.
+  //
+  // Derived, not authored, so region 3 gets one by existing: THE REGION'S
+  // CHAFF — every archetype that does not telegraph.
+  //
+  // That is the base table's own composition, read off rather than guessed at.
+  // `skulker`, `flit`, `fusehead` are floor 1's three non-telegraphing types at
+  // 8/4/6 HP and 1/1/2 materials, and `regions-enemies.js` asserts the same
+  // split for every region ("EVERY heavy or elite archetype telegraphs; chaff
+  // stays undodgeable"), so "the chaff" is a well-defined thing to ask a region
+  // for. The Pacific Northwest's three are sapling, thornhound and mistwalker
+  // at 9/6/10 HP and 1/1/2 — trash, a mover, and a ranged threat, which is the
+  // shape §2.2 says the trio is for.
+  //
+  // AN EARLIER VERSION TOOK TWO CHAFF PLUS THE GENTLEST TELEGRAPHER, and
+  // `region_test` caught it by outcome rather than by constant: the Cedar
+  // Warden carries 15 HP against the Fusehead's 6, so map 1 paid out slower and
+  // a character left it at LEVEL 2 with one slot instead of level 6 with two —
+  // exactly the progression debt `ONBOARDING_XP_MULT` exists to prevent, re-
+  // incurred by changing the table underneath it.
+  _onboardingTable() {
+    const pop = this.region && REGION_ENEMIES[this.region];
+    if (!pop) return ONBOARDING_TABLE;
+    const chaff = pop.enemies.filter(e => !e.telegraph).map(e => e.id);
+    return chaff.length === ONBOARDING_TABLE.length ? chaff : ONBOARDING_TABLE;
   }
 
   _regionPick() {
+    // THE ONBOARDING TABLE IS A HARD RESTRICTION AND THE REGION PICK BYPASSED
+    // IT. `_spawnTable` returned the three-archetype table correctly and
+    // `id = regionPop || table[…]` then threw it away, because the region pick
+    // is evaluated first and always wins. Measured: region 1's map 1 — the
+    // tutorial, built to field three archetypes at half density — fielded all
+    // SIX, Bark Hulk and Cedar Warden included, and killed a Bastion camper
+    // that survives the base roster indefinitely.
+    //
+    // This is the third lever to name enemies past the table (`js/arenas.js`
+    // names the other two) and the largest: the other two inject one archetype,
+    // this one replaced the whole table.
+    if (this._onboarding()) return null;
     if (!this.region) return null;
     const pop = nodePopulation(this.region, this.nodeType || 'horde');
     if (!pop || !pop.length) return null;
@@ -3616,7 +3828,7 @@ export class Sim {
   // force: 'weapon' | 'rareplus' — used by the stock guarantees
   _rollStockEntry(p, rng, force = null) {
     const t = p.char.trait;
-    const floorScale = 1 + CONFIG.PRICE_FLOOR_SCALE * (this.floorNum - 1);
+    const floorScale = 1 + CONFIG.PRICE_REGION_SCALE * (this.regionIndex - 1);
     let discount = 1 - p.hookAgg.shopDiscount / 100;
     if (t.key === 'insider') discount *= 1 - t.discount / 100;
     // Quartermaster buys only weapons; Gilded One stocks only the finest
@@ -3657,10 +3869,12 @@ export class Sim {
   // grows with every region and every item — or a single progress float. It is
   // the float. Adding region 5 changes no shop code.
   _runProgress() {
-    const perRegion = Math.max(1, CONFIG.FLOORS);
-    const region = (this.regionIndex || 0);
-    const within = (this.floorNum - 1) / perRegion;
-    return Math.min(1, (region + within) / 8);      // 0 at the first door, 1 at the last
+    // POSITION IN THE RUN, and the run is eight regions. It used to be
+    // `(region + (floorNum-1)/FLOORS) / 8` with `region` permanently 0, so it
+    // returned 0.000 to 0.094 across an entire game and the eighteen items
+    // carrying `lateWeight` were effectively unreachable. Region 1 now reads
+    // 0.125 and region 8 reads 1.000.
+    return Math.min(1, Math.max(0, this.regionIndex / TOTAL_REGIONS));
   }
 
   _pickWeighted(rng, pool) {
@@ -3678,7 +3892,7 @@ export class Sim {
   }
 
   _rollTier(rng) {
-    const T = TIER_WEIGHTS[this.floorNum - 1];
+    const T = TIER_WEIGHTS[Math.min(TIER_WEIGHTS.length, Math.max(1, this.regionIndex)) - 1];
     const roll = rng.float() * 100;
     let acc = 0;
     for (let i = 0; i < 4; i++) { acc += T[i]; if (roll < acc) return i + 1; }
@@ -3687,7 +3901,7 @@ export class Sim {
 
   // the highest tier the current floor can roll at all (Gilded One's shelf)
   _topTier() {
-    const T = TIER_WEIGHTS[this.floorNum - 1];
+    const T = TIER_WEIGHTS[Math.min(TIER_WEIGHTS.length, Math.max(1, this.regionIndex)) - 1];
     for (let i = 3; i >= 0; i--) if (T[i] > 0) return i + 1;
     return 1;
   }
@@ -3719,7 +3933,7 @@ export class Sim {
   }
 
   _rerollCost(p) {
-    const base = CONFIG.REROLL_BASE + CONFIG.REROLL_PER_FLOOR * (this.floorNum - 1);
+    const base = CONFIG.REROLL_BASE + CONFIG.REROLL_PER_REGION * (this.regionIndex - 1);
     if (p.shop.freeLeft > 0) return 0;
     let cost = p.rerollFlat ? base : Math.round(base * Math.pow(CONFIG.REROLL_GROWTH, p.shop.rerolls));
     if (p.shop.black) cost = Math.round(cost * 0.75); // Black Market: rerolls −25%
@@ -3739,7 +3953,7 @@ export class Sim {
         ? { lvl: (p.itemState[s2.id] || {}).lvl || 1, price: Math.round(s2.price * CONFIG.ITEM_UPGRADE_PRICE_MULT) } : null),
       weaponsOnly: p.char.trait.key === 'arsenal_doctrine',
       black: !!p.shop.black,
-      floor: this.floorNum, // sell values shown in the UI derive from this
+      region: this.regionIndex, // sell values shown in the UI derive from this
     });
   }
 
@@ -3786,7 +4000,7 @@ export class Sim {
     // Quartermaster recovers exactly what went in; everyone else gets 30%
     const refund = p.char.trait.key === 'arsenal_doctrine'
       ? (w.invested || 0)
-      : sellValue(weaponBasePrice(WEAPON_BY_ID[id], tier), this.floorNum);
+      : sellValue(weaponBasePrice(WEAPON_BY_ID[id], tier), this.regionIndex);
     p.weapons.splice(slot, 1);
     this._removeSummonByUid(p, w.uid);
     p.materials += refund;
@@ -3800,7 +4014,7 @@ export class Sim {
     const i = p.items.indexOf(id);
     const item = ITEM_BY_ID[id];
     if (i < 0 || !item) return 'not owned';
-    const refund = sellValue(item.price, this.floorNum);
+    const refund = sellValue(item.price, this.regionIndex);
     p.items.splice(i, 1); // one instance; stacks sell one at a time
     this._recomputeItems(p);   // hookAgg rebuilt — sold mechanical effects can never fire again
     this._recomputeStats(p);
@@ -4018,6 +4232,10 @@ export class Sim {
         else this.pushEvent({ k: 'slotResult', idx, ok: true, loadout: [...p.loadout] });
         break;
       }
+      case 'shrine': {
+        this._takeShrine(p, msg.id);
+        break;
+      }
       case 'levelup': {
         if (!p.pendingOffer) return;
         const pick = p.pendingOffer.find(o => o.id === msg.id) || p.pendingOffer[0];
@@ -4150,7 +4368,7 @@ export class Sim {
         if (p.char.trait.key === 'overseer' && WEAPON_BY_ID[s.id].cls !== 'summon') return this._buyResult(p, msg.slot, false, 'turret mounts only');
         const refund = p.char.trait.key === 'arsenal_doctrine'
           ? (w.invested || 0)
-          : sellValue(weaponBasePrice(WEAPON_BY_ID[w.id], w.tier), this.floorNum);
+          : sellValue(weaponBasePrice(WEAPON_BY_ID[w.id], w.tier), this.regionIndex);
         if (p.materials + refund < s.price) return this._buyResult(p, msg.slot, false, 'poor');
         // every check passed — commit both legs
         this._sellWeapon(p, msg.sell, w.id, w.tier);
@@ -4167,8 +4385,14 @@ export class Sim {
         if (!p.shop) return;
         const cost = this._rerollCost(p);
         if (cost > p.materials) return;
-        if (p.shop.freeLeft > 0) p.shop.freeLeft--;
-        else { p.materials -= cost; p.shop.rerolls++; }
+        if (p.shop.freeLeft > 0) {
+          p.shop.freeLeft--;
+          // Spend the SHRINE's stock first and spend it for real. `freeLeft` is
+          // rebuilt from `hookAgg.freeRerolls + shrineRerolls` at every shop, so
+          // decrementing only the shop's copy would make one shrine reroll a
+          // free reroll in every shop for the rest of the run.
+          if (p.shrineRerolls > 0) p.shrineRerolls--;
+        } else { p.materials -= cost; p.shop.rerolls++; }
         p.shop.stock = p.shop.stock.filter(s => s.locked && !s.sold);
         this._fillStock(p);
         this.pushEvent({ k: 'sfx', s: 'reroll' });
@@ -4242,7 +4466,13 @@ export class Sim {
     this.result = {
       win,
       seed: this.seed,
-      floor: this.floorNum,
+      region: this.regionIndex,
+      regionId: this.region,
+      regionName: (REGION_BY_INDEX[this.regionIndex] || {}).name || `Region ${this.regionIndex}`,
+      // What the world map needs to advance a frontier and to bias the NEXT
+      // region's objective draw away from what this one just dealt.
+      regionCleared: !!this.regionCleared,
+      objectives: (this.floor && this.floor.objectives) || [],
       players: this.players.map(p => ({
         idx: p.idx, name: p.name, charId: p.charId, color: p.color,
         damage: Math.round(p.damageDealt), kills: p.kills, level: p.level,
@@ -4262,7 +4492,7 @@ export class Sim {
     switch (cmd) {
       case 'F1': {
         if (this.phase !== 'arena') break;
-        const table = FLOOR_TABLES[this.floorNum - 1];
+        const table = this._spawnTable(true);
         for (let i = 0; i < 50; i++) {
           const pos = { x: WALL + 40 + this.rng.float() * (this.W - 2 * WALL - 80), y: WALL + 40 + this.rng.float() * (this.H - 2 * WALL - 80) };
           if (this._inObstacle(pos.x, pos.y, 20)) continue;
@@ -4281,7 +4511,9 @@ export class Sim {
         this._checkFightClear();
         break;
       }
-      case 'F4': if (this.floorNum < CONFIG.FLOORS) this._startFloor(this.floorNum + 1); break;
+      // F4 used to descend a floor. There is nowhere to descend to, so the
+      // dev key now does the thing it was really for: get me to the boss.
+      case 'F4': if (this.phase === 'map' && this.floor) this._travelTo(this.floor.bossId); break;
       case 'F5': this.god = !this.god; this.pushEvent({ k: 'toast', idx: 0, text: `God mode ${this.god ? 'ON' : 'OFF'}` }); break;
       // F7 — THE TELEGRAPH PIT. (F6 is the hitbox/fps overlay, client-side.) Clears the field and reseeds it with slabjaws
       // and aegimands only, ringed around the party at their commit distance.

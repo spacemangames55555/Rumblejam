@@ -124,6 +124,23 @@ export class Page {
   close() { try { this.proc.kill(); } catch { /* gone */ } }
 }
 
+// STARTING A RUN IS TWO CLICKS NOW, AND EVERY BROWSER SUITE MADE ONE.
+//
+// `#btn-start` used to construct the Sim directly. It now opens the WORLD MAP,
+// because a run has to be a run of somewhere — and twenty call sites across
+// three suites clicked the button, waited for `window.uv.sim`, and timed out.
+// One helper rather than twenty edits: the sequence is a property of the shell,
+// not of any one test.
+//
+// `regionIndex` defaults to 1 because that is the only region a fresh
+// character may enter, and every browser suite starts from a fresh profile.
+export async function startRun(P, regionIndex = 1) {
+  await P.exec(`document.getElementById('btn-start').click(); return 1;`);
+  await P.waitFor(`return document.getElementById('screen-world') && !document.getElementById('screen-world').classList.contains('hidden') ? 1 : 0`, 8000, 'world map');
+  await P.exec(`const c=document.querySelector('.world-card[data-region="${regionIndex}"]'); if(!c) throw new Error('no region ${regionIndex} card'); c.click(); return 1;`);
+  return P.waitFor(`return window.uv.mode==='run' ? 1 : 0`, 12000, `region ${regionIndex} run started`);
+}
+
 export function bootHttpd(port) {
   const httpd = spawn('python3', ['-m', 'http.server', String(port)], { cwd: process.cwd(), stdio: 'ignore' });
   process.on('exit', () => httpd.kill());

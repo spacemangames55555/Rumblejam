@@ -15,7 +15,11 @@ const KIND_META = {
   elite: { sym: '☠', name: 'Champion' },
   shop: { sym: '◆', name: 'Trader' },
   treasure: { sym: '★', name: 'Reliquary' },
-  siege: { sym: '⛨', name: 'SIEGE' },
+  siege: { sym: '⛨', name: 'BOSS' },
+  // §2.4's other two node types, which no structure could place until the tree
+  // replaced the floor map
+  shrine: { sym: '✦', name: 'Shrine', hint: 'No combat. One skill point, or one guaranteed reroll.' },
+  cursed: { sym: '☾', name: 'Cursed', hint: "The region's modifier, active for this map only. ×1.6 materials." },
   // the eight objective levels carry their own icon + name on the map
   ...Object.fromEntries(Object.entries(OBJECTIVE_META).map(([k, v]) => [k, { sym: v.sym, name: v.name, hint: v.hint }])),
 };
@@ -37,11 +41,11 @@ export function hideMapScreen() {
 
 export function isMapScreenOpen() { return !$('screen-map').classList.contains('hidden'); }
 
-// state: {layout, floorNum, current, visited:[], reachable:[], vote:{nodeId,t,byIdx}|null, onShop:bool, partyNames:{idx:name}}
+// state: {layout, regionIndex, regionName, current, visited:[], reachable:[], vote:{nodeId,t,byIdx}|null, onShop:bool}
 export function updateMapScreen(state) {
   if (!isMapScreenOpen()) return;
   const d = JSON.stringify([state.current, state.visited, state.reachable,
-    state.vote && [state.vote.nodeId, Math.ceil(state.vote.t * 10)], state.onShop, state.floorNum]);
+    state.vote && [state.vote.nodeId, Math.ceil(state.vote.t * 10)], state.onShop, state.regionIndex]);
   if (d === lastDigest) return;
   renderMap(state);
 }
@@ -50,7 +54,7 @@ function renderMap(state) {
   const el = $('screen-map');
   const { layout } = state;
   lastDigest = JSON.stringify([state.current, state.visited, state.reachable,
-    state.vote && [state.vote.nodeId, Math.ceil(state.vote.t * 10)], state.onShop, state.floorNum]);
+    state.vote && [state.vote.nodeId, Math.ceil(state.vote.t * 10)], state.onShop, state.regionIndex]);
   const cols = Math.max(...layout.nodes.map(n => n.col)) + 1;
   const byCol = Array.from({ length: cols }, () => []);
   for (const n of layout.nodes) byCol[n.col].push(n);
@@ -80,10 +84,10 @@ function renderMap(state) {
     <div class="panel map-panel">
       <div class="row spread">
         <div>
-          <div class="ov-title">FLOOR ${state.floorNum} / 4 — THE GAUNTLET</div>
+          <div class="ov-title">${escapeHtml(state.regionName || `REGION ${state.regionIndex}`).toUpperCase()} — REGION ${state.regionIndex} / 8</div>
           <div class="ov-sub">${state.vote
             ? `${escapeHtml(state.voteName || 'A player')} chose a path — ${Math.ceil(state.vote.t)}s to redirect (once)`
-            : 'pick the party\'s next stop · all paths meet at the Siege'}</div>
+            : 'pick the party\'s next map · five maps, then the boss · every route passes the reliquary and the trader'}</div>
         </div>
         ${state.onShop ? '<button id="map-reopen-shop">◆ Reopen shop</button>' : ''}
       </div>
@@ -92,7 +96,7 @@ function renderMap(state) {
         ${colHtml}
       </div>
       <div class="map-legend">
-        <div>⚔ Skirmish · ◆ Trader · ★ Reliquary · ⛨ Siege · <span class="mn-bastion-inline">⛊</span> Bastion: hold-your-ground</div>
+        <div>⚔ Skirmish · ☠ Champion · ✦ Shrine · ☾ Cursed · ◆ Trader · ★ Reliquary · ⛨ Boss · <span class="mn-bastion-inline">⛊</span> Bastion: hold-your-ground</div>
         <div class="legend-obj">${Object.values(OBJECTIVE_META).map(o => `${o.sym} ${o.name}`).join(' · ')}</div>
       </div>
     </div>`;

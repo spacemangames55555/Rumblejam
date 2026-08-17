@@ -163,8 +163,8 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 // Depth is `node.col`, which `waveConfig` already receives — this is arithmetic
 // inside an existing parameter, not a new channel.
 export const ONBOARDING_RATE = [0.5, 0.75, 1];
-export function onboardingMult(floorNum, depth) {
-  if (floorNum !== 1) return 1;
+export function onboardingMult(regionIndex, depth) {
+  if (regionIndex !== 1) return 1;
   return ONBOARDING_RATE[Math.min(depth, ONBOARDING_RATE.length - 1)];
 }
 
@@ -196,8 +196,8 @@ export function onboardingMult(floorNum, depth) {
 // (a fresh character leaves map 1 at level 6 with 2 slots) instead of trusting
 // the constant. Change the table or the rate and that gate names the reason.
 export const ONBOARDING_XP_MULT = [3.4, 1.35, 1];
-export function onboardingXpMult(floorNum, depth) {
-  if (floorNum !== 1) return 1;
+export function onboardingXpMult(regionIndex, depth) {
+  if (regionIndex !== 1) return 1;
   return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];
 }
 
@@ -214,14 +214,18 @@ export function onboardingXpMult(floorNum, depth) {
 // because its sample moved into the tutorial. A gate that cannot ask whether it
 // is standing in the exception will silently measure the exception, and this is
 // the second caller that makes the question a function instead of a comment.
-export function isOnboardingNode(floorNum, node) {
-  return floorNum === 1 && !!node && node.col === 0 && node.kind !== 'siege';
+export function isOnboardingNode(regionIndex, node) {
+  return regionIndex === 1 && !!node && node.col === 0 && node.kind !== 'siege';
 }
 
-export function waveConfig(floorNum, depth, kind) {
+// `regionIndex` is the world axis (1..8) and `depth` is the ZERO-BASED map
+// index inside the region (0..4) — the same two numbers this took as
+// `floorNum` and `node.col`, re-keyed. The caller does the −1, so map 1 sits on
+// exactly the arithmetic column 0 sat on.
+export function waveConfig(regionIndex, depth, kind) {
   const elite = kind === 'elite';
   const siege = kind === 'siege';
-  const dur = siege ? Infinity : Math.round(60 + depth * 5 + floorNum * 5); // 60–90s
+  const dur = siege ? Infinity : Math.round(60 + depth * 5 + regionIndex * 5); // 65–110s
   // floor 1 is the baseline a one-weapon starting kit can chew through
   // (~0.6 kills/sec organic); later floors outpace it and force build growth
   // AN ELITE NODE NO LONGER BUMPS ITS SPAWN RATE (D-24). It used to add +0.2
@@ -231,9 +235,9 @@ export function waveConfig(floorNum, depth, kind) {
   // fight"). §2.4 is now the single definition of what an elite node is, and
   // it arrives through nodeModifiers(); leaving this bump in place would have
   // multiplied against it rather than agreeing with it.
-  const onb = onboardingMult(floorNum, depth);
-  const r0 = (0.5 + 0.25 * (floorNum - 1)) * onb;
-  const r1 = (1.2 + 0.55 * (floorNum - 1) + 0.18 * depth) * onb;
+  const onb = onboardingMult(regionIndex, depth);
+  const r0 = (0.5 + 0.25 * (regionIndex - 1)) * onb;
+  const r1 = (1.2 + 0.55 * (regionIndex - 1) + 0.18 * depth) * onb;
   return {
     t: 0, acc: 0, dur, r0, r1,
     rampT: siege ? 150 : dur,          // sieges plateau at 150s and hold
@@ -251,8 +255,8 @@ export function waveConfig(floorNum, depth, kind) {
 // given party size and floor. The wave is a linear ramp r0→r1 over dur, so
 // the integral is the mean rate × duration × the party/patch multipliers.
 // Elite Arena prices its roster against this.
-export function hordeTotalSpawns(floorNum, depth, coopSpawn) {
-  const w = waveConfig(floorNum, depth, 'combat');
+export function hordeTotalSpawns(regionIndex, depth, coopSpawn) {
+  const w = waveConfig(regionIndex, depth, 'combat');
   return ((w.r0 + w.r1) / 2) * w.dur * coopSpawn * CONFIG.spawnBudgetMult;
 }
 
@@ -345,7 +349,7 @@ export const SIEGES = [
 // Build the runtime obstacle/hazard lists for a node's arena.
 // Parties of ARENA_CROWD_AT+ fight in the same templates scaled up
 // ~25% in bounds — 8 spread players need somewhere to spread to.
-export function buildArena(seed, floorNum, node, playerCount = 1) {
+export function buildArena(seed, regionIndex, node, playerCount = 1) {
   const crowd = playerCount >= CONFIG.ARENA_CROWD_AT ? CONFIG.ARENA_CROWD_SCALE : 1;
   // Objective levels can reshape the room (Breach is a corridor). That scale
   // has to reach the obstacles and hazards too, NOT just the bounds — scaling
@@ -353,12 +357,18 @@ export function buildArena(seed, floorNum, node, playerCount = 1) {
   // and _pushOut then shoves players through the wall to escape it.
   const shape = objectiveShape(node.kind);
   const kx = crowd * shape.x, ky = crowd * shape.y;
-  // The floor's theme. Cosmetic: the renderer is the only consumer, and a
-  // floor with no biome renders exactly as it did before this existed.
-  const b = biomeFor(floorNum);
+  // The REGION's theme. Cosmetic: the renderer is the only consumer, and a
+  // region with no biome renders exactly as it did before this existed.
+  const b = biomeFor(regionIndex);
   const biomeId = b ? b.id : null;
   if (node.kind === 'siege') {
-    const s = SIEGES[floorNum - 1];
+    // THE BOSS ARENA. Four were authored for four floors; eight regions need
+    // eight, and the four are real finished rooms rather than placeholders. They
+    // spread across regions 1-4 and region 8 gets the Regent's Court back —
+    // the room its boss was authored for. Regions 5-7 repeat the Court rather
+    // than repeating a mid-run room, because the alternative is an endgame
+    // party fighting in the walled yard from the tutorial.
+    const s = SIEGES[Math.min(SIEGES.length, Math.max(1, regionIndex)) - 1];
     return {
       w: Math.round(s.w * kx), h: Math.round(s.h * ky), name: s.name,
       obstacles: s.obstacles.map(o => scaleRect(o, kx, ky)),
@@ -369,7 +379,7 @@ export function buildArena(seed, floorNum, node, playerCount = 1) {
     };
   }
   const t = ARENA_TEMPLATES[node.template];
-  const rng = subRng(seed, 'arena', floorNum, node.id);
+  const rng = subRng(seed, 'arena', regionIndex, node.id);
   return {
     w: Math.round(t.w * kx), h: Math.round(t.h * ky), name: t.name,
     obstacles: t.obstacles(rng).map(o => scaleRect(o, kx, ky)),

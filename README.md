@@ -1,22 +1,19 @@
 # UNDERVAULT
 
 A co-op dungeon-crawl arena roguelite for 1–8 players, in the browser, with no
-server to run. Pick one of **33 characters** and descend through a 4-floor
-Gauntlet: each floor is a **branching node map** (a decision screen, not
-corridors) of big scrolling battle arenas, and every floor ends in a
-**Siege** — a continuous, mutating last stand capped by the floor boss. Clear
-fights, bank level-ups, shop and reroll, and
-destroy **The Vault Regent** on floor 4. If the whole party goes down, the run
-is over.
+server to run. Pick a character on the **world map** and enter a **region**:
+a branching tree of ten maps (a decision screen, not corridors) of big
+scrolling battle arenas, of which you route through five, crossing a
+reliquary and a trader on the way, and finishing at the **region boss**.
+Clearing it advances your frontier and unlocks the next region. If the whole
+party goes down, the region resets.
 
-> **The combat model changed and this paragraph is the old one.** Weapons are
-> removed; a character's output is auto-triggered **skills** across two trees
-> per class, and above the four-floor Gauntlet there is now a **world layer** of
-> regions played in order. [`docs/GDD.md`](docs/GDD.md) is the authoritative
-> design document — §5 for the combat model, §2 for run structure, §16 for what
-> is actually built today. The paragraph above is kept because the Gauntlet
-> layer still exists underneath and most of this README still describes it
-> accurately.
+> **The four-floor Gauntlet is retired.** `js/dungeon.js` and `CONFIG.FLOORS`
+> are gone: a region IS the map, and the tree in `js/nodetree.js` is the only
+> map structure in the game. Much of this README still says "floor" where it
+> now means "region" or "map"; [`docs/GDD.md`](docs/GDD.md) is the authoritative
+> design document — §2 for run structure, §5 for the combat model, §16 for what
+> is actually built today.
 
 Everything is plain JavaScript (ES modules) + Canvas 2D + WebAudio. All art is
 drawn with canvas primitives and nearly all sound is synthesized; the only
@@ -651,6 +648,22 @@ never loads them:
 - `node tools/telegraph_test.mjs` — the telegraph state machine through live
   ticks, every case staged from four seeds at four positions. Includes the
   siege-boss regression (known defect #5) and the `windupMs` reaction floor.
+- `node tools/region_wire_gate.mjs` — **the region layer, asserted by effect from
+  the entry point `main.js` uses.** Every check constructs `new Sim({seed, party,
+  regionIndex})` and reads what came out; none assigns a region by hand. Five maps
+  then a boss, a region-1 enemy the legacy tables never had, nest walls at the
+  region's ×0.5, `pnw` ground on every map and no tundra anywhere, region 2
+  disjoint from region 1, both stops on every route, no objective twice in one
+  region, a locked region refused and a frontier advanced. The region layer sat
+  green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/region_curve.mjs [--verbose]` — composed player output at each of
+  §4.3's eight level anchors, median across four classes, best of three loadout
+  windows. Prints the `REGION_HP_MULT` / `REGION_DMG_MULT` tables so the world
+  axis is measured rather than rescaled from the retired four-floor ramp.
+- `node tools/gen_biome_tiles.mjs [biomeId …]` — placeholder ground tiles for one
+  biome (default: every biome with a palette). Deterministic, so a rerun is an
+  empty diff. Was `gen_tundra_tiles.mjs`; a generator that names its subject in
+  its filename is a generator you copy.
 - `node tools/region_test.mjs` — node-tree distribution over 1000 trees, the
   frontier rule from three sides, cross-tree point spending down two full
   prerequisite chains, and a save round trip **through a real file** plus five

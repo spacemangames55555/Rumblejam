@@ -355,10 +355,9 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
 // was hanging before it reached the siege runs; the only evidence anyone had
 // was a partial log. This drives a real siege to a real boss spawn.
 {
-  const g = new Sim({ seed: 5, party: [{ idx: 0, key: 'k', name: 'T', charId: 'toh_samurai', color: '#fff' }] });
+  const g = new Sim({ seed: 5, regionIndex: 4, party: [{ idx: 0, key: 'k', name: 'T', charId: 'toh_samurai', color: '#fff' }] });
   g.god = true;
-  while (g.floorNum < 4) g.debug('F4');
-  g._travelTo(g.floor.siegeId);
+  g._travelTo(g.floor.bossId);
   let spawned = false, crash = null;
   try {
     for (let i = 0; i < 60 * 400 && !spawned; i++) { g.tick(); spawned = !!g.boss; }

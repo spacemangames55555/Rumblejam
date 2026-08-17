@@ -33,15 +33,16 @@ Combat is twin-stick movement and positioning. Players do not fire manually. Eve
 
 | Term | Meaning |
 |---|---|
-| Map | One playable dungeon, comparable to a floor in the pre-overhaul build |
+| Map | One playable arena — one node on the region's tree. **Not a floor:** the pre-overhaul floor was a whole dungeon with a boss at the end, and that is what a REGION is now. `CONFIG.FLOORS` and `js/dungeon.js` are both retired |
 | Region | A themed area containing 10 maps on a tree, plus a boss map |
-| Run | A full game across all 8 regions, persisting across many sittings |
+| Run | One region, entered from the world map and ended by its boss. A full game is eight of them, persisting across many sittings |
 | Character save | One object: class, level, points, items, frontier, parked region state |
 
 ### 2.2 Structure
 
 - **8 regions**, fixed order, 1 through 8.
 - Each region presents **10 maps on a branching tree**. The player clears **5** to reach the boss.
+- Every route also crosses **one reliquary and one trader**, which are not part of the ten: they are full-width bands between columns, so they are on every path rather than being a choice. A five-node route that could miss the shop is a run with no shop in it.
 - Clearing the **region boss** unlocks the next region.
 - **6 maps per region × 8 regions = 48 maps** in a full run.
 
@@ -71,6 +72,18 @@ ENTRY ──┤      ╳      ╳      ╳      ╳      ├── BOSS
 
 Every path is exactly five nodes **by construction**, not by validation. Cross-links randomise per generation (`CROSS_LINK_CHANCE = 0.45`) so routes diverge and reconverge without changing path length.
 
+**Two stops sit between the columns**, after map 2 and after map 4 (`STOP_BANDS` in `js/nodetree.js`):
+
+```
+ENTRY ─ 1A ─ 2A ─ ⟦RELIQUARY⟧ ─ 3A ─ 4A ─ ⟦SHOP⟧ ─ 5A ─ BOSS
+         ×    ×                  ×    ×             ×
+        1B ─ 2B ─               3B ─ 4B ─          5B ─
+```
+
+Each owns its whole column, so every route crosses both. **Reliquary before shop**, for the reason `_clearArena` already raises the spend step before `_openShop` one level down: what you slot changes what you want to buy. The shop then sits four fights deep, with income behind it and one fight in front of it to test the purchase. The bands carry no combat depth, so `depthMult` still runs 1..5 and the route is still five *fights*.
+
+**Objectives never sit at map 1.** The retired floor map swapped them off its entry column because "the objective levels assume a node or two of build-up behind you"; that reasoning is about a party's first fight, and it binds harder here — map 1 is one of five rather than one of six, and it is the only map in the game played at a single skill slot.
+
 ### 2.4 Node types
 
 Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
@@ -83,7 +96,9 @@ Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
 | Shrine | No combat. Party chooses: +1 skill point **or** one guaranteed shop reroll. Never both, never rolled |
 | Cursed | Region modifier active for that node only, ×1.6 gold |
 
-Placement: Shrine and Cursed may not sit in column 1; both Elites may not share a column. Node type is **visible before selection** — the route decision does not exist otherwise.
+Placement: Shrine, Cursed and Objective may not sit in column 1; both Elites may not share a column. Node type is **visible before selection** — the route decision does not exist otherwise.
+
+**Which two objectives a region deals.** Two of the eight, never the same type twice inside one region, weighted toward what the player has not seen lately: `w(t) = min(4, regions since t was last dealt)`, with a never-seen type at the maximum. Sixteen draws across a full run, so the bias is what stops a playthrough dealing Nest Purge five times and Payload never — measured, a type dealt in the previous region comes back **11%** of the time against ~25% for a flat draw. Recency is the RUN's own history rather than the save: §11.3 lets a guest play the host's rolled tree, which is only coherent if the host can roll it from things the host has.
 
 **What each type is for.** §2.3 exists to create a route decision, and a route decision needs the nodes to reward different builds. The deep-versus-wide sweep at the level-70 anchor (`tools/shape_by_node.mjs`) says they do, and says which way:
 
@@ -277,6 +292,17 @@ Authored per region band, not computed from a global curve. Expected player leve
 | Level | 1 | 10 | 19 | 28 | 37 | 46 | 55 | 64 |
 
 If a party arrives significantly above or below the anchor, that is the difficulty setting doing its job, not a bug.
+
+**The multipliers those anchors buy** (`REGION_HP_MULT` / `REGION_DMG_MULT` in `js/regions.js`), measured by `tools/region_curve.mjs` against composed player output at each anchor, targeting flat time-to-kill:
+
+| Region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| HP × | 1.00 | 2.13 | 3.84 | 4.33 | 5.29 | 6.02 | 7.35 | 7.36 |
+| damage × | 1.00 | 1.59 | 2.26 | 2.44 | 2.75 | 2.98 | 3.36 | 3.36 |
+
+This replaces `FLOOR_HP_MULT ^ (floor-1)`, a geometric ramp over four points, and it was **re-derived rather than rescaled**. The old curve reached ×2.46 by floor 4; this reaches ×4.33 by region 4, whose anchor is level 28 — so the four-floor curve was scaling enemies slower than it scaled players, and a run got easier the longer it ran. Regions 7 and 8 are flat because three of four measured classes stop gaining output between level 55 and 64: the trees absorb every point, but the last nine buy ranks, and a rank is −3% cooldown against a floor of 70%. Region 8's difficulty comes from its even domain spread (§3.2) and its boss, not from this axis.
+
+Damage is not measured separately — player effective HP grows from banked stat picks, which are a choice rather than a table. It keeps the relationship the old curve authored between the two axes, `ln(1.20)/ln(1.35) = 0.608`, so damage grows as HP^0.608.
 
 ---
 
@@ -1883,6 +1909,18 @@ Two full round trips — sixteen generations — went into wording a thing the e
 
 This generalises past art. The same shape is any place we describe in a string what an interface takes as structure: a config value passed inside a free-text field, a constraint written into a comment when the type system could carry it, an intent explained in a prompt when the callee has an argument for it. `openapi.json` was already being read in this repo for endpoint *shapes*; it was not being read for what those endpoints let you *ask*.
 
+75. **A module can be imported and still be a graveyard.** Reachability at the module level is not reachability of anything inside it.
+
+`js/worldmap.js` was imported by `js/main.js` and `js/ui/screens.js`, so an import-graph walk from `index.html` reported 92 of 93 modules live. Both importers wanted `DIFFICULTIES`. `worldMapState`, `partyCanEnter`, and through them every export of `js/saves.js` — `park`, `unpark`, `canEnter`, `onRegionCleared`, `recordUnlock`, `exportBundle`, `importBundle` — had no caller anywhere. **The region layer had never executed in 165 commits**, and the one thing that would have said so was a check on the EXPORT surface rather than on the file list.
+
+`reach_gate` had two rows for this, naming `shrineOffer` and `worldMapState` individually, and that framing is what let it hide: the gate stayed green about one function while the module behind it was equally dead. It now asserts every export of both progression files. **Name the surface, not the instance** — the instances you write down are the ones you already know about.
+
+76. **Every lever that names an id instead of drawing from the table has to be closed, and there is always one more.** This is the third time the same sentence has been written in this repo about a different lever.
+
+The onboarding patch closed two: the profile's `flankers` injection hard-assigning `gyre`/`lancerfish` and its `artillery` injection hard-assigning `lobber`, both bypassing `ONBOARDING_TABLE`. Wiring regions found the third and the fourth. The levers named base-roster ids, so a Pacific Northwest fight fielded a Gyre — and `_regionPick` was evaluated *before* the table and won, so region 1's **map 1**, the tutorial built to field three archetypes at half density, fielded all six including both heavies. Measured, it killed a Bastion camper that survives the base roster indefinitely.
+
+Both are now roles rather than ids: the levers resolve `behavior` against the region's own roster, and the onboarding table is derived from it (two commonest chaff, the gentlest telegrapher). `nestIdFor` does the same for Nest Purge's keep, which had `wombden` hard-named. **When a system gains a new source of content, audit every place that names content directly** — the audit is cheap and the failure is invisible, because a hardcoded id always spawns something.
+
 **And it is cheap to check.** The parameters were three lines of schema away for the whole of both attempts. Reading the enum takes a minute; two round trips took thirty-two generations of budget and two rounds of wrong conclusions about the anchor.
 
 ### 13.1 The through-line
@@ -1993,7 +2031,7 @@ They are the same category as the seven checks above, and the same category as D
 
 **The weapon-cap pair used to name whichever two classes headed `SELECTABLE`, and it has now been pinned.** It read `toh_samurai`/`toh_necromancer` before the Druid gained a tree, then `toh_druid`/`toh_necromancer`, and when the Wizard's trees landed both positional references collapsed onto the Necromancer and the check reported the **same class twice**. `T1_REFERENCE` and `T2_REFERENCE` are now named constants (`toh_necromancer`, `toh_samurai`) covering 36 checks between them, so the strings stop moving. A set diff across this patch therefore shows `toh_druid weapon cap` leaving and `toh_samurai weapon cap` arriving: **the same two skipped checks, renamed once, deliberately, for the last time.**
 
-### Group E — built, working, and unreachable by a player (3)
+### Group E — built, working, and unreachable by a player (1)
 
 **THE RULE 71 SWEEP.** Three defects in a row had one shape: a sim-side system that worked, a gate that was green because it provisioned what the game never does, and no path from a real browser to it. The §5.6 opening card, unspent skill points and §4.1's difficulty ladder were each found by somebody playing rather than by a check. This group is the audit for the shape rather than the instances, and the answer was **several**, so it is a patch of its own rather than something folded into the tree conversion.
 
@@ -2002,8 +2040,11 @@ The mechanical half is cheap and covers the whole surface: **every `kind` the si
 | What | State | Evidence |
 |---|---|---|
 | **Respec at 1000 gold** (§9.4) | handler at `game.js:4174`, **no sender anywhere in `js/`** | `econ_gate` proves the respec ladder works; nothing can ask for it |
-| **The Shrine's choice** — a skill point or a guaranteed reroll (§2.4) | `shrineOffer()` exported from `nodebehaviour.js`, **called by nothing in `js/` or `tools/`** | the offer is constructed and never presented; the node resolves without the choice |
-| **World map region selection** (§3) | `worldMapState()` exported, **called by nothing** | §16 already says "Rules built, **no DOM**" — the one of the three that is documented rather than silent |
+
+
+**Two of the three closed on `patch-wire-regions`, and the second one was the whole reason the region layer had never executed.** `worldMapState` was a complete, tested projection of all eight regions with `enterable` flags and a stated lock reason per card — and the file it named in its own header, `js/ui/worldmap.js`, did not exist. `js/worldmap.js` was imported only for `DIFFICULTIES`, and `js/saves.js` only by `worldmap.js`, so the frontier, the unlocks, the parked trees and `partyCanEnter` were all module-reachable and completely dead. **165 commits passed with every gate green**, because `region_test` called `generateTree` and `canEnter` and `park` directly and never asked whether a running game reached them.
+
+`reach_gate` now asserts the whole surface rather than two named functions: **every export of `js/worldmap.js` and `js/saves.js` must have a caller in `js/`.** That check is what would have caught it, and its absence is what let a subsystem sit green and dead. Closing it wired `park`/`unpark` (§11.3 mid-region resume) and `exportBundle`/`importBundle` (§12's save export) as well, because both were equally dead and the gate does not distinguish.
 
 **Reachable, checked, and fine:** shop rerolls (`#shop-reroll`), item upgrades (the shop's buy path upgrades in place), loadout changes (the ◆ button, wherever `canSlot` holds), difficulty (fixed this patch).
 

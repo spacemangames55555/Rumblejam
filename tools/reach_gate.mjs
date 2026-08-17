@@ -89,22 +89,58 @@ if (!kinds || kinds.length < 5) {
   else if (Object.keys(FILED).length) ok(`all ${Object.keys(FILED).length} filed exemption(s) are still genuinely unreachable`);
 }
 
-// The two Group E rows that do not go through `uiAction` at all. Named
-// individually because they are not a pattern — each is one exported function
-// that nothing calls, and a generic "unused export" scan over this codebase
-// would drown in legitimate internals.
+// The two Group E rows that do not go through `uiAction` at all. Both are now
+// WIRED, so the assertion is inverted: they must keep having a caller.
 for (const [what, fn, where] of [
   ['the Shrine\'s choice (§2.4)', 'shrineOffer', 'js/nodebehaviour.js'],
   ['world map region selection (§3)', 'worldMapState', 'js/worldmap.js'],
 ]) {
   checks++;
-  // callers are references OUTSIDE the file that defines it
   const callers = files.filter(([n, src]) => n !== where && new RegExp(`\\b${fn}\\b`).test(src)).map(([n]) => n);
-  if (!callers.length) {
-    console.log(`✓ ${what}: still filed — \`${fn}\` is exported from ${where} and called by nothing in js/`);
+  if (callers.length) {
+    console.log(`✓ ${what}: \`${fn}\` is called from ${callers.join(', ')}`);
   } else {
     fails++;
-    console.log(`✗ ${what}: \`${fn}\` now has caller(s) (${callers.join(', ')}) — it is reachable, so remove the row from §15 Group E`);
+    console.log(`✗ ${what}: \`${fn}\` is exported from ${where} and called by NOTHING in js/ — it was wired once and has come loose`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// THE WHOLE PROGRESSION LAYER, NOT TWO NAMED FUNCTIONS.
+//
+// The two rows above were filed individually, and that framing is what let the
+// problem hide: `worldMapState` was the only name anybody wrote down, so the
+// gate stayed green about ONE function while the entire module behind it —
+// `partyCanEnter`, and through it every export of `js/saves.js`: `park`,
+// `unpark`, `onRegionCleared`, `canEnter`, `recordUnlock`, `loadAll`,
+// `saveAll` — sat equally dead. Module reachability said 92 of 93 files were
+// live, because `worldmap.js` WAS imported: for `DIFFICULTIES`, and for
+// nothing else. A file can be imported and still be a graveyard.
+//
+// So this asks the whole surface. Both files are progression, both are
+// per-character state that a run has to read and write, and an export of
+// either with no caller in `js/` is a promise the game does not keep.
+const SURFACE = ['js/worldmap.js', 'js/saves.js'];
+// Constants a UI reads by name rather than calling. Listed, because a gate that
+// silently skips half its subject is the exact defect this section exists for.
+const NON_CALLABLE = new Set(['SAVE_VERSION', 'DIFFICULTY_BY_ID', 'EXPORT_PROMPT_AFTER_REGION_CLEAR', 'STORAGE_WARNING']);
+
+for (const where of SURFACE) {
+  const entry = files.find(([n]) => n === where);
+  checks++;
+  if (!entry) { fails++; console.log(`✗ ${where} is missing — this gate is reading the wrong thing`); continue; }
+  const [, src] = entry;
+  const names = [...new Set([...src.matchAll(/^export (?:const|function|class)\s+(\w+)/gm)].map(m => m[1]))];
+  const dead = names.filter(n => !NON_CALLABLE.has(n)
+    && !files.some(([f, s2]) => f !== where && new RegExp(`\\b${n}\\b`).test(s2)));
+  if (dead.length) {
+    fails++;
+    console.log(`✗ ${where}: ${dead.length} of ${names.length} export(s) have no caller anywhere in js/: ${dead.join(', ')}`);
+    console.log('  A progression rule nothing calls is a rule the game does not have. This is the check whose '
+      + 'absence let the world map, the frontier, the unlocks and the parked trees sit green and dead for 165 commits.');
+  } else {
+    console.log(`✓ ${where}: all ${names.length - names.filter(n => NON_CALLABLE.has(n)).length} callable export(s) have a caller in js/`
+      + (names.some(n => NON_CALLABLE.has(n)) ? ` (${names.filter(n => NON_CALLABLE.has(n)).length} read as data, listed in NON_CALLABLE)` : ''));
   }
 }
 

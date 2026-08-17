@@ -76,8 +76,22 @@ function stage(skillId, twoPlayer = false, charOverride = null) {
   while (cur) { chain.unshift(cur); cur = tree.skills.find(s => s.id === cur.prereq); }
   for (const s of chain) { p.skillPoints++; spendSkillPoint(g, p, s.id); }
   for (let i = 1; i < RANK; i++) { p.skillPoints++; spendSkillPoint(g, p, skillId); }
-  const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+  // THE ROOM IS PINNED, and `open_expanse` is the one to pin: pure kiting
+  // space, no obstacles. Every other template puts architecture between the
+  // caster and a dummy spawned at a fixed offset — and §13's line-of-sight rule
+  // means walls block attacks for everyone, so a bolt into a pillar is a rider
+  // that "never lands". Taking whatever template the deck dealt is how `wd_pin`'s bolt reported its `doll` rider as never landing.
+  const node = g.floor.nodes.find(x => x.depth !== null && x.kind !== 'shrine');
+  node.template = 'open_expanse';
   g._travelTo(node.id);
+  // THE ROOM MUST STAY EMPTY, not merely start empty. Clearing the pool once
+  // leaves the WAVE running, so ambient spawns arrive throughout the window and
+  // stand between the probe and its pinned dummy — measured, that is what made
+  // `wd_pin`'s bolt report its `doll` rider as never landing. Both this and `econ_gate` cleared the pool
+  // and neither stopped the wave; it went unnoticed while every region fight
+  // drew the same thin base-roster table.
+  g.wave.done = true;
+  g.spawnQueue.length = 0;
   for (const e of [...g.enemyPool]) if (e.active) { e.hp = 0; e.active = false; }
   p.loadout = new Array(8).fill(null);
   p.loadout[0] = skillId;
