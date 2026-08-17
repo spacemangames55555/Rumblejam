@@ -98,6 +98,10 @@ Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
 
 Placement: Shrine, Cursed and Objective may not sit in column 1; both Elites may not share a column. Node type is **visible before selection** — the route decision does not exist otherwise.
 
+**The Bastion sanction is a RATIO, not a survival.** A camper in the profile that sanctions camping lasts **at least ×1.5 as long** as the same camper in the worst other profile, same room, same seed (`sim_test`). It is stated this way because the survival form encoded one roster: floor 1's table could not touch a statue at all, so "camping must work where sanctioned" was reading the absence of a roster rather than the presence of a sanction, and every roster change since has moved it. Measured — floor-1 control ×1.98–×2.35, region 1 ×1.66–×2.51, region 2 ×1.38–×1.73. The control's figure is a lower bound: its camper never dies, so its numerator is the length of the fight rather than its survival capacity.
+
+**A camper still dying is the density working.** Region 1 kills a level-12 contact tank at 74–82s and region 2 at 37–43s. That is 58% and 59% telegraph density doing what §3.5 says it is for — a stance that cannot be punished is not a decision — and it is not a regression to be tuned away.
+
 **Which two objectives a region deals.** Two of the eight, never the same type twice inside one region, weighted toward what the player has not seen lately: `w(t) = min(4, regions since t was last dealt)`, with a never-seen type at the maximum. Sixteen draws across a full run, so the bias is what stops a playthrough dealing Nest Purge five times and Payload never — measured, a type dealt in the previous region comes back **11%** of the time against ~25% for a flat draw. Recency is the RUN's own history rather than the save: §11.3 lets a guest play the host's rolled tree, which is only coherent if the host can roll it from things the host has.
 
 **What each type is for.** §2.3 exists to create a route decision, and a route decision needs the nodes to reward different builds. The deep-versus-wide sweep at the level-70 anchor (`tools/shape_by_node.mjs`) says they do, and says which way:
@@ -292,6 +296,10 @@ Authored per region band, not computed from a global curve. Expected player leve
 | Level | 1 | 10 | 19 | 28 | 37 | 46 | 55 | 64 |
 
 If a party arrives significantly above or below the anchor, that is the difficulty setting doing its job, not a bug.
+
+**EVERY REGION'S ROSTER IS AUTHORED AT FLOOR-1 PARITY. THE WORLD AXIS IS THE SOLE DIFFICULTY MULTIPLIER.** A roster is authored to a weighted mean of **7.9 HP and 3.45 damage**, ±15%, whatever its index — the same band for region 1 and region 8 — and the table above is what makes region 8 harder than region 1. A roster that also carries band scaling multiplies the axis a second time: Central America was authored at ×3.3 the floor-1 table *and* multiplied by ×2.13, arriving at 7.02× floor 1 for a player roughly 2.1× stronger.
+
+**A region's identity is composition, never weight** — which behaviours it fields, what shapes its telegraphs draw, how its slabs and its lights are distributed. Region 1 teaches circle, cone and line separately with small close zones; region 2 overlaps them, fields an orbiter region 1 has no equivalent of, and keeps three chaff archetypes where region 1 has two. Two regions with identical weighted means can play nothing alike; two differing only in weight are the same region twice with one of them wrong. `tools/roster_weight_gate.mjs` asserts the band on every built region, and **reports the composed figure without gating it** — composed is `mean × axis`, a derived quantity, and gating it would invite satisfying the check by moving the axis, which is the one number here that was measured rather than authored.
 
 **The weight has to be in the multiplier, not in the units.** Region 1 replaces floor 1 at ×1.00, so its roster should weigh what floor 1's table weighed — and the first version did not: ×2.14 the weighted mean HP and ×1.69 the damage, all of it authored into the units. The cause was a coupling rather than a tuning error. §3.5 requires ≥50% telegraph density for readability, and the only behaviours permitted to telegraph were the three the roster had authored as slabs, so **a readability goal imported a weight goal.** Telegraph is an animation and timing property; it has no necessary relationship to HP. Region 1 needs the most density and the least weight, and it had the most of both. `tools/roster_weight_gate.mjs` now asserts both halves together, because either alone is satisfiable by breaking the other.
 
@@ -1916,6 +1924,16 @@ This generalises past art. The same shape is any place we describe in a string w
 `js/worldmap.js` was imported by `js/main.js` and `js/ui/screens.js`, so an import-graph walk from `index.html` reported 92 of 93 modules live. Both importers wanted `DIFFICULTIES`. `worldMapState`, `partyCanEnter`, and through them every export of `js/saves.js` — `park`, `unpark`, `canEnter`, `onRegionCleared`, `recordUnlock`, `exportBundle`, `importBundle` — had no caller anywhere. **The region layer had never executed in 165 commits**, and the one thing that would have said so was a check on the EXPORT surface rather than on the file list.
 
 `reach_gate` had two rows for this, naming `shrineOffer` and `worldMapState` individually, and that framing is what let it hide: the gate stayed green about one function while the module behind it was equally dead. It now asserts every export of both progression files. **Name the surface, not the instance** — the instances you write down are the ones you already know about.
+
+79. **A check that passes because its subject is absent is not a passing check.** "Camping must work where sanctioned" was green for the life of the floor-1 roster, and the reason was that the roster could not touch a statue at all.
+
+Measured, a camping level-12 Blacksmith took **zero damage** in a floor-1 Bastion room. The assertion was reading the absence of pressure as the presence of a sanction, so every roster with any pressure in it broke the check — region 1's five reds, then region 2's — and each time the roster looked like the regression. The Bastion profile's actual claim is comparative: a single front is a queue, and holding ground against a queue beats holding it anywhere else. Stated as a RATIO against the worst other profile in the same room on the same seed, it survives a roster change because both sides move together.
+
+**When a check has never failed, ask what would have to be true for it to fail.** If the answer is "the thing it measures would have to exist", it has been measuring nothing.
+
+80. **The bound you calibrate from is often a floor rather than a ceiling, and pinning a gate to the top of a noisy band asserts the noise.** The floor-1 control's sanction ratio measured ×1.98, and that is the least the sanction is worth there, not the most: the camper never dies, so the numerator is the length of the FIGHT rather than its survival capacity.
+
+The same room also measured ×1.89 standalone and ×1.66 inside the suite — KNOWN-DEFECTS #1 has `rushMove()` drawing from global `Math.random()`, so a fixture's result depends on how many fixtures ran before it. A floor set at 1.75 would have been calibrated to one end of that spread and would fail on ordering. Set at 1.5 it sits below every observation on every roster and still states the claim.
 
 77. **A set's NAME is a claim, and content will be authored to it.** `HEAVY_BEHAVIORS` governed which units may telegraph — a timing property — and every roster authored to the word.
 

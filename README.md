@@ -650,11 +650,14 @@ never loads them:
   siege-boss regression (known defect #5) and the `windupMs` reaction floor.
 - `node tools/roster_weight_gate.mjs [--verbose]` — **telegraph density and
   roster weight, asserted together**, because either alone is satisfiable by
-  breaking the other. A region's telegraphing share must clear the 50% floor;
-  region 1's weighted mean HP and damage must sit within ±15% of the floor-1
-  table it replaces at ×1.00; and at least two of its telegraphers must be below
-  its own median HP, so the read can be learned on something that dies. Later
-  regions are reported with their world multiplier composed in, not gated.
+  breaking the other. For EVERY built region: the telegraphing share clears the
+  50% floor; the weighted mean HP and damage sit within ±15% of the floor-1
+  table (7.9 / 3.45 — the same band at every index, because the world axis is
+  the sole difficulty multiplier and a roster carrying band scaling multiplies
+  it twice); and at least two telegraphers sit below the roster's own median HP,
+  so the read can be learned on something that dies. The composed figure
+  (`mean × axis`) is printed and never gated — gating a derived number invites
+  satisfying the check by moving the axis.
 - `node tools/region_wire_gate.mjs` — **the region layer, asserted by effect from
   the entry point `main.js` uses.** Every check constructs `new Sim({seed, party,
   regionIndex})` and reads what came out; none assigns a region by hand. Five maps

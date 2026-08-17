@@ -17,18 +17,34 @@
 // at all — wants exactly that. So this gate asserts both halves at once:
 //
 //   A. Telegraph density ≥ the declared floor, by encounter weight.
-//   B. Weighted mean HP and damage within a band of the table the region
-//      replaces, at the region's own world multiplier.
+//   B. Weighted mean HP and damage within a band of the FLOOR-1 TABLE — the
+//      same band for every region, 1 through 8.
 //   C. At least two telegraphers BELOW the roster's median HP, so the read can
 //      be learned against something that dies before the lesson is punishing.
 //      A and B together are still satisfiable by one 4-HP telegrapher carrying
 //      the density while every other committing unit is a slab.
 //
-// WHY A BAND AND NOT A NUMBER. `FLOOR_TABLES[0]` is the roster region 1
-// replaced, and region 1 sits at ×1.00 on the world axis, so parity is the
-// target rather than an aspiration. Later regions carry their own multiplier
-// and are REPORTED rather than gated — the composed figure is what matters
-// there, and deciding it is a separate patch.
+// EVERY REGION'S ROSTER IS AUTHORED AT FLOOR-1 PARITY. THE WORLD AXIS IS THE
+// SOLE DIFFICULTY MULTIPLIER.
+//
+// This is the rule the gate exists to hold, and it is not a region-1 rule with
+// exceptions. `REGION_HP_MULT` already scales every region's enemies — it is
+// measured against player output at each of §4.3's level anchors, and it is
+// applied to authored HP at spawn. A roster that ALSO carries band scaling
+// multiplies the axis a second time: Central America was authored at ×3.3 the
+// floor-1 table and then multiplied by ×2.13, arriving at 7.02× floor 1 for a
+// player who is roughly 2.1× stronger.
+//
+// So a region's identity is COMPOSITION — which behaviours it fields, what
+// shapes its telegraphs draw, how its slabs and its lights are distributed —
+// and never weight. Two regions with identical weighted means can play nothing
+// alike; two regions differing only in weight are the same region twice with
+// one of them wrong.
+//
+// THE COMPOSED FIGURE IS REPORTED AND NEVER GATED. It is `mean × axis`, a
+// derived quantity, and gating it would invite satisfying the check by moving
+// the axis — which is the one number here that was measured rather than
+// authored (`tools/region_curve.mjs`).
 //
 // Usage: node tools/roster_weight_gate.mjs [--verbose]
 import { REGION_ENEMIES, telegraphWeight, MIN_TELEGRAPH_WEIGHT } from '../js/content/regions-enemies.js';
@@ -60,10 +76,12 @@ const REF_HP = weightedMean(FLOOR1, e => e.hp);
 const REF_DMG = weightedMean(FLOOR1, e => e.dmg);
 const BAND = 0.15;
 
-// GATED REGIONS are the ones whose reference is known. Region 1 replaces floor
-// 1 at ×1.00; every later region multiplies, and what its parity target should
-// be is an open design question rather than something this gate may invent.
-const GATED = new Set([1]);
+// EVERY BUILT REGION IS GATED. There is no such thing as a region whose roster
+// band is an open question: the band is floor-1 parity, always, and the world
+// axis carries the difficulty. A region added to `REGIONS` is gated the day it
+// is added, with no list here to remember to update — which is the point, since
+// a gate with an opt-in list is a gate that is green about whatever is not on
+// it (§13 rule 73).
 
 console.log('ROSTER WEIGHT AND TELEGRAPH DENSITY — the two halves of one coupling\n');
 console.log(`reference: floor-1 table (${FLOOR_TABLES[0].join(', ')}) — weighted mean HP ${REF_HP.toFixed(1)}, damage ${REF_DMG.toFixed(2)}`);
@@ -76,9 +94,7 @@ for (const region of REGIONS) {
   const dmg = weightedMean(units, e => e.dmg);
   const med = median(units.map(e => e.hp));
   const lightTel = units.filter(e => e.telegraph && e.hp < med);
-  const gated = GATED.has(region.index);
-
-  console.log(`── region ${region.index} · ${region.name}${gated ? '' : '  (reported, not gated)'}`);
+  console.log(`── region ${region.index} · ${region.name}`);
   if (VERBOSE) {
     for (const e of [...units].sort((a, b) => a.hp - b.hp)) {
       console.log(`     ${e.id.padEnd(20)} hp ${String(e.hp).padStart(3)}  dmg ${String(e.dmg).padStart(2)}`
@@ -94,32 +110,28 @@ for (const region of REGIONS) {
       + 'weight relief must not be bought by removing telegraphs');
   }
 
-  // ---- B. the weight band ----
-  const composedHp = hp * regionHpMult(region.index);
-  const composedDmg = dmg * regionDmgMult(region.index);
-  if (gated) {
-    const hpOff = (hp - REF_HP) / REF_HP, dmgOff = (dmg - REF_DMG) / REF_DMG;
-    if (Math.abs(hpOff) <= BAND) ok(`region ${region.index} weighted mean HP ${hp.toFixed(1)} — ${(hpOff * 100 >= 0 ? '+' : '')}${(hpOff * 100).toFixed(1)}% against the floor-1 table it replaces`);
-    else bad(`region ${region.index} weighted mean HP ${hp.toFixed(1)} is ${(hpOff * 100 >= 0 ? '+' : '')}${(hpOff * 100).toFixed(1)}% against the floor-1 table's ${REF_HP.toFixed(1)} — `
-      + `region ${region.index} sits at ×${regionHpMult(region.index).toFixed(2)} on the world axis, so the weight is in the units themselves`);
+  // ---- B. the weight band, same band for every region ----
+  const hpOff = (hp - REF_HP) / REF_HP, dmgOff = (dmg - REF_DMG) / REF_DMG;
+  if (Math.abs(hpOff) <= BAND) ok(`region ${region.index} weighted mean HP ${hp.toFixed(1)} — ${(hpOff * 100 >= 0 ? '+' : '')}${(hpOff * 100).toFixed(1)}% against floor-1 parity`);
+  else bad(`region ${region.index} weighted mean HP ${hp.toFixed(1)} is ${(hpOff * 100 >= 0 ? '+' : '')}${(hpOff * 100).toFixed(1)}% against the floor-1 table's ${REF_HP.toFixed(1)} — `
+    + `the world axis already multiplies this region by ×${regionHpMult(region.index).toFixed(2)}, so authored weight above parity is a second difficulty multiplier`);
 
-    if (Math.abs(dmgOff) <= BAND) ok(`region ${region.index} weighted mean contact damage ${dmg.toFixed(2)} — ${(dmgOff * 100 >= 0 ? '+' : '')}${(dmgOff * 100).toFixed(1)}%`);
-    else bad(`region ${region.index} weighted mean contact damage ${dmg.toFixed(2)} is ${(dmgOff * 100 >= 0 ? '+' : '')}${(dmgOff * 100).toFixed(1)}% against ${REF_DMG.toFixed(2)}`);
+  if (Math.abs(dmgOff) <= BAND) ok(`region ${region.index} weighted mean contact damage ${dmg.toFixed(2)} — ${(dmgOff * 100 >= 0 ? '+' : '')}${(dmgOff * 100).toFixed(1)}%`);
+  else bad(`region ${region.index} weighted mean contact damage ${dmg.toFixed(2)} is ${(dmgOff * 100 >= 0 ? '+' : '')}${(dmgOff * 100).toFixed(1)}% against ${REF_DMG.toFixed(2)}`);
 
-    // ---- C. the coupling, broken and asserted broken ----
-    if (lightTel.length >= 2) {
-      ok(`region ${region.index} has ${lightTel.length} telegrapher(s) below its median HP of ${med} (${lightTel.map(e => `${e.id} ${e.hp}`).join(', ')}) — the read can be learned on something that dies`);
-    } else {
-      bad(`region ${region.index} has ${lightTel.length} telegrapher(s) below its median HP of ${med} — want at least 2. `
-        + 'Density and mean weight can BOTH be satisfied while every committing unit is a slab and one 4-HP outlier carries the average; '
-        + 'this is the check that says the coupling is actually broken rather than averaged around');
-    }
+  // ---- C. the coupling, broken and asserted broken ----
+  if (lightTel.length >= 2) {
+    ok(`region ${region.index} has ${lightTel.length} telegrapher(s) below its median HP of ${med} (${lightTel.map(e => `${e.id} ${e.hp}`).join(', ')}) — the read can be learned on something that dies`);
   } else {
-    checks++;
-    console.log(`✓ REPORTED, not gated: region ${region.index} weighted mean HP ${hp.toFixed(1)} (×${regionHpMult(region.index).toFixed(2)} world axis = **${composedHp.toFixed(1)} composed**, `
-      + `${(composedHp / REF_HP).toFixed(2)}× the floor-1 table), damage ${dmg.toFixed(2)} (composed ${composedDmg.toFixed(2)}, ${(composedDmg / REF_DMG).toFixed(2)}×). `
-      + `${lightTel.length} telegrapher(s) below its median HP of ${med}.`);
+    bad(`region ${region.index} has ${lightTel.length} telegrapher(s) below its median HP of ${med} — want at least 2. `
+      + 'Density and mean weight can BOTH be satisfied while every committing unit is a slab and one 4-HP outlier carries the average; '
+      + 'this is the check that says the coupling is actually broken rather than averaged around');
   }
+
+  // ---- reported, never gated: what the axis makes of it ----
+  console.log(`  · composed: HP ${(hp * regionHpMult(region.index)).toFixed(1)} (${(hp * regionHpMult(region.index) / REF_HP).toFixed(2)}× floor 1), `
+    + `damage ${(dmg * regionDmgMult(region.index)).toFixed(2)} (${(dmg * regionDmgMult(region.index) / REF_DMG).toFixed(2)}×) `
+    + `— derived from the ×${regionHpMult(region.index).toFixed(2)} world axis, not asserted`);
   console.log('');
 }
 
