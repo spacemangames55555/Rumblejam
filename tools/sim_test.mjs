@@ -23,7 +23,7 @@ import { WEAPONS } from '../js/content/weapons.js';
 import { ENEMIES } from '../js/content/enemies.js';
 import { BOSSES } from '../js/content/bosses.js';
 import { STAT_KEYS } from '../js/config.js';
-import { generateFloorMap } from '../js/dungeon.js';
+import { generateFloorMap, OPENING_FLOOR, OPENING_SKIRMISH_COLUMNS, OPENING_SPECIALS } from '../js/dungeon.js';
 import { OBJECTIVE_KINDS as OBJ_KINDS, BOUNTY_HP_MULT } from '../js/objectives.js';
 import { CONFIG as CFG } from '../js/config.js';
 import { isOnboardingNode } from '../js/arenas.js';
@@ -1158,7 +1158,13 @@ try {
     // as today. Its trait is fully implemented; only its tree is missing.
     const s = new Sim({ seed: 4242, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'ST', charId, color: '#fff' }] });
     armBot(s, s.players[0]);
-    const node = s.floor.nodes.find(n => n.kind === 'combat');
+    // NOT map 1. This gate's claim is about PROFILES and TEMPLATES — "a median
+    // character standing still must die outside Bastion" — and it picked the
+    // first combat node, which used to be a standard 65 s arena. Map 1 is now
+    // deliberately half-length (the same enemies at double rate, dungeon.js
+    // OPENING_*), so a statue outlives the wave and the gate started measuring
+    // the opening instead of the profile. Same claim, on a full-length map.
+    const node = s.floor.nodes.find(n => n.kind === 'combat' && n.col > CFG.OPENING_RATE_COLUMN);
     node.profile = profileKey; node.template = template;
     s._travelTo(node.id);
     let t = 0;
@@ -1632,9 +1638,27 @@ try {
         const c = {};
         for (const n of fights) { c[n.kind] = (c[n.kind] || 0) + 1; seen[n.kind] = 1; }
         const horde = c.combat || 0;
+        if (fights.length !== 12) { bad++; continue; }
+        // THE OPENING FLOOR HAS ITS OWN RULED ROSTER. Floor 1's first three
+        // columns are plain skirmishes (dungeon.js OPENING_*), which is SEVEN
+        // hordes — one past HORDE_MAX — and leaves exactly five specials. So
+        // floor 1 is checked against that ruling and floors 2-4 against the
+        // original spec, rather than widening the original until both fit: a
+        // band loose enough to admit two different rosters admits a third
+        // nobody meant.
+        if (f === OPENING_FLOOR) {
+          const want = {};
+          for (const k of OPENING_SPECIALS) want[k] = (want[k] || 0) + 1;
+          const openHordes = 12 - OPENING_SPECIALS.length;
+          if (horde !== openHordes) { bad++; continue; }
+          if (Object.entries(want).some(([k, n]) => (c[k] || 0) !== n)) { bad++; continue; }
+          // and every one of them is in the opening columns
+          if (map.nodes.some(n => n.col < OPENING_SKIRMISH_COLUMNS && n.kind !== 'combat')) { bad++; continue; }
+          if (!map.nodes.some(n => n.kind === 'shop') || !map.nodes.some(n => n.kind === 'treasure')) bad++;
+          continue;
+        }
         hordeLo = Math.min(hordeLo, horde); hordeHi = Math.max(hordeHi, horde);
-        if (fights.length !== 12) bad++;
-        else if (horde < HORDE_MIN || horde > HORDE_MAX) bad++;
+        if (horde < HORDE_MIN || horde > HORDE_MAX) bad++;
         else if ((c.nest || 0) !== 1 || (c.bounty || 0) !== 1 || (c.breach || 0) !== 1) bad++;
         else if ((c.zone || 0) < 1 || (c.zone || 0) > 2 || (c.elite_arena || 0) < 1 || (c.elite_arena || 0) > 2) bad++;
         else if (f % 2 === 1 ? ((c.relic || 0) !== 1 || (c.storm || 0) !== 1) : (c.payload || 0) !== 1) bad++;

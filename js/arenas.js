@@ -221,7 +221,33 @@ export function isOnboardingNode(floorNum, node) {
 export function waveConfig(floorNum, depth, kind) {
   const elite = kind === 'elite';
   const siege = kind === 'siege';
-  const dur = siege ? Infinity : Math.round(60 + depth * 5 + floorNum * 5); // 60–90s
+
+  // MAP 1 SPAWNS AT DOUBLE RATE, AND RATE AND DURATION MOVE TOGETHER.
+  //
+  // That pairing is the whole ruling. A horde's total spend is `mean rate x
+  // dur` (see hordeTotalSpawns) and the level clears when the wave is done AND
+  // the field is empty — it is a TIMED WAVE, not a fixed roster. So doubling
+  // the rate alone would field twice the enemies over the same 65s, which is a
+  // harder map, not a faster one.
+  //
+  // The ruling was "the same fight, arriving twice as fast", so the multiplier
+  // doubles r0/r1 and halves `dur` in the same breath. The integral is
+  // identical by construction:
+  //   ((2*r0 + 2*r1) / 2) * (dur / 2) === ((r0 + r1) / 2) * dur
+  //
+  // Splitting those two lines apart is how this silently becomes a difficulty
+  // change nobody voted for, which is why they are adjacent and why
+  // region_opening_gate asserts the COUNT is unchanged as well as the rate
+  // being doubled.
+  const opening = floorNum === CONFIG.OPENING_FLOOR && depth === CONFIG.OPENING_RATE_COLUMN;
+  const rateMult = opening ? CONFIG.OPENING_RATE_MULT : 1;
+
+  // NOT rounded. `Math.round` was cosmetic while every duration was an integer,
+  // and it stays a no-op at rateMult 1 — but halving an ODD duration and then
+  // rounding puts 1.5% of extra spawns into map 1, which is exactly the silent
+  // difficulty change the pairing above exists to prevent. `dur` is compared
+  // against elapsed seconds; a fractional one is fine.
+  const dur = siege ? Infinity : (60 + depth * 5 + floorNum * 5) / rateMult; // 60–90s
   // floor 1 is the baseline a one-weapon starting kit can chew through
   // (~0.6 kills/sec organic); later floors outpace it and force build growth
   // AN ELITE NODE NO LONGER BUMPS ITS SPAWN RATE (D-24). It used to add +0.2
@@ -232,8 +258,8 @@ export function waveConfig(floorNum, depth, kind) {
   // it arrives through nodeModifiers(); leaving this bump in place would have
   // multiplied against it rather than agreeing with it.
   const onb = onboardingMult(floorNum, depth);
-  const r0 = (0.5 + 0.25 * (floorNum - 1)) * onb;
-  const r1 = (1.2 + 0.55 * (floorNum - 1) + 0.18 * depth) * onb;
+  const r0 = (0.5 + 0.25 * (floorNum - 1)) * onb * rateMult;
+  const r1 = (1.2 + 0.55 * (floorNum - 1) + 0.18 * depth) * onb * rateMult;
   return {
     t: 0, acc: 0, dur, r0, r1,
     rampT: siege ? 150 : dur,          // sieges plateau at 150s and hold

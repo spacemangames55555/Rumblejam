@@ -148,6 +148,21 @@ export const CONFIG = {
   CASCADE_CD_RATE: 0.08,
   CASCADE_CD_FLOOR: 0.5,
 
+  // ---------------------------------------------------------- the opening
+  //
+  // Floor 1's first three maps are plain skirmishes and its first map spawns at
+  // double rate. The numbers live HERE rather than in dungeon.js because two
+  // modules need them and dungeon.js cannot be one of the sources: it imports
+  // arenas.js, so arenas.js importing it back would be a cycle. config.js is
+  // the leaf both already read.
+  //
+  // The rationale for each is at its use site — dungeon.js for the skirmish
+  // columns, arenas.js `waveConfig` for the rate/duration pairing.
+  OPENING_FLOOR: 1,
+  OPENING_SKIRMISH_COLUMNS: 3,      // columns 0,1,2 of the opening floor
+  OPENING_RATE_COLUMN: 0,           // map 1 only
+  OPENING_RATE_MULT: 2,
+
   // RANK SHORTENS THE SKILL'S OWN COOLDOWN, and §4.2 was rewritten to allow it.
   //
   // The old rule was "ranks may not touch cooldown", and its reason was sound:
