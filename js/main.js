@@ -21,6 +21,9 @@ import { ensureAudio, sfx, preloadAirhorn, levelupHorn, audioStats, getCtxState,
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
 import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
+import { initWorldMap, showWorldMap, hideWorldMap, isWorldMapOpen } from './ui/worldmap.js';
+import { loadAll, saveAll, newCharacter, newPlayerStore, onRegionCleared, recordUnlock, validateCharacter,
+  park, unpark, exportBundle, importBundle, STORAGE_WARNING } from './saves.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
 import { DEFAULT_DIFFICULTY } from './worldmap.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening, showSkills, closeSkills, isSkillsOpen, updateSkillsMeta } from './ui/overlays.js';
@@ -29,7 +32,8 @@ import { tohSnapshot, tohMarks, tohState, TOH_STANCE_NAMES } from './traits-toh.
 import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
 import { ENEMIES } from './content/enemies.js';
-import { BOSSES } from './content/bosses.js';
+import { ALL_BOSS_DEFS } from './content/bosses.js';
+import { bossForRegion, TOTAL_REGIONS } from './regions.js';
 import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
 import { projSpriteFor, PYLON_SPRITE } from './content/sprites.js';
 import { clamp } from './util.js';
@@ -38,12 +42,12 @@ const { WALL } = CONFIG;
 
 // ---------------- boot ----------------
 
-console.log(`%cUNDERVAULT%c content loaded — characters: ${CHARACTERS.length}, items: ${ITEMS.length}, weapons: ${WEAPONS.length}, enemy types: ${ENEMIES.length}, bosses: ${BOSSES.length}, sprites: ${SPRITE_MODE}`,
+console.log(`%cUNDERVAULT%c content loaded — characters: ${CHARACTERS.length}, items: ${ITEMS.length}, weapons: ${WEAPONS.length}, enemy types: ${ENEMIES.length}, bosses: ${ALL_BOSS_DEFS.length}, sprites: ${SPRITE_MODE}`,
   'color:#ffd45e;font-weight:bold;font-size:16px', 'color:inherit');
 console.assert(CHARACTERS.length === 33, 'need exactly 33 characters');
 console.assert(ITEMS.length >= 100, 'need ≥100 items');
 console.assert(WEAPONS.length === 26, 'need exactly 26 weapons');
-console.assert(ENEMIES.length === 12 && BOSSES.length === 4, 'need 12 enemy types + 4 bosses');
+console.assert(ENEMIES.length === 12 && ALL_BOSS_DEFS.length === 6, 'need 12 base enemy types + 6 bosses (4 legacy + 2 region)');
 
 const canvas = document.getElementById('game-canvas');
 const renderer = new Renderer(canvas);
@@ -64,7 +68,13 @@ const app = {
   myKey: '_local',
   meta: null,             // my latest private meta
   metas: {},              // host: last metas per idx (for HUD)
-  floorNum: 1,
+  regionIndex: 1,
+  regionName: '',
+  // ---- the progression layer, which had no entry point until the world map ----
+  characters: [],         // every saved character on this device
+  player: null,           // the player-level store (unlocked classes)
+  character: null,        // the one being played this run
+  objectiveHistory: [],   // objectives dealt in earlier regions of this sitting
   map: null,              // latest 'map' event (node layout + reachable)
   arena: null,            // latest 'arena' event (dims + obstacles)
   runMode: 'map',         // 'map' | 'arena'
@@ -98,7 +108,17 @@ const actions = {
     refreshLobby();
     broadcastLobby();
   },
-  startGame: hostStartRun,
+  startGame: hostOpenWorldMap,
+  storageWarning: STORAGE_WARNING,
+  exportSaves: () => ({ text: exportBundle(app.characters, app.player), name: 'undervault-saves.json' }),
+  importSaves: (text) => {
+    const r = importBundle(text);
+    if (!r.ok) return r;
+    app.characters = r.characters;
+    app.player = r.player;
+    saveAll(app.characters, app.player);
+    return { ok: true, count: r.characters.length };
+  },
 };
 // Sprites start loading NOW, at page load, while the player is still reading
 // the title and picking a character — not at game start, where a stall would
@@ -113,6 +133,61 @@ initMapScreen({
   pickNode: nodeId => sendUi({ kind: 'pickNode', nodeId }),
   reopenShop: () => sendUi({ kind: 'reopenShop' }),
 });
+initWorldMap({
+  enterRegion: hostEnterRegion,
+  back: () => { hideWorldMap(); refreshLobby(); },
+});
+
+// ---------------- saves & the world map ----------------
+//
+// Loaded once at boot. A save that fails validation is REPORTED and dropped
+// rather than repaired: `validateCharacter` exists precisely because a bundle
+// from a file is untrusted input, and silently fixing one is how a corrupt save
+// becomes a permanent corrupt save.
+{
+  const loaded = loadAll();
+  app.player = loaded.player || newPlayerStore();
+  app.characters = loaded.characters.filter(c => {
+    const problems = validateCharacter(c);
+    if (problems.length) console.log(`[saves] dropping character ${c && c.name}: ${problems.join('; ')}`);
+    return !problems.length;
+  });
+}
+
+// One character per class on this device. The lobby's pick IS the character
+// choice — §3.4 unlocks live on the player and the point of unlocking a class
+// is to create a NEW character of it, so a class maps to a character rather
+// than the other way round.
+function characterFor(classId) {
+  let c = app.characters.find(x => x.class === classId);
+  if (!c) {
+    c = newCharacter(`c_${classId}_${app.characters.length + 1}`, classId, { name: currentName() });
+    app.characters.push(c);
+    saveAll(app.characters, app.player);
+  }
+  return c;
+}
+
+function hostOpenWorldMap() {
+  const l = app.lobby;
+  if (!l || !l.players.every(p => p.charId && (p.ready || p.isHost))) return;
+  const me = l.players.find(p => p.isHost) || l.players[0];
+  app.character = characterFor(me.charId);
+  app.objectiveHistory = [];
+  hideScreens();
+  showWorldMap(app.character, app.player, { canLeave: true });
+}
+
+// SELECTION, THEN THE RUN. The world map picks an index and nothing else; this
+// is where that index becomes a Sim. `partyCanEnter` is not consulted for a
+// solo host — the card was already inert if the host could not enter it, and
+// the multi-character party check belongs with real per-peer saves, which do
+// not travel yet.
+function hostEnterRegion(regionIndex) {
+  hideWorldMap();
+  app.regionIndex = regionIndex;
+  hostStartRun();
+}
 initOverlays({
   buy: slot => sendUi({ kind: 'buy', slot }),
   swapBuy: (slot, sell, sellId, sellTier) => sendUi({ kind: 'swapBuy', slot, sell, sellId, sellTier }),
@@ -262,7 +337,23 @@ function initLeaveButton() {
 // lobby — connections and room code intact, ready for a fresh run/seed.
 function hostAbandonRun() {
   if (app.role !== 'host' || !app.sim) return;
+  parkCurrentRegion();      // §11.3 — the region is left, not lost
   hostReturnToLobby(false); // abandoning keeps your picks; a defeat clears them
+}
+
+// §11.3 — MID-REGION STATE PARKS. Walking out of a region halfway through
+// stores the rolled tree and the nodes already cleared on the CHARACTER, so
+// re-entering resumes the same region rather than rolling a new one. A tree is
+// state by §12's rule: losing it costs a run, not a floor.
+//
+// Deliberately not called on a wipe. §11.1 says a party wipe RESETS the region
+// and regenerates the tree — "a failed region never replays identically" — so
+// a wipe must clear the park rather than write one.
+function parkCurrentRegion() {
+  const sim = app.sim;
+  if (!sim || !app.character || sim.over) return;
+  park(app.character, sim.regionIndex, sim.floor, sim.clearedKeys(), sim.difficulty);
+  saveAll(app.characters, app.player);
 }
 
 // A run ending is not the end of the session. The whole party goes back to
@@ -515,9 +606,16 @@ function hostStartRun() {
     // a desync guard; it is so a client KNOWS what it agreed to play, and so a
     // later client-side predictor inherits the setting rather than defaulting.
     const difficulty = app.lobby.difficulty || DEFAULT_DIFFICULTY;
-    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, party: app.party, difficulty });
+    const regionIndex = app.regionIndex || 1;
+    // A parked region resumes: same tree, same cleared nodes. `unpark` returns
+    // null for every other region, which is the whole of the check.
+    const parked = app.character ? unpark(app.character, regionIndex) : null;
+    if (app.hostT) app.hostT.broadcast({ t: 'start', seed, party: app.party, difficulty, regionIndex });
     startRunCommon();
-    app.sim = new Sim({ seed, party: app.party, difficulty });
+    app.sim = new Sim({ seed, party: app.party, difficulty, regionIndex,
+      objectiveHistory: app.objectiveHistory,
+      tree: parked ? parked.tree : null, cleared: parked ? parked.cleared : [] });
+    if (parked) console.log(`[world] resumed region ${regionIndex} — ${parked.cleared.length} node(s) already cleared`);
     drainSimOutputs(true); // deliver initial floor/room events
   });
 }
@@ -555,7 +653,7 @@ function startRunCommon() {
   app.metas = {};
   app.snaps = [];
   app.lastSnapAt = performance.now(); // grace window before the no-snapshot watchdog may fire
-  banner('THE UNDERVAULT', 'Floor 1', 2000);
+  banner('THE UNDERVAULT', app.regionName || `Region ${app.regionIndex}`, 2000);
 }
 
 // ---------------- lobby: client ----------------
@@ -681,6 +779,9 @@ function clientOnMessage(msg) {
       }
       app.party = party;
       app.myIdx = me.idx;
+      // The host chose the region; a client needs it before the first snapshot
+      // so its HUD, its banner and its boss silhouette are not guessing.
+      app.regionIndex = Math.max(1, Math.min(TOTAL_REGIONS, (msg.regionIndex | 0) || 1));
       gateOnAssets(() => {
         if (app.role !== 'client') return;   // dropped while we waited
         startRunCommon();
@@ -834,11 +935,11 @@ function applySnapState(snap) {
 
   // ---- the node map ----
   if (st.map) {
-    const newFloor = !app.map || app.map.floorNum !== st.map.floorNum;
+    const newRegion = !app.map || app.map.regionIndex !== st.map.regionIndex;
     app.map = st.map;
     app.arena = null;
     app.runMode = 'map';
-    if (newFloor) { app.floorNum = st.map.floorNum; app.bossInfo = null; }
+    if (newRegion) { app.regionIndex = st.map.regionIndex; app.regionName = st.map.regionName || ''; app.bossInfo = null; }
   } else if (st.arena) {
     // ---- the room, including walls that moved mid-siege ----
     app.arena = st.arena;
@@ -884,15 +985,15 @@ function handleEvent(ev) {
   switch (ev.k) {
     case 'sfx': if (sfx[ev.s]) sfx[ev.s](); break;
     case 'map': {
-      const newFloor = !app.map || app.map.floorNum !== ev.floorNum;
+      const newRegion = !app.map || app.map.regionIndex !== ev.regionIndex;
       app.map = ev;
       app.arena = null;
       app.runMode = 'map';
       app.bossInfo = null;
-      if (newFloor) {
-        app.floorNum = ev.floorNum;
+      if (newRegion) {
+        app.regionIndex = ev.regionIndex;
+        app.regionName = ev.regionName || '';
         closeAllOverlays();
-        if (ev.floorNum > 1) banner(`FLOOR ${ev.floorNum}`, ['', 'The walls weep rust.', 'Something hums below.', 'The Vault is awake.'][ev.floorNum - 1] || '', 2200);
       }
       if (app.mode === 'run') showMapScreen(mapScreenState());
       break;
@@ -958,6 +1059,18 @@ function handleEvent(ev) {
       showHud(false);
       closeAllOverlays();
       hideMapScreen();
+      // §11.2 — THE FRONTIER MOVES ON A BOSS KILL, and this is where. The rule
+      // and the store have existed since the region shell; nothing called them
+      // because nothing could finish a region. Advancement is on PRESENCE at
+      // the kill, so it is unconditional on who dealt the damage.
+      if (ev.result && ev.result.win && ev.result.regionCleared && app.character && app.role !== 'client') {
+        const moved = onRegionCleared(app.character, ev.result.region);
+        const unlocked = recordUnlock(app.player, ev.result.region);
+        saveAll(app.characters, app.player);
+        app.objectiveHistory.push([...(ev.result.objectives || [])]);
+        console.log(`[world] region ${ev.result.region} cleared — frontier ${moved.before} → ${moved.after} (${moved.outcome})`
+          + (unlocked ? `, unlocked ${unlocked}` : ''));
+      }
       showResults(ev.result, app.myIdx, app.role !== 'client');
       break;
     }
@@ -1086,7 +1199,7 @@ function mapScreenState() {
   const voter = vote && app.party ? app.party.find(x => x.idx === vote.byIdx) : null;
   const curNode = m.layout.nodes[m.current];
   return {
-    layout: m.layout, floorNum: m.floorNum,
+    layout: m.layout, regionIndex: m.regionIndex, regionName: m.regionName || app.regionName,
     current: m.current, visited: m.visited, reachable: m.reachable,
     vote, voteName: voter ? voter.name : null,
     onShop: !!(curNode && curNode.kind === 'shop'),
@@ -1109,7 +1222,7 @@ function viewFromSim(sim) {
     myIdx: app.myIdx,
     mode: 'arena',
     aw: sim.W, ah: sim.H,
-    arenaKey: `${sim.floorNum}:${sim.currentNode}`,
+    arenaKey: `${sim.regionIndex}:${sim.currentNode}`,
     biome: sim.biome || null,
     // committed zones ride the view like any other world layer
     telZones: sim.telegraphZones(),
@@ -1211,7 +1324,11 @@ function viewFromSnaps(dtFrame) {
     const flags = n[5];
     const pylon = !!(flags & 32);
     let shape, color, radius, spriteId;
-    if (flags & 2) { const bd = BOSSES[app.floorNum - 1]; shape = bd.shape; color = bd.color; radius = bd.radius; spriteId = bd.spriteId; }
+    // The boss's silhouette on a CLIENT, which has no Sim to ask. Keyed by
+    // region through the same resolver the host uses, so a region whose boss is
+    // a redistributed legacy one draws that one rather than indexing a
+    // four-entry array with a region number and reading `undefined` at 5.
+    if (flags & 2) { const bd = bossForRegion(app.regionIndex); shape = bd.shape; color = bd.color; radius = bd.radius; spriteId = bd.spriteId; }
     else if (pylon) { shape = 'square'; color = '#c05eff'; radius = 26; spriteId = PYLON_SPRITE; }
     else {
       const def = ENEMIES[n[1]];
@@ -1263,7 +1380,7 @@ function viewFromSnaps(dtFrame) {
     mode: s1.mode === 0 ? 'map' : 'arena',
     aw: app.arena ? app.arena.w : undefined,
     ah: app.arena ? app.arena.h : undefined,
-    arenaKey: `${app.floorNum}:${s1.node}`,
+    arenaKey: `${app.regionIndex}:${s1.node}`,
     // from the 'arena' event, not a snapshot — the floor is cosmetic and never
     // goes on the wire per frame. A client that missed the event draws flat.
     biome: app.arena ? app.arena.biome || null : null,
@@ -1393,7 +1510,8 @@ function frame(now) {
   if (view && hudTimer >= 0.1) {
     hudTimer = 0;
     updateHud(app.meta, view, {
-      floorNum: app.floorNum,
+      regionIndex: app.regionIndex,
+      regionName: app.regionName,
       arenaName: app.arena && view.mode === 'arena' ? app.arena.name : null,
       kind: view.mode === 'arena' ? view.kind : null,
       boss: view.boss,

@@ -15,7 +15,10 @@ export const CONFIG = {
   WALL: 36,            // wall thickness
   DOOR_W: 120,         // door gap width
 
-  FLOORS: 4,
+  // FLOORS IS GONE. A run is one region and a region is one tree; there is no
+  // floor to count. The world axis that replaced `FLOOR_HP_MULT` is authored
+  // per region band in js/regions.js, because §4.3 asks for it to be authored
+  // rather than computed from a global curve.
   ROOMS_MIN: 10,
   ROOMS_MAX: 13,
 
@@ -201,8 +204,6 @@ export const CONFIG = {
   SPAWN_BANK_CAP: 45,      // banked budget units — bounds the post-ceiling flood
   ARENA_CROWD_AT: 5,       // parties this size and up fight in scaled arenas
   ARENA_CROWD_SCALE: 1.25, // bounds ×1.25 (same templates, geometry scaled)
-  FLOOR_HP_MULT: 1.35,
-  FLOOR_DMG_MULT: 1.2,
 
   // The two canonical difficulty knobs (patch 8) — all future density/health
   // tuning is a one-line change here.
@@ -226,7 +227,7 @@ export const CONFIG = {
   ELITE_HP_MULT: 3,
   ELITE_DMG_MULT: 1.5,
 
-  REROLL_BASE: 6, REROLL_PER_FLOOR: 3, REROLL_GROWTH: 1.5,
+  REROLL_BASE: 6, REROLL_PER_REGION: 3, REROLL_GROWTH: 1.5,
 
   // ---- phase 4: the economy (§9.2, §9.3) ----
   // Respec refunds ALL points at once — per-point respec would let a player
@@ -253,7 +254,10 @@ export const CONFIG = {
 
   SHOP_SLOTS: 4,
   RARITY_WEIGHTS: { common: 62, uncommon: 25, rare: 10, legendary: 3 },
-  PRICE_FLOOR_SCALE: 0.25,  // prices *(1+0.25*(floor-1))
+  // §4.5 says item prices scale ~25% per REGION BAND, and there are eight of
+  // them — so the slope is unchanged and only the axis moved. Region 8 pays
+  // ×2.75 where floor 4 paid ×1.75.
+  PRICE_REGION_SCALE: 0.25,  // prices *(1+0.25*(region-1))
   WEAPON_SLOT_MAX: 6,
   // ZERO. Weapons are removed from the game, so the chance a shop slot rolls
   // one is not a tuning knob with a small value — it is a rate that must be
@@ -425,8 +429,8 @@ export const NET_PREFIX = 'sg-dungeon-';
 export function weaponBasePrice(def, tier) {
   return def.price * TIER_PRICE_MULT[tier - 1];
 }
-export function sellValue(basePrice, floorNum) {
-  return Math.floor(basePrice * (1 + CONFIG.PRICE_FLOOR_SCALE * (floorNum - 1)) * 0.3);
+export function sellValue(basePrice, regionIndex) {
+  return Math.floor(basePrice * (1 + CONFIG.PRICE_REGION_SCALE * (regionIndex - 1)) * 0.3);
 }
 
 // ---------------------------------------------------------------- §9.2 the penalty roll

@@ -252,9 +252,13 @@ const HOOKS = {
     run: ({ g, p }) => { p.xpNext = 1; g._collectMaterial(p, 5); return Math.round(p.stats.vitality); },
   },
   floorStats: {
-    what: 'Greed on the sheet after advancing a floor',
+    // `floorStats` items grant on the between-maps beat. That used to be a
+    // floor transition; a region has no floors, so the hook moved to
+    // `_betweenMaps` — which is what `_finishNode` calls on the way back to the
+    // map screen. The item's cadence is unchanged: once per map.
+    what: 'Greed on the sheet after leaving a map',
     payload: { stats: { greed: 300 } },
-    run: ({ g, p }) => { g._startFloor(g.floorNum + 1); return Math.round(p.stats.greed); },
+    run: ({ g, p }) => { g._betweenMaps(); return Math.round(p.stats.greed); },
   },
   allyAura: {
     what: "an ally's Ferocity while standing inside the aura",

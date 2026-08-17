@@ -16,9 +16,10 @@
 import { CONFIG } from './config.js';
 import { clamp, dist2 } from './util.js';
 import { hordeTotalSpawns } from './arenas.js';
-import { BOSS_BY_FLOOR } from './content/bosses.js';
+
 import { FLOOR_TABLES } from './content/enemies.js';
-import { REGION_BY_INDEX } from './regions.js';
+import { REGION_BY_INDEX, regionHpMult, bossForRegion } from './regions.js';
+import { REGION_ENEMIES } from './content/regions-enemies.js';
 
 const { WALL } = CONFIG;
 
@@ -60,14 +61,14 @@ function anyPlayerWithin(sim, x, y, r) {
   }
   return false;
 }
-function floorTable(sim) { return FLOOR_TABLES[sim.floorNum - 1]; }
+function floorTable(sim) { return sim._spawnTable(true); }
 
 
 // Bounty champions are priced off the floor boss's REAL spawn HP (post-patch,
 // i.e. already doubled), using the same formula _spawnBoss uses so the
 // comparison is apples-to-apples.
 function bossHp(sim) {
-  const b = BOSS_BY_FLOOR[sim.floorNum] || BOSS_BY_FLOOR[1];
+  const b = bossForRegion(sim.regionIndex);
   return (b.bountyAnchor || b.hp) * sim.coopHp * sim.greedHp * CONFIG.enemyHpMult;
 }
 
@@ -79,7 +80,12 @@ function bossHp(sim) {
 // sequence are exactly as specified. Floors 2+ measured at 28–37s per level.
 function bountyFraction(sim, roll) {
   const top = 0.60 + 0.10 * roll;                  // the briefed band
-  const ramp = [0.70, 0.85, 0.95, 1][Math.min(3, sim.floorNum - 1)];
+  // RE-KEYED TO REGIONS, and extended rather than stretched. The ramp existed
+  // because region 1 cannot pay three bosses of HP in one level; that is a
+  // statement about the FIRST region, so the first four entries are unchanged
+  // and regions 5-8 simply stay at the briefed band. Rescaling the four steps
+  // across eight would have made region 4 easier than floor 4 was.
+  const ramp = [0.70, 0.85, 0.95, 1, 1, 1, 1, 1][Math.min(7, Math.max(0, sim.regionIndex - 1))];
   return top * ramp;
 }
 
@@ -101,7 +107,7 @@ export function initObjective(sim, node) {
       // what a standard fight would spend, all of it standing on the field at
       // t=0. Total threat goes up, per-unit HP comes down (see spawnEliteArena)
       // so the match still lands at 2–3 minutes.
-      o.total = Math.max(6, Math.round(hordeTotalSpawns(sim.floorNum, node.col, sim.coopSpawn) / 2));
+      o.total = Math.max(6, Math.round(hordeTotalSpawns(sim.regionIndex, (node.depth || 1) - 1, sim.coopSpawn) / 2));
       o.spawnedCount = 0;
       break;
     }
@@ -130,7 +136,7 @@ export function initObjective(sim, node) {
       // out the wall has squeezed the party into a narrow slit right against
       // it. The door opens, the map releases, and it starts again. That
       // squeeze is the level's identity, so it is computed, not hoped for.
-      o.segs = 3 + (sim.floorNum >= 3 ? 1 : 0);
+      o.segs = 3 + (sim.regionIndex >= 3 ? 1 : 0);
       o.seg = 0;
       o.doors = [];
       const usable = sim.W - 2 * WALL - 260;             // leave room for the gate
@@ -155,7 +161,7 @@ export function initObjective(sim, node) {
       // war zone at the far end of each one.
       o.banked = 0; o.need = 5;
       o.altar = spot(sim, sim.W / 2, sim.H / 2, 80);
-      o.pack = Math.max(4, Math.round(hordeTotalSpawns(sim.floorNum, node.col, sim.coopSpawn) / 5));
+      o.pack = Math.max(4, Math.round(hordeTotalSpawns(sim.regionIndex, (node.depth || 1) - 1, sim.coopSpawn) / 5));
       o.relics = [];
       o.nextId = 0;
       spawnNextRelic(sim, o);
@@ -177,8 +183,8 @@ export function initObjective(sim, node) {
       o.path = payloadPath(sim);
       o.leg = 0; o.moved = 0;
       o.x = o.path[0].x; o.y = o.path[0].y;
-      o.hp = 220 + sim.floorNum * 60; o.maxHp = o.hp;
-      o.escortR = 260; o.speed = 42 + sim.floorNum * 2;
+      o.hp = 220 + sim.regionIndex * 60; o.maxHp = o.hp;
+      o.escortR = 260; o.speed = 42 + sim.regionIndex * 2;
       o.stall = 0; o.escorted = false;
       o.gate = o.path[o.path.length - 1];
       break;
@@ -323,7 +329,12 @@ function spawnEliteArena(sim, o) {
   // the largest rosters, where it would silently cap the fight's difficulty.
   const REF = 13 * 1.6;
   const shrink = clamp(REF / Math.max(1, o.total), 0.07, 1);
-  const floorHarden = 1 + 0.5 * (sim.floorNum - 1);
+  // Was `1 + 0.5*(floorNum-1)`, reaching 2.5 at floor 4. Held to the same
+  // ceiling across eight regions rather than reaching 4.5 at region 8: this
+  // hardens INDIVIDUAL champions on top of the world axis, which already
+  // multiplies their HP by 7.36 there, and the two compounding was never the
+  // intent.
+  const floorHarden = 1 + 0.5 * Math.min(3, sim.regionIndex - 1);
   // Lobbers are the projectile pressure and hold 25–30% of the roster; the
   // rest split evenly across Charger / Splitter / Enrager.
   const lobbers = Math.round(o.total * 0.27);
@@ -409,8 +420,25 @@ function nestSpots(sim, want) {
   return pts;
 }
 
+// WHICH CREATURE IS THE NEST. Nest Purge needs a spawner to besiege, and
+// `wombden` was hard-named — so a Pacific Northwest Nest Purge put a base-roster
+// star-shaped Wombden and its Flit brood in the middle of a cedar forest. Same
+// shape as the profile levers: an objective that NAMES an id instead of asking
+// the region is a hole the region cannot fill.
+//
+// Resolved by behaviour, so a region supplies its own nest by authoring an
+// enemy with `behavior: 'nest'` and nothing else. NEITHER REGION DOES YET —
+// this falls back to `wombden` today, every time, and that is a content gap
+// (six archetypes, none of them a spawner) rather than a wiring one.
+// `region_wire_gate` reports which regions are still borrowing it.
+export function nestIdFor(sim) {
+  const pop = sim.region && REGION_ENEMIES[sim.region];
+  const own = pop && pop.enemies.find(e => e.behavior === 'nest');
+  return own ? own.id : 'wombden';
+}
+
 function buildNests(sim, o) {
-  const floorHp = Math.pow(CONFIG.FLOOR_HP_MULT, sim.floorNum - 1);
+  const floorHp = regionHpMult(sim.regionIndex);
   // A barricade has to be worth swinging at: two of them (one per ring) is
   // the toll for reaching a nest, and that toll is comparable to the nest.
   // REGION TUNING, read here rather than baked into the wall. Region 1 halves
@@ -426,7 +454,7 @@ function buildNests(sim, o) {
   for (const p of spots) {
     // noObjHp: the +50% map-wide toughness is for the garrison, not the keep —
     // the nest's own number is the briefed ×10 and nothing else.
-    const e = sim.spawnEnemyById('wombden', p.x, p.y, { hpMult: 22, noObjHp: true });
+    const e = sim.spawnEnemyById(nestIdFor(sim), p.x, p.y, { hpMult: 22, noObjHp: true });
     if (!e) continue;
     e.isNest = true;
     e.radius *= 1.5;
@@ -842,7 +870,12 @@ function objectiveBaseMult(o, sim) {
   // back half of the level, which is neither a fight nor legible on a phone.
   // Tapered, every floor gets the same felt escalation — the slit fills up as
   // the clock runs down instead of being full from the first door onward.
-  if (o.type === 'breach') return 2.6 - 0.4 * (sim.floorNum - 1);
+  // TAPERED, AND FLOORED. `2.6 - 0.4*(n-1)` reaches 0.2 at region 7 and goes
+  // NEGATIVE at region 8 — a negative spawn multiplier is not a gentler
+  // Breach, it is a Breach with no enemies in it and no way to fail. The taper
+  // was authored across four floors and the floor of 1.0 is what stops it
+  // running off the end of its own axis.
+  if (o.type === 'breach') return Math.max(1.0, 2.6 - 0.4 * (sim.regionIndex - 1));
   if (o.type === 'payload') return 0.9;
   // Relic Run has NO ambient inflow at all: its whole budget is pre-spent as
   // the five packs that land with the five relics (see spawnNextRelic). The

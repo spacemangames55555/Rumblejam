@@ -23,7 +23,7 @@ export function showHud(on) {
   }
 }
 
-// meta: my private meta; view: interpolated/live view; ctx: {floorNum, layout, visited, curRoom, boss}
+// meta: my private meta; view: interpolated/live view; ctx: {regionIndex, regionName, layout, visited, curRoom, boss}
 export function updateHud(meta, view, hctx) {
   // party bars — 5+ players compact into a two-column strip (own row stays
   // full width and detailed; allies condense to name + bar)
@@ -57,7 +57,7 @@ export function updateHud(meta, view, hctx) {
   wrap.innerHTML = rows.join('');
   // top: floor & arena
   const kindName = ({ combat: 'Skirmish', elite: 'Champion Hunt', siege: 'SIEGE' })[hctx.kind] || '';
-  let top = `FLOOR ${hctx.floorNum} / 4${hctx.arenaName ? ` — ${escapeHtml(hctx.arenaName)}` : ''}${kindName ? ` · ${kindName}` : ''}`;
+  let top = `${escapeHtml(hctx.regionName || `REGION ${hctx.regionIndex}`)} ${hctx.regionIndex}/8${hctx.arenaName ? ` — ${escapeHtml(hctx.arenaName)}` : ''}${kindName ? ` · ${kindName}` : ''}`;
   if (hctx.boss) {
     top += ` — <b style="color:var(--danger)">${escapeHtml(hctx.boss.name)}</b> ${bossBar(hctx.boss)}`;
   }

@@ -397,6 +397,21 @@ async function extractToMap(br, what) {
   throw new Error(`extraction never completed (${what})`);
 }
 
+// STARTING A RUN IS TWO CLICKS NOW. `#btn-start` opens the WORLD MAP, and the
+// region card is what constructs the Sim — a run has to be a run of somewhere.
+// Seventeen call sites in this file clicked the button and waited for
+// `window.uv.sim`; the sequence lives in one place instead.
+//
+// A local copy rather than the one in cdp_harness.mjs because this suite has
+// its own `Browser`, not that module's `Page`. The two share `exec`/`waitFor`
+// and nothing else.
+async function startRun(P, regionIndex = 1) {
+  await P.exec(`document.getElementById('btn-start').click(); return 1;`);
+  await P.waitFor(`return document.getElementById('screen-world') && !document.getElementById('screen-world').classList.contains('hidden') ? 1 : 0`, 8000, 'world map');
+  await P.exec(`const c=document.querySelector('.world-card[data-region="${regionIndex}"]'); if(!c) throw new Error('no region ${regionIndex} card'); c.click(); return 1;`);
+  return P.waitFor(`return window.uv.mode==='run' ? 1 : 0`, 12000, `region ${regionIndex} run started`);
+}
+
 const A = new Browser();
 try {
   await A.open('A');
@@ -442,7 +457,7 @@ try {
   // pick char + start
   await A.exec(`document.querySelector('.char-card[data-char="vesper"]').click()`);
   await sleep(300);
-  await A.exec(`document.getElementById('btn-start').click()`);
+  await startRun(A);
   await A.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'run start');
   ok('run starts (solo host)');
 
@@ -918,7 +933,7 @@ try {
   ok('solo abandon → straight to lobby (no results screen)');
   await A.exec(`document.querySelector('.char-card[data-char="onrush"]').click()`);
   await sleep(300);
-  await A.exec(`document.getElementById('btn-start').click()`);
+  await startRun(A);
   await A.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 4000, 'second run after abandon');
   const fresh = await A.exec(`const s=window.uv.sim, p=s.players[0]; return JSON.stringify({char:p.charId, mats:p.materials, lvl:p.level, floor:s.floorNum, items:p.items.length, phase:s.phase})`);
   const fr = JSON.parse(fresh);
@@ -1204,7 +1219,7 @@ try {
   await A.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 4000, 'lobby2');
   await A.exec(`document.querySelector('.char-card[data-char="threader"]').click()`);
   await sleep(200);
-  await A.exec(`document.getElementById('btn-start').click()`);
+  await startRun(A);
   await A.waitFor(`return window.uv.mode==='run'`, 4000, 'run2');
   const crest = await A.exec(`const s=window.uv.sim; if (!s.god) s.debug('F5');
     for (const id of ['coilgun','hailburst','gravelmouth','sparkbolt']) s._addWeapon(s.players[0], id, 4);
@@ -1242,7 +1257,7 @@ try {
     await F.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby (no asset)');
     await F.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
     await sleep(250);
-    await F.exec(`document.getElementById('btn-start').click()`);
+    await startRun(F);
     await F.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'run (no asset)');
     await F.exec(`window.uv.sim.debug('F2'); return 1;`); // banks level-ups → levelUp events
     await F.waitFor(`return window.uvAudio.stats.blips >= 1 ? 1 : 0`, 5000, 'blip fallback');
@@ -1413,7 +1428,7 @@ try {
     await br.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby');
     await br.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
     await sleep(250);
-    await br.exec(`document.getElementById('btn-start').click()`);
+    await startRun(br);
     await br.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run');
     await br.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
     await br.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena');
@@ -1707,7 +1722,7 @@ try {
         await S6.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 8000, 'lobby (scaled char)');
         await S6.exec(`document.querySelector('.char-card[data-char="${SCALED_CHAR}"]').click()`);
         await sleep(250);
-        await S6.exec(`document.getElementById('btn-start').click()`);
+        await startRun(S6);
         await S6.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run (scaled char)');
         await S6.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
         await S6.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena (scaled char)');
@@ -1828,7 +1843,7 @@ try {
       await S7.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 8000, 'lobby (tuned)');
       await S7.exec(`document.querySelector('.char-card[data-char="toh_druid"]').click()`);
       await sleep(250);
-      await S7.exec(`document.getElementById('btn-start').click()`);
+      await startRun(S7);
       await S7.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run (tuned)');
       await S7.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
       await S7.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena (tuned)');
@@ -2043,7 +2058,7 @@ try {
       await S9.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 8000, 'lobby (beast)');
       await S9.exec(`document.querySelector('.char-card[data-char="toh_hunter"]').click()`);
       await sleep(250);
-      await S9.exec(`document.getElementById('btn-start').click()`);
+      await startRun(S9);
       await S9.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 8000, 'run (beast)');
       await S9.exec(`const s=window.uv.sim; const n=s.floor.nodes.find(x=>x.kind==='combat'); n.template='open_expanse'; s._travelTo(n.id); return 1;`);
       await S9.waitFor(`return window.uv.sim.phase==='arena'`, 8000, 'arena (beast)');
@@ -2216,7 +2231,7 @@ try {
     await br.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby');
     await br.exec(`document.querySelector('.char-card[data-char="bulwark"]').click()`);
     await sleep(200);
-    await br.exec(`document.getElementById('btn-start').click()`);
+    await startRun(br);
     await br.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'run');
     await br.exec(`const s=window.uv.sim; if(!s.god) s.debug('F5'); s._travelTo(s.reachableNodes()[0]); return 1;`);
     await br.waitFor(`return window.uv.sim.phase==='arena'`, 5000, 'arena');
@@ -2559,7 +2574,7 @@ try {
     await M.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'mobile lobby');
     await M.tap('.char-card[data-char="facet"]');
     await sleep(250);
-    await M.tap('#btn-start');
+    await startRun(M);
     await M.waitFor(`return window.uv.mode==='run' && !!window.uv.sim`, 5000, 'mobile run start');
     ok('touch-only: host → tap character → start run');
     // the preloaded (suspended) context resumed on the first touch
@@ -2889,7 +2904,7 @@ try {
     await M.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden')`, 5000, 'lobby (touch off)');
     await M.tap('.char-card[data-char="onrush"]');
     await sleep(250);
-    await M.tap('#btn-start');
+    await startRun(M);
     await M.waitFor(`return window.uv.mode==='run'`, 5000, 'run (touch off)');
     // enter an arena so the HUD meter + joystick checks run in a fight
     await M.exec(`document.querySelector('.map-node.reachable').click(); return 1;`);
@@ -3084,7 +3099,7 @@ if (wantCoop) {
           fail(`client ready: ${missing}. host: ${JSON.stringify(st)} | client: ${cst}`);
         }
       }
-      await A.exec(`document.getElementById('btn-start').click()`);
+      await startRun(A);
       await A.waitFor(`return window.uv.mode==='run'`, 5000, 'host run');
       await B.waitFor(`return window.uv.mode==='run'`, 5000, 'client run');
       ok('both enter the run');
@@ -3256,7 +3271,7 @@ if (wantCoop) {
       await sleep(400);
       await B.exec(`document.getElementById('btn-ready').click()`);
       await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'client re-ready');
-      await A.exec(`document.getElementById('btn-start').click()`);
+      await startRun(A);
       await A.waitFor(`return window.uv.mode==='run' && window.uv.sim && window.uv.sim.players[0].charId==='facet' && window.uv.sim.players[0].materials===0`, 5000, 'fresh co-op run (host)');
       await B.waitFor(`return window.uv.mode==='run'`, 5000, 'fresh co-op run (client)');
       ok('fresh co-op run starts for both after abandon');
@@ -3546,7 +3561,7 @@ if (wantCoop) {
       await sleep(300);
       await B.exec(`document.getElementById('btn-ready').click(); return 1;`);
       await A.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready && window.uv.lobby.players[1].charId`, 8000, 'client ready for run 2');
-      await A.exec(`document.getElementById('btn-start').click(); return 1;`);
+      await startRun(A);
       await A.waitFor(`return window.uv.mode==='run'`, 6000, 'run 2 on host');
       await B.waitFor(`return window.uv.mode==='run'`, 8000, 'run 2 on client');
       ok('defeat → same-session character select → new run, without rehosting');
@@ -3592,7 +3607,7 @@ if (wantCoop) {
             await sleep(400);
             await C.exec(`document.getElementById('btn-ready').click()`);
             await B.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'C ready');
-            await B.exec(`document.getElementById('btn-start').click()`);
+            await startRun(B);
             await C.waitFor(`return window.uv.mode==='run'`, 6000, 'C in run');
             // travel into the first fight so summons/turrets are on the field
             await B.exec(`const s=window.uv.sim; s.uiAction(0,{kind:'pickNode', nodeId:s.reachableNodes()[0]}); return 1;`);
@@ -3673,7 +3688,7 @@ if (wantCoop) {
           await sleep(300);
           await M2.tap('#btn-ready');
           await D.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready`, 5000, 'touch client ready');
-          await D.exec(`document.getElementById('btn-start').click()`);
+          await startRun(D);
           await M2.waitFor(`return window.uv.mode==='run'`, 6000, 'cross-play run');
           ok('cross-play run starts (desktop host + touch client)');
           // into the first fight (touch client taps its map vote; expiry travels)
@@ -3777,7 +3792,7 @@ if (wantCoop) {
           if (mseat.n === 8 && mseat.h >= 44) ok(`mobile lobby renders 8 seats at the 44px standard (${mseat.h}px)`);
           else fail(`mobile lobby seats: ${JSON.stringify(mseat)}`);
           await W0.waitFor(`return window.uv.lobby.players.every(p=>p.charId && (p.ready||p.isHost))`, 10000, 'all 8 ready');
-          await W0.exec(`document.getElementById('btn-start').click(); return 1;`);
+          await startRun(W0);
           await W0.waitFor(`return window.uv.mode==='run'`, 8000, 'warband run starts');
           for (const Wi of [W[1], W[4], W[7]]) await Wi.waitFor(`return window.uv.mode==='run'`, 10000, 'client in run');
           ok('the 8-player run starts on every screen');

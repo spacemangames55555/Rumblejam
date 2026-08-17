@@ -39,8 +39,21 @@ function stage(level = 30, seed = SEED) {
   for (const tid of Object.keys(TREES).filter(t => TREES[t].classId === CHAR)) {
     for (const s of [...TREES[tid].skills].sort((a, b) => a.tier - b.tier)) { p.skillPoints++; spendSkillPoint(g, p, s.id); }
   }
-  const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+  const node = g.floor.nodes.find(x => x.depth !== null && x.kind !== 'shrine');
   g._travelTo(node.id);
+  // THE ROOM HAS TO BE QUIET, and clearing the pool once is not quiet — the
+  // wave keeps spawning for the whole 20s window. Region 1's roster brought a
+  // spitter and a sprinter into that window, so a −60 Grit penalty changed how
+  // often the probe got HIT, which changed how often its hit-triggered skills
+  // fired, and the gate read that as a stat reaching a cooldown. It is not: it
+  // is the stat reaching a trigger, through survivability, in a room the probe
+  // never meant to have enemies in.
+  //
+  // The gate already states the principle — "if anything dies, ON_KILL arms and
+  // the fire count changes for a reason that is not a cooldown" — and ambient
+  // spawns are the same contamination arriving from the other end.
+  g.wave.done = true;
+  g.spawnQueue.length = 0;
   for (const e of [...g.enemyPool]) if (e.active) { e.hp = 0; e.active = false; }
   p.hp = p.stats.vitality;
   return { g, p };
@@ -188,11 +201,14 @@ console.log(`econ gate — §9.2's roll constraints and §9.3's sinks, measured\
   if (r.ok && p.skillPoints >= spent && !Object.keys(p.skillRanks).length) ok(`respec refunded all ${spent} points at once and cleared every rank — never per-point (§9.3)`);
   else fail(`respec did not refund the whole build: ${JSON.stringify(r)}, points ${p.skillPoints}, ranks left ${Object.keys(p.skillRanks).length}`);
 
-  // NEVER RESETTING is the whole mechanic: it must survive a floor change.
+  // NEVER RESETTING is the whole mechanic: it must survive leaving a map.
+  // `_startFloor` was the floor transition; `_betweenMaps` is the beat that
+  // replaced it, and it is the one that runs the per-map grants a reset would
+  // ride along with.
   const after = g._respecCost(p);
-  g._startFloor(g.floorNum + 1);
-  if (g._respecCost(p) === after && after === 2500) ok(`the next respec costs ${after} and stays ${g._respecCost(p)} across a floor change — the cost never resets`);
-  else fail(`respec cost reset across a floor: ${after} → ${g._respecCost(p)}`);
+  g._betweenMaps();
+  if (g._respecCost(p) === after && after === 2500) ok(`the next respec costs ${after} and stays ${g._respecCost(p)} across a map change — the cost never resets`);
+  else fail(`respec cost reset across a map: ${after} → ${g._respecCost(p)}`);
 }
 
 // ---------------------------------------------------------------------------

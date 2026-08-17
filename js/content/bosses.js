@@ -60,3 +60,8 @@ for (const b of BOSSES) b.spriteId = `boss.${b.id}`;
 // Region bosses carry their own spriteId (assigned in regions-enemies.js),
 // so this composes rather than tags.
 export const ALL_BOSS_DEFS = [...BOSSES, ...ALL_REGION_BOSSES];
+
+// Every boss by id, region ones included. `BOSS_BY_FLOOR` is the legacy index
+// and is kept only so the four originals can be redistributed across the eight
+// regions by name; a region resolves its boss through this.
+export const BOSS_BY_ID = Object.fromEntries(ALL_BOSS_DEFS.map(b => [b.id, b]));

@@ -23,7 +23,9 @@ import { WEAPONS } from '../js/content/weapons.js';
 import { ENEMIES } from '../js/content/enemies.js';
 import { BOSSES } from '../js/content/bosses.js';
 import { STAT_KEYS } from '../js/config.js';
-import { generateFloorMap } from '../js/dungeon.js';
+import { generateTree, assertTree, COLUMNS, ROWS, NODE_MIX, STOP_BANDS } from '../js/nodetree.js';
+import { REGIONS, REGION_BY_INDEX as RG_BY_INDEX } from '../js/regions.js';
+import { nodePopulation as NODE_POP } from '../js/nodebehaviour.js';
 import { OBJECTIVE_KINDS as OBJ_KINDS, BOUNTY_HP_MULT } from '../js/objectives.js';
 import { CONFIG as CFG } from '../js/config.js';
 import { isOnboardingNode } from '../js/arenas.js';
@@ -31,7 +33,8 @@ import { isOnboardingNode } from '../js/arenas.js';
 const WALL_OUT = (p, g) => Math.max(0,
   CFG.WALL - p.x, CFG.WALL - p.y, p.x - (g.W - CFG.WALL), p.y - (g.H - CFG.WALL));
 import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
-import { BIOMES, FLOOR_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
+import { BIOMES, REGION_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
+import { TOTAL_REGIONS } from '../js/regions.js';
 import * as SKILLSIM from '../js/skillsim.js';
 import { ENEMY_BY_ID as ENEMY_BY_ID_T } from '../js/content/enemies.js';
 // Art fixtures below build sheets that must match the manifest exactly. They
@@ -154,42 +157,52 @@ if (BOSSES.length === 4) ok('bosses: 4'); else fail(`bosses ${BOSSES.length} != 
   if (!bad) ok(`stat glossary: all 10 entries complete; ${rendered.size} rendered stat names all resolve`);
 }
 
-// ---- 2. node-map generation gates across seeded generations ----
+// ---- 2. region-tree generation gates across seeded generations ----
+//
+// RE-AIMED, NOT DELETED. This checked the 14-node floor map: fifteen nodes, an
+// avoidable Elite Arena, all five templates. The floor map is retired and a
+// REGION is the map now, so the structural claims move to the structure that
+// exists — and two of them change shape rather than disappearing:
+//
+//   - "15 nodes" becomes 10 fights + 2 stops + the gate.
+//   - "an avoidable Elite Arena" becomes its OPPOSITE for the stops. A
+//     five-node route that misses the shop is a run with no shop, so the two
+//     stops are on every route by construction; avoidability is still the rule
+//     for the elite nodes, which share a column with something else.
 {
-  let bad = 0;
+  let bad = 0, gens = 0;
+  const wantNodes = COLUMNS * ROWS + STOP_BANDS.length + 1;
   for (let seed = 1; seed <= 150; seed++) {
-    for (let f = 1; f <= 4; f++) {
-      const m = generateFloorMap(seed, f);
-      const kinds = {};
-      for (const n of m.nodes) kinds[n.kind] = (kinds[n.kind] || 0) + 1;
-      // 12 combat nodes + shop + reliquary + siege (the objectives patch)
-      if (m.nodes.length !== 15) { bad++; fail(`map ${seed}/${f}: ${m.nodes.length} nodes`); }
-      if (kinds.shop !== 1 || kinds.treasure !== 1 || kinds.siege !== 1) { bad++; fail(`map ${seed}/${f}: kinds ${JSON.stringify(kinds)}`); }
-      // every non-siege node exits; whole map reachable; siege reachable from all
-      for (const n of m.nodes) if (n.id !== m.siegeId && (n.edges.length < 1 || n.edges.length > 3)) { bad++; fail(`map ${seed}/${f}: node ${n.id} has ${n.edges.length} exits`); }
+    for (const region of REGIONS) {
+      const m = generateTree(seed, region, seed % 4);
+      gens++;
+      const problems = assertTree(m);
+      if (problems.length) { bad++; if (bad <= 3) fail(`tree ${seed}/${region.id}: ${problems.join('; ')}`); continue; }
+      if (m.nodes.length !== wantNodes) { bad++; fail(`tree ${seed}/${region.id}: ${m.nodes.length} nodes, want ${wantNodes}`); }
+      // whole tree reachable from the entry pair
       const seen = new Set(m.startIds); const q = [...m.startIds];
       while (q.length) { const id = q.shift(); for (const e of m.nodes[id].edges) if (!seen.has(e)) { seen.add(e); q.push(e); } }
-      if (seen.size !== m.nodes.length) { bad++; fail(`map ${seed}/${f}: unreachable nodes`); }
-      // at least one Elite Arena is optional: some path from an entry to the
-      // siege skips it, so the floor's nastiest room is always routable-around
-      const elites = m.nodes.filter(n => n.kind === 'elite_arena');
+      if (seen.size !== m.nodes.length) { bad++; fail(`tree ${seed}/${region.id}: ${m.nodes.length - seen.size} unreachable node(s)`); }
+      // every elite sits on a branch some route skips
+      const elites = m.nodes.filter(n => n.mix === 'elite');
       const avoidable = elites.some(elite => {
         const seen2 = new Set(m.startIds.filter(id => id !== elite.id));
         const q2 = [...seen2];
         while (q2.length) {
           const id = q2.shift();
-          if (id === m.siegeId) return true;
+          if (id === m.bossId) return true;
           for (const e of m.nodes[id].edges) if (e !== elite.id && !seen2.has(e)) { seen2.add(e); q2.push(e); }
         }
         return false;
       });
-      if (!elites.length || !avoidable) { bad++; fail(`map ${seed}/${f}: no avoidable Elite Arena`); }
-      // every floor draws from all five arena templates
+      if (elites.length !== NODE_MIX.elite || !avoidable) { bad++; fail(`tree ${seed}/${region.id}: no avoidable elite`); }
+      // every region draws from all five arena templates
       const t = new Set(m.nodes.filter(n => n.template).map(n => n.template));
-      if (t.size !== TEMPLATE_KEYS.length) { bad++; fail(`map ${seed}/${f}: templates ${[...t]}`); }
+      if (t.size !== TEMPLATE_KEYS.length) { bad++; fail(`tree ${seed}/${region.id}: templates ${[...t]}`); }
     }
   }
-  if (!bad) ok('node maps: 600 seeded generations — 15 nodes, guarantees, avoidable Elite Arena, all 5 templates');
+  if (!bad) ok(`region trees: ${gens} seeded generations — ${wantNodes} nodes (${COLUMNS * ROWS} fights, ${STOP_BANDS.length} stops, 1 gate), fully reachable, avoidable elite, all 5 templates`);
+  else fail(`${bad}/${gens} region trees violated the structure`);
 }
 
 // ---- harness navigation ----
@@ -356,8 +369,8 @@ function unstick(g, p, mx, my) {
 // taking column 0. This is for the ones that only ever wanted somewhere to
 // stand.
 function representativeNode(g) {
-  return g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind)
-    && !isOnboardingNode(g.floorNum, x));
+  return g.floor.nodes.find(x => !['shop', 'treasure', 'shrine', 'siege'].includes(x.kind)
+    && !isOnboardingNode(g.regionIndex, x));
 }
 
 function armBot(g, p, ranks = 3, level = ARM_LEVEL) {
@@ -525,23 +538,32 @@ function clearArena(sim, buyStuff) {
   }
   return ticks;
 }
-// walk the whole floor: pick nodes until the siege is beaten (floor advances)
-function playFloor(sim, buyStuff) {
-  const startFloor = sim.floorNum;
+// Walk the whole REGION: pick nodes until the boss is beaten and the run ends.
+//
+// The old version watched `floorNum` change, which was how it knew a floor had
+// finished. A region does not advance a counter — clearing its boss ENDS the
+// run, and the world map is what moves the party on — so the terminating
+// condition is `sim.over`, and a region that never ends is a region that never
+// reached its boss.
+function playRegion(sim, buyStuff) {
+  const region = sim.regionIndex;
   let guard = 0;
-  while (!sim.over && sim.floorNum === startFloor && guard++ < 40) {
+  while (!sim.over && guard++ < 40) {
     if (sim.phase === 'map') {
       for (const q of sim.players) drain(sim, q, buyStuff);
       const r = sim.reachableNodes();
-      if (!r.length) { fail(`floor ${startFloor}: no reachable nodes from ${sim.currentNode}`); return; }
+      if (!r.length) { fail(`region ${region}: no reachable nodes from ${sim.currentNode}`); return; }
       sim.uiAction(0, { kind: 'pickNode', nodeId: r[0] });
       // co-op: the tap starts a consent countdown — tick it out
       for (let i = 0; i < 60 * 5 && sim.phase === 'map' && !sim.over; i++) sim.tick();
+      // §2.4's shrine is a stop with a choice; an unanswered one is a party
+      // standing on the map screen forever
+      for (const q of sim.livePlayers()) if (q.shrineOffer) sim.uiAction(q.idx, { kind: 'shrine', id: 'skillPoint' });
     } else {
       clearArena(sim, buyStuff);
     }
   }
-  if (sim.floorNum === startFloor && !sim.over) fail(`floor ${startFloor} never completed`);
+  if (!sim.over) fail(`region ${region} never completed`);
 }
 
 // ---- 3. consent selection: solo instant; contested redirects once then locks ----
@@ -598,11 +620,14 @@ try {
 // characters are retired, so this is the selectable set instead.
 for (const charId of _SEL.map(c => c.id)) {
   try {
-    const sim = new Sim({ seed: 424242, party: [{ idx: 0, key: 'k', name: 'RUN', charId, color: '#fff' }] });
+    // A RUN IS ONE REGION now, so this plays one — and it plays REGION 1,
+    // which is the region every save starts in and the one §3.5 says is played
+    // more than 6, 7 and 8 combined.
+    const sim = new Sim({ seed: 424242, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'RUN', charId, color: '#fff' }] });
     sim.debug('F2');
-    for (let f = 1; f <= 4 && !sim.over; f++) playFloor(sim, true);
-    if (sim.over && sim.result && sim.result.win) ok(`full-run WIN as ${charId}`);
-    else fail(`${charId} run did not win (over=${sim.over}, floor=${sim.floorNum})`);
+    playRegion(sim, true);
+    if (sim.over && sim.result && sim.result.win && sim.result.regionCleared) ok(`region-1 clear as ${charId}`);
+    else fail(`${charId} did not clear region 1 (over=${sim.over}, win=${sim.result && sim.result.win}, cleared=${sim.result && sim.result.regionCleared})`);
   } catch (err) { fail(`${charId} full run crashed`, err); }
 }
 
@@ -698,13 +723,12 @@ try {
       s.phase = 'map';
     }
   }
-  for (let f = 1; f <= 4; f++) { // the bespoke siege arenas too
-    const s = new Sim({ seed: 5, party: party4 });
-    while (s.floorNum < f) s.debug('F4');
-    s._travelTo(s.floor.siegeId);
-    for (const p of s.players) if (s._inObstacle(p.x, p.y, p.radius)) { clip++; fail(`floor ${f} siege: player spawned inside an obstacle`); }
+  for (let r = 1; r <= 4; r++) { // the bespoke boss arenas too, one per region
+    const s = new Sim({ seed: 5, regionIndex: r, party: party4 });
+    s._travelTo(s.floor.bossId);
+    for (const p of s.players) if (s._inObstacle(p.x, p.y, p.radius)) { clip++; fail(`region ${r} boss room: player spawned inside an obstacle`); }
   }
-  if (!clip) ok('party spawns clear of obstacles (25 seeds × 5 templates + all 4 sieges)');
+  if (!clip) ok('party spawns clear of obstacles (25 seeds × 5 templates + all 4 boss rooms)');
 } catch (err) { fail('spawn-clip check crashed', err); }
 
 // ---- 8. the Siege end-to-end ----
@@ -715,7 +739,7 @@ try {
   const sim = new Sim({ seed: 31, party });
   sim.god = true;
   const p = sim.players[0];
-  sim._travelTo(sim.floor.siegeId); // jump straight to the finale
+  sim._travelTo(sim.floor.bossId); // jump straight to the finale
   if (sim.arenaNode.kind !== 'siege') throw new Error('not in siege');
   const obst0 = sim.obstacles.length;
   // down player 1: the first mutation must revive them (mercy rule)
@@ -753,16 +777,17 @@ try {
   if (revivedByMutation) ok('mutation revived the downed player (mercy rule)'); else fail('mercy revive did not fire');
   if (events.includes('boss') && events.indexOf('boss') > events.indexOf(mutations[mutations.length - 1])) ok('the floor boss entered mid-siege after the final mutation');
   else fail(`boss entry ordering: ${events.join(',')}`);
-  if (events.includes('bossDown') && sim.floorNum === 2) ok(`siege victory paid out and descended (peak alive ${peak})`);
-  else fail(`siege end: floor ${sim.floorNum}, events ${events.join(',')}`);
+  // The boss no longer descends — it ENDS the region, which is the one place
+  // this claim genuinely changed rather than being re-keyed.
+  if (events.includes('bossDown') && sim.regionCleared) ok(`boss victory paid out and cleared the region (peak alive ${peak})`);
+  else fail(`boss end: regionCleared=${sim.regionCleared}, events ${events.join(',')}`);
 } catch (err) { fail('siege end-to-end crashed', err); }
 
 // ---- 8b. hold-circle chokes spawns; hazard field migrates (floor 3 / floor 2) ----
 try {
-  const sim = new Sim({ seed: 33, party: [{ idx: 0, key: 'k', name: 'H', charId: T1, color: '#fff' }] });
+  const sim = new Sim({ seed: 33, regionIndex: 3, party: [{ idx: 0, key: 'k', name: 'H', charId: T1, color: '#fff' }] });
   sim.god = true;
-  while (sim.floorNum < 3) sim.debug('F4');
-  sim._travelTo(sim.floor.siegeId);
+  sim._travelTo(sim.floor.bossId);
   const p = sim.players[0];
   // fast-forward to the circle mutation
   while (sim.mutIdx < 1) { sim.siegeT = sim.mutations[0].at; sim.tick(); }
@@ -776,10 +801,12 @@ try {
   if (rateFree && sim.holdCircle.held) ok('hold circle: contested state tracks the players');
   else fail(`hold circle held states: free=${!rateFree} held=${sim.holdCircle.held}`);
 
-  const s2 = new Sim({ seed: 34, party: [{ idx: 0, key: 'k', name: 'H2', charId: T1, color: '#fff' }] });
+  // The migrating hazard field is region 2's boss-room mutation. `debug('F4')`
+  // used to descend a floor to reach it; F4 now jumps to the boss gate, so the
+  // region is chosen where a region belongs — at construction.
+  const s2 = new Sim({ seed: 34, regionIndex: 2, party: [{ idx: 0, key: 'k', name: 'H2', charId: T1, color: '#fff' }] });
   s2.god = true;
-  s2.debug('F4');
-  s2._travelTo(s2.floor.siegeId);
+  s2._travelTo(s2.floor.bossId);
   while (s2.mutIdx < 2) { s2.siegeT = s2.mutations[Math.min(s2.mutIdx, 1)].at; s2.tick(); }
   const field = s2.hazards.find(h => h.vx !== undefined);
   if (!field) throw new Error('no migrating field');
@@ -794,30 +821,35 @@ try {
   const party = pickN(4).map((c, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: c, color: '#fff' }));
   const sim = new Sim({ seed: 777, party });
   sim.debug('F2');
-  playFloor(sim, true);
-  if (sim.over) fail('coop wiped unexpectedly on floor 1');
-  else ok('4-player co-op clears floor 1 through the node map');
-  // enter a fight for revive mechanics
-  if (sim.phase === 'map') {
-    for (const q of sim.players) drain(sim, q, false);
-    sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+  playRegion(sim, true);
+  // Clearing region 1 ENDS the run, so the revive mechanics below need a fresh
+  // sim rather than the finished one. Splitting the two was not needed while a
+  // floor clear just advanced a counter.
+  if (sim.over && sim.result && sim.result.win) ok('4-player co-op clears region 1 through the node tree');
+  else fail(`4-player co-op did not clear region 1 (over=${sim.over}, win=${sim.result && sim.result.win})`);
+  const revive = new Sim({ seed: 777, regionIndex: 1, party });
+  revive.debug('F2');
+  Object.assign(sim, {});   // sim stays the cleared run; `revive` is the live one
+  if (revive.phase === 'map') {
+    for (const q of revive.players) drain(revive, q, false);
+    revive.uiAction(0, { kind: 'pickNode', nodeId: revive.reachableNodes()[0] });
     let g = 0;
-    while (sim.phase === 'map' && g++ < 6) { for (const q of sim.players) drain(sim, q, false); sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] }); }
-    for (let i = 0; i < 60 * 5 && sim.phase === 'map'; i++) sim.tick(); // vote countdown
+    while (revive.phase === 'map' && g++ < 6) { for (const q of revive.players) drain(revive, q, false); revive.uiAction(0, { kind: 'pickNode', nodeId: revive.reachableNodes()[0] }); }
+    for (let i = 0; i < 60 * 5 && revive.phase === 'map'; i++) revive.tick(); // vote countdown
   }
-  const p1 = sim.players[1];
+  const p1 = revive.players[1];
   let gDown = 0;
-  while (!p1.downed && gDown++ < 90) { p1.hp = Math.min(p1.hp, 1); p1.invuln = 0; p1.stats.reflex = 0; sim.hurtPlayer(p1, 999, null); }
+  while (!p1.downed && gDown++ < 90) { p1.hp = Math.min(p1.hp, 1); p1.invuln = 0; p1.stats.reflex = 0; revive.hurtPlayer(p1, 999, null); }
   if (!p1.downed) fail('repeated hurtPlayer(999) did not down the target');
-  sim.players[0].x = p1.x; sim.players[0].y = p1.y;
-  for (let i = 0; i < 60 * 4; i++) sim.tick();
+  revive.players[0].x = p1.x; revive.players[0].y = p1.y;
+  for (let i = 0; i < 60 * 4; i++) revive.tick();
   if (p1.downed) fail('revive by proximity failed after 4s');
   else ok('down + proximity revive works');
-  for (const p of sim.players) {
+  for (const p of revive.players) {
     let g = 0;
-    while (!p.downed && !sim.over && g++ < 90) { p.invuln = 0; p.stats.reflex = 0; p.hp = Math.min(p.hp, 1); sim.hurtPlayer(p, 9999, null); }
+    while (!p.downed && !revive.over && g++ < 90) { p.invuln = 0; p.stats.reflex = 0; p.hp = Math.min(p.hp, 1); revive.hurtPlayer(p, 9999, null); }
   }
-  if (sim.over && sim.result && !sim.result.win) ok('full wipe ends run with loss results');
+  if (revive.over && revive.result && !revive.result.win) ok('full wipe ends run with loss results');
   else fail('wipe did not end the run');
 } catch (err) { fail('coop run crashed', err); }
 
@@ -836,7 +868,7 @@ try {
   else fail(`combine result wrong: ${JSON.stringify(p.weapons)}`);
   const mats0 = p.materials;
   const slot = p.weapons.findIndex(w => w.id === 'coilgun');
-  const expect = sellValue(weaponBasePrice(WEAPON_BY_ID.coilgun, 2), sim.floorNum);
+  const expect = sellValue(weaponBasePrice(WEAPON_BY_ID.coilgun, 2), sim.regionIndex);
   sim.uiAction(0, { kind: 'sellWeapon', slot, id: 'coilgun', tier: 2 });
   if (p.materials === mats0 + expect && !p.weapons.some(w => w.id === 'coilgun')) ok(`sell weapon refunds 30% (+${expect})`);
   else fail(`sell weapon: mats ${mats0}→${p.materials}`);
@@ -1055,12 +1087,15 @@ try {
     const wantChaff = Math.round(ENEMY_BY_ID.skulker.hp * CONFIG.enemyHpMult * hs.coopHp);
     const wantElite = Math.round(ENEMY_BY_ID.lobber.hp * CONFIG.ELITE_HP_MULT * CONFIG.enemyHpMult * hs.coopHp);
     const okChaff = chaff.maxHp === wantChaff, okElite = elite.maxHp === wantElite;
-    // boss: use the floor-1 siege boss
-    const bs = new Sim({ seed: 16, party: [{ idx: 0, key: 'k', name: 'B', charId: T1, color: '#fff' }] });
-    bs._travelTo(bs.floor.siegeId);
+    // boss: region 1's own boss, resolved the way the sim resolves it. Reading
+    // `BOSS_BY_FLOOR[1]` hard-named the Ossuary Hulk, which is region 3's boss
+    // now — the check would have compared the Hulk's HP against the Pacific
+    // Northwest's and called a correct game wrong.
+    const bs = new Sim({ seed: 16, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'B', charId: T1, color: '#fff' }] });
+    bs._travelTo(bs.floor.bossId);
     bs.siegeT = bs.bossAt; bs.tick();
-    const { BOSS_BY_FLOOR } = await import('../js/content/bosses.js');
-    const okBoss = bs.boss && bs.boss.maxHp === Math.round(BOSS_BY_FLOOR[1].hp * CONFIG.enemyHpMult * bs.coopHp);
+    const { bossForRegion } = await import('../js/regions.js');
+    const okBoss = bs.boss && bs.boss.maxHp === Math.round(bossForRegion(1).hp * CONFIG.enemyHpMult * bs.coopHp);
     if (okChaff && okElite && okBoss) ok(`enemyHpMult ${CONFIG.enemyHpMult} applies to chaff (${wantChaff}), elite (${wantElite}), boss (${bs.boss.maxHp})`);
     else fail(`hp spot checks: chaff ${chaff.maxHp}/${wantChaff} elite ${elite.maxHp}/${wantElite} boss ${bs.boss && bs.boss.maxHp}`);
     // density: identical no-kill fight with the knob on vs off. Count spawn
@@ -1297,7 +1332,7 @@ try {
     // siege looting window: boss death → countdown → THEN fizzle + hatch + shop
     const g = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: T1, color: '#fff' }] });
     g.god = true;
-    g._travelTo(g.floor.siegeId);
+    g._travelTo(g.floor.bossId);
     g.siegeT = g.bossAt; g.tick();
     let b = 0;
     while (g.boss && b++ < 3000) g.damageEnemy(g.boss, 400, { owner: g.players[0] });
@@ -1352,9 +1387,9 @@ try {
   else fail(`arena scale: 4p ${w4}×${h4} ${t4}, 5p ${w5}×${h5} ${t5}`);
   // siege mutations scale with the arena so scripts land where the walls are
   const s8 = new Sim({ seed: 424244, party: octet(8) });
-  s8._travelTo(s8.floor.siegeId);
+  s8._travelTo(s8.floor.bossId);
   const s1p = new Sim({ seed: 424244, party: octet(1) });
-  s1p._travelTo(s1p.floor.siegeId);
+  s1p._travelTo(s1p.floor.bossId);
   const m8 = s8.mutations.find(m => m.x !== undefined), m1 = s1p.mutations.find(m => m.x !== undefined);
   if (m8 && m1 && m8.x === Math.round(m1.x * CW.ARENA_CROWD_SCALE)) ok('siege mutation coordinates scale with the 8-player arena');
   else fail(`mutation scale: ${m1 && m1.x} → ${m8 && m8.x}`);
@@ -1384,7 +1419,7 @@ try {
   // codec: round-trip fidelity + wire size at a dense moment
   {
     const g = new Sim({ seed: 626262, party: octet(8) });
-    g._travelTo(g.floor.siegeId);
+    g._travelTo(g.floor.bossId);
     for (let i = 0; i < 7; i++) g.debug('F1');
     for (let i = 0; i < 40; i++) { g.tick(); for (const q of g.players) { q.hp = q.stats.vitality; q.invuln = 1; } }
     const snap = g.getSnapshot();
@@ -1556,7 +1591,7 @@ try {
       }
     };
     let guard = 0;
-    while (!g.over && g.floorNum === 1 && guard++ < 60 * 60 * 30) {
+    while (!g.over && guard++ < 60 * 60 * 30) {
       if (g.phase === 'map') {
         for (const q of g.players) drain(g, q, true);
         const r = g.reachableNodes();
@@ -1571,8 +1606,8 @@ try {
     }
     const standing = g.players.filter(p => !p.gone && !p.downed).length;
     const nodesCleared = g.visited.size;
-    if (!g.over && g.floorNum === 2) {
-      ok(`mixed-8 party clears ALL of floor 1 organically (no nukes) — ${standing}/8 standing at the descent`);
+    if (g.over && g.result && g.result.win) {
+      ok(`mixed-8 party clears ALL of region 1 organically (no nukes) — ${standing}/8 standing at the boss`);
     } else {
       // Not a hard failure, and deliberately so: the outcome swings on global
       // Math.random (spawn placement), so the same code wipes on the opening
@@ -1594,7 +1629,6 @@ try {
   const { OBJECTIVE_KINDS, OBJECTIVE_META } = await import('../js/objectives.js');
   const { WEAPON_BY_ID } = await import('../js/content/weapons.js');
   const { CONFIG } = await import('../js/config.js');
-  const { HORDE_MIN, HORDE_MAX } = await import('../js/dungeon.js');
   const { CONFIG: CO } = await import('../js/config.js');
   const { ITEMS: IO } = await import('../js/content/items.js');
   const mk = (ids) => ids.map((c, i) => ({ idx: i, key: `o${i}`, name: `O${i}`, charId: c, color: '#fff' }));
@@ -1621,29 +1655,34 @@ try {
   const soloRef = _SEL.some(c => c.id === OBJ_SOLO_REFERENCE) ? OBJ_SOLO_REFERENCE : _SEL[0].id;
   const quad = n => (n === 1 ? mk([soloRef]) : mk(Array.from({ length: n }, (_, i) => pickN(4)[i % 4])));
 
-  // --- floor composition: 12 combat nodes with the guaranteed mix ---
+  // --- region composition: §2.4's mix, and all eight objectives ACROSS regions ---
+  //
+  // The floor map dealt twelve objectives into every floor and this checked
+  // that all eight types appeared in one. A region deals TWO, and §2.4 says so
+  // — variety is bought across a playthrough rather than crammed into a map, so
+  // the same claim ("all eight are reachable") has to be asked of a run rather
+  // than of a single generation. Asking one region would demand a thing the
+  // design deliberately does not do.
   {
-    let bad = 0, hordeLo = 99, hordeHi = 0;
+    let bad = 0;
     const seen = {};
     for (let s = 0; s < 240; s++) {
-      for (let f = 1; f <= 4; f++) {
-        const map = generateFloorMap(s * 7919 + 13, f);
-        const fights = map.nodes.filter(n => !['shop', 'treasure', 'siege'].includes(n.kind));
+      for (const region of REGIONS) {
+        const map = generateTree(s * 7919 + 13, region, s % 4);
+        const fights = map.nodes.filter(n => n.depth !== null);
         const c = {};
-        for (const n of fights) { c[n.kind] = (c[n.kind] || 0) + 1; seen[n.kind] = 1; }
-        const horde = c.combat || 0;
-        hordeLo = Math.min(hordeLo, horde); hordeHi = Math.max(hordeHi, horde);
-        if (fights.length !== 12) bad++;
-        else if (horde < HORDE_MIN || horde > HORDE_MAX) bad++;
-        else if ((c.nest || 0) !== 1 || (c.bounty || 0) !== 1 || (c.breach || 0) !== 1) bad++;
-        else if ((c.zone || 0) < 1 || (c.zone || 0) > 2 || (c.elite_arena || 0) < 1 || (c.elite_arena || 0) > 2) bad++;
-        else if (f % 2 === 1 ? ((c.relic || 0) !== 1 || (c.storm || 0) !== 1) : (c.payload || 0) !== 1) bad++;
-        else if (!map.nodes.some(n => n.kind === 'shop') || !map.nodes.some(n => n.kind === 'treasure')) bad++;
+        for (const n of fights) c[n.mix] = (c[n.mix] || 0) + 1;
+        for (const o of map.objectives) seen[o] = 1;
+        if (fights.length !== COLUMNS * ROWS) bad++;
+        else if (Object.entries(NODE_MIX).some(([k, v]) => (c[k] || 0) !== v)) bad++;
+        else if (new Set(map.objectives).size !== NODE_MIX.objective) bad++;
+        else if (STOP_BANDS.some(b => map.nodes.filter(n => n.kind === b.kind).length !== 1)) bad++;
       }
     }
-    if (!bad) ok(`floor composition: 960 floors all yield 12 combat nodes with the guaranteed mix (horde arenas ${hordeLo}–${hordeHi})`);
-    else fail(`floor composition: ${bad}/960 floors violated the spec`);
-    if (OBJECTIVE_KINDS.every(k => seen[k])) ok('all eight objective types appear across generated floors');
+    const gens = 240 * REGIONS.length;
+    if (!bad) ok(`region composition: ${gens} regions all yield §2.4's exact mix (${Object.entries(NODE_MIX).map(([k, v]) => `${v} ${k}`).join(', ')}) plus one shop and one reliquary`);
+    else fail(`region composition: ${bad}/${gens} regions violated the spec`);
+    if (OBJECTIVE_KINDS.every(k => seen[k])) ok(`all eight objective types appear across ${gens} generated regions (two per region, never repeating inside one)`);
     else fail(`missing objective kinds: ${OBJECTIVE_KINDS.filter(k => !seen[k]).join(', ')}`);
   }
 
@@ -2197,7 +2236,7 @@ try {
     g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
   } };
   const enterKind = (g, kind) => {
-    const n = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    const n = g.floor.nodes.find(x => x.depth !== null && x.kind !== 'shrine');
     n.kind = kind; if (!n.template) n.template = 'open_expanse';
     g._travelTo(n.id); return n;
   };
@@ -2260,17 +2299,16 @@ try {
     let bad = 0;
     const { hordeTotalSpawns } = await import('../js/arenas.js');
     for (const [n, fl] of [[1, 1], [4, 1], [8, 1], [4, 3]]) {
-      const g = new Sim({ seed: 31337, party: squad(Math.min(4, n)).concat(
+      const g = new Sim({ seed: 31337, regionIndex: fl, party: squad(Math.min(4, n)).concat(
         n > 4 ? mkp(Array.from({ length: n - 4 }, (_, i) => pickN(4)[i % 4]))
           .map((m, i) => ({ ...m, idx: 4 + i, key: `x${i}` })) : []) });
-      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
       const node = enterKind(g, 'elite_arena');
       const o = g.obj;
-      const priced = Math.round(hordeTotalSpawns(g.floorNum, node.col, g.coopSpawn) / 2);
-      if (Math.abs(o.total - priced) > 1) { bad++; fail(`elite roster ${o.total} != half a horde arena (${priced}) at ${n}p f${fl}`); }
+      const priced = Math.round(hordeTotalSpawns(g.regionIndex, (node.depth || 1) - 1, g.coopSpawn) / 2);
+      if (Math.abs(o.total - priced) > 1) { bad++; fail(`elite roster ${o.total} != half a horde arena (${priced}) at ${n}p r${fl}`); }
       // the WHOLE roster lands at once, and it is a MIX of variants
       for (let i = 0; i < 90; i++) g.tick();
-      if (g.enemyPool.count < o.total) { bad++; fail(`only ${g.enemyPool.count}/${o.total} champions on the field at t=0 (${n}p f${fl})`); }
+      if (g.enemyPool.count < o.total) { bad++; fail(`only ${g.enemyPool.count}/${o.total} champions on the field at t=0 (${n}p r${fl})`); }
       const kinds = new Set([...g.enemyPool].map(e => e.arenaVariant));
       if (kinds.size < 3) { bad++; fail(`elite roster was not a mix: ${[...kinds]}`); }
     }
@@ -2403,6 +2441,7 @@ try {
 try {
   const { hordeTotalSpawns: HTS } = await import('../js/arenas.js');
   const { BOSS_BY_FLOOR: BBF } = await import('../js/content/bosses.js');
+  const { bossForRegion: BFR } = await import('../js/regions.js');
   const mk3 = ids => ids.map((c, i) => ({ idx: i, key: `q${i}`, name: `Q${i}`, charId: c, color: '#fff' }));
   const party3 = n => mk3(Array.from({ length: n },
     (_, i) => pickN(8)[i % 8]));
@@ -2412,7 +2451,7 @@ try {
     g._applyPerm(p, { ferocity: 40, tempo: 15, vitality: 30 });
   } };
   const enter3 = (g, kind) => {
-    const n = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+    const n = g.floor.nodes.find(x => x.depth !== null && x.kind !== 'shrine');
     n.kind = kind; if (!n.template) n.template = 'open_expanse';
     g._travelTo(n.id); return n;
   };
@@ -2422,8 +2461,7 @@ try {
     let bad = 0;
     const notes = [];
     for (const [n, fl] of [[1, 1], [4, 1], [8, 1], [1, 4]]) {
-      const g = new Sim({ seed: 8181 + n, party: party3(n) });
-      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      const g = new Sim({ seed: 8181 + n, regionIndex: fl, party: party3(n) });
       enter3(g, 'elite_arena'); g.god = true; gear3(g);
       const o = g.obj;
       for (let i = 0; i < 4; i++) g.tick();      // the roster lands on tick 1
@@ -2436,10 +2474,10 @@ try {
       // 25-30% lobbers
       const lob = [...g.enemyPool].filter(e => e.arenaVariant === 'lobber').length;
       const share = lob / Math.max(1, g.enemyPool.count);
-      if (share < 0.22 || share > 0.33) { bad++; fail(`lobber share ${(100 * share).toFixed(0)}% outside 25-30% (${n}p f${fl})`); }
+      if (share < 0.22 || share > 0.33) { bad++; fail(`lobber share ${(100 * share).toFixed(0)}% outside 25-30% (${n}p r${fl})`); }
       // per-unit HP falls as the roster grows: total threat up, per-unit down
       const hp = [...g.enemyPool].map(e => e.maxHp);
-      notes.push(`${n}p f${fl}: ${o.total} champions, HP ${Math.min(...hp)}-${Math.max(...hp)}, closest ${Math.round(closest)}u`);
+      notes.push(`${n}p r${fl}: ${o.total} champions, HP ${Math.min(...hp)}-${Math.max(...hp)}, closest ${Math.round(closest)}u`);
     }
     // the shrink really is a shrink: a bigger roster means softer individuals
     const solo = new Sim({ seed: 8181, party: party3(1) }); enter3(solo, 'elite_arena'); solo.tick();
@@ -2456,13 +2494,12 @@ try {
   {
     let bad = 0;
     for (const [n, fl] of [[1, 1], [4, 1], [8, 1]]) {
-      const g = new Sim({ seed: 3400 + n, party: party3(n) });
-      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      const g = new Sim({ seed: 3400 + n, regionIndex: fl, party: party3(n) });
       const node = enter3(g, 'relic'); g.god = true; gear3(g);
       const o = g.obj;
       if (o.relics.length !== 1) { bad++; fail(`relic run opened with ${o.relics.length} relics, want 1`); }
       // the pack is the level's budget / 5, and it is standing at the relic
-      const priced = Math.max(4, Math.round(HTS(g.floorNum, node.col, g.coopSpawn) / 5));
+      const priced = Math.max(4, Math.round(HTS(g.regionIndex, (node.depth || 1) - 1, g.coopSpawn) / 5));
       if (o.pack !== priced) { bad++; fail(`relic pack ${o.pack} != budget/5 (${priced})`); }
       if (g.enemyPool.count < o.pack * 0.9) { bad++; fail(`relic pack did not land: ${g.enemyPool.count}/${o.pack}`); }
       const far = [...g.enemyPool].filter(e => Math.hypot(e.x - o.relics[0].x, e.y - o.relics[0].y) > 700).length;
@@ -2519,8 +2556,7 @@ try {
     let bad = 0;
     const notes = [];
     for (const [n, fl] of [[1, 1], [4, 1], [1, 4]]) {
-      const g = new Sim({ seed: 6060 + n, party: party3(n) });
-      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      const g = new Sim({ seed: 6060 + n, regionIndex: fl, party: party3(n) });
       enter3(g, 'breach'); g.god = true; gear3(g);
       const o = g.obj;
       if (o.need !== undefined || o.kills !== undefined) { bad++; fail('breach still tracks a kill quota'); }
@@ -2546,7 +2582,7 @@ try {
         const behind = xs.filter(x => x < mid).length;
         if (behind < xs.length * 0.25 || behind > xs.length * 0.75) { bad++; fail(`breach spawns are one-sided: ${behind}/${xs.length} behind the party`); }
       }
-      notes.push(`${n}p f${fl}: ${o.doors.length} doors, slit ${Math.round(worst)}u`);
+      notes.push(`${n}p r${fl}: ${o.doors.length} doors, slit ${Math.round(worst)}u`);
     }
     // and the far gate IS the extraction portal — no mid-map hatch
     {
@@ -2570,14 +2606,13 @@ try {
     let bad = 0;
     const notes = [];
     for (const [n, fl] of [[1, 1], [4, 1], [1, 4]]) {
-      const g = new Sim({ seed: 2200 + n, party: party3(n) });
-      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      const g = new Sim({ seed: 2200 + n, regionIndex: fl, party: party3(n) });
       enter3(g, 'bounty'); g.god = true; gear3(g);
       for (let i = 0; i < 200; i++) { for (const p of g.players) g.setInput(p.idx, { mx: 0, my: 0 }); g.tick(); }
       const mark = g.enemyById(g.obj.markId);
-      if (!mark) { bad++; fail(`no bounty mark after 3s (${n}p f${fl})`); continue; }
+      if (!mark) { bad++; fail(`no bounty mark after 3s (${n}p r${fl})`); continue; }
       // the anchor: ~60-70% of the floor boss, floor-ramped, then xBOUNTY_HP_MULT
-      const anchor = (BBF[g.floorNum].bountyAnchor || BBF[g.floorNum].hp) * g.coopHp * g.greedHp * CFG.enemyHpMult;
+      const anchor = (BFR(g.regionIndex).bountyAnchor || BFR(g.regionIndex).hp) * g.coopHp * g.greedHp * CFG.enemyHpMult;
       const ratio = mark.maxHp / anchor;
       // BAND DERIVED FROM THE CONSTANT, not typed beside it. This read
       // `3 .. 7.5` against a hardcoded x10 and went red the moment the ruling
@@ -2592,7 +2627,7 @@ try {
       const chaff = g.enemyPool.count - 1;
       if (chaff < 4) { bad++; fail(`the mark is not calling reinforcements: ${chaff} chaff after 3s`); }
       if (near < chaff * 0.6) { bad++; fail(`the stream is not spawning at the mark: ${near}/${chaff} nearby`); }
-      notes.push(`${n}p f${fl}: ${Math.round(mark.maxHp)}hp (${ratio.toFixed(1)}x boss) spd ${Math.round(mark.spd)}, ${chaff} in the stream`);
+      notes.push(`${n}p r${fl}: ${Math.round(mark.maxHp)}hp (${ratio.toFixed(1)}x boss) spd ${Math.round(mark.spd)}, ${chaff} in the stream`);
     }
     // the stream scales with party size
     const s1 = new Sim({ seed: 2200, party: party3(1) }); enter3(s1, 'bounty'); s1.god = true;
@@ -2637,8 +2672,7 @@ try {
     let bad = 0;
     const notes = [];
     for (const [n, fl] of [[1, 1], [4, 1], [8, 1], [1, 3]]) {
-      const g = new Sim({ seed: 7700 + n, party: party3(n) });
-      for (let f = 1; f < fl; f++) g._startFloor(f + 1);
+      const g = new Sim({ seed: 7700 + n, regionIndex: fl, party: party3(n) });
       enter3(g, 'nest'); g.god = true; gear3(g);
       const o = g.obj;
       const nest = g.enemyById(o.nests[0]);
@@ -2651,7 +2685,13 @@ try {
       const w0 = g.walls.find(w => w.nestId === nest.id && w.ring === 0);
       if (!g._inObstacle(w0.x + w0.w / 2, w0.y + w0.h / 2, 0)) { bad++; fail('a barricade does not block movement'); }
       if (!g.losBlocked(nest.x, nest.y, nest.x + 900, nest.y)) { /* the ring may be open that way */ }
-      if (w0.maxHp < 150) { bad++; fail(`barricade HP ${w0.maxHp} is not a real obstacle`); }
+      // 150 was the floor when every region's barricade was the same wall.
+      // Region 1 halves it on purpose (`nestWallHpMult`) so Nest Purge teaches
+      // before it tests, so the floor is relative to the region rather than
+      // absolute — an absolute one would have made region 1's gentleness a
+      // failure the first time it applied.
+      const wallFloor = 150 * ((RG_BY_INDEX[g.regionIndex] || {}).tuning || {}).nestWallHpMult || 150;
+      if (w0.maxHp < wallFloor) { bad++; fail(`barricade HP ${w0.maxHp} is under region ${g.regionIndex}'s floor of ${Math.round(wallFloor)}`); }
       // the nest is untouchable until BOTH layers are breached
       if (!nest.nestShielded) { bad++; fail('a walled nest started unshielded'); }
       const hp0 = nest.hp;
@@ -2665,7 +2705,7 @@ try {
       if (nest.nestShielded) { bad++; fail('both rings breached and the nest is still shielded'); }
       g.damageEnemy(nest, 100, {});
       if (nest.hp >= hp0) { bad++; fail('a breached nest still takes no damage'); }
-      notes.push(`${n}p f${fl}: ${o.total} nests @ ${nest.maxHp}hp behind ${w0.maxHp}hp walls`);
+      notes.push(`${n}p r${fl}: ${o.total} nests @ ${nest.maxHp}hp behind ${w0.maxHp}hp walls`);
     }
     // nest HP is the briefed x10 (2.2 -> 22 on the base spawner) and the map is +50%
     {
@@ -2719,7 +2759,6 @@ try {
     else fail(`earlier bosses moved: ${others.join(' / ')}`);
     // and the bounty anchor did NOT follow it up
     const g = new Sim({ seed: 4321, party: party3(1) });
-    g._startFloor(2); g._startFloor(3); g._startFloor(4);
     enter3(g, 'bounty'); g.god = true;
     for (let i = 0; i < 200; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
     const mark = g.enemyById(g.obj.markId);
@@ -2918,7 +2957,13 @@ try {
     // classes still fail here — correctly, and for the reason Group A gives.
     const one = id => {
       const g = new Sim({ seed: 4242, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'T', charId: id, color: '#fff' }] });
-      const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
+      // §13 rule 58 — `find(x => not a stop)` returns the FIRST node, and the
+      // first node is map 1: half density, three archetypes, and the one room
+      // in the game built to be unrepresentative. The Assassin's contract and
+      // the Hunter's leash both went red on a thin, fast-moving tutorial
+      // roster, and neither is about onboarding. `representativeNode` is the
+      // predicate that exists to say "somewhere typical".
+      const node = representativeNode(g);
       node.kind = 'combat'; g._travelTo(node.id); g.god = true;
       armBot(g, g.players[0]);
       return g;
@@ -3220,10 +3265,15 @@ try {
     // zero as a beast defect. The class carried `allowUnplayable` while it had
     // no tree; it has two now and is selectable, so the flag is gone and this
     // seats it the ordinary way.
+    // The room is PINNED, not taken. `find(first non-stop)` is map 1 (§13 rule
+    // 58) and its template is whatever the deck dealt — and the leash check
+    // below needs a room at least LEASH_R + 200 wide to put an enemy outside
+    // the leash at all. `open_expanse` is the widest template and the one that
+    // makes the setup possible; the check that follows asserts it worked.
     const hunter = (seed = 4242) => {
       const g = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'H', charId: 'toh_hunter', color: '#fff' }] });
-      const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
-      node.kind = 'combat'; g._travelTo(node.id); g.god = true;
+      const node = representativeNode(g);
+      node.kind = 'combat'; node.template = 'open_expanse'; g._travelTo(node.id); g.god = true;
       const p = g.players[0];
       if (p.boonOffer && p.boonOffer.length) g.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
       return g;
@@ -3307,6 +3357,15 @@ try {
       quiet(g);
       const far = g.spawnEnemyById('skulker', Math.min(g.W - 60, p.x + BEAST.LEASH_R + 200), p.y, {});
       far.spd = 0; far.hp = far.maxHp = 99999;
+      // ASSERT THE SETUP. The x is clamped into the arena, so a room narrower
+      // than the leash silently puts the "far" enemy INSIDE it — and the beast
+      // then pursues correctly while the check reports the leash broken. That
+      // is what this reported when the room deal moved: pursued=true at a max
+      // distance of 269u, well inside MEANDER_R.
+      const setupD = Math.hypot(far.x - p.x, far.y - p.y);
+      if (setupD <= BEAST.LEASH_R) {
+        fail(`leash fixture could not place an enemy outside the leash: ${setupD.toFixed(0)}u in a ${g.W}×${g.H} room, leash ${BEAST.LEASH_R} — the room is too small for the question`);
+      }
       let sawPursuit = false, maxD = 0;
       for (let i = 0; i < 60 * 6; i++) {
         g.tick();
@@ -3701,7 +3760,7 @@ try {
   //    them, and the guarantee is structural: the sprite layer is not imported
   //    by anything that simulates, so no sim code CAN read a scale. --
   {
-    const SIM_MODULES = ['game.js', 'netcodec.js', 'net.js', 'dungeon.js', 'objectives.js',
+    const SIM_MODULES = ['game.js', 'netcodec.js', 'net.js', 'nodetree.js', 'objectives.js',
       'arenas.js', 'traits-toh.js', 'config.js', 'rng.js', 'util.js'];
     const leaked = [];
     for (const f of SIM_MODULES) {
@@ -4470,10 +4529,9 @@ try {
 
 // ---- 11. stress: siege crest density, tick-time measurement ----
 try {
-  const sim = new Sim({ seed: 99, party: [{ idx: 0, key: 'k', name: 'STRESS', charId: T1, color: '#fff' }] });
+  const sim = new Sim({ seed: 99, regionIndex: 4, party: [{ idx: 0, key: 'k', name: 'STRESS', charId: T1, color: '#fff' }] });
   sim.god = true;
-  while (sim.floorNum < 4) sim.debug('F4');
-  sim._travelTo(sim.floor.siegeId);
+  sim._travelTo(sim.floor.bossId);
   const p = sim.players[0];
   p.weapons.length = 0; sim.summons.length = 0; // let the siege pile up
   for (let t = 0; t < 60 * 130; t++) { sim.tick(); drain(sim, p, false); }
@@ -4734,49 +4792,57 @@ try {
     else fail(`biome ${b.id}: atlas ${b.atlas} must be site-relative and end in '/' — GitHub Pages serves from a subpath`);
   }
 
-  // -- exactly one biome has art in this patch, and every other floor is
-  //    untouched. This is the acceptance criterion "all non-tundra maps are
-  //    visually unchanged", expressed where it can actually be checked. --
+  // -- the ground follows the REGION, and only the built regions have one. --
+  //
+  // This asserted "exactly one floor is themed and it is tundra". Both halves
+  // are now wrong on purpose: the ground is keyed to regions, and the one
+  // themed slot was the Pacific Northwest wearing snow. The claim it was really
+  // making — every unthemed map is visually unchanged — survives as "only the
+  // regions with a declared tileset are themed".
   {
-    const themed = FLOOR_BIOMES.map((id, i) => [i + 1, id]).filter(([, id]) => id);
-    if (themed.length === 1 && themed[0][1] === 'tundra') ok(`exactly one floor is themed: floor ${themed[0][0]} is tundra, floors ${FLOOR_BIOMES.map((id, i) => id ? null : i + 1).filter(Boolean).join('/')} draw the flat floor`);
-    else fail(`expected one themed floor (tundra), got ${JSON.stringify(themed)}`);
-    if (FLOOR_BIOMES.length === CFG.FLOORS) ok(`FLOOR_BIOMES covers all ${CFG.FLOORS} floors`);
-    else fail(`FLOOR_BIOMES has ${FLOOR_BIOMES.length} entries for ${CFG.FLOORS} floors — a floor past the end would be undefined`);
-    if (!biomeFor(0) && !biomeFor(99) && !biomeFor(undefined)) ok('biomeFor() returns null off the end of the floor list rather than throwing');
-    else fail('biomeFor() resolved a biome for an out-of-range floor');
+    const themed = REGION_BIOMES.map((id, i) => [i + 1, id]).filter(([, id]) => id);
+    const declared = REGIONS.filter(r => r.tileset && BIOMES[r.tileset]).map(r => r.index);
+    if (themed.length === declared.length && themed.every(([i]) => declared.includes(i))) {
+      ok(`the ground follows the region: ${themed.map(([i, id]) => `${i}=${id}`).join(', ')}; regions ${REGION_BIOMES.map((id, i) => id ? null : i + 1).filter(Boolean).join('/')} draw the flat fill`);
+    } else fail(`REGION_BIOMES ${JSON.stringify(themed)} disagrees with the regions that declare a tileset (${declared.join(', ')})`);
+    if (!REGION_BIOMES.includes('tundra')) ok('tundra is declared in BIOMES and worn by no region — the art is kept, the slot is unassigned');
+    else fail('tundra is assigned to a region; it belongs to the Russian / necromancer region, whose index is undecided');
+    if (REGION_BIOMES.length === TOTAL_REGIONS) ok(`REGION_BIOMES covers all ${TOTAL_REGIONS} regions`);
+    else fail(`REGION_BIOMES has ${REGION_BIOMES.length} entries for ${TOTAL_REGIONS} regions — a region past the end would be undefined`);
+    if (!biomeFor(0) && !biomeFor(99) && !biomeFor(undefined)) ok('biomeFor() returns null off the end of the region list rather than throwing');
+    else fail('biomeFor() resolved a biome for an out-of-range region');
   }
 
-  // -- the arena carries it, on every node kind, for every floor --
+  // -- the arena carries it, on every node kind, for every region --
   {
     const { buildArena } = await import('../js/arenas.js');
     let wrong = 0, seen = 0;
-    for (let floor = 1; floor <= CFG.FLOORS; floor++) {
-      const want = FLOOR_BIOMES[floor - 1] || null;
+    for (let region = 1; region <= TOTAL_REGIONS; region++) {
+      const want = REGION_BIOMES[region - 1] || null;
       for (const template of TEMPLATE_KEYS) {
-        const a = buildArena(12345, floor, { id: 3, kind: 'combat', template }, 1);
+        const a = buildArena(12345, region, { id: 3, kind: 'combat', template }, 1);
         seen++;
-        if ((a.biome || null) !== want) { wrong++; if (wrong < 3) fail(`buildArena floor ${floor} ${template}: biome ${a.biome} != ${want}`); }
+        if ((a.biome || null) !== want) { wrong++; if (wrong < 3) fail(`buildArena region ${region} ${template}: biome ${a.biome} != ${want}`); }
       }
-      const s = buildArena(12345, floor, { id: 9, kind: 'siege', template: null }, 1);
+      const s = buildArena(12345, region, { id: 9, kind: 'siege', template: null }, 1);
       seen++;
-      if ((s.biome || null) !== want) { wrong++; fail(`buildArena floor ${floor} siege: biome ${s.biome} != ${want}`); }
+      if ((s.biome || null) !== want) { wrong++; fail(`buildArena region ${region} boss room: biome ${s.biome} != ${want}`); }
     }
-    if (!wrong) ok(`every arena carries its floor's biome — ${seen} arenas across ${CFG.FLOORS} floors, templates and sieges`);
+    if (!wrong) ok(`every arena carries its region's biome — ${seen} arenas across ${TOTAL_REGIONS} regions, templates and boss rooms`);
   }
 
   // -- and the sim publishes it, because the renderer reads it off the view --
   {
-    const g = new Sim({ seed: 909, party: [{ idx: 0, key: 'k', name: 'B', charId: T1, color: '#fff' }] });
+    const g = new Sim({ seed: 909, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'B', charId: T1, color: '#fff' }] });
     g.uiAction(0, { kind: 'pickNode', nodeId: g.reachableNodes()[0] });
     const ev = g.events.filter(e => e.k === 'arena').pop();
-    if (g.biome === 'tundra') ok(`Sim.biome is 'tundra' on floor 1 — the host renderer has a floor to draw`);
-    else fail(`Sim.biome is ${JSON.stringify(g.biome)} on floor 1, want 'tundra'`);
-    if (ev && ev.biome === 'tundra') ok(`the 'arena' event carries biome 'tundra' — clients theme from the event, not from a per-frame snapshot`);
+    if (g.biome === 'pnw') ok(`Sim.biome is 'pnw' in region 1 — the host renderer has a forest floor to draw`);
+    else fail(`Sim.biome is ${JSON.stringify(g.biome)} in region 1, want 'pnw'`);
+    if (ev && ev.biome === 'pnw') ok(`the 'arena' event carries biome 'pnw' — clients theme from the event, not from a per-frame snapshot`);
     else fail(`the 'arena' event carries biome ${JSON.stringify(ev && ev.biome)} — a client would draw the flat floor while the host draws tiles`);
     // and it is NOT on the wire per frame: the floor is cosmetic and static
     const snap = JSON.stringify(g.getSnapshot());
-    if (!snap.includes('tundra')) ok('the biome is not in the snapshot — a static cosmetic never costs bandwidth per frame');
+    if (!snap.includes('pnw')) ok('the biome is not in the snapshot — a static cosmetic never costs bandwidth per frame');
     else fail('the biome is being serialized into snapshots — that is per-frame bandwidth for something that never changes');
   }
 
@@ -4797,9 +4863,9 @@ try {
     if (!wrong) ok(`radii unchanged on a themed floor (4 characters, trait multipliers intact) — tiles are paint, not collision`);
 
     // And the room is the same room whether or not it is themed. Compared on
-    // ONE floor with the biome switched off and back on, not across two floors:
-    // buildArena keys its rng on floorNum (subRng(seed,'arena',floorNum,id)),
-    // so two different floors legitimately build two different rooms and
+    // ONE region with the biome switched off and back on, not across two:
+    // buildArena keys its rng on the region (subRng(seed,'arena',region,id)),
+    // so two different regions legitimately build two different rooms and
     // comparing them proves nothing. This is the difference the patch made.
     const { buildArena } = await import('../js/arenas.js');
     const shape = a => JSON.stringify([a.w, a.h, a.name, a.obstacles, a.hazards, a.mutations]);
@@ -4807,12 +4873,12 @@ try {
     for (const template of TEMPLATE_KEYS) {
       const node = { id: 3, kind: 'combat', template };
       const themed = buildArena(4242, 1, node, 1);
-      const was = FLOOR_BIOMES[0];
-      FLOOR_BIOMES[0] = null;                       // same floor, no biome
+      const was = REGION_BIOMES[0];
+      REGION_BIOMES[0] = null;                      // same region, no biome
       const plain = buildArena(4242, 1, node, 1);
-      FLOOR_BIOMES[0] = was;
+      REGION_BIOMES[0] = was;
       checked++;
-      if (themed.biome !== 'tundra' || plain.biome !== null) { geomWrong++; fail(`${template}: biome toggle did not take (${themed.biome} / ${plain.biome})`); }
+      if (themed.biome !== 'pnw' || plain.biome !== null) { geomWrong++; fail(`${template}: biome toggle did not take (${themed.biome} / ${plain.biome})`); }
       else if (shape(themed) !== shape(plain)) { geomWrong++; fail(`${template}: theming changed the room geometry — the biome is not cosmetic`); }
     }
     if (!geomWrong) ok(`switching the biome on and off leaves the room byte-identical across ${checked} templates — geometry, obstacles and hazards all untouched`);
@@ -4909,7 +4975,6 @@ try {
     for (const c of R.SELECTABLE) {
       for (let s = 0; s < 4; s++) {
         const g = new Sim({ seed: 7000 + s, party: [{ idx: 0, key: 'k', name: 'T', charId: c.id, color: '#fff' }] });
-        for (let f = 1; f < 1 + (s % 4); f++) g._startFloor(f + 1);
         const node = g.floor.nodes.find(n => n.kind === 'shop');
         if (!node) continue;
         g._travelTo(node.id);
@@ -5473,11 +5538,29 @@ try {
   // THE FOUR AXES, each measured against the horde room from the same seed.
   // Directions come from NODE_TUNING rather than from literals here, so a
   // retune of the design moves the test with it.
+  //
+  // GOLD CARRIES A SECOND TERM NOW, AND IT IS NOT AN ERROR. §2.4's elite node
+  // does two things: it multiplies the payout by 1.35, and it reweights the
+  // roster so 75% comes from the region's HEAVY half. Heavies carry more base
+  // `mats`, so an elite node in a live region pays 1.35 × (heavy mats / mixed
+  // mats), which measured ×1.72 the first time a region population reached the
+  // field. Before the region layer was wired `_regionPick` returned null and
+  // both rooms drew the same table, so the roster term was exactly 1 and the
+  // multiplier was the whole answer.
+  //
+  // The expectation is derived from `nodePopulation` rather than hardcoded, so
+  // it moves with the design instead of pinning today's roster.
+  const matsMean = pop => pop.reduce((a, x) => a + x.w * x.def.mats, 0) / pop.reduce((a, x) => a + x.w, 0);
+  const rosterTerm = (() => {
+    const g0 = new Sim({ seed: SEED, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    if (!g0.region) return 1;
+    return matsMean(NODE_POP(g0.region, 'elite')) / matsMean(NODE_POP(g0.region, 'horde'));
+  })();
   const axes = [
     ['count', e.n / Math.max(1, h.n), NODE_T.eliteCountMult, 'fewer'],
     ['HP', e.hp / Math.max(1e-9, h.hp), NODE_T.eliteHpMult, 'tougher'],
     ['damage', e.dmg / Math.max(1e-9, h.dmg), NODE_T.eliteDmgMult, 'harder-hitting'],
-    ['gold', e.mats / Math.max(1e-9, h.mats), NODE_T.eliteGoldMult, 'better-paying'],
+    ['gold', e.mats / Math.max(1e-9, h.mats), NODE_T.eliteGoldMult * rosterTerm, 'better-paying'],
   ];
   for (const [name, got, want, word] of axes) {
     // A generous band — spawn tables, rounding and floor scaling all sit
@@ -5485,9 +5568,9 @@ try {
     // absolute: below 1 must stay below 1, above 1 must stay above 1.
     const rightSide = (want < 1) ? got < 1 : got > 1;
     const close = Math.abs(got - want) / want <= 0.25;
-    if (rightSide && close) ok(`elite is measurably ${word}: ${name} ×${got.toFixed(2)} against horde (§2.4 asks ×${want})`);
-    else if (!rightSide) fail(`elite ${name} ×${got.toFixed(2)} is on the WRONG SIDE of 1 — §2.4 asks ×${want}. An elite node that is horde with a bigger number asks the same build question`);
-    else fail(`elite ${name} ×${got.toFixed(2)} is more than 25% off §2.4's ×${want}`);
+    if (rightSide && close) ok(`elite is measurably ${word}: ${name} ×${got.toFixed(2)} against horde (§2.4 asks ×${want.toFixed(2)}${name === 'gold' && rosterTerm !== 1 ? `, being 1.35 × ${rosterTerm.toFixed(2)} for the heavier roster` : ''})`);
+    else if (!rightSide) fail(`elite ${name} ×${got.toFixed(2)} is on the WRONG SIDE of 1 — §2.4 asks ×${want.toFixed(2)}. An elite node that is horde with a bigger number asks the same build question`);
+    else fail(`elite ${name} ×${got.toFixed(2)} is more than 25% off §2.4's ×${want.toFixed(2)}`);
   }
   // The negative the whole defect turned on: the modifiers existing is not the
   // same as the modifiers applying.

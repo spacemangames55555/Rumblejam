@@ -1623,6 +1623,36 @@
       "w": 64,
       "h": 64
     },
+    "tile.pnw_00": {
+      "file": "assets/tiles/pnw/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.pnw_01": {
+      "file": "assets/tiles/pnw/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.pnw_02": {
+      "file": "assets/tiles/pnw/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.pnw_03": {
+      "file": "assets/tiles/pnw/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.pnw_04": {
+      "file": "assets/tiles/pnw/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
     "tile.tundra_00": {
       "file": "assets/tiles/tundra/tile-00.png",
       "w": 64,
@@ -1649,6 +1679,36 @@
     },
     "tile.tundra_04": {
       "file": "assets/tiles/tundra/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.xibalba_00": {
+      "file": "assets/tiles/xibalba/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.xibalba_01": {
+      "file": "assets/tiles/xibalba/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.xibalba_02": {
+      "file": "assets/tiles/xibalba/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.xibalba_03": {
+      "file": "assets/tiles/xibalba/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.xibalba_04": {
+      "file": "assets/tiles/xibalba/tile-04.png",
       "w": 64,
       "h": 64,
       "strict": true

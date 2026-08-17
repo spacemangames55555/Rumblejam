@@ -51,7 +51,7 @@ export function showTitle(err = '') {
         </div>
         <div class="howto hidden" id="howto-box">
           <h3>Goal</h3>
-          Fight room to room through a 4-floor dungeon. Beat each floor's boss, descend, and destroy the Vault Regent on floor 4. If the whole party goes down, the run is over.
+          Pick a route through a region's ten maps — you fight five of them, plus a reliquary and a trader every route passes — then face the region boss. Clearing it unlocks the next region. If the whole party goes down, the region resets.
           <h3>Controls</h3>
           <b>WASD / arrows</b> move · weapons attack on their own · <b>E</b> opens the shop when you're in a shop room · mouse for menus.
           <h3>Materials</h3>
@@ -196,11 +196,11 @@ export function showResults(result, myIdx, canLobby = true) {
   hideScreens();
   const el = $('screen-results');
   el.classList.remove('hidden');
-  const title = result.win ? '<span class="result-title-win">VAULT CONQUERED</span>' : '<span class="result-title-loss">THE PARTY HAS FALLEN</span>';
+  const title = result.win ? '<span class="result-title-win">REGION CLEARED</span>' : '<span class="result-title-loss">THE PARTY HAS FALLEN</span>';
   el.innerHTML = `
     <div class="panel">
       <h2 class="rt">${title}</h2>
-      <div style="text-align:center;" class="dim">${result.win ? 'The Vault Regent lies in pieces.' : `Wiped on floor ${result.floor}.`}</div>
+      <div style="text-align:center;" class="dim">${result.win ? `${escapeHtml(result.regionName || 'The region')} is cleared.` : `Wiped in ${escapeHtml(result.regionName || 'the region')}.`}</div>
       <div class="results-grid">${result.players.map(p => `
         <div class="result-card" style="border-top:4px solid ${p.color}">
           <h4>${escapeHtml(p.name)} ${p.idx === myIdx ? '(you)' : ''} — ${CHAR_BY_ID[p.charId] ? CHAR_BY_ID[p.charId].name : ''} ${p.gone ? '(left)' : ''}</h4>
@@ -262,6 +262,15 @@ function initSettings() {
           <option value="off" ${tm === 'off' ? 'selected' : ''}>Off</option>
         </select>
       </label>
+      <div class="set-saves">
+        <div class="dim small" style="margin-bottom:6px;">${escapeHtml(A.storageWarning || '')}</div>
+        <div class="row" style="gap:6px;">
+          <button id="set-export" style="flex:1;">Export saves</button>
+          <button id="set-import" style="flex:1;">Import…</button>
+        </div>
+        <input type="file" id="set-import-file" accept="application/json,.json" class="hidden">
+        <div class="dim small" id="set-saves-msg"></div>
+      </div>
       <button id="set-close" style="width:100%;">Close</button>`;
     panel.querySelector('#set-vol').oninput = e => { setVolume(e.target.value / 100); sfx.click(); };
     panel.querySelector('#set-shake').onchange = e => {
@@ -270,6 +279,34 @@ function initSettings() {
       if (window.uvRenderer) window.uvRenderer.shakeEnabled = shakeEnabled;
     };
     panel.querySelector('#set-touch').onchange = e => { setTouchMode(e.target.value); sfx.click(); };
+    // §12 — EXPORT AND IMPORT ARE PART OF THE FORMAT, not a nicety: clearing
+    // browser data destroys every save, and `exportBundle`/`importBundle` had
+    // been written, tested and left with no caller. The warning above them is
+    // `saves.js`'s own STORAGE_WARNING rather than a second copy of it.
+    const msg = panel.querySelector('#set-saves-msg');
+    panel.querySelector('#set-export').onclick = () => {
+      sfx.click();
+      const { text, name } = A.exportSaves();
+      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      msg.textContent = `Exported ${name}.`;
+    };
+    const file = panel.querySelector('#set-import-file');
+    panel.querySelector('#set-import').onclick = () => { sfx.click(); file.click(); };
+    file.onchange = () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      f.text().then(text => {
+        const r = A.importSaves(text);
+        // A REFUSAL IS REPORTED IN FULL. `importBundle` never throws and never
+        // half-succeeds; the whole point is that the player learns their file
+        // is from an older build rather than watching characters vanish.
+        msg.textContent = r.ok ? `Imported ${r.count} character(s).` : `Import refused: ${r.problems.join('; ')}`;
+      });
+    };
     panel.querySelector('#set-close').onclick = () => panel.classList.add('hidden');
   };
 }
