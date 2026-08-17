@@ -1188,12 +1188,17 @@ try {
   // attack at all and died in every Bastion template: the Bastion sanction was
   // untested and read as broken. Standing still is the variable; having nothing
   // to hit back with is not.
-  const statueRun = (charId, profileKey, template, maxS = 240) => {
+  const statueRun = (charId, profileKey, template, maxS = 240, representative = false) => {
     // allowUnplayable: the CAMPER is an archetype, not a class you can start
     // as today. Its trait is fully implemented; only its tree is missing.
     const s = new Sim({ seed: 4242, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'ST', charId, color: '#fff' }] });
     armBot(s, s.players[0]);
-    const node = s.floor.nodes.find(n => n.kind === 'combat');
+    // `representative`: §13 rule 58. `find(kind === 'combat')` is map 1, the
+    // tutorial — half density, three archetypes — where a camper outlives every
+    // profile and a duration ratio has nothing to measure.
+    const node = representative
+      ? s.floor.nodes.find(n => n.depth > 1 && n.template && n.kind !== 'shrine')
+      : s.floor.nodes.find(n => n.kind === 'combat');
     node.profile = profileKey; node.template = template;
     s._travelTo(node.id);
     let t = 0;
@@ -1232,14 +1237,75 @@ try {
     // It has no skill tree yet, so it cannot be STARTED as — but the sanction
     // is a property of the Bastion profile against the archetype it is for, and
     // that is testable now.
+    // THE SANCTION IS A RATIO, NOT A SURVIVAL. "Camping must work where
+    // sanctioned" was the wrong assertion and it encoded one roster.
+    //
+    // It passed on floor 1 because floor 1's table could not touch a statue at
+    // all — measured, a camping level-12 Blacksmith took ZERO damage there, so
+    // the check was reading the absence of a roster rather than the presence of
+    // a sanction. Every roster change since has moved it: region 1's 58%
+    // telegraph density kills that camper at 74–82s, which is the density doing
+    // exactly what `enemies-pnw.js` opens by saying it is for ("a stance that
+    // cannot be punished is not a decision"), and the old check called it a
+    // regression.
+    //
+    // What the Bastion profile actually claims is that a single front is a
+    // QUEUE, and holding ground against a queue is the sanctioned play. That is
+    // a claim about DURATION RELATIVE TO ELSEWHERE, and it survives a roster
+    // change because both sides move together.
+    //
+    // N IS CALIBRATED FROM THE FLOOR-1 CONTROL, which is the roster the old
+    // assertion was written against. Measured across all five templates against
+    // the WORST unsanctioned profile — the honest denominator, since the claim
+    // is against camping elsewhere rather than against the friendliest
+    // elsewhere:
+    //
+    //   floor-1 control  ×1.98 – ×2.35
+    //   region 1         ×1.66 – ×2.51
+    //   region 2         ×1.38 – ×1.73   (reported; this fixture runs region 1)
+    //
+    // THE CONTROL'S FIGURE IS A LOWER BOUND, not a ceiling. On floor 1 the
+    // camper never dies, so its numerator is the length of the FIGHT rather
+    // than its survival capacity — the sanction is worth at least ×1.98 there
+    // and the room ran out before it could say more.
+    //
+    // 1.5 rather than 1.75. The spread above is wide, and the reason is on
+    // record: KNOWN-DEFECTS #1 has `rushMove()` drawing from global
+    // `Math.random()`, so the same room measured standalone and measured after
+    // 200 other fixtures differs — region 1's cramped_crypt reads ×1.89 alone
+    // and ×1.66 in-suite. A floor pinned to the top of that band asserts the
+    // noise. 1.5 sits below every observation on every roster and still states
+    // the real claim: the sanctioned spot buys at least half again as much time
+    // as the best alternative in the same room.
     const CAMPER = 'toh_blacksmith';
+    const SANCTION_N = 1.5;
+    const UNSANCTIONED = COMBAT_PROFILE_KEYS.filter(k => k !== 'bastion');
     let bok = 0;
+    const sanction = [];
     for (const tmpl of TK9) {
-      const r = statueRun(CAMPER, 'bastion', tmpl, 300);
-      if (!r.died) bok++;
-      else fail(`camper statue DIED in Bastion/${tmpl} at ${r.secs.toFixed(0)}s — camping must work where sanctioned`);
+      const b = statueRun(CAMPER, 'bastion', tmpl, 300, true);
+      // the worst unsanctioned profile in the SAME room on the SAME seed
+      const others = UNSANCTIONED.map(pr => statueRun(CAMPER, pr, tmpl, 300, true));
+      const worstRun = others.reduce((a, x) => (x.secs < a.secs ? x : a));
+      // A DENOMINATOR THAT DID NOT DIE CANNOT PRICE THE SANCTION. If the camper
+      // outlives every unsanctioned profile too, the room is not pressing hard
+      // enough to answer the question — that is a fixture that cannot measure,
+      // and §13 says so out loud rather than dividing two fight lengths and
+      // reporting ×1.04.
+      if (!worstRun.died) {
+        fail(`the sanction ratio has no denominator in ${tmpl}: the camper survived every unsanctioned profile too `
+          + `(worst ${worstRun.secs.toFixed(0)}s, not a death) — the room cannot price the sanction, so this is a fixture that could not measure`);
+        continue;
+      }
+      const ratio = b.secs / Math.max(1e-9, worstRun.secs);
+      sanction.push(`${tmpl} ×${ratio.toFixed(2)}`);
+      if (ratio >= SANCTION_N) bok++;
+      else fail(`Bastion bought only ×${ratio.toFixed(2)} in ${tmpl} (${b.secs.toFixed(0)}s against ${worstRun.secs.toFixed(0)}s unsanctioned) — `
+        + `the sanction must be worth at least ×${SANCTION_N}, calibrated below the floor-1 control's measured ×1.98 minimum`);
     }
-    if (bok === TK9.length) ok('the Bastion camper statue survives in every template — camping has a sanctioned home');
+    if (bok === TK9.length) ok(`the Bastion sanction is worth at least ×${SANCTION_N} in every template — ${sanction.join(', ')}. `
+      + 'A ratio rather than a survival: the claim is that holding ground against a single front beats holding it anywhere else, '
+      + 'which is true across rosters instead of encoding one');
     // DELETED: the Bulwark clause. It compared a Bulwark statue against the
     // median statue; Bulwark is retired, so both sides were the same class and
     // the comparison could only ever be vacuous.

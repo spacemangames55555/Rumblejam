@@ -522,7 +522,7 @@
     },
     "enemy.xib_howler": {
       "batch": 3,
-      "subject": "Howler, a chaser monster, Central America region",
+      "subject": "Howler, a warden monster, Central America region",
       "silhouette": "a hunched biped with an oversized open jaw taking up half the head",
       "directions": 8,
       "frames": 1,
@@ -530,7 +530,7 @@
         128,
         128
       ],
-      "prompt": "Howler, a chaser monster, Central America region, a hunched biped with an oversized open jaw taking up half the head, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+      "prompt": "Howler, a warden monster, Central America region, a hunched biped with an oversized open jaw taking up half the head, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.xib_jade_colossus": {
       "batch": 3,
