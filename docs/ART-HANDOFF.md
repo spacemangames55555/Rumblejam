@@ -250,8 +250,13 @@ handle it.
 ## 6. Regions 3–8 — the authoring work, which is not art
 
 Six regions exist as names only: **The Sahel, Norse Reach, Steppe, Indus Delta,
-Abyssal Trench, The Vault.** They carry no data. That is **36 enemies and 6
-two-phase bosses** nobody has written, and it is content design, not drawing —
+Abyssal Trench, The Vault.** They carry no data. That is **42 enemies and 6
+two-phase bosses** nobody has written — SEVEN per region, not six: six combat
+archetypes plus a `behavior: 'nest'` spawner, so each region's Nest Purge looks
+like its region rather than borrowing the base roster's Wombden and Flit brood,
+which is what regions 1 and 2 do today. See `docs/regions-3-8-roster-brief.md`
+for the slot table and the constraints each roster is gated against. It is
+content design, not drawing —
 whether it comes before or after the art is your call, but the art spec above
 cannot be written for them until it exists, because the silhouette note *is* the
 brief and it is derived from what the enemy does.
@@ -326,4 +331,5 @@ unique against every other note, because two units described the same way get
 drawn the same way. Regions also name a `tileset` and a `hazard`; only `tundra`
 has tiles on disk, and they are placeholders.
 
-**Totals if all six are built: 42 unit sheets, 336 facings.**
+**Totals if all six are built: 48 unit sheets, 384 facings** — 42 enemies
+(seven per region) plus the six bosses.

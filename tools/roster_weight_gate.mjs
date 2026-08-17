@@ -23,6 +23,26 @@
 //      be learned against something that dies before the lesson is punishing.
 //      A and B together are still satisfiable by one 4-HP telegrapher carrying
 //      the density while every other committing unit is a slab.
+//   D. Those light telegraphers' PUNISH sized to the vitality a character
+//      carries at the region's own anchor level — 6–9%. This is §13 rule 78 in
+//      gate form: neither mean in B contains a telegraph's damage or its
+//      cooldown, so both can land while the fight plays wrong. Measured, region
+//      1 sat at parity on HP and damage and still killed a camper at 71s,
+//      because a 7 HP unit was landing 9 damage every 2.2 seconds — harder per
+//      commit than a 34 HP Bark Hulk lands per second.
+//   E. At least one LANDMARK: a unit above 2× the roster's median HP at a draw
+//      weight below 0.3. Both halves together. Heavy alone is a slab everywhere
+//      and the region has no texture; low-weight alone is a rare mid unit and
+//      the region has no skyline.
+//
+// D IS GATED ON THE LIGHT TELEGRAPHERS ONLY, and that is a deliberate reading.
+// Applied to every telegrapher the band fails both built regions on their
+// landmarks — the Elk lands 23.8% of a level-1 character and the Bark Hulk
+// 33.8%, the Bloodpriest 30.2% and the Jade Colossus 44.2% — and a landmark
+// hitting hard is the whole point of a landmark. Rule 78's term was the LIGHT
+// units: the ones common enough that their punish is what a player is actually
+// standing in. Every telegrapher's percentage is printed regardless, so the
+// stratification is visible rather than assumed.
 //
 // EVERY REGION'S ROSTER IS AUTHORED AT FLOOR-1 PARITY. THE WORLD AXIS IS THE
 // SOLE DIFFICULTY MULTIPLIER.
@@ -49,7 +69,11 @@
 // Usage: node tools/roster_weight_gate.mjs [--verbose]
 import { REGION_ENEMIES, telegraphWeight, MIN_TELEGRAPH_WEIGHT } from '../js/content/regions-enemies.js';
 import { ENEMY_BY_ID, FLOOR_TABLES } from '../js/content/enemies.js';
-import { REGIONS, regionHpMult, regionDmgMult, TOTAL_REGIONS } from '../js/regions.js';
+import { REGIONS, regionHpMult, regionDmgMult, TOTAL_REGIONS, REGION_ANCHOR_LEVEL } from '../js/regions.js';
+import { Sim } from '../js/game.js';
+import * as SKILLSIM from '../js/skillsim.js';
+import { TREES, TREES_BY_CLASS } from '../js/skills.js';
+import { SELECTABLE } from '../js/content/characters.js';
 
 const VERBOSE = process.argv.includes('--verbose');
 let fails = 0, checks = 0;
@@ -70,6 +94,54 @@ const median = (xs) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 
+// VITALITY AT A LEVEL, MEASURED RATHER THAN TABLED. There is no formula to
+// read: a character's health comes from banked stat picks and from whatever its
+// class starts with, so the only honest source is a character that has actually
+// been levelled. Median across the selectable roster, because one class is not
+// the anchor — the Blacksmith carries 150 where three others carry 80, and
+// sizing a region's punish to the tankiest class would under-punish everyone.
+//
+// AND IT BARELY MOVES WITH LEVEL, WHICH THIS SAYS OUT LOUD. Vitality grows from
+// BANKED STAT PICKS — a player's choice at a level-up screen — and a harness
+// does not make choices, so a level-10 character here carries the same base its
+// class started with. Measured, level 1 and level 10 both resolve to 80.
+//
+// That is a real limit on what D asserts, not a bug to hide: while the input is
+// flat, "6–9% of anchor vitality" is in practice "between 4.8 and 7.2 damage" at
+// every region. It is still the term §13 rule 78 is about and still the term
+// neither weighted mean contains — but a check whose input does not vary is a
+// saturated instrument (§13 rule 37), so the gate prints the figure per anchor
+// and calls out the collision rather than letting a reader infer level scaling
+// that is not there. Model banked picks and this band tightens by itself.
+const vitalityCache = new Map();
+function anchorVitality(level) {
+  if (vitalityCache.has(level)) return vitalityCache.get(level);
+  const vs = [];
+  for (const c of SELECTABLE) {
+    const g = new Sim({ seed: 4242, regionIndex: 1, allowUnplayable: true,
+      party: [{ idx: 0, key: 'k', name: 'P', charId: c.id, color: '#fff' }] });
+    const p = g.players[0];
+    if (p.openingOffer) g.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+    p.level = level;
+    const skills = (TREES_BY_CLASS[c.id] || []).flatMap(t => TREES[t].skills).sort((a, b) => a.tier - b.tier);
+    let budget = level - 1;
+    for (const sk of skills) {
+      if (budget <= 0) break;
+      p.skillPoints++;
+      if (SKILLSIM.spendSkillPoint(g, p, sk.id)) budget--; else p.skillPoints--;
+    }
+    g._recomputeStats(p);
+    vs.push(p.stats.vitality);
+  }
+  const v = median(vs);
+  vitalityCache.set(level, v);
+  return v;
+}
+
+// D's band, and E's two halves.
+const PUNISH_LO = 0.06, PUNISH_HI = 0.09;
+const LANDMARK_HP_MULT = 2, LANDMARK_MAX_W = 0.3;
+
 // The roster region 1 replaces. Floor 1's table, at ×1.00, is the yardstick.
 const FLOOR1 = FLOOR_TABLES[0].map(id => ENEMY_BY_ID[id]);
 const REF_HP = weightedMean(FLOOR1, e => e.hp);
@@ -84,6 +156,18 @@ const BAND = 0.15;
 // it (§13 rule 73).
 
 console.log('ROSTER WEIGHT AND TELEGRAPH DENSITY — the two halves of one coupling\n');
+{
+  // Say it once, up front, rather than leaving it to be noticed in two rows.
+  const byAnchor = REGIONS.map(r => [r.index, REGION_ANCHOR_LEVEL[r.index - 1], anchorVitality(REGION_ANCHOR_LEVEL[r.index - 1])]);
+  const distinct = new Set(byAnchor.map(x => x[2]));
+  console.log('anchor vitality: ' + byAnchor.map(([i, lv, v]) => `region ${i} (level ${lv}) ${v}`).join(', '));
+  if (distinct.size === 1 && byAnchor.length > 1) {
+    console.log('  NOTE: every anchor resolves to the same vitality. Vitality grows from BANKED STAT PICKS, which a harness');
+    console.log('  never spends, so check D is currently a flat absolute band rather than a level-scaled one. Stated so the');
+    console.log('  label does not imply scaling the measurement does not have (§13 rule 37).');
+  }
+  console.log('');
+}
 console.log(`reference: floor-1 table (${FLOOR_TABLES[0].join(', ')}) — weighted mean HP ${REF_HP.toFixed(1)}, damage ${REF_DMG.toFixed(2)}`);
 console.log(`band: ±${(BAND * 100).toFixed(0)}% → HP [${(REF_HP * (1 - BAND)).toFixed(1)}, ${(REF_HP * (1 + BAND)).toFixed(1)}], damage [${(REF_DMG * (1 - BAND)).toFixed(2)}, ${(REF_DMG * (1 + BAND)).toFixed(2)}]\n`);
 
@@ -126,6 +210,40 @@ for (const region of REGIONS) {
     bad(`region ${region.index} has ${lightTel.length} telegrapher(s) below its median HP of ${med} — want at least 2. `
       + 'Density and mean weight can BOTH be satisfied while every committing unit is a slab and one 4-HP outlier carries the average; '
       + 'this is the check that says the coupling is actually broken rather than averaged around');
+  }
+
+  // ---- D. punish sized to the level the unit is met at ----
+  const anchor = REGION_ANCHOR_LEVEL[region.index - 1];
+  const vit = anchorVitality(anchor);
+  const pct = e => e.telegraph.damage / vit;
+  const telUnits = units.filter(e => e.telegraph).sort((a, b) => a.hp - b.hp);
+  const outOfBand = lightTel.filter(e => pct(e) < PUNISH_LO || pct(e) > PUNISH_HI);
+  if (!lightTel.length) {
+    // C already failed; saying "0 of 0 in band" here would be a second green
+    // about an empty set (§13 rule 73).
+    bad(`region ${region.index} has no light telegrapher to size a punish against — D cannot be evaluated, which is not the same as passing`);
+  } else if (!outOfBand.length) {
+    ok(`region ${region.index} light telegraphers punish for ${lightTel.map(e => `${(100 * pct(e)).toFixed(1)}%`).join(' / ')} of the ${vit} vitality a level-${anchor} character carries `
+      + `— inside the ${(100 * PUNISH_LO).toFixed(0)}–${(100 * PUNISH_HI).toFixed(0)}% band`);
+  } else {
+    bad(`region ${region.index}: ${outOfBand.length} light telegrapher(s) outside the ${(100 * PUNISH_LO).toFixed(0)}–${(100 * PUNISH_HI).toFixed(0)}% punish band against ${vit} vitality at level ${anchor}: `
+      + outOfBand.map(e => `${e.id} ${e.telegraph.damage} = ${(100 * pct(e)).toFixed(1)}%`).join(', ')
+      + ' — neither weighted mean contains a telegraph\'s damage or its cooldown, so both can land while the fight plays wrong (§13 rule 78)');
+  }
+  console.log(`  · punish, every telegrapher against ${vit} vitality at level ${anchor}: `
+    + telUnits.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${(100 * pct(e)).toFixed(1)}%`).join(', ')
+    + ' — the band gates the light ones; a landmark hitting hard is the point of a landmark');
+
+  // ---- E. at least one landmark, on BOTH halves ----
+  const heavy = units.filter(e => e.hp > LANDMARK_HP_MULT * med);
+  const landmarks = heavy.filter(e => e.w < LANDMARK_MAX_W);
+  if (landmarks.length) {
+    ok(`region ${region.index} has ${landmarks.length} landmark(s) — above ${LANDMARK_HP_MULT}× the median (${LANDMARK_HP_MULT * med}) at a draw weight under ${LANDMARK_MAX_W}: `
+      + landmarks.map(e => `${e.id} ${e.hp}hp @ w${e.w}`).join(', '));
+  } else {
+    bad(`region ${region.index} has no landmark: ${heavy.length} unit(s) above ${LANDMARK_HP_MULT}× the median HP `
+      + `(${heavy.map(e => `${e.id} ${e.hp}hp @ w${e.w}`).join(', ') || 'none'}), none of them under w${LANDMARK_MAX_W}. `
+      + 'Both halves are the check: heavy alone is a slab you meet constantly, low weight alone is a rare mid unit');
   }
 
   // ---- reported, never gated: what the axis makes of it ----
