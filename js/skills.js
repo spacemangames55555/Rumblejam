@@ -257,6 +257,18 @@ export function slotsAtLevel(level) {
   return n;
 }
 
+// THE INVERSE, because fixtures kept hard-coding the level and meaning the slot
+// count. sim_test armed its bots at level 12 for "three slots" and its DPS gate
+// at 12 for the same reason; when the ladders merged, 12 became FOUR slots and
+// both fixtures silently changed what they measured while the literal `12` sat
+// there looking deliberate. A fixture that wants N slots should say N.
+//
+// Lowest level granting at least `n` slots; clamped, so asking for more than
+// the ladder offers returns the top gate rather than `undefined`.
+export function levelForSlots(n) {
+  return SLOT_LEVELS[Math.min(SLOT_LEVELS.length, Math.max(1, n)) - 1];
+}
+
 // ---------------------------------------------------------------- ranks
 
 // Rank is the number of points spent. Note this means rank 1 already carries
@@ -437,6 +449,15 @@ function assertTrees() {
     const top = TIER_LEVELS[TIER_LEVELS.length - 1];
     if (SLOT_LEVELS[SLOT_LEVELS.length - 1] !== top) {
       problems.push(`the 8th slot opens at ${SLOT_LEVELS[SLOT_LEVELS.length - 1]} but the last tier opens at ${top} — a player with every tier must have every slot`);
+    }
+    // `levelForSlots` is the inverse fixtures pin themselves to. If it ever
+    // stops being one, every fixture that asked for N slots is quietly
+    // measuring a different number of them — the exact failure it was added
+    // to end.
+    for (let n = 1; n <= SLOT_LEVELS.length; n++) {
+      const lv = levelForSlots(n);
+      if (slotsAtLevel(lv) !== n) problems.push(`levelForSlots(${n}) = ${lv}, which grants ${slotsAtLevel(lv)} slots`);
+      if (lv > 1 && slotsAtLevel(lv - 1) !== n - 1) problems.push(`level ${lv - 1} grants ${slotsAtLevel(lv - 1)} slots, so ${lv} is not the lowest level with ${n}`);
     }
     // The claim the whole change exists to make true: nothing is still locked
     // once the top gate is reached, so everything past it is rank investment.

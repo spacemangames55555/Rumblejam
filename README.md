@@ -666,6 +666,17 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/fixture_gate.mjs` — **the measuring instrument, measured.** Three
+  phase-1 surveys published confident numbers about characters missing a power
+  source, and each looked plausible enough to build a conclusion on. This asserts
+  that `tools/fixture_build.mjs` stages what it claims: `levelForSlots` inverts
+  `slotsAtLevel` (so a fixture that wants three slots gets three); a level-82
+  build carries its 56 shop items and they are worth ~46% of its output; the
+  MOVEMENT window a stationary fixture never opens is worth ×3.9 on
+  `samurai_agility` while costing a hunter nothing; a dot compounds without
+  limit on immortal targets and a mortal ring bounds it. It also pins the one
+  thing no fixture can fix — `cascade` is uncapped by design, so a savage's DPS
+  is a function of window length and is only quotable with its window attached.
 - `node tools/region_curve.mjs [--verbose]` — composed player output at each of
   §4.3's eight level anchors, median across four classes, best of three loadout
   windows. Prints the `REGION_HP_MULT` / `REGION_DMG_MULT` tables so the world
