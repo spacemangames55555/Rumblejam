@@ -26,8 +26,14 @@ throughput figure below moved with it. The first pass measured a
 zero-ferocity character and reported +14% growth from level 60 to 80; with
 stat picks it is **+40%**.
 
-Both are the same shape: a survey measuring its own accessor. Everything below
-is post-correction.
+**3. `depth > 1 && template && kind !== 'shrine'` is not "a representative
+fight".** It picks an `elite` node in region 2 and a `relic` node in region 8 —
+different kinds, one carrying a ×2.40 node modifier and a heavy-drawing
+profile. **This invalidated the headline finding of section 4** and is corrected
+in place below; the full decomposition is `docs/hp-chain.md`.
+
+All three are the same shape: a survey measuring its own accessor or its own
+sampler. Everything below is post-correction.
 
 ## Headline: the blocker does NOT fire, and two of the brief's premises are wrong
 
@@ -168,16 +174,26 @@ gap `tree_dps` names.*
 | 7 | 45 | 266 | 72.0 | 7.35 | 3.36 |
 | **8** | **132** | **333** | **68.8** | **7.36** | **3.36** |
 
-Two things stand out and neither matches symptom 3:
+> **CORRECTED.** The table above samples a different NODE KIND per region — an
+> `elite` node in region 2, a `relic` node in region 8. Region 2's 171 is
+> ×2.40 node modifier and a heavy-drawing elite profile, not its roster. The
+> original conclusion drawn from it ("mean HP does not follow the world axis")
+> is **withdrawn**. See `docs/hp-chain.md`; §13 rule 85.
 
-- **Enemy count already rises steeply** — 12 alive in region 1 to 133 in
-  region 8, 39 spawned to 333. "Not enough enemies late" is not what the spawn
-  budget does.
-- **Mean HP does not follow the world axis.** Region 2 fields the toughest
-  bodies in the game at 171 HP; region 8, at ×7.36 the multiplier, fields 68.8.
-  The axis is applied per-body, so a region whose roster is mostly chaff comes
-  out *softer* than one with heavy units, no matter what the multiplier says.
-  That is why region 8 does not feel like an escalation.
+Like for like, on a plain **combat** node in every region:
+
+| region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| mean maxHp | 8.6 | 26.8 | 53.7 | 52.3 | 60.8 | 69.3 | 74.7 | **85.0** |
+| incoming HP/sec | 0.3 | 7.0 | 22.6 | 17.5 | 10.2 | 19.9 | 28.3 | **30.0** |
+| peak alive | 5 | 27 | 52 | 71 | 35 | 34 | 145 | 101 |
+
+- **Enemy count rises steeply** — 5 alive in region 1 to 101 in region 8.
+  "Not enough enemies late" is not what the spawn budget does.
+- **Per-body HP rises with the axis** — 8.6 → 85.0, a non-axis multiplier of a
+  constant 1.29 (`coopHp × CONFIG.enemyHpMult`) in every region.
+- **Incoming rises too** — 0.3 → 30.0 HP/sec. Region 8 is the hardest region
+  on every axis measured, not the softest.
 
 Against an 8-slot level-80 build, per class, in region 8:
 
@@ -390,21 +406,26 @@ property to preserve.
 1. **Growth is too slow, not absent.** +14% from level 60 to 80. Rank is
    already a linear damage term at ~4%/rank; making it "primary" is not the
    change, *steepening* it is. The lever is the rate, not the mechanism.
-2. **The world axis raises per-body numbers, and region 8's roster is light.**
-   Region 8 has the highest multiplier in the game and fields softer bodies
-   and less incoming damage than region 2. Until that is addressed, no amount
-   of player growth will be felt late, because lateness is not currently
-   harder. This is the single highest-value finding here and it was not one of
-   the four symptoms.
+2. ~~**The world axis raises per-body numbers, and region 8's roster is
+   light.**~~ **WITHDRAWN — this was a fixture error.** Measured like for like
+   on a plain combat node, region 8's bodies are ×10 region 1's and its
+   incoming is ×100. The axis works. See `docs/hp-chain.md`.
+
+   What replaces it is narrower: **the curve rises and player output rises with
+   it, so the question is why the fight does not feel harder.** The overkill
+   figure (16.4%, flat across build shapes) and the throughput figures (a
+   level-82 build clearing 333 bodies in ~45 s) are where that has to be
+   answered — not in the axis.
 
 **Consequences for the phase-2 shapes as written:**
 
 - *"Rank adds damage linearly as the primary term"* — already true. Restate as
   a rate change, and note the whole-build effect is already ×1.2–×3.0 from rank
   1 to 10.
-- *"Enemy count at region 8 rises"* — count already rises 12 → 133 alive. The
-  axis that has not risen is per-body threat. Raising count further without
-  fixing that makes region 8 more chaff, which is what it already is.
+- *"Enemy count at region 8 rises"* — count already rises 5 → 101 alive on a
+  plain combat node, and per-body HP and incoming rise with it. There is no
+  un-risen axis to fix first; raising count is a live lever, not a
+  compensation for a broken one.
 - *"Sustain converts flat to proportional"* — supported, and the per-kill cap
   matters more than the conversion: per-kill is 83% of available sustain and
   rides the kill rate directly.

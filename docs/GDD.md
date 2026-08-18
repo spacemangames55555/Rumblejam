@@ -1985,6 +1985,20 @@ Five checks went red on a patch that edited two arrays of numbers. The class DPS
 
 Neither is a defect and neither was retuned here: they are the balance shift the patch exists to cause, arriving where the gates could see it. **Isolate before reporting.** Re-running with only the old slot ladder restored — tier ladder untouched — returned the red set to baseline exactly, which is what makes "the slot count at level 12" a cause rather than a hypothesis.
 
+85. **A fixture that picks a room by predicate picks a DIFFERENT room in each region, and the comparison it then makes is not the one it reports.** `depth > 1 && template && kind !== 'shrine'` reads like "a representative fight". Measured, it selects an `elite` node with profile `artillery` in region 2 and a `relic` node with profile `puddle` in region 8.
+
+The elite node carries `fightMods.hp` ×2.40 and its profile draws heavies, so the same roster comes out at ×3.01 the authored composition. Region 2 therefore measured 171 mean HP against region 8's 68.8, and the survey concluded that the world axis was not raising late-game threat — the single most consequential finding in that pass, and an artefact of comparing two different node kinds.
+
+Like for like on a plain combat node, per-body HP runs 8.6 → 85.0 across the eight regions and incoming damage 0.3 → 30.0 HP/sec. The axis works.
+
+**Name the node kind in the fixture, not a predicate that happens to match one.** A predicate over a generated tree is a sampler, and a sampler that returns different strata per condition is measuring the strata.
+
+86. **Capstone depth variance is KNOWN AND TOLERATED. Do not re-flag it.** At an equal 82-point budget, a build that learns every node in all three trees and equips the eight deepest actives differs from one that stops at the early tiers and ranks those to 10 — by −78% output (necromancer) to +186% (monk), depending only on which capstone the class happens to own.
+
+Breadth does buy capability: 14 of 14 classes gain something the shallow build lacks (`stun` in 13, `multiPulse` in 11, `ward` in 10, `cone` in 8), plus 2–5 more always-on passives. And eight slots means depth SWAPS a kit rather than extending it — the shallow build keeps `hazard`, `slow`, `shield` and `heal` the deep one drops.
+
+This spread is accepted as-is. It is not a defect and it is not on the tuning list; a later tree pass may narrow it, and until someone decides to, a survey that rediscovers it should cite this rule and move on.
+
 ### 13.1 The through-line
 
 **After a migration this large, a red check is more likely to be a test still describing the old world than a bug in the new one.** Of the last ten failures triaged, nine were tests measuring something that no longer existed. This will recur in phase 5, when twelve more classes arrive and every trait test written against two gets re-exercised.
