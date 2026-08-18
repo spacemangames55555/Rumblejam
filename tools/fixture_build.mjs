@@ -211,6 +211,28 @@ export function buildCharacter(g, p, { level, points = null, mode = 'spread', it
 export function driveMoving(g, p, i) { g.setInput(p.idx, { mx: (i % 2 ? 1 : -1), my: 0 }); }
 export function driveStill(g, p) { g.setInput(p.idx, { mx: 0, my: 0 }); }
 
+// ENGAGE: walk at the nearest enemy, hold at standoff. This is the driver
+// `difficulty_gate` already calibrates against (tools/difficulty_gate.mjs:117),
+// reused for the same reason `driveMoving` reuses tree_dps's.
+//
+// It is needed wherever a room has to be CLEARED rather than survived, because
+// a fixture that never presses a direction is a statue — and a statue cannot
+// finish a fight it is not standing in the middle of. Measured: a level-82
+// itemised hunter left stationary in a region-8 room dies in 17.8 s, and a
+// priest survives 180 s without ever clearing it. Neither number is about the
+// build.
+//
+// It is a FLOOR on real play, deliberately: it advances and holds, it never
+// kites, retreats or repositions. So survival read through it under-estimates a
+// real player and clear time over-estimates one.
+export function driveEngage(g, p, { standoff = 110, range = 900 } = {}) {
+  const tgt = g.trigGrid && g.trigGrid.nearest ? g.trigGrid.nearest(p.x, p.y, range) : null;
+  if (!tgt) { g.setInput(p.idx, { mx: 0, my: 0 }); return null; }
+  const dx = tgt.x - p.x, dy = tgt.y - p.y, d = Math.hypot(dx, dy) || 1;
+  g.setInput(p.idx, d > standoff ? { mx: dx / d, my: dy / d } : { mx: 0, my: 0 });
+  return tgt;
+}
+
 // Which windows a character's SLOTTED kit actually needs. Derived from the
 // triggers rather than from a list of class ids, so a class that gains a
 // movement node later is staged without anyone remembering to edit a set.

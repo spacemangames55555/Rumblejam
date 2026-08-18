@@ -666,6 +666,15 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/power_curve_phase2.mjs [--only=N,N] [--quick]` — **do the two
+  curves rise together?** Eight sections: composed enemy threat on a plain
+  `combat` node in every region; itemised player output at each region's §4.3
+  anchor, shallow and deep; the band-by-band ratio; whether the regions 4–5
+  incoming dip is the region or the room (it is the room); clear time and deaths
+  in a real region-8 room; whether band 3→4 survives a seed sweep (it does not);
+  concentration against spread as clear time; and sustain against incoming, split
+  across the two doors healing can arrive through. Measures, changes nothing —
+  findings in `docs/power-curve-phase2-measurement.md`.
 - `node tools/fixture_gate.mjs` — **the measuring instrument, measured.** Three
   phase-1 surveys published confident numbers about characters missing a power
   source, and each looked plausible enough to build a conclusion on. This asserts
