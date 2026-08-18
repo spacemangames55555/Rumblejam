@@ -51,17 +51,40 @@ const pump = (g, p) => {
 // the other half of the tension the brief wants preserved.
 function spend(g, p, points, mode = 'spread') {
   let left = points;
-  // 1. breadth: one point into each distinct unlearned node, lowest tier first
+  // 1. breadth: one point into each distinct unlearned node, lowest tier first.
+  //
+  // `shallow` STOPS once the loadout is full — it buys the cheapest eight
+  // actives it can slot and spends everything else on rank. `deep` and
+  // `spread` keep learning until the trees run out, which is what reaches the
+  // tier-10 capstones in all three. Those two shapes are the ends of the
+  // spend spectrum, not a target and a shortfall.
+  const slotCap = slotsAtLevel(p.level);
   for (let pass = 0; pass < 12 && left > 0; pass++) {
+    if (mode === 'shallow' && (p.loadout || []).filter(Boolean).length >= slotCap) break;
     const fresh = SKILLSIM.learnableSkills(p)
       .filter(s => skillRank(p, s.id) < 1)
       .sort((a, b) => a.tier - b.tier);
     if (!fresh.length) break;
     for (const s of fresh) {
       if (left <= 0) break;
+      if (mode === 'shallow' && (p.loadout || []).filter(Boolean).length >= slotCap) break;
       p.skillPoints++;
       if (SKILLSIM.spendSkillPoint(g, p, s.id)) left--; else p.skillPoints--;
     }
+  }
+  // A DEEP BUILD EQUIPS WHAT IT PAID FOR. `spendSkillPoint` auto-slots the
+  // first eight actives a character learns and never swaps them, which is right
+  // as an anti-softlock floor and wrong as a model of a player: learning
+  // breadth-first means both build shapes end up fielding the SAME eight
+  // early-tier actives, and the deep build's twenty extra nodes — including
+  // every tier-10 capstone it spent points reaching — sit unequipped. Measured
+  // that way the two builds differ in nothing but damage, which is an artefact
+  // of the slotter rather than a fact about the trees.
+  if (mode === 'deep') {
+    const byId = Object.fromEntries(Object.values(TREES).flatMap(t => t.skills).map(x => [x.id, x]));
+    const owned = Object.keys(p.skillRanks || {}).map(id => byId[id]).filter(x => x && x.type === 'active');
+    const best = owned.sort((a, b) => b.tier - a.tier).slice(0, slotCap).map(x => x.id);
+    for (let i = 0; i < p.loadout.length; i++) p.loadout[i] = best[i] || null;
   }
   // 2. depth: the remainder into what is actually equipped
   const slotted = () => (p.loadout || []).filter(Boolean);
@@ -82,10 +105,30 @@ function spend(g, p, points, mode = 'spread') {
   return points - left;
 }
 
-function room(charId, { level, points, regionIndex = 2, seed = 771, mode = 'spread' } = {}) {
+// A CHARACTER AT LEVEL N HAS SPENT N STAT PICKS, and a fixture that sets
+// `p.level` directly has spent none. `banked` is incremented by the level-up
+// path, not by the level number, so every survey that assigns a level and walks
+// into a room is carrying a level-1 statline on a level-80 build — vitality
+// reads 150 at level 80 for exactly this reason. That is fine for a throughput
+// reading and fatal for a survival one, so it is modelled here through the same
+// offer/answer path the game uses rather than by writing permStats directly.
+function spendStats(g, p, n) {
+  p.banked = n;
+  let guard = 0;
+  while (p.banked > 0 && guard++ < 600) {
+    g._maybeOffer(p);
+    if (!p.pendingOffer) break;
+    g.uiAction(0, { kind: 'levelup', id: p.pendingOffer[0].id });
+  }
+  p.banked = 0;
+  g._recomputeStats(p);
+}
+
+function room(charId, { level, points, regionIndex = 2, seed = 771, mode = 'spread', stats = true } = {}) {
   const g = new Sim({ seed, regionIndex, allowUnplayable: true, party: P(charId) });
   const p = g.players[0];
   p.level = level;
+  if (stats) spendStats(g, p, level - 1);
   spend(g, p, points ?? level, mode);
   g.god = true;
   const node = g.floor.nodes.find(n => n.depth > 1 && n.template && n.kind !== 'shrine');
@@ -96,8 +139,8 @@ function room(charId, { level, points, regionIndex = 2, seed = 771, mode = 'spre
 
 // A throughput reading against a ring of immortal dummies — the same shape
 // tree_dps uses, so the numbers are comparable to that gate.
-function throughput(charId, { level, points, regionIndex = 2, secs = 20, seed = 771, mode = 'spread' } = {}) {
-  const r = room(charId, { level, points, regionIndex, seed, mode });
+function throughput(charId, { level, points, regionIndex = 2, secs = 20, seed = 771, mode = 'spread', stats = true } = {}) {
+  const r = room(charId, { level, points, regionIndex, seed, mode, stats });
   if (!r) return null;
   const { g, p } = r;
   for (const e of g.enemyPool) if (e.active) g.enemyPool.release(e);
@@ -442,3 +485,139 @@ H('6. OVERKILL WASTE — does the efficiency tension exist today?');
 console.log('\n' + '='.repeat(92));
 console.log('PHASE 1 COMPLETE — nothing was tuned. See docs/power-curve-phase1.md.');
 console.log('='.repeat(92));
+
+// ------------------------------------------------- 7. the spend spectrum
+//
+// 8 x rank-10 is ONE POINT on a spectrum, not the target, and reaching it at
+// 100 points is the accepted cost of not diversifying. The question this
+// section asks is the one that matters for tuning: at the SAME budget, what
+// does each end of the spectrum have that the other does not?
+//
+//   shallow — stop learning once the loadout is full, everything else on rank.
+//             Eight actives from the early tiers, at rank ~10.
+//   deep    — learn every node in all three trees, reaching the tier-10
+//             capstones, then rank what is slotted. Lands nearer rank 7.
+//
+// If the deep build's only difference is lower damage, breadth is buying
+// nothing and that is a finding about the TREES, not about tuning.
+if (want(7)) {
+H('7. THE SPEND SPECTRUM — shallow vs deep at the same budget');
+
+  const BUDGET = 82;          // measured end-of-run points, section 1
+  const RIDERS = ['slow', 'stun', 'root', 'knockback', 'splash', 'mark', 'taunt',
+                  'weakenDamage', 'weakenDefense', 'defenseDown', 'drench', 'mend',
+                  'healPerHit', 'impactDot', 'multiPulse', 'windUp', 'doll', 'sluice'];
+
+  // What a build IS, beyond its damage: the capabilities it can bring to bear.
+  function profile(g, p) {
+    const learned = Object.keys(p.skillRanks || {});
+    const byId = Object.fromEntries(Object.values(TREES).flatMap(t => t.skills).map(s => [s.id, s]));
+    const slotted = (p.loadout || []).filter(Boolean);
+    const slottedSk = slotted.map(id => byId[id]).filter(Boolean);
+    const learnedSk = learned.map(id => byId[id]).filter(Boolean);
+    // passives are ALWAYS ON and need no slot — the one thing breadth buys
+    // that does not compete for the eight
+    const passives = learnedSk.filter(s => s.type === 'passive');
+    const effects = new Set(slottedSk.flatMap(s => (s.compose || []).map(c => c.kind)));
+    const riders = new Set(slottedSk.flatMap(s => (s.compose || []).flatMap(c => Object.keys(c.riders || {})))
+      .filter(k => RIDERS.includes(k)));
+    const domains = new Set(slottedSk.map(s => s.domain).filter(Boolean));
+    const selectors = new Set(slottedSk.map(s => s.select).filter(Boolean));
+    const maxTierPerTree = {};
+    for (const s of learnedSk) maxTierPerTree[s.tree] = Math.max(maxTierPerTree[s.tree] || 0, s.tier);
+    const slotRanks = slotted.map(id => p.skillRanks[id]);
+    return {
+      learned: learned.length, passives: passives.length, passiveIds: passives.map(s => s.id),
+      slotted: slotted.length, slottedIds: slotted,
+      meanSlotRank: slotRanks.reduce((a, b) => a + b, 0) / Math.max(1, slotRanks.length),
+      minSlotRank: Math.min(...slotRanks), maxSlotRank: Math.max(...slotRanks),
+      effects, riders, domains, selectors,
+      treeTiers: Object.values(maxTierPerTree), maxTier: Math.max(0, ...learnedSk.map(s => s.tier)),
+      vitality: p.stats.vitality,
+    };
+  }
+
+  // Does it CLEAR region 8, and how fast? This is the tuning question — both
+  // ends of the spectrum have to be able to finish the game.
+  function clearRun(cid, mode, { regionIndex = 8, cap = 180 } = {}) {
+    const r = room(cid, { level: BUDGET, points: BUDGET, regionIndex, mode });
+    if (!r) return null;
+    const { g, p } = r;
+    const prof = profile(g, p);
+    let t = 0, taken = 0;
+    g.god = false;                       // survival counts here
+    while (!g.over && !g.cleared && t < 60 * cap) {
+      const h = p.hp;
+      g.tick(); pump(g, p);
+      if (p.hp < h) taken += h - p.hp;
+      t++;
+    }
+    return { prof, cleared: !!g.cleared, died: !!g.over, secs: t / 60, kills: p.kills, taken };
+  }
+
+  console.log(`\n  Both builds at ${BUDGET} points (the measured end-of-run budget), region 8, god OFF.`);
+  console.log(`  "cleared" means the room ended with the character alive.\n`);
+  console.log(`  ${'class'.padEnd(13)} ${'build'.padEnd(8)} ${'nodes'.padStart(6)} ${'psv'.padStart(4)} ${'slot rank'.padStart(10)} ${'maxTier/tree'.padStart(13)} ${'dps'.padStart(7)} ${'result'.padStart(9)} ${'secs'.padStart(6)}`);
+  const out = [];
+  for (const cid of (QUICK ? ['toh_blacksmith', 'toh_wizard', 'toh_hunter'] : CLASSES)) {
+    const rec = { cid };
+    for (const mode of ['shallow', 'deep']) {
+      const t = throughput(cid, { level: BUDGET, points: BUDGET, regionIndex: 8, mode });
+      const c = clearRun(cid, mode);
+      if (!c) continue;
+      rec[mode] = { ...c, dps: t ? t.dps : NaN };
+      const pr = c.prof;
+      console.log(`  ${(mode === 'shallow' ? cid.replace('toh_', '') : '').padEnd(13)} ${mode.padEnd(8)}`
+        + ` ${String(pr.learned).padStart(6)} ${String(pr.passives).padStart(4)}`
+        + ` ${(pr.minSlotRank + '-' + pr.maxSlotRank).padStart(10)} ${pr.treeTiers.join('/').padStart(13)}`
+        + ` ${(t ? t.dps.toFixed(0) : 'n/a').padStart(7)} ${(c.cleared ? 'CLEARED' : c.died ? 'DIED' : 'timeout').padStart(9)} ${c.secs.toFixed(0).padStart(6)}`);
+    }
+    out.push(rec);
+  }
+
+  // THE DIFF. What does each end have that the other does not?
+  console.log('\n  WHAT EACH BUILD HAS THAT THE OTHER DOES NOT');
+  const diffCount = { effects: 0, riders: 0, domains: 0, selectors: 0, passives: 0 };
+  const deepOnlyAll = new Map(), shallowOnlyAll = new Map();
+  for (const rec of out) {
+    if (!rec.shallow || !rec.deep) continue;
+    const a = rec.shallow.prof, b = rec.deep.prof;
+    const only = (x, y) => [...x].filter(v => !y.has(v));
+    const dEff = only(b.effects, a.effects), sEff = only(a.effects, b.effects);
+    const dRid = only(b.riders, a.riders), sRid = only(a.riders, b.riders);
+    const dDom = only(b.domains, a.domains), sDom = only(a.domains, b.domains);
+    const dSel = only(b.selectors, a.selectors), sSel = only(a.selectors, b.selectors);
+    for (const v of dEff) deepOnlyAll.set('effect:' + v, (deepOnlyAll.get('effect:' + v) || 0) + 1);
+    for (const v of dRid) deepOnlyAll.set('rider:' + v, (deepOnlyAll.get('rider:' + v) || 0) + 1);
+    for (const v of sEff) shallowOnlyAll.set('effect:' + v, (shallowOnlyAll.get('effect:' + v) || 0) + 1);
+    for (const v of sRid) shallowOnlyAll.set('rider:' + v, (shallowOnlyAll.get('rider:' + v) || 0) + 1);
+    if (dEff.length || dRid.length || dDom.length || dSel.length) diffCount.effects++;
+    const pd = b.passives - a.passives;
+    if (pd > 0) diffCount.passives++;
+    console.log(`\n  ${rec.cid.replace('toh_', '')}`);
+    console.log(`    deep-only    effects [${dEff.join(', ') || '—'}]  riders [${dRid.join(', ') || '—'}]  domains [${dDom.join(', ') || '—'}]  selectors [${dSel.join(', ') || '—'}]`);
+    console.log(`    shallow-only effects [${sEff.join(', ') || '—'}]  riders [${sRid.join(', ') || '—'}]  domains [${sDom.join(', ') || '—'}]  selectors [${sSel.join(', ') || '—'}]`);
+    console.log(`    passives always-on: shallow ${a.passives}, deep ${b.passives}  (deep +${pd})`);
+    console.log(`    dps ${rec.shallow.dps.toFixed(0)} -> ${rec.deep.dps.toFixed(0)}  (${(100 * (rec.deep.dps / Math.max(1e-9, rec.shallow.dps) - 1)).toFixed(0)}%),`
+      + ` damage taken ${rec.shallow.taken.toFixed(0)} -> ${rec.deep.taken.toFixed(0)}`);
+  }
+
+  const n = out.filter(r => r.shallow && r.deep).length;
+  console.log('\n  ' + '-'.repeat(88));
+  console.log(`  classes where the deep build brings a capability the shallow one lacks: ${diffCount.effects}/${n}`);
+  console.log(`  classes where the deep build carries more always-on passives:           ${diffCount.passives}/${n}`);
+  if (deepOnlyAll.size) {
+    console.log('\n  capabilities only the DEEP build has, across classes:');
+    for (const [k, v] of [...deepOnlyAll].sort((a, b) => b[1] - a[1])) console.log(`    ${k.padEnd(28)} x${v}`);
+  } else {
+    console.log('\n  capabilities only the DEEP build has: NONE.');
+  }
+  if (shallowOnlyAll.size) {
+    console.log('\n  capabilities only the SHALLOW build has, across classes:');
+    for (const [k, v] of [...shallowOnlyAll].sort((a, b) => b[1] - a[1])) console.log(`    ${k.padEnd(28)} x${v}`);
+  }
+  const sc = out.filter(r => r.shallow && r.shallow.cleared).length;
+  const dc = out.filter(r => r.deep && r.deep.cleared).length;
+  console.log(`\n  region 8 cleared: shallow ${sc}/${n}, deep ${dc}/${n}`);
+  console.log('  BOTH ends of the spectrum have to clear region 8 for the spectrum to be a choice.');
+}
