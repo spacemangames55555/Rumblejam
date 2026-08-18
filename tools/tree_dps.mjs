@@ -2,7 +2,7 @@
 //
 // THE BLIND SPOT THIS EXISTS FOR. `sim_test`'s `measureDps` levels a character
 // to 12 and lets the auto-slotter fill the loadout from every tree the class
-// owns. Level 12 is three slots (SLOT_LEVELS), and a class's two older trees
+// owns. Level 12 is four slots (SLOT_LEVELS), and a class's two older trees
 // reach them first, so **no third tree's actives have ever been measured — on
 // any of the fourteen.** Every third tree authored so far was scored on its
 // tier-2 passive alone, because a passive is always on and needs no slot. That
@@ -16,13 +16,17 @@
 //
 // THREE THINGS MAKE THE NUMBER READABLE.
 //
-// 1. LEVEL 60, NOT 12. Tier 10 unlocks at 60 (§8.1.1 TIER_LEVELS), so this is
-//    the lowest level at which all ten nodes of a tree are learnable. Below it
-//    the capstones are unmeasurable by construction.
+// 1. LEVEL 60, NOT 12. Every node of a tree is learnable from 36 now that the
+//    ladder tops out there (§8.1.1 TIER_LEVELS) — this used to say "tier 10
+//    unlocks at 60", and that was the reason for the number. 60 is KEPT, and
+//    for a different reason worth stating: the question is what a tree does at
+//    full investment, and level is the skill-point budget once it stops being
+//    an unlock gate. 36 would measure the same nodes at rank 1.
 //
-// 2. SLOTS PINNED TO THE TREE. Seven slots at level 60, filled with that tree's
-//    own actives in tier order and nothing else. A tree with fewer than seven
-//    actives fields fewer, which is honest — that IS the tree.
+// 2. SLOTS PINNED TO THE TREE. Eight slots at level 60 — the eighth arrives at
+//    36 on the shared ladder, where it used to wait until 66 — filled with that
+//    tree's own actives in tier order and nothing else. A tree with fewer than
+//    eight actives fields fewer, which is honest: that IS the tree.
 //
 // 3. THE BAND IS WITHIN-CLASS, NOT ACROSS THE ROSTER. A summon tree and a
 //    strike tree are not comparable and never were; a roster median would be
@@ -77,7 +81,7 @@ const VERBOSE = process.argv.includes('--verbose');
 // only under the immortal one is telling you about the fixture.
 const MORTAL = process.argv.includes('--mortal');
 const MORTAL_HP = 900;
-const LEVEL = 60;            // tier 10 unlocks here; every node learnable
+const LEVEL = 60;            // full point budget; every node learnable from 36
 const SECONDS = 30;          // long enough for a 9s capstone to come round thrice
 const TICKS = SECONDS * 60;
 // §13 rule 28: the band is the CLASS's own median, and it is wide because

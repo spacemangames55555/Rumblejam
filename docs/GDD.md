@@ -678,20 +678,26 @@ This is written down because the alternative was demonstrated at length: **the l
 
 Enforced in `canLearn` (`TIER_LEVELS` in `js/skills.js`), not merely tabled. Measured, not assumed: full runs to victory for all 14 classes end at **level 68–70**, reaching ~21 by the end of floor 1, ~35 by floor 2 and ~52 by floor 3. (Two classes measured as outliers here — Assassin 115 and Priest 102. The Assassin was an economy defect and is fixed: D-34 brings it to 70, inside the band. The Priest's is D-35, still open. Neither is a property of the curve.)
 
-| Tier | Level | Where that lands |
-|---|---|---|
-| 1 | 1 | §5.6's opening ability, chosen at character start |
-| 2 | 3 | first map |
-| 3 | 6 | end of map 1 |
-| 4 | 10 | mid floor 1 |
-| 5 | 15 | floor 1, third slot open at 12 |
-| 6 | 21 | **end of floor 1** |
-| 7 | 28 | floor 2 |
-| 8 | 36 | **just past floor 2's 35** |
-| 9 | 48 | floor 3 |
-| 10 | 60 | **floor 4 — the capstone arrives late** |
+| Tier | Level | Slot | Where that lands |
+|---|---|---|---|
+| 1 | 1 | 1 | §5.6's opening ability, chosen at character start |
+| 2 | 3 | 2 | first map |
+| 3 | 5 | 3 | end of map 1 |
+| 4 | 8 | — | mid floor 1 |
+| 5 | 11 | 4 | floor 1 |
+| 6 | 15 | 5 | floor 1 |
+| 7 | 19 | 6 | **end of floor 1** |
+| 8 | 24 | — | floor 2 |
+| 9 | 30 | 7 | floor 2 |
+| 10 | 36 | 8 | **the capstone, and the last lock of any kind** |
 
-The first six gates track D2's shape closely: its 6/12/18/24/30 of 99 is 6–30% of the cap, which against 69 is levels 4/8/12/17/21 — within a level or two of the table above. Where this departs from D2 is the top half: D2 stops gating at 30% and this keeps going to 87%, because tiers 7–10 are the payoff and a capstone available at the halfway point is a default rather than a decision.
+**Level 36 is the line, and that is the whole design of this table.** At 36 a character has every tier in all three trees and all eight loadout slots; there is nothing left that a level unlocks. Everything from 36 to the measured end of a run at 68–70 is rank investment in a build the player already holds — which is the range the power curve has to hold up in, and the range that could not be measured while the loadout was still assembling itself.
+
+The first six gates track D2's shape at the front: its 6/12/18/24/30 of 99 is 6–30% of the cap, which against 69 is levels 4/8/12/17/21. Where this departs from D2 is the top: D2 keeps gating into the back half and this stops at 52% of the run, on purpose. A capstone that arrives with a third of the run left is a decision the player then gets to *play*; one that arrives at 87% is a trophy.
+
+**Slots and tiers are one ladder.** Eight slots against ten gates, so tiers 4 and 8 carry no slot; both ends are shared, so slot 1 is free at level 1 and the eighth opens at 36 with the last tier. Asserted at load in `assertTrees()` — every entry in `SLOT_LEVELS` must appear in `TIER_LEVELS`, and the last must equal the last — because two schedules is exactly what this replaces.
+
+**What this changed, and why the ladder is ten rows rather than eight.** It ended at 60, with slots on a separate ladder ending at 66. All 42 trees reach tier 10, so an eight-row table would leave tiers 9 and 10 with no gate at all — content that loads, renders and can never be bought, which `assertTrees()` already refuses. Compressing the *schedule* rather than the *trees* leaves the shape spec, the prereq graph and every render column exactly as authored.
 
 Two properties worth stating because they are consequences rather than choices. The gate is per-tier and not per-tree, so a player who spreads reaches tier 10 in all three trees at the same level — correct, since branching is not exclusion. And **the shape spec's node count is the real balance lever**: at 3 trees × 10 nodes a player spends 30 of ~69 points on unlocks and has 39 left for ranks; at 14 nodes per tree that becomes 42 and 27. Fixing the gates does not fix the rank budget, and the shape spec has to be read against this table.
 
@@ -703,8 +709,8 @@ That is not a flaw in `measureDps`: it answers "is this CLASS in band", and a cl
 
 `tools/tree_dps.mjs` answers the other question. Three things make its number readable:
 
-1. **Level 60, not 12.** Tier 10 unlocks at 60, so this is the lowest level at which all ten nodes are learnable. Below it the capstones are unmeasurable by construction.
-2. **Slots pinned to the tree** — seven at level 60, filled with that tree's own actives in tier order and nothing else.
+1. **Level 60, not 12.** Every node is learnable from 36 now that the ladder tops out there; 60 is kept because the question is what a tree does at full investment, and once level stops being an unlock gate it is the rank budget.
+2. **Slots pinned to the tree** — eight at level 60, filled with that tree's own actives in tier order and nothing else.
 3. **The band is within-class.** A summon tree and a strike tree are not comparable; a roster median would be §13 rule 28 again, an anchor derived from the population it measures. A player picks among exactly three trees, so the class's own median is the only thing "in band" can honestly mean.
 
 And the staging answers declarations rather than assuming them (§13 rule 61): a tree firing on `ON_DODGE`, `SELF_THRESHOLD` or `MOVEMENT` produces zero unstaged, and **a zero meaning "never triggered" reads identically to a zero meaning "deals no damage"**. Every condition the fixture cannot arrange is named in the output, so an unstaged trigger is visible as a gap rather than hiding inside a low number.
@@ -1972,6 +1978,12 @@ Every one of those returned a clean number. **Before believing a green probe, as
 `addWall` pushes barricades into `sim.obstacles`, which is correct — they stop swings, blasts and committed zones. Selection then consulted the same list, which is also correct, and the combination said "do not shoot at something behind a barricade". But a shot at something behind a barricade is not a shot through it: the projectile tick puts it *into* the wall and calls `damageWall`. The missing category was *destructible*: permanent geometry is cover, a barricade is a target. `losBlockedPermanent` is that category, and everything downstream got simpler once it existed.
 
 **The same patch produced the mirror of this.** Giving minions obstacle collision — a plain fix for a plain defect — took away the Hunter's only route to a barricade, because its hounds used to chew one as a side effect of drifting into it. sim_test's own comment had already recorded that the mechanism was accidental: "a bolt only touches a wall when the dummy it was aimed at happens to be on the far side." **An accident that a gate depends on is load-bearing, and removing it is a behaviour change whether or not it was ever designed.** The replacement has to be deliberate: a minion with nothing in reach now strikes the barricade in front of it, the way `chewWalls` has always done for a player.
+
+84. **Changing what a LEVEL means re-baselines every fixture pinned to that level, and those fixtures do not mention the thing that changed.** Moving slot unlocks onto the tier ladder turned level 12 from three loadout slots into four. `ARM_LEVEL = 12` is the level almost every fixture in `sim_test` arms at, chosen as "a party a few rooms into a floor" — a statement about progress, not about slots.
+
+Five checks went red on a patch that edited two arrays of numbers. The class DPS median rose 61% (29.5 → 47.5) because thirteen of fourteen classes gained a slot's worth of output, and three classes that gained less fell outside a ±40% band measured against that risen median — §13 rule 28 again, an anchor derived from the population it measures. A camping statue then survived four profiles in `open_expanse` where the Statue Test requires it to die, because the same fixture is now a quarter stronger.
+
+Neither is a defect and neither was retuned here: they are the balance shift the patch exists to cause, arriving where the gates could see it. **Isolate before reporting.** Re-running with only the old slot ladder restored — tier ladder untouched — returned the red set to baseline exactly, which is what makes "the slot count at level 12" a cause rather than a hypothesis.
 
 ### 13.1 The through-line
 

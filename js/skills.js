@@ -221,10 +221,36 @@ export const TREE_NODES = 10;
 // which spends ten nodes on six of these ten gates so two branches can run in
 // parallel. Ten nodes across ten DENSE tiers is one node per tier, which is a
 // chain: sparse tiers are what make the shape spec and this table compatible.
-export const TIER_LEVELS = [1, 3, 6, 10, 15, 21, 28, 36, 48, 60];
+//
+// THE LADDER NOW ENDS AT 36, AND THAT IS THE POINT. It ended at 60, which put
+// the last two gates past where most of a run happens and made "the endgame
+// build" something a player mostly read about rather than held. Level 36 is
+// now the line: every tier is open, every slot is unlocked, and everything
+// after it is rank investment in a loadout the player already has. That is the
+// range the power curve has to hold up in, and it could not be measured while
+// the loadout was still assembling itself at 66.
+//
+// TEN ENTRIES, NOT EIGHT, AND NO TREE RESHAPED. Every one of the 42 trees
+// reaches tier 10 — the twelve dense trees run 1..10 one node per tier, the
+// thirty sparse ones spend ten nodes on tiers 1/2/4/6/8/10. An eight-entry
+// table would leave tiers 9 and 10 with no gate, which the assertion in
+// assertTrees() correctly calls content that can never be bought. Compressing
+// the ladder rather than the trees moves the schedule and leaves the shape
+// spec, the prereq graph and every render column exactly as authored.
+export const TIER_LEVELS = [1, 3, 5, 8, 11, 15, 19, 24, 30, 36];
 export function tierLevel(tier) { return TIER_LEVELS[tier - 1]; }
 
-export const SLOT_LEVELS = [1, 5, 12, 21, 31, 42, 54, 66];
+// SLOTS RIDE THE SAME LADDER. Eight slots against ten gates, so two gates carry
+// no slot; both endpoints are kept, so slot 1 is free at level 1 and the eighth
+// opens at 36 alongside the last tier. The two skipped gates (8 and 24) are the
+// ones that put the remaining eight closest to the schedule this was specified
+// as — 1/3/6/10/15/21/28/36 — which no subset of the tier ladder hits exactly;
+// this is within two levels at every step.
+//
+// Every threshold here MUST be a tier gate. `assertTrees()` checks it, because
+// "slots unlock on the tier ladder" is the whole claim and a hand-typed number
+// that drifts off it would restore the two-schedules problem this replaces.
+export const SLOT_LEVELS = [1, 3, 5, 11, 15, 19, 30, 36];
 export function slotsAtLevel(level) {
   let n = 0;
   for (const lv of SLOT_LEVELS) if (level >= lv) n++;
@@ -394,6 +420,29 @@ function assertTrees() {
   for (const tree of Object.values(TREES)) {
     for (const s of tree.skills) {
       for (const c of s.compose || []) if (c.kind === 'form' && c.form) FORM_NAMES.add(c.form);
+    }
+  }
+
+  // ONE LADDER, ASSERTED WHERE IT IS DEFINED. Both halves of this are claims
+  // the rest of the file and the skill screen rely on, and both are cheap.
+  {
+    const asc = TIER_LEVELS.every((lv, i) => i === 0 || lv > TIER_LEVELS[i - 1]);
+    if (!asc) problems.push(`TIER_LEVELS is not strictly ascending: ${TIER_LEVELS.join(', ')}`);
+    if (TIER_LEVELS[0] !== 1) problems.push(`TIER_LEVELS starts at ${TIER_LEVELS[0]}; tier 1 must be available at level 1`);
+    if (SLOT_LEVELS.length !== 8) problems.push(`${SLOT_LEVELS.length} slot thresholds, want exactly 8`);
+    const offLadder = SLOT_LEVELS.filter(lv => !TIER_LEVELS.includes(lv));
+    if (offLadder.length) {
+      problems.push(`SLOT_LEVELS ${offLadder.join(', ')} are not tier gates — slots and tiers share one ladder, so every slot threshold must appear in TIER_LEVELS (${TIER_LEVELS.join(', ')})`);
+    }
+    const top = TIER_LEVELS[TIER_LEVELS.length - 1];
+    if (SLOT_LEVELS[SLOT_LEVELS.length - 1] !== top) {
+      problems.push(`the 8th slot opens at ${SLOT_LEVELS[SLOT_LEVELS.length - 1]} but the last tier opens at ${top} — a player with every tier must have every slot`);
+    }
+    // The claim the whole change exists to make true: nothing is still locked
+    // once the top gate is reached, so everything past it is rank investment.
+    const maxTier = Math.max(...Object.values(TREES).flatMap(t => t.skills.map(s => s.tier)));
+    if (tierLevel(maxTier) !== top) {
+      problems.push(`the deepest tier authored is ${maxTier} (level ${tierLevel(maxTier)}) but the ladder tops out at ${top}`);
     }
   }
 
