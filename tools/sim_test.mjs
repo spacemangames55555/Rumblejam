@@ -36,6 +36,7 @@ import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 import { BIOMES, REGION_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
 import { TOTAL_REGIONS } from '../js/regions.js';
 import * as SKILLSIM from '../js/skillsim.js';
+import { levelForSlots, slotsAtLevel } from '../js/skills.js';
 import { ENEMY_BY_ID as ENEMY_BY_ID_T } from '../js/content/enemies.js';
 // Art fixtures below build sheets that must match the manifest exactly. They
 // hardcoded 32 until enemies moved to 128 and every one became a rejected
@@ -75,13 +76,19 @@ const T2 = _SEL.some(c => c.id === T2_REFERENCE) ? T2_REFERENCE : _SEL[1 % _SEL.
 // hardcoded lists of retired classic characters; those tests care about party
 // SIZE and mixture, never about which retired trait was in slot 3.
 const pickN = n => Array.from({ length: n }, (_, i) => _SEL[i % _SEL.length].id);
-// The level an armed bot arrives at. 12 is the FOURTH loadout slot on the
-// shared ladder (SLOT_LEVELS = [1, 3, 5, 11, …]) — it was the third when slots
-// ran on their own schedule. A party a few rooms into a floor, not one that has
-// just pressed START. The level is unchanged deliberately: it is a statement
-// about where a party is, and moving it to chase the new slot count would
-// re-baseline every check downstream of it for no reason.
-const ARM_LEVEL = 12;
+// WHAT AN ARMED BOT IS, SAID AS THE THING IT MEANS. This was `const ARM_LEVEL
+// = 12` and the 12 was never about the level — it was how you spelled "three
+// loadout slots" back when slots ran on their own schedule. When the ladders
+// merged in patch-skill-level-gates, 12 became the FOURTH slot and every check
+// downstream of `armBot` changed what it measured while the literal `12` sat
+// there looking deliberate. That patch left it alone rather than re-baseline
+// mid-change; this is the once it was deferred to.
+//
+// Pinned to the slot count now, so the next ladder edit moves the level and
+// leaves the FIXTURE'S MEANING alone, which is the only thing that was ever
+// intended to be constant. §13 rule 84.
+const ARM_SLOTS = 3;
+const ARM_LEVEL = levelForSlots(ARM_SLOTS);
 // A retired id, assembled so no search-and-replace over character names can
 // reach it. Two passes of bulk editing rewrote this literal into a valid class
 // and quietly turned its assertion into a tautology.
@@ -3160,9 +3167,28 @@ try {
     // Assassin: a mark exists, the crit rules are Duskblade's, kills vanish him
     {
       const g = one('toh_assassin'); const p = g.players[0];
-      run(g, 60 * 8, () => { p.hp = p.stats.vitality; });
-      if (p.contractId !== null) ok('Assassin: a contract is marked and tracked');
-      else { bad++; fail('no contract marked'); }
+      // ASSERT THE BEHAVIOUR, NOT THE INSTANT. This read `p.contractId !== null`
+      // at the last tick, and a contract is a CHURNING state: the mark clears
+      // the moment its target dies and re-arms after `remarkDelay`, so an
+      // Assassin who is killing things spends much of a fight unmarked. Sampled
+      // per tick over the same 8 s window, `contractId` is null for 32-69% of
+      // it — at every level tried (5, 8, 11, 12, 15) and on 2 of 5 seeds the
+      // final tick lands in a gap. The check passed on seed 4242 by luck, and
+      // re-pinning `armBot` to its slot count only changed which side of the
+      // coin came up. What "marked and tracked" means is that marks HAPPEN and
+      // that each one names a real enemy, so that is what is counted now.
+      let marks = 0, lastId = null, orphan = 0;
+      run(g, 60 * 8, () => {
+        p.hp = p.stats.vitality;
+        if (p.contractId !== null && p.contractId !== lastId) {
+          marks++;
+          if (!g.enemyById(p.contractId)) orphan++;
+        }
+        lastId = p.contractId;
+      });
+      if (marks > 0 && !orphan) ok(`Assassin: a contract is marked and tracked (${marks} marks in 8s, every one a live enemy)`);
+      else if (orphan) { bad++; fail(`${orphan} of ${marks} contracts named an enemy that does not exist`); }
+      else { bad++; fail('no contract marked in 8s'); }
       if (p.critMult === 3) ok('granted crits deal ×3');
       else { bad++; fail(`critMult ${p.critMult}`); }
       const e = g.spawnEnemyById('skulker', p.x + 40, p.y, {});
@@ -4481,7 +4507,12 @@ try {
 // for months while measuring the wrong world. It now spends the class's trees
 // the way every other gate does, which is what "damage output" means in a game
 // where a character's damage IS its skills.
-const DPS_LEVEL = 12;
+// Pinned to slots for the same reason `ARM_SLOTS` is (see there). This gate
+// spends the class's WHOLE tree regardless, so the level only decides which
+// tiers are buyable and how many actives can be fielded — which is to say the
+// level was only ever a way of saying "three slots" here too.
+const DPS_SLOTS = 3;
+const DPS_LEVEL = levelForSlots(DPS_SLOTS);
 const { TREES: DPS_TREES } = await import('../js/skills.js');
 function measureDps(charId) {
   // allowUnplayable: this measures a class's damage output against dummies, and
