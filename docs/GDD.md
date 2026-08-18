@@ -1487,6 +1487,23 @@ Shop rerolls escalating within a visit; item upgrades; **skill respec at 1000 go
 
 **An item upgrade is a duplicate purchase**, priced at ×1.6, capped at level 4, and it deepens *both halves*: the bonus and the rolled penalty scale together, so buying a second copy is never a way to acquire the upside alone. Hook payloads are not scaled by a blanket multiplier — an item declares an explicit `perLevel` block instead, because "stronger" is not the same direction for every field and a generic ×1.5 would quietly weaken a lower-is-better one.
 
+### 9.3.1 OPEN DESIGN GAP — nothing punishes concentration
+
+**Stated as a gap rather than a defect, because whether concentration *should* be punished is undecided.** The design has long assumed a tension between spreading points across a loadout and pouring them into one skill. Measured as clear time on a region-8 room (`tools/power_curve_phase2.mjs` §7), that tension does not exist:
+
+| class | concentrated | spread |
+|---|---|---|
+| priest | cleared 162.9 s, min HP 38.4% | cleared 145.7 s, min HP 61.8% |
+| savage | cleared 119.8 s | cleared 119.8 s |
+| hunter | died 18.8 s | died 17.5 s |
+| monk | died 29.8 s | died 27.8 s |
+
+Spread is 12% faster for one class, *identical* for another, and irrelevant for the two that die either way.
+
+**Why there is nothing to tune.** Both shapes field **eight** slotted skills — the difference is only where the ranks went, so concentration is never "one skill" in play. Its sole structural downside is that its damage sits behind one cooldown, and `SKILL_RANK_CD_RATE` **shortens that cooldown as rank rises** (0.97/rank to a 0.70 floor), partially refunding the very penalty that was supposed to bite. Nothing else in the system prefers breadth.
+
+So a mechanism would have to be **added**, not tuned. Candidates exist (diminishing returns per skill, a loadout-diversity term, cooldowns that scale with concentration) and none is chosen here. A survey that rediscovers this should cite this section rather than re-derive it.
+
 ### 9.4 Numbers
 
 All placeholders for playtest. Income roughly flat within a region, scaling ~15% per band; item prices ~25% per band; reroll cost doubling within a visit. **Target: 1–2 purchases per shop visit throughout the run, never 6.**
@@ -2023,7 +2040,9 @@ Two consequences. The measurement one: a savage number is meaningless without it
 
 *(A related trap in the same measurement: not all HP that ARRIVES is healing. `_recomputeStats` grants the difference when Vitality grows (js/game.js:631), and a room hands out enough XP to level mid-fight — which credited the blacksmith with 0.9 HP/s of "sustain" that was 14 HP of level-ups.)*
 
-94. **Before calling a band-to-band difference a curve finding, check it against the same region's own seed spread.** Two apparent defects died of this in one pass. The regions 4–5 "incoming dip" (22.6 → 17.5 → 10.2) is a generator artifact: within one region incoming ranges ×3.5 across seeds — region 5 alone runs 10.2 to 27.3 — while the spread across regions 3–6's means is only ×1.3. Band 3→4's enemy-HP step (×0.98 against the axis's ×1.13) is likewise inside a within-region spread of ×1.15–1.28. A single-seed band comparison in a procedurally generated room measures the seed at least as much as the band.
+94. **A cross-group difference smaller than the within-group spread is not a finding.** Measure the within-group spread first, and quote it next to the difference; if the difference does not clear it, there is nothing to explain and nothing to tune. This is the general rule — it governs seeds against regions, classes against classes, builds against builds, runs against runs.
+
+Two apparent defects died of it in one pass, both from single-seed comparisons in procedurally generated rooms. The regions 4–5 "incoming dip" (22.6 → 17.5 → 10.2) is a generator artifact: within ONE region, incoming ranges ×3.5 across seeds — region 5 alone runs 10.2 to 27.3 — while the spread across regions 3–6's means is only ×1.3. Band 3→4's enemy-HP step (×0.98 against the axis's ×1.13) sits inside a within-region spread of ×1.15–1.28. Both were closed as measurement error, and the cost of not checking is a tuning pass aimed at a coin flip.
 
 ### 13.1 The through-line
 

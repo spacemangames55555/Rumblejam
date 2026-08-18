@@ -666,6 +666,16 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/bimodal_diagnosis.mjs [--seeds=N] [--quick]` — **why do some
+  classes die in a region-8 room and others not notice?** Instruments every
+  channel that could plausibly explain survival — sustain through both doors,
+  mitigation, output, mobility, pet screening — and correlates each against
+  survival over the whole roster rather than comparing two groups, because with
+  one always-survivor a group mean is a sample of one. Also reads burst against
+  attrition off the HP trace, since they need opposite fixes. Findings in
+  `docs/bimodal-diagnosis.md`: it is not sustain, every death is attrition, and
+  the roster shares one defensive clock that three classes have found an exit
+  from by two different mechanisms.
 - `node tools/power_curve_phase2.mjs [--only=N,N] [--quick]` — **do the two
   curves rise together?** Eight sections: composed enemy threat on a plain
   `combat` node in every region; itemised player output at each region's §4.3
