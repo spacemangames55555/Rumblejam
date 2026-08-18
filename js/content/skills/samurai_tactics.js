@@ -50,7 +50,7 @@ const FOOT_HEAVY = { scaleWith: 'footing'};
 export const SAMURAI_TACTICS = [
   {
     id: 'sam_draw_cut', tree: 'samurai_tactics', tier: 1, name: 'Draw Cut',
-    desc: 'The cut that comes out of the stance. It is worth more the longer you have held it.',
+    flavor: 'The cut that comes out of the stance. It is worth more the longer you have held it.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'NEAREST', range: T.drawReach },
@@ -60,7 +60,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_measured_breath', tree: 'samurai_tactics', tier: 2, name: 'Measured Breath',
-    desc: 'You settle into the ground faster than you used to.',
+    flavor: 'You settle into the ground faster than you used to.',
     type: 'passive', domain: 'mental', prereq: 'sam_draw_cut',
     trigger: null, cooldown: 0, compose: [],
     passive: { footingAccrualPct: T.breathAccrualPct },
@@ -70,7 +70,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_rising_cut', tree: 'samurai_tactics', tier: 3, name: 'Rising Cut',
-    desc: 'Slower, heavier, and it asks you to still be standing when it lands.',
+    flavor: 'Slower, heavier, and it asks you to still be standing when it lands.',
     type: 'active', domain: 'physical', prereq: 'sam_measured_breath',
     select: 'highest_hp',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'NEAREST', range: T.risingReach },
@@ -83,7 +83,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_two_heavens', tree: 'samurai_tactics', tier: 4, name: 'Two Heavens',
-    desc: 'Both blades, one motion.',
+    flavor: 'Both blades, one motion.',
     type: 'active', domain: 'physical', prereq: 'sam_rising_cut',
     select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.twinRadius, count: T.twinCount },
@@ -96,7 +96,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_read_the_line', tree: 'samurai_tactics', tier: 5, name: 'Read the Line',
-    desc: 'You saw where it was going. Now it cannot guard.',
+    flavor: 'You saw where it was going. Now it cannot guard.',
     type: 'active', domain: 'mental', prereq: 'sam_two_heavens',
     select: 'nearest',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'ON_DODGE', window: T.readWindow },
@@ -112,7 +112,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_held_edge', tree: 'samurai_tactics', tier: 6, name: 'Held Edge',
-    desc: 'Every stack of footing is worth more edge than it was.',
+    flavor: 'Every stack of footing is worth more edge than it was.',
     type: 'passive', domain: 'physical', prereq: 'sam_read_the_line',
     trigger: null, cooldown: 0, compose: [],
     passive: { footingScaleWeight: T.heldEdgeWeight },
@@ -120,7 +120,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_severing_arc', tree: 'samurai_tactics', tier: 7, name: 'Severing Arc',
-    desc: 'A long sweep that answers a crowd without giving up the ground.',
+    flavor: 'A long sweep that answers a crowd without giving up the ground.',
     type: 'active', domain: 'physical', prereq: 'sam_held_edge',
     select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.severRadius, count: T.severCount },
@@ -130,7 +130,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_mountain_stance', tree: 'samurai_tactics', tier: 8, name: 'Mountain Stance',
-    desc: 'Four seconds of not moving, and the mountain answers.',
+    flavor: 'Four seconds of not moving, and the mountain answers.',
     type: 'active', domain: 'mental', prereq: 'sam_severing_arc',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'MOVEMENT', mode: 'still', seconds: T.mountainSeconds },
@@ -143,7 +143,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_killing_ground', tree: 'samurai_tactics', tier: 9, name: 'Killing Ground',
-    desc: 'The ground you chose is the ground it dies on.',
+    flavor: 'The ground you chose is the ground it dies on.',
     type: 'active', domain: 'physical', prereq: 'sam_mountain_stance',
     select: 'lowest_hp',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.killPct, range: T.killReach },
@@ -156,7 +156,7 @@ export const SAMURAI_TACTICS = [
   },
   {
     id: 'sam_unsheathed', tree: 'samurai_tactics', tier: 10, name: 'Unsheathed',
-    desc: 'Everything the stance was for, spent at once.',
+    flavor: 'Everything the stance was for, spent at once.',
     type: 'active', domain: 'physical', prereq: 'sam_killing_ground',
     select: 'objective_target',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.unsheathedRadius, count: T.unsheathedCount },

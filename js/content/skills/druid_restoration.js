@@ -100,7 +100,7 @@ const PACK = { scaleWith: 'pack' };
 export const DRUID_RESTORATION = [
   {
     id: 'dru_cutting_back', tree: 'druid_restoration', tier: 1, name: 'Cutting Back',
-    desc: 'Prunes what is dying so the rest of it does not. The pack is a garden, not a stockpile.',
+    flavor: 'Prunes what is dying so the rest of it does not. The pack is a garden, not a stockpile.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.cuttingReach },
@@ -113,7 +113,7 @@ export const DRUID_RESTORATION = [
   },
   {
     id: 'dru_tending', tree: 'druid_restoration', tier: 2, name: 'Tending',
-    desc: 'A standing pack is not the same as a healthy one. Both roads out of here are about the animal that is about to fall.',
+    flavor: 'A standing pack is not the same as a healthy one. Both roads out of here are about the animal that is about to fall.',
     type: 'passive', domain: 'spiritual', prereq: 'dru_cutting_back',
     trigger: null, cooldown: 0, compose: [],
     passive: { packScaleWeight: T.tendingWeight },
@@ -123,7 +123,7 @@ export const DRUID_RESTORATION = [
   // ------------------------------ branch A: Thornbark (the timer never starts)
   {
     id: 'dru_thorn', tree: 'druid_restoration', tier: 4, name: 'Thorn',
-    desc: 'Thornbark heals by fighting. The Druid does not stop to tend the pack — tending is what its swings already do.',
+    flavor: 'Thornbark heals by fighting. The Druid does not stop to tend the pack — tending is what its swings already do.',
     type: 'active', domain: 'physical', prereq: 'dru_tending',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.thornReach },
@@ -136,7 +136,7 @@ export const DRUID_RESTORATION = [
   },
   {
     id: 'dru_grovekeeper', tree: 'druid_restoration', tier: 6, name: 'Grovekeeper',
-    desc: 'They stand because you kept them standing, and they are worth more for it.',
+    flavor: 'They stand because you kept them standing, and they are worth more for it.',
     type: 'passive', domain: 'spiritual', prereq: 'dru_thorn',
     trigger: null, cooldown: 0, compose: [],
     passive: { packScaleWeight: T.grovekeepWeight },
@@ -144,7 +144,7 @@ export const DRUID_RESTORATION = [
   },
   {
     id: 'dru_bark_shield', tree: 'druid_restoration', tier: 8, name: 'Bark Shield',
-    desc: 'The whole line at once, and everything behind it comes back up with it.',
+    flavor: 'The whole line at once, and everything behind it comes back up with it.',
     type: 'active', domain: 'spiritual', prereq: 'dru_grovekeeper',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.barkRange, count: 2 },
@@ -157,7 +157,7 @@ export const DRUID_RESTORATION = [
   },
   {
     id: 'dru_thornbark', tree: 'druid_restoration', tier: 10, name: 'Thornbark',
-    desc: 'CAPSTONE — Thornbark. Twice, and both times the pack is further from the ground than it was.',
+    flavor: 'CAPSTONE — Thornbark. Twice, and both times the pack is further from the ground than it was.',
     type: 'active', domain: 'physical', prereq: 'dru_bark_shield',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.thornbarkReach },
@@ -172,7 +172,7 @@ export const DRUID_RESTORATION = [
   // --------------------------- branch B: Bramblehide (when nothing is standing)
   {
     id: 'dru_husk', tree: 'druid_restoration', tier: 4, name: 'Husk',
-    desc: 'Bramblehide reads no pack at all. A branch for the empty field cannot depend on the field being full.',
+    flavor: 'Bramblehide reads no pack at all. A branch for the empty field cannot depend on the field being full.',
     type: 'active', domain: 'physical', prereq: 'dru_tending',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.huskPct },
@@ -182,7 +182,7 @@ export const DRUID_RESTORATION = [
   },
   {
     id: 'dru_hidebind', tree: 'druid_restoration', tier: 6, name: 'Hidebind',
-    desc: 'What you grew for them, you can wear yourself.',
+    flavor: 'What you grew for them, you can wear yourself.',
     type: 'passive', domain: 'physical', prereq: 'dru_husk',
     trigger: null, cooldown: 0, compose: [],
     passive: { armorGrit: T.hidebindGrit, armorVit: T.hidebindVit },
@@ -192,7 +192,7 @@ export const DRUID_RESTORATION = [
   },
   {
     id: 'dru_gore', tree: 'druid_restoration', tier: 8, name: 'Gore',
-    desc: 'No animal in front of you and no animal behind you. Still teeth.',
+    flavor: 'No animal in front of you and no animal behind you. Still teeth.',
     type: 'active', domain: 'physical', prereq: 'dru_hidebind',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.goreReach },
@@ -205,7 +205,7 @@ export const DRUID_RESTORATION = [
   },
   {
     id: 'dru_bramblehide', tree: 'druid_restoration', tier: 10, name: 'Bramblehide',
-    desc: 'CAPSTONE — Bramblehide. The pack is gone and you are still the worst thing in the room.',
+    flavor: 'CAPSTONE — Bramblehide. The pack is gone and you are still the worst thing in the room.',
     type: 'active', domain: 'physical', prereq: 'dru_gore',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.bramblehidePct },

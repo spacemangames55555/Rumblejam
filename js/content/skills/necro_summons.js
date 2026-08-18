@@ -73,7 +73,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const NECRO_SUMMONS = [
   {
     id: 'necro_bone_shard', tree: 'necro_summons', tier: 1, name: 'Bone Shard',
-    desc: 'The first thing you learn is that bone is already a weapon.',
+    flavor: 'The first thing you learn is that bone is already a weapon.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.shardRange },
@@ -83,7 +83,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_raise_skeleton', tree: 'necro_summons', tier: 2, name: 'Raise Skeleton',
-    desc: 'It remembers how to hold a weapon. It remembers nothing else.',
+    flavor: 'It remembers how to hold a weapon. It remembers nothing else.',
     type: 'active', domain: 'spiritual', prereq: 'necro_bone_shard',
     select: 'self',   // writes the caster, picks no target (§5.3)
     // §8.5: Raise Skeleton is triggered by a SOUL TOKEN in range, not by a
@@ -114,7 +114,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_gravechill', tree: 'necro_summons', tier: 4, name: 'Gravechill',
-    desc: 'The ground goes cold and stays cold.',
+    flavor: 'The ground goes cold and stays cold.',
     type: 'active', domain: 'spiritual', prereq: 'necro_raise_skeleton',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.chillRadius, count: T.chillTrigCount },
@@ -128,7 +128,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_soul_harvest', tree: 'necro_summons', tier: 4, name: 'Soul Harvest',
-    desc: 'What the dead leave behind is still worth something to you.',
+    flavor: 'What the dead leave behind is still worth something to you.',
     type: 'active', domain: 'spiritual', prereq: 'necro_raise_skeleton',
     select: 'self',   // writes the caster, picks no target (§5.3)
     // ON_TOKEN, first use. The token is a world resource left by any enemy
@@ -147,7 +147,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_bone_plate', tree: 'necro_summons', tier: 6, name: 'Bone Plate',
-    desc: 'You wear the parts that did not get up.',
+    flavor: 'You wear the parts that did not get up.',
     type: 'passive', domain: 'physical', prereq: 'necro_soul_harvest',
     trigger: null, cooldown: 0, compose: [],
     passive: { armorGrit: T.plateGrit, armorVit: T.plateVit },
@@ -156,7 +156,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_grave_bolt', tree: 'necro_summons', tier: 8, name: 'Grave Bolt',
-    desc: 'It lands, and then it keeps happening.',
+    flavor: 'It lands, and then it keeps happening.',
     type: 'active', domain: 'spiritual', prereq: 'necro_bone_plate',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.graveRange },
@@ -169,7 +169,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_charnel_pact', tree: 'necro_summons', tier: 10, name: 'Charnel Pact',
-    desc: 'You spend a soul the way other people spend a coin.',
+    flavor: 'You spend a soul the way other people spend a coin.',
     type: 'active', domain: 'spiritual', prereq: 'necro_grave_bolt',
     select: 'densest_cluster',
     // ON_TOKEN, second use, on a DIFFERENT primitive. One use proves a trigger
@@ -181,7 +181,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_bone_golem', tree: 'necro_summons', tier: 6, name: 'Bone Golem',
-    desc: 'Enough of them, stacked well enough, and it stands on its own.',
+    flavor: 'Enough of them, stacked well enough, and it stands on its own.',
     type: 'active', domain: 'physical', prereq: 'necro_gravechill',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'PROXIMITY', radius: T.golemTrigRadius, count: T.golemTrigCount },
@@ -199,7 +199,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_dread_howl', tree: 'necro_summons', tier: 8, name: 'Dread Howl',
-    desc: 'Every skull in the room opens at once.',
+    flavor: 'Every skull in the room opens at once.',
     type: 'active', domain: 'spiritual', prereq: 'necro_bone_golem',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.howlRadius, count: T.howlCount },
@@ -212,7 +212,7 @@ export const NECRO_SUMMONS = [
   },
   {
     id: 'necro_army_of_the_dead', tree: 'necro_summons', tier: 10, name: 'Army of the Dead',
-    desc: 'You stop asking. The floor answers anyway.',
+    flavor: 'You stop asking. The floor answers anyway.',
     type: 'active', domain: 'spiritual', prereq: 'necro_dread_howl',
     select: 'densest_cluster',
     trigger: { kind: 'SELF_THRESHOLD', pct: T.armyTrigPct },

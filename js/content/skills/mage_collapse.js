@@ -57,7 +57,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const MAGE_COLLAPSE = [
   {
     id: 'mage_coil_shot', tree: 'mage_collapse', tier: 1, name: 'Coil Shot',
-    desc: 'A rail of compressed air at the nearest thing. Deals 7 damage at 255 range.',
+    flavor: 'A rail of compressed air at the nearest thing.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.coilRange },
@@ -67,7 +67,7 @@ export const MAGE_COLLAPSE = [
   },
   {
     id: 'mage_gravity_well', tree: 'mage_collapse', tier: 2, name: 'Gravity Well',
-    desc: 'A dent in the floor that drags the crowd to 70% speed for 1.5s. 5 damage a tick over 3.6s.',
+    flavor: 'A dent in the floor.',
     type: 'active', domain: 'mental', prereq: 'mage_coil_shot',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.wellRadius, count: T.wellCount },
@@ -81,7 +81,6 @@ export const MAGE_COLLAPSE = [
   },
   {
     id: 'mage_event_horizon', tree: 'mage_collapse', tier: 4, name: 'Event Horizon',
-    desc: 'Absorbs 26 over 4.8s when you drop below 60% health.',
     type: 'active', domain: 'mental', prereq: 'mage_gravity_well',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
@@ -91,7 +90,7 @@ export const MAGE_COLLAPSE = [
   },
   {
     id: 'mage_redshift', tree: 'mage_collapse', tier: 4, name: 'Redshift',
-    desc: 'A stretched shot at the fattest thing in range. 10 damage, and it deals 24% less for 2.6s.',
+    flavor: 'A stretched shot at the fattest thing in range.',
     type: 'active', domain: 'spiritual', prereq: 'mage_gravity_well',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.redshiftRange },
@@ -108,7 +107,6 @@ export const MAGE_COLLAPSE = [
     // registered passive key, and inventing one means a reader in `skillsim.js`
     // — the engine code a content-shaped class is not supposed to cost (§8.3).
     id: 'mage_accretion', tree: 'mage_collapse', tier: 6, name: 'Accretion',
-    desc: 'Deals 9 damage and pulls 45% of it back as health.',
     type: 'active', domain: 'spiritual', prereq: 'mage_event_horizon',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.accretionRange },
@@ -118,7 +116,7 @@ export const MAGE_COLLAPSE = [
   },
   {
     id: 'mage_tidal_shear', tree: 'mage_collapse', tier: 6, name: 'Tidal Shear',
-    desc: 'A fan of pulled space across the crowd. Deals 11 damage.',
+    flavor: 'A fan of pulled space across the crowd.',
     type: 'active', domain: 'mental', prereq: 'mage_redshift',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.shearRadius, count: T.shearCount },
@@ -128,7 +126,7 @@ export const MAGE_COLLAPSE = [
   },
   {
     id: 'mage_frame_drag', tree: 'mage_collapse', tier: 8, name: 'Frame Drag',
-    desc: 'A line that holds what it crosses in place for 1.4s. Deals 11 damage.',
+    flavor: 'A line that holds what it crosses in place.',
     type: 'active', domain: 'mental', prereq: 'mage_tidal_shear',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.dragRadius, count: T.dragCount },
@@ -141,7 +139,6 @@ export const MAGE_COLLAPSE = [
   },
   {
     id: 'mage_null_geodesic', tree: 'mage_collapse', tier: 8, name: 'Null Geodesic',
-    desc: 'Absorbs 30 over 5.2s and returns 40% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'mage_accretion',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
@@ -154,7 +151,7 @@ export const MAGE_COLLAPSE = [
   },
   {
     id: 'mage_spaghettification', tree: 'mage_collapse', tier: 10, name: 'Spaghettification',
-    desc: 'Three drawn-out shots, each leaving a tear. 12 damage plus 9 over 2.4s.',
+    flavor: 'Three drawn-out shots, each leaving a tear.',
     type: 'active', domain: 'spiritual', prereq: 'mage_frame_drag',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.spagRadius, count: T.spagTargets },
@@ -168,7 +165,7 @@ export const MAGE_COLLAPSE = [
   },
   {
     id: 'mage_heat_death', tree: 'mage_collapse', tier: 10, name: 'Heat Death',
-    desc: 'The end of the argument. 17 damage in a wide fan, and what it touches is stunned for 0.7s.',
+    flavor: 'The end of the argument.',
     type: 'active', domain: 'mental', prereq: 'mage_null_geodesic',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.heatRadius, count: T.heatCount },

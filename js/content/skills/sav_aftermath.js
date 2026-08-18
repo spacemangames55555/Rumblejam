@@ -91,7 +91,7 @@ const ARMOR = { scaleWith: 'armor' };
 export const SAV_AFTERMATH = [
   {
     id: 'sav_ember', tree: 'sav_aftermath', tier: 1, name: 'Ember',
-    desc: 'What is left when the fire goes out, and the reason there is a tree here at all.',
+    flavor: 'What is left when the fire goes out, and the reason there is a tree here at all.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.emberReach },
@@ -101,7 +101,7 @@ export const SAV_AFTERMATH = [
   },
   {
     id: 'sav_sawtooth', tree: 'sav_aftermath', tier: 2, name: 'Sawtooth',
-    desc: 'It climbs and it falls and you chose neither. Both roads out of here are about the fall.',
+    flavor: 'It climbs and it falls and you chose neither. Both roads out of here are about the fall.',
     type: 'passive', domain: 'mental', prereq: 'sav_ember',
     trigger: null, cooldown: 0, compose: [],
     passive: { cascadeScaleWeight: T.sawtoothWeight },
@@ -111,7 +111,7 @@ export const SAV_AFTERMATH = [
   // ------------------------------------- branch A: Backdraft (spend the crest)
   {
     id: 'sav_backdraft', tree: 'sav_aftermath', tier: 4, name: 'Backdraft',
-    desc: 'Backdraft is worth most at the top, which is where the chain is most likely to break. Spend it there.',
+    flavor: 'Backdraft is worth most at the top, which is where the chain is most likely to break. Spend it there.',
     type: 'active', domain: 'physical', prereq: 'sav_sawtooth',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.backdraftRange, count: 2 },
@@ -124,7 +124,7 @@ export const SAV_AFTERMATH = [
   },
   {
     id: 'sav_emberfall', tree: 'sav_aftermath', tier: 6, name: 'Emberfall',
-    desc: 'Everything you banked is worth more on the way down than it was on the way up.',
+    flavor: 'Everything you banked is worth more on the way down than it was on the way up.',
     type: 'passive', domain: 'mental', prereq: 'sav_backdraft',
     trigger: null, cooldown: 0, compose: [],
     passive: { cascadeScaleWeight: T.emberfallWeight },
@@ -132,7 +132,7 @@ export const SAV_AFTERMATH = [
   },
   {
     id: 'sav_detonate', tree: 'sav_aftermath', tier: 8, name: 'Detonate',
-    desc: 'A long fuse, so that when it comes round the chain has had time to get deep.',
+    flavor: 'A long fuse, so that when it comes round the chain has had time to get deep.',
     type: 'active', domain: 'physical', prereq: 'sav_emberfall',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.detonateReach },
@@ -145,7 +145,7 @@ export const SAV_AFTERMATH = [
   },
   {
     id: 'sav_flashover', tree: 'sav_aftermath', tier: 10, name: 'Flashover',
-    desc: 'CAPSTONE — Backdraft. Twice, at the crest, because there is not going to be a third.',
+    flavor: 'CAPSTONE — Backdraft. Twice, at the crest, because there is not going to be a third.',
     type: 'active', domain: 'physical', prereq: 'sav_detonate',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.flashoverReach },
@@ -160,7 +160,7 @@ export const SAV_AFTERMATH = [
   // ------------------------------------ branch B: Bedrock (outlive the fall)
   {
     id: 'sav_bedrock', tree: 'sav_aftermath', tier: 4, name: 'Bedrock',
-    desc: `Bedrock never reads the chain. ${STAT_NAME.grit} does not reset because a skill fired twice running.`,
+    flavor: `Bedrock never reads the chain. ${STAT_NAME.grit} does not reset because a skill fired twice running.`,
     type: 'active', domain: 'physical', prereq: 'sav_sawtooth',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.bedrockPct },
@@ -170,7 +170,7 @@ export const SAV_AFTERMATH = [
   },
   {
     id: 'sav_granite', tree: 'sav_aftermath', tier: 6, name: 'Granite',
-    desc: 'Slower than the fire and still there after it.',
+    flavor: 'Slower than the fire and still there after it.',
     type: 'passive', domain: 'physical', prereq: 'sav_bedrock',
     trigger: null, cooldown: 0, compose: [],
     passive: { armorScaleWeight: T.graniteWeight },
@@ -178,7 +178,7 @@ export const SAV_AFTERMATH = [
   },
   {
     id: 'sav_scar', tree: 'sav_aftermath', tier: 8, name: 'Scar',
-    desc: 'Burned ground keeps burning whether or not you are still swinging.',
+    flavor: 'Burned ground keeps burning whether or not you are still swinging.',
     type: 'active', domain: 'physical', prereq: 'sav_granite',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.scarRadius, count: 2 },
@@ -191,7 +191,7 @@ export const SAV_AFTERMATH = [
   },
   {
     id: 'sav_ashfield', tree: 'sav_aftermath', tier: 10, name: 'Ashfield',
-    desc: 'CAPSTONE — Bedrock. Raised at the crest, still standing in the valley, and it hits back the whole way down.',
+    flavor: 'CAPSTONE — Bedrock. Raised at the crest, still standing in the valley, and it hits back the whole way down.',
     type: 'active', domain: 'physical', prereq: 'sav_scar',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.bedrockWardPct },

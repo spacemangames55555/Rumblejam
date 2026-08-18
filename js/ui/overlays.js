@@ -8,6 +8,7 @@ import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_NAMES, weapon
 import { escapeHtml } from './screens.js';
 import { glossName, glossShort, glossDetail, glossify } from './gloss.js';
 import { SLOT_LEVELS, TIER_LEVELS, tierLevel } from '../skills.js';
+import { mechanics, passiveText } from '../skilltext.js';
 import { sfx } from '../audio.js';
 
 const $ = id => document.getElementById(id);
@@ -508,7 +509,8 @@ export function showOpening(ev) {
         <div class="offer-card boon-card" data-id="${escapeHtml(p.id)}">
           <div class="oname">${escapeHtml(p.name)}</div>
           <div class="orarity">${escapeHtml(p.tree)} · ${escapeHtml(p.domain)}</div>
-          <div class="gloss-short">${escapeHtml(p.desc || '')}</div>
+          <div class="sk-mech">${escapeHtml(p.mech || '')}</div>
+          ${p.flavor ? `<div class="sk-flavor">${escapeHtml(p.flavor)}</div>` : ''}
         </div>`).join('')}</div>
     </div>`;
   el.querySelectorAll('.boon-card').forEach(card => {
@@ -594,14 +596,42 @@ function skillCard(meta, sk, spendable) {
     <div class="sk-tier">T${sk.tier}</div>
     <div class="sk-name">${escapeHtml(sk.name)}${sk.type === 'passive' ? ' <span class="sk-tag">passive</span>' : ''}</div>
     <div class="sk-rank">${rankText}${learnable ? ' · <b>1 pt</b>' : ''}</div>
-    <div class="sk-desc">${escapeHtml(sk.desc || '')}</div>
+    ${mechBlock(sk, rank)}
+    ${sk.flavor ? `<div class="sk-flavor">${escapeHtml(sk.flavor)}</div>` : ''}
   </div>`;
+}
+
+// THE MECHANICAL LINE, ABOVE THE FLAVOR AND STYLED APART FROM IT.
+//
+// Generated from the def at the rank being displayed, never authored — see
+// js/skilltext.js. A figure that moves with rank shows `now → next` so the cost
+// of a point is visible before it is spent; one that does not shows a single
+// number, which makes the arrow itself the signal.
+//
+// Rank 0 renders rank 1, because rank 0 never fires and what a player wants
+// before spending is what the point buys.
+function mechBlock(sk, rank) {
+  if (sk.type === 'passive') {
+    const p = passiveText(sk);
+    return p.text ? `<div class="sk-mech"><span class="sk-mv">${escapeHtml(p.text)}</span></div>` : '';
+  }
+  const m = mechanics(sk, rank);
+  if (!m.fields.length) return '';
+  const rows = m.fields.map(f => `<span class="sk-mf">${escapeHtml(f.label)}</span> `
+    + `<span class="sk-mv">${escapeHtml(String(f.now))}</span>`
+    + (f.next !== undefined ? ` <span class="sk-mn">→ ${escapeHtml(String(f.next))}</span>` : ''));
+  return `<div class="sk-mech">${rows.join('<br>')}</div>`;
 }
 
 // Fixed cell geometry so edge positions are ARITHMETIC rather than measured —
 // nothing here waits for layout, so the panel draws correctly the first frame
 // and inside a hidden container.
-const CELL_W = 132, CELL_H = 104, GAP_X = 38, GAP_Y = 14;
+// GROWN FOR THE MECHANICAL LINE. 132x104 held a name, a rank and two lines of
+// prose; a generated block runs to seven fields on 111 of 356 actives and the
+// longest single field ("Over time 20.8 a tick every 0.42s for 6.6s → ...") is
+// 77 characters. Numbers a player cannot see are the defect this patch exists
+// to fix, so the card fits them rather than clipping them.
+const CELL_W = 196, CELL_H = 188, GAP_X = 38, GAP_Y = 14;
 
 function treeGraph(meta, t, spendable) {
   const L = layoutTree(t.skills);

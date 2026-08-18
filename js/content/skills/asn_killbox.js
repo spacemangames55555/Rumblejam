@@ -60,7 +60,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const ASN_KILLBOX = [
   {
     id: 'asn_shiv', tree: 'asn_killbox', tier: 1, name: 'Shiv',
-    desc: 'A short quiet cut at whatever came close. Deals 6 damage in a 1.6-radian arc.',
+    flavor: 'A short quiet cut at whatever came close.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.shivRadius, count: T.shivCount },
@@ -77,7 +77,7 @@ export const ASN_KILLBOX = [
     // player pays for it twice: once in the cast that places it, and again in
     // standing somewhere the fight has to come to.
     id: 'asn_caltrops', tree: 'asn_killbox', tier: 2, name: 'Caltrops',
-    desc: 'Lays an inert trap where you are looking. It sits for 14s and goes off for 11 when you fight beside it.',
+    flavor: 'Lays an inert trap where you are looking.',
     type: 'active', domain: 'physical', prereq: 'asn_shiv',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.shivRadius, count: T.shivCount },
@@ -89,7 +89,7 @@ export const ASN_KILLBOX = [
   },
   {
     id: 'asn_cold_read', tree: 'asn_killbox', tier: 3, name: 'Cold Read',
-    desc: 'A thrown blade that is surer the more ground you have prepared. 8 damage, +5% per trap set.',
+    flavor: 'A thrown blade that is surer the more ground you have prepared.',
     type: 'active', domain: 'mental', prereq: 'asn_caltrops',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.readRange },
@@ -102,7 +102,7 @@ export const ASN_KILLBOX = [
   },
   {
     id: 'asn_tripwire', tree: 'asn_killbox', tier: 4, name: 'Tripwire',
-    desc: 'A heavier charge on a wider footprint. Sits for 14s and goes off for 14.',
+    flavor: 'A heavier charge on a wider footprint.',
     type: 'active', domain: 'physical', prereq: 'asn_cold_read',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.shivRadius, count: T.shivCount },
@@ -114,7 +114,6 @@ export const ASN_KILLBOX = [
   },
   {
     id: 'asn_dead_ground', tree: 'asn_killbox', tier: 5, name: 'Dead Ground',
-    desc: 'Every trap you have set is worth 2% more to every skill that reads them.',
     type: 'passive', domain: 'mental', prereq: 'asn_tripwire',
     trigger: null, cooldown: 0, compose: [],
     passive: { killboxScaleWeight: T.deadWeight },
@@ -125,7 +124,7 @@ export const ASN_KILLBOX = [
   },
   {
     id: 'asn_garrote', tree: 'asn_killbox', tier: 6, name: 'Garrote',
-    desc: 'Holds one thing still for 1.3s. 10 damage, +5.5% per trap set.',
+    flavor: 'Holds one thing still.',
     type: 'active', domain: 'physical', prereq: 'asn_dead_ground',
     select: 'lowest_hp',
     trigger: { kind: 'PROXIMITY', radius: T.garroteRadius, count: T.garroteCount },
@@ -139,7 +138,7 @@ export const ASN_KILLBOX = [
   },
   {
     id: 'asn_pressure_plate', tree: 'asn_killbox', tier: 7, name: 'Pressure Plate',
-    desc: 'The biggest charge the kit carries. Sits for 14s and goes off for 17.',
+    flavor: 'The biggest charge the kit carries.',
     type: 'active', domain: 'physical', prereq: 'asn_garrote',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.shivRadius, count: T.shivCount },
@@ -151,7 +150,7 @@ export const ASN_KILLBOX = [
   },
   {
     id: 'asn_blind_angle', tree: 'asn_killbox', tier: 8, name: 'Blind Angle',
-    desc: 'A line thrown from where they are not looking. 10 damage, +6% per trap set.',
+    flavor: 'A line thrown from where they are not looking.',
     type: 'active', domain: 'mental', prereq: 'asn_pressure_plate',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.blindRadius, count: T.blindCount },
@@ -164,7 +163,6 @@ export const ASN_KILLBOX = [
   },
   {
     id: 'asn_quiet_exit', tree: 'asn_killbox', tier: 9, name: 'Quiet Exit',
-    desc: 'Absorbs 24 over 4.6s, +6% per trap set, when you drop below 50% health.',
     type: 'active', domain: 'mental', prereq: 'asn_blind_angle',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
@@ -181,7 +179,7 @@ export const ASN_KILLBOX = [
     // off first; cast it standing outside and it lands at full strength with the
     // ground still armed. That is the whole class in one node.
     id: 'asn_the_room_you_chose', tree: 'asn_killbox', tier: 10, name: 'The Room You Chose',
-    desc: 'Everything you prepared, at once. 12 damage in a wide fan, +7.5% per trap set, and what it touches is stunned for 0.62s.',
+    flavor: 'Everything you prepared, at once.',
     type: 'active', domain: 'physical', prereq: 'asn_quiet_exit',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.roomRadius, count: T.roomCount },

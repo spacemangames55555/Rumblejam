@@ -4,6 +4,7 @@
 
 import { CONFIG, DEV, PALETTE } from './config.js';
 import { readsTokens, TREES as TREES_UI, TREES_BY_CLASS as TREES_BY_CLASS_UI } from './skills.js';
+import { mechanicalLine } from './skilltext.js';
 // A player row's class, host-side. `char` is the def object; charId is the id.
 const myCharId = p => (p && p.char ? p.char.id : null);
 import { BIOMES, tileVariant } from './biomes.js';
@@ -286,7 +287,7 @@ function showOpeningFromPend() {
   const picks = trees.list
     .map(t => t.skills.find(s => s.tier === 1))
     .filter(s => s && !(s.maxRank !== undefined && (ranks[s.id] || 0) >= s.maxRank))
-    .map(s => ({ id: s.id, name: s.name, desc: s.desc, tree: TREES_UI[s.tree].name, domain: s.domain }));
+    .map(s => ({ id: s.id, name: s.name, mech: mechanicalLine(s, 1), flavor: s.flavor || '', tree: TREES_UI[s.tree].name, domain: s.domain }));
   if (picks.length) showOpening({ picks });
 }
 

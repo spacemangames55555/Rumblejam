@@ -90,7 +90,7 @@ const CHI = { scaleWith: 'chi'};
 export const MONK_EMPTY_HAND = [
   {
     id: 'monk_open_hand', tree: 'monk_empty_hand', tier: 1, name: 'Open Hand',
-    desc: 'The strike that needs nothing to be true first.',
+    flavor: 'The strike that needs nothing to be true first.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.palmReach },
@@ -100,7 +100,7 @@ export const MONK_EMPTY_HAND = [
   },
   {
     id: 'monk_stillness', tree: 'monk_empty_hand', tier: 2, name: 'Stillness',
-    desc: 'The pool is not the person. Both roads out of here are about being at zero.',
+    flavor: 'The pool is not the person. Both roads out of here are about being at zero.',
     type: 'passive', domain: 'mental', prereq: 'monk_open_hand',
     trigger: null, cooldown: 0, compose: [],
     passive: { chiScaleWeight: T.stillnessWeight },
@@ -110,7 +110,7 @@ export const MONK_EMPTY_HAND = [
   // ----------------------------------- branch A: Empty Hand (costs nothing)
   {
     id: 'monk_formless', tree: 'monk_empty_hand', tier: 4, name: 'Formless',
-    desc: 'Costs nothing, so a room that drained you cannot take it. This branch is the floor, raised.',
+    flavor: 'Costs nothing, so a room that drained you cannot take it. This branch is the floor, raised.',
     type: 'active', domain: 'physical', prereq: 'monk_stillness',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.formlessReach },
@@ -120,7 +120,7 @@ export const MONK_EMPTY_HAND = [
   },
   {
     id: 'monk_hollow', tree: 'monk_empty_hand', tier: 6, name: 'Hollow',
-    desc: 'What is empty can still be moved through.',
+    flavor: 'What is empty can still be moved through.',
     type: 'passive', domain: 'mental', prereq: 'monk_formless',
     trigger: null, cooldown: 0, compose: [],
     passive: { chiScaleWeight: T.hollowWeight },
@@ -128,7 +128,7 @@ export const MONK_EMPTY_HAND = [
   },
   {
     id: 'monk_falling_water', tree: 'monk_empty_hand', tier: 8, name: 'Falling Water',
-    desc: 'It goes where it was already going.',
+    flavor: 'It goes where it was already going.',
     type: 'active', domain: 'physical', prereq: 'monk_hollow',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.cascadeRange, count: 2 },
@@ -138,7 +138,7 @@ export const MONK_EMPTY_HAND = [
   },
   {
     id: 'monk_nothing_held', tree: 'monk_empty_hand', tier: 10, name: 'Nothing Held',
-    desc: 'CAPSTONE — Empty Hand. Twice, at zero, and it did not need your permission.',
+    flavor: 'CAPSTONE — Empty Hand. Twice, at zero, and it did not need your permission.',
     type: 'active', domain: 'physical', prereq: 'monk_falling_water',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.nothingReach },
@@ -153,7 +153,7 @@ export const MONK_EMPTY_HAND = [
   // -------------------------------- branch B: One Breath (empty on purpose)
   {
     id: 'monk_gathering', tree: 'monk_empty_hand', tier: 4, name: 'Gathering',
-    desc: 'Spent by choice rather than by the room. One Breath makes the build decide when the Monk goes to zero.',
+    flavor: 'Spent by choice rather than by the room. One Breath makes the build decide when the Monk goes to zero.',
     type: 'active', domain: 'spiritual', prereq: 'monk_stillness',
     select: 'self',   // writes the caster, picks no target (§5.3)
     chi: T.gatherChi,
@@ -164,7 +164,7 @@ export const MONK_EMPTY_HAND = [
   },
   {
     id: 'monk_the_well', tree: 'monk_empty_hand', tier: 6, name: 'The Well',
-    desc: 'Deeper, and therefore worth more on the way down.',
+    flavor: 'Deeper, and therefore worth more on the way down.',
     type: 'passive', domain: 'spiritual', prereq: 'monk_gathering',
     trigger: null, cooldown: 0, compose: [],
     passive: { chiScaleWeight: T.wellWeight },
@@ -172,7 +172,7 @@ export const MONK_EMPTY_HAND = [
   },
   {
     id: 'monk_river_turns', tree: 'monk_empty_hand', tier: 8, name: 'The River Turns',
-    desc: 'A large expense, taken willingly, before the room can take it for you.',
+    flavor: 'A large expense, taken willingly, before the room can take it for you.',
     type: 'active', domain: 'spiritual', prereq: 'monk_the_well',
     select: 'self',   // writes the caster, picks no target (§5.3)
     chi: T.riverChi,
@@ -183,7 +183,7 @@ export const MONK_EMPTY_HAND = [
   },
   {
     id: 'monk_one_breath', tree: 'monk_empty_hand', tier: 10, name: 'One Breath',
-    desc: 'CAPSTONE — One Breath. The whole pool at once, because you chose the moment, and what strikes it is struck back.',
+    flavor: 'CAPSTONE — One Breath. The whole pool at once, because you chose the moment, and what strikes it is struck back.',
     type: 'active', domain: 'spiritual', prereq: 'monk_river_turns',
     select: 'self',   // writes the caster, picks no target (§5.3)
     chi: T.oceanChi,

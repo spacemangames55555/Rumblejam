@@ -74,7 +74,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const HUN_LONGSHOT = [
   {
     id: 'hun_sighting_shot', tree: 'hun_longshot', tier: 1, name: 'Sighting Shot',
-    desc: 'A ranging shot at the nearest thing. Deals 5 damage at 260 range.',
+    flavor: 'A ranging shot at the nearest thing.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.sightRange },
@@ -91,7 +91,7 @@ export const HUN_LONGSHOT = [
     // `move: 'chase'` is the engine's own filler: a bird that chases is a bird
     // that leaves, and leaving is what the span measures.
     id: 'hun_falconer', tree: 'hun_longshot', tier: 2, name: 'Falconer',
-    desc: 'Puts a bird up. It hunts on its own, and the further it ranges the harder you hit.',
+    flavor: 'Puts a bird up. It hunts on its own, and the further it ranges the harder you hit.',
     type: 'active', domain: 'physical', prereq: 'hun_sighting_shot',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.sightRange },
@@ -112,7 +112,7 @@ export const HUN_LONGSHOT = [
     // itself: it fires when something comes near the BIRD, and the shot leaves
     // the HUNTER. Two placements, one decision.
     id: 'hun_spotters_call', tree: 'hun_longshot', tier: 3, name: "Spotter's Call",
-    desc: 'Fires when something closes on your beast, not on you. 7 damage, +5% per band between you.',
+    flavor: 'Fires when something closes on your beast, not on you.',
     type: 'active', domain: 'mental', prereq: 'hun_falconer',
     select: 'nearest', from: 'pet',
     trigger: { kind: 'NEAREST', range: T.callRange },
@@ -125,7 +125,7 @@ export const HUN_LONGSHOT = [
   },
   {
     id: 'hun_enfilade', tree: 'hun_longshot', tier: 4, name: 'Enfilade',
-    desc: 'A line down the lane between you. 9 damage, +5.5% per band between you.',
+    flavor: 'A line down the lane between you.',
     type: 'active', domain: 'physical', prereq: 'hun_spotters_call',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.enfRadius, count: T.enfCount },
@@ -138,7 +138,6 @@ export const HUN_LONGSHOT = [
   },
   {
     id: 'hun_long_leash', tree: 'hun_longshot', tier: 5, name: 'Long Leash',
-    desc: 'Every band of ground between you and your beast is worth 2% more to every skill that reads it.',
     type: 'passive', domain: 'mental', prereq: 'hun_enfilade',
     trigger: null, cooldown: 0, compose: [],
     passive: { spreadScaleWeight: T.leashWeight },
@@ -149,7 +148,7 @@ export const HUN_LONGSHOT = [
   },
   {
     id: 'hun_crossfire', tree: 'hun_longshot', tier: 6, name: 'Crossfire',
-    desc: 'Two shots when the crowd reaches your beast. 10 damage each, +6% per band between you.',
+    flavor: 'Two shots when the crowd reaches your beast.',
     type: 'active', domain: 'physical', prereq: 'hun_long_leash',
     select: 'nearest', from: 'pet',
     trigger: { kind: 'PROXIMITY', radius: T.enfRadius, count: T.enfCount },
@@ -162,7 +161,7 @@ export const HUN_LONGSHOT = [
   },
   {
     id: 'hun_driven_game', tree: 'hun_longshot', tier: 7, name: 'Driven Game',
-    desc: 'A fan that drives them off your bird and onto your line. 10 damage, +6% per band, and they crawl at 74% for 1.3s.',
+    flavor: 'A fan that drives them off your bird and onto your line.',
     type: 'active', domain: 'mental', prereq: 'hun_crossfire',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.drivenRadius, count: T.drivenCount },
@@ -176,7 +175,6 @@ export const HUN_LONGSHOT = [
   },
   {
     id: 'hun_set_and_hold', tree: 'hun_longshot', tier: 8, name: 'Set and Hold',
-    desc: 'Absorbs 24 over 4.6s, +6.5% per band between you, below 50% health.',
     type: 'active', domain: 'spiritual', prereq: 'hun_driven_game',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
@@ -189,7 +187,7 @@ export const HUN_LONGSHOT = [
   },
   {
     id: 'hun_culling_shot', tree: 'hun_longshot', tier: 9, name: 'Culling Shot',
-    desc: 'Takes the hurt one your beast has found. 12 damage below 45% health, +7% per band between you.',
+    flavor: 'Takes the hurt one your beast has found.',
     type: 'active', domain: 'mental', prereq: 'hun_set_and_hold',
     select: 'lowest_hp', from: 'pet',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.cullPct, range: T.cullRange },
@@ -204,7 +202,7 @@ export const HUN_LONGSHOT = [
     // The capstone is the class's thesis: it looks through the bird, shoots from
     // the Hunter, and is worth most when those are as far apart as they get.
     id: 'hun_both_barrels', tree: 'hun_longshot', tier: 10, name: 'Both Barrels',
-    desc: 'Three shots down the whole span. 16 damage each, +8% per band between you, and what they hit is stunned for 0.6s.',
+    flavor: 'Three shots down the whole span.',
     type: 'active', domain: 'physical', prereq: 'hun_culling_shot',
     select: 'highest_hp', from: 'pet',
     trigger: { kind: 'PROXIMITY', radius: T.enfRadius, count: T.enfCount },

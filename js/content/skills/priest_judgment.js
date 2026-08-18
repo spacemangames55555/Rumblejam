@@ -63,7 +63,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const PRIEST_JUDGMENT = [
   {
     id: 'pri_rebuke', tree: 'priest_judgment', tier: 1, name: 'Rebuke',
-    desc: 'A backhand at whatever came close. Deals 8 damage in a 1.6-radian arc.',
+    flavor: 'A backhand at whatever came close.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.rebukeRadius, count: T.rebukeCount },
@@ -76,7 +76,7 @@ export const PRIEST_JUDGMENT = [
     // Priest without marks is a weak Mage, and a class should not spend a third
     // of a run being a worse version of another one.
     id: 'pri_judgment', tree: 'priest_judgment', tier: 2, name: 'Judgment',
-    desc: 'Marks a target for 9s. When it dies, allies within 190 units are healed 7.',
+    flavor: 'Marks a target. When it dies.',
     type: 'active', domain: 'spiritual', prereq: 'pri_rebuke',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.judgeRange },
@@ -89,7 +89,7 @@ export const PRIEST_JUDGMENT = [
   },
   {
     id: 'pri_censure', tree: 'priest_judgment', tier: 4, name: 'Censure',
-    desc: 'Marks a whole fan at once for 8s, healing 5 each when they fall. Deals 10 damage.',
+    flavor: 'Marks a whole fan at once.',
     type: 'active', domain: 'spiritual', prereq: 'pri_judgment',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.censureRadius, count: T.censureCount },
@@ -102,7 +102,7 @@ export const PRIEST_JUDGMENT = [
   },
   {
     id: 'pri_weight_of_sin', tree: 'priest_judgment', tier: 4, name: 'Weight of Sin',
-    desc: 'A heavy arc that leaves them deals 22% less for 2.5s. Deals 11 damage.',
+    flavor: 'A heavy arc.',
     type: 'active', domain: 'physical', prereq: 'pri_judgment',
     select: 'highest_hp',
     trigger: { kind: 'PROXIMITY', radius: T.weightRadius, count: T.weightCount },
@@ -115,7 +115,6 @@ export const PRIEST_JUDGMENT = [
   },
   {
     id: 'pri_attend_the_fallen', tree: 'priest_judgment', tier: 6, name: 'Attend the Fallen',
-    desc: 'Every standing mark is worth 2% more to every skill that reads them.',
     type: 'passive', domain: 'spiritual', prereq: 'pri_weight_of_sin',
     trigger: null, cooldown: 0, compose: [],
     passive: { marksScaleWeight: T.attendWeight },
@@ -126,7 +125,7 @@ export const PRIEST_JUDGMENT = [
   },
   {
     id: 'pri_sentence', tree: 'priest_judgment', tier: 8, name: 'Sentence',
-    desc: 'Marks the dying for a large payout — 12 healed when it falls. Deals 14 damage below 50% health.',
+    flavor: 'Marks the dying for a large payout.',
     type: 'active', domain: 'spiritual', prereq: 'pri_attend_the_fallen',
     select: 'lowest_hp',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.sentencePct, range: T.sentenceRange },
@@ -139,7 +138,7 @@ export const PRIEST_JUDGMENT = [
   },
   {
     id: 'pri_chorus', tree: 'priest_judgment', tier: 6, name: 'Chorus of the Named',
-    desc: 'Louder for every mark still standing. 10 damage, +5% per marked enemy.',
+    flavor: 'Louder for every mark still standing.',
     type: 'active', domain: 'mental', prereq: 'pri_censure',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.chorusRadius, count: T.chorusCount },
@@ -152,7 +151,7 @@ export const PRIEST_JUDGMENT = [
   },
   {
     id: 'pri_reliquary_ward', tree: 'priest_judgment', tier: 8, name: 'Reliquary Ward',
-    desc: 'A ward that thickens with every mark held. Absorbs 24, +7% per marked enemy, over 5s.',
+    flavor: 'A ward that thickens with every mark held.',
     type: 'active', domain: 'spiritual', prereq: 'pri_chorus',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
@@ -165,7 +164,7 @@ export const PRIEST_JUDGMENT = [
   },
   {
     id: 'pri_long_ledger', tree: 'priest_judgment', tier: 10, name: 'The Long Ledger',
-    desc: 'A line that marks everything it crosses for 8s. 12 damage, +6% per marked enemy.',
+    flavor: 'A line that marks everything it crosses.',
     type: 'active', domain: 'mental', prereq: 'pri_sentence',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.ledgerRadius, count: T.ledgerCount },
@@ -179,7 +178,7 @@ export const PRIEST_JUDGMENT = [
   },
   {
     id: 'pri_day_of_accounts', tree: 'priest_judgment', tier: 10, name: 'Day of Accounts',
-    desc: 'Everything in front of you is named at once, for 10s and 16 healing each. 17 damage, +7% per marked enemy.',
+    flavor: 'Everything in front of you is named at once.',
     type: 'active', domain: 'spiritual', prereq: 'pri_reliquary_ward',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.accountsRadius, count: T.accountsCount },

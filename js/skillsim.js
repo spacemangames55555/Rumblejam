@@ -11,6 +11,7 @@ import { EnemyGrid, triggerHolds, triggerConsume, triggerOrigin, TRIGGER_TICK_MS
 import { selectTarget } from './selectors.js';
 import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn, rankCooldown } from './skills.js';
+import { mechanicalLine } from './skilltext.js';
 import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
 import { CONFIG } from './config.js';
@@ -109,7 +110,7 @@ export function openingPicks(p) {
   return treesFor(p)
     .map(t => TREES[t].skills.find(s => s.tier === 1))
     .filter(s => s && canLearn(p, s))
-    .map(s => ({ id: s.id, name: s.name, desc: s.desc, tree: TREES[s.tree].name, domain: s.domain }));
+    .map(s => ({ id: s.id, name: s.name, mech: mechanicalLine(s, 1), flavor: s.flavor || '', tree: TREES[s.tree].name, domain: s.domain }));
 }
 
 // Whether anything in the loadout can actually kill something. The same question

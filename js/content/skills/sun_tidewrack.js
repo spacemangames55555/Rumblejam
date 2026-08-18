@@ -66,7 +66,7 @@ const soak = stacks => ({ drench: { stacks, cap: T.drenchCap, dur: T.drenchDur }
 export const SUN_TIDEWRACK = [
   {
     id: 'sun_spindrift', tree: 'sun_tidewrack', tier: 1, name: 'Spindrift',
-    desc: 'A lash of spray at the nearest thing. Deals 6 damage at 250 range.',
+    flavor: 'A lash of spray at the nearest thing.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.spinRange },
@@ -79,7 +79,7 @@ export const SUN_TIDEWRACK = [
     // Strike and Pin. A class should not spend a third of a run being a worse
     // version of another one.
     id: 'sun_souse', tree: 'sun_tidewrack', tier: 2, name: 'Souse',
-    desc: 'A fan of seawater that leaves 2 drench on everything it touches. Deals 7 damage.',
+    flavor: 'A fan of seawater.',
     type: 'active', domain: 'physical', prereq: 'sun_spindrift',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.souseRadius, count: T.souseCount },
@@ -92,7 +92,7 @@ export const SUN_TIDEWRACK = [
   },
   {
     id: 'sun_rip_current', tree: 'sun_tidewrack', tier: 3, name: 'Rip Current',
-    desc: 'A channel of water that soaks 2 into everything in the line. 8 damage, +3% per stack standing.',
+    flavor: 'A channel of water.',
     type: 'active', domain: 'mental', prereq: 'sun_souse',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.ripRadius, count: T.ripCount },
@@ -110,7 +110,7 @@ export const SUN_TIDEWRACK = [
     // with no way to cash it, which is the same complaint that puts every other
     // class's engine at tier 2.
     id: 'sun_sluicegate', tree: 'sun_tidewrack', tier: 4, name: 'Sluicegate',
-    desc: 'Opens the gate on one target: 9 damage, plus 8 more for every drench stack it was carrying — and the stacks are spent.',
+    flavor: 'Opens the gate on one target.',
     type: 'active', domain: 'physical', prereq: 'sun_rip_current',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.sluiceRange },
@@ -123,7 +123,6 @@ export const SUN_TIDEWRACK = [
   },
   {
     id: 'sun_tidemark', tree: 'sun_tidewrack', tier: 5, name: 'Tidemark',
-    desc: 'Every drench stack standing is worth 0.8% more to every skill that reads them.',
     type: 'passive', domain: 'spiritual', prereq: 'sun_sluicegate',
     trigger: null, cooldown: 0, compose: [],
     passive: { drenchScaleWeight: T.tidemarkWeight },
@@ -136,7 +135,7 @@ export const SUN_TIDEWRACK = [
   },
   {
     id: 'sun_undertow', tree: 'sun_tidewrack', tier: 6, name: 'Undertow',
-    desc: 'A close drag that soaks 3 and slows to 76% for 1.3s. 9 damage, +3.5% per stack standing.',
+    flavor: 'A close drag.',
     type: 'active', domain: 'physical', prereq: 'sun_tidemark',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.underRadius, count: T.underCount },
@@ -150,7 +149,7 @@ export const SUN_TIDEWRACK = [
   },
   {
     id: 'sun_millrace', tree: 'sun_tidewrack', tier: 7, name: 'Millrace',
-    desc: 'A wide sheet that soaks 2 across the crowd. 8 damage, +3.5% per stack standing.',
+    flavor: 'A wide sheet.',
     type: 'active', domain: 'mental', prereq: 'sun_undertow',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.millRadius, count: T.millCount },
@@ -164,7 +163,7 @@ export const SUN_TIDEWRACK = [
   },
   {
     id: 'sun_breakwater', tree: 'sun_tidewrack', tier: 8, name: 'Breakwater',
-    desc: 'A wall of standing water. Absorbs 26 over 4.8s, +4% per stack standing, below 55% health.',
+    flavor: 'A wall of standing water.',
     type: 'active', domain: 'spiritual', prereq: 'sun_millrace',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
@@ -177,7 +176,7 @@ export const SUN_TIDEWRACK = [
   },
   {
     id: 'sun_flood_tide', tree: 'sun_tidewrack', tier: 9, name: 'Flood Tide',
-    desc: 'The water comes in. Soaks 3 across a wide fan. 10 damage, +4% per stack standing.',
+    flavor: 'The water comes in.',
     type: 'active', domain: 'physical', prereq: 'sun_breakwater',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.floodRadius, count: T.floodCount },
@@ -195,7 +194,7 @@ export const SUN_TIDEWRACK = [
     // to size its own damage, then sluices every body it touches. Spend it on a
     // dry room and it is a mediocre cone.
     id: 'sun_the_whole_sea', tree: 'sun_tidewrack', tier: 10, name: 'The Whole Sea',
-    desc: 'Everything you have soaked, called in at once. 13 damage in a wide fan, +5% per stack standing, plus 11 per stack on each target — and the room goes dry.',
+    flavor: 'Everything you have soaked, called in at once.',
     type: 'active', domain: 'spiritual', prereq: 'sun_flood_tide',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.seaRadius, count: T.seaCount },

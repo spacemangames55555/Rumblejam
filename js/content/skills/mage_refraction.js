@@ -72,7 +72,7 @@ const CRY = { scaleWith: 'crystal'};
 export const MAGE_REFRACTION = [
   {
     id: 'mage_splinter', tree: 'mage_refraction', tier: 1, name: 'Splinter',
-    desc: 'A shard thrown off the lattice. Small, and it does not care whether anything has hit you yet.',
+    flavor: 'A shard thrown off the lattice. Small, and it does not care whether anything has hit you yet.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.splinterRange },
@@ -82,7 +82,7 @@ export const MAGE_REFRACTION = [
   },
   {
     id: 'mage_flaw', tree: 'mage_refraction', tier: 2, name: 'Inclusion',
-    desc: 'The flaw inside the stone is what makes it catch the light. Both roads out of here are about being hit on purpose.',
+    flavor: 'The flaw inside the stone is what makes it catch the light. Both roads out of here are about being hit on purpose.',
     type: 'passive', domain: 'spiritual', prereq: 'mage_splinter',
     trigger: null, cooldown: 0, compose: [],
     passive: { crystalScaleWeight: T.inclusionWeight },
@@ -92,7 +92,7 @@ export const MAGE_REFRACTION = [
   // ------------------------------------------------ branch A: Invite (taunt)
   {
     id: 'mage_provoke', tree: 'mage_refraction', tier: 4, name: 'Provoke',
-    desc: 'An insult with a range. Invite buys the one thing that reliably fills a damage-taken engine — something willing to close.',
+    flavor: 'An insult with a range. Invite buys the one thing that reliably fills a damage-taken engine — something willing to close.',
     type: 'active', domain: 'spiritual', prereq: 'mage_flaw',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.provokeRange },
@@ -105,7 +105,7 @@ export const MAGE_REFRACTION = [
   },
   {
     id: 'mage_attractor', tree: 'mage_refraction', tier: 6, name: 'Attractor',
-    desc: 'Every inclusion in the lattice pulls a little harder.',
+    flavor: 'Every inclusion in the lattice pulls a little harder.',
     type: 'passive', domain: 'spiritual', prereq: 'mage_provoke',
     trigger: null, cooldown: 0, compose: [],
     passive: { crystalScaleWeight: T.attractorWeight },
@@ -113,7 +113,7 @@ export const MAGE_REFRACTION = [
   },
   {
     id: 'mage_draw_fire', tree: 'mage_refraction', tier: 8, name: 'Draw Fire',
-    desc: 'A wide, deliberately rude gesture.',
+    flavor: 'A wide, deliberately rude gesture.',
     type: 'active', domain: 'spiritual', prereq: 'mage_attractor',
     select: 'objective_target',
     trigger: { kind: 'PROXIMITY', radius: T.drawRange, count: 2 },
@@ -126,7 +126,7 @@ export const MAGE_REFRACTION = [
   },
   {
     id: 'mage_caustic', tree: 'mage_refraction', tier: 10, name: 'Caustic',
-    desc: 'CAPSTONE — Invite. The light focuses through you. Everything in the cone comes, and hits softer for having come.',
+    flavor: 'CAPSTONE — Invite. The light focuses through you. Everything in the cone comes, and hits softer for having come.',
     type: 'active', domain: 'spiritual', prereq: 'mage_draw_fire',
     select: 'objective_target',
     trigger: { kind: 'PROXIMITY', radius: T.causticRange, count: 3 },
@@ -141,7 +141,7 @@ export const MAGE_REFRACTION = [
   // --------------------------------------- branch B: Temper (SELF_THRESHOLD)
   {
     id: 'mage_anneal', tree: 'mage_refraction', tier: 4, name: 'Anneal',
-    desc: 'Heat, then cool slowly. Temper pays out once the crystal is already flowing and the question is surviving the supply.',
+    flavor: 'Heat, then cool slowly. Temper pays out once the crystal is already flowing and the question is surviving the supply.',
     type: 'active', domain: 'spiritual', prereq: 'mage_flaw',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.annealPct },
@@ -151,7 +151,7 @@ export const MAGE_REFRACTION = [
   },
   {
     id: 'mage_hardness', tree: 'mage_refraction', tier: 6, name: 'Hardness',
-    desc: 'What survived the last blow is denser than what went into it.',
+    flavor: 'What survived the last blow is denser than what went into it.',
     type: 'passive', domain: 'spiritual', prereq: 'mage_anneal',
     trigger: null, cooldown: 0, compose: [],
     passive: { crystalScaleWeight: T.hardnessWeight },
@@ -159,7 +159,7 @@ export const MAGE_REFRACTION = [
   },
   {
     id: 'mage_quench', tree: 'mage_refraction', tier: 8, name: 'Quench',
-    desc: 'The stored heat leaves all at once, into whatever is closest.',
+    flavor: 'The stored heat leaves all at once, into whatever is closest.',
     type: 'active', domain: 'spiritual', prereq: 'mage_hardness',
     select: 'objective_target',
     trigger: { kind: 'SELF_THRESHOLD', pct: T.quenchPct },
@@ -169,7 +169,7 @@ export const MAGE_REFRACTION = [
   },
   {
     id: 'mage_adamant', tree: 'mage_refraction', tier: 10, name: 'Adamant',
-    desc: 'CAPSTONE — Temper. At the bottom of the health bar the lattice finishes forming, and what hits it is hit back.',
+    flavor: 'CAPSTONE — Temper. At the bottom of the health bar the lattice finishes forming, and what hits it is hit back.',
     type: 'active', domain: 'spiritual', prereq: 'mage_quench',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.adamantPct },

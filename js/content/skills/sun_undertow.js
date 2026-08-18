@@ -88,7 +88,7 @@ const DRENCH = { scaleWith: 'drench' };
 export const SUN_UNDERTOW = [
   {
     id: 'sun_scud', tree: 'sun_undertow', tier: 1, name: 'Scud',
-    desc: 'Wets what it hits and does not wait to find out whether that mattered.',
+    flavor: 'Wets what it hits and does not wait to find out whether that mattered.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.scudRange },
@@ -101,7 +101,7 @@ export const SUN_UNDERTOW = [
   },
   {
     id: 'sun_shallows', tree: 'sun_undertow', tier: 2, name: 'Shallows',
-    desc: 'Not everything is worth drowning slowly. Both roads out of here are about the fight that ends first.',
+    flavor: 'Not everything is worth drowning slowly. Both roads out of here are about the fight that ends first.',
     type: 'passive', domain: 'spiritual', prereq: 'sun_scud',
     trigger: null, cooldown: 0, compose: [],
     passive: { drenchScaleWeight: T.shallowsWeight },
@@ -111,7 +111,7 @@ export const SUN_UNDERTOW = [
   // ------------------------------ branch A: Undertow (the soak IS the payout)
   {
     id: 'sun_drag', tree: 'sun_undertow', tier: 4, name: 'Drag',
-    desc: 'Undertow never cashes. The damage rides the soak, so a stack that dies with its body still bought something.',
+    flavor: 'Undertow never cashes. The damage rides the soak, so a stack that dies with its body still bought something.',
     type: 'active', domain: 'physical', prereq: 'sun_shallows',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.dragReach },
@@ -124,7 +124,7 @@ export const SUN_UNDERTOW = [
   },
   {
     id: 'sun_sluiceway', tree: 'sun_undertow', tier: 6, name: 'Sluiceway',
-    desc: 'Water does work on the way past. It does not have to arrive anywhere.',
+    flavor: 'Water does work on the way past. It does not have to arrive anywhere.',
     type: 'passive', domain: 'spiritual', prereq: 'sun_drag',
     trigger: null, cooldown: 0, compose: [],
     passive: { drenchScaleWeight: T.sluicewayWeight },
@@ -132,7 +132,7 @@ export const SUN_UNDERTOW = [
   },
   {
     id: 'sun_sweep', tree: 'sun_undertow', tier: 8, name: 'Sweep',
-    desc: 'Wets the whole line at once, because the line will not be there long.',
+    flavor: 'Wets the whole line at once, because the line will not be there long.',
     type: 'active', domain: 'spiritual', prereq: 'sun_sluiceway',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.sweepRange, count: 2 },
@@ -145,7 +145,7 @@ export const SUN_UNDERTOW = [
   },
   {
     id: 'sun_seawall', tree: 'sun_undertow', tier: 10, name: 'Seawall',
-    desc: 'CAPSTONE — Undertow. Everything in front of you is wet and slow, and none of it was ever going to be cashed.',
+    flavor: 'CAPSTONE — Undertow. Everything in front of you is wet and slow, and none of it was ever going to be cashed.',
     type: 'active', domain: 'spiritual', prereq: 'sun_sweep',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.seawallRange, count: 3 },
@@ -160,7 +160,7 @@ export const SUN_UNDERTOW = [
   // -------------------------- branch B: Riptide (soak and cash in one breath)
   {
     id: 'sun_undertow_cut', tree: 'sun_undertow', tier: 4, name: 'Riptide',
-    desc: 'Riptide completes the whole loop in one cast — soak and spend together. Small, certain, and it fits inside two seconds of life.',
+    flavor: 'Riptide completes the whole loop in one cast — soak and spend together. Small, certain, and it fits inside two seconds of life.',
     type: 'active', domain: 'physical', prereq: 'sun_shallows',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.undertowReach },
@@ -173,7 +173,7 @@ export const SUN_UNDERTOW = [
   },
   {
     id: 'sun_ebb', tree: 'sun_undertow', tier: 6, name: 'Ebb',
-    desc: 'What goes out was never being saved.',
+    flavor: 'What goes out was never being saved.',
     type: 'passive', domain: 'spiritual', prereq: 'sun_undertow_cut',
     trigger: null, cooldown: 0, compose: [],
     passive: { drenchScaleWeight: T.ebbWeight },
@@ -181,7 +181,7 @@ export const SUN_UNDERTOW = [
   },
   {
     id: 'sun_race', tree: 'sun_undertow', tier: 8, name: 'Race',
-    desc: 'Arrives wet and leaves dry, in that order, at range.',
+    flavor: 'Arrives wet and leaves dry, in that order, at range.',
     type: 'active', domain: 'spiritual', prereq: 'sun_ebb',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.raceRange },
@@ -194,7 +194,7 @@ export const SUN_UNDERTOW = [
   },
   {
     id: 'sun_maelstrom', tree: 'sun_undertow', tier: 10, name: 'Maelstrom',
-    desc: 'CAPSTONE — Riptide. Twice, and it spends both times, because there is no second chance to.',
+    flavor: 'CAPSTONE — Riptide. Twice, and it spends both times, because there is no second chance to.',
     type: 'active', domain: 'physical', prereq: 'sun_race',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.maelstromReach },

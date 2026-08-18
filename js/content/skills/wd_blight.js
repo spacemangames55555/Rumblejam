@@ -54,7 +54,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const WD_BLIGHT = [
   {
     id: 'wd_bogspit', tree: 'wd_blight', tier: 1, name: 'Bogspit',
-    desc: 'A gob of something wrong at the nearest thing. Deals 6 damage at 250 range.',
+    flavor: 'A gob of something wrong at the nearest thing.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.spitRange },
@@ -67,7 +67,6 @@ export const WD_BLIGHT = [
     // with the mirror is the point: a plague on six bodies is six streams of
     // debt arriving in one doll, none of them aimed at it.
     id: 'wd_rot', tree: 'wd_blight', tier: 2, name: 'Rot',
-    desc: 'A sickness that spreads to everything within 130. 5 damage a second for 3.6s.',
     type: 'active', domain: 'spiritual', prereq: 'wd_bogspit',
     select: 'densest_cluster',
     trigger: { kind: 'NEAREST', range: T.spitRange },
@@ -79,7 +78,6 @@ export const WD_BLIGHT = [
   },
   {
     id: 'wd_fen_shroud', tree: 'wd_blight', tier: 4, name: 'Fen Shroud',
-    desc: 'Absorbs 22 over 4.6s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'wd_rot',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
@@ -89,7 +87,7 @@ export const WD_BLIGHT = [
   },
   {
     id: 'wd_marsh_gas', tree: 'wd_blight', tier: 6, name: 'Marsh Gas',
-    desc: 'A low cloud that drags the crowd to 72% speed for 1.4s. 5 damage a tick over 3.8s.',
+    flavor: 'A low cloud.',
     type: 'active', domain: 'mental', prereq: 'wd_fen_shroud',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.gasRadius, count: T.gasCount },
@@ -105,7 +103,6 @@ export const WD_BLIGHT = [
     // The tree's one engine reader, and deliberately the sustain: the debt in
     // the doll pays the Witch Doctor back rather than paying the room.
     id: 'wd_leech_the_link', tree: 'wd_blight', tier: 4, name: 'Leech the Link',
-    desc: 'Deals 8 damage, +5% per point the doll is carrying, and returns half of it as health.',
     type: 'active', domain: 'spiritual', prereq: 'wd_rot',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.leechRange },
@@ -118,7 +115,7 @@ export const WD_BLIGHT = [
   },
   {
     id: 'wd_grave_wax', tree: 'wd_blight', tier: 6, name: 'Grave Wax',
-    desc: 'A seal on the fattest thing in range. 10 damage, and it deals 24% less for 2.6s.',
+    flavor: 'A seal on the fattest thing in range.',
     type: 'active', domain: 'mental', prereq: 'wd_leech_the_link',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.waxRange },
@@ -131,7 +128,7 @@ export const WD_BLIGHT = [
   },
   {
     id: 'wd_carrion_choir', tree: 'wd_blight', tier: 10, name: 'Carrion Choir',
-    desc: 'A fan of flies that returns 4 health for every enemy it touches. Deals 10 damage.',
+    flavor: 'A fan of flies.',
     type: 'active', domain: 'spiritual', prereq: 'wd_spoil',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.choirRadius, count: T.choirCount },
@@ -144,7 +141,6 @@ export const WD_BLIGHT = [
   },
   {
     id: 'wd_drowned_ward', tree: 'wd_blight', tier: 8, name: 'Drowned Ward',
-    desc: 'Absorbs 28 over 5.2s and returns 40% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'wd_marsh_gas',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
@@ -157,7 +153,7 @@ export const WD_BLIGHT = [
   },
   {
     id: 'wd_spoil', tree: 'wd_blight', tier: 8, name: 'Spoil',
-    desc: 'A deeper rot with a wider reach. 7 damage a second for 4.2s, spreading to 175.',
+    flavor: 'A deeper rot with a wider reach.',
     type: 'active', domain: 'spiritual', prereq: 'wd_grave_wax',
     select: 'densest_cluster',
     trigger: { kind: 'NEAREST', range: T.waxRange },
@@ -169,7 +165,7 @@ export const WD_BLIGHT = [
   },
   {
     id: 'wd_the_long_rot', tree: 'wd_blight', tier: 10, name: 'The Long Rot',
-    desc: 'Everything in front of you goes over at once. 15 damage in a wide fan, and they go with it.',
+    flavor: 'Everything in front of you goes over at once.',
     type: 'active', domain: 'physical', prereq: 'wd_drowned_ward',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.longRadius, count: T.longCount },

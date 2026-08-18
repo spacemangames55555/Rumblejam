@@ -63,7 +63,7 @@ const DOLL = { scaleWith: 'doll'};
 export const WD_SWARM = [
   {
     id: 'wd_scattered_hex', tree: 'wd_swarm', tier: 1, name: 'Scattered Hex',
-    desc: 'Thrown at whatever is closest rather than at the one that matters. The tree begins by giving up on choosing.',
+    flavor: 'Thrown at whatever is closest rather than at the one that matters. The tree begins by giving up on choosing.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.hexRange },
@@ -73,7 +73,7 @@ export const WD_SWARM = [
   },
   {
     id: 'wd_the_many', tree: 'wd_swarm', tier: 2, name: 'The Many',
-    desc: 'One of them was never the problem. Both roads out of here are about the other five.',
+    flavor: 'One of them was never the problem. Both roads out of here are about the other five.',
     type: 'passive', domain: 'spiritual', prereq: 'wd_scattered_hex',
     trigger: null, cooldown: 0, compose: [],
     passive: { dollScaleWeight: T.manyWeight },
@@ -83,7 +83,7 @@ export const WD_SWARM = [
   // --------------------------------------------------- branch A: Plague
   {
     id: 'wd_contagion', tree: 'wd_swarm', tier: 4, name: 'Contagion',
-    desc: 'It does not care which one it started on. Plague pays by contact and count — the inverse of a doll.',
+    flavor: 'It does not care which one it started on. Plague pays by contact and count — the inverse of a doll.',
     type: 'active', domain: 'spiritual', prereq: 'wd_the_many',
     select: 'densest_cluster',
     trigger: { kind: 'NEAREST', range: T.contagionRange },
@@ -93,7 +93,7 @@ export const WD_SWARM = [
   },
   {
     id: 'wd_virulence', tree: 'wd_swarm', tier: 6, name: 'Virulence',
-    desc: 'What is already in them works faster.',
+    flavor: 'What is already in them works faster.',
     type: 'passive', domain: 'spiritual', prereq: 'wd_contagion',
     trigger: null, cooldown: 0, compose: [],
     passive: { dollScaleWeight: T.virulenceWeight },
@@ -101,7 +101,7 @@ export const WD_SWARM = [
   },
   {
     id: 'wd_miasma', tree: 'wd_swarm', tier: 8, name: 'Miasma',
-    desc: 'Ground nobody wants to stand in, laid where the most of them are.',
+    flavor: 'Ground nobody wants to stand in, laid where the most of them are.',
     type: 'active', domain: 'spiritual', prereq: 'wd_virulence',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.miasmaRadius, count: 3 },
@@ -115,7 +115,7 @@ export const WD_SWARM = [
   },
   {
     id: 'wd_pandemic', tree: 'wd_swarm', tier: 10, name: 'Pandemic',
-    desc: 'CAPSTONE — Plague. It gets better as the room gets worse.',
+    flavor: 'CAPSTONE — Plague. It gets better as the room gets worse.',
     type: 'active', domain: 'spiritual', prereq: 'wd_miasma',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.pandemicRange, count: 3 },
@@ -127,7 +127,7 @@ export const WD_SWARM = [
   // --------------------------------------------------- branch B: Fetish
   {
     id: 'wd_fetish', tree: 'wd_swarm', tier: 4, name: 'Fetish',
-    desc: 'A little thing with your temper. Fetish answers being outnumbered by stopping being outnumbered.',
+    flavor: 'A little thing with your temper. Fetish answers being outnumbered by stopping being outnumbered.',
     type: 'active', domain: 'spiritual', prereq: 'wd_the_many',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.fetishPct },
@@ -142,7 +142,7 @@ export const WD_SWARM = [
   },
   {
     id: 'wd_spirit_hut', tree: 'wd_swarm', tier: 6, name: 'Spirit Hut',
-    desc: 'Somewhere for them to come from.',
+    flavor: 'Somewhere for them to come from.',
     type: 'passive', domain: 'spiritual', prereq: 'wd_fetish',
     trigger: null, cooldown: 0, compose: [],
     passive: { dollScaleWeight: T.hutWeight },
@@ -150,7 +150,7 @@ export const WD_SWARM = [
   },
   {
     id: 'wd_gravecall', tree: 'wd_swarm', tier: 8, name: 'Gravecall',
-    desc: 'The ones already down are not finished being useful.',
+    flavor: 'The ones already down are not finished being useful.',
     type: 'active', domain: 'spiritual', prereq: 'wd_spirit_hut',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'ON_KILL' },
@@ -165,7 +165,7 @@ export const WD_SWARM = [
   },
   {
     id: 'wd_legion', tree: 'wd_swarm', tier: 10, name: 'Legion',
-    desc: 'CAPSTONE — Fetish. You brought a crowd of your own.',
+    flavor: 'CAPSTONE — Fetish. You brought a crowd of your own.',
     type: 'active', domain: 'spiritual', prereq: 'wd_gravecall',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },

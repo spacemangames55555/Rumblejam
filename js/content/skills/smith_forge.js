@@ -1,4 +1,3 @@
-import { STAT_NAME } from '../../config.js';
 // BLACKSMITH — Forge tree.
 //
 // The other half, and — like Arcana, Grace, Ensemble, Collapse, Blight, Reef,
@@ -61,7 +60,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const SMITH_FORGE = [
   {
     id: 'smith_tongs', tree: 'smith_forge', tier: 1, name: 'Tongs',
-    desc: 'Close and unglamorous. Deals 7 damage in a narrow arc.',
+    flavor: 'Close and unglamorous.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.tongsRadius, count: T.tongsCount },
@@ -71,7 +70,6 @@ export const SMITH_FORGE = [
   },
   {
     id: 'smith_bellows', tree: 'smith_forge', tier: 2, name: 'Bellows',
-    desc: 'Absorbs 22 over 4.8s.',
     type: 'active', domain: 'spiritual', prereq: 'smith_tongs',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
@@ -81,7 +79,7 @@ export const SMITH_FORGE = [
   },
   {
     id: 'smith_quench', tree: 'smith_forge', tier: 4, name: 'Quench',
-    desc: 'Steam and shock. 9 damage, and what it touches crawls at 68% for 1.5s.',
+    flavor: 'Steam and shock.',
     type: 'active', domain: 'physical', prereq: 'smith_bellows',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.quenchRadius, count: T.quenchCount },
@@ -94,7 +92,7 @@ export const SMITH_FORGE = [
   },
   {
     id: 'smith_sparks', tree: 'smith_forge', tier: 6, name: 'Sparks',
-    desc: 'Catches, and keeps burning for 3.4s. Deals 8 up front.',
+    flavor: 'Catches, and keeps burning.',
     type: 'active', domain: 'physical', prereq: 'smith_quench',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.sparksRange },
@@ -109,14 +107,14 @@ export const SMITH_FORGE = [
     // maxRank: 1 — `armorGrit` is 'other' in PASSIVE_EFFECT, an unlock rather
     // than an investment. Same registry refusal the Savage's Old Scars hit.
     id: 'smith_deadweight', tree: 'smith_forge', tier: 4, name: 'Deadweight',
-    desc: `Nothing moves you and nothing ever has. +7 ${STAT_NAME.grit}.`,
+    flavor: 'Nothing moves you and nothing ever has.',
     type: 'passive', domain: 'physical', prereq: 'smith_bellows',
     passive: { armorGrit: T.deadGrit },
     maxRank: 1,
   },
   {
     id: 'smith_swage_block', tree: 'smith_forge', tier: 6, name: 'Swage Block',
-    desc: 'A shaping blow that sends the front rank somewhere else. Deals 11 damage.',
+    flavor: 'A shaping blow that sends the front rank somewhere else.',
     type: 'active', domain: 'physical', prereq: 'smith_deadweight',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.swageRadius, count: T.swageCount },
@@ -129,7 +127,6 @@ export const SMITH_FORGE = [
   },
   {
     id: 'smith_draw_the_heat', tree: 'smith_forge', tier: 8, name: 'Draw the Heat',
-    desc: 'Deals 11 damage and takes 45% of it back as health.',
     type: 'active', domain: 'physical', prereq: 'smith_swage_block',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.drawRange },
@@ -141,7 +138,6 @@ export const SMITH_FORGE = [
     // The trait makes this class unpushable and oversized, so pulling a crowd
     // onto itself is the one thing a Blacksmith can do that nobody else survives.
     id: 'smith_standing_order', tree: 'smith_forge', tier: 8, name: 'Standing Order',
-    desc: 'Everything comes to you for 1.6s. Deals 10 damage.',
     type: 'active', domain: 'spiritual', prereq: 'smith_sparks',
     select: 'densest_cluster',
     trigger: { kind: 'ON_HIT_TAKEN' },
@@ -154,7 +150,6 @@ export const SMITH_FORGE = [
   },
   {
     id: 'smith_cold_shut', tree: 'smith_forge', tier: 10, name: 'Cold Shut',
-    desc: 'Absorbs 30 over 5.4s and returns 32% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'smith_draw_the_heat',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 40 },
@@ -166,7 +161,7 @@ export const SMITH_FORGE = [
   },
   {
     id: 'smith_strike_while_hot', tree: 'smith_forge', tier: 10, name: "Strike While It's Hot",
-    desc: 'The whole weight of the shop behind it. 16 damage in a wide arc, and a 0.6s stun.',
+    flavor: 'The whole weight of the shop behind it.',
     type: 'active', domain: 'physical', prereq: 'smith_standing_order',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.hotRadius, count: T.hotCount },

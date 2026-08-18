@@ -79,7 +79,7 @@ const REVIVES = { revives: true, reviveBase: T.reviveBase, revivePerAnimal: T.re
 export const DRUID_BEASTS = [
   {
     id: 'druid_thorn_lash', tree: 'druid_beasts', tier: 1, name: 'Thorn Lash',
-    desc: 'The undergrowth answers before anything with legs does.',
+    flavor: 'The undergrowth answers before anything with legs does.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.lashReach },
@@ -89,7 +89,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_call_wolf', tree: 'druid_beasts', tier: 2, name: 'Call Wolf',
-    desc: 'It was already nearby. It usually is.',
+    flavor: 'It was already nearby. It usually is.',
     type: 'active', domain: 'physical', prereq: 'druid_thorn_lash',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'PROXIMITY', radius: T.wolfTrigRadius, count: T.wolfTrigCount },
@@ -106,7 +106,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_bramble', tree: 'druid_beasts', tier: 4, name: 'Bramble',
-    desc: 'Ground that would rather they did not cross it.',
+    flavor: 'Ground that would rather they did not cross it.',
     type: 'active', domain: 'physical', prereq: 'druid_call_wolf',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.brambleRadius, count: T.brambleTrigCount },
@@ -120,7 +120,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_pack_bond', tree: 'druid_beasts', tier: 8, name: 'Pack Bond',
-    desc: 'They hunt better because you are there, and so do you.',
+    flavor: 'They hunt better because you are there, and so do you.',
     type: 'passive', domain: 'spiritual', prereq: 'druid_call_hawk',
     trigger: null, cooldown: 0, compose: [],
     // Raises what a pack member is WORTH without touching any step — the same
@@ -130,7 +130,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_call_bear', tree: 'druid_beasts', tier: 4, name: 'Call Bear',
-    desc: 'Slower to arrive. Considerably harder to remove.',
+    flavor: 'Slower to arrive. Considerably harder to remove.',
     type: 'active', domain: 'physical', prereq: 'druid_call_wolf',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'PROXIMITY', radius: T.bearTrigRadius, count: T.bearTrigCount },
@@ -148,7 +148,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_maul', tree: 'druid_beasts', tier: 6, name: 'Maul',
-    desc: 'You have picked up some of their habits.',
+    flavor: 'You have picked up some of their habits.',
     type: 'active', domain: 'physical', prereq: 'druid_bramble',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.maulReach },
@@ -161,7 +161,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_rejuvenate', tree: 'druid_beasts', tier: 8, name: 'Rejuvenate',
-    desc: 'Green comes back into things.',
+    flavor: 'Green comes back into things.',
     type: 'active', domain: 'spiritual', prereq: 'druid_maul',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.rejuvPct },
@@ -171,7 +171,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_call_hawk', tree: 'druid_beasts', tier: 6, name: 'Call Hawk',
-    desc: 'It stays high and picks its moment.',
+    flavor: 'It stays high and picks its moment.',
     type: 'active', domain: 'physical', prereq: 'druid_call_bear',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.hawkTrigRange },
@@ -188,7 +188,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_stampede', tree: 'druid_beasts', tier: 10, name: 'Stampede',
-    desc: 'Everything with hooves, in one direction, at once.',
+    flavor: 'Everything with hooves, in one direction, at once.',
     type: 'active', domain: 'physical', prereq: 'druid_pack_bond',
     select: 'farthest',
     trigger: { kind: 'ISOLATED', radius: T.stampedeRadius, count: T.stampedeCount },
@@ -201,7 +201,7 @@ export const DRUID_BEASTS = [
   },
   {
     id: 'druid_wild_synergy', tree: 'druid_beasts', tier: 10, name: 'Wild Synergy',
-    desc: 'For a moment there is no telling where you stop.',
+    flavor: 'For a moment there is no telling where you stop.',
     type: 'active', domain: 'spiritual', prereq: 'druid_rejuvenate',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.synergyTrigRadius, count: T.synergyTrigCount },

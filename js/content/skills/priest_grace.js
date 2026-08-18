@@ -53,7 +53,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const PRIEST_GRACE = [
   {
     id: 'pri_consecrate', tree: 'priest_grace', tier: 1, name: 'Consecrate',
-    desc: 'A sweep of clean fire through the crowd. Deals 8 damage in a 1.6-radian fan.',
+    flavor: 'A sweep of clean fire through the crowd.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.consecrateRadius, count: T.consecrateCount },
@@ -68,7 +68,6 @@ export const PRIEST_GRACE = [
     // The one node in the tree that reads the engine, and it is deliberately the
     // heal — see the header. 14 base, +8% per mark standing.
     id: 'pri_intercession', tree: 'priest_grace', tier: 2, name: 'Intercession',
-    desc: 'Restores 14 health, +8% for every enemy still carrying your mark.',
     type: 'active', domain: 'spiritual', prereq: 'pri_consecrate',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 70 },
@@ -81,7 +80,6 @@ export const PRIEST_GRACE = [
   },
   {
     id: 'pri_warding_hand', tree: 'priest_grace', tier: 3, name: 'Warding Hand',
-    desc: 'Absorbs 22 over 4.2s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'pri_intercession',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
@@ -91,7 +89,7 @@ export const PRIEST_GRACE = [
   },
   {
     id: 'pri_smite', tree: 'priest_grace', tier: 4, name: 'Smite',
-    desc: 'A bolt of judgment at the fattest thing in range. Deals 12 damage.',
+    flavor: 'A bolt of judgment at the fattest thing in range.',
     type: 'active', domain: 'mental', prereq: 'pri_warding_hand',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.smiteRange },
@@ -105,7 +103,6 @@ export const PRIEST_GRACE = [
     // `skillsim.js`. Drain says the same thing about the Priest and says it
     // better — sustain paid for by staying in the fight rather than by existing.
     id: 'pri_litany', tree: 'priest_grace', tier: 5, name: 'Litany',
-    desc: 'Deals 10 damage and returns 55% of it as health.',
     type: 'active', domain: 'spiritual', prereq: 'pri_smite',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.litanyRange },
@@ -115,7 +112,7 @@ export const PRIEST_GRACE = [
   },
   {
     id: 'pri_hallowed_ground', tree: 'priest_grace', tier: 6, name: 'Hallowed Ground',
-    desc: 'Consecrated floor that burns and slows to 72% for 1.1s. 6 damage a tick over 3.6s.',
+    flavor: 'Consecrated floor that burns and slows.',
     type: 'active', domain: 'spiritual', prereq: 'pri_litany',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.hallowRadius, count: T.hallowCount },
@@ -129,7 +126,7 @@ export const PRIEST_GRACE = [
   },
   {
     id: 'pri_staff_of_office', tree: 'priest_grace', tier: 7, name: 'Staff of Office',
-    desc: 'A heavy sweep that shoves what it touches away. Deals 13 damage.',
+    flavor: 'A heavy sweep that shoves what it touches away.',
     type: 'active', domain: 'physical', prereq: 'pri_hallowed_ground',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.staffRadius, count: T.staffCount },
@@ -142,7 +139,6 @@ export const PRIEST_GRACE = [
   },
   {
     id: 'pri_vigil', tree: 'priest_grace', tier: 8, name: 'Vigil',
-    desc: 'Absorbs 30 over 5.2s and returns 40% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'pri_staff_of_office',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
@@ -155,7 +151,7 @@ export const PRIEST_GRACE = [
   },
   {
     id: 'pri_procession', tree: 'priest_grace', tier: 9, name: 'Procession',
-    desc: 'A line that holds what it crosses in place for 1.4s. Deals 11 damage.',
+    flavor: 'A line that holds what it crosses in place.',
     type: 'active', domain: 'mental', prereq: 'pri_vigil',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.processionRadius, count: T.processionCount },
@@ -168,7 +164,7 @@ export const PRIEST_GRACE = [
   },
   {
     id: 'pri_benediction', tree: 'priest_grace', tier: 10, name: 'Benediction',
-    desc: 'A wide blessing that returns 6 health for every enemy it touches. Deals 16 damage.',
+    flavor: 'A wide blessing.',
     type: 'active', domain: 'spiritual', prereq: 'pri_procession',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.benedictionRadius, count: T.benedictionCount },

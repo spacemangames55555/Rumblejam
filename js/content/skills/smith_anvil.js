@@ -72,7 +72,7 @@ const FORM = { scaleWith: 'form'};
 export const SMITH_ANVIL = [
   {
     id: 'smith_tap', tree: 'smith_anvil', tier: 1, name: 'Tap',
-    desc: 'The small corrective blow. It does not care what you are made of today.',
+    flavor: 'The small corrective blow. It does not care what you are made of today.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.tapReach },
@@ -82,7 +82,7 @@ export const SMITH_ANVIL = [
   },
   {
     id: 'smith_patience', tree: 'smith_anvil', tier: 2, name: 'Patience',
-    desc: 'Most of the work happens between the heats. Both roads out of here are about the interval.',
+    flavor: 'Most of the work happens between the heats. Both roads out of here are about the interval.',
     type: 'passive', domain: 'physical', prereq: 'smith_tap',
     trigger: null, cooldown: 0, compose: [],
     passive: { formScaleWeight: T.patienceWeight },
@@ -92,7 +92,7 @@ export const SMITH_ANVIL = [
   // ------------------------------------------------- branch A: Cold Iron
   {
     id: 'smith_cold_work', tree: 'smith_anvil', tier: 4, name: 'Cold Work',
-    desc: 'Shaping without heat. Fires only while no form holds — this branch IS the gap, and it goes quiet the moment one starts.',
+    flavor: 'Shaping without heat. Fires only while no form holds — this branch IS the gap, and it goes quiet the moment one starts.',
     type: 'active', domain: 'physical', prereq: 'smith_patience',
     select: 'objective_target',
     form: 'none',
@@ -103,7 +103,7 @@ export const SMITH_ANVIL = [
   },
   {
     id: 'smith_hammer_hand', tree: 'smith_anvil', tier: 6, name: 'Hammer Hand',
-    desc: 'The hand knows the shape whether or not the metal is glowing.',
+    flavor: 'The hand knows the shape whether or not the metal is glowing.',
     type: 'passive', domain: 'physical', prereq: 'smith_cold_work',
     trigger: null, cooldown: 0, compose: [],
     passive: { formScaleWeight: T.hammerWeight },
@@ -111,7 +111,7 @@ export const SMITH_ANVIL = [
   },
   {
     id: 'smith_swage', tree: 'smith_anvil', tier: 8, name: 'Swage',
-    desc: 'A whole row of it, worked cold.',
+    flavor: 'A whole row of it, worked cold.',
     type: 'active', domain: 'physical', prereq: 'smith_hammer_hand',
     select: 'densest_cluster',
     form: 'none',
@@ -122,7 +122,7 @@ export const SMITH_ANVIL = [
   },
   {
     id: 'smith_proof', tree: 'smith_anvil', tier: 10, name: 'Proof',
-    desc: 'CAPSTONE — Cold Iron. The healthy Blacksmith, paid for being healthy. Twice, and what is left is thrown clear.',
+    flavor: 'CAPSTONE — Cold Iron. The healthy Blacksmith, paid for being healthy. Twice, and what is left is thrown clear.',
     type: 'active', domain: 'physical', prereq: 'smith_swage',
     select: 'objective_target',
     form: 'none',
@@ -138,7 +138,7 @@ export const SMITH_ANVIL = [
   // ------------------------------------------------ branch B: Tempering
   {
     id: 'smith_quenching', tree: 'smith_anvil', tier: 4, name: 'Quenching',
-    desc: 'Tempering competes with the forms for the same low-health moment: spend it becoming something, or spend it on this.',
+    flavor: 'Tempering competes with the forms for the same low-health moment: spend it becoming something, or spend it on this.',
     type: 'active', domain: 'physical', prereq: 'smith_patience',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.quenchPct },
@@ -148,7 +148,7 @@ export const SMITH_ANVIL = [
   },
   {
     id: 'smith_grain', tree: 'smith_anvil', tier: 6, name: 'Grain',
-    desc: 'What the heat did to the structure stays done.',
+    flavor: 'What the heat did to the structure stays done.',
     type: 'passive', domain: 'physical', prereq: 'smith_quenching',
     trigger: null, cooldown: 0, compose: [],
     passive: { formScaleWeight: T.grainWeight },
@@ -156,7 +156,7 @@ export const SMITH_ANVIL = [
   },
   {
     id: 'smith_drawing_out', tree: 'smith_anvil', tier: 8, name: 'Drawing Out',
-    desc: 'Thinner, longer, and it reaches further than it looks.',
+    flavor: 'Thinner, longer, and it reaches further than it looks.',
     type: 'active', domain: 'physical', prereq: 'smith_grain',
     select: 'objective_target',
     trigger: { kind: 'SELF_THRESHOLD', pct: T.drawPct },
@@ -166,7 +166,7 @@ export const SMITH_ANVIL = [
   },
   {
     id: 'smith_forge_weld', tree: 'smith_anvil', tier: 10, name: 'Forge Weld',
-    desc: 'CAPSTONE — Tempering. Two pieces made one at the bottom of the bar, and it hits back.',
+    flavor: 'CAPSTONE — Tempering. Two pieces made one at the bottom of the bar, and it hits back.',
     type: 'active', domain: 'physical', prereq: 'smith_drawing_out',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.weldPct },

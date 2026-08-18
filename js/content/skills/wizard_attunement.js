@@ -58,7 +58,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const WIZARD_ATTUNEMENT = [
   {
     id: 'wiz_cinder_bolt', tree: 'wizard_attunement', tier: 1, name: 'Cinder Bolt',
-    desc: 'A quick mote of fire at the nearest thing. Deals 7 damage at 250 range.',
+    flavor: 'A quick mote of fire at the nearest thing.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.cinderRange },
@@ -73,7 +73,7 @@ export const WIZARD_ATTUNEMENT = [
     // domain they write, because the decision is WHEN to shift and into WHAT,
     // and pricing them differently would answer that in advance.
     id: 'wiz_attune_physical', tree: 'wizard_attunement', tier: 2, name: 'Attune: Physical',
-    desc: 'Your skills also resolve as Physical, whichever reads better. Lasts until you attune again or leave the room.',
+    flavor: 'Your skills also resolve as Physical, whichever reads better. Lasts until you attune again or leave the room.',
     type: 'active', domain: 'physical', prereq: 'wiz_cinder_bolt',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.cinderRange },
@@ -86,7 +86,7 @@ export const WIZARD_ATTUNEMENT = [
   },
   {
     id: 'wiz_refracted_lance', tree: 'wizard_attunement', tier: 3, name: 'Refracted Lance',
-    desc: 'A beam that sharpens with every attunement made this room. 8 damage, +5% per shift banked.',
+    flavor: 'A beam that sharpens with every attunement made this room.',
     type: 'active', domain: 'mental', prereq: 'wiz_attune_physical',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.lanceRadius, count: T.lanceCount },
@@ -99,7 +99,7 @@ export const WIZARD_ATTUNEMENT = [
   },
   {
     id: 'wiz_attune_mental', tree: 'wizard_attunement', tier: 4, name: 'Attune: Mental',
-    desc: 'Your skills also resolve as Mental, whichever reads better. Lasts until you attune again or leave the room.',
+    flavor: 'Your skills also resolve as Mental, whichever reads better. Lasts until you attune again or leave the room.',
     type: 'active', domain: 'mental', prereq: 'wiz_refracted_lance',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.cinderRange },
@@ -109,7 +109,7 @@ export const WIZARD_ATTUNEMENT = [
   },
   {
     id: 'wiz_prism_ward', tree: 'wizard_attunement', tier: 5, name: 'Prism Ward',
-    desc: 'A ward that thickens with attunements. Absorbs 26, +6% per shift banked, over 5s.',
+    flavor: 'A ward that thickens with attunements.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_attune_mental',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
@@ -122,7 +122,7 @@ export const WIZARD_ATTUNEMENT = [
   },
   {
     id: 'wiz_spectral_cascade', tree: 'wizard_attunement', tier: 6, name: 'Spectral Cascade',
-    desc: 'A fan of raw arcana across the crowd. 9 damage, +5% per shift banked.',
+    flavor: 'A fan of raw arcana across the crowd.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_prism_ward',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.cascadeRadius, count: T.cascadeCount },
@@ -135,7 +135,7 @@ export const WIZARD_ATTUNEMENT = [
   },
   {
     id: 'wiz_attune_spiritual', tree: 'wizard_attunement', tier: 7, name: 'Attune: Spiritual',
-    desc: 'Your skills also resolve as Spiritual, whichever reads better. Lasts until you attune again or leave the room.',
+    flavor: 'Your skills also resolve as Spiritual, whichever reads better. Lasts until you attune again or leave the room.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_spectral_cascade',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.cinderRange },
@@ -148,7 +148,6 @@ export const WIZARD_ATTUNEMENT = [
     // than granting a flat number — the same hook Held Edge uses on Footing,
     // keyed by engine name so it needed no code here.
     id: 'wiz_sympathetic_resonance', tree: 'wizard_attunement', tier: 8, name: 'Sympathetic Resonance',
-    desc: 'Every attunement is worth 2% more to every skill that reads them.',
     type: 'passive', domain: 'mental', prereq: 'wiz_attune_spiritual',
     trigger: null, cooldown: 0, compose: [],
     passive: { shiftScaleWeight: T.resonanceWeight },
@@ -159,7 +158,7 @@ export const WIZARD_ATTUNEMENT = [
   },
   {
     id: 'wiz_unmaking_beam', tree: 'wizard_attunement', tier: 9, name: 'Unmaking Beam',
-    desc: 'Two pulses down a long line. 8 damage a pulse, +6% per shift banked.',
+    flavor: 'Two pulses down a long line.',
     type: 'active', domain: 'mental', prereq: 'wiz_sympathetic_resonance',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.unmakeRadius, count: T.unmakeCount },
@@ -173,7 +172,7 @@ export const WIZARD_ATTUNEMENT = [
   },
   {
     id: 'wiz_third_reading', tree: 'wizard_attunement', tier: 10, name: 'The Third Reading',
-    desc: 'The whole room read at once. 15 damage in a wide fan, +7% per shift banked, and what it touches deals 22% less for 2.6s.',
+    flavor: 'The whole room read at once.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_unmaking_beam',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.thirdRadius, count: T.thirdCount },
