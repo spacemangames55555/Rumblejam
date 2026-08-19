@@ -56,7 +56,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const ASN_SHADOW = [
   {
     id: 'asn_backstep', tree: 'asn_shadow', tier: 1, name: 'Backstep',
-    desc: 'A thrown blade at the nearest thing. Deals 6 damage at 250 range.',
+    flavor: 'A thrown blade at the nearest thing.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.backRange },
@@ -66,7 +66,7 @@ export const ASN_SHADOW = [
   },
   {
     id: 'asn_hamstring', tree: 'asn_shadow', tier: 2, name: 'Hamstring',
-    desc: 'A cut behind the knee — it crawls at 68% for 1.6s. Deals 8 damage.',
+    flavor: 'A cut behind the knee.',
     type: 'active', domain: 'physical', prereq: 'asn_backstep',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.hamRadius, count: T.hamCount },
@@ -79,7 +79,6 @@ export const ASN_SHADOW = [
   },
   {
     id: 'asn_vanish', tree: 'asn_shadow', tier: 4, name: 'Vanish',
-    desc: 'Absorbs 22 over 4.4s when you drop below 55% health.',
     type: 'active', domain: 'mental', prereq: 'asn_hamstring',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
@@ -89,7 +88,7 @@ export const ASN_SHADOW = [
   },
   {
     id: 'asn_open_vein', tree: 'asn_shadow', tier: 6, name: 'Open Vein',
-    desc: 'A blade that keeps working. 9 damage plus 9 over 2.8s.',
+    flavor: 'A blade that keeps working.',
     type: 'active', domain: 'physical', prereq: 'asn_vanish',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.veinRange },
@@ -105,7 +104,7 @@ export const ASN_SHADOW = [
     // Assassin has not spent still pays it something, which is the only reason
     // holding a full box while fighting elsewhere is worth doing.
     id: 'asn_last_word', tree: 'asn_shadow', tier: 8, name: 'Last Word',
-    desc: 'Finishes what is nearly gone. 12 damage below 45% health, +6% per trap still set.',
+    flavor: 'Finishes what is nearly gone.',
     type: 'active', domain: 'mental', prereq: 'asn_cutpurse',
     select: 'lowest_hp',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.lastPct, range: T.lastRange },
@@ -118,7 +117,7 @@ export const ASN_SHADOW = [
   },
   {
     id: 'asn_mark_of_debt', tree: 'asn_shadow', tier: 4, name: 'Mark of Debt',
-    desc: 'Opens the fattest thing in range — it takes 26% more for 2.6s. Deals 10 damage.',
+    flavor: 'Opens the fattest thing in range.',
     type: 'active', domain: 'mental', prereq: 'asn_hamstring',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.debtRange },
@@ -135,7 +134,6 @@ export const ASN_SHADOW = [
     // Sundian's Sump are: `regen` is an ITEM hook, not a registered passive key
     // (§8.3).
     id: 'asn_cutpurse', tree: 'asn_shadow', tier: 6, name: 'Cutpurse',
-    desc: 'Deals 9 damage and takes 45% of it back as health.',
     type: 'active', domain: 'physical', prereq: 'asn_mark_of_debt',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.purseRange },
@@ -145,7 +143,7 @@ export const ASN_SHADOW = [
   },
   {
     id: 'asn_two_blades', tree: 'asn_shadow', tier: 8, name: 'Two Blades',
-    desc: 'Two cuts on the same beat. Deals 8 damage a pulse.',
+    flavor: 'Two cuts on the same beat.',
     type: 'active', domain: 'physical', prereq: 'asn_open_vein',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.twoRadius, count: T.twoCount },
@@ -158,7 +156,7 @@ export const ASN_SHADOW = [
   },
   {
     id: 'asn_nightwork', tree: 'asn_shadow', tier: 10, name: 'Nightwork',
-    desc: 'Ground glass underfoot that slows to 76% for 1.2s. 6 damage a tick over 3.6s.',
+    flavor: 'Ground glass underfoot.',
     type: 'active', domain: 'physical', prereq: 'asn_two_blades',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.nightRadius, count: T.nightCount },
@@ -174,7 +172,7 @@ export const ASN_SHADOW = [
     // The single biggest number in the class, on one target, at range. §1.1: the
     // Assassin does not clear rooms, it removes one thing from them.
     id: 'asn_the_contract', tree: 'asn_shadow', tier: 10, name: 'The Contract',
-    desc: 'One name, one blade. 20 damage to the fattest thing in range, and it is stunned for 0.7s.',
+    flavor: 'One name, one blade.',
     type: 'active', domain: 'mental', prereq: 'asn_last_word',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.contractRange },

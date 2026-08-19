@@ -1,4 +1,3 @@
-import { STAT_NAME } from '../../config.js';
 // BLACKSMITH — Crystal tree. The last class.
 //
 // THE ENGINE IS A STATE, NOT A QUANTITY, AND IT IS THE ONLY ONE. Every engine
@@ -85,7 +84,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const SMITH_CRYSTAL = [
   {
     id: 'smith_hammer_blow', tree: 'smith_crystal', tier: 1, name: 'Hammer Blow',
-    desc: 'The plain one. Deals 7 damage, +22% while a crystal form holds.',
+    flavor: 'The plain one.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.hammerRadius, count: T.hammerCount },
@@ -100,7 +99,6 @@ export const SMITH_CRYSTAL = [
     // THE FIRST FORM, and the shallowest threshold — the one a Blacksmith is in
     // most often. Grit and Vitality, because Pyrite is the trait's Grit crystal.
     id: 'smith_iron_pyrite', tree: 'smith_crystal', tier: 2, name: 'Iron Pyrite',
-    desc: `At 70% health you go to iron for 7s: +22 ${STAT_NAME.grit}, +14 Vitality, and Anvil Strike becomes available.`,
     type: 'active', domain: 'physical', prereq: 'smith_hammer_blow',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.pyritePct },
@@ -119,7 +117,7 @@ export const SMITH_CRYSTAL = [
     // a form that swapped slots would be §9.2's deleted trigger-swap item aimed
     // at the player by their own class.
     id: 'smith_anvil_strike', tree: 'smith_crystal', tier: 3, name: 'Anvil Strike',
-    desc: 'Only in Iron Pyrite. Deals 12 damage and throws the front rank back.',
+    flavor: 'Only in Iron Pyrite.',
     type: 'active', domain: 'physical', prereq: 'smith_iron_pyrite',
     select: 'densest_cluster', form: 'pyrite',
     trigger: { kind: 'PROXIMITY', radius: T.anvilRadius, count: T.anvilCount },
@@ -132,7 +130,7 @@ export const SMITH_CRYSTAL = [
   },
   {
     id: 'smith_slag', tree: 'smith_crystal', tier: 4, name: 'Slag',
-    desc: 'A spray of hot waste. Deals 9 damage, +24% while a form holds.',
+    flavor: 'A spray of hot waste.',
     type: 'active', domain: 'physical', prereq: 'smith_anvil_strike',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.slagRadius, count: T.slagCount },
@@ -145,7 +143,6 @@ export const SMITH_CRYSTAL = [
   },
   {
     id: 'smith_prism_quartz', tree: 'smith_crystal', tier: 5, name: 'Prism Quartz',
-    desc: `At 55% health you go to glass for 6.5s: +26 ${STAT_NAME.attunement}, +18 ${STAT_NAME.ferocity}, and Refraction becomes available.`,
     type: 'active', domain: 'mental', prereq: 'smith_slag',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.quartzPct },
@@ -158,7 +155,7 @@ export const SMITH_CRYSTAL = [
   },
   {
     id: 'smith_refraction', tree: 'smith_crystal', tier: 6, name: 'Refraction',
-    desc: 'Only in Prism Quartz. A splitting bolt for 13 damage.',
+    flavor: 'Only in Prism Quartz. A splitting bolt.',
     type: 'active', domain: 'mental', prereq: 'smith_prism_quartz',
     select: 'farthest', form: 'quartz',
     trigger: { kind: 'NEAREST', range: T.refractRange },
@@ -170,7 +167,7 @@ export const SMITH_CRYSTAL = [
   },
   {
     id: 'smith_facet', tree: 'smith_crystal', tier: 7, name: 'Facet',
-    desc: 'Being crystal is worth more. +5% damage while any form holds, per rank.',
+    flavor: 'Being crystal is worth more.',
     type: 'passive', domain: 'mental', prereq: 'smith_refraction',
     passive: { formScaleWeight: T.facetWeight },
     ranks: R,
@@ -181,7 +178,6 @@ export const SMITH_CRYSTAL = [
     // the tree and its cooldown is the longest, so it is a rescue rather than a
     // rotation.
     id: 'smith_celestial_calcite', tree: 'smith_crystal', tier: 8, name: 'Celestial Calcite',
-    desc: 'At 35% health you go to light for 6s: +40 Recovery, +24 Vitality, and Mend the Seam becomes available.',
     type: 'active', domain: 'spiritual', prereq: 'smith_facet',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.calcitePct },
@@ -194,7 +190,7 @@ export const SMITH_CRYSTAL = [
   },
   {
     id: 'smith_mend_the_seam', tree: 'smith_crystal', tier: 9, name: 'Mend the Seam',
-    desc: 'Only in Celestial Calcite. Restores 26 health — and Calcite\'s own Recovery amplifies it.',
+    flavor: 'Only in Celestial Calcite.',
     type: 'active', domain: 'spiritual', prereq: 'smith_celestial_calcite',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
@@ -204,7 +200,7 @@ export const SMITH_CRYSTAL = [
   },
   {
     id: 'smith_whole_cloth', tree: 'smith_crystal', tier: 10, name: 'Whole Cloth',
-    desc: 'Whatever you are made of right now, all of it at once. 17 damage, +30% in form, and a 0.64s stun.',
+    flavor: 'Whatever you are made of right now, all of it at once.',
     type: 'active', domain: 'physical', prereq: 'smith_mend_the_seam',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.clothRadius, count: T.clothCount },

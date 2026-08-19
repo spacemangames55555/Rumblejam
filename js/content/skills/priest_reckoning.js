@@ -81,7 +81,7 @@ const MARKS = { scaleWith: 'marks' };
 export const PRIEST_RECKONING = [
   {
     id: 'pri_indictment', tree: 'priest_reckoning', tier: 1, name: 'Indictment',
-    desc: 'Names a debt. Somebody has to, and there is nobody else here.',
+    flavor: 'Names a debt. Somebody has to, and there is nobody else here.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.indictRange },
@@ -94,7 +94,7 @@ export const PRIEST_RECKONING = [
   },
   {
     id: 'pri_alone', tree: 'priest_reckoning', tier: 2, name: 'Alone',
-    desc: 'A congregation of one is still a congregation. Both roads out of here are about being the only one standing.',
+    flavor: 'A congregation of one is still a congregation. Both roads out of here are about being the only one standing.',
     type: 'passive', domain: 'spiritual', prereq: 'pri_indictment',
     trigger: null, cooldown: 0, compose: [],
     passive: { marksScaleWeight: T.aloneWeight },
@@ -104,7 +104,7 @@ export const PRIEST_RECKONING = [
   // ------------------------------------- branch A: Vigil (your own congregation)
   {
     id: 'pri_solace', tree: 'priest_reckoning', tier: 4, name: 'Solace',
-    desc: 'Vigil keeps the Priest standing. The trait turns the mercy into damage on the way out — nobody said it had to be gentle.',
+    flavor: 'Vigil keeps the Priest standing. The trait turns the mercy into damage on the way out — nobody said it had to be gentle.',
     type: 'active', domain: 'spiritual', prereq: 'pri_alone',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.solacePct },
@@ -114,7 +114,7 @@ export const PRIEST_RECKONING = [
   },
   {
     id: 'pri_matins', tree: 'priest_reckoning', tier: 6, name: 'Matins',
-    desc: 'The office is kept whether or not anyone attends.',
+    flavor: 'The office is kept whether or not anyone attends.',
     type: 'passive', domain: 'spiritual', prereq: 'pri_solace',
     trigger: null, cooldown: 0, compose: [],
     passive: { marksScaleWeight: T.matinsWeight },
@@ -122,7 +122,7 @@ export const PRIEST_RECKONING = [
   },
   {
     id: 'pri_compline', tree: 'priest_reckoning', tier: 8, name: 'Compline',
-    desc: 'The last hour, and the door is barred from the inside.',
+    flavor: 'The last hour, and the door is barred from the inside.',
     type: 'active', domain: 'spiritual', prereq: 'pri_matins',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.complinePct },
@@ -132,7 +132,7 @@ export const PRIEST_RECKONING = [
   },
   {
     id: 'pri_vespers', tree: 'priest_reckoning', tier: 10, name: 'Vespers',
-    desc: 'CAPSTONE — Vigil. Alone, at the end of the day, and what comes at you goes back.',
+    flavor: 'CAPSTONE — Vigil. Alone, at the end of the day, and what comes at you goes back.',
     type: 'active', domain: 'spiritual', prereq: 'pri_compline',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.vespersPct },
@@ -147,7 +147,7 @@ export const PRIEST_RECKONING = [
   // --------------------------------- branch B: Reckoning (collect them yourself)
   {
     id: 'pri_tally', tree: 'priest_reckoning', tier: 4, name: 'Tally',
-    desc: 'In a party the debt is collected by whoever swings next. Alone, this is who swings next.',
+    flavor: 'In a party the debt is collected by whoever swings next. Alone, this is who swings next.',
     type: 'active', domain: 'physical', prereq: 'pri_alone',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.tallyReach },
@@ -160,7 +160,7 @@ export const PRIEST_RECKONING = [
   },
   {
     id: 'pri_arrears', tree: 'priest_reckoning', tier: 6, name: 'Arrears',
-    desc: 'Every name still on the list makes the next one heavier.',
+    flavor: 'Every name still on the list makes the next one heavier.',
     type: 'passive', domain: 'spiritual', prereq: 'pri_tally',
     trigger: null, cooldown: 0, compose: [],
     passive: { marksScaleWeight: T.arrearsWeight },
@@ -168,7 +168,7 @@ export const PRIEST_RECKONING = [
   },
   {
     id: 'pri_distraint', tree: 'priest_reckoning', tier: 8, name: 'Distraint',
-    desc: 'Seizes against the debt. Marks what it does not finish, which is most of them.',
+    flavor: 'Seizes against the debt. Marks what it does not finish, which is most of them.',
     type: 'active', domain: 'spiritual', prereq: 'pri_arrears',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.distraintRange, count: 2 },
@@ -181,7 +181,7 @@ export const PRIEST_RECKONING = [
   },
   {
     id: 'pri_foreclose', tree: 'priest_reckoning', tier: 10, name: 'Foreclose',
-    desc: 'CAPSTONE — Reckoning. Twice, and the second one is for the interest.',
+    flavor: 'CAPSTONE — Reckoning. Twice, and the second one is for the interest.',
     type: 'active', domain: 'physical', prereq: 'pri_distraint',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.forecloseReach },

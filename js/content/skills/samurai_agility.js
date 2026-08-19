@@ -114,7 +114,7 @@ export const SAMURAI_AGILITY = [
   // ------------------------------------------------------------------ root
   {
     id: 'sam_quickstep', tree: 'samurai_agility', tier: 1, name: 'Quickstep',
-    desc: 'A cut thrown mid-stride. The first thing this tree teaches is that moving is not the same as retreating.',
+    flavor: 'A cut thrown mid-stride. The first thing this tree teaches is that moving is not the same as retreating.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'MOVEMENT', mode: 'moving', seconds: T.quickMove },
@@ -126,7 +126,7 @@ export const SAMURAI_AGILITY = [
   // ------------------------------------------------- the branch point (T2)
   {
     id: 'sam_light_feet', tree: 'samurai_agility', tier: 2, name: 'Light Feet',
-    desc: 'The stance settles faster when you have been moving. Both roads out of this node lead somewhere; the choice is which one first.',
+    flavor: 'The stance settles faster when you have been moving. Both roads out of this node lead somewhere; the choice is which one first.',
     type: 'passive', domain: 'physical', prereq: 'sam_quickstep',
     trigger: null, cooldown: 0, compose: [],
     passive: { footingAccrualPct: T.lightAccrual },
@@ -137,7 +137,7 @@ export const SAMURAI_AGILITY = [
   // ----------------------------------------------------- branch A: Gale ---
   {
     id: 'sam_running_cut', tree: 'samurai_agility', tier: 4, name: 'Running Cut',
-    desc: 'Two cuts on the move. Gale pays out precisely while the Footing engine is paying nothing.',
+    flavor: 'Two cuts on the move. Gale pays out precisely while the Footing engine is paying nothing.',
     type: 'active', domain: 'physical', prereq: 'sam_light_feet',
     select: 'objective_target',
     trigger: { kind: 'MOVEMENT', mode: 'moving', seconds: T.runMove },
@@ -147,7 +147,7 @@ export const SAMURAI_AGILITY = [
   },
   {
     id: 'sam_gale_step', tree: 'samurai_agility', tier: 6, name: 'Gale Step',
-    desc: 'Ground taken at speed is ground held. The stance recovers faster still.',
+    flavor: 'Ground taken at speed is ground held. The stance recovers faster still.',
     type: 'passive', domain: 'physical', prereq: 'sam_running_cut',
     trigger: null, cooldown: 0, compose: [],
     passive: { footingAccrualPct: T.galeAccrual },
@@ -156,7 +156,7 @@ export const SAMURAI_AGILITY = [
   },
   {
     id: 'sam_hundred_paces', tree: 'samurai_agility', tier: 8, name: 'Hundred Paces',
-    desc: 'The cut arrives before you do.',
+    flavor: 'The cut arrives before you do.',
     type: 'active', domain: 'physical', prereq: 'sam_gale_step',
     select: 'objective_target',
     trigger: { kind: 'MOVEMENT', mode: 'moving', seconds: T.hundredMove },
@@ -166,7 +166,7 @@ export const SAMURAI_AGILITY = [
   },
   {
     id: 'sam_windwalk', tree: 'samurai_agility', tier: 10, name: 'Windwalk',
-    desc: 'CAPSTONE — Gale. Everything within reach is thrown clear, twice, and you have not stopped once.',
+    flavor: 'CAPSTONE — Gale. Everything within reach is thrown clear, twice, and you have not stopped once.',
     type: 'active', domain: 'physical', prereq: 'sam_hundred_paces',
     select: 'objective_target',
     trigger: { kind: 'MOVEMENT', mode: 'moving', seconds: T.windMove },
@@ -181,7 +181,7 @@ export const SAMURAI_AGILITY = [
   // ----------------------------------------------------- branch B: Edge ---
   {
     id: 'sam_slip_cut', tree: 'samurai_agility', tier: 4, name: 'Slip Cut',
-    desc: 'The answer to being moved. Edge turns the one moment you had no choice into the one that hits hardest.',
+    flavor: 'The answer to being moved. Edge turns the one moment you had no choice into the one that hits hardest.',
     type: 'active', domain: 'physical', prereq: 'sam_light_feet',
     select: 'objective_target',
     trigger: { kind: 'ON_DODGE', window: T.slipWindow },
@@ -191,7 +191,7 @@ export const SAMURAI_AGILITY = [
   },
   {
     id: 'sam_dancing_edge', tree: 'samurai_agility', tier: 6, name: 'Dancing Edge',
-    desc: 'The armour goes with you. What the stance gave up, the plate keeps.',
+    flavor: 'The armour goes with you. What the stance gave up, the plate keeps.',
     type: 'passive', domain: 'physical', prereq: 'sam_slip_cut',
     trigger: null, cooldown: 0, compose: [],
     passive: { armorScaleWeight: T.danceWeight },
@@ -199,7 +199,7 @@ export const SAMURAI_AGILITY = [
   },
   {
     id: 'sam_crescent', tree: 'samurai_agility', tier: 8, name: 'Crescent',
-    desc: 'A wide arc off the back foot.',
+    flavor: 'A wide arc off the back foot.',
     type: 'active', domain: 'physical', prereq: 'sam_dancing_edge',
     select: 'objective_target',
     trigger: { kind: 'ON_DODGE', window: T.crescentWindow },
@@ -209,7 +209,7 @@ export const SAMURAI_AGILITY = [
   },
   {
     id: 'sam_moonfall', tree: 'samurai_agility', tier: 10, name: 'Moonfall',
-    desc: 'CAPSTONE — Edge. Whatever made you move is on the ground.',
+    flavor: 'CAPSTONE — Edge. Whatever made you move is on the ground.',
     type: 'active', domain: 'physical', prereq: 'sam_crescent',
     select: 'objective_target',
     trigger: { kind: 'ON_DODGE', window: T.moonWindow },

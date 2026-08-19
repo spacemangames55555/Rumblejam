@@ -85,7 +85,7 @@ export const HUN_PINCER = [
     // that chases is a beast that ends up in the middle distance — which is the
     // band this whole tree is authored for.
     id: 'hun_loosed', tree: 'hun_pincer', tier: 1, name: 'Loosed',
-    desc: 'A shot, and something to go with it. Neither of you is the whole answer.',
+    flavor: 'A shot, and something to go with it. Neither of you is the whole answer.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.loosedRange },
@@ -108,7 +108,7 @@ export const HUN_PINCER = [
   },
   {
     id: 'hun_jaws', tree: 'hun_pincer', tier: 2, name: 'Jaws',
-    desc: 'Neither end of the leash is where the work happens. Both roads out of here are about the middle.',
+    flavor: 'Neither end of the leash is where the work happens. Both roads out of here are about the middle.',
     type: 'passive', domain: 'mental', prereq: 'hun_loosed',
     trigger: null, cooldown: 0, compose: [],
     passive: { spreadScaleWeight: T.jawsWeight },
@@ -118,7 +118,7 @@ export const HUN_PINCER = [
   // ---------------------------------- branch A: Crossfire (fired by the Hunter)
   {
     id: 'hun_interlock', tree: 'hun_pincer', tier: 4, name: 'Crossfire',
-    desc: 'Crossfire is your half of the jaw: everything between you and the beast, sized by how far apart you are.',
+    flavor: 'Crossfire is your half of the jaw: everything between you and the beast, sized by how far apart you are.',
     type: 'active', domain: 'physical', prereq: 'hun_jaws',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.crossRange, count: 2 },
@@ -128,7 +128,7 @@ export const HUN_PINCER = [
   },
   {
     id: 'hun_bracket', tree: 'hun_pincer', tier: 6, name: 'Bracket',
-    desc: 'The angle is the weapon. It only exists because there are two of you.',
+    flavor: 'The angle is the weapon. It only exists because there are two of you.',
     type: 'passive', domain: 'mental', prereq: 'hun_interlock',
     trigger: null, cooldown: 0, compose: [],
     passive: { spreadScaleWeight: T.bracketWeight },
@@ -136,7 +136,7 @@ export const HUN_PINCER = [
   },
   {
     id: 'hun_raking_shot', tree: 'hun_pincer', tier: 8, name: 'Raking Shot',
-    desc: 'Straight down the line the two of you make.',
+    flavor: 'Straight down the line the two of you make.',
     type: 'active', domain: 'physical', prereq: 'hun_bracket',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.raakeLength, count: 2 },
@@ -146,7 +146,7 @@ export const HUN_PINCER = [
   },
   {
     id: 'hun_closing', tree: 'hun_pincer', tier: 10, name: 'Closing',
-    desc: 'CAPSTONE — Crossfire. The jaw shuts, and whatever it did not kill is worse at everything.',
+    flavor: 'CAPSTONE — Crossfire. The jaw shuts, and whatever it did not kill is worse at everything.',
     type: 'active', domain: 'physical', prereq: 'hun_raking_shot',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.closeRange, count: 3 },
@@ -161,7 +161,7 @@ export const HUN_PINCER = [
   // ------------------------------------- branch B: Whistle (fired by the beast)
   {
     id: 'hun_whistle', tree: 'hun_pincer', tier: 4, name: 'Whistle',
-    desc: 'Whistle is the beast\'s half: it decides when, you decide where. Only worth having when you are not standing in the same place.',
+    flavor: 'Whistle is the beast\'s half: it decides when, you decide where. Only worth having when you are not standing in the same place.',
     type: 'active', domain: 'physical', prereq: 'hun_jaws',
     from: 'pet',
     select: 'objective_target',
@@ -172,7 +172,7 @@ export const HUN_PINCER = [
   },
   {
     id: 'hun_kennel', tree: 'hun_pincer', tier: 6, name: 'Kennel',
-    desc: 'It has been reading the room the whole time. Start listening.',
+    flavor: 'It has been reading the room the whole time. Start listening.',
     type: 'passive', domain: 'mental', prereq: 'hun_whistle',
     trigger: null, cooldown: 0, compose: [],
     passive: { spreadScaleWeight: T.kennelWeight },
@@ -180,7 +180,7 @@ export const HUN_PINCER = [
   },
   {
     id: 'hun_bell', tree: 'hun_pincer', tier: 8, name: 'Bell',
-    desc: 'It calls when the crowd reaches it. The shot comes from behind them.',
+    flavor: 'It calls when the crowd reaches it. The shot comes from behind them.',
     type: 'active', domain: 'physical', prereq: 'hun_kennel',
     from: 'pet',
     select: 'objective_target',
@@ -194,7 +194,7 @@ export const HUN_PINCER = [
   },
   {
     id: 'hun_quarry', tree: 'hun_pincer', tier: 10, name: 'Quarry',
-    desc: 'CAPSTONE — Whistle. It has them. Twice.',
+    flavor: 'CAPSTONE — Whistle. It has them. Twice.',
     type: 'active', domain: 'physical', prereq: 'hun_bell',
     from: 'pet',
     select: 'objective_target',

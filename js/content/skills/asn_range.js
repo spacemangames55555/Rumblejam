@@ -63,7 +63,7 @@ const KB = { scaleWith: 'killbox'};
 export const ASN_RANGE = [
   {
     id: 'asn_dart', tree: 'asn_range', tier: 1, name: 'Dart',
-    desc: 'Thrown, not placed. The first thing this tree teaches is that you do not always get to choose the ground.',
+    flavor: 'Thrown, not placed. The first thing this tree teaches is that you do not always get to choose the ground.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.dartRange },
@@ -73,7 +73,7 @@ export const ASN_RANGE = [
   },
   {
     id: 'asn_steady_hand', tree: 'asn_range', tier: 2, name: 'Steady Hand',
-    desc: 'Every box you left standing is worth something from here. Both roads out of this node are output without setup.',
+    flavor: 'Every box you left standing is worth something from here. Both roads out of this node are output without setup.',
     type: 'passive', domain: 'physical', prereq: 'asn_dart',
     trigger: null, cooldown: 0, compose: [],
     passive: { killboxScaleWeight: T.steadyWeight },
@@ -83,7 +83,7 @@ export const ASN_RANGE = [
   // ------------------------------------------------- branch A: Longline
   {
     id: 'asn_pin', tree: 'asn_range', tier: 4, name: 'Pin',
-    desc: 'The far one stops moving. Longline shoots past what is on you at what is not yet.',
+    flavor: 'The far one stops moving. Longline shoots past what is on you at what is not yet.',
     type: 'active', domain: 'physical', prereq: 'asn_steady_hand',
     select: 'farthest',
     trigger: { kind: 'NEAREST', range: T.pinRange },
@@ -96,7 +96,7 @@ export const ASN_RANGE = [
   },
   {
     id: 'asn_marksman', tree: 'asn_range', tier: 6, name: 'Marksman',
-    desc: 'Distance stops costing you anything.',
+    flavor: 'Distance stops costing you anything.',
     type: 'passive', domain: 'physical', prereq: 'asn_pin',
     trigger: null, cooldown: 0, compose: [],
     passive: { killboxScaleWeight: T.marksmanWeight },
@@ -104,7 +104,7 @@ export const ASN_RANGE = [
   },
   {
     id: 'asn_volley', tree: 'asn_range', tier: 8, name: 'Volley',
-    desc: 'Two lines out at once, both of them long.',
+    flavor: 'Two lines out at once, both of them long.',
     type: 'active', domain: 'physical', prereq: 'asn_marksman',
     select: 'farthest',
     trigger: { kind: 'NEAREST', range: T.volleyRange },
@@ -114,7 +114,7 @@ export const ASN_RANGE = [
   },
   {
     id: 'asn_deadfall', tree: 'asn_range', tier: 10, name: 'Deadfall',
-    desc: 'CAPSTONE — Longline. It lands where you were never standing, and takes the ground with it.',
+    flavor: 'CAPSTONE — Longline. It lands where you were never standing, and takes the ground with it.',
     type: 'active', domain: 'physical', prereq: 'asn_volley',
     select: 'farthest',
     trigger: { kind: 'NEAREST', range: T.deadfallRange },
@@ -129,7 +129,7 @@ export const ASN_RANGE = [
   // ------------------------------------------------ branch B: Overwatch
   {
     id: 'asn_cull', tree: 'asn_range', tier: 4, name: 'Cull',
-    desc: 'The one already bleeding. Overwatch converts a fight in progress without needing a box under it.',
+    flavor: 'The one already bleeding. Overwatch converts a fight in progress without needing a box under it.',
     type: 'active', domain: 'physical', prereq: 'asn_steady_hand',
     select: 'lowest_hp',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.cullPct, range: T.cullRange },
@@ -139,7 +139,7 @@ export const ASN_RANGE = [
   },
   {
     id: 'asn_cold_eye', tree: 'asn_range', tier: 6, name: 'Cold Eye',
-    desc: 'You stopped counting the ones that are going to die anyway.',
+    flavor: 'You stopped counting the ones that are going to die anyway.',
     type: 'passive', domain: 'physical', prereq: 'asn_cull',
     trigger: null, cooldown: 0, compose: [],
     passive: { killboxScaleWeight: T.coldEyeWeight },
@@ -147,7 +147,7 @@ export const ASN_RANGE = [
   },
   {
     id: 'asn_ricochet', tree: 'asn_range', tier: 8, name: 'Ricochet',
-    desc: 'It finds the second one on its own.',
+    flavor: 'It finds the second one on its own.',
     type: 'active', domain: 'physical', prereq: 'asn_cold_eye',
     select: 'lowest_hp',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.ricochetPct, range: T.ricochetRange },
@@ -157,7 +157,7 @@ export const ASN_RANGE = [
   },
   {
     id: 'asn_headhunter', tree: 'asn_range', tier: 10, name: 'Headhunter',
-    desc: 'CAPSTONE — Overwatch. The thing the level is about, at whatever range it thought was safe.',
+    flavor: 'CAPSTONE — Overwatch. The thing the level is about, at whatever range it thought was safe.',
     type: 'active', domain: 'physical', prereq: 'asn_ricochet',
     select: 'objective_target',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.headhunterPct, range: T.headhunterRange },

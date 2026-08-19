@@ -76,7 +76,7 @@ export const SAV_PRIMAL_FURY = [
     // hold in the same situation are two skills that cannot follow each other,
     // because whichever is faster fires twice and breaks the chain.
     id: 'sav_rip', tree: 'sav_primal_fury', tier: 1, name: 'Rip',
-    desc: 'The opening tear. Deals 3 damage, +2% per rank of cascade.',
+    flavor: 'The opening tear.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.ripRadius, count: T.ripCount },
@@ -89,7 +89,7 @@ export const SAV_PRIMAL_FURY = [
   },
   {
     id: 'sav_run_down', tree: 'sav_primal_fury', tier: 2, name: 'Run Down',
-    desc: 'Reaches whatever is closest, wherever it is. Deals 4 damage, +2.2% per rank.',
+    flavor: 'Reaches whatever is closest, wherever it is.',
     type: 'active', domain: 'physical', prereq: 'sav_rip',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.runRange },
@@ -102,7 +102,7 @@ export const SAV_PRIMAL_FURY = [
   },
   {
     id: 'sav_wide_swing', tree: 'sav_primal_fury', tier: 4, name: 'Wide Swing',
-    desc: 'For when there are enough of them. Deals 5 damage in a wide fan, +2.4% per rank.',
+    flavor: 'For when there are enough of them.',
     type: 'active', domain: 'physical', prereq: 'sav_run_down',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.wideRadius, count: T.wideCount },
@@ -118,7 +118,7 @@ export const SAV_PRIMAL_FURY = [
     // situation none of the others share. A finisher is a good cascade link
     // precisely because it cannot be the skill that fires twice.
     id: 'sav_gore', tree: 'sav_primal_fury', tier: 4, name: 'Gore',
-    desc: 'Goes for something already bleeding. Deals 5 damage and throws it, +2.6% per rank.',
+    flavor: 'Goes for something already bleeding.',
     type: 'active', domain: 'physical', prereq: 'sav_run_down',
     select: 'lowest_hp',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.gorePct, range: T.goreRange },
@@ -131,14 +131,13 @@ export const SAV_PRIMAL_FURY = [
   },
   {
     id: 'sav_red_memory', tree: 'sav_primal_fury', tier: 8, name: 'Red Memory',
-    desc: 'Every rank you are holding is worth more. +0.35% damage per rank, per rank of this.',
+    flavor: 'Every rank you are holding is worth more.',
     type: 'passive', domain: 'mental', prereq: 'sav_break_line',
     passive: { cascadeScaleWeight: T.memoryWeight },
     ranks: R,
   },
   {
     id: 'sav_break_line', tree: 'sav_primal_fury', tier: 6, name: 'Break Line',
-    desc: 'Through the middle of them, and what it crosses stays put for 1.1s. 5 damage, +2.8% per rank.',
     type: 'active', domain: 'physical', prereq: 'sav_wide_swing',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.breakRadius, count: T.breakCount },
@@ -154,7 +153,7 @@ export const SAV_PRIMAL_FURY = [
     // exact complement of the PROXIMITY nodes. This is the skill that carries the
     // chain through the quiet moments when Rip and Wide Swing have nothing.
     id: 'sav_alone_with_it', tree: 'sav_primal_fury', tier: 6, name: 'Alone With It',
-    desc: 'For one at a time, with nobody else close. Deals 7 damage, +3% per rank.',
+    flavor: 'For one at a time, with nobody else close.',
     type: 'active', domain: 'physical', prereq: 'sav_gore',
     select: 'nearest',
     trigger: { kind: 'ISOLATED', radius: T.aloneRadius, count: T.aloneCount },
@@ -170,7 +169,6 @@ export const SAV_PRIMAL_FURY = [
     // defensive node has to work when the chain is broken, because the chain
     // breaking and the health bar emptying tend to be the same moment.
     id: 'sav_second_wind', tree: 'sav_primal_fury', tier: 8, name: 'Second Wind',
-    desc: 'Restores 24 health when you drop below 45%.',
     type: 'active', domain: 'spiritual', prereq: 'sav_alone_with_it',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
@@ -180,7 +178,6 @@ export const SAV_PRIMAL_FURY = [
   },
   {
     id: 'sav_hooked', tree: 'sav_primal_fury', tier: 10, name: 'Hooked',
-    desc: 'Deals 6 damage and takes 40% of it back, +3.2% per rank.',
     type: 'active', domain: 'physical', prereq: 'sav_second_wind',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.hookedRange },
@@ -193,7 +190,7 @@ export const SAV_PRIMAL_FURY = [
   },
   {
     id: 'sav_nothing_left', tree: 'sav_primal_fury', tier: 10, name: 'Nothing Left',
-    desc: 'The end of the chain. 9 damage in a huge fan, +3.6% per rank, and what it touches is stunned for 0.6s.',
+    flavor: 'The end of the chain.',
     type: 'active', domain: 'physical', prereq: 'sav_red_memory',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.nothingRadius, count: T.nothingCount },

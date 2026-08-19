@@ -67,7 +67,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const WD_EFFIGY = [
   {
     id: 'wd_bone_rattle', tree: 'wd_effigy', tier: 1, name: 'Bone Rattle',
-    desc: 'A rattle of charms at whatever came close. Deals 6 damage in a 1.7-radian arc.',
+    flavor: 'A rattle of charms at whatever came close.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.rattleRadius, count: T.rattleCount },
@@ -81,7 +81,7 @@ export const WD_EFFIGY = [
     // `highest_hp` names the fattest thing in range, so the pin goes into the
     // elite rather than into whatever the auto-bind would have grabbed.
     id: 'wd_pin', tree: 'wd_effigy', tier: 2, name: 'Pin',
-    desc: 'Names the fattest thing in range as your doll. Everything you deal to anything else bleeds into it. Deals 7 damage.',
+    flavor: 'Names the fattest thing in range as your doll. Everything you deal to anything else bleeds into it.',
     type: 'active', domain: 'spiritual', prereq: 'wd_bone_rattle',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.pinRange },
@@ -94,7 +94,7 @@ export const WD_EFFIGY = [
   },
   {
     id: 'wd_sympathetic_ache', tree: 'wd_effigy', tier: 3, name: 'Sympathetic Ache',
-    desc: 'Hurts more the more the doll is carrying. 8 damage, +5% per point banked.',
+    flavor: 'Hurts more the more the doll is carrying.',
     type: 'active', domain: 'mental', prereq: 'wd_pin',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.acheRange },
@@ -107,7 +107,7 @@ export const WD_EFFIGY = [
   },
   {
     id: 'wd_needlework', tree: 'wd_effigy', tier: 4, name: 'Needlework',
-    desc: 'Close work that opens a seam — what it touches takes 22% more for 2.4s. 9 damage, +5.5% per point banked.',
+    flavor: 'Close work that opens a seam — what it touches takes.',
     type: 'active', domain: 'physical', prereq: 'wd_sympathetic_ache',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.needleRadius, count: T.needleCount },
@@ -121,7 +121,6 @@ export const WD_EFFIGY = [
   },
   {
     id: 'wd_sympathetic_binding', tree: 'wd_effigy', tier: 5, name: 'Sympathetic Binding',
-    desc: 'Everything the doll is carrying is worth 2% more to every skill that reads it.',
     type: 'passive', domain: 'spiritual', prereq: 'wd_needlework',
     trigger: null, cooldown: 0, compose: [],
     passive: { dollScaleWeight: T.bindingWeight },
@@ -132,7 +131,7 @@ export const WD_EFFIGY = [
   },
   {
     id: 'wd_hollow_man', tree: 'wd_effigy', tier: 6, name: 'Hollow Man',
-    desc: 'The doll takes it instead. Absorbs 22 over 4.6s, +6% per point banked, below 55% health.',
+    flavor: 'The doll takes it instead.',
     type: 'active', domain: 'spiritual', prereq: 'wd_sympathetic_binding',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
@@ -145,7 +144,7 @@ export const WD_EFFIGY = [
   },
   {
     id: 'wd_second_skin', tree: 'wd_effigy', tier: 7, name: 'Second Skin',
-    desc: 'A fan of borrowed pain. 10 damage, +6% per point banked.',
+    flavor: 'A fan of borrowed pain.',
     type: 'active', domain: 'mental', prereq: 'wd_hollow_man',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.skinRadius, count: T.skinCount },
@@ -158,7 +157,7 @@ export const WD_EFFIGY = [
   },
   {
     id: 'wd_crooked_thread', tree: 'wd_effigy', tier: 8, name: 'Crooked Thread',
-    desc: 'A line of stitching that holds what it crosses for 1.3s. 10 damage, +6.5% per point banked.',
+    flavor: 'A line of stitching.',
     type: 'active', domain: 'spiritual', prereq: 'wd_second_skin',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.threadRadius, count: T.threadCount },
@@ -172,7 +171,7 @@ export const WD_EFFIGY = [
   },
   {
     id: 'wd_what_the_doll_knows', tree: 'wd_effigy', tier: 9, name: 'What the Doll Knows',
-    desc: 'Finishes what is nearly gone. 11 damage below 50% health, +7% per point banked.',
+    flavor: 'Finishes what is nearly gone.',
     type: 'active', domain: 'mental', prereq: 'wd_crooked_thread',
     select: 'lowest_hp',
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.knowsPct, range: T.knowsRange },
@@ -188,7 +187,7 @@ export const WD_EFFIGY = [
     // together are the class's whole clock: this is what a full doll is FOR, and
     // the doll is dying the entire time you are loading it.
     id: 'wd_everything_it_held', tree: 'wd_effigy', tier: 10, name: 'Everything It Held',
-    desc: 'The doll gives it all back at once. 15 damage in a wide fan, +8% per point banked, and what it touches is stunned for 0.65s.',
+    flavor: 'The doll gives it all back at once.',
     type: 'active', domain: 'spiritual', prereq: 'wd_what_the_doll_knows',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.heldRadius, count: T.heldCount },

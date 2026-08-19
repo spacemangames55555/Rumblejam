@@ -55,7 +55,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const SUN_REEF = [
   {
     id: 'sun_reefcut', tree: 'sun_reef', tier: 1, name: 'Reefcut',
-    desc: 'A short raking cut at whatever came close. Deals 6 damage in a 1.6-radian arc.',
+    flavor: 'A short raking cut at whatever came close.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.cutRadius, count: T.cutCount },
@@ -65,7 +65,7 @@ export const SUN_REEF = [
   },
   {
     id: 'sun_shoal', tree: 'sun_reef', tier: 2, name: 'Shoal',
-    desc: 'Shallow water underfoot that drags the crowd to 72% speed for 1.4s. 5 damage a tick over 3.8s.',
+    flavor: 'Shallow water underfoot.',
     type: 'active', domain: 'physical', prereq: 'sun_reefcut',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.shoalRadius, count: T.shoalCount },
@@ -82,7 +82,6 @@ export const SUN_REEF = [
     // keeps the Sundian standing, which is the only place soaking pays the
     // character rather than the burst.
     id: 'sun_brine_draught', tree: 'sun_reef', tier: 4, name: 'Brine Draught',
-    desc: 'Restores 14 health, +2% for every drench stack standing in the room.',
     type: 'active', domain: 'spiritual', prereq: 'sun_shoal',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
@@ -95,7 +94,7 @@ export const SUN_REEF = [
   },
   {
     id: 'sun_barnacle', tree: 'sun_reef', tier: 4, name: 'Barnacle',
-    desc: 'Crusts the fattest thing in range — it takes 22% more for 2.5s. Deals 9 damage.',
+    flavor: 'Crusts the fattest thing in range.',
     type: 'active', domain: 'physical', prereq: 'sun_shoal',
     select: 'highest_hp',
     trigger: { kind: 'NEAREST', range: T.barnRange },
@@ -108,7 +107,7 @@ export const SUN_REEF = [
   },
   {
     id: 'sun_kelp_snare', tree: 'sun_reef', tier: 6, name: 'Kelp Snare',
-    desc: 'A line of weed that holds what it crosses for 1.4s. Deals 9 damage.',
+    flavor: 'A line of weed.',
     type: 'active', domain: 'mental', prereq: 'sun_brine_draught',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.snareRadius, count: T.snareCount },
@@ -121,7 +120,6 @@ export const SUN_REEF = [
   },
   {
     id: 'sun_salt_rime', tree: 'sun_reef', tier: 6, name: 'Salt Rime',
-    desc: 'A crust that spreads to everything within 150. 6 damage a second for 3.8s.',
     type: 'active', domain: 'spiritual', prereq: 'sun_barnacle',
     select: 'densest_cluster',
     trigger: { kind: 'NEAREST', range: T.barnRange },
@@ -133,7 +131,6 @@ export const SUN_REEF = [
   },
   {
     id: 'sun_sea_wall', tree: 'sun_reef', tier: 8, name: 'Sea Wall',
-    desc: 'Absorbs 24 over 4.8s when you drop below 60% health.',
     type: 'active', domain: 'spiritual', prereq: 'sun_kelp_snare',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
@@ -143,7 +140,7 @@ export const SUN_REEF = [
   },
   {
     id: 'sun_riptooth', tree: 'sun_reef', tier: 8, name: 'Riptooth',
-    desc: 'A raking sweep that throws the front rank back. Deals 11 damage.',
+    flavor: 'A raking sweep that throws the front rank back.',
     type: 'active', domain: 'physical', prereq: 'sun_salt_rime',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.riptoothRadius, count: T.riptoothCount },
@@ -160,7 +157,6 @@ export const SUN_REEF = [
     // is an ITEM hook, not a registered passive key, and inventing one means a
     // reader in `skillsim.js` (§8.3).
     id: 'sun_sump', tree: 'sun_reef', tier: 10, name: 'Sump',
-    desc: 'Deals 9 damage and draws half of it back as health.',
     type: 'active', domain: 'spiritual', prereq: 'sun_sea_wall',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.sumpRange },
@@ -170,7 +166,7 @@ export const SUN_REEF = [
   },
   {
     id: 'sun_longshore', tree: 'sun_reef', tier: 10, name: 'Longshore',
-    desc: 'The whole shelf moves. 14 damage in a wide fan, and what it touches crawls at 66% for 1.8s.',
+    flavor: 'The whole shelf moves.',
     type: 'active', domain: 'physical', prereq: 'sun_riptooth',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.longRadius, count: T.longCount },

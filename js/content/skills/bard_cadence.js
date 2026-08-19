@@ -73,7 +73,7 @@ export const BARD_CADENCE = [
     // is not a damage skill, it is a METRONOME — the thing that keeps the window
     // from lapsing while everything else is recovering.
     id: 'bard_opening_note', tree: 'bard_cadence', tier: 1, name: 'Opening Note',
-    desc: 'A struck note at the nearest thing. Deals 4 damage, and never stops being available.',
+    flavor: 'A struck note at the nearest thing.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.openRange },
@@ -86,7 +86,7 @@ export const BARD_CADENCE = [
     // mark, for the same reason. A class should not spend a third of a run being
     // a worse version of another one.
     id: 'bard_quickstep', tree: 'bard_cadence', tier: 2, name: 'Quickstep',
-    desc: 'A close flourish that sharpens with the beat. 4 damage, +2% per stack held.',
+    flavor: 'A close flourish that sharpens with the beat.',
     type: 'active', domain: 'physical', prereq: 'bard_opening_note',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.quickRadius, count: T.quickCount },
@@ -99,7 +99,7 @@ export const BARD_CADENCE = [
   },
   {
     id: 'bard_counterpoint', tree: 'bard_cadence', tier: 3, name: 'Counterpoint',
-    desc: 'Two answering notes at once. 5 damage each, +2.2% per stack held.',
+    flavor: 'Two answering notes at once.',
     type: 'active', domain: 'mental', prereq: 'bard_quickstep',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.counterRange },
@@ -112,7 +112,7 @@ export const BARD_CADENCE = [
   },
   {
     id: 'bard_syncopation', tree: 'bard_cadence', tier: 4, name: 'Syncopation',
-    desc: 'An off-beat sweep that drags the crowd to 76% speed for 1.2s. 6 damage, +2.5% per stack.',
+    flavor: 'An off-beat sweep.',
     type: 'active', domain: 'mental', prereq: 'bard_counterpoint',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.syncRadius, count: T.syncCount },
@@ -126,7 +126,6 @@ export const BARD_CADENCE = [
   },
   {
     id: 'bard_perfect_time', tree: 'bard_cadence', tier: 5, name: 'Perfect Time',
-    desc: 'Every stack you are holding is worth 1% more to every skill that reads them.',
     type: 'passive', domain: 'mental', prereq: 'bard_syncopation',
     trigger: null, cooldown: 0, compose: [],
     passive: { rhythmScaleWeight: T.perfectWeight },
@@ -137,7 +136,7 @@ export const BARD_CADENCE = [
   },
   {
     id: 'bard_drum_line', tree: 'bard_cadence', tier: 6, name: 'Drum Line',
-    desc: 'A wide beat that shoves the front rank back. 6 damage, +2.5% per stack held.',
+    flavor: 'A wide beat that shoves the front rank back.',
     type: 'active', domain: 'physical', prereq: 'bard_perfect_time',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.drumRadius, count: T.drumCount },
@@ -155,7 +154,7 @@ export const BARD_CADENCE = [
     // other skills are long enough that the opener alone can no longer hold the
     // chain through them.
     id: 'bard_running_sixteenths', tree: 'bard_cadence', tier: 7, name: 'Running Sixteenths',
-    desc: 'Three quick notes, one after another. 4 damage each, +2.5% per stack held.',
+    flavor: 'Three quick notes, one after another.',
     type: 'active', domain: 'spiritual', prereq: 'bard_drum_line',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.sixteenRange },
@@ -168,7 +167,7 @@ export const BARD_CADENCE = [
   },
   {
     id: 'bard_hemiola', tree: 'bard_cadence', tier: 8, name: 'Hemiola',
-    desc: 'Two beats laid across three, down a line. 5 damage a pulse, +2.7% per stack.',
+    flavor: 'Two beats laid across three, down a line.',
     type: 'active', domain: 'mental', prereq: 'bard_running_sixteenths',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.hemiolaRadius, count: T.hemiolaCount },
@@ -182,7 +181,7 @@ export const BARD_CADENCE = [
   },
   {
     id: 'bard_stretto', tree: 'bard_cadence', tier: 9, name: 'Stretto',
-    desc: 'The theme piled on itself. 7 damage, +3% per stack, and what it touches deals 20% less for 2.2s.',
+    flavor: 'The theme piled on itself.',
     type: 'active', domain: 'spiritual', prereq: 'bard_hemiola',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.strettoRadius, count: T.strettoCount },
@@ -200,7 +199,7 @@ export const BARD_CADENCE = [
     // the biggest hole in its own chain. Play it on a full stack and it hits for
     // nearly double; play it too early and the window lapses while it recovers.
     id: 'bard_last_bar', tree: 'bard_cadence', tier: 10, name: 'The Last Bar',
-    desc: 'Everything resolves at once. 9 damage in a wide fan, +3.5% per stack, and what it touches is stunned for 0.6s.',
+    flavor: 'Everything resolves at once.',
     type: 'active', domain: 'spiritual', prereq: 'bard_stretto',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.lastRadius, count: T.lastCount },

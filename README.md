@@ -666,6 +666,15 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/skilltext_gate.mjs [--verbose]` — **every skill states its
+  mechanics, and no skill states them by hand.** Catches the two opposite
+  failures: a skill shipped with flavour and no numbers, and a number typed into
+  a description that goes stale on the next tuning edit (216 of 420 carried one
+  before `js/skilltext.js` existed). Checks the digit rule on the loaded objects
+  AND on the source lines, so a value smuggled through a template literal is
+  caught, and asserts the live-rank claim BY EFFECT — a generator that ignored
+  its rank argument passes every structural check and fails only that one.
+  `--verbose` prints all 356 actives. See `docs/skill-descriptions.md`.
 - `node tools/bimodal_diagnosis.mjs [--seeds=N] [--quick]` — **why do some
   classes die in a region-8 room and others not notice?** Instruments every
   channel that could plausibly explain survival — sustain through both doors,

@@ -58,7 +58,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const MONK_STONEGARDEN = [
   {
     id: 'monk_low_sweep', tree: 'monk_stonegarden', tier: 1, name: 'Low Sweep',
-    desc: 'A short kick at the ankles. Deals 6 damage in a 1.7-radian arc.',
+    flavor: 'A short kick at the ankles.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.sweepRadius, count: T.sweepCount },
@@ -72,7 +72,6 @@ export const MONK_STONEGARDEN = [
     // Monk is spending its offence on GROUND rather than on health, and the
     // decision is which of the two the next eight points buy.
     id: 'monk_set_stone', tree: 'monk_stonegarden', tier: 2, name: 'Set Stone',
-    desc: 'Spends 8 Chi to set a stone. It waits, and goes off for 16 when you next strike nearby.',
     type: 'active', domain: 'physical', prereq: 'monk_low_sweep',
     select: 'densest_cluster', chi: T.stoneChi,
     trigger: { kind: 'PROXIMITY', radius: 210, count: 1 },
@@ -84,7 +83,7 @@ export const MONK_STONEGARDEN = [
   },
   {
     id: 'monk_turning_elbow', tree: 'monk_stonegarden', tier: 3, name: 'Turning Elbow',
-    desc: 'A close turn that shoves the front rank off you. Deals 9 damage.',
+    flavor: 'A close turn that shoves the front rank off you.',
     type: 'active', domain: 'physical', prereq: 'monk_set_stone',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.elbowRadius, count: T.elbowCount },
@@ -101,7 +100,7 @@ export const MONK_STONEGARDEN = [
     // it is empty, because a Monk at zero Chi with no free defensive is a Monk
     // whose engine failing also removes its ability to survive failing.
     id: 'monk_warded_ground', tree: 'monk_stonegarden', tier: 4, name: 'Warded Ground',
-    desc: 'Absorbs 22 over 4.2s. Costs no Chi — the one thing that still works when the pool is dry.',
+    flavor: 'Costs no Chi — the one thing that still works when the pool is dry.',
     type: 'active', domain: 'spiritual', prereq: 'monk_turning_elbow',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
@@ -111,14 +110,14 @@ export const MONK_STONEGARDEN = [
   },
   {
     id: 'monk_long_garden', tree: 'monk_stonegarden', tier: 5, name: 'Long Garden',
-    desc: 'Every stone you have set makes you hit harder. +5% damage per stone standing, per rank.',
+    flavor: 'Every stone you have set makes you hit harder.',
     type: 'passive', domain: 'mental', prereq: 'monk_warded_ground',
     passive: { killboxScaleWeight: T.gardenWeight },
     ranks: R,
   },
   {
     id: 'monk_iron_bell', tree: 'monk_stonegarden', tier: 6, name: 'Iron Bell',
-    desc: 'A ringing shout that pulls the crowd onto you for 1.5s. Deals 10 damage.',
+    flavor: 'A ringing shout.',
     type: 'active', domain: 'spiritual', prereq: 'monk_long_garden',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.bellRadius, count: T.bellCount },
@@ -131,7 +130,6 @@ export const MONK_STONEGARDEN = [
   },
   {
     id: 'monk_second_stone', tree: 'monk_stonegarden', tier: 7, name: 'Second Stone',
-    desc: 'Spends 12 Chi to set a heavier stone. 20 damage in a wider circle.',
     type: 'active', domain: 'physical', prereq: 'monk_iron_bell',
     select: 'densest_cluster', chi: T.stone2Chi,
     trigger: { kind: 'PROXIMITY', radius: 220, count: 2 },
@@ -143,7 +141,7 @@ export const MONK_STONEGARDEN = [
   },
   {
     id: 'monk_snare_line', tree: 'monk_stonegarden', tier: 8, name: 'Snare Line',
-    desc: 'A drawn cord that holds what crosses it for 1.35s. Deals 9 damage.',
+    flavor: 'A drawn cord.',
     type: 'active', domain: 'mental', prereq: 'monk_second_stone',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.lineRadius, count: T.lineCount },
@@ -156,7 +154,6 @@ export const MONK_STONEGARDEN = [
   },
   {
     id: 'monk_give_ground', tree: 'monk_stonegarden', tier: 9, name: 'Give Ground',
-    desc: 'Deals 10 damage and takes 45% of it back as health.',
     type: 'active', domain: 'physical', prereq: 'monk_snare_line',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.giveRange },
@@ -166,7 +163,7 @@ export const MONK_STONEGARDEN = [
   },
   {
     id: 'monk_garden_closes', tree: 'monk_stonegarden', tier: 10, name: 'The Garden Closes',
-    desc: 'Everything you laid out, at once. 15 damage in a wide fan, and what it touches crawls at 70% for 1.6s.',
+    flavor: 'Everything you laid out, at once.',
     type: 'active', domain: 'physical', prereq: 'monk_give_ground',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.closeRadius, count: T.closeCount },

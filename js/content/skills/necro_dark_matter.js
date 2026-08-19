@@ -52,7 +52,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const NECRO_DARK_MATTER = [
   {
     id: 'necro_blip', tree: 'necro_dark_matter', tier: 1, name: 'Dark Energy Blip',
-    desc: 'Direct a small amount of dark energy onto your target.',
+    flavor: 'Direct a small amount of dark energy onto your target.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'objective_target',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'NEAREST', range: T.blipRange },
@@ -62,7 +62,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_blight', tree: 'necro_dark_matter', tier: 2, name: 'Blight',
-    desc: 'A chilling aura settles on the ground, damaging and slowing what stands in it.',
+    flavor: 'A chilling aura settles on the ground, damaging and slowing what stands in it.',
     type: 'active', domain: 'spiritual', prereq: 'necro_blip',
     select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.blightRadius, count: T.blightCount },
@@ -76,7 +76,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_rift', tree: 'necro_dark_matter', tier: 3, name: 'Dark Energy Rift',
-    desc: 'A rift tears open, striking your target and two others beside it.',
+    flavor: 'A rift tears open, striking your target and two others beside it.',
     type: 'active', domain: 'spiritual', prereq: 'necro_blight',
     select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.riftRadius, count: T.riftCount },
@@ -89,7 +89,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_hex', tree: 'necro_dark_matter', tier: 4, name: 'Hex of Entropy',
-    desc: 'A hex of decay saps the strength from what it touches.',
+    flavor: 'A hex of decay saps the strength from what it touches.',
     type: 'active', domain: 'mental', prereq: 'necro_rift',
     select: 'highest_hp',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'NEAREST', range: T.hexRange },
@@ -105,7 +105,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_burr', tree: 'necro_dark_matter', tier: 5, name: 'Dark Energy Burr',
-    desc: 'A burr lodges in a wounded target and detonates a moment later.',
+    flavor: 'A burr lodges in a wounded target and detonates a moment later.',
     type: 'active', domain: 'spiritual', prereq: 'necro_hex',
     select: 'lowest_hp',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'TARGET_THRESHOLD', pct: T.burrPct, range: T.burrRange },
@@ -118,7 +118,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_collapse', tree: 'necro_dark_matter', tier: 6, name: 'Internal Collapse',
-    desc: 'Rot already in the body is turned inward, and spreads.',
+    flavor: 'Rot already in the body is turned inward, and spreads.',
     type: 'active', domain: 'spiritual', prereq: 'necro_burr',
     select: 'highest_hp',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'ON_STATUS', status: 'dot', range: T.collapseRange },
@@ -131,7 +131,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_taint', tree: 'necro_dark_matter', tier: 7, name: 'Tainted Dark Matter',
-    desc: 'Matter fouled beyond repair; whatever it strikes guards itself poorly after.',
+    flavor: 'Matter fouled beyond repair; whatever it strikes guards itself poorly after.',
     type: 'active', domain: 'mental', prereq: 'necro_collapse',
     select: 'highest_hp',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'NEAREST', range: T.taintRange },
@@ -144,7 +144,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_abyssal', tree: 'necro_dark_matter', tier: 8, name: 'Abyssal Blast',
-    desc: 'The abyss opens in a wide arc before you.',
+    flavor: 'The abyss opens in a wide arc before you.',
     type: 'active', domain: 'spiritual', prereq: 'necro_taint',
     select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.abyssRadius, count: T.abyssCount },
@@ -154,7 +154,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_beam', tree: 'necro_dark_matter', tier: 9, name: 'Dark Energy Beam',
-    desc: 'A sustained lance of dark energy. It wants room to work.',
+    flavor: 'A sustained lance of dark energy. It wants room to work.',
     type: 'active', domain: 'spiritual', prereq: 'necro_abyssal',
     select: 'farthest',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'ISOLATED', radius: T.beamRadius, count: T.beamCount },
@@ -167,7 +167,7 @@ export const NECRO_DARK_MATTER = [
   },
   {
     id: 'necro_bomb', tree: 'necro_dark_matter', tier: 10, name: 'Dark Matter Bomb',
-    desc: 'Everything the tree has been building toward, delivered at once.',
+    flavor: 'Everything the tree has been building toward, delivered at once.',
     type: 'active', domain: 'spiritual', prereq: 'necro_beam',
     select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
     trigger: { kind: 'PROXIMITY', radius: T.bombRadius, count: T.bombCount },

@@ -70,7 +70,7 @@ const RHY = { scaleWith: 'rhythm'};
 export const BARD_REQUIEM = [
   {
     id: 'bard_grace_note', tree: 'bard_requiem', tier: 1, name: 'Grace Note',
-    desc: 'A small figure thrown ahead of the beat. Costs nothing and keeps the line moving.',
+    flavor: 'A small figure thrown ahead of the beat. Costs nothing and keeps the line moving.',
     type: 'active', domain: 'mental', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.graceRange },
@@ -80,7 +80,7 @@ export const BARD_REQUIEM = [
   },
   {
     id: 'bard_held_breath', tree: 'bard_requiem', tier: 2, name: 'Held Breath',
-    desc: 'The pause before the phrase resolves. Both roads out of here are about what happens when it does not.',
+    flavor: 'The pause before the phrase resolves. Both roads out of here are about what happens when it does not.',
     type: 'passive', domain: 'mental', prereq: 'bard_grace_note',
     trigger: null, cooldown: 0, compose: [],
     passive: { rhythmScaleWeight: T.heldWeight },
@@ -90,7 +90,7 @@ export const BARD_REQUIEM = [
   // ---------------------------------------------- branch A: Cadenza (ON_KILL)
   {
     id: 'bard_answering_verse', tree: 'bard_requiem', tier: 4, name: 'Answering Verse',
-    desc: 'The phrase answers itself the moment something falls. Cadenza refuses the break by finishing what it started.',
+    flavor: 'The phrase answers itself the moment something falls. Cadenza refuses the break by finishing what it started.',
     type: 'active', domain: 'mental', prereq: 'bard_held_breath',
     select: 'objective_target',
     trigger: { kind: 'ON_KILL' },
@@ -100,7 +100,7 @@ export const BARD_REQUIEM = [
   },
   {
     id: 'bard_cadenza', tree: 'bard_requiem', tier: 6, name: 'Cadenza',
-    desc: 'The solo passage. Every stack you kept is worth more while you are the only one playing.',
+    flavor: 'The solo passage. Every stack you kept is worth more while you are the only one playing.',
     type: 'passive', domain: 'mental', prereq: 'bard_answering_verse',
     trigger: null, cooldown: 0, compose: [],
     passive: { rhythmScaleWeight: T.cadenzaWeight },
@@ -108,7 +108,7 @@ export const BARD_REQUIEM = [
   },
   {
     id: 'bard_round', tree: 'bard_requiem', tier: 8, name: 'Round',
-    desc: 'The figure repeats outward, each voice entering as the last one lands.',
+    flavor: 'The figure repeats outward, each voice entering as the last one lands.',
     type: 'active', domain: 'mental', prereq: 'bard_cadenza',
     select: 'objective_target',
     trigger: { kind: 'ON_KILL' },
@@ -118,7 +118,7 @@ export const BARD_REQUIEM = [
   },
   {
     id: 'bard_last_measure', tree: 'bard_requiem', tier: 10, name: 'Finale',
-    desc: 'CAPSTONE — Cadenza. The phrase closes twice and nothing near you keeps its footing.',
+    flavor: 'CAPSTONE — Cadenza. The phrase closes twice and nothing near you keeps its footing.',
     type: 'active', domain: 'mental', prereq: 'bard_round',
     select: 'objective_target',
     trigger: { kind: 'ON_KILL' },
@@ -133,7 +133,7 @@ export const BARD_REQUIEM = [
   // ------------------------------------------ branch B: Dirge (ON_HIT_TAKEN)
   {
     id: 'bard_struck_chord', tree: 'bard_requiem', tier: 4, name: 'Struck Chord',
-    desc: 'Interrupted, and the interruption is the note. Dirge is paid exactly when the window is most likely to lapse.',
+    flavor: 'Interrupted, and the interruption is the note. Dirge is paid exactly when the window is most likely to lapse.',
     type: 'active', domain: 'mental', prereq: 'bard_held_breath',
     select: 'objective_target',
     trigger: { kind: 'ON_HIT_TAKEN' },
@@ -143,7 +143,7 @@ export const BARD_REQUIEM = [
   },
   {
     id: 'bard_undertow', tree: 'bard_requiem', tier: 6, name: 'Undertow',
-    desc: 'The line under the melody does not stop when the melody does.',
+    flavor: 'The line under the melody does not stop when the melody does.',
     type: 'passive', domain: 'mental', prereq: 'bard_struck_chord',
     trigger: null, cooldown: 0, compose: [],
     passive: { rhythmScaleWeight: T.undertowWeight },
@@ -151,7 +151,7 @@ export const BARD_REQUIEM = [
   },
   {
     id: 'bard_threnody', tree: 'bard_requiem', tier: 8, name: 'Threnody',
-    desc: 'A song for what it cost you.',
+    flavor: 'A song for what it cost you.',
     type: 'active', domain: 'mental', prereq: 'bard_undertow',
     select: 'objective_target',
     trigger: { kind: 'ON_HIT_TAKEN' },
@@ -161,7 +161,7 @@ export const BARD_REQUIEM = [
   },
   {
     id: 'bard_requiem_mass', tree: 'bard_requiem', tier: 10, name: 'Requiem',
-    desc: 'CAPSTONE — Dirge. Whatever broke the phrase is left standing in it, and slowing.',
+    flavor: 'CAPSTONE — Dirge. Whatever broke the phrase is left standing in it, and slowing.',
     type: 'active', domain: 'mental', prereq: 'bard_threnody',
     select: 'objective_target',
     trigger: { kind: 'ON_HIT_TAKEN' },

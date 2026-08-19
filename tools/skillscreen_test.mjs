@@ -198,6 +198,52 @@ try {
   if (spend.clicked && spent < spend.before) ok(`and a node clicked at that scroll position spends: ${spend.before} → ${spent}`);
   else no(`clicking from the scrolled position did not spend: ${JSON.stringify(spend)} → ${spent}`);
 
+  // THE NUMBERS ON SCREEN MOVE WITH THE RANK — asserted at the DOM, not at the
+  // generator. `skilltext_gate` proves `mechanics()` reads its rank argument;
+  // this proves the card the player is looking at is re-rendered with the new
+  // one. The two are different failures and D-32 is the reason to check both:
+  // six sim-level assertions once passed while the screen was dark (§13 rule
+  // 54). A skill card must also never be mechanics-less, and its flavour must
+  // be a separate element from its numbers.
+  const shown = await P.exec(`
+    const p = document.getElementById('overlay-skills');
+    const cards = [...p.querySelectorAll('.skill-node')];
+    const known = cards.find(c => c.classList.contains('known')) || cards[0];
+    return {
+      cards: cards.length,
+      noMech: cards.filter(c => !c.querySelector('.sk-mech')).length,
+      mech: known ? (known.querySelector('.sk-mech') || {}).textContent || '' : '',
+      flavorIsSeparate: known ? !!known.querySelector('.sk-flavor') || !known.textContent.match(/\\bDeals\\b/) : false,
+      arrows: cards.filter(c => c.querySelector('.sk-mn')).length,
+      digitsInFlavor: cards.filter(c => {
+        const f = c.querySelector('.sk-flavor'); return f && /\\d/.test(f.textContent);
+      }).length,
+    };`);
+  console.log('  ', JSON.stringify({ ...shown, mech: shown.mech.slice(0, 60) }));
+  if (shown.cards && !shown.noMech) ok(`every one of the ${shown.cards} skill cards on screen carries a mechanical line`);
+  else no(`${shown.noMech} of ${shown.cards} skill cards render no .sk-mech — flavour-only content reached the screen`);
+  if (!shown.digitsInFlavor) ok('no card renders a digit inside its flavour element — the numbers come from the def');
+  else no(`${shown.digitsInFlavor} card(s) render a digit in flavour text`);
+  if (shown.arrows > 0) ok(`${shown.arrows} card(s) show a next-rank value, so the cost of a point is on screen before it is spent`);
+  else no('no card shows a next-rank preview');
+
+  // spend a second point into the SAME node and require its numbers to change
+  const moved = await P.exec(`
+    const p = document.getElementById('overlay-skills');
+    const n = p.querySelector('.skill-node.known[data-buy="1"]') || p.querySelector('.skill-node[data-buy="1"]');
+    if (!n) return { ok: 0 };
+    const id = n.dataset.id;
+    const before = (n.querySelector('.sk-mech') || {}).textContent || '';
+    n.click();
+    return { ok: 1, id, before };`);
+  await sleep(500);
+  const reread = await P.exec(`
+    const n = document.querySelector('#overlay-skills .skill-node[data-id="${moved.id}"]');
+    return n ? (n.querySelector('.sk-mech') || {}).textContent || '' : '';`);
+  if (!moved.ok) no('no rankable node to spend a second point into');
+  else if (reread && reread !== moved.before) ok(`ranking a node re-renders its numbers: "${moved.before.slice(0, 34)}…" → "${reread.slice(0, 34)}…"`);
+  else no(`ranking ${moved.id} left its mechanical line unchanged: ${JSON.stringify(reread.slice(0, 60))} — the card is not reading the new rank`);
+
   // AND THE FAR TIERS HAVE TO BE REACHABLE SIDEWAYS TOO.
   //
   // Six tier columns at CELL_W 132 + GAP_X 38 is roughly 1020px of graph, and a

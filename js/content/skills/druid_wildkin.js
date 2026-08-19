@@ -63,7 +63,7 @@ const PACK = { scaleWith: 'pack'};
 export const DRUID_WILDKIN = [
   {
     id: 'druid_rake', tree: 'druid_wildkin', tier: 1, name: 'Rake',
-    desc: 'The Druid\'s own claws. The pack is not the only thing on the field with teeth.',
+    flavor: 'The Druid\'s own claws. The pack is not the only thing on the field with teeth.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.rakeReach },
@@ -73,7 +73,7 @@ export const DRUID_WILDKIN = [
   },
   {
     id: 'druid_kinship', tree: 'druid_wildkin', tier: 2, name: 'Kinship',
-    desc: 'Every animal standing makes you more of one. Both roads out of here are about the Druid rather than the pack.',
+    flavor: 'Every animal standing makes you more of one. Both roads out of here are about the Druid rather than the pack.',
     type: 'passive', domain: 'physical', prereq: 'druid_rake',
     trigger: null, cooldown: 0, compose: [],
     passive: { packScaleWeight: T.kinshipWeight },
@@ -83,7 +83,7 @@ export const DRUID_WILDKIN = [
   // ------------------------------------------------- branch A: Wild Kin
   {
     id: 'druid_rend', tree: 'druid_wildkin', tier: 4, name: 'Rend',
-    desc: 'You go in with them. The pack stops being a screen and starts being a multiplier.',
+    flavor: 'You go in with them. The pack stops being a screen and starts being a multiplier.',
     type: 'active', domain: 'physical', prereq: 'druid_kinship',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.rendReach },
@@ -93,7 +93,7 @@ export const DRUID_WILDKIN = [
   },
   {
     id: 'druid_alpha_bond', tree: 'druid_wildkin', tier: 6, name: 'Alpha Bond',
-    desc: 'They hunt harder with you in the middle of it.',
+    flavor: 'They hunt harder with you in the middle of it.',
     type: 'passive', domain: 'physical', prereq: 'druid_rend',
     trigger: null, cooldown: 0, compose: [],
     passive: { packScaleWeight: T.alphaWeight },
@@ -101,7 +101,7 @@ export const DRUID_WILDKIN = [
   },
   {
     id: 'druid_thunder_run', tree: 'druid_wildkin', tier: 8, name: 'Thunder Run',
-    desc: 'The whole pack moves as one body and you are the front of it.',
+    flavor: 'The whole pack moves as one body and you are the front of it.',
     type: 'active', domain: 'physical', prereq: 'druid_alpha_bond',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.thunderRange, count: 2 },
@@ -111,7 +111,7 @@ export const DRUID_WILDKIN = [
   },
   {
     id: 'druid_apex', tree: 'druid_wildkin', tier: 10, name: 'Apex',
-    desc: 'CAPSTONE — Wild Kin. Twice, and everything still standing is thrown off you.',
+    flavor: 'CAPSTONE — Wild Kin. Twice, and everything still standing is thrown off you.',
     type: 'active', domain: 'physical', prereq: 'druid_thunder_run',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.apexReach },
@@ -126,7 +126,7 @@ export const DRUID_WILDKIN = [
   // --------------------------------------------- branch B: Earth's Wrath
   {
     id: 'druid_thornwall', tree: 'druid_wildkin', tier: 4, name: 'Thornwall',
-    desc: 'Ground that fights for you when nothing else is. Earth\'s Wrath fires in the state a wiped pack produces.',
+    flavor: 'Ground that fights for you when nothing else is. Earth\'s Wrath fires in the state a wiped pack produces.',
     type: 'active', domain: 'spiritual', prereq: 'druid_kinship',
     select: 'densest_cluster',
     trigger: { kind: 'SELF_THRESHOLD', pct: T.thornPct },
@@ -140,7 +140,7 @@ export const DRUID_WILDKIN = [
   },
   {
     id: 'druid_deep_roots', tree: 'druid_wildkin', tier: 6, name: 'Deep Roots',
-    desc: 'What the pack taught you does not leave when the pack does.',
+    flavor: 'What the pack taught you does not leave when the pack does.',
     type: 'passive', domain: 'spiritual', prereq: 'druid_thornwall',
     trigger: null, cooldown: 0, compose: [],
     passive: { packScaleWeight: T.rootsWeight },
@@ -148,7 +148,7 @@ export const DRUID_WILDKIN = [
   },
   {
     id: 'druid_stoneskin', tree: 'druid_wildkin', tier: 8, name: 'Stoneskin',
-    desc: 'Bark over everything soft, and it bites back.',
+    flavor: 'Bark over everything soft, and it bites back.',
     type: 'active', domain: 'spiritual', prereq: 'druid_deep_roots',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.stonePct },
@@ -158,7 +158,7 @@ export const DRUID_WILDKIN = [
   },
   {
     id: 'druid_earthshaker', tree: 'druid_wildkin', tier: 10, name: 'Earthshaker',
-    desc: 'CAPSTONE — Earth\'s Wrath. Alone, hurt, and the ground answers instead of the pack.',
+    flavor: 'CAPSTONE — Earth\'s Wrath. Alone, hurt, and the ground answers instead of the pack.',
     type: 'active', domain: 'spiritual', prereq: 'druid_stoneskin',
     select: 'densest_cluster',
     trigger: { kind: 'SELF_THRESHOLD', pct: T.quakePct },

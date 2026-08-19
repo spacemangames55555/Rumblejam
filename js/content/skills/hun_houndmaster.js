@@ -1,4 +1,3 @@
-import { STAT_NAME } from '../../config.js';
 // HUNTER — Houndmaster tree.
 //
 // The other half, and — like Arcana, Grace, Ensemble, Collapse, Blight, Reef and
@@ -59,7 +58,7 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 export const HUN_HOUNDMASTER = [
   {
     id: 'hun_whistle_up', tree: 'hun_houndmaster', tier: 1, name: 'Whistle Up',
-    desc: 'A short cut at whatever came close. Deals 5 damage in a 1.6-radian arc.',
+    flavor: 'A short cut at whatever came close.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.whistleRadius, count: T.whistleCount },
@@ -72,7 +71,7 @@ export const HUN_HOUNDMASTER = [
     // in one field: a hound that orbits stays inside ALPHA's 120, a bird that
     // chases does not. Same primitive, opposite class.
     id: 'hun_hound', tree: 'hun_houndmaster', tier: 2, name: 'Hound',
-    desc: 'A hound that stays at your heel. Two of them inside 120 wake Alpha.',
+    flavor: 'A hound that stays at your heel.',
     type: 'active', domain: 'physical', prereq: 'hun_whistle_up',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.bayRange },
@@ -90,7 +89,7 @@ export const HUN_HOUNDMASTER = [
   },
   {
     id: 'hun_bay', tree: 'hun_houndmaster', tier: 4, name: 'Bay',
-    desc: 'The pack gives tongue and pulls the crowd onto you for 1.6s. Deals 8 damage.',
+    flavor: 'The pack gives tongue.',
     type: 'active', domain: 'spiritual', prereq: 'hun_hound',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.bayRadius, count: T.bayCount },
@@ -106,7 +105,7 @@ export const HUN_HOUNDMASTER = [
     // within 120, so this is the tier where the tree's whole bonus arrives at
     // once rather than growing.
     id: 'hun_second_hound', tree: 'hun_houndmaster', tier: 4, name: 'Second Hound',
-    desc: `A second hound at the other heel. Two inside 120 is Alpha: +20% ${STAT_NAME.ferocity} and +10% ${STAT_NAME.tempo}, to you and to them.`,
+    flavor: 'A second hound at the other heel.',
     type: 'active', domain: 'physical', prereq: 'hun_hound',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'NEAREST', range: T.bayRange },
@@ -124,7 +123,6 @@ export const HUN_HOUNDMASTER = [
   },
   {
     id: 'hun_feed_the_pack', tree: 'hun_houndmaster', tier: 6, name: 'Feed the Pack',
-    desc: 'Restores 15 health when you drop below 65%.',
     type: 'active', domain: 'spiritual', prereq: 'hun_second_hound',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
@@ -134,7 +132,7 @@ export const HUN_HOUNDMASTER = [
   },
   {
     id: 'hun_boarspear', tree: 'hun_houndmaster', tier: 8, name: 'Boarspear',
-    desc: 'A braced thrust that throws the front rank off the pack. Deals 11 damage.',
+    flavor: 'A braced thrust that throws the front rank off the pack.',
     type: 'active', domain: 'physical', prereq: 'hun_snare_net',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.spearRadius, count: T.spearCount },
@@ -147,7 +145,7 @@ export const HUN_HOUNDMASTER = [
   },
   {
     id: 'hun_snare_net', tree: 'hun_houndmaster', tier: 6, name: 'Snare Net',
-    desc: 'A cast net that holds what it crosses for 1.4s. Deals 9 damage.',
+    flavor: 'A cast net.',
     type: 'active', domain: 'mental', prereq: 'hun_bay',
     select: 'farthest',
     trigger: { kind: 'PROXIMITY', radius: T.netRadius, count: T.netCount },
@@ -160,7 +158,6 @@ export const HUN_HOUNDMASTER = [
   },
   {
     id: 'hun_kennel_guard', tree: 'hun_houndmaster', tier: 10, name: 'Kennel Guard',
-    desc: 'Absorbs 26 over 5s and returns 35% of what it stops.',
     type: 'active', domain: 'spiritual', prereq: 'hun_boarspear',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 50 },
@@ -177,7 +174,6 @@ export const HUN_HOUNDMASTER = [
     // Sump and the Assassin's Cutpurse are: `regen` is an ITEM hook, not a
     // registered passive key (§8.3).
     id: 'hun_blood_trail', tree: 'hun_houndmaster', tier: 8, name: 'Blood Trail',
-    desc: 'Deals 9 damage and takes half of it back as health.',
     type: 'active', domain: 'physical', prereq: 'hun_feed_the_pack',
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.trailRange },
@@ -187,7 +183,7 @@ export const HUN_HOUNDMASTER = [
   },
   {
     id: 'hun_loose_the_pack', tree: 'hun_houndmaster', tier: 10, name: 'Loose the Pack',
-    desc: 'Everything at once, off the leash. 15 damage in a wide fan, and what it touches crawls at 70% for 1.6s.',
+    flavor: 'Everything at once, off the leash.',
     type: 'active', domain: 'physical', prereq: 'hun_blood_trail',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.looseRadius, count: T.looseCount },

@@ -63,7 +63,7 @@ const SHIFT = { scaleWith: 'shift'};
 export const WIZARD_DISSONANCE = [
   {
     id: 'wiz_fray', tree: 'wizard_dissonance', tier: 1, name: 'Fray',
-    desc: 'An unfocused bolt. It is not the right answer to anything, which is the point of starting here.',
+    flavor: 'An unfocused bolt. It is not the right answer to anything, which is the point of starting here.',
     type: 'active', domain: 'mental', prereq: null,
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.frayRange },
@@ -73,7 +73,7 @@ export const WIZARD_DISSONANCE = [
   },
   {
     id: 'wiz_discord', tree: 'wizard_dissonance', tier: 2, name: 'Discord',
-    desc: 'Being wrong is information. Both roads out of here are about the bet that did not land.',
+    flavor: 'Being wrong is information. Both roads out of here are about the bet that did not land.',
     type: 'passive', domain: 'mental', prereq: 'wiz_fray',
     trigger: null, cooldown: 0, compose: [],
     passive: { shiftScaleWeight: T.discordWeight },
@@ -83,7 +83,7 @@ export const WIZARD_DISSONANCE = [
   // --------------------------------------- branch A: Spread (one of each)
   {
     id: 'wiz_iron_word', tree: 'wizard_dissonance', tier: 4, name: 'Iron Word',
-    desc: 'PHYSICAL. Spread refuses the bet: whatever the room turns out to be, one of these three already matches it.',
+    flavor: 'PHYSICAL. Spread refuses the bet: whatever the room turns out to be, one of these three already matches it.',
     type: 'active', domain: 'physical', prereq: 'wiz_discord',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.ironReach },
@@ -93,7 +93,7 @@ export const WIZARD_DISSONANCE = [
   },
   {
     id: 'wiz_polyglot', tree: 'wizard_dissonance', tier: 6, name: 'Polyglot',
-    desc: 'Fluent in all three, expert in none, and never silent.',
+    flavor: 'Fluent in all three, expert in none, and never silent.',
     type: 'passive', domain: 'mental', prereq: 'wiz_iron_word',
     trigger: null, cooldown: 0, compose: [],
     passive: { shiftScaleWeight: T.polyWeight },
@@ -101,7 +101,7 @@ export const WIZARD_DISSONANCE = [
   },
   {
     id: 'wiz_murmur', tree: 'wizard_dissonance', tier: 8, name: 'Murmur',
-    desc: 'MENTAL. The second of the three.',
+    flavor: 'MENTAL. The second of the three.',
     type: 'active', domain: 'mental', prereq: 'wiz_polyglot',
     select: 'objective_target',
     trigger: { kind: 'NEAREST', range: T.murmurRange },
@@ -111,7 +111,7 @@ export const WIZARD_DISSONANCE = [
   },
   {
     id: 'wiz_chorus', tree: 'wizard_dissonance', tier: 10, name: 'Chorus',
-    desc: 'CAPSTONE — Spread. SPIRITUAL, and the third voice. All of them at once, and whatever it is weak against is weakened.',
+    flavor: 'CAPSTONE — Spread. SPIRITUAL, and the third voice. All of them at once, and whatever it is weak against is weakened.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_murmur',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.chorusRange, count: 2 },
@@ -126,7 +126,7 @@ export const WIZARD_DISSONANCE = [
   // ---------------------------------- branch B: Conviction (paid for it)
   {
     id: 'wiz_recoil', tree: 'wizard_dissonance', tier: 4, name: 'Recoil',
-    desc: 'Fires when the bet has already gone badly. Conviction turns the cost of a mismatch into the trigger for the answer.',
+    flavor: 'Fires when the bet has already gone badly. Conviction turns the cost of a mismatch into the trigger for the answer.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_discord',
     select: 'densest_cluster',
     trigger: { kind: 'ON_HIT_TAKEN' },
@@ -139,7 +139,7 @@ export const WIZARD_DISSONANCE = [
   },
   {
     id: 'wiz_tempered', tree: 'wizard_dissonance', tier: 6, name: 'Tempered',
-    desc: 'Every wrong guess left something behind.',
+    flavor: 'Every wrong guess left something behind.',
     type: 'passive', domain: 'spiritual', prereq: 'wiz_recoil',
     trigger: null, cooldown: 0, compose: [],
     passive: { shiftScaleWeight: T.temperWeight },
@@ -147,7 +147,7 @@ export const WIZARD_DISSONANCE = [
   },
   {
     id: 'wiz_bulwark', tree: 'wizard_dissonance', tier: 8, name: 'Bulwark',
-    desc: 'Standing in the wrong domain costs less than it did.',
+    flavor: 'Standing in the wrong domain costs less than it did.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_tempered',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.bulwarkPct },
@@ -157,7 +157,7 @@ export const WIZARD_DISSONANCE = [
   },
   {
     id: 'wiz_reversal', tree: 'wizard_dissonance', tier: 10, name: 'Reversal',
-    desc: 'CAPSTONE — Conviction. The mismatch turns around and goes back the way it came.',
+    flavor: 'CAPSTONE — Conviction. The mismatch turns around and goes back the way it came.',
     type: 'active', domain: 'spiritual', prereq: 'wiz_bulwark',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.reversalPct },

@@ -72,7 +72,7 @@ export const MONK_CHI = [
     // there is no "build Chi" button, because a resource with its own generator
     // button is a rotation rather than a decision.
     id: 'monk_open_palm', tree: 'monk_chi', tier: 1, name: 'Open Palm',
-    desc: 'The opening form. Deals 6 damage, +1% per point of Chi held.',
+    flavor: 'The opening form.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.palmRadius, count: T.palmCount },
@@ -87,7 +87,6 @@ export const MONK_CHI = [
     // THE FIRST SPEND, and the tier where the class becomes itself: from here on
     // the Monk's health bar is denominated in damage it has already dealt.
     id: 'monk_gathering_breath', tree: 'monk_chi', tier: 2, name: 'Gathering Breath',
-    desc: 'Spends 6 Chi to restore 12 health when you drop below 70%.',
     type: 'active', domain: 'spiritual', prereq: 'monk_open_palm',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 70 },
@@ -97,7 +96,7 @@ export const MONK_CHI = [
   },
   {
     id: 'monk_rolling_fist', tree: 'monk_chi', tier: 4, name: 'Rolling Fist',
-    desc: 'A turning strike through two. Deals 8 damage, +1.1% per point of Chi.',
+    flavor: 'A turning strike through two.',
     type: 'active', domain: 'physical', prereq: 'monk_gathering_breath',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.fistRadius, count: T.fistCount },
@@ -110,7 +109,6 @@ export const MONK_CHI = [
   },
   {
     id: 'monk_mend', tree: 'monk_chi', tier: 4, name: 'Mend',
-    desc: 'Spends 10 Chi to restore 18 health when you drop below 55%.',
     type: 'active', domain: 'spiritual', prereq: 'monk_gathering_breath',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
@@ -123,14 +121,14 @@ export const MONK_CHI = [
     // only registered way to make a point of Chi worth more without touching a
     // step. Rankable, because it is a damage investment (§8.3).
     id: 'monk_still_water', tree: 'monk_chi', tier: 6, name: 'Still Water',
-    desc: 'Every point of Chi you hold is worth more. +0.16% damage per point, per rank.',
+    flavor: 'Every point of Chi you hold is worth more.',
     type: 'passive', domain: 'mental', prereq: 'monk_mend',
     passive: { chiScaleWeight: T.stillWeight },
     ranks: R,
   },
   {
     id: 'monk_hammerfall', tree: 'monk_chi', tier: 6, name: 'Hammerfall',
-    desc: 'A dropping heel that throws the front rank back. 11 damage, +1.2% per point of Chi.',
+    flavor: 'A dropping heel that throws the front rank back.',
     type: 'active', domain: 'physical', prereq: 'monk_rolling_fist',
     select: 'nearest',
     trigger: { kind: 'PROXIMITY', radius: T.hammerRadius, count: T.hammerCount },
@@ -146,7 +144,6 @@ export const MONK_CHI = [
     // Priest's Litany and the Hunter's Blood Trail are actives: `regen` is an
     // ITEM hook, not a registered passive key (§8.3).
     id: 'monk_breathe_out', tree: 'monk_chi', tier: 8, name: 'Breathe Out',
-    desc: 'Spends 14 Chi. Absorbs 26 over 4.4s.',
     type: 'active', domain: 'spiritual', prereq: 'monk_still_water',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
@@ -156,7 +153,7 @@ export const MONK_CHI = [
   },
   {
     id: 'monk_crane_step', tree: 'monk_chi', tier: 8, name: 'Crane Step',
-    desc: 'A sweeping turn that leaves the crowd crawling at 76% for 1.3s. 12 damage, +1.3% per point of Chi.',
+    flavor: 'A sweeping turn.',
     type: 'active', domain: 'physical', prereq: 'monk_hammerfall',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.craneRadius, count: T.craneCount },
@@ -170,7 +167,6 @@ export const MONK_CHI = [
   },
   {
     id: 'monk_quiet_the_body', tree: 'monk_chi', tier: 10, name: 'Quiet the Body',
-    desc: 'Spends 18 Chi to restore 30 health when you drop below 40%.',
     type: 'active', domain: 'spiritual', prereq: 'monk_breathe_out',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 40 },
@@ -183,7 +179,7 @@ export const MONK_CHI = [
     // the tree that funds the healing is the one that funds it fastest. A
     // capstone that spent would have made the tree's own end its own drain.
     id: 'monk_empty_hand', tree: 'monk_chi', tier: 10, name: 'Empty Hand',
-    desc: 'Everything at once and nothing held back. 17 damage in a wide arc, +1.5% per point of Chi, and what it touches is stunned for 0.6s.',
+    flavor: 'Everything at once and nothing held back.',
     type: 'active', domain: 'physical', prereq: 'monk_crane_step',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.emptyRadius, count: T.emptyCount },
