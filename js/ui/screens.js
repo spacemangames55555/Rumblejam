@@ -192,7 +192,7 @@ function statSummary(stats) {
 // canLobby: this client can drive the party back to character select (host or
 // solo). Everyone else is told the host is doing it — the room, the code and
 // every peer connection survive a defeat.
-export function showResults(result, myIdx, canLobby = true) {
+export function showResults(result, myIdx, canLobby = true, carried = false) {
   hideScreens();
   const el = $('screen-results');
   el.classList.remove('hidden');
@@ -216,7 +216,9 @@ export function showResults(result, myIdx, canLobby = true) {
         <div class="seed-line">run seed: <b>${result.seed >>> 0}</b></div>
         <div class="row">
           ${canLobby
-    ? '<button class="primary big" id="btn-lobby" style="width:auto;">▶ NEW RUN (same room)</button>'
+    ? (carried
+      ? '<button class="primary big" id="btn-lobby" style="width:auto;">▶ ONWARD (world map)</button>'
+      : '<button class="primary big" id="btn-lobby" style="width:auto;">▶ NEW RUN (same room)</button>')
     : '<span class="dim small">waiting for the host to start a new run…</span>'}
           <button id="btn-title">Leave</button>
         </div>
@@ -224,7 +226,11 @@ export function showResults(result, myIdx, canLobby = true) {
     </div>`;
   $('btn-title').onclick = () => { sfx.click(); A.leave(); };
   const lb = $('btn-lobby');
-  if (lb) lb.onclick = () => { sfx.click(); A.backToLobby(); };
+  // A CLEARED REGION RETURNS THE SAME CHARACTER TO THE WORLD MAP, not the
+  // party to character select. Clearing region 1 used to drop everyone back to
+  // the class picker, which is where a character's level, skills and items went
+  // to die: nothing carried, so the next region started a newborn.
+  if (lb) lb.onclick = () => { sfx.click(); if (carried) A.toWorldMap(); else A.backToLobby(); };
 }
 
 function summarizeItems(ids) {

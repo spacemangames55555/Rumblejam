@@ -666,6 +666,16 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/run_continuity_gate.mjs [--verbose] [--survey]` — **one character,
+  eight regions.** js/saves.js has been per-character and correct since the
+  region shell; nothing connected it to a run, so `new Sim(...)` built a level-1
+  newborn every region and `character.level` was 1 for the game's whole history.
+  Asserts by effect through `carryInto`/`recordRun`/`worldMapState` and a real
+  boss kill: a character clears region 1 and arrives in region 2 at the level it
+  finished with, items/skills/stat picks survive, a fresh character is offered
+  region 1 only on a save where another cleared region 4, and a party is refused
+  a region any member has not reached. `--survey` carries one character through
+  all eight regions and reports the level. See `docs/run-continuity.md`.
 - `node tools/skilltext_gate.mjs [--verbose]` — **every skill states its
   mechanics, and no skill states them by hand.** Catches the two opposite
   failures: a skill shipped with flavour and no numbers, and a number typed into

@@ -15,6 +15,7 @@ import {
 import { CHAR_BY_ID, isSelectable, unselectableReason } from './content/characters.js';
 import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
+import { SKILL_BY_ID } from './skills.js';
 import * as MIN from './minions.js';
 import { EnemyGrid } from './triggers.js';
 import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './telegraphs.js';
@@ -77,7 +78,7 @@ const TIER_WEIGHTS = [
 ];
 
 export class Sim {
-  constructor({ seed, party, allowUnplayable = false, difficulty = DEFAULT_DIFFICULTY, regionIndex = 1, objectiveHistory = [], tree = null, cleared = [] }) {
+  constructor({ seed, party, allowUnplayable = false, difficulty = DEFAULT_DIFFICULTY, regionIndex = 1, objectiveHistory = [], tree = null, cleared = [], carry = null }) {
     // see _makePlayer: an explicit, named opt-out for tests that measure a
     // class's TRAIT rather than whether it can win a fight
     this.allowUnplayable = allowUnplayable;
@@ -164,7 +165,14 @@ export class Sim {
 
     this.decoys = [];   // Mirage afterimages — taunt targets that burst on expiry
 
+    // A CHARACTER ARRIVES AS ITSELF. `carry` is one entry per party slot (or a
+    // single object for solo) holding the level, ranks, unspent points, items
+    // and stat picks that character finished its last region with — see
+    // `carryInto` in js/saves.js. Without it every Sim built a level-1 newborn,
+    // which is why the eight-region progression the power curve is specified
+    // against had never been played.
     this.players = party.map((m, i) => this._makePlayer(m, i));
+    if (carry) party.forEach((m, i) => this._carryPlayer(this.players[i], Array.isArray(carry) ? carry[i] : (i === 0 ? carry : null)));
     // party-wide curse (Tollkeeper's Toll Road: double mats, +25% enemy HP)
     this.greedHp = this.players.some(p => p.char.trait.key === 'toll_road') ? 1.25 : 1;
     this.greedMats = this.players.some(p => p.char.trait.key === 'toll_road') ? 2 : 1;
@@ -379,6 +387,48 @@ export class Sim {
     p.hp = p.stats.vitality;
     tohInitPlayer(this, p);
     return p;
+  }
+
+  // REBUILD A CARRIED CHARACTER ON TOP OF A FRESH PLAYER.
+  //
+  // Order matters and is the reason this is not four assignments. Ranks go in
+  // through `spendSkillPoint` rather than by writing `skillRanks` directly, so
+  // the prerequisite chain, the loadout auto-slot and every rank-derived engine
+  // are built by the same code a real spend uses — a save that wrote ranks
+  // straight in would produce a character the game could not have made.
+  //
+  // `xpNext` is re-derived from the carried level, or a level-19 character
+  // would arrive still owing the level-2 threshold and gain nine levels on its
+  // first kill.
+  _carryPlayer(p, c) {
+    if (!p || !c) return;
+    p.level = Math.max(1, c.level || 1);
+    p.xp = 0;
+    p.xpNext = CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * p.level;
+    // stat picks the character already made
+    if (c.statPicks) this._applyPerm(p, c.statPicks);
+    // learned skills, spent the way a player spends them (lowest tier first so
+    // prerequisites are always already owned)
+    const want = Object.entries(c.ranks || {});
+    const tierOf = id => (SKILL_BY_ID[id] ? SKILL_BY_ID[id].tier : 99);
+    want.sort((a, b) => tierOf(a[0]) - tierOf(b[0]));
+    let guard = 0;
+    for (let pass = 0; pass < 12; pass++) {
+      let moved = false;
+      for (const [id, rank] of want) {
+        while ((p.skillRanks[id] || 0) < rank && guard++ < 20000) {
+          p.skillPoints++;
+          if (!SK.spendSkillPoint(this, p, id)) { p.skillPoints--; break; }
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+    p.skillPoints = Math.max(0, c.skillPoints || 0);
+    for (const id of (c.items || [])) p.items.push(id);
+    this._recomputeItems(p);
+    this._recomputeStats(p);
+    p.hp = p.stats.vitality;
   }
 
   _initStartingGear(p) {

@@ -71,6 +71,61 @@ export function recordUnlock(store, regionIndex) {
   return region.nativeClass;
 }
 
+// ------------------------------------------------- carrying a character
+//
+// THE WIRING THAT WAS NEVER THERE. Everything above has been per-character and
+// correct since the region shell: `frontier` lives on the character,
+// `onRegionCleared` advances that character's own, `canEnter` gates on it. What
+// no code did was move a character's LEVEL, SKILLS, STAT PICKS or ITEMS across
+// the boundary in either direction.
+//
+//   in  — `new Sim(...)` built every player at level 1 with an empty tree. A
+//         character that had cleared region 1 walked into region 2 as a
+//         newborn.
+//   out — the only writes back were `frontier` and `parked`. `character.level`
+//         was 1 for the whole of the game's history and `character.items` was
+//         `[]`, because nothing ever assigned them.
+//
+// So the eight-region progression the entire power curve is specified against
+// had never once been played. Same shape as the eight-slot finding and the
+// region layer before it: the rule existed, the store existed, and the two were
+// not connected.
+//
+// These two functions are the connection, and they live here rather than in
+// main.js so the sim harnesses can exercise the real thing.
+
+// What a Sim needs to rebuild this character. Shape matches the constructor's
+// `carry` option; ids and ranks are copied so a Sim cannot mutate a save.
+export function carryInto(character) {
+  if (!character) return null;
+  return {
+    level: Math.max(1, character.level || 1),
+    ranks: { ...(character.points && character.points.spent) },
+    skillPoints: Math.max(0, (character.points && character.points.unspent) || 0),
+    items: [...(character.items || [])],
+    statPicks: { ...(character.statPicks || {}) },
+  };
+}
+
+// And the way back. Called on any exit that keeps progress — a region cleared,
+// a region abandoned — because levels and loot earned in a room are earned
+// whether or not the boss died.
+//
+// `banked` is deliberately carried as UNSPENT rather than auto-spent: a player
+// who has not chosen their stat picks still owns them, and choosing for them
+// would be the fixture bug that read ferocity 0 at level 82, shipped.
+export function recordRun(character, player) {
+  if (!character || !player) return null;
+  const before = { level: character.level, items: (character.items || []).length };
+  character.level = Math.max(character.level || 1, player.level || 1);
+  character.points = character.points || { spent: {}, unspent: 0 };
+  character.points.spent = { ...(player.skillRanks || {}) };
+  character.points.unspent = Math.max(0, player.skillPoints || 0);
+  character.items = [...(player.items || [])];
+  character.statPicks = { ...(player.permStats || {}) };
+  return { before, after: { level: character.level, items: character.items.length } };
+}
+
 // ---------------------------------------------------------------- parking
 
 // A character three maps into region 2 who joins a friend's region 2 plays the

@@ -24,7 +24,7 @@ import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { initWorldMap, showWorldMap, hideWorldMap, isWorldMapOpen } from './ui/worldmap.js';
 import { loadAll, saveAll, newCharacter, newPlayerStore, onRegionCleared, recordUnlock, validateCharacter,
-  park, unpark, exportBundle, importBundle, STORAGE_WARNING } from './saves.js';
+  park, unpark, carryInto, recordRun, exportBundle, importBundle, STORAGE_WARNING } from './saves.js';
 import { showHud, updateHud, toast, banner } from './ui/hud.js';
 import { DEFAULT_DIFFICULTY } from './worldmap.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening, showSkills, closeSkills, isSkillsOpen, updateSkillsMeta } from './ui/overlays.js';
@@ -95,6 +95,18 @@ const actions = {
   join: joinGame,
   leave: leaveToTitle,
   backToLobby: hostReturnToLobby,
+  // A cleared region hands the SAME character back to the world map, where its
+  // advanced frontier now offers the next region. `hostReturnToLobby` clears
+  // every charId, which is character select — the thing that was resetting the
+  // run.
+  toWorldMap: () => {
+    if (!app.character) return hostReturnToLobby();
+    app.mode = 'worldmap';
+    app.sim = null;
+    app.objectiveHistory = [];
+    hideScreens();
+    showWorldMap(app.character, app.player, { canLeave: true });
+  },
   pickChar: charId => sendUi({ kind: 'pick', charId }),
   toggleReady: () => sendUi({ kind: 'ready' }),
   // §4.1's ladder, finally with a writer. `app.lobby.difficulty` was READ at the
@@ -354,6 +366,9 @@ function parkCurrentRegion() {
   const sim = app.sim;
   if (!sim || !app.character || sim.over) return;
   park(app.character, sim.regionIndex, sim.floor, sim.clearedKeys(), sim.difficulty);
+  // levels and loot earned in the rooms already walked are earned, whether or
+  // not the boss died — parking without this threw them away on every walk-out
+  recordRun(app.character, sim.players[app.myIdx]);
   saveAll(app.characters, app.player);
 }
 
@@ -613,9 +628,17 @@ function hostStartRun() {
     const parked = app.character ? unpark(app.character, regionIndex) : null;
     if (app.hostT) app.hostT.broadcast({ t: 'start', seed, party: app.party, difficulty, regionIndex });
     startRunCommon();
+    // THE CHARACTER WALKS IN AS ITSELF. Without `carry` every region built a
+    // level-1 newborn with an empty tree, which is why the 1→8 progression the
+    // power curve is specified against had never been played. Solo only for
+    // now: a client's save does not travel yet, so a joined peer still arrives
+    // fresh and that is stated rather than silently half-done.
+    const carry = app.character ? carryInto(app.character) : null;
     app.sim = new Sim({ seed, party: app.party, difficulty, regionIndex,
-      objectiveHistory: app.objectiveHistory,
+      objectiveHistory: app.objectiveHistory, carry,
       tree: parked ? parked.tree : null, cleared: parked ? parked.cleared : [] });
+    if (carry) console.log(`[world] carried ${app.character.name} into region ${regionIndex}: level ${carry.level}, `
+      + `${Object.keys(carry.ranks).length} skill(s), ${carry.items.length} item(s)`);
     if (parked) console.log(`[world] resumed region ${regionIndex} — ${parked.cleared.length} node(s) already cleared`);
     drainSimOutputs(true); // deliver initial floor/room events
   });
@@ -1067,12 +1090,18 @@ function handleEvent(ev) {
       if (ev.result && ev.result.win && ev.result.regionCleared && app.character && app.role !== 'client') {
         const moved = onRegionCleared(app.character, ev.result.region);
         const unlocked = recordUnlock(app.player, ev.result.region);
+        // AND THE CHARACTER KEEPS WHAT IT EARNED. `frontier` was the only thing
+        // ever written back; level, skills, stat picks and items were dropped on
+        // the floor at the end of every region.
+        const kept = app.sim ? recordRun(app.character, app.sim.players[app.myIdx]) : null;
         saveAll(app.characters, app.player);
+        if (kept) console.log(`[world] ${app.character.name} keeps level ${kept.after.level} `
+          + `(was ${kept.before.level}) and ${kept.after.items} item(s)`);
         app.objectiveHistory.push([...(ev.result.objectives || [])]);
         console.log(`[world] region ${ev.result.region} cleared — frontier ${moved.before} → ${moved.after} (${moved.outcome})`
           + (unlocked ? `, unlocked ${unlocked}` : ''));
       }
-      showResults(ev.result, app.myIdx, app.role !== 'client');
+      showResults(ev.result, app.myIdx, app.role !== 'client', !!(ev.result && ev.result.win && ev.result.regionCleared && app.character && app.role !== 'client'));
       break;
     }
   }
