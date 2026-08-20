@@ -666,6 +666,13 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/skill_taxonomy.mjs [--write]` — **how many mechanically distinct
+  things are there, across 420 skills?** Clusters every active by delivery,
+  geometry and targeting, all derived from the defs (`shapeOfStep` from
+  js/skilltext.js, so the document and the skill cards cannot disagree). Answers
+  43 / 17 / 10 depending on where you cut, reports what differs between classes
+  that share a shape, and states plainly whether the roster can carry party
+  roles. `--write` regenerates `docs/SKILL-TAXONOMY.md`.
 - `node tools/skilltext_gate.mjs [--verbose]` — **every skill states its
   mechanics, and no skill states them by hand.** Catches the two opposite
   failures: a skill shipped with flavour and no numbers, and a number typed into
