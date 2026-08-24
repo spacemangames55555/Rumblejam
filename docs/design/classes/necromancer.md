@@ -44,10 +44,17 @@ settled in a documents-only pass because the built shape lives in `js/`.
 
 Against `roster-ruling-pace-damage-engines.md`. What moved, what held.
 
-**Pace (ruling 1).** 21 of 22 timed actives rebucketed to the fixed values.
-Grasp of Death is held — see the conflicts below. Distribution: Dark Matter
-passes on its own (7 medium-or-faster, 0 very slow), Marrow passes (Stake
-promoted, its root cut under ruling 6), Summons **cannot pass** — see below.
+**Pace (ruling 1).** 21 of 22 timed actives rebucketed, then rescaled again
+when the bucket table was retuned against the corrected activation-rate gap.
+Grasp of Death is held — see below. Distribution: Dark Matter passes on its own
+(7 medium-or-faster, 0 very slow), Marrow passes (Stake promoted, its root cut
+under ruling 6), Summons **cannot pass** — see below.
+
+**Rate: 8.75/sec on a spread build, against a 6–8 target.** Still above the
+band after the rescale, and the reason is bucket MIX rather than bucket values:
+this class owns four very-fast nodes — Bone Dart, Entropy Cascade, Dark Energy
+Blip, Internal Collapse — and four very-fast slots produce 6.7/sec between them
+before anything else is slotted. No per-class rule currently caps that.
 
 **Damage share (ruling 2).** Marrow 6 damage nodes, 1 high. Dark Matter 10
 damage nodes, and its high-tier node comes from relabelling Singularity off
@@ -195,7 +202,7 @@ RANGE:                range long (460px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 very fast (400ms)
+PACE:                 very fast (600ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -231,7 +238,7 @@ RANGE:                melee short (72px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 fast (800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -265,7 +272,7 @@ RANGE:                range short (165px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 90px; knockback-stun 160ms
@@ -335,7 +342,9 @@ DAMAGE TIER:          none (0)
 PACE:                 capstone (30000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               form 30000ms — maxHPMult +0.50, damageReduction +0.45;
+RIDERS:               form 10000ms — maxHPMult +0.50, damageReduction +0.45;
+                      cut from 30000ms by ruling 6's one-third rule under the
+                      30s capstone cooldown;
                       caster size increases (the game's only size-change)
 DOT:                  none
 AFFECTS:              self
@@ -353,14 +362,12 @@ COST:                 the size increase is not cosmetic. A larger hitbox in
                       a bullet-hell room means more contacts, and this skill
                       makes the player physically harder to keep safe for
                       thirty seconds. It gives you durability and takes away
-                      evasion. RULING 6 CONFLICT — STILL HELD: the form
-                      exception moved this to the capstone bucket at its
-                      ceiling, 30s, and a 30000ms form under a 30000ms
-                      cooldown is STILL permanent. Ruling 6's exception works
-                      for a 12s form under a 60s capstone; it cannot ration a
-                      form whose duration already equals the bucket's whole
-                      range. Either this form shortens or the bucket needs a
-                      value above 30s
+                      evasion. RESOLVED: reported from this node, ruling 6
+                      gained a one-third rule, and a 10s form on a 30s capstone
+                      is up a third of the time. The larger hitbox is now a
+                      window the player can wait out rather than a permanent
+                      condition, which is what made the drawback legible in the
+                      first place
 VISUAL:               he swells — the skeleton visibly thickening beneath,
                       plates of bone shouldering up through the coat, half a
                       head taller and much wider
@@ -385,18 +392,18 @@ RANGE:                melee long (84px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               root 1000ms — port addition; cut from 2500ms by roster
-                      ruling 6, which caps a rider at ~70% of its cooldown
+RIDERS:               root 1400ms — port addition; cut from an authored
+                      2500ms by roster ruling 6 (70% of the 2s cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
 TRIGGER:              ENEMY_BREACHES_RING (84px)
 THREAT:               some
 --- growth ---
-RANK ADDS:            +2 damage; +100ms root every 3rd rank (was +300ms —
+RANK ADDS:            +2 damage; +150ms root every 3rd rank (was +300ms —
                       rescaled with the shorter base so ranking cannot walk
                       the root back above the cooldown)
 --- identity ---
@@ -507,7 +514,7 @@ RANGE:                range medium (320px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (28)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockdown — stun 1500ms per enemy hit; caster displaced
@@ -542,7 +549,7 @@ RANGE:                melee long (120px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          high (40)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               drain — heals caster for 60% of damage dealt
@@ -593,7 +600,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 3 standing, +1 per 4 ranks
 --- output ---
 DAMAGE TIER:          none (0) — the skeleton deals the damage, not the cast
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               summon persists until killed; takes aggro above the
@@ -635,7 +642,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 1, always
 --- output ---
 DAMAGE TIER:          none (0) — the Monster deals 26 per swing / 1100ms
-PACE:                 very slow (6000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               MAGNET aggro r300 — actively pulls enemy attention off
@@ -748,7 +755,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 2, +1 per 6 ranks
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               summon persists until killed
@@ -909,7 +916,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 (locks nearest)
 --- output ---
 DAMAGE TIER:          low (14 per tick)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               does NOT break on movement (port ruling 4, and roster
@@ -955,7 +962,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 per cast (nearest below max stacks)
 --- output ---
 DAMAGE TIER:          low (8 per tick)
-PACE:                 very fast (400ms)
+PACE:                 very fast (600ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               stacks to 6 on a single target
@@ -1043,7 +1050,7 @@ RANGE:                range long (480px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 very fast (400ms)
+PACE:                 very fast (600ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1075,7 +1082,7 @@ RANGE:                range long (420px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1109,7 +1116,7 @@ RANGE:                range long (460px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               vulnerability — target takes +20% damage for 4000ms
@@ -1150,18 +1157,18 @@ RANGE:                range medium (360px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (4)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               slow ×0.5 for 1000ms; weaken 40% for 1000ms — both cut
-                      from 2000ms by roster ruling 6
+RIDERS:               slow ×0.5 for 1400ms; weaken 40% for 1400ms — both cut
+                      from an authored 2000ms by roster ruling 6
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
 TRIGGER:              DENSEST_CLUSTER within 360px
 THREAT:               none
 --- growth ---
-RANK ADDS:            +150ms duration and +8px radius per rank (was +400ms,
+RANK ADDS:            +200ms duration and +8px radius per rank (was +400ms,
                       rescaled under ruling 6; not damage — four damage is the
                       joke and it should stay the joke)
 --- identity ---
@@ -1189,7 +1196,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (34)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1224,7 +1231,7 @@ RANGE:                range medium (300px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1295,7 +1302,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 per cast (nearest below max stacks)
 --- output ---
 DAMAGE TIER:          low (10 per tick)
-PACE:                 very fast (400ms)
+PACE:                 very fast (600ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               stacks to 5 on a single target
@@ -1330,7 +1337,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 (locks nearest)
 --- output ---
 DAMAGE TIER:          low (16 per tick)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               does NOT break on movement (port ruling 4, and roster

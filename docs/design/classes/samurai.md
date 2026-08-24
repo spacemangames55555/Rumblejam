@@ -1,4 +1,4 @@
-# SAMURAI — RUMBLEJAM CONVERSION (27 skills)
+# SAMURAI — RUMBLEJAM CONVERSION (26 skills)
 
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
@@ -13,7 +13,7 @@ divergence in the roster, and it did not resolve as one decision.
 | doc tree | ruling | built counterpart |
 |---|---|---|
 | Blade | **→ Tactics, revise in place.** The doc is the better-specified side | Tactics (10, linear) |
-| Stances | **dissolved.** Water/Stone/Fire become a trait spec; the other seven nodes move into Armor as its riposte layer | `three_stances` trait + Armor |
+| Stances | **dissolved.** Water/Stone/Fire become a trait spec; five of the other seven move into Armor as its riposte layer, one is deleted | `three_stances` trait + Armor |
 | Bow | **held as a genuine gap, logged.** Needs `bolt`/`line` composes the class does not have — a `js/` patch for later | none exists |
 
 **Names kept: Armor / Tactics / Agility.** Two reasons, neither about taste.
@@ -86,6 +86,16 @@ Stone when he is being hit, Water when he is running, Fire when he is safe.
 **These three occupy no slots.** That is the substantive change: the doc spent
 three of eight on the machine, and the trait spends none.
 
+### DELETED — Disciplined Breath
+
+Ruled out of the class, not held. It restored 12 HP and 25 Resolve; Resolve is
+superseded, Footing cannot be granted by a cast without contradicting its one
+rule, and what remained was a 12 HP heal on a 4s cooldown. That is not worth a
+tier slot. Recorded here rather than left as a stub, so the tree reads as six
+deliberate nodes rather than seven with one broken.
+
+Armor is now **6 of 10** documented. Four slots open.
+
 **Open:** the built trait's own numbers (`ironGrit: 6`, `ironRefundPct: 0.2`,
 `precisionBleedDur: 4`) are a different scheme from the table above, and
 reconciling them is `js/` work outside this pass.
@@ -124,10 +134,19 @@ window expires on nothing, which auto-fire would otherwise do constantly.
 
 ## ROSTER RULING APPLIED
 
-**Pace (ruling 1).** All 22 timed actives rebucketed. Three promotions to reach
-the distribution floor: Falling Petal (slow → medium) for Tactics, Kiai (slow →
-medium) for Armor, Running Draw (slow → medium) for Bow. Each was chosen for
-having no timed rider to break, so none of the three needed a ruling-6 cut.
+**Pace (ruling 1).** All 21 timed actives rebucketed, then rescaled again when
+the bucket table was retuned. Three promotions to reach the distribution floor:
+Falling Petal (slow → medium) for Tactics, Kiai (slow → medium) for Armor,
+Running Draw (slow → medium) for Bow. Each was chosen for having no timed rider
+to break, so none needed a ruling-6 cut.
+
+**Rate: 5.33/sec on a spread build, against a 6–8 target.** BELOW the band, and
+for the mirror-image reason to the Necromancer's 8.75: this class owns **no
+very-fast node at all.** Its fastest bucket is `fast`, so every eight-slot build
+is some mix of 1.2s and 2.0s and the arithmetic tops out at 6.67/sec even if all
+eight are fast. The spread and fastest-8 builds are identical here for the same
+reason. Held — reaching the band needs a rule about bucket mix, not a
+per-skill edit.
 
 **Distribution.** Tactics 4 medium-or-faster of 7 non-capstone actives, 0 very
 slow — passes. Bow 4 of 8, 0 very slow — passes. **Armor is 3 of 4 and cannot
@@ -159,21 +178,18 @@ non-binding, which is the opposite of the Necromancer's nine.
 
 ### HELD
 
-**1. Disciplined Breath has lost its function.** It restored 12 HP and 25
-Resolve. Resolve is superseded, and Footing cannot be restored by a cast
-without contradicting its one rule — stacks are earned by standing still.
-The node is a 12 HP heal on a 3s cooldown until ruled, and it is the strongest
-deletion candidate in the pass.
+**RESOLVED — Disciplined Breath is deleted.** See the section above.
 
-**2. Guard Break's weaken is now nine frames.** Ruling 6 applied
-mechanically gives 560ms under the fast bucket's 800ms. A 30% weaken that
-short is a rounding error, and the doc called this the best defensive value in
-the class. Either the node wants the medium bucket, or ruling 6 wants a floor
-below which a rider is cut entirely rather than shortened into meaninglessness.
+**RESOLVED — Guard Break's weaken.** It was a ruling-6 casualty at 560ms under
+the first bucket table. The rescale to a 1.2s fast bucket puts it at 840ms,
+clear of the 500ms floor that this node's failure produced.
 
-**3. No high-tier node in Tactics or Armor.** See above.
+**1. No high-tier node in Tactics or Armor.** Logged against the power-curve
+pass, which owns damage values. Ruling 1 forbids retuning them here, and unlike
+the Necromancer's Singularity there is no mislabelled total to correct — these
+nodes are genuinely medium.
 
-**4. Agility is undocumented and Armor is 7 of 10.** Thirteen built nodes have
+**2. Agility is undocumented and Armor is 6 of 10.** Fourteen built nodes have
 no counterpart in this file.
 
 
@@ -199,7 +215,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 fast (800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -235,7 +251,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (13 × 2 pulses = 26)
-PACE:                 fast (800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               2 pulses 140ms apart, each rolling its own hits
@@ -311,12 +327,13 @@ RANGE:                n/a
 TARGETS:              self; the armed strike deals ×2.5 and stuns
 --- output ---
 DAMAGE TIER:          none (0) at cast
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               the armed strike gains ×2.5 damage and stun 700ms on
-                      its targets. Armed window 2100ms, cut from 3000ms by
-                      roster ruling 6 to sit under the 3s cooldown. Fires only
+                      its targets. Armed window 3000ms as authored — the
+                      rescaled slow bucket's 4s clears it, so ruling 6 makes no
+                      cut here. Fires only
                       when a Tactics attack is off cooldown with an enemy in
                       its range (ruling 5)
 DOT:                  none
@@ -354,7 +371,7 @@ RANGE:                melee long (100px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -389,7 +406,7 @@ RANGE:                range short (190px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               NO knockdown — `knockdownMs 0`, deliberately zeroed in
@@ -464,13 +481,13 @@ RANGE:                range medium (300px)
 TARGETS:              1 marked
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               taunt 2100ms on the marked enemy, PLUS a 2100ms window
+RIDERS:               taunt 2800ms on the marked enemy, PLUS a 2800ms window
                       in which ALL of the player's damage is ×1.25 — global,
-                      not mark-only (see note). Both cut from 4000ms by roster
-                      ruling 6 to sit under the 3s cooldown
+                      not mark-only (see note). Both cut from an authored
+                      4000ms by roster ruling 6 (70% of the 4s cooldown)
 DOT:                  none
 AFFECTS:              enemies + self
 --- automation ---
@@ -513,7 +530,7 @@ RANGE:                range short (170px)
 TARGETS:              uncapped in ring (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (34) — 75 against stunned or slowed targets
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               ×2.2 per target that is currently STUNNED or SLOWED,
@@ -600,7 +617,7 @@ automation in the roster.
 SKILL NAME:           Guard Break
 CLASS / TREE / TIER:  samurai / Armor / tier_code 0
 TYPE:                 active
-AXIS POSITION:        1 (of 7)
+AXIS POSITION:        1 (of 6)
 --- delivery ---
 CAST:                 melee
 SHAPE:                multi-target (uncapped circle r74)
@@ -608,10 +625,11 @@ RANGE:                melee short (74px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 fast (800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               weaken 30% for 560ms — RULING 6 CASUALTY, see COST
+RIDERS:               weaken 30% for 840ms, cut from an authored 4000ms by
+                      roster ruling 6 (70% of the 1.2s cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -626,15 +644,14 @@ ENGINE:               Footing-neutral, and it is delivered from a plant.
                       Under Resolve this node generated nothing because it was
                       not a Blade strike; Footing does not make that
                       distinction, so the old dead spot is gone
-COST:                 RULING 6 CASUALTY — REPORTED, NOT RESOLVED. The weaken
-                      was 4000ms on a 3000ms cooldown, which the fast bucket
-                      took to 800ms; ruling 6 then cut the weaken to 560ms to
-                      keep it under. A 30% weaken lasting nine frames is not a
-                      debuff, it is a rounding error, and this was the best
-                      defensive value in the class. Either Guard Break wants
-                      the medium bucket (weaken 1050ms) or ruling 6 wants a
-                      floor below which a rider is cut entirely rather than
-                      shortened into meaninglessness
+COST:                 a 30% weaken on four enemies is the best defensive
+                      value in the class and it is invisible. Nothing on screen
+                      tells the player it is working, and a new player will drop
+                      it for something with a bigger number. Under the first
+                      bucket table this node was a ruling-6 casualty at 560ms —
+                      nine frames of weaken, which reads as a broken skill. The
+                      rescale to a 1.2s fast bucket puts it at 840ms, clear of
+                      the 500ms floor the casualty produced
 VISUAL:               a short hard strike at the guard hand; the enemy's next
                       swing visibly lacks commitment
 FLAVOR:               He is not trying to hurt them. He is trying to make
@@ -644,7 +661,7 @@ FLAVOR:               He is not trying to hurt them. He is trying to make
 SKILL NAME:           Parry
 CLASS / TREE / TIER:  samurai / Armor / tier_code 1
 TYPE:                 active
-AXIS POSITION:        2 (of 7)
+AXIS POSITION:        2 (of 6)
 --- delivery ---
 CAST:                 instant-at-range
 SHAPE:                multi-target (area at the attacker)
@@ -652,7 +669,7 @@ RANGE:                melee short (at the attacker)
 TARGETS:              cap 2
 --- output ---
 DAMAGE TIER:          medium (22 riposte, 36 with Counterstrike owned)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               riposte — resolves as an immediate counter-strike on
@@ -679,57 +696,10 @@ FLAVOR:               He does not block. Blocking is agreeing to be hit
                       somewhere convenient. This is closer to declining to
                       accept delivery.
 
-SKILL NAME:           Disciplined Breath
-CLASS / TREE / TIER:  samurai / Armor / tier_code 2
-TYPE:                 active
-AXIS POSITION:        3 (of 7)
---- delivery ---
-CAST:                 self
-SHAPE:                none
-RANGE:                n/a
-TARGETS:              self
---- output ---
-DAMAGE TIER:          none (0)
-PACE:                 slow (3000ms)
-DOMAIN:               mental
---- effects ---
-RIDERS:               restores 12 HP. RULING CONFLICT — HELD: the second half
-                      restored 25 Resolve, and Resolve is superseded. Footing
-                      cannot be restored by a skill — it is earned by standing
-                      still, and granting stacks for a cast contradicts the
-                      engine outright. The node is a 12 HP heal until ruled
-DOT:                  none
-AFFECTS:              self
---- automation ---
-TRIGGER:              COOLDOWN_READY when Footing is below 4 stacks
-THREAT:               none
---- growth ---
-RANK ADDS:            +4 HP per rank. The Resolve half is held — see RIDERS
---- identity ---
-ENGINE:               HELD. Under Resolve this was the only node that
-                      generated without an enemy acting. Under Footing there is
-                      nothing for it to generate, and inventing a stack grant
-                      would break the engine's one rule
-COST:                 twelve health is not a heal, and with the Resolve half
-                      held this node is now ONLY that. It was a resource valve
-                      on an engine that no longer exists. Of everything in this
-                      pass it is the node most likely to want deleting rather
-                      than rewriting
-VISUAL:               one full breath, shoulders dropping, everything else
-                      briefly slowing around him
-FLAVOR:               Kyoto taught him that the breath is not preparation for
-                      the technique. The breath is the technique and
-                      everything after it is follow-through.
-
-> **Energy has no referent:** the code restores 35 energy, and RumbleJam has
-> no energy resource. It was redirected to Resolve, and Resolve is now
-> superseded too — so the substitution has failed twice and the node is held.
-> See its RIDERS line.
-
 SKILL NAME:           Counterstrike
-CLASS / TREE / TIER:  samurai / Armor / tier_code 3
+CLASS / TREE / TIER:  samurai / Armor / tier_code 2
 TYPE:                 passive
-AXIS POSITION:        4 (of 7)
+AXIS POSITION:        3 (of 6)
 --- delivery ---
 CAST:                 n/a
 SHAPE:                n/a
@@ -768,9 +738,9 @@ FLAVOR:               The counter is not a reaction. A reaction is late by
                       place he decided on some while ago.
 
 SKILL NAME:           Immovable Mind
-CLASS / TREE / TIER:  samurai / Armor / tier_code 4
+CLASS / TREE / TIER:  samurai / Armor / tier_code 3
 TYPE:                 passive
-AXIS POSITION:        5 (of 7)
+AXIS POSITION:        4 (of 6)
 --- delivery ---
 CAST:                 n/a
 SHAPE:                n/a
@@ -806,9 +776,9 @@ FLAVOR:               They have stopped trying to stagger him. Not out of
                       embarrassing to make.
 
 SKILL NAME:           Kiai
-CLASS / TREE / TIER:  samurai / Armor / tier_code 5
+CLASS / TREE / TIER:  samurai / Armor / tier_code 4
 TYPE:                 active
-AXIS POSITION:        6 (of 7)
+AXIS POSITION:        5 (of 6)
 --- delivery ---
 CAST:                 melee
 SHAPE:                fan (wide) (90° total)
@@ -816,7 +786,7 @@ RANGE:                melee long (110px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (10)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               stun 900ms
@@ -842,9 +812,9 @@ FLAVOR:               It is not loud. That is what surprises people. It is
                       it before the ear does.
 
 SKILL NAME:           Perfect Form
-CLASS / TREE / TIER:  samurai / Armor / tier_code 6
+CLASS / TREE / TIER:  samurai / Armor / tier_code 5
 TYPE:                 active
-AXIS POSITION:        7 (of 7)
+AXIS POSITION:        6 (of 6)
 --- delivery ---
 CAST:                 self
 SHAPE:                none (auto-ripostes every hit for the duration)
@@ -907,7 +877,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 fast (800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -949,7 +919,7 @@ TARGETS:              pierces all enemies along the line (port change — see
                       COST)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -986,11 +956,11 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — slow ×0.45 for 1050ms, cut from 4000ms by
-                      roster ruling 6 to sit under the 1.5s cooldown
+RIDERS:               AUTHORED — slow ×0.45 for 1400ms, cut from an authored
+                      4000ms by roster ruling 6 (70% of the 2s cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1056,13 +1026,13 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               AUTHORED — on impact, taunts every enemy within 150px
-                      of the target for 2100ms (cut from 3000ms by roster
-                      ruling 6), pulling them toward the arrow rather than the
-                      Samurai
+                      of the target for 3000ms as authored — the rescaled
+                      slow bucket's 4s clears it — pulling them toward the
+                      arrow rather than the Samurai
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1102,7 +1072,7 @@ RANGE:                range short (220px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (1500ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               the caster dashes as part of the cast; the dash itself
@@ -1140,12 +1110,12 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — burn DoT, 6 per 1000ms for 2100ms (cut from
-                      5000ms by roster ruling 6); the burn spreads once to an
-                      enemy within 60px on the target's death
+RIDERS:               AUTHORED — burn DoT, 6 per 1000ms for 2800ms (cut from
+                      an authored 5000ms by roster ruling 6); the burn spreads
+                      once to an enemy within 60px on the target's death
 DOT:                  6 per 1000ms for 5000ms
 AFFECTS:              enemies
 --- automation ---
@@ -1178,13 +1148,13 @@ TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
 CAST:                 placed
-SHAPE:                ground area (r130, persistent hazard 2100ms — cut from
-                      3000ms by roster ruling 6)
+SHAPE:                ground area (r130, persistent hazard 3000ms — as
+                      authored; the rescaled slow bucket's 4s clears it)
 RANGE:                range short (240px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 8 per 350ms tick
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -1220,7 +1190,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 slow (3000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — root 2500ms; the rooted target also takes

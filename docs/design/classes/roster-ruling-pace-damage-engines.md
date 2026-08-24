@@ -33,18 +33,20 @@ Recomputed on `sum(1/cd)`, with a representative build taken evenly across the t
 
 **The correct formula reproduces the measured number.** The built game measures 4.1/sec in play and computes to 4.52/sec on `sum(1/cd)`, against 3.40/sec on `8/mean`. That agreement is the evidence for the formula, and the 0.51 figure was never reconcilable with the 4.1 sitting beside it in the same sentence.
 
-**What this changes.** The gap is **4.1 → 6–8, roughly 1.5–1.8x**, not the ~8x the 0.51 figure implied. The bucket values below were sized against the wrong number and are **too fast at the quick end**: four very-fast slots alone produce 10/sec, and a Necromancer build under these buckets measures 9.25/sec against a 6–8 target. Flagged, not changed — retuning the table is a separate ruling.
+**What this changes.** The gap is **4.1 → 6–8, roughly 1.5–1.8x**, not the ~8x the 0.51 figure implied. The bucket table below has been **rescaled once against the corrected gap** — see the note under it.
 
 Fixed bucket values. "Slow" means one thing roster-wide:
 
 | bucket | cooldown |
 |---|---|
-| very fast | 0.4 s |
-| fast | 0.8 s |
-| medium | 1.5 s |
-| slow | 3 s |
-| very slow | 6 s |
+| very fast | 0.6 s |
+| fast | 1.2 s |
+| medium | 2.0 s |
+| slow | 4 s |
+| very slow | 8 s |
 | capstone | 20–30 s |
+
+**Rescaled once, against the corrected gap.** The first table (0.4 / 0.8 / 1.5 / 3 / 6) was sized against the 0.51/sec figure and assumed an ~8x jump. The real gap is 1.5–1.8x, and the first table overshot: the Necromancer measured **12.92/sec** under it against a 6–8 target, because four very-fast slots produce 6.7/sec between them before anything else is slotted.
 
 **Distribution rule, per tree of 10:** at least **4 nodes in medium or faster**, at most **2 in very slow**. Capstones are exempt from the distribution count.
 
@@ -94,7 +96,11 @@ Passive counts run from 1 (Druid) to 12 (Blacksmith), median 4. A shared budget 
 
 **A rider's duration must be shorter than its skill's cooldown.** Where the authored duration exceeds the new cooldown, **cut the duration to ~70% of the cooldown.** Do not lengthen the cooldown to fit the rider — pace is the thing being fixed, and solving a rider by slowing the skill undoes ruling 1.
 
-**Exception: transformations and forms keep their duration and take a capstone-bucket cooldown instead.** A form is the skill; shortening it to 70% of a fast cooldown deletes it rather than balancing it.
+**Floor: a rider that would be cut below 500ms is cut ENTIRELY, not shortened.** A 30% weaken lasting nine frames is worse than no weaken — it reads as a broken skill rather than a deliberate omission, and a player cannot tell the difference between a rider that is tiny and one that is failing. Where cutting the rider removes the skill's whole point, hold the skill and report it instead of deleting its reason to exist.
+
+**Exception: transformations and forms keep their duration and take a capstone-bucket cooldown instead** — **and a form's duration must be at most one third of its cooldown.** A form is the skill, so shortening it to 70% of a fast cooldown deletes it rather than balancing it; but the exception alone is not enough. The Necromancer's Marrownaut is a 30000ms form, and at the capstone bucket's 30s ceiling it was still permanently up. The one-third rule is the missing half: a 30s capstone carries a 10s form.
+
+**Stacking DoTs are not riders for this rule.** A stacking DoT whose duration exceeds its cooldown is rationed by its stack ceiling, not by the clock — Entropy Cascade's 5000ms DoT on a 600ms cooldown caps at 6 stacks and behaves correctly.
 
 This rule exists because ruling 1 sets cooldowns and says nothing about durations, so rebucketing silently converts every timed rider into a permanent one. It is not a per-class problem. Three landed in the Necromancer alone on the first pass:
 

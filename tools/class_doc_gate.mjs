@@ -86,12 +86,13 @@ const TEMPLATE_SET = new Set(TEMPLATE);
 //
 //   necromancer 31 — `necro_skeleton_branch`, an exclusive pair (Blood Skeleton
 //                    / Marrow Skeleton) both at tier_code 5.
-//   samurai     27 — Water, Stone and Fire Stance left the tree by ruling: the
+//   samurai     26 — Water, Stone and Fire Stance left the tree by ruling: the
 //                    stance machine is the built `three_stances` trait, not
 //                    three slotted nodes, so they are a trait spec in the
-//                    document's prose and no longer skill blocks. The
-//                    remaining seven Stances nodes moved into Armor.
-export const EXPECTED_BLOCKS = { necromancer: 31, samurai: 27 };
+//                    document's prose and no longer skill blocks. Five of the
+//                    remaining seven moved into Armor; Disciplined Breath was
+//                    deleted, its whole function having been a Resolve restore.
+export const EXPECTED_BLOCKS = { necromancer: 31, samurai: 26 };
 const DEFAULT_BLOCKS = 30;
 
 // A field line: a caps name at column 0 followed by a colon. Continuation lines
