@@ -997,6 +997,42 @@ the Samurai pass of the class-conversion revision
 
 ---
 
+## 19. The Savage's thirty skills scale on `cascade`, not on the engine in its own trait
+
+**Where:** `js/content/skills/savage_*.js` carry `scaleWith: 'cascade'` on 12
+skills (plus `armor` on 3). The class trait in `js/content/characters-toh.js` is
+`blood_dance`: `heatPer: 8`, `heatMax: 120`, `heatDecaySec: 3`.
+
+**What is wrong.** `blood_dance` is a momentum engine — it builds on hits, caps,
+and drains after three seconds of not connecting. That is the class's engine and
+it works. **No skill reads it.** The skills scale on `cascade`, which measures
+chain length (`ENGINE_SCALE.cascade`, max 18, uncapped by §8.3), a different
+quantity that happens to correlate with hitting things.
+
+So the Savage has a working engine its own kit ignores, and a scaling term
+nothing in the class was designed around. A player building for momentum is
+rewarded through a proxy, and every tuning change to `blood_dance` moves a
+number no skill consults.
+
+**Reproduce:** `node tools/balance_probe.mjs toh_savage` — heat climbs and
+decays as designed while output tracks chain length instead.
+
+**Ruled out.** Changing `blood_dance` to match `cascade`. The trait is the
+better engine and it is the one the conversion document independently arrived
+at, deriving Momentum from Warrior's Momentum's declared text without knowing
+the trait existed. Two designs converging is evidence for the design.
+
+**What a fix would have to do.** Repoint the class's `scaleWith` terms from
+`cascade` to the trait's heat. `ENGINE_SCALE` needs a `momentum` entry with a
+hard cap — `blood_dance` already has one at 120, unlike `cascade` which §8.3
+leaves uncapped, so this also closes an uncapped scaling term.
+
+**Status:** `js/` change, own patch. Raised by the engine ruling of the
+class-conversion revision (`docs/design/classes/engines-doc-vs-built.md`),
+which ruled the document's Momentum as the Savage's engine.
+
+---
+
 ## 12. A client-page eval dies on an undefined `.x` mid co-op
 
 **Where:** the client page, during the co-op phase.

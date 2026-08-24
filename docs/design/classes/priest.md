@@ -3,6 +3,32 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Conviction (doc). `marks` is superseded.**
+
+**Tree names — built names win.** Light→Reckoning, Rebuke→Judgment, Grace→Grace
+
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
+most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 5.50/sec on a spread build — BELOW the band.**
+
+**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
+Cooldowns moved; rider durations did not. Any rider now longer than its skill's
+cooldown is a permanent effect until that sweep runs.
+
+**Outstanding:** none.
+
 ---
 
 ## CLASS ENGINE — CONVICTION
@@ -72,7 +98,7 @@ component without pretending a Priest can tank.
 
 ---
 
-## TREE: LIGHT
+## TREE: RECKONING  (was Light in the source conversion)
 
 Role read: **the protection healer.** Shields, barriers, immunity windows,
 and three summonable guardians. This is the tree that makes the Priest a
@@ -82,7 +108,7 @@ means something with nobody else in the room.
 ---
 
 SKILL NAME:           Ray of Light
-CLASS / TREE / TIER:  priest / Light / tier_code 0
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -92,7 +118,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 fast (2400ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -116,7 +142,7 @@ FLAVOR:               He was taught that light is not a weapon, and he
                       the winged ones did with it.
 
 SKILL NAME:           Shield of Faith
-CLASS / TREE / TIER:  priest / Light / tier_code 1
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -126,7 +152,7 @@ RANGE:                range medium (300px placement)
 TARGETS:              n/a — cap 2 standing, +1 per 5 ranks
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               grants the recipient 1500ms harm immunity on spawn;
@@ -154,7 +180,7 @@ FLAVOR:               Faith is not a feeling. It is the decision to put
                       for them, and then to stand behind that decision.
 
 SKILL NAME:           Retribution Aura
-CLASS / TREE / TIER:  priest / Light / tier_code 2
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 2
 TYPE:                 buff
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -164,7 +190,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 8000ms — reflectPct 0.35
@@ -191,7 +217,7 @@ FLAVOR:               Rome taught him the word for this and it was not
                       distinction.
 
 SKILL NAME:           Guardian's Embrace
-CLASS / TREE / TIER:  priest / Light / tier_code 3
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -201,7 +227,7 @@ RANGE:                range short (180px)
 TARGETS:              every live ally and summon in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 30 to every friendly in r180; COSTS the Priest
@@ -232,7 +258,7 @@ FLAVOR:               It has to come from somewhere. Everyone who has ever
                       and almost none of them have asked.
 
 SKILL NAME:           Radiant Aura
-CLASS / TREE / TIER:  priest / Light / tier_code 4
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -242,7 +268,7 @@ RANGE:                melee long (placed at caster)
 TARGETS:              uncapped — friendlies inside are healed
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -270,7 +296,7 @@ FLAVOR:               A place where things get better slightly faster than
                       the radius larger.
 
 SKILL NAME:           Celestial Barrier
-CLASS / TREE / TIER:  priest / Light / tier_code 5
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -280,7 +306,7 @@ RANGE:                range short (160px placement)
 TARGETS:              n/a — cap 1
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               guardian holds position and body-blocks; substantially
@@ -309,7 +335,7 @@ FLAVOR:               Not a miracle. Masonry. It is simply that the material
                       him than stone would.
 
 SKILL NAME:           Divine Fortress
-CLASS / TREE / TIER:  priest / Light / tier_code 6
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 6
 TYPE:                 passive
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -347,7 +373,7 @@ FLAVOR:               He does not think of himself as a priest of light. He
                       came from.
 
 SKILL NAME:           Guardian's Blessing
-CLASS / TREE / TIER:  priest / Light / tier_code 7
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -357,7 +383,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               harm immunity 4000ms — takes no damage from any source
@@ -389,7 +415,7 @@ FLAVOR:               Nothing touches him. He has never been comfortable
 > cooldown instead. Overrule if you'd rather it scale freely.
 
 SKILL NAME:           Divine Intervention
-CLASS / TREE / TIER:  priest / Light / tier_code 8
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -400,7 +426,7 @@ TARGETS:              1 — the most-injured ally (co-op) or most-injured
                       summon (solo); does not fire with neither present
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (30000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               full heal to the target plus 2000ms harm immunity;
@@ -437,7 +463,7 @@ FLAVOR:               He does not ask for this one. He has never been sure
 > that the conversion is worth doing.
 
 SKILL NAME:           Aegis of Dawn
-CLASS / TREE / TIER:  priest / Light / tier_code 9
+CLASS / TREE / TIER:  priest / Reckoning / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -448,7 +474,7 @@ TARGETS:              n/a — 4 guardians at once, 25000ms lifespan, ignoring
                       the Shield of Faith cap
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               the four hold a ring formation around the Priest and
@@ -479,7 +505,7 @@ FLAVOR:               The first light is not warm. Anyone who has stood a
 
 ---
 
-## TREE: REBUKE
+## TREE: JUDGMENT  (was Rebuke in the source conversion)
 
 Role read: **the damage spec.** This is the Priest as a WoW Shadow or
 Retribution — the tree you take when the group already has healing or when
@@ -489,7 +515,7 @@ damage tier and its only real burst.
 ---
 
 SKILL NAME:           Smite
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 0
+CLASS / TREE / TIER:  priest / Judgment / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -499,7 +525,7 @@ RANGE:                melee short (72px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 fast (2200ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               weaken 25% for 4000ms
@@ -523,7 +549,7 @@ FLAVOR:               The word means to strike. It has always meant to
                       were being kind to themselves.
 
 SKILL NAME:           Rebuke of the Heretic
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 1
+CLASS / TREE / TIER:  priest / Judgment / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -533,7 +559,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               fear — target flees for 2000ms (port addition, see COST)
@@ -562,7 +588,7 @@ FLAVOR:               He does not raise his voice. He has found that the
 > its name implies rather than raising the number. Invention, flagged.
 
 SKILL NAME:           Divine Wrath
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 2
+CLASS / TREE / TIER:  priest / Judgment / tier_code 2
 TYPE:                 buff
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -572,7 +598,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 8000ms — damageMult +0.25
@@ -598,7 +624,7 @@ FLAVOR:               He was taught that wrath belongs to someone else. He
                       gentler.
 
 SKILL NAME:           Word of Power
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 3
+CLASS / TREE / TIER:  priest / Judgment / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -608,7 +634,7 @@ RANGE:                range short (180px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               slow ×0.55 for 2500ms; weaken 25% for 4000ms
@@ -634,7 +660,7 @@ FLAVOR:               One word. He will not tell anyone which one, and the
                       repeat it afterward.
 
 SKILL NAME:           Judgment Ray
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 4
+CLASS / TREE / TIER:  priest / Judgment / tier_code 4
 TYPE:                 channel
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -644,7 +670,7 @@ RANGE:                range medium (320px)
 TARGETS:              1 (locks nearest)
 --- output ---
 DAMAGE TIER:          low (9 per tick)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               does NOT break on movement (ruling 6); 60% tick rate
@@ -672,7 +698,7 @@ FLAVOR:               It comes from above and he has stopped claiming to
                       authority he is permitted to point it.
 
 SKILL NAME:           Sanctified Ground
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 5
+CLASS / TREE / TIER:  priest / Judgment / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -682,7 +708,7 @@ RANGE:                melee long (140px)
 TARGETS:              uncapped — heals friendlies, damages nothing
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -708,7 +734,7 @@ FLAVOR:               Ground is not holy. Ground is ground. What he does is
                       that this particular patch of it is going to behave.
 
 SKILL NAME:           Vanquisher's Zeal
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 6
+CLASS / TREE / TIER:  priest / Judgment / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -718,7 +744,7 @@ RANGE:                melee short (60px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          medium (22) — 44 against stunned or slowed targets
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               doubles to 44 per target that is currently STUNNED or
@@ -745,7 +771,7 @@ FLAVOR:               He is not fast. He has simply noticed that a thing
                       the remainder is arithmetic.
 
 SKILL NAME:           Vanquishing Light
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 7
+CLASS / TREE / TIER:  priest / Judgment / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -755,7 +781,7 @@ RANGE:                range medium (320px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               drain — heals the Priest for 60% of damage dealt
@@ -782,7 +808,7 @@ FLAVOR:               What he takes back is not theirs and was never his. He
                       question of whose it was to move.
 
 SKILL NAME:           Righteous Fury
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 8
+CLASS / TREE / TIER:  priest / Judgment / tier_code 8
 TYPE:                 buff
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -792,7 +818,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 8000ms — attackSpeedMult +0.25, damageMult +0.15
@@ -815,7 +841,7 @@ FLAVOR:               Righteous is doing a great deal of work in that name
                       and he is aware of it.
 
 SKILL NAME:           Divine Judgment
-CLASS / TREE / TIER:  priest / Rebuke / tier_code 9
+CLASS / TREE / TIER:  priest / Judgment / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -825,7 +851,7 @@ RANGE:                range medium (300px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          high (50)
-PACE:                 very slow (45000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               weaken 30% for 6000ms
@@ -875,7 +901,7 @@ RANGE:                melee long (130px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 fast (3000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 12 to the Priest and every friendly in r130 in
@@ -913,7 +939,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 8000ms — regenPerSec 8
@@ -949,7 +975,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               strips EVERY affliction on the Priest at once — DoT
@@ -990,7 +1016,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 10000ms — damageMult +0.10, regenPerSec 6
@@ -1026,7 +1052,7 @@ RANGE:                range medium (260px)
 TARGETS:              uncapped along both beams
 --- output ---
 DAMAGE TIER:          low (6 per 400ms tick)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 5 per 400ms tick to every friendly standing in
@@ -1066,7 +1092,7 @@ RANGE:                range long (400px)
 TARGETS:              1 — the most-injured ally (co-op) or summon (solo)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 60; COSTS the Priest 25 HP. The code already
@@ -1141,7 +1167,7 @@ RANGE:                melee long (120px)
 TARGETS:              every ally and summon in the field
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1180,7 +1206,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (24000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               UNTARGETABLE for 3000ms — enemies lose him entirely and
@@ -1218,7 +1244,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped — every friendly in the field
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (55000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none

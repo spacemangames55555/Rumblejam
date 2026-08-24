@@ -3,6 +3,32 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Momentum (doc) — which is what the built `blood_dance` trait already does.**
+
+**Tree names — built names win.** Obsidian→Primal Fury, Blood→Bloodbound, Jaguar→Aftermath
+
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
+most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 5.75/sec on a spread build — BELOW the band.**
+
+**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
+Cooldowns moved; rider durations did not. Any rider now longer than its skill's
+cooldown is a permanent effect until that sweep runs.
+
+**Outstanding:** thirty skills read `cascade` instead of the trait — KNOWN-DEFECTS #19.
+
 ---
 
 ## CLASS ENGINE — MOMENTUM (derived, and already named in code)
@@ -71,7 +97,7 @@ than a design one — the tree contents are fine.
 
 ---
 
-## TREE: OBSIDIAN
+## TREE: PRIMAL FURY  (was Obsidian in the source conversion)
 
 Role read: **the melee DPS and the engine tree.** Nine strikes, almost all
 inside 100px, and the Momentum passive that pays for the whole class. It is
@@ -80,7 +106,7 @@ the tree that has to keep swinging, and it contains the reason to.
 ---
 
 SKILL NAME:           Obsidian Slash
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 0
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -90,7 +116,7 @@ RANGE:                melee short (74px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (19)
-PACE:                 fast (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -116,7 +142,7 @@ FLAVOR:               Volcanic glass takes an edge three molecules across.
                       ever shatters the way it does, either.
 
 SKILL NAME:           Jagged Wound
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 1
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -126,7 +152,7 @@ RANGE:                melee short (72px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (14) — plus 30 over the bleed
-PACE:                 medium (5000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none beyond the bleed
@@ -154,7 +180,7 @@ FLAVOR:               The blade breaking is not a failure. He counted on it
                       breaking and left most of it behind on purpose.
 
 SKILL NAME:           Warrior's Momentum
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 2
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 2
 TYPE:                 passive
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -193,7 +219,7 @@ FLAVOR:               He does not warm up. There is no warming up. There is
                       started, and stopping it is somebody else's problem.
 
 SKILL NAME:           Savage Leap
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 3
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -204,7 +230,7 @@ TARGETS:              uncapped in the landing area (identity skill — breadth
                       is the point)
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               stun 700ms in the landing circle; the Savage travels
@@ -233,7 +259,7 @@ FLAVOR:               Down is the direction with the most force available and
                       whole of his technique and has never pretended otherwise.
 
 SKILL NAME:           Brutal Cleave
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 4
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -243,7 +269,7 @@ RANGE:                melee long (100px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 medium (6000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -269,7 +295,7 @@ FLAVOR:               Brutal is a word for the observer. From the inside it
                       several answers, no follow-up required.
 
 SKILL NAME:           Skull Splitter
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 5
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -279,7 +305,7 @@ RANGE:                melee long (84px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               stun 900ms
@@ -304,7 +330,7 @@ FLAVOR:               A specific target, a specific angle, and a very old
                       argument about whether it counts as a technique.
 
 SKILL NAME:           Terrifying Roar
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 6
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -314,7 +340,7 @@ RANGE:                range short (170px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               slow ×0.6 for 2500ms; weaken 25% for 4000ms — gated in
@@ -343,7 +369,7 @@ FLAVOR:               He is not trying to frighten anyone. Frightening people
                       internal reasons.
 
 SKILL NAME:           Headtaker
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 7
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -353,7 +379,7 @@ RANGE:                melee short (60px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          medium (20) — 70 on the finisher
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — ×3.5 against any target below 30% HP,
@@ -390,7 +416,7 @@ FLAVOR:               The head is not a trophy. He has been asked and has
 > Obsidian tree its one moment of acceleration.
 
 SKILL NAME:           Scent of Blood
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 8
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 8
 TYPE:                 passive
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -428,7 +454,7 @@ FLAVOR:               It is not that he can smell it. Everyone can smell it.
                       once it has arrived.
 
 SKILL NAME:           Endless Slaughter
-CLASS / TREE / TIER:  savage / Obsidian / tier_code 9
+CLASS / TREE / TIER:  savage / Primal Fury / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -438,7 +464,7 @@ RANGE:                melee long (140px per link)
 TARGETS:              cascades from target to target for the duration
 --- output ---
 DAMAGE TIER:          low (14 per strike)
-PACE:                 very slow (55000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               auto-casts a chain of strikes, each finding the nearest
@@ -472,7 +498,7 @@ FLAVOR:               Endless is the wrong word and he has never used it. It
 
 ---
 
-## TREE: BLOOD
+## TREE: BLOODBOUND  (was Blood in the source conversion)
 
 Role read: **the sustain and ranged spec.** A reflect, a drain, a
 self-heal capstone, two bleeds and the class's only projectile. It is where
@@ -483,7 +509,7 @@ does.
 ---
 
 SKILL NAME:           Blood Spike
-CLASS / TREE / TIER:  savage / Blood / tier_code 0
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -493,7 +519,7 @@ RANGE:                range medium (320px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (17)
-PACE:                 fast (2200ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -521,7 +547,7 @@ FLAVOR:               His own, at first. He worked out later that it did not
                       original method.
 
 SKILL NAME:           Open Veins
-CLASS / TREE / TIER:  savage / Blood / tier_code 1
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -532,7 +558,7 @@ TARGETS:              AUTHORED — spreads to a new enemy within 110px each
                       time it ticks, cap 5 simultaneous
 --- output ---
 DAMAGE TIER:          none (0 direct) — 6 per 1000ms per bleeding enemy
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               every enemy carrying it counts as BLEEDING for Blood
@@ -566,7 +592,7 @@ FLAVOR:               He does not open anything. He points out, with some
 > matching the Wizard's Plague treatment.
 
 SKILL NAME:           Crimson Nova
-CLASS / TREE / TIER:  savage / Blood / tier_code 2
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -576,7 +602,7 @@ RANGE:                melee long (140px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -600,7 +626,7 @@ FLAVOR:               There is more of it in a room than anyone assumes and
                       half of that sentence to be a temporary condition.
 
 SKILL NAME:           Red Harvest
-CLASS / TREE / TIER:  savage / Blood / tier_code 3
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 3
 TYPE:                 passive
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -635,7 +661,7 @@ FLAVOR:               A harvest is a thing you plan for a year and take in a
                       has never liked being told the metaphor is unkind.
 
 SKILL NAME:           Transfusion
-CLASS / TREE / TIER:  savage / Blood / tier_code 4
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -645,7 +671,7 @@ RANGE:                range medium (300px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               drain — heals the Savage 60% of damage dealt
@@ -672,7 +698,7 @@ FLAVOR:               An exchange. He is aware that the other party has not
                       procedural.
 
 SKILL NAME:           Blood Ward
-CLASS / TREE / TIER:  savage / Blood / tier_code 5
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 5
 TYPE:                 buff
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -682,7 +708,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 7000ms — reflectPct 0.35
@@ -710,7 +736,7 @@ FLAVOR:               Not protection. He has been very clear that it is not
                       were going to be.
 
 SKILL NAME:           Sacrificial Might
-CLASS / TREE / TIER:  savage / Blood / tier_code 6
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -720,7 +746,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               AUTHORED — spends 25% of CURRENT health and grants
@@ -756,7 +782,7 @@ FLAVOR:               The offering is not a payment. Nobody is being paid.
 > power) and I wrote it that way. Design proposal, not conversion.
 
 SKILL NAME:           Hemorrhage
-CLASS / TREE / TIER:  savage / Blood / tier_code 7
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 7
 TYPE:                 stacking_dot
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -766,7 +792,7 @@ RANGE:                range medium (300px)
 TARGETS:              1 per cast (nearest below max stacks)
 --- output ---
 DAMAGE TIER:          low (4 per tick)
-PACE:                 fast (3000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               stacks to 4; every stacked target counts as BLEEDING
@@ -796,7 +822,7 @@ FLAVOR:               There is a difference between bleeding and hemorrhaging
                       to stop it.
 
 SKILL NAME:           Blood Mire
-CLASS / TREE / TIER:  savage / Blood / tier_code 8
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -806,7 +832,7 @@ RANGE:                melee long (90px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 4 per 600ms tick
-PACE:                 slow (11000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               slow ×0.6 to everything inside; the field marks
@@ -834,7 +860,7 @@ FLAVOR:               The ground here remembers. Not metaphorically. There
                       city and he has simply asked for some of it back.
 
 SKILL NAME:           Blood God's Hunger
-CLASS / TREE / TIER:  savage / Blood / tier_code 9
+CLASS / TREE / TIER:  savage / Bloodbound / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -844,7 +870,7 @@ RANGE:                range short (180px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          high (40)
-PACE:                 very slow (55000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 12 per enemy PRESENT in r180, maximum 5,
@@ -877,7 +903,7 @@ FLAVOR:               He does not believe it is a god and he does not believe
 
 ---
 
-## TREE: JAGUAR
+## TREE: AFTERMATH  (was Jaguar in the source conversion)
 
 Role read: **the survivability and speed spec.** Two transformations, three
 defensive passives, a heal, a confusion and a totem. It is the only tree in
@@ -887,7 +913,7 @@ Savage stay standing long enough for Momentum to reach five.
 ---
 
 SKILL NAME:           Feral Lunge
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 0
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -897,7 +923,7 @@ RANGE:                range short (190px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 fast (2600ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockdown — stun 350ms per enemy hit; caster displaced
@@ -927,7 +953,7 @@ FLAVOR:               The cat does not stalk because it is patient. It stalks
                       afford to spend it early.
 
 SKILL NAME:           Predator's Snarl
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 1
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -937,7 +963,7 @@ RANGE:                range medium (300px)
 TARGETS:              1 (nearest)
 --- output ---
 DAMAGE TIER:          none (0) — chip 8 per 600ms during the confusion
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               CONFUSION 80% for 3500ms — the target attacks other
@@ -965,7 +991,7 @@ FLAVOR:               Not a threat. A threat is information about the future.
                       hearing it has no framework for disputing.
 
 SKILL NAME:           Jaguar Spirit
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 2
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 2
 TYPE:                 transformation
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -975,7 +1001,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (30000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               form 10000ms — attackSpeedMult +0.25, moveSpeedMult
@@ -1006,7 +1032,7 @@ FLAVOR:               Not a costume and not a possession. Something that was
                       to set the pace.
 
 SKILL NAME:           Thick Hide
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 3
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 3
 TYPE:                 passive
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -1043,7 +1069,7 @@ FLAVOR:               Rosettes are not decoration and were never decoration.
                       it is doing two jobs.
 
 SKILL NAME:           Spirit of the Hunt
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 4
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 4
 TYPE:                 buff
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -1053,7 +1079,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 8000ms — moveSpeedMult +0.15, attackSpeedMult
@@ -1083,7 +1109,7 @@ FLAVOR:               The hunt is not the chase. The chase is four seconds at
                       him through those.
 
 SKILL NAME:           Blood Scent
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 5
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 5
 TYPE:                 passive
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -1126,7 +1152,7 @@ FLAVOR:               He does not hunt the healthy ones. Not out of mercy —
 > this class gets a tooltip callout, make it this.
 
 SKILL NAME:           Lick the Wounds
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 6
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -1136,7 +1162,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               heals 28 to self
@@ -1162,7 +1188,7 @@ FLAVOR:               Undignified and effective, in that order, and he
                       stopped ranking those two some time ago.
 
 SKILL NAME:           Sun Totem
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 7
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -1172,7 +1198,7 @@ RANGE:                melee long (130px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 7 per 500ms tick
-PACE:                 slow (13000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1202,7 +1228,7 @@ FLAVOR:               Not a prayer and not a request. It is a marker, placed
                       punctual about collections.
 
 SKILL NAME:           Apex Instinct
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 8
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 8
 TYPE:                 passive
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -1240,7 +1266,7 @@ FLAVOR:               Apex is a position in a diagram. It has never once
                       that.
 
 SKILL NAME:           Avatar of the Jaguar
-CLASS / TREE / TIER:  savage / Jaguar / tier_code 9
+CLASS / TREE / TIER:  savage / Aftermath / tier_code 9
 TYPE:                 buff
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -1250,7 +1276,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 10000ms — damageMult +0.25, attackSpeedMult

@@ -3,6 +3,32 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Rhythm (doc engine, built name, per §8.3).**
+
+**Tree names — built names win.** HELD — see below
+**HELD, and it is a genuine exception.** Songs is clearly the support tree and maps to **Ensemble** (heal/shield/ward/drain). But Battle (melee) and Sonic Chaos (ranged control) both have a claim on **Cadence** and **Requiem**, and neither built name carries a role signal strong enough to decide it.
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
+most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 5.50/sec on a spread build — BELOW the band.**
+
+**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
+Cooldowns moved; rider durations did not. Any rider now longer than its skill's
+cooldown is a permanent effect until that sweep runs.
+
+**Outstanding:** the doc's Tempo→song-radius payout is not in the built `rhythm` term.
+
 ---
 
 ## CLASS ENGINE — TEMPO
@@ -89,7 +115,7 @@ RANGE:                range short (220px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 fast (2500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals the Bard 10 on every cast
@@ -128,7 +154,7 @@ RANGE:                melee long (110px)
 TARGETS:              every ally and summon in the field
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (30000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -166,7 +192,7 @@ RANGE:                Tempo radius (120–260px)
 TARGETS:              self + all allies and summons in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 10000ms — damageMult +0.20 to everyone covered
@@ -203,7 +229,7 @@ RANGE:                Tempo radius (120–260px)
 TARGETS:              self + all allies and summons in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 8000ms — regenPerSec 6 to everyone covered
@@ -239,7 +265,7 @@ RANGE:                Tempo radius (120–260px)
 TARGETS:              self + all allies and summons in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (90000ms — longest cooldown in the class)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               AUTHORED — timed 60000ms: everyone covered gains +20%
@@ -286,7 +312,7 @@ RANGE:                Tempo radius (120–260px)
 TARGETS:              self + all allies and summons in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               AUTHORED — timed 8000ms: everyone covered becomes
@@ -332,7 +358,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0) — the tick is 0 damage, purely a re-apply
-PACE:                 slow (12000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               slow ×0.55 and weaken 25% to everything inside
@@ -369,7 +395,7 @@ RANGE:                Tempo radius (120–260px)
 TARGETS:              self + all allies and summons in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 8000ms — damageMult +0.20, attackSpeedMult +0.20,
@@ -408,7 +434,7 @@ RANGE:                Tempo radius (120–260px)
 TARGETS:              self + all allies and summons in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals the Bard 30 immediately
@@ -445,7 +471,7 @@ RANGE:                Tempo radius (120–260px)
 TARGETS:              self + all allies and summons in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 10000ms — damageMult +0.30, attackSpeedMult
@@ -499,7 +525,7 @@ RANGE:                melee short (66px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          low (9 × 3 pulses = 27)
-PACE:                 fast (2800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               3 pulses 130ms apart, each rolling its own hits
@@ -533,7 +559,7 @@ RANGE:                Tempo radius (120–260px)
 TARGETS:              self + all allies and summons in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               timed 8000ms — attackSpeedMult +0.30, damageMult +0.15
@@ -573,7 +599,7 @@ RANGE:                melee long (90px)
 TARGETS:              chain, 2 jumps
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -606,7 +632,7 @@ RANGE:                melee long (110px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               stun 900ms
@@ -641,7 +667,7 @@ RANGE:                melee long (84px)
 TARGETS:              cap 5
 --- output ---
 DAMAGE TIER:          high (70)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               wind-up 600ms telegraph
@@ -677,7 +703,7 @@ RANGE:                range medium (280px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockdown — stun 900ms per enemy hit; caster displaced
@@ -713,7 +739,7 @@ RANGE:                n/a
 TARGETS:              self; each armed hit splashes r90
 --- output ---
 DAMAGE TIER:          none (0) at cast
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               the next 3 damaging hits each splash r90 for full
@@ -750,7 +776,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               absorb shield 50 for 5000ms
@@ -784,7 +810,7 @@ RANGE:                melee long (120px)
 TARGETS:              uncapped in area, judged per target
 --- output ---
 DAMAGE TIER:          medium (24) — 60 against targets below 35% HP
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — finisher: ×2.5 against any target below 35%
@@ -827,7 +853,7 @@ RANGE:                melee long (130px per link)
 TARGETS:              cascades from target to target for 8000ms
 --- output ---
 DAMAGE TIER:          low (14 per strike)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               for the duration every ally covered by any active song
@@ -877,7 +903,7 @@ RANGE:                range medium (260px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 fast (2600ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               knockback 120px; knockback-stun 200ms
@@ -912,7 +938,7 @@ RANGE:                melee long (120px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               knockback 140px; knockback-stun 200ms
@@ -1021,7 +1047,7 @@ RANGE:                range medium (260px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 slow (11000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               knockdown 200ms; leaves a damaging trail zone along the
@@ -1058,7 +1084,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (34)
-PACE:                 medium (5000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none
@@ -1094,7 +1120,7 @@ RANGE:                range medium (320px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               CONFUSION 4000ms (ruling 4) — the target attacks other
@@ -1135,7 +1161,7 @@ TARGETS:              uncapped in the cells (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          low (8)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               slow ×0.6 inside the cells
@@ -1173,7 +1199,7 @@ TARGETS:              5 projectiles, each seeking a separate target where
                       available (port change — see COST)
 --- output ---
 DAMAGE TIER:          low (8 per note)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               each note that hits an enemy already hit by another
@@ -1214,7 +1240,7 @@ RANGE:                range medium (340px)
 TARGETS:              chain, 4 jumps
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 very slow (45000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none

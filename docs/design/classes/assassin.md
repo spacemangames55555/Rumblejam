@@ -3,6 +3,32 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Shadow (doc).**
+
+**Tree names — built names win.** Traps→Killbox, Shadow→Shadow, Marksman→Range
+
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
+most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 5.75/sec on a spread build — BELOW the band.**
+
+**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
+Cooldowns moved; rider durations did not. Any rider now longer than its skill's
+cooldown is a permanent effect until that sweep runs.
+
+**Outstanding:** the concealment feed has no built counterpart and is new `js/` work.
+
 ---
 
 ## THE STRUCTURAL PROBLEM, AND THE RULING
@@ -82,7 +108,7 @@ Edge: applies to every damaging skill, magnitude in MainScene.
 
 ---
 
-## TREE: TRAPS
+## TREE: KILLBOX  (was Traps in the source conversion)
 
 Role read: **the zone controller, and the roster's only pre-placement
 class.** Nine devices and a detonator. It is the tree that decides where the
@@ -92,7 +118,7 @@ is committed *before* the enemies arrive.
 ---
 
 SKILL NAME:           Blade Trap
-CLASS / TREE / TIER:  assassin / Traps / tier_code 0
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -102,7 +128,7 @@ RANGE:                melee short (70px)
 TARGETS:              springs on the first enemy; the burst is uncapped
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 fast (3200ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -127,7 +153,7 @@ FLAVOR:               The first one he built took four hours and a great deal
                       sure the trade was in his favour.
 
 SKILL NAME:           Snare Trap
-CLASS / TREE / TIER:  assassin / Traps / tier_code 1
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -137,7 +163,7 @@ RANGE:                melee short (70px)
 TARGETS:              springs on the first enemy only
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               root 2800ms on whatever springs it
@@ -162,7 +188,7 @@ FLAVOR:               Dubai has no woods to learn this in. He learned it from
                       knot and unwilling to say why.
 
 SKILL NAME:           Trap Mastery
-CLASS / TREE / TIER:  assassin / Traps / tier_code 2
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 2
 TYPE:                 passive
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -201,7 +227,7 @@ FLAVOR:               Twenty years of doing something with your hands does
                       the parts that were never load-bearing.
 
 SKILL NAME:           Toxic Trap
-CLASS / TREE / TIER:  assassin / Traps / tier_code 3
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -212,7 +238,7 @@ TARGETS:              uncapped in the zone (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          low (6 direct) — the zone is where the damage lives
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               leaves a lingering poison zone when sprung
@@ -237,7 +263,7 @@ FLAVOR:               He does not carry the antidote. He has been asked about
                       expectation of accidents.
 
 SKILL NAME:           Flash Trap
-CLASS / TREE / TIER:  assassin / Traps / tier_code 4
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -247,7 +273,7 @@ RANGE:                melee long (80px)
 TARGETS:              springs on the first enemy
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               CONFUSION 85% for 3500ms on the springer (ruling 4) —
@@ -274,7 +300,7 @@ FLAVOR:               Not blinding. Blinding is permanent and he has never
                       somebody being sincerely mistaken.
 
 SKILL NAME:           Explosive Trap
-CLASS / TREE / TIER:  assassin / Traps / tier_code 5
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -285,7 +311,7 @@ TARGETS:              uncapped in the burst (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          medium (34)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -309,7 +335,7 @@ FLAVOR:               The trick is not the explosive. Anyone can obtain
                       explosive. The trick is the part that decides when.
 
 SKILL NAME:           Frost Trap
-CLASS / TREE / TIER:  assassin / Traps / tier_code 6
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -321,7 +347,7 @@ TARGETS:              uncapped in the field (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.55 to everything inside the field for 4500ms
@@ -346,7 +372,7 @@ FLAVOR:               Cold in Dubai is a manufactured thing and always has
                       instructive.
 
 SKILL NAME:           Remote Detonation
-CLASS / TREE / TIER:  assassin / Traps / tier_code 7
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -356,7 +382,7 @@ RANGE:                n/a
 TARGETS:              whatever each fired payload catches
 --- output ---
 DAMAGE TIER:          none (0) — it deals nothing itself
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               each device applies its own payload — bursts, roots,
@@ -386,7 +412,7 @@ FLAVOR:               The waiting is the work. The button is not the work and
                       he resents that everyone always asks about the button.
 
 SKILL NAME:           Caltrops
-CLASS / TREE / TIER:  assassin / Traps / tier_code 8
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -396,7 +422,7 @@ RANGE:                melee long (90px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 4 per 500ms tick
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.6 to everything inside
@@ -424,7 +450,7 @@ FLAVOR:               Two thousand years old and unimproved. There is nothing
                       that is the entire design.
 
 SKILL NAME:           Minefield
-CLASS / TREE / TIER:  assassin / Traps / tier_code 9
+CLASS / TREE / TIER:  assassin / Killbox / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -435,7 +461,7 @@ RANGE:                range short (200px)
 TARGETS:              per-device burst, uncapped
 --- output ---
 DAMAGE TIER:          medium (22 per device)
-PACE:                 very slow (45000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               the six do not count against the armed-device cap
@@ -485,7 +511,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (16) — 29 from concealment (×1.8)
-PACE:                 fast (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               ×1.8 stealthBonus when struck from concealment; the
@@ -521,7 +547,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               stealth 20000ms, flickering — attacking drops
@@ -570,7 +596,7 @@ RANGE:                melee short (75px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          high (48) — 86 from concealment (×1.8)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               ×1.8 stealthBonus from concealment; drops concealment
@@ -645,7 +671,7 @@ RANGE:                range medium (260px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          medium (22) — 40 from concealment
-PACE:                 slow (8000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               the Assassin arrives at the strike point; ×1.8 from
@@ -683,7 +709,7 @@ RANGE:                range short (200px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          none (0) — chip 8 per 700ms during the confusion
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               CONFUSION 85% for 3200ms with chip damage; plus
@@ -725,7 +751,7 @@ RANGE:                melee short (60px)
 TARGETS:              cap 2
 --- output ---
 DAMAGE TIER:          medium (20) — 36 from concealment
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — executes outright any target below 20% HP,
@@ -770,7 +796,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               instant stealth 5000ms plus UNTARGETABLE for 700ms —
@@ -848,7 +874,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (50000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               for the window, striking does NOT break concealment at
@@ -884,7 +910,7 @@ FLAVOR:               There is a state where the hiding and the working stop
 
 ---
 
-## TREE: MARKSMAN
+## TREE: RANGE  (was Marksman in the source conversion)
 
 Role read: **the safe tree, and the one that needed the most repair.** Ten
 thrown-weapon skills, six of them single-target with no rider as shipped.
@@ -894,7 +920,7 @@ authored riders below, it was six interchangeable stars.
 ---
 
 SKILL NAME:           Throwing Star
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 0
+CLASS / TREE / TIER:  assassin / Range / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -904,7 +930,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (15) — 27 from concealment
-PACE:                 fast (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               ×1.8 from concealment; drops concealment for 2000ms
@@ -929,7 +955,7 @@ FLAVOR:               Not accurate. Accurate is for one. He throws in the
                       screams.
 
 SKILL NAME:           Throwing Mastery
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 1
+CLASS / TREE / TIER:  assassin / Range / tier_code 1
 TYPE:                 passive
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -963,7 +989,7 @@ FLAVOR:               Mastery is a strong word for having done something an
                       strong word and other people keep applying it.
 
 SKILL NAME:           Rapid Shot
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 2
+CLASS / TREE / TIER:  assassin / Range / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -974,7 +1000,7 @@ TARGETS:              4 stars in sequence, 120ms apart, each seeking the
                       nearest available target (port change — see COST)
 --- output ---
 DAMAGE TIER:          low (7 per star)
-PACE:                 medium (4500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               only the FIRST star of the volley receives the
@@ -1003,7 +1029,7 @@ FLAVOR:               Rapid is not the same as hurried and he would like the
 > a four-star volley. Flagged.
 
 SKILL NAME:           Ensnaring Shot
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 3
+CLASS / TREE / TIER:  assassin / Range / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -1013,7 +1039,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (11)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — root 2500ms, and the rooted enemy also
@@ -1040,7 +1066,7 @@ FLAVOR:               One is a delay. Two is a bottleneck. Three would be
 > Name promises a snare; I added the root and the chain.
 
 SKILL NAME:           Piercing Strikes
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 4
+CLASS / TREE / TIER:  assassin / Range / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -1050,7 +1076,7 @@ RANGE:                range medium (380px)
 TARGETS:              AUTHORED — pierces every enemy along the line
 --- output ---
 DAMAGE TIER:          low (13)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               each successive enemy pierced takes 10% more than the
@@ -1080,7 +1106,7 @@ FLAVOR:               It does not lose energy going through. He has checked,
 > plural and says piercing. Added the pierce and the escalation.
 
 SKILL NAME:           Poisoned Stars
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 5
+CLASS / TREE / TIER:  assassin / Range / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -1090,7 +1116,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — heavy poison, 7 per 1000ms for 6000ms,
@@ -1119,7 +1145,7 @@ FLAVOR:               Same mixture as the blades. He sees no reason to
 > **AUTHORED:** no rider in ToH. A star called Poisoned with no poison.
 
 SKILL NAME:           Trick Shot
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 6
+CLASS / TREE / TIER:  assassin / Range / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -1129,7 +1155,7 @@ RANGE:                range medium (300px)
 TARGETS:              chain, 3 jumps
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -1153,7 +1179,7 @@ FLAVOR:               He worked this out on a wall in a warehouse over
                       to anybody who asked.
 
 SKILL NAME:           Fan of Blades
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 7
+CLASS / TREE / TIER:  assassin / Range / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -1163,7 +1189,7 @@ RANGE:                range short (170px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -1188,7 +1214,7 @@ FLAVOR:               Wasteful. He knows. There is a version of him that
                       survived a room this crowded.
 
 SKILL NAME:           Crippling Shot
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 8
+CLASS / TREE / TIER:  assassin / Range / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -1198,7 +1224,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — slow ×0.4 for 5000ms and vulnerability: the
@@ -1231,7 +1257,7 @@ FLAVOR:               Crippling is not about the leg. He has explained this
 > has one setup node.
 
 SKILL NAME:           Rain of Steel
-CLASS / TREE / TIER:  assassin / Marksman / tier_code 9
+CLASS / TREE / TIER:  assassin / Range / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -1241,7 +1267,7 @@ RANGE:                range short (240px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 11 per 300ms tick
-PACE:                 very slow (45000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none

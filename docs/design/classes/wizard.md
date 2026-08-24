@@ -3,6 +3,32 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: `shift` (built). Mana is CUT.**
+
+**Tree names — built names win.** HELD — see below
+**HELD, and it is a genuine exception.** **Attunement** holds all three `shift` nodes, so under the `shift` ruling it is the engine tree — but this document has no engine tree; its three are elemental domains (Fire/Wind, Ice/Poison, Ethereal). Mapping domains onto Attunement/Arcana/Dissonance has no role evidence either way.
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
+most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 7.67/sec on a spread build — IN BAND.**
+
+**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
+Cooldowns moved; rider durations did not. Any rider now longer than its skill's
+cooldown is a permanent effect until that sweep runs.
+
+**Outstanding:** every `consumes N mana` line is void; and the duplicate tier-0 openers are now LOAD-BEARING — `shift` pays for rotating domains and three near-identical bolts give nothing to rotate between.
+
 ---
 
 ## CLASS ENGINE — MANA (the only depleting engine in the roster)
@@ -94,7 +120,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 very fast (1200ms)
+PACE:                 very fast (600ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -131,7 +157,7 @@ RANGE:                range medium (320px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12 per bolt)
-PACE:                 medium (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -166,7 +192,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (6000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               AUTHORED — detonates on death: an enemy killed while
@@ -206,7 +232,7 @@ RANGE:                melee long (135px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 medium (5000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -240,7 +266,7 @@ RANGE:                range medium (260px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               caster displaced 260px along the path
@@ -274,7 +300,7 @@ RANGE:                melee short (70px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 12 per 480ms tick
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -310,7 +336,7 @@ RANGE:                melee long (120px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (34)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -346,7 +372,7 @@ TARGETS:              uncapped along line (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          high (40)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -383,7 +409,7 @@ RANGE:                range short (180px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (26 × 3 pulses = 78)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               3 pulses 320ms apart, each rolling its own hits
@@ -418,7 +444,7 @@ RANGE:                n/a
 TARGETS:              aura: uncapped in r150
 --- output ---
 DAMAGE TIER:          low (7 per 500ms aura pulse)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               form 12000ms — damageMult +0.50, attackSpeedMult +0.50;
@@ -473,7 +499,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 fast (1500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -511,7 +537,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 medium (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — poison DoT, 5 per 1000ms for 6000ms
@@ -550,7 +576,7 @@ RANGE:                melee short (70px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0) — deals literally zero, tick damage is 0
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.45 to everything standing in the field
@@ -589,7 +615,7 @@ RANGE:                melee long (80px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.5 for 4000ms; weaken 30% for 4000ms
@@ -624,7 +650,7 @@ RANGE:                melee long (140px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 150px; knockback-stun 200ms
@@ -660,7 +686,7 @@ RANGE:                range short (160px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 9 per 500ms tick
-PACE:                 slow (11000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.55 to everything inside
@@ -696,7 +722,7 @@ RANGE:                range short (220px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 11 per 500ms tick
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -734,7 +760,7 @@ TARGETS:              spreads to a new enemy within 120px on each tick, cap
                       6 simultaneous infections (ruling 5)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 8 per 1000ms per infection
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               each infected enemy that dies while infected passes the
@@ -780,7 +806,7 @@ RANGE:                melee short (spawns at 40px)
 TARGETS:              n/a — cap 1
 --- output ---
 DAMAGE TIER:          none (0) — it never attacks anything, ever
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               MAGNET aggro r220 — actively pulls enemy targeting onto
@@ -822,7 +848,7 @@ RANGE:                range short (240px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 16 per 500ms tick
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.5 and weaken 35% to everything inside, for as
@@ -874,7 +900,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 very fast (1300ms)
+PACE:                 very fast (600ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none
@@ -909,7 +935,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               heals 35 to self
@@ -946,7 +972,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               timed 8000ms — regenPerSec 8
@@ -980,7 +1006,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               absorb shield 60 for 8000ms
@@ -1017,7 +1043,7 @@ RANGE:                range short (240px)
 TARGETS:              self (teleport)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               instantaneous — no travel, no collision along the way
@@ -1055,7 +1081,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               timed 6000ms — reflectPct 0.50
@@ -1092,7 +1118,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               timed 6000ms — damageReduction +0.60
@@ -1129,7 +1155,7 @@ RANGE:                melee long (115px)
 TARGETS:              cap 6
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               heals the Wizard per enemy PRESENT in r115, not per
@@ -1167,7 +1193,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (22000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               timed 8000ms — regenPerSec 12, damageReduction +0.30
@@ -1206,7 +1232,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (90000ms — the longest cooldown in the class)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               AUTHORED — ward: the next blow that would kill him

@@ -3,6 +3,32 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Hex (doc).**
+
+**Tree names — built names win.** Voodoo→Effigy, Decay→Blight, Spirits→Swarm
+
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
+most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 5.50/sec on a spread build — BELOW the band.**
+
+**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
+Cooldowns moved; rider durations did not. Any rider now longer than its skill's
+cooldown is a permanent effect until that sweep runs.
+
+**Outstanding:** none.
+
 ---
 
 ## A NAMING FLAG, FIRST
@@ -90,7 +116,7 @@ classes. Spirit Walk uses the Assassin's flicker ruling.
 
 ---
 
-## TREE: VOODOO
+## TREE: EFFIGY  (was Voodoo in the source conversion)
 
 Role read: **the proxy controller.** The doll turns melee into ranged area
 damage; the decoys turn enemy attention into somebody else's problem. Almost
@@ -100,7 +126,7 @@ the class.
 ---
 
 SKILL NAME:           Voodoo Doll
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 0
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -110,7 +136,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 bound
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 slow (10000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               THE BIND — while it holds, melee strikes covering the
@@ -141,7 +167,7 @@ FLAVOR:               The doll is not the target. It has never been the
                       it is a matter of correct paperwork rather than malice.
 
 SKILL NAME:           Spirit Projection
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 1
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -151,7 +177,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — 1 spirit decoy
 --- output ---
 DAMAGE TIER:          none (0) — it never attacks
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               magnet aggro decoy; counts as a live summon for Soul
@@ -178,7 +204,7 @@ FLAVOR:               It is not a copy of him. It is the part of the
                       happening, which is not a place he intends to be.
 
 SKILL NAME:           Cursed Vision
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 2
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -188,7 +214,7 @@ RANGE:                range medium (320px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          none (0) — chip 8 per 600ms at its nearest fellow
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               CONFUSION 80% for 4000ms — the longest confusion in the
@@ -215,7 +241,7 @@ FLAVOR:               He does not show it anything that is not there. He
                       declines to continue helping it sort what is.
 
 SKILL NAME:           Spirit Shackles
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 3
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -225,7 +251,7 @@ RANGE:                range medium (300px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 slow (10000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               drain — heals the Witch Doctor 60% of damage dealt
@@ -252,7 +278,7 @@ FLAVOR:               Shackles are for keeping a thing where it is. He has
                       something can travel back along the same line.
 
 SKILL NAME:           Soulbound Hex
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 4
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 4
 TYPE:                 passive
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -289,7 +315,7 @@ FLAVOR:               A binding runs in both directions. Everyone who has
                       have listened to the second half.
 
 SKILL NAME:           Shadow Stitch
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 5
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 5
 TYPE:                 passive
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -333,7 +359,7 @@ FLAVOR:               Cloth is threads. A person is threads. He has stopped
 > mentions the other.
 
 SKILL NAME:           Spectral Echoes
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 6
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -343,7 +369,7 @@ RANGE:                n/a (spawns in a loose ring)
 TARGETS:              n/a — several mini-decoy illusions, timed
 --- output ---
 DAMAGE TIER:          none (0) — they never attack
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               low-HP magnet decoys that expire; each counts as a live
@@ -370,7 +396,7 @@ FLAVOR:               Not illusions. He is firm about that. They are moments
                       asked to wait somewhere useful.
 
 SKILL NAME:           Soul Harvest
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 7
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 7
 TYPE:                 passive
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -408,7 +434,7 @@ FLAVOR:               Nothing is taken from them. They have finished with it.
                       about what happens to it next.
 
 SKILL NAME:           Spirit Assault
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 8
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 8
 TYPE:                 passive
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -447,7 +473,7 @@ FLAVOR:               He is not doing this part. He set it going some while
                       the whole point of an arrangement of this kind.
 
 SKILL NAME:           Spirit Split
-CLASS / TREE / TIER:  witchdoctor / Voodoo / tier_code 9
+CLASS / TREE / TIER:  witchdoctor / Effigy / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -457,7 +483,7 @@ RANGE:                n/a
 TARGETS:              spawns a decoy AND re-arms the doll mirror
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 very slow (50000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               composite — a fresh decoy plus a re-armed mirror at full
@@ -489,7 +515,7 @@ FLAVOR:               Splitting is the wrong word. Nothing is divided.
 
 ---
 
-## TREE: DECAY
+## TREE: BLIGHT  (was Decay in the source conversion)
 
 Role read: **the damage tree.** Poisons, clouds, an armour form and a
 spreading capstone. Where the Witch Doctor goes when the doll build is too
@@ -498,7 +524,7 @@ slow, and its hazards are what keep Hex ticking while he runs.
 ---
 
 SKILL NAME:           Blow Dart
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 0
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -508,7 +534,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 fast (2600ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -534,7 +560,7 @@ FLAVOR:               No sound worth the name. That has always been the
                       updated.
 
 SKILL NAME:           Venomous Infusion
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 1
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 1
 TYPE:                 buff
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -544,7 +570,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               timed 10000ms — damageMult +0.20
@@ -569,7 +595,7 @@ FLAVOR:               He has been building a tolerance since he was eleven.
                       careful never to let anyone assume otherwise.
 
 SKILL NAME:           Poison Mastery
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 2
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 2
 TYPE:                 passive
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -604,7 +630,7 @@ FLAVOR:               Mastery is knowing the doses. Everyone can obtain the
                       writing things down.
 
 SKILL NAME:           Plague Cloud
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 3
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -614,7 +640,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 6 per 500ms tick
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               weaken 20% to everything inside
@@ -640,7 +666,7 @@ FLAVOR:               Not a disease. Diseases have intentions of their own and
                       he does not trust anything with intentions of its own.
 
 SKILL NAME:           Life Drain
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 4
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -650,7 +676,7 @@ RANGE:                range medium (300px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 slow (8000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               drain — heals 70% of damage dealt, the highest drain
@@ -676,7 +702,7 @@ FLAVOR:               Seventy percent. He has measured, repeatedly, and the
                       pursue.
 
 SKILL NAME:           Hallucinogenic Brew
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 5
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -686,7 +712,7 @@ RANGE:                range medium (300px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          none (0) — chip 8 per 600ms
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               CONFUSION 80% for 3200ms
@@ -711,7 +737,7 @@ FLAVOR:               The recipe is not secret. It is written down in three
                       and the quantity is the entire craft.
 
 SKILL NAME:           Miasma Armor
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 6
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 6
 TYPE:                 transformation
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -721,7 +747,7 @@ RANGE:                n/a
 TARGETS:              aura: uncapped in r110
 --- output ---
 DAMAGE TIER:          low (6 per 500ms aura pulse)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               form 9000ms — damageReduction +0.20; aura 6 damage /
@@ -748,7 +774,7 @@ FLAVOR:               Bad air. The oldest theory of disease, entirely wrong
                       and, handled correctly, entirely sufficient.
 
 SKILL NAME:           Venom Flask
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 7
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -758,7 +784,7 @@ RANGE:                range medium (320px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — shatters on impact into a 90px pool lasting
@@ -786,7 +812,7 @@ FLAVOR:               He does not throw them if he can help it. Glass is
 > projectile with no rider — a flask that does not spill. Added the pool.
 
 SKILL NAME:           Corrosive Eruption
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 8
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -796,7 +822,7 @@ RANGE:                range short (180px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               weaken 35% for 5000ms — the largest weaken magnitude in
@@ -824,7 +850,7 @@ FLAVOR:               Corrosion is not fast. That is the ordinary case. He has
                       up later.
 
 SKILL NAME:           Pestilence Nova
-CLASS / TREE / TIER:  witchdoctor / Decay / tier_code 9
+CLASS / TREE / TIER:  witchdoctor / Blight / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -835,7 +861,7 @@ TARGETS:              seeds uncapped in r180, then spreads to 10 further
                       enemies
 --- output ---
 DAMAGE TIER:          low (7 per tick)
-PACE:                 very slow (50000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               spreading — each infected enemy passes the DoT to a new
@@ -866,7 +892,7 @@ FLAVOR:               He is not spreading anything. He set one condition in one
 
 ---
 
-## TREE: SPIRITS
+## TREE: SWARM  (was Spirits in the source conversion)
 
 Role read: **the support and mitigation tree.** A heal totem, a party hazard,
 the damage redirect, an effigy, a stealth and a permanent ally. The only tree
@@ -876,7 +902,7 @@ other two set up.
 ---
 
 SKILL NAME:           Spirit Swarm
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 0
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -886,7 +912,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 7 per 500ms tick
-PACE:                 fast (2800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               slow ×0.65 to everything inside
@@ -915,7 +941,7 @@ FLAVOR:               They were here before he arrived. He has not summoned
                       of floor is interesting.
 
 SKILL NAME:           Ancestral Guidance
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 1
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 1
 TYPE:                 buff
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -925,7 +951,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 9000ms — damageMult +0.15, attackSpeedMult +0.15
@@ -950,7 +976,7 @@ FLAVOR:               Advice, mostly. Not all of it good, not all of it
                       relevant, and none of it possible to ignore.
 
 SKILL NAME:           Healing Totem
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 2
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -960,7 +986,7 @@ RANGE:                melee long (130px)
 TARGETS:              every ally and summon in the field
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -987,7 +1013,7 @@ FLAVOR:               The wood is not doing anything. He would like that
                       understood before anyone starts carving their own.
 
 SKILL NAME:           Hexing Ritual
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 3
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -997,7 +1023,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0) — the tick is 0 damage, purely a re-apply
-PACE:                 slow (14000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               slow ×0.6 and weaken 25% to everything inside
@@ -1024,7 +1050,7 @@ FLAVOR:               A ritual is a procedure with steps in a fixed order and
                       why it works and why it is boring to watch.
 
 SKILL NAME:           Blood Pact
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 4
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -1034,7 +1060,7 @@ RANGE:                n/a
 TARGETS:              every live summon
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals every live summon +30 HP; COSTS the Witch Doctor
@@ -1062,7 +1088,7 @@ FLAVOR:               A pact is not a gift. Both sides are named in it and both
                       party who forgot that.
 
 SKILL NAME:           Spirit Walk
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 5
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -1072,7 +1098,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               stealth 5000ms, flickering per the Assassin's ruling
@@ -1098,7 +1124,7 @@ FLAVOR:               He has not gone anywhere. He is standing exactly where he
                       obliged to solve it.
 
 SKILL NAME:           Soul Bind
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 6
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -1108,7 +1134,7 @@ RANGE:                n/a
 TARGETS:              self + all live summons
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (22000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               35% of damage the Witch Doctor would take is redirected
@@ -1137,7 +1163,7 @@ FLAVOR:               Shared is not the word. Nothing is shared. It is moved,
                       something that was made for the purpose.
 
 SKILL NAME:           Cursed Effigy
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 7
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -1147,7 +1173,7 @@ RANGE:                melee short (planted 60px ahead)
 TARGETS:              n/a — 1 rooted magnet effigy
 --- output ---
 DAMAGE TIER:          none (0) — it never attacks and never moves
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               magnet aggro; ROOTED in place, cannot follow; counts as a
@@ -1176,7 +1202,7 @@ FLAVOR:               It is not guarding anything. It is standing where the
                       never once left early.
 
 SKILL NAME:           Tribal Ritual
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 8
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -1186,7 +1212,7 @@ RANGE:                range short (150px)
 TARGETS:              allies and summons in the field; weakens enemies in it
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               weaken 20% to enemies inside
@@ -1214,7 +1240,7 @@ FLAVOR:               It takes four people to do this properly and he has done
                       about that.
 
 SKILL NAME:           Soul Revenant
-CLASS / TREE / TIER:  witchdoctor / Spirits / tier_code 9
+CLASS / TREE / TIER:  witchdoctor / Swarm / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -1224,7 +1250,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — 1 revenant ally
 --- output ---
 DAMAGE TIER:          none (0) — the revenant deals the damage
-PACE:                 very slow (55000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               unlike every other body this class summons, the revenant

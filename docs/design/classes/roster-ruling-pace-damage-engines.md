@@ -54,6 +54,20 @@ The speed half was originally "at least 4 nodes in medium or faster". That is a 
 
 **A bucket-mix rule fixes both ends.** The floor of 2 fast-or-better guarantees a class can reach the band; the ceiling of 1 very-fast per tree stops one class running away with it.
 
+### MEASURED ACROSS ALL FOURTEEN — the floor of 2 is one short
+
+Applied to every class. All fourteen now comply on all three clauses. **Five of fourteen land in the 6–8 band.**
+
+| result | classes |
+|---|---|
+| in band | Blacksmith 6.58, Druid 6.33, Hunter 6.00, Samurai 6.00, Wizard 7.67 |
+| below, 5.50–5.75 | Assassin, Bard, Mage, Monk, Priest, Savage, Sundian, Witch Doctor |
+| above | Necromancer 8.25 |
+
+The eight below are not scattered — they sit in a 0.25-wide cluster just under the floor, because **they are all sitting exactly ON the rule's minimum.** Two fast-or-better per tree gives a spread build six fast slots and two more from whatever the trees offer third, which is 5.0/sec plus whatever the last two contribute: 6.00 when both are medium, 5.75 when one is slow, 5.50 when both are.
+
+**The floor wants to be 3, not 2.** Three fast-or-better per tree fills all eight slots from the fast heads — 8 × 1.2s is 6.67/sec, inside the band for any class without a very-fast node and higher for one with. That is arithmetic, not a measurement, and it is the smallest change that would put the cluster inside the band. Not applied — the floor of 2 is what was ruled.
+
 ### What a per-tree rule cannot do
 
 **It constrains composition, not builds.** A player slots eight nodes and may take them all from one tree, and a mono-tree build is a different arithmetic from a spread one — the same tree that contributes its two fast nodes to a spread build also contributes its slow and very-slow ones when it has to fill all eight slots.
@@ -83,19 +97,23 @@ High-tier damage at 2.3% of the roster is the sharper half of this problem. Ever
 
 ---
 
-## Ruling 3 — Engine cost proportional to cooldown
+## Ruling 3 — VOID. Engine cost proportional to cooldown
 
-Applies to the two depleting engines, **Wizard Mana** and **Mage Energy**:
+**This rule has no subject left.** It applied to the roster's two depleting
+engines, Wizard Mana and Mage Energy. The engine rulings cut both: the Wizard
+takes the built `shift` and the Mage takes the built `crystal`, and neither is a
+resource that is spent per cast. **No class in the roster now has a depleting
+engine**, so there is nothing for a proportional cost to be proportional to.
 
-```
-cost = cooldown_seconds × k        k ≈ 0.6
-```
+Kept as a void entry rather than deleted, because the reasoning survives its
+subject: if a depleting engine is ever added, a flat per-cast cost couples it to
+the cooldown table and a proportional one does not.
 
-Burn-per-second is then flat per slotted skill, and the constraint becomes **how many actives you run** rather than which pace bucket they sit in. Against 4/sec regeneration, roughly six actives is sustainable and eight is not — which is the pressure both class files state they want.
-
-This also makes the engines survive any future pace change. A flat per-cast cost is coupled to cooldown values; a proportional one isn't.
-
-**Both files' "silent character" windows need shortening.** Elemental Storm currently leaves the Wizard doing nothing for ten seconds. Movement is the player's only input, so a character with nothing firing isn't a tradeoff they chose — it's the game stopping. Dead air should read as recovery, not punishment: a couple of seconds, not ten.
+**One clause outlived the rule and is promoted here.** The "silent character"
+requirement stands on its own for every class: movement is the player's only
+input, so a character with nothing firing is not a tradeoff the player chose, it
+is the game stopping. Dead air should read as recovery, not punishment — a
+couple of seconds, not ten.
 
 ---
 

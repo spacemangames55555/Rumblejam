@@ -3,6 +3,32 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Chi (doc, as an oscillator).**
+
+**Tree names — built names win.** Iron Palm→Empty Hand, Chi→Chi, Spirit→Stone Garden
+
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
+most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 5.75/sec on a spread build — BELOW the band.**
+
+**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
+Cooldowns moved; rider durations did not. Any rider now longer than its skill's
+cooldown is a permanent effect until that sweep runs.
+
+**Outstanding:** none.
+
 ---
 
 ## CLASS ENGINE — CHI (an oscillator, not a bank)
@@ -71,7 +97,7 @@ classes. Silent Step uses the Assassin's flicker ruling.
 
 ---
 
-## TREE: IRON PALM
+## TREE: EMPTY HAND  (was Iron Palm in the source conversion)
 
 Role read: **the melee DPS, and the tree that spends.** Nine strikes and a
 stealth. It has the class's only sustained damage and it cannot run on its
@@ -80,7 +106,7 @@ own — every skill here costs Chi that this tree does not produce.
 ---
 
 SKILL NAME:           Palm Strike
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 0
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -90,7 +116,7 @@ RANGE:                melee short (68px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (19)
-PACE:                 fast (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -115,7 +141,7 @@ FLAVOR:               The hand is not hard. Hardness is what breaks. What he
                       arm objects to the arrival.
 
 SKILL NAME:           Flurry of Blows
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 1
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -125,7 +151,7 @@ RANGE:                melee short (66px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (9 × 3 pulses = 27)
-PACE:                 fast (3400ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               3 pulses 130ms apart, each rolling its own hits
@@ -150,7 +176,7 @@ FLAVOR:               Not fast. Consecutive. There is nothing between them,
                       harder to achieve.
 
 SKILL NAME:           Sweeping Kick
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 2
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -160,7 +186,7 @@ RANGE:                melee long (90px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 medium (6000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.6 for 2000ms
@@ -185,7 +211,7 @@ FLAVOR:               The legs are longer and heavier and nobody watches
                       third is the one that matters.
 
 SKILL NAME:           Flowing Movement
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 3
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 3
 TYPE:                 passive
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -222,7 +248,7 @@ FLAVOR:               Stillness is a kind of movement that has agreed to
                       it insufferable, and has since found it accurate.
 
 SKILL NAME:           Deflect
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 4
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -233,7 +259,7 @@ TARGETS:              1 incoming projectile, returned at its sender
 --- output ---
 DAMAGE TIER:          none (0) — the returned projectile carries the Monk's
                       damage
-PACE:                 medium (6000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — destroys the nearest incoming enemy
@@ -265,7 +291,7 @@ FLAVOR:               He is not fast enough to catch it. Nobody is. What he
 > projectile counter, so I built one.
 
 SKILL NAME:           Pressure Points
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 5
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -275,7 +301,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               weaken 30% for 5000ms
@@ -302,7 +328,7 @@ FLAVOR:               There is a map. It is very old and mostly correct and
                       that nobody is willing to fix them.
 
 SKILL NAME:           Rising Dragon
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 6
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -312,7 +338,7 @@ RANGE:                range short (180px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockdown — stun 400ms per enemy hit; caster displaced
@@ -340,7 +366,7 @@ FLAVOR:               Up is not a direction anyone expects a fight to go.
                       and he has stopped expecting it to stop being true.
 
 SKILL NAME:           Empowered Strikes
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 7
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -350,7 +376,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0) at cast
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — the next 3 Iron Palm strikes deal +80% and
@@ -385,7 +411,7 @@ FLAVOR:               Nothing is added. He simply stops holding back three
 > could have been.
 
 SKILL NAME:           Silent Step
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 8
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -395,7 +421,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               stealth 4500ms, flickering per the Assassin's ruling —
@@ -424,7 +450,7 @@ FLAVOR:               Lhasa is very quiet at altitude. He learned to walk
                       everyone else had learned somewhere louder.
 
 SKILL NAME:           Hundred Hands
-CLASS / TREE / TIER:  monk / Iron Palm / tier_code 9
+CLASS / TREE / TIER:  monk / Empty Hand / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -434,7 +460,7 @@ RANGE:                melee long (140px per link)
 TARGETS:              cascades from target to target for 6000ms
 --- output ---
 DAMAGE TIER:          low (11 per strike)
-PACE:                 very slow (55000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               auto-casts a chain of strikes over the duration, each
@@ -485,7 +511,7 @@ RANGE:                range short (210px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 fast (2800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 10 to the Monk, his summons and any ally within
@@ -555,7 +581,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 30 to self
@@ -589,7 +615,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               restores 40 Chi instantly (the code's 40 energy,
@@ -664,7 +690,7 @@ RANGE:                melee long (120px)
 TARGETS:              every ally and summon in the field
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (24000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -701,7 +727,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               strips ONE harmful effect, in the code's own priority
@@ -742,7 +768,7 @@ RANGE:                range long (400px)
 TARGETS:              1 — the most-injured ally (co-op) or summon (solo)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 30 to the target; COSTS the Monk 15 HP, bypassing
@@ -781,7 +807,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               absorb shield 50 for 5000ms
@@ -816,7 +842,7 @@ RANGE:                range short (170px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (36)
-PACE:                 very slow (50000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 26 to the Monk, his summons and every ally in the
@@ -847,7 +873,7 @@ FLAVOR:               He does not divide it into a healing part and a harming
 
 ---
 
-## TREE: SPIRIT
+## TREE: STONE GARDEN  (was Spirit in the source conversion)
 
 Role read: **the tank spec, via other bodies.** A damage redirect, a decoy
 summon, a mobile aura, a reflect and two control fields. It is where the
@@ -858,7 +884,7 @@ reducing it.
 ---
 
 SKILL NAME:           Force Palm
-CLASS / TREE / TIER:  monk / Spirit / tier_code 0
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -868,7 +894,7 @@ RANGE:                range short (220px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 fast (2600ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none
@@ -894,7 +920,7 @@ FLAVOR:               The distance is not an obstacle he has overcome. It is
                       transaction.
 
 SKILL NAME:           Enigmatic Presence
-CLASS / TREE / TIER:  monk / Spirit / tier_code 1
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -904,7 +930,7 @@ RANGE:                range medium (300px)
 TARGETS:              1 (nearest)
 --- output ---
 DAMAGE TIER:          none (0) — chip 8 per 600ms during the confusion
-PACE:                 slow (12000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               CONFUSION 80% for 3500ms — the target attacks other
@@ -931,7 +957,7 @@ FLAVOR:               He is not doing anything. He would like this stated
                       own conclusions.
 
 SKILL NAME:           Divine Connection
-CLASS / TREE / TIER:  monk / Spirit / tier_code 2
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -941,7 +967,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 1
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               while any summon lives, 30% of all damage meant for the
@@ -970,7 +996,7 @@ FLAVOR:               Shared is the wrong word and he uses it anyway. Nothing
                       agreed to be there.
 
 SKILL NAME:           Enlightened Mind
-CLASS / TREE / TIER:  monk / Spirit / tier_code 3
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 3
 TYPE:                 passive
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -1007,7 +1033,7 @@ FLAVOR:               He does not see it coming. Seeing it coming would be
                       already made arrangements.
 
 SKILL NAME:           Astral Projection
-CLASS / TREE / TIER:  monk / Spirit / tier_code 4
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -1017,7 +1043,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — 1 decoy, timed
 --- output ---
 DAMAGE TIER:          none (0) — it never attacks
-PACE:                 very slow (22000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               MAGNET aggro decoy — pulls enemy targeting onto itself
@@ -1046,7 +1072,7 @@ FLAVOR:               It is not a copy and it is not a trick and he has
                       difficult to injure.
 
 SKILL NAME:           Karma's Embrace
-CLASS / TREE / TIER:  monk / Spirit / tier_code 5
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 5
 TYPE:                 buff
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -1056,7 +1082,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               timed 8000ms — reflectPct 0.30
@@ -1082,7 +1108,7 @@ FLAVOR:               Not punishment. He has been very clear about this on
                       declined to interrupt one.
 
 SKILL NAME:           Prayer Wheel
-CLASS / TREE / TIER:  monk / Spirit / tier_code 6
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -1094,7 +1120,7 @@ TARGETS:              uncapped per pulse (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          low (8 per pulse)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               the only aura in the game that travels with the player
@@ -1130,7 +1156,7 @@ FLAVOR:               The turning is the prayer. Not what is written on it —
 > the other seven auras, it is this node.
 
 SKILL NAME:           Mantra of Stillness
-CLASS / TREE / TIER:  monk / Spirit / tier_code 7
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -1140,7 +1166,7 @@ RANGE:                range short (150px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0) — the tick is 0 damage, purely a re-apply
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               slow ×0.6 and weaken 20% to everything inside
@@ -1165,7 +1191,7 @@ FLAVOR:               He says it once. It is not long and it is not in a
                       on the meaning.
 
 SKILL NAME:           Meditation
-CLASS / TREE / TIER:  monk / Spirit / tier_code 8
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 8
 TYPE:                 buff
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -1175,7 +1201,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               timed 6000ms — regenPerSec 20, the highest regeneration
@@ -1204,7 +1230,7 @@ FLAVOR:               He was taught to sit for this. He no longer sits. His
                       and is not available to say it.
 
 SKILL NAME:           Enlightenment
-CLASS / TREE / TIER:  monk / Spirit / tier_code 9
+CLASS / TREE / TIER:  monk / Stone Garden / tier_code 9
 TYPE:                 buff
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -1214,7 +1240,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               timed 10000ms — damageMult +0.25, attackSpeedMult

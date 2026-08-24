@@ -4,7 +4,29 @@ Fourteen classes, one decision each. The conversion documents each propose an
 engine; the code already has one. This puts them side by side so all fourteen
 can be ruled together.
 
-**No recommendations here.** Two have already been ruled and are marked.
+**ALL FOURTEEN ARE NOW RULED.** The verdict is on each entry. This document is
+kept as the record of what the decision was made from, not as an open question.
+
+| ruling | classes |
+|---|---|
+| **the document's engine wins** | Bard *(named Rhythm, per §8.3)*, Druid, Monk, Sundian, Assassin, Witch Doctor, Necromancer, Savage, Blacksmith, Priest |
+| **the built engine wins** | Wizard `shift`, Mage `crystal`, Hunter `spread`, Samurai `footing` |
+
+**Blacksmith keeps both.** `form` and Forge Heat are not rivals — `form` pays
+while in a Crystal, Forge Heat pays to reach one. That is a complete loop, and
+the doc's engine is taken with `form` left in place.
+
+**Two consequences that reach outside this file:**
+
+- **Roster ruling 3 has no subject left.** It applied to Wizard Mana and Mage
+  Energy, the roster's two depleting engines, and both are cut. See the ruling
+  file — the rule is void rather than merely unused.
+- **The Wizard's duplicate tier-0 openers get WORSE under `shift`, not better.**
+  `shift` pays for rotating between damage domains. Fireball, Icicle and
+  Ethereal Bolt are three near-identical single-target projectiles, so a Wizard
+  holding all three openers has nothing to rotate between and the engine pays
+  him nothing. Differentiating them was cosmetic under Mana; under `shift` it is
+  load-bearing.
 
 ## How to read the built side
 
@@ -42,8 +64,8 @@ the last, +2 otherwise. Pays out as song radius — auras project 120px at zero,
 *Built: `rhythm` [16 skills], cap 10 hard. Trait `rhythm`: 1.5s window, 10
 stacks.* Fed by casting inside a 1.5s window.
 **Same idea.** Same feed, same punishment, different scale (100 points against
-10 stacks) and a 0.5s difference in the window. GDD §8.3 already ruled the
-Bard's engine is Rhythm.
+10 stacks) and a 0.5s difference in the window.
+**RULED: the document's engine, carrying the built name — Rhythm, per §8.3.**
 
 **DRUID** — *Doc: Kinship 0–100.* Fed by presence: +1/sec per living summon,
 +6 per beast skill, +1 per 10 HP healed. Pays for summons. Punishes having
@@ -52,6 +74,7 @@ nothing out — no decay at all while any animal lives, 2/sec when none does.
 system, unrelated.* Fed by live minion count.
 **Same idea.** Both measure bodies standing. The doc adds healing and beast
 casts as feeds; the built term is the headcount alone.
+**RULED: the document's engine — Kinship.**
 
 **MONK** — *Doc: Chi 0–100, starts at 50. An oscillator, not a bank.* Iron Palm
 skills spend 6; Chi and Spirit skills generate 6. Also fed by healing and by
@@ -60,6 +83,7 @@ dry, a pure Chi Monk has nothing to spend on.
 *Built: `chi` [12], cap 45 hard. Trait `karma` is a separate reflect mechanic.*
 **Same idea, same name.** Different scale (0–100 against a 45 cap). The
 two-directional spend/generate split is the doc's addition.
+**RULED: the document's engine — Chi, as an oscillator.**
 
 **SUNDIAN** — *Doc: Tide 0–100.* Fed by drench: +1 per stack applied to an
 enemy, +3 per stack consumed, +2 per kill on a drenched target. Punishes
@@ -69,6 +93,7 @@ sum". Trait `coral_growth` is separate terrain machinery.*
 **Same idea, and the doc says so** — it states it invented nothing here. The
 difference is a layer: the built term scales on the stacks themselves, the doc
 converts stacks into a second currency that capstones then spend.
+**RULED: the document's engine — Tide, keeping the drench layer beneath it.**
 
 ---
 
@@ -83,6 +108,7 @@ a gold-payout mechanic, unrelated.* Fed by armed trap count only.
 **Same idea, half of it.** The traps half matches exactly. The concealment
 half — which the doc treats as the class's whole character, being paid for the
 seconds before the violence — has no built counterpart.
+**RULED: the document's engine — Shadow. The concealment feed is new `js/` work.**
 
 **WITCH DOCTOR** — *Doc: Hex 0–100.* Fed by **indirect damage only**: +2 per
 mirrored doll hit, +1 per DoT or hazard tick, +3 per kill he did not land
@@ -93,6 +119,7 @@ doll cap 10.*
 **Same idea, narrower.** Both centre on the doll and its mirror. The doc widens
 it to every indirect source — clouds, totems, decoys, DoTs — and adds the
 prohibition on direct damage, which is the part with no built equivalent.
+**RULED: the document's engine — Hex.**
 
 ---
 
@@ -107,6 +134,9 @@ within 200px.
 **Different ideas that meet at the same place.** The built term pays you
 *while* in a Crystal. The doc's engine pays you *to reach* one. They describe
 opposite halves of the same skill and do not contradict each other.
+**RULED: BOTH. Forge Heat is the engine and `form` stays in place — the two
+together are a complete loop, heat to reach a Crystal and `form` to pay for
+being in it.**
 
 **MAGE** — *Doc: Energy 0–100, starts full.* A depleting resource: every cast
 costs by pace bucket, regenerating +3/sec plus **+2 per enemy pulled** by any
@@ -117,6 +147,8 @@ crystal stacks as a Crystalblade combo mechanic.
 **Different ideas — and the doc contains both.** The built engine is the
 crystal-stack mechanic the doc proposes as a *tree* feature; the doc's headline
 engine, Energy, has no built counterpart anywhere.
+**RULED: the built engine — `crystal`. Energy is cut. Crystal stacks stay
+exactly what the doc already makes them, the Crystalblade tree's mechanic.**
 
 **PRIEST** — *Doc: Conviction 0–100.* Fed by suffering: +1 per 10 HP healed to
 anyone, +4 when an ally or summon is hit within 250px, **+15 for spending his
@@ -127,6 +159,7 @@ is going badly for everyone else.
 bonuses.*
 **Different ideas entirely.** The built term is offensive target-marking. The
 doc's is healing and self-sacrifice. No overlap in feed, payout or punishment.
+**RULED: the document's engine — Conviction. `marks` is superseded.**
 
 **SAVAGE** — *Doc: Momentum, 0–5 stacks.* +1 per hit landed, each stack +6%
 damage, decaying one stack per 2000ms without a hit. The only engine that
@@ -138,6 +171,9 @@ scaling on missing HP.*
 Momentum almost exactly — build on hits, drain on silence. But the *skills*
 scale on `cascade`, chain length, which is a different measurement. The built
 class has a momentum engine its own skills do not read.
+**RULED: the document's engine — Momentum, which is what `blood_dance` already
+does. The defect is that thirty skills read `cascade` instead of the trait they
+are supposed to. Logged as KNOWN-DEFECTS #19.**
 
 **WIZARD** — *Doc: Mana 0–100, starts full.* The roster's only spend-down
 economy: every cast costs by pace bucket, regenerating +4/sec and +6 per kill
@@ -148,6 +184,8 @@ attacks — the class where the eight-slot budget is self-limiting.
 **Different ideas entirely.** The built term rewards rotating between damage
 domains, which the Wizard's three trees are built to enable (Fire/Wind,
 Ice/Poison, Ethereal). The doc's is a resource pool. Nothing connects them.
+**RULED: the built engine — `shift`. Mana is cut. See the note at the top about
+the tier-0 openers, which this ruling promotes from cosmetic to load-bearing.**
 
 ---
 
@@ -164,6 +202,8 @@ in `js/skills.js` as "more per span between you and the beast". Trait
 **Opposite signs on the same measurement.** Both read the distance between
 Hunter and beast. The doc pays for it being small; the code pays for it being
 large, across 14 of 30 skills. The trait carries both directions at once.
+**RULED: the built engine — `spread`. Bond is cut, and every Bond-derived
+ENGINE line in the Hunter document inverts.**
 
 **SAMURAI** — **RULED: Footing wins, Resolve superseded.**
 *Doc proposed: Resolve 0–100* — fed by being attacked, +10 per parry, +5 per
@@ -187,3 +227,4 @@ Decays 1/sec — a bank, not a temperature.
 **Nothing to compare.** The `pack` term exists and would fit a summoner, but a
 single skill uses it. This is the one class where ruling for the document costs
 nothing, because there is nothing on the other side.
+**RULED: the document's engine — Essence.**

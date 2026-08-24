@@ -9,6 +9,32 @@ checks this document's class token against the live set.*
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Tide (doc), keeping the drench layer beneath it.**
+
+**Tree names — built names win.** HELD — see below
+**HELD, and it is a genuine exception.** Tidecaller maps to **Tidewrack** on both name and role. Blade (melee) and Regalia (worn items) against **Reef** and **Undertow** is a coin toss — both built trees carry a similar strike count and neither name reads as jewellery.
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
+most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 5.75/sec on a spread build — BELOW the band.**
+
+**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
+Cooldowns moved; rider durations did not. Any rider now longer than its skill's
+cooldown is a permanent effect until that sweep runs.
+
+**Outstanding:** none.
+
 ---
 
 ## CLASS ENGINE — TIDE (fully derived; the code named it)
@@ -101,7 +127,7 @@ TARGETS:              uncapped inside r30 (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          low (19)
-PACE:                 fast (2200ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               drench +1 stack (+1 more with the Drench passive)
@@ -139,7 +165,7 @@ RANGE:                melee long (140px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 4 per 500ms tick
-PACE:                 slow (11000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               slow ×0.6 inside the hazard
@@ -177,7 +203,7 @@ RANGE:                range short (150px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 slow (13000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               pull everything within 240px toward the centre, then
@@ -254,7 +280,7 @@ RANGE:                range medium (280px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 medium (7000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               knockback 130px
@@ -289,7 +315,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 6000ms — blockChance +0.30, blockReduction 0.70
@@ -324,7 +350,7 @@ RANGE:                range medium (320px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (9 base) — up to 121 per enemy at 8 stacks
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               CONSUMES every drench stack on every enemy in the area,
@@ -371,7 +397,7 @@ RANGE:                range short (160px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 8 per 500ms tick
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               slow ×0.75 inside the hazard
@@ -449,7 +475,7 @@ RANGE:                range medium (320px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          high (40)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               knockback 170px; drench +2 stacks (+2 more with the
@@ -503,7 +529,7 @@ RANGE:                melee short (78px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (19)
-PACE:                 fast (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               drench +1 stack (+1 more with the Drench passive)
@@ -580,7 +606,7 @@ RANGE:                melee long (82px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (16) — 26 against drenched targets (×1.6)
-PACE:                 medium (6000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               ×1.6 against any target currently DRENCHED, resolved
@@ -620,7 +646,7 @@ TARGETS:              uncapped in the hazard (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 2 per 500ms tick
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               the Sundian teleports 200px, leaving the hazard behind
@@ -657,7 +683,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               absorb shield 40 for 6000ms
@@ -691,7 +717,7 @@ RANGE:                melee long (100px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 150px
@@ -731,7 +757,7 @@ RANGE:                melee long (80px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.35 for 3000ms — the hardest slow in the class
@@ -767,7 +793,7 @@ RANGE:                melee short (74px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (11 × 2 pulses = 22)
-PACE:                 medium (4800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               2 pulses 150ms apart, each rolling its own hits
@@ -802,7 +828,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               root 1600ms on the nearest enemy; heals the Sundian 50%
@@ -840,7 +866,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               form 10000ms — attackSpeedMult +0.25, damageMult +0.10
@@ -892,7 +918,7 @@ RANGE:                range medium (300px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (19)
-PACE:                 fast (2200ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none
@@ -927,7 +953,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 fast (1500ms — a "don" action, not an attack)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               AUTHORED — worn permanently once donned: maxHPMult
@@ -966,7 +992,7 @@ RANGE:                n/a
 TARGETS:              1 (the attacker, reactively)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 fast (1500ms — a "don" action)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               RECONSTRUCTED — the export notes "reflect damages
@@ -1007,7 +1033,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 fast (1500ms — a "don" action)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               AUTHORED — worn permanently: damageReduction +0.20,
@@ -1084,7 +1110,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               AUTHORED — worn permanently: +2 Tide per second, and
@@ -1126,7 +1152,7 @@ RANGE:                melee long (130px)
 TARGETS:              every ally and summon in the field
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none
@@ -1162,7 +1188,7 @@ RANGE:                range medium (300px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               slow ×0.55 for 3000ms to everything in r140; weaken 25%
@@ -1202,7 +1228,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               AUTHORED — worn permanently: a 50-point absorb shield
@@ -1244,7 +1270,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               AUTHORED — for 12000ms, every worn regalia's effect is
