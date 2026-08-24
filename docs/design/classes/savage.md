@@ -449,10 +449,10 @@ AFFECTS:              enemies
 --- automation ---
 TRIGGER:              CROWD_THRESHOLD (8+ within 250px), consuming all
                       Momentum stacks
+THREAT:               high
 --- growth ---
 RANK ADDS:            +2 damage per strike; +500ms cascade duration every
                       4th rank
-THREAT:               high
 --- identity ---
 ENGINE:               consumes all stacks for +15% effect each — at five
                       stacks it is +75% duration and damage, and it then

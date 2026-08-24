@@ -5851,5 +5851,22 @@ try {
   else fail('the spend step opened with no points — an empty prompt is the same defect one step on');
 } catch (e) { fail('map-end spend step', e); }
 
+// ---- 18. the class conversion documents, against the code ----
+//
+// `docs/design/classes/` is design SOURCE — numbers are read out of it and
+// typed into `js/` — so it drifts the way any unchecked document drifts, and
+// here the drift arrives as a wrong number rather than a wrong sentence. The
+// gate lives in `tools/class_doc_gate.mjs` and runs standalone; it is called
+// here so that a rename on either side of the doc↔code bridge is red in the
+// suite everyone already runs, rather than in an instrument someone has to
+// remember exists. That is §13 rule 73's shape: a check nobody invokes is a
+// check that reports on the day after it mattered.
+try {
+  const { checkClassDocs } = await import('./class_doc_gate.mjs');
+  const { checks, fails } = checkClassDocs();
+  for (const c of checks) if (!c.ok) fail(c.msg);
+  if (!fails) ok(`class conversion docs: ${checks.length} checks — template, block counts, and the class-id bridge to TREES_BY_CLASS`);
+} catch (e) { fail('class conversion documents', e); }
+
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL SIM TESTS PASSED');
 process.exit(failures ? 1 : 0);
