@@ -675,6 +675,21 @@ never loads them:
   caught, and asserts the live-rank claim BY EFFECT — a generator that ignored
   its rank argument passes every structural check and fails only that one.
   `--verbose` prints all 356 actives. See `docs/skill-descriptions.md`.
+- `node tools/class_doc_gate.mjs [--verbose]` — **the fourteen class conversion
+  documents, against the code.** `docs/design/classes/` is design source —
+  numbers get read out of it and typed into `js/` — so its drift arrives as a
+  wrong number rather than a wrong sentence. Two checks. The template: 27 fields
+  per block, in order, section markers included, names only and never values, so
+  no plausible figure in the right slot can satisfy it; 421 blocks, 30 per class
+  and 31 for the Necromancer's exclusive skeleton branch. And the class-id
+  bridge: docs are named for a reader (`witchdoctor.md`), ids for a namespace
+  (`toh_witch_doctor`), and `CLASS_DOCS` in the gate is the one place that gap is
+  written down. Checked as an arity in **both** directions — a doc naming a class
+  the code lacks and a class the code has that no doc covers are the same rename
+  seen from opposite ends, and checking one catches half. Runs inside
+  `sim_test.mjs` §18 as well as standalone. It exists because the GDD spent four
+  drafts telling readers the Sundian's id was `atlantean`, an id that has never
+  appeared in `js/` in any commit.
 - `node tools/bimodal_diagnosis.mjs [--seeds=N] [--quick]` — **why do some
   classes die in a region-8 room and others not notice?** Instruments every
   channel that could plausibly explain survival — sustain through both doors,

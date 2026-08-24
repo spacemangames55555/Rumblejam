@@ -1,7 +1,10 @@
 # SUNDIAN — RUMBLEJAM CONVERSION (30 skills)
 
-*Internal `classId` remains `atlantean` for save safety; display name is
-Sundian throughout.*
+*Code id is `toh_sundian`; display name is Sundian throughout. An earlier
+version of this note claimed the id was held at `atlantean` for save safety —
+no such id exists in `js/`, and none ever has. Renaming `toh_sundian` would
+still break saves, which store the class id; `tools/class_doc_gate.mjs` now
+checks this document's class token against the live set.*
 
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.

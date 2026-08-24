@@ -733,7 +733,7 @@ Neither is a tuning error. Both are a tree naming an engine it cannot supply, wh
 
 The original design named three aspirational trees per class (Blacksmith: Tank / DPS / Runes; Monk: Melee Heals / Gauntlets / Traps; and so on). **Those names are superseded by the built ones below and the table has been removed.** Keeping both invites a reader to cite the target instead of the thing — which is how the README came to describe Footing as granting Reflex.
 
-The Sundian's `classId` remains `atlantean` internally for save compatibility. **Do not rename the id.**
+The Sundian's `classId` is **`toh_sundian`**. Saves store the class id — `js/saves.js` writes it as `class` and validates it against `TREES_BY_CLASS`, with no migration table anywhere — so **do not rename it, or any class id.** Earlier drafts of this line said the id was held at `atlantean` for save compatibility; no such id has ever existed in `js/`, in this build or in any commit. The rule was right and its referent was not, which is the failure `tools/class_doc_gate.mjs` now closes: every class id the design documents name is checked against the live set in both directions.
 
 | # | Class | Home | Trees as built |
 |---|---|---|---|
