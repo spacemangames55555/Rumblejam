@@ -689,7 +689,12 @@ never loads them:
   seen from opposite ends, and checking one catches half. Runs inside
   `sim_test.mjs` §18 as well as standalone. It exists because the GDD spent four
   drafts telling readers the Sundian's id was `atlantean`, an id that has never
-  appeared in `js/` in any commit.
+  appeared in `js/` in any commit. It also prints a **tree-name inventory —
+  reported, never checked**, and kept outside `checkClassDocs()` so it has no
+  route to a failure count. Class ids have one right answer; tree names do not,
+  because these documents carry Thrones of Heaven's structure and the built trees
+  are what the code settled on. 9 of 42 names match exactly, 8 of 14 classes
+  match none, and each is a design call rather than a defect.
 - `node tools/bimodal_diagnosis.mjs [--seeds=N] [--quick]` — **why do some
   classes die in a region-8 room and others not notice?** Instruments every
   channel that could plausibly explain survival — sustain through both doors,
