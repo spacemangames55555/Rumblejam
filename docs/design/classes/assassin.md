@@ -18,10 +18,10 @@ further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 5.75/sec on a spread build — BELOW the band.**
+**Rate: 6.67/sec on a spread build — IN BAND.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -163,7 +163,7 @@ RANGE:                melee short (70px)
 TARGETS:              springs on the first enemy only
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               root 2800ms on whatever springs it
@@ -751,7 +751,7 @@ RANGE:                melee short (60px)
 TARGETS:              cap 2
 --- output ---
 DAMAGE TIER:          medium (20) — 36 from concealment
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — executes outright any target below 20% HP,
@@ -1116,7 +1116,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — heavy poison, 7 per 1000ms for 6000ms,

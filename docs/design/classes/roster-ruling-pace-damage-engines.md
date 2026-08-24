@@ -48,38 +48,46 @@ Fixed bucket values. "Slow" means one thing roster-wide:
 
 **Rescaled once, against the corrected gap.** The first table (0.4 / 0.8 / 1.5 / 3 / 6) was sized against the 0.51/sec figure and assumed an ~8x jump. The real gap is 1.5–1.8x, and the first table overshot: the Necromancer measured **12.92/sec** under it against a 6–8 target, because four very-fast slots produce 6.7/sec between them before anything else is slotted.
 
-**Distribution rule, per tree of 10:** at least **2 nodes fast or better**, at most **1 very fast**, at most **2 in very slow**. Capstones are exempt from the distribution count.
+**Distribution rule, per tree of 10:** at least **3 nodes fast or better**, at most **1 very fast**, at most **2 in very slow**. Capstones are exempt from the distribution count.
 
 The speed half was originally "at least 4 nodes in medium or faster". That is a floor on composition and it does not reach the target: 4 medium plus 4 slow satisfies it and yields 3.0/sec. Worse, it says nothing about the top of the range, and the top is what actually moves the number — the Necromancer's four very-fast nodes produced 6.7/sec between them before anything else was slotted, while the Samurai owned no very-fast node at all and could not exceed 6.67/sec even with all eight slots fast.
 
-**A bucket-mix rule fixes both ends.** The floor of 2 fast-or-better guarantees a class can reach the band; the ceiling of 1 very-fast per tree stops one class running away with it.
+**A bucket-mix rule fixes both ends.** The floor of fast-or-better nodes guarantees a class can reach the band; the ceiling on very-fast stops one class running away with it. The floor was set at 2, measured, and raised to 3 — see below.
 
-### MEASURED ACROSS ALL FOURTEEN — the floor of 2 is one short
+### MEASURED ACROSS ALL FOURTEEN — the floor was raised from 2 to 3
 
-Applied to every class. All fourteen now comply on all three clauses. **Five of fourteen land in the 6–8 band.**
+**At a floor of 2**, five of fourteen landed in band and eight sat in a 0.25-wide cluster at 5.50–5.75 — all of them exactly ON the minimum, because two fast-or-better per tree gives a spread build six fast slots and two leftovers.
+
+**At a floor of 3, twelve of fourteen land in band.** Three per tree fills all eight slots from the fast heads: 8 × 1.2s is 6.67/sec.
 
 | result | classes |
 |---|---|
-| in band | Blacksmith 6.58, Druid 6.33, Hunter 6.00, Samurai 6.00, Wizard 7.67 |
-| below, 5.50–5.75 | Assassin, Bard, Mage, Monk, Priest, Savage, Sundian, Witch Doctor |
-| above | Necromancer 8.25 |
+| in band | ten classes at **6.67**, plus Blacksmith and Druid at **7.50** |
+| above | **Wizard 8.33**, **Necromancer 9.17** |
 
-The eight below are not scattered — they sit in a 0.25-wide cluster just under the floor, because **they are all sitting exactly ON the rule's minimum.** Two fast-or-better per tree gives a spread build six fast slots and two more from whatever the trees offer third, which is 5.0/sec plus whatever the last two contribute: 6.00 when both are medium, 5.75 when one is slow, 5.50 when both are.
+**The two that miss, miss on the CEILING, not the floor.** Each very-fast node is worth 0.83/sec more than a fast one, so a class's rate is fixed by how many it owns:
 
-**The floor wants to be 3, not 2.** Three fast-or-better per tree fills all eight slots from the fast heads — 8 × 1.2s is 6.67/sec, inside the band for any class without a very-fast node and higher for one with. That is arithmetic, not a measurement, and it is the smallest change that would put the cluster inside the band. Not applied — the floor of 2 is what was ruled.
+| very-fast nodes | rate |
+|---|---|
+| 0 | 6.67 |
+| 1 | 7.50 |
+| 2 | **8.33** — Wizard |
+| 3 | **9.17** — Necromancer |
+
+"At most 1 very fast **per tree**" permits three per class, and those two use their whole allowance. **A per-CLASS ceiling of 1 very-fast would put all fourteen between 6.67 and 7.50** — the whole roster inside the band, with the band's own width left over for the differences that matter. Reported, not applied.
 
 ### What a per-tree rule cannot do
 
 **It constrains composition, not builds.** A player slots eight nodes and may take them all from one tree, and a mono-tree build is a different arithmetic from a spread one — the same tree that contributes its two fast nodes to a spread build also contributes its slow and very-slow ones when it has to fill all eight slots.
 
-Measured after this rule (see the two class files):
+Measured on the two classes carried furthest (at the floor of 2; the floor of 3 lifts both readings but not the shape):
 
 | build | Necromancer | Samurai |
 |---|---|---|
 | spread across three trees | in band | in band |
 | single tree | **below band** | **below band** |
 
-That is the rule's limit and it is structural: no per-tree composition rule can put every build in the band, because a tree of ten cannot be all fast without the distribution rule's other half collapsing. Mono-tree builds are slower by construction. **Whether that is a defect or a correct cost of specialising is a design call and is not made here.**
+That is the rule's limit and it is structural: no per-tree composition rule can put every build in the band, because a tree of ten cannot be all fast without the very-slow clause collapsing. Mono-tree builds are slower by construction. **Whether that is a defect or a correct cost of specialising is a design call and is not made here.**
 
 Where a skill's identity genuinely requires a long cooldown that isn't a capstone, say so and keep it — but it counts against the tree's two very-slow slots.
 

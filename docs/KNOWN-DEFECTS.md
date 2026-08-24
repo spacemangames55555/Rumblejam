@@ -1033,6 +1033,50 @@ which ruled the document's Momentum as the Savage's engine.
 
 ---
 
+## 20. Two Druid trees are named for each other's contents
+
+**Where:** `js/content/skills/druid_*.js`. The class's three built trees are
+`Wild Kin`, `Tapestry of Beasts` and `Restoration`.
+
+**What is wrong.** The names are crossed against what the trees hold:
+
+| built tree | what it actually contains |
+|---|---|
+| **Wild Kin** | `strike ×3, cone ×2, hazard ×1, ward ×1` — **no summons at all** |
+| **Tapestry of Beasts** | `strike ×2, summon ×3, hazard, heal, line, cone` — **all three summons** |
+
+"Wild Kin" names a summoner tree that summons nothing. "Tapestry of Beasts" — a
+name that reads as *borrowed* animal traits, one at a time — holds every actual
+animal the class calls. A player reading the tree titles picks the wrong tree
+for the build they want, and every document that maps the class by name inherits
+the error.
+
+**This is independent of the conversion documents.** They arrange the same two
+axes the other way round and are internally consistent; the defect is that the
+code's own labels do not describe the code's own contents. It would still be
+wrong if the documents did not exist.
+
+**Reproduce:**
+```
+node -e "import('./js/skills.js').then(m=>{for(const id of m.TREES_BY_CLASS['toh_druid']){const t=m.TREES[id];const k={};for(const s of t.skills)for(const c of (s.compose||[]))k[c.kind]=(k[c.kind]||0)+1;console.log(t.name, JSON.stringify(k))}})"
+```
+
+**Ruled out.** Moving the skills. The trees are coherent as *designs* — one is a
+summoner tree and one is a melee-flex tree — so the cheap and correct fix is the
+labels, not the contents.
+
+**What a fix would have to do.** Swap the two tree `name` fields, leaving skills
+and ids where they are. Tree ids are referenced by saves through spent skill
+points, so the `id` must not move; only the display `name` does. Check
+`tools/class_doc_gate.mjs`'s tree inventory afterwards — it reads names and will
+show the change.
+
+**Status:** `js/` change, own patch. Raised by the twelve-class pass of the
+class-conversion revision, where it was the reason the Druid's tree-name mapping
+could not be resolved.
+
+---
+
 ## 12. A client-page eval dies on an undefined `.x` mid co-op
 
 **Where:** the client page, during the co-op phase.

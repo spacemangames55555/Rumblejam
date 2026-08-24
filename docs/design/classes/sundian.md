@@ -16,18 +16,19 @@ fields authored. Class-wide rulings stated once here.
 
 **Engine — RULED: Tide (doc), keeping the drench layer beneath it.**
 
-**Tree names — built names win.** HELD — see below
-**HELD, and it is a genuine exception.** Tidecaller maps to **Tidewrack** on both name and role. Blade (melee) and Regalia (worn items) against **Reef** and **Undertow** is a coin toss — both built trees carry a similar strike count and neither name reads as jewellery.
+**Tree names — RULED: this document's names are KEPT.** The standing rule is
+"built names win unless the doc's is clearly better", and here the built name is
+not merely worse — it is wrong. Tidecaller maps to **Tidewrack** on both name and role, but Blade against **Reef** and Regalia against **Undertow** is a coin toss — neither built name reads as jewellery.
 
 **Tree contents — the document wins**, per the standing rule. Applied without
 further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 5.75/sec on a spread build — BELOW the band.**
+**Rate: 6.67/sec on a spread build — IN BAND.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -350,7 +351,7 @@ RANGE:                range medium (320px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (9 base) — up to 121 per enemy at 8 stacks
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               CONSUMES every drench stack on every enemy in the area,
@@ -606,7 +607,7 @@ RANGE:                melee long (82px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (16) — 26 against drenched targets (×1.6)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               ×1.6 against any target currently DRENCHED, resolved

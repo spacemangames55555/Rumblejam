@@ -10,18 +10,19 @@ fields authored. Class-wide rulings stated once here.
 
 **Engine — RULED: Kinship (doc).**
 
-**Tree names — built names win.** HELD — see below
-**HELD, and it is a genuine exception.** **The names cross over.** The built `Wild Kin` tree has NO summons (strike/cone/hazard/ward); the built `Tapestry of Beasts` has three. This document is the opposite way round — Wild Kin is the summoner tree, Tapestry of Beasts is the melee-flex. Taking the built names by role would swap them against their own titles.
+**Tree names — RULED: this document's names are KEPT.** The standing rule is
+"built names win unless the doc's is clearly better", and here the built name is
+not merely worse — it is wrong. **The built names are crossed against their own contents.** The built `Wild Kin` tree has NO summons; the built `Tapestry of Beasts` has three. This document is the opposite way round. Logged separately as a code defect — see KNOWN-DEFECTS #20.
 
 **Tree contents — the document wins**, per the standing rule. Applied without
 further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 6.33/sec on a spread build — IN BAND.**
+**Rate: 7.50/sec on a spread build — IN BAND.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -254,7 +255,7 @@ RANGE:                range medium (300px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockdown — stun 1000ms per enemy hit; caster displaced
@@ -525,7 +526,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               heals 30 to self
@@ -918,7 +919,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 2, +1 per 5 ranks
 --- output ---
 DAMAGE TIER:          none (0) — the viper deals the damage
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               persists until killed; applies a poison DoT on its bites

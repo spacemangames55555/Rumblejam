@@ -50,7 +50,7 @@ Grasp of Death is held — see below. Distribution: Dark Matter passes on its ow
 (7 medium-or-faster, 0 very slow), Marrow passes (Stake promoted, its root cut
 under ruling 6), Summons **cannot pass** — see below.
 
-**Rate: 8.25/sec on a spread build, against a 6–8 target — STILL 0.25 ABOVE.**
+**Rate: 9.17/sec on a spread build, against a 6–8 target — ABOVE.**
 The bucket-mix rule took this class from 8.75 by demoting Internal Collapse
 (Dark Matter held two very-fast nodes; Blip keeps the slot as the tier-1
 opener). It did not close the gap, and the reason is arithmetic in the rule
@@ -58,8 +58,12 @@ rather than anything in this class: **at most 1 very-fast per tree means 3 per
 class**, and a spread build takes all three. 3 × 1.667/sec is 5.0/sec before a
 single other slot is filled.
 
-A per-CLASS ceiling of 2 very-fast would land this build at 7.67/sec. Reported,
-not applied — it is a change to the rule, not to the Necromancer.
+At the raised floor of 3 fast-or-better this class reads 9.17/sec, and the cause
+is unchanged: **at most 1 very-fast per tree means 3 per class**, and this class
+uses its whole allowance. Each very-fast node is worth 0.83/sec more than a fast
+one, so 0 gives 6.67, 1 gives 7.50, 2 gives 8.33 and 3 gives 9.17. **A per-CLASS
+ceiling of 1 very-fast would put every class in the roster between 6.67 and
+7.50.** Reported, not applied — it is a change to the rule.
 
 **Mono-tree: 5.25/sec (Dark Matter), below band.** Marrow and Summons cannot
 fill eight slots at all — 7 and 6 timed actives against 8 slots, so a single-tree
@@ -281,7 +285,7 @@ RANGE:                range short (165px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 90px; knockback-stun 160ms
@@ -925,7 +929,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 (locks nearest)
 --- output ---
 DAMAGE TIER:          low (14 per tick)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               does NOT break on movement (port ruling 4, and roster
@@ -1091,7 +1095,7 @@ RANGE:                range long (420px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none

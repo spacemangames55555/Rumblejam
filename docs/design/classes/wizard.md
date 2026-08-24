@@ -10,18 +10,19 @@ fields authored. Class-wide rulings stated once here.
 
 **Engine — RULED: `shift` (built). Mana is CUT.**
 
-**Tree names — built names win.** HELD — see below
-**HELD, and it is a genuine exception.** **Attunement** holds all three `shift` nodes, so under the `shift` ruling it is the engine tree — but this document has no engine tree; its three are elemental domains (Fire/Wind, Ice/Poison, Ethereal). Mapping domains onto Attunement/Arcana/Dissonance has no role evidence either way.
+**Tree names — RULED: this document's names are KEPT.** The standing rule is
+"built names win unless the doc's is clearly better", and here the built name is
+not merely worse — it is wrong. **Attunement** holds all three `shift` nodes, so under the `shift` ruling it is the engine tree — but this document has no engine tree; its three are elemental domains. Mapping domains onto Attunement/Arcana/Dissonance has no role evidence either way.
 
 **Tree contents — the document wins**, per the standing rule. Applied without
 further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 7.67/sec on a spread build — IN BAND.**
+**Rate: 8.33/sec on a spread build — ABOVE the band.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -232,7 +233,7 @@ RANGE:                melee long (135px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -615,7 +616,7 @@ RANGE:                melee long (80px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.5 for 4000ms; weaken 30% for 4000ms
@@ -1155,7 +1156,7 @@ RANGE:                melee long (115px)
 TARGETS:              cap 6
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               heals the Wizard per enemy PRESENT in r115, not per

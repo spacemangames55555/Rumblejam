@@ -18,10 +18,10 @@ further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 5.75/sec on a spread build — BELOW the band.**
+**Rate: 6.67/sec on a spread build — IN BAND.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -351,7 +351,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (34)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none
@@ -673,7 +673,7 @@ TARGETS:              4 missiles, each seeking a separate target where
                       available (port change — see COST)
 --- output ---
 DAMAGE TIER:          low (9 per missile)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1059,7 +1059,7 @@ RANGE:                melee short (66px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (9 × 3 pulses = 27)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               3 pulses 130ms apart, each rolling its own hits and

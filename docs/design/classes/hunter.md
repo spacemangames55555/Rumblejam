@@ -18,10 +18,10 @@ further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 6.00/sec on a spread build — IN BAND.**
+**Rate: 6.67/sec on a spread build — IN BAND.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -196,7 +196,7 @@ RANGE:                range medium (300px)
 TARGETS:              1 (marked; all beasts redirect onto it)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               pet-command override, exclusive with Scatter the Pack —
@@ -775,7 +775,7 @@ TARGETS:              AUTHORED — hits every enemy on the way out and again on
                       the way back
 --- output ---
 DAMAGE TIER:          low (16 per pass, 32 to anything hit twice)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               the return pass is 400ms after the outbound, along the
@@ -1091,7 +1091,7 @@ RANGE:                melee short (74px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               slow ×0.5 for 2500ms

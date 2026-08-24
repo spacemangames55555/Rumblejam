@@ -140,7 +140,7 @@ Falling Petal (slow → medium) for Tactics, Kiai (slow → medium) for Armor,
 Running Draw (slow → medium) for Bow. Each was chosen for having no timed rider
 to break, so none needed a ruling-6 cut.
 
-**Rate: 6.00/sec on a spread build — IN BAND**, at its floor exactly. The
+**Rate: 6.67/sec on a spread build — IN BAND.** The
 bucket-mix rule took this class from 5.33 by promoting Parry and Piercing Arrow
 to fast, giving Armor and Bow their second fast-or-better node each. The class
 still owns **no very-fast node**, so its ceiling is structural: every build is a
@@ -375,7 +375,7 @@ RANGE:                melee long (100px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -790,7 +790,7 @@ RANGE:                melee long (110px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (10)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               stun 900ms
@@ -960,7 +960,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — slow ×0.45 for 1400ms, cut from an authored

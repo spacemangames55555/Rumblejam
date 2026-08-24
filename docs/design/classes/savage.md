@@ -18,10 +18,10 @@ further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 5.75/sec on a spread build — BELOW the band.**
+**Rate: 6.67/sec on a spread build — IN BAND.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -269,7 +269,7 @@ RANGE:                melee long (100px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -671,7 +671,7 @@ RANGE:                range medium (300px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               drain — heals the Savage 60% of damage dealt
@@ -963,7 +963,7 @@ RANGE:                range medium (300px)
 TARGETS:              1 (nearest)
 --- output ---
 DAMAGE TIER:          none (0) — chip 8 per 600ms during the confusion
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               CONFUSION 80% for 3500ms — the target attacks other

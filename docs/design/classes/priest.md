@@ -18,10 +18,10 @@ further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 5.50/sec on a spread build — BELOW the band.**
+**Rate: 6.67/sec on a spread build — IN BAND.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -227,7 +227,7 @@ RANGE:                range short (180px)
 TARGETS:              every live ally and summon in radius
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 30 to every friendly in r180; COSTS the Priest
@@ -744,7 +744,7 @@ RANGE:                melee short (60px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          medium (22) — 44 against stunned or slowed targets
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               doubles to 44 per target that is currently STUNNED or
@@ -939,7 +939,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed 8000ms — regenPerSec 8

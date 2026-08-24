@@ -18,10 +18,10 @@ further asking; divergences from the built tree are what this file already
 describes.
 
 **Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
-brought into the bucket-mix rule — at least 2 nodes fast-or-better per tree, at
-most 1 very fast, at most 2 very slow. All three trees comply.
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 5.50/sec on a spread build — BELOW the band.**
+**Rate: 6.67/sec on a spread build — IN BAND.**
 
 **Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
 Cooldowns moved; rider durations did not. Any rider now longer than its skill's
@@ -214,7 +214,7 @@ RANGE:                range medium (320px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          none (0) — chip 8 per 600ms at its nearest fellow
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               CONFUSION 80% for 4000ms — the longest confusion in the
@@ -784,7 +784,7 @@ RANGE:                range medium (320px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — shatters on impact into a 90px pool lasting
@@ -1060,7 +1060,7 @@ RANGE:                n/a
 TARGETS:              every live summon
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals every live summon +30 HP; COSTS the Witch Doctor
