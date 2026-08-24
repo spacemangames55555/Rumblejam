@@ -29,7 +29,7 @@
 //
 // Usage: node tools/class_doc_gate.mjs [--verbose]
 import { readdirSync, readFileSync } from 'node:fs';
-import { TREES_BY_CLASS } from '../js/skills.js';
+import { TREES, TREES_BY_CLASS } from '../js/skills.js';
 
 const DIR = new URL('../docs/design/classes/', import.meta.url);
 const RULING = 'roster-ruling-pace-damage-engines.md';
@@ -110,14 +110,27 @@ function blocksOf(text) {
   });
 }
 
-// The class token out of `CLASS / TREE / TIER: <class> / <tree> / tier_code N`.
-// Lower-cased, because the doc that capitalises it is naming a character and
-// the code that does not is naming a key.
-function classTokenOf(block, lines) {
+// `CLASS / TREE / TIER: <class> / <tree> / tier_code N` split into its three
+// parts.
+//
+// NOT a plain split on '/': the Wizard's trees are named `Fire/Wind` and
+// `Ice/Poison`, so his line carries four segments where everyone else's carries
+// three, and a naive split silently reports his trees as "Fire" and "Ice". The
+// class is the first segment and the tier is the last; the tree is everything
+// between, rejoined. That holds for a tree name containing any number of
+// slashes and needs no exception for the Wizard.
+function partsOf(block, lines) {
   const f = block.seen.find(s => s.name === 'CLASS / TREE / TIER');
   if (!f) return null;
-  const v = lines[f.line - 1].split(':').slice(1).join(':');
-  return v.split('/')[0].trim().toLowerCase() || null;
+  const segs = lines[f.line - 1].split(':').slice(1).join(':').split('/').map(s => s.trim());
+  if (segs.length < 3) return null;
+  return { cls: segs[0].toLowerCase(), tree: segs.slice(1, -1).join('/'), tier: segs[segs.length - 1] };
+}
+// Lower-cased, because the doc that capitalises the class is naming a character
+// and the code that does not is naming a key.
+function classTokenOf(block, lines) {
+  const p = partsOf(block, lines);
+  return p ? p.cls || null : null;
 }
 
 function problemsOf(b) {
@@ -218,6 +231,51 @@ export function checkClassDocs() {
   return { checks, fails: checks.filter(c => !c.ok).length };
 }
 
+// ------------------------------------------------------- the tree inventory
+
+// REPORTED, NEVER CHECKED — and deliberately not part of `checkClassDocs`, so
+// there is no route by which it can reach a failure count.
+//
+// The class-id bridge is a gate because there is exactly one right answer: an
+// id either resolves or it does not. Tree names are not that. These documents
+// are CONVERSION PROPOSALS carrying Thrones of Heaven's tree structure, and the
+// built trees are what the code settled on; where they disagree, the resolution
+// is a design call per class — adopt the doc's names, keep the built ones, or
+// decide the doc describes a tree that was never built. A gate would be
+// asserting an answer that has not been given yet, and a red check nobody can
+// action is how a suite stops being read.
+//
+// So this counts and prints and returns, and that is all.
+export function treeInventory() {
+  const rows = [];
+  for (const doc of Object.keys(CLASS_DOCS)) {
+    let text;
+    try { text = readFileSync(new URL(`${doc}.md`, DIR), 'utf8'); } catch { continue; }
+    const lines = text.split('\n');
+
+    // In order of first appearance, which is tree order in the document.
+    const docTrees = [];
+    for (const b of blocksOf(text)) {
+      const p = partsOf(b, lines);
+      if (p && p.tree && !docTrees.includes(p.tree)) docTrees.push(p.tree);
+    }
+    const codeTrees = (TREES_BY_CLASS[CLASS_DOCS[doc]] || []).map(id => TREES[id]?.name || id);
+
+    // Exact is case-insensitive equality and nothing cleverer. "Related" is one
+    // name containing the other — the Druid's `Nature's Restoration` against the
+    // built `Restoration`, the Savage's `Blood` against `Bloodbound`. Kept in
+    // its own column rather than folded into the match count, because whether
+    // those are the same tree under two names or two different trees is exactly
+    // the judgement this inventory refuses to make.
+    const lc = (s) => s.toLowerCase();
+    const exact = docTrees.filter(t => codeTrees.some(c => lc(c) === lc(t)));
+    const related = docTrees.filter(t => !exact.includes(t)
+      && codeTrees.some(c => lc(c).includes(lc(t)) || lc(t).includes(lc(c))));
+    rows.push({ doc, docTrees, codeTrees, exact, related });
+  }
+  return rows;
+}
+
 // ---------------------------------------------------------------- CLI
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -226,6 +284,23 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log('THE CLASS CONVERSION DOCUMENTS, AGAINST THE CODE\n');
   for (const c of checks) if (!c.ok || verbose) console.log(`${c.ok ? '✓' : '✗'} ${c.msg}`);
   if (!verbose) console.log(`(${checks.length - fails} passing checks not shown — --verbose for all)`);
+
+  // The inventory prints after the verdict and takes no part in it.
+  const rows = treeInventory();
+  const tot = rows.reduce((n, r) => n + r.exact.length, 0);
+  console.log('\n\nTREE NAMES — REPORTED, NOT CHECKED');
+  console.log('These documents are conversion proposals; the built trees are what the code');
+  console.log('settled on. Divergence is expected and each class is a design call.\n');
+  const w = Math.max(...rows.map(r => r.docTrees.join(' / ').length));
+  const v = Math.max(...rows.map(r => r.codeTrees.join(' / ').length));
+  console.log(`  ${'class'.padEnd(13)}${'doc trees'.padEnd(w + 3)}${'built trees'.padEnd(v + 3)}match`);
+  for (const r of rows) {
+    const mark = r.exact.length === 3 ? 'all 3' : r.exact.length ? `${r.exact.length} of 3` : 'none';
+    console.log(`  ${r.doc.padEnd(13)}${r.docTrees.join(' / ').padEnd(w + 3)}${r.codeTrees.join(' / ').padEnd(v + 3)}${mark}`);
+    if (r.related.length) console.log(`  ${''.padEnd(13)}└ related, not identical: ${r.related.map(t => `"${t}"`).join(', ')}`);
+  }
+  console.log(`\n  ${tot} of 42 tree names match exactly; ${rows.filter(r => !r.exact.length).length} of 14 classes match none.`);
+
   console.log(fails ? `\n${fails} FAILURE(S)` : `\nALL ${checks.length} CLASS-DOC CHECKS PASSED`);
   process.exit(fails ? 1 : 0);
 }
