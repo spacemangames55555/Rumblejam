@@ -46,14 +46,15 @@ Against `roster-ruling-pace-damage-engines.md`. What moved, what held.
 
 **Pace (ruling 1).** 21 of 22 timed actives rebucketed to the fixed values.
 Grasp of Death is held — see the conflicts below. Distribution: Dark Matter
-passes on its own (7 medium-or-faster, 0 very slow), Marrow passes **only if
-Stake's root is shortened**, Summons **cannot pass** — see below.
+passes on its own (7 medium-or-faster, 0 very slow), Marrow passes (Stake
+promoted, its root cut under ruling 6), Summons **cannot pass** — see below.
 
 **Damage share (ruling 2).** Marrow 6 damage nodes, 1 high. Dark Matter 10
 damage nodes, and its high-tier node comes from relabelling Singularity off
 its 8-pulse total rather than its per-pulse figure — no number changed, and
 ruling 2 could not otherwise be met without retuning, which the ruling's own
-"out of scope" clause forbids. Summons has 2 and fails — see below.
+"out of scope" clause forbids. Summons has 6 and passes, under the rewritten
+ruling 2 that counts a summon's damage as the node's damage.
 
 **Passive budget (ruling 4).** Nine passives across the class against a
 four-slot budget: Marrow 3, Summons 5, Dark Matter 1. Binding, and worth
@@ -69,39 +70,36 @@ END, since the slow bucket's 3s otherwise sits under a 10s channel.
 **Engine cost (ruling 3).** Not applicable. Essence is a bank that builds, not
 one of the two depleting engines.
 
-### THE RULING AGAINST THE CLASS — four held, not resolved
+### THE RULING AGAINST THE CLASS — two resolved since, two still held
 
-**1. Shortened cooldowns turn timed riders permanent.** The ruling sets
-cooldowns and says nothing about rider durations, so every rider whose
-duration now exceeds its cooldown becomes an always-on effect. Three here:
+**RESOLVED by roster ruling 6 (rider duration under cooldown).** Reported from
+this class, ruled roster-wide, applied back here. Stake's root went 2500ms to
+1000ms and Hex of Entropy's slow and weaken went 2000ms to 1000ms — both now
+sit under a 1500ms cooldown, and both gained uptime doing it: Stake pins 67% of
+the time against 25% before, Hex 67% against 22%.
 
-| skill | rider | new cooldown | result |
-|---|---|---|---|
-| Stake | root 2500ms | 1500ms | permanent single-target root |
-| Hex of Entropy | slow ×0.5 + weaken 40%, 2000ms | 1500ms | permanent area control |
-| Marrownaut | form 30000ms | 6000ms | permanent +50% HP / +45% mitigation |
+**RESOLVED by the reword of ruling 2 (summon damage counts).** Summons has six
+damaging nodes once a summon's output counts as the node's output, and passes.
 
-This is not a Necromancer problem. It will hit every class with a timed rider,
-and it wants one roster-wide companion rule rather than fourteen local fixes.
+**STILL HELD 1 — Marrownaut is a form the exception cannot ration.** Ruling 6
+says a form keeps its duration and takes a capstone cooldown. Applied, at the
+bucket's 30s ceiling. A 30000ms form under a 30000ms cooldown is still
+permanent. The exception works for a 12s form under a 60s capstone; it cannot
+ration a form whose duration equals the bucket's entire range.
 
-**2. Summons cannot satisfy the distribution rule and stay a summoner tree.**
-Five passives plus a capstone leave five timed actives, of which four must be
-medium-or-faster. Two already are. The other three are Unleash the Monster,
-Dark Matter and Death Channel — a single pet, a capped second summon, and a
-ten-second channel. A skeleton every 0.4s is not a commander, and a channel on
-a cooldown shorter than itself is not a channel.
+**STILL HELD 2 — Summons cannot satisfy the DISTRIBUTION rule and stay a
+summoner tree.** Five passives plus a capstone leave five timed actives, of
+which four must be medium-or-faster. Two are. The other three are Unleash the
+Monster, Dark Matter and Death Channel — a single pet, a capped second summon,
+and a ten-second channel. A skeleton every 0.4s is not a commander, and a
+channel on a cooldown shorter than itself is not a channel. The damage half of
+this was fixed by rewording ruling 2; the pace half has no equivalent reading.
 
-**3. Summons cannot satisfy the damage-share floor either, for the same
-reason.** Six of its nodes read `DAMAGE TIER: none (0) — the skeleton deals
-the damage, not the cast`. The tree has output; it is delivered by bodies. The
-rule as written counts the cast. It needs to count a summon's damage as the
-node's damage, or summoner trees fail it by construction.
-
-**4. Grasp of Death is a capstone the capstone bucket destroys.** It is
-Marrow's tier-10 and the class's only self-heal — 40 damage on a 60% drain,
-currently 9s. The capstone bucket says 20–30s, which removes the Necromancer's
-sustain; the slow bucket says 3s, which makes a 24-point heal available twenty
-times a minute. Held at 9s, in no bucket, deliberately.
+**STILL HELD 3 — Grasp of Death is a capstone the capstone bucket destroys.**
+Marrow's tier-10 and the class's only self-heal: 40 damage on a 60% drain,
+currently 9s. The capstone bucket's 20–30s removes the Necromancer's sustain;
+the slow bucket's 3s makes a 24-point drain-heal available twenty times a
+minute. Held at 9s, in no bucket, deliberately.
 
 ---
 
@@ -334,7 +332,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (6000ms)
+PACE:                 capstone (30000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               form 30000ms — maxHPMult +0.50, damageReduction +0.45;
@@ -355,12 +353,14 @@ COST:                 the size increase is not cosmetic. A larger hitbox in
                       a bullet-hell room means more contacts, and this skill
                       makes the player physically harder to keep safe for
                       thirty seconds. It gives you durability and takes away
-                      evasion. RULING CONFLICT — HELD: the very-slow bucket
-                      puts the cooldown at 6s under a 30000ms form, so the
-                      transformation never lapses and +50% HP / +45% damage
-                      reduction become permanent stats. Either the form comes
-                      down to a few seconds or this node needs a cooldown the
-                      bucket table does not have
+                      evasion. RULING 6 CONFLICT — STILL HELD: the form
+                      exception moved this to the capstone bucket at its
+                      ceiling, 30s, and a 30000ms form under a 30000ms
+                      cooldown is STILL permanent. Ruling 6's exception works
+                      for a 12s form under a 60s capstone; it cannot ration a
+                      form whose duration already equals the bucket's whole
+                      range. Either this form shortens or the bucket needs a
+                      value above 30s
 VISUAL:               he swells — the skeleton visibly thickening beneath,
                       plates of bone shouldering up through the coat, half a
                       head taller and much wider
@@ -388,24 +388,26 @@ DAMAGE TIER:          low (14)
 PACE:                 medium (1500ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               root 2500ms — port addition, see COST
+RIDERS:               root 1000ms — port addition; cut from 2500ms by roster
+                      ruling 6, which caps a rider at ~70% of its cooldown
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
 TRIGGER:              ENEMY_BREACHES_RING (84px)
 THREAT:               some
 --- growth ---
-RANK ADDS:            +2 damage; +300ms root every 3rd rank
+RANK ADDS:            +2 damage; +100ms root every 3rd rank (was +300ms —
+                      rescaled with the shorter base so ranking cannot walk
+                      the root back above the cooldown)
 --- identity ---
 ENGINE:               neutral
-COST:                 RULING CONFLICT — HELD. The pace pass promoted this
-                      from slow to medium (10s to 1.5s) because Marrow needs
-                      a fourth medium-or-faster node and this was the tree's
-                      weakest, by its own former COST line. But the root is
-                      2500ms and the cooldown is now 1500ms, so as written it
-                      is a PERMANENT single-target root. The root needs to
-                      come down to roughly 900ms, or this stays slow and
-                      Marrow fails the distribution rule. Not resolved here
+COST:                 promoted from slow to medium (10s to 1.5s) because
+                      Marrow needs a fourth medium-or-faster node and this was
+                      the tree's weakest by its own former reckoning. Ruling 6
+                      took the root from 2500ms to 1000ms to keep it under the
+                      cooldown. The node is better for it: one second of pin
+                      every 1.5s is 67% uptime against the old 2500ms every
+                      10s, which was 25%. It pins more and locks less
 VISUAL:               a spike of yellowed bone driven down through the foot,
                       pinning the enemy in place; it snaps when they tear free
 FLAVOR:               A stake is not a weapon. It is a statement about where
@@ -1151,24 +1153,25 @@ DAMAGE TIER:          low (4)
 PACE:                 medium (1500ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               slow ×0.5 for 2000ms; weaken 40% for 2000ms
+RIDERS:               slow ×0.5 for 1000ms; weaken 40% for 1000ms — both cut
+                      from 2000ms by roster ruling 6
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
 TRIGGER:              DENSEST_CLUSTER within 360px
 THREAT:               none
 --- growth ---
-RANK ADDS:            +400ms duration and +8px radius per rank (not damage —
-                      four damage is the joke and it should stay the joke)
+RANK ADDS:            +150ms duration and +8px radius per rank (was +400ms,
+                      rescaled under ruling 6; not damage — four damage is the
+                      joke and it should stay the joke)
 --- identity ---
 ENGINE:               neutral
-COST:                 RULING CONFLICT — HELD. It was the shortest control
-                      window in the game on a seven-second cooldown, off five
-                      times as often as on. At the medium bucket's 1.5s the
-                      2000ms slow and 40% weaken never lapse, so the joke node
-                      becomes permanent area control on a cluster. The two
-                      seconds want to come down below the cooldown, or this
-                      node wants a bucket the ruling does not offer
+COST:                 it was the shortest control window in the game on a
+                      seven-second cooldown, off five times as often as on. At
+                      the medium bucket it is one second in every 1.5 — still
+                      the shortest window in the game, now at 67% uptime
+                      instead of 22%. Ruling 6 is what keeps it from becoming
+                      permanent, and four damage is still the joke
 VISUAL:               a brief violet lattice snapping into place over a small
                       knot of enemies, then falling apart
 FLAVOR:               A hex is a request that something proceed slightly

@@ -81,10 +81,17 @@ export const TEMPLATE = [
 ];
 const TEMPLATE_SET = new Set(TEMPLATE);
 
-// Necromancer carries one extra block: `necro_skeleton_branch`, an exclusive
-// pair (Blood Skeleton / Marrow Skeleton) both at tier_code 5. Stated as a
-// number so that losing a branch is a red check rather than a quiet 30.
-export const EXPECTED_BLOCKS = { necromancer: 31 };
+// Departures from 30, each for a stated reason, so that losing a block is a red
+// check rather than a quiet 30.
+//
+//   necromancer 31 — `necro_skeleton_branch`, an exclusive pair (Blood Skeleton
+//                    / Marrow Skeleton) both at tier_code 5.
+//   samurai     27 — Water, Stone and Fire Stance left the tree by ruling: the
+//                    stance machine is the built `three_stances` trait, not
+//                    three slotted nodes, so they are a trait spec in the
+//                    document's prose and no longer skill blocks. The
+//                    remaining seven Stances nodes moved into Armor.
+export const EXPECTED_BLOCKS = { necromancer: 31, samurai: 27 };
 const DEFAULT_BLOCKS = 30;
 
 // A field line: a caps name at column 0 followed by a colon. Continuation lines

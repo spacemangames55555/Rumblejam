@@ -6,7 +6,7 @@ Applies to all fourteen RumbleJam class conversion files. The class files get re
 
 Measured across all fourteen conversions (329 timed actives):
 
-- Mean cooldown **15.6 seconds**. An 8-slot build fires **0.51 times per second**. Current measured in-game rate is 4.1/sec, and 4.1 already reads as too sparse in play.
+- Mean cooldown **15.6 seconds**. An 8-slot build fires ~~0.51 times per second~~ — **corrected: 2.6 times per second.** See "The activation-rate formula" below. Current measured in-game rate is 4.1/sec, and 4.1 already reads as too sparse in play.
 - **155 of 391 skills deal no damage** (40%). Only **9 are high damage** (2.3%).
 - Two depleting engines (Wizard Mana, Mage Energy) charge a flat cost per cast by pace bucket, so burn-per-second varies ~8× between a fast and a slow skill.
 
@@ -16,7 +16,24 @@ The cooldowns came from Thrones of Heaven, where a human pressed buttons every f
 
 ## Ruling 1 — Pace
 
-**Target: a slotted 8-skill build fires 6–8 times per second.** Genre reference is Brotato's six weapons at one to two attacks each. Mean cooldown across a slotted build lands near 1.1s.
+**Target: a slotted 8-skill build fires 6–8 times per second**, measured as **`sum(1/cd)` over the eight slotted cooldowns.** Genre reference is Brotato's six weapons at one to two attacks each.
+
+### The activation-rate formula
+
+This ruling was first written against `8 / mean_cooldown`. **That formula is wrong** and it understated every rate in the document.
+
+`8/mean` is the firing rate only when all eight slotted cooldowns are equal. By the AM–HM inequality `sum(1/cd) >= 8/mean` for every other build, with the gap widening as the build's cooldowns spread out — and a real build is deliberately spread, because a player slots a fast opener next to a capstone.
+
+Recomputed on `sum(1/cd)`, with a representative build taken evenly across the three trees:
+
+| | 8/mean (wrong) | sum(1/cd) (correct) |
+|---|---|---|
+| the fourteen conversions as authored | 1.60/sec (0.51 quoted, taken over *all* actives rather than a slotted eight) | **2.62/sec** |
+| the built game today | 3.40/sec | **4.52/sec** |
+
+**The correct formula reproduces the measured number.** The built game measures 4.1/sec in play and computes to 4.52/sec on `sum(1/cd)`, against 3.40/sec on `8/mean`. That agreement is the evidence for the formula, and the 0.51 figure was never reconcilable with the 4.1 sitting beside it in the same sentence.
+
+**What this changes.** The gap is **4.1 → 6–8, roughly 1.5–1.8x**, not the ~8x the 0.51 figure implied. The bucket values below were sized against the wrong number and are **too fast at the quick end**: four very-fast slots alone produce 10/sec, and a Necromancer build under these buckets measures 9.25/sec against a 6–8 target. Flagged, not changed — retuning the table is a separate ruling.
 
 Fixed bucket values. "Slow" means one thing roster-wide:
 
@@ -39,7 +56,9 @@ Where a skill's identity genuinely requires a long cooldown that isn't a capston
 
 ## Ruling 2 — Damage share
 
-**Per tree of 10: at least 5 nodes deal real damage, and at least 1 is high tier.**
+**Per tree of 10: at least 5 nodes are damaging, and at least 1 is high tier.**
+
+**A node is damaging if it PRODUCES damage** — from the cast, from a placed hazard or trap, or from a body it summons. Counting only damage on the cast itself fails the Necromancer, the Druid and the Hunter by construction, because a summoner's output is delivered by the summon: six Necromancer nodes read `DAMAGE TIER: none (0) — the skeleton deals the damage, not the cast`, and that tree has output.
 
 Zero-damage control skills stay. Black Ice dealing literally nothing is correct design and should not have damage grafted onto it; the same goes for Intimidate, the Ice Golem, and every pure-utility node. The rule guarantees that a player who commits to one tree has output, not that every node is an attack.
 
@@ -68,6 +87,22 @@ This also makes the engines survive any future pace change. A flat per-cast cost
 Passives get their own budget: **4 passive slots**, separate from the 8 active slots, on the same unlock ladder.
 
 Passive counts run from 1 (Druid) to 12 (Blacksmith), median 4. A shared budget would punish passive-heavy classes for their identity; an unlimited one would hand Blacksmith twelve always-on effects against Druid's one. Fixed 4 binds six of thirteen classes, so it's a real build decision rather than a formality.
+
+---
+
+## Ruling 6 — Rider duration against cooldown
+
+**A rider's duration must be shorter than its skill's cooldown.** Where the authored duration exceeds the new cooldown, **cut the duration to ~70% of the cooldown.** Do not lengthen the cooldown to fit the rider — pace is the thing being fixed, and solving a rider by slowing the skill undoes ruling 1.
+
+**Exception: transformations and forms keep their duration and take a capstone-bucket cooldown instead.** A form is the skill; shortening it to 70% of a fast cooldown deletes it rather than balancing it.
+
+This rule exists because ruling 1 sets cooldowns and says nothing about durations, so rebucketing silently converts every timed rider into a permanent one. It is not a per-class problem. Three landed in the Necromancer alone on the first pass:
+
+| skill | rider | new cooldown | before the rule | after |
+|---|---|---|---|---|
+| Stake | root 2500ms | 1500ms | permanent single-target root | root 1000ms |
+| Hex of Entropy | slow ×0.5 + weaken 40%, 2000ms | 1500ms | permanent area control | both 1000ms |
+| Marrownaut | form 30000ms | 6000ms | permanent +50% HP / +45% mitigation | form kept, cooldown to the capstone bucket |
 
 ---
 
