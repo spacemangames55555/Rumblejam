@@ -32,7 +32,15 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { TREES, TREES_BY_CLASS } from '../js/skills.js';
 
 const DIR = new URL('../docs/design/classes/', import.meta.url);
-const RULING = 'roster-ruling-pace-damage-engines.md';
+
+// Files in the directory that are NOT class documents. Listed explicitly rather
+// than pattern-matched: the whole point of the coverage check is that an
+// unrecognised file is a failure, so the exemption has to be a decision someone
+// made rather than a filename that happened to sort differently.
+const NOT_A_CLASS = new Set([
+  'roster-ruling-pace-damage-engines.md',   // the ruling the class files revise against
+  'engines-doc-vs-built.md',                // engine decision document, all 14 side by side
+]);
 
 // ---------------------------------------------------------------- the bridge
 
@@ -176,7 +184,7 @@ export function checkClassDocs() {
   try { files = readdirSync(DIR).filter(f => f.endsWith('.md')).sort(); }
   catch (e) { bad(`docs/design/classes/ is unreadable: ${e.message}`); return { checks, fails: 1 }; }
 
-  const docs = files.filter(f => f !== RULING).map(f => f.replace(/\.md$/, ''));
+  const docs = files.filter(f => !NOT_A_CLASS.has(f)).map(f => f.replace(/\.md$/, ''));
 
   // -- the bridge, both directions --
   //
@@ -203,7 +211,7 @@ export function checkClassDocs() {
 
   // -- per file --
   for (const f of files) {
-    if (f === RULING) continue;
+    if (NOT_A_CLASS.has(f)) continue;
     const doc = f.replace(/\.md$/, '');
     const text = readFileSync(new URL(f, DIR), 'utf8');
     const lines = text.split('\n');
@@ -233,8 +241,9 @@ export function checkClassDocs() {
     for (const { b, problems } of broken) bad(`${doc} / ${b.name} (line ${b.line}): ${problems.slice(0, 3).join('; ')}${problems.length > 3 ? ` (+${problems.length - 3} more)` : ''}`);
   }
 
-  if (files.includes(RULING)) ok(`the roster ruling is filed alongside them (${RULING})`);
-  else bad(`${RULING} is missing from docs/design/classes/`);
+  const missingCompanions = [...NOT_A_CLASS].filter(f => !files.includes(f));
+  if (!missingCompanions.length) ok(`the ${NOT_A_CLASS.size} companion documents are filed alongside them`);
+  for (const f of missingCompanions) bad(`${f} is missing from docs/design/classes/`);
 
   return { checks, fails: checks.filter(c => !c.ok).length };
 }
