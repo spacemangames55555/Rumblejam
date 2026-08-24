@@ -50,11 +50,20 @@ Grasp of Death is held — see below. Distribution: Dark Matter passes on its ow
 (7 medium-or-faster, 0 very slow), Marrow passes (Stake promoted, its root cut
 under ruling 6), Summons **cannot pass** — see below.
 
-**Rate: 8.75/sec on a spread build, against a 6–8 target.** Still above the
-band after the rescale, and the reason is bucket MIX rather than bucket values:
-this class owns four very-fast nodes — Bone Dart, Entropy Cascade, Dark Energy
-Blip, Internal Collapse — and four very-fast slots produce 6.7/sec between them
-before anything else is slotted. No per-class rule currently caps that.
+**Rate: 8.25/sec on a spread build, against a 6–8 target — STILL 0.25 ABOVE.**
+The bucket-mix rule took this class from 8.75 by demoting Internal Collapse
+(Dark Matter held two very-fast nodes; Blip keeps the slot as the tier-1
+opener). It did not close the gap, and the reason is arithmetic in the rule
+rather than anything in this class: **at most 1 very-fast per tree means 3 per
+class**, and a spread build takes all three. 3 × 1.667/sec is 5.0/sec before a
+single other slot is filled.
+
+A per-CLASS ceiling of 2 very-fast would land this build at 7.67/sec. Reported,
+not applied — it is a change to the rule, not to the Necromancer.
+
+**Mono-tree: 5.25/sec (Dark Matter), below band.** Marrow and Summons cannot
+fill eight slots at all — 7 and 6 timed actives against 8 slots, so a single-tree
+Necromancer is not merely slow, it is short of skills.
 
 **Damage share (ruling 2).** Marrow 6 damage nodes, 1 high. Dark Matter 10
 damage nodes, and its high-tier node comes from relabelling Singularity off
@@ -600,7 +609,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 3 standing, +1 per 4 ranks
 --- output ---
 DAMAGE TIER:          none (0) — the skeleton deals the damage, not the cast
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               summon persists until killed; takes aggro above the
@@ -1302,7 +1311,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 per cast (nearest below max stacks)
 --- output ---
 DAMAGE TIER:          low (10 per tick)
-PACE:                 very fast (600ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               stacks to 5 on a single target

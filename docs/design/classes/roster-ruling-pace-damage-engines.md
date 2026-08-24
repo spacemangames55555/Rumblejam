@@ -48,9 +48,24 @@ Fixed bucket values. "Slow" means one thing roster-wide:
 
 **Rescaled once, against the corrected gap.** The first table (0.4 / 0.8 / 1.5 / 3 / 6) was sized against the 0.51/sec figure and assumed an ~8x jump. The real gap is 1.5–1.8x, and the first table overshot: the Necromancer measured **12.92/sec** under it against a 6–8 target, because four very-fast slots produce 6.7/sec between them before anything else is slotted.
 
-**Distribution rule, per tree of 10:** at least **4 nodes in medium or faster**, at most **2 in very slow**. Capstones are exempt from the distribution count.
+**Distribution rule, per tree of 10:** at least **2 nodes fast or better**, at most **1 very fast**, at most **2 in very slow**. Capstones are exempt from the distribution count.
 
-Buckets alone don't reach the target — half the current roster sits in slow or very slow, which would still only yield ~2.3/sec. The distribution rule is what gets there.
+The speed half was originally "at least 4 nodes in medium or faster". That is a floor on composition and it does not reach the target: 4 medium plus 4 slow satisfies it and yields 3.0/sec. Worse, it says nothing about the top of the range, and the top is what actually moves the number — the Necromancer's four very-fast nodes produced 6.7/sec between them before anything else was slotted, while the Samurai owned no very-fast node at all and could not exceed 6.67/sec even with all eight slots fast.
+
+**A bucket-mix rule fixes both ends.** The floor of 2 fast-or-better guarantees a class can reach the band; the ceiling of 1 very-fast per tree stops one class running away with it.
+
+### What a per-tree rule cannot do
+
+**It constrains composition, not builds.** A player slots eight nodes and may take them all from one tree, and a mono-tree build is a different arithmetic from a spread one — the same tree that contributes its two fast nodes to a spread build also contributes its slow and very-slow ones when it has to fill all eight slots.
+
+Measured after this rule (see the two class files):
+
+| build | Necromancer | Samurai |
+|---|---|---|
+| spread across three trees | in band | in band |
+| single tree | **below band** | **below band** |
+
+That is the rule's limit and it is structural: no per-tree composition rule can put every build in the band, because a tree of ten cannot be all fast without the distribution rule's other half collapsing. Mono-tree builds are slower by construction. **Whether that is a defect or a correct cost of specialising is a design call and is not made here.**
 
 Where a skill's identity genuinely requires a long cooldown that isn't a capstone, say so and keep it — but it counts against the tree's two very-slow slots.
 

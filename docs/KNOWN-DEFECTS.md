@@ -946,6 +946,57 @@ file.
 
 ---
 
+## 18. `samurai_agility` scales on Footing, and its own play pattern destroys Footing
+
+**Where:** `js/content/skills/samurai_agility.js` — the tree declares
+`scaleWith: 'footing'` and its nodes trigger on `MOVEMENT`. Footing is granted
+by **standing still** (GDD §8.4: one stack per 500ms stationary, cap 10, with a
+400ms grace *budget* rather than a timer).
+
+**What is wrong.** The tree scales on an engine its own play pattern spends. A
+player using Agility as designed — Quickstep, Running Cut, Slip Cut, Windwalk,
+all movement-triggered — is moving continuously, which drains the 400ms budget
+and drops every stack. The reward and the requirement are opposites, so the
+tree's scaling term reads as near-zero exactly when the tree is being played
+correctly. The GDD already names this in §8.1 and it has never been costed.
+
+**Reproduce:** `node tools/balance_probe.mjs toh_samurai` — the pilot bot
+kites, so it plays Agility's pattern by default. Footing stacks should sit near
+the floor for the whole run.
+
+**Ruled out.** Rescaling Agility onto another engine term. Two reasons: the
+conflict is not Agility's alone — Footing is stationary-fed in a game whose only
+input is movement, so every class scaling on it has this tension and Agility
+merely states it loudest — and `samurai_agility` is GDD §8.1's cited
+shape-spec reference for the whole roster, so making it a special case costs
+more than it fixes.
+
+**What a fix would have to do.** Widen the grace budget rather than change what
+Agility scales on. **Proposed: `footingGraceMs` 400 → 900**, `footingGraceRefill`
+unchanged at 1.0.
+
+- 900ms is chosen as roughly one *reposition* rather than one sidestep: enough
+  to leave a hazard and re-plant, still far short of a room crossing, which is
+  several seconds at player move speed. §8.4's boundary — "one sidestep out of
+  the fastest committed zone fits and a room crossing does not" — is preserved
+  and moved out one step.
+- The budget, not `footingTickMs`. Halving the tick would make stacks cheaper
+  for a Samurai who never moves; widening the budget pays only the player who
+  does, which is the population this defect is about.
+- §8.4 calls Footing "the most-iterated design in the project", so a fourth
+  iteration should be deliberate rather than incidental.
+
+**It does not ship without a fixture.** The test is whether an Agility build
+holds Footing **above ~5 stacks** while playing the tree as intended — which is
+a measurement, not an argument, and the number is what decides whether 900ms is
+the right widening or merely a different wrong one.
+
+**Status:** proposal accepted, `js/` change, lands in its own patch. Raised by
+the Samurai pass of the class-conversion revision
+(`docs/design/classes/samurai.md`).
+
+---
+
 ## 12. A client-page eval dies on an undefined `.x` mid co-op
 
 **Where:** the client page, during the co-op phase.

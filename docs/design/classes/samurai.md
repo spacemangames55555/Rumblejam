@@ -140,13 +140,17 @@ Falling Petal (slow → medium) for Tactics, Kiai (slow → medium) for Armor,
 Running Draw (slow → medium) for Bow. Each was chosen for having no timed rider
 to break, so none needed a ruling-6 cut.
 
-**Rate: 5.33/sec on a spread build, against a 6–8 target.** BELOW the band, and
-for the mirror-image reason to the Necromancer's 8.75: this class owns **no
-very-fast node at all.** Its fastest bucket is `fast`, so every eight-slot build
-is some mix of 1.2s and 2.0s and the arithmetic tops out at 6.67/sec even if all
-eight are fast. The spread and fastest-8 builds are identical here for the same
-reason. Held — reaching the band needs a rule about bucket mix, not a
-per-skill edit.
+**Rate: 6.00/sec on a spread build — IN BAND**, at its floor exactly. The
+bucket-mix rule took this class from 5.33 by promoting Parry and Piercing Arrow
+to fast, giving Armor and Bow their second fast-or-better node each. The class
+still owns **no very-fast node**, so its ceiling is structural: every build is a
+mix of 1.2s and 2.0s, and eight fast slots would top out at 6.67/sec. Spread and
+fastest-8 are identical here for that reason.
+
+**Mono-tree: 3.46/sec (Tactics), 3.67/sec (Bow) — both well below band.** Armor
+holds only four timed actives and cannot fill eight slots. A single-tree Samurai
+fires at roughly half the rate of a spread one, which is the per-tree rule's
+structural limit rather than a fact about this class.
 
 **Distribution.** Tactics 4 medium-or-faster of 7 non-capstone actives, 0 very
 slow — passes. Bow 4 of 8, 0 very slow — passes. **Armor is 3 of 4 and cannot
@@ -669,7 +673,7 @@ RANGE:                melee short (at the attacker)
 TARGETS:              cap 2
 --- output ---
 DAMAGE TIER:          medium (22 riposte, 36 with Counterstrike owned)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               riposte — resolves as an immediate counter-strike on
@@ -919,7 +923,7 @@ TARGETS:              pierces all enemies along the line (port change — see
                       COST)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
