@@ -7,7 +7,7 @@
 // drifts faster than the code it governs, and here the drift arrives as a wrong
 // number rather than a wrong sentence.
 //
-// FIVE CHECKS, AND THEY FAIL FOR DIFFERENT REASONS.
+// FOUR CHECKS, AND THEY FAIL FOR DIFFERENT REASONS.
 //
 // 1. THE TEMPLATE. Every block carries the same 27 fields in the same order.
 //    Names and order only. A missing or misspelled field name is what turns
@@ -31,7 +31,7 @@
 // green for both.
 //
 // SO THE FAILURE SHAPE IS CROSS-FIELD CONTRADICTION, and that is what checks 3
-// 4 and 5 test. None of them ranks a number or has an opinion about whether 840ms
+// 3 and 4 test. Neither one ranks a number or has an opinion about whether 840ms
 // is the right stun: that judgment stays out of this file, exactly as before.
 // What they assert is INTERNAL CONSISTENCY — that a block which states the same
 // quantity twice states it the same way both times, and that an annotation
@@ -52,9 +52,12 @@
 //
 // 3. CROSS-FIELD DURATION AGREEMENT. See `dotSignature` below.
 // 4. ANNOTATION ARITHMETIC. See `PCT_OF_CD` below.
-// 5. ROSTER RULING 6 ITSELF. See `ruling6` below — and note that both of its
-//    suppression markers, `**Exempt:**` and `**Grandfathered:**`, are read out
-//    of the class files and never written down in here.
+// A FIFTH CHECK ASSERTED ROSTER RULING 6 — no rider longer than 70% of its own
+// cooldown — and is GONE, because the cap is retired. See the ruling: RumbleJam
+// fires automatically into swarms, so a rider outliving its cooldown lands on
+// the next enemy rather than locking one down. There is no invariant left to
+// assert. The exemption marker it read outlives it, below, because what those
+// six lines say was never about duration.
 //
 // Usage: node tools/class_doc_gate.mjs [--verbose]
 import { readdirSync, readFileSync } from 'node:fs';
@@ -338,127 +341,37 @@ function annotationArithmetic(doc, blocks, lines) {
   return { verified, bad };
 }
 
-// ---------------------------------------------- 5. ruling 6, asserted directly
+// ------------------------------------------------- the exemption marker
 
-// THE RULE THE WHOLE SWEEP WAS ABOUT, AND THE ONE THAT HAD NO INSTRUMENT.
-//
-// Roster ruling 6: a rider's duration may not exceed its skill's cooldown, and
-// where it did, the cut was to ~70% of that cooldown. Checks 3 and 4 each catch
-// a way of getting this wrong, but both need something extra to compare
-// against — 3 needs the block to state the duration twice, 4 needs an
-// annotation that shows its own arithmetic. `necromancer/Tainted Dark Matter`
-// has neither: `DOT: none`, no annotation, and a 4000ms vulnerability on a
-// 2000ms cooldown. Nothing looked at it because nothing was asking the rule's
-// own question.
-//
-// So this asks it. Rider duration against the block's own PACE, directly.
-
-const RIDER_MAX_RATIO = 0.7;
-// The ruling's floor: a rider cut below 500ms is deleted rather than shortened,
-// so anything at or under it is not a candidate for this rule at all.
-const RIDER_FLOOR_MS = 500;
-
-// `(70% of the 1200ms cooldown)` survives `stripHistory` whenever the
-// annotation is not introduced by an em-dash. It states a COOLDOWN, and check 4
-// already owns it — read here it would look like a rider the length of the
-// cooldown, which is the false positive most likely to discredit this check.
-const PCT_CLAUSE = /\(\s*\d+%\s+of\s+the\s+[\d.]+\s*m?s\s+cooldown\s*\)/gi;
-
-// MILLISECONDS ONLY, DELIBERATELY. Every rider duration in the corpus is
-// written in ms; a bare `Ns` inside RIDERS is prose about a cooldown or a
-// bucket, not a rider — "the slow bucket's 3s sits under a 10s channel" is a
-// sentence about pacing. Reading those would flag the sentence rather than the
-// rider.
-//
-// THE COST OF THAT IS NAMED: `necromancer/Death Channel` states its numbers
-// only in prose seconds, so this check cannot see it. Its contradiction is
-// PACE against prose in RIDERS and COST, which is a fourth check and not a
-// looser version of this one.
-//
-// A TICK PERIOD IS NOT A DURATION either. "6 per 1000ms for 2800ms" is one
-// rider lasting 2800ms that ticks every second; reading the 1000ms as a rider
-// would flag every damage-over-time in the roster against its own tick rate.
-function riderDurations(text) {
-  const t = stripHistory(text)
-    .replace(PCT_CLAUSE, ' ')
-    .replace(/\bper\s+\d+\s*ms/gi, ' ');
-  return [...t.matchAll(/(\d+)\s*ms/g)].map(m => +m[1]);
-}
-
-// THE EXEMPTION IS READ FROM THE DOCUMENT, NEVER FROM A LIST IN HERE.
-//
-// Five skills are held out of ruling 6, and each says so in its own file:
+// SIX SKILLS CARRY A CATEGORY RULING IN THEIR OWN FILE:
 //
 //     **Exempt:** Toxic Bolt held — its `RIDERS` line restates the poison DoT
-//     in `DOT:`, and stacking DoTs are exempt.
+//     already in `DOT:`, so the two fields are one statement and not two.
 //
-// Hardcoding those five names here would put the judgment in the tool instead
-// of the document, and a reader of `wizard.md` would have no way to know the
-// skill was exempt. The declaration lives where the decision was made; this
-// only obeys it.
+// It says what a value IS, not how long it may be — a stacking DoT restated
+// across two fields is one effect written twice, a hazard's lifetime is not a
+// rider on a target, worn regalia's refresh cadence is not a duration on
+// anything. None of that depended on ruling 6's cap and none of it retires with
+// it. The marker is what stops a future sweep reading such a value as a rider
+// duration and cutting it.
 //
-// IT IS A FILE-LEVEL LINE NAMING A SKILL, not a marker inside the block, so the
-// link between the two is a name match and a name match can rot. An `**Exempt:**`
-// line naming a skill this file does not contain is therefore a failure in its
-// own right — otherwise renaming a block silently revokes its exemption and the
-// gate goes red for a reason nobody wrote down.
-// TWO MARKERS, ONE PARSER, AND THEY MUST NOT MERGE.
+// A `**Grandfathered:**` marker was read here too and is gone with the cap it
+// held blocks against. The two shared one expression; unpicking them is the
+// alternation and the optional `held` coming out, and nothing else — the shape
+// was always `**Label:** <name> held? — reason`.
 //
-//   **Exempt:** Toxic Bolt held — its `RIDERS` line restates the poison DoT ...
-//   **Grandfathered:** Kiai — rider 900ms is 75% of its 1200ms cooldown, ...
-//
-// EXEMPT is a permanent category ruling: a stacking DoT is rationed by its
-// stack ceiling, so the clock never applied to it and never will. GRANDFATHERED
-// is a live value breaking a live rule, kept because ruling 6's 70% is a target
-// that has not met a controller yet. One of those is settled and one is a
-// question waiting for playtest, and collapsing them would lose the distinction
-// exactly when playtest goes looking for it — so they suppress the same check
-// but are counted and reported apart.
-//
-// `**Held:**` was the proposed word and is NOT used: samurai.md already has a
-// `### HELD` section meaning open items, and that file carries three of the
-// sixteen.
-//
-// The two shapes differ only in an optional "held" before the em-dash, so one
-// expression reads both and the capture says which.
-const DECLARATION = /^\*\*(Exempt|Grandfathered):\*\*\s+(.+?)\s+(?:held\s+)?—/;
+// THE NAME LINK IS THE WHOLE MECHANISM, so a broken one is a failure on its own
+// terms: renaming a block would otherwise leave the marker pointing at nothing
+// and silently stop covering the skill it was written for.
+const EXEMPT_LINE = /^\*\*Exempt:\*\*\s+(.+?)\s+held\s+—/;
 
-function ruling6(doc, blocks, lines) {
-  const bad = [];
-  const declared = { Exempt: [], Grandfathered: [] };
-  for (const l of lines) {
-    const m = DECLARATION.exec(l);
-    if (m) declared[m[1]].push(m[2].trim());
-  }
-  // THE NAME LINK IS THE WHOLE MECHANISM, so a broken one is a failure on its
-  // own terms — for both markers. Without this, renaming a block silently
-  // revokes its exemption or quietly promotes a grandfathered rider into an
-  // unnoticed one, which is the failure this marker exists to prevent.
-  const names = new Set(blocks.map(b => b.name));
-  for (const kind of ['Exempt', 'Grandfathered']) {
-    for (const d of declared[kind]) {
-      if (!names.has(d)) bad.push(`**${kind}:** names "${d}", which is not a skill block in this file`);
-    }
-  }
-  const exempt = new Set([...declared.Exempt, ...declared.Grandfathered]);
-
-  let checked = 0;
-  for (const b of blocks) {
-    if (exempt.has(b.name)) continue;
-    const v = valuesOf(b, lines);
-    const paceM = PACE_MS.exec(v['PACE'] || '');
-    if (!paceM) continue;                 // passives and n/a carry no cooldown
-    const pace = +paceM[1];
-    const limit = pace * RIDER_MAX_RATIO;
-    for (const d of riderDurations(v['RIDERS'] || '')) {
-      checked++;
-      if (d <= RIDER_FLOOR_MS) continue;
-      if (d > limit) {
-        bad.push(`${b.name} (line ${b.line}): rider ${d}ms is ${Math.round(100 * d / pace)}% of its ${pace}ms cooldown, over the 70% ruling 6 allows`);
-      }
-    }
-  }
-  return { checked, exempt: declared.Exempt.length, grandfathered: declared.Grandfathered.length, bad };
+function exemptLinkage(blocks, lines) {
+  const named = [];
+  for (const l of lines) { const m = EXEMPT_LINE.exec(l); if (m) named.push(m[1].trim()); }
+  const have = new Set(blocks.map(b => b.name));
+  return { count: named.length,
+    bad: named.filter(n => !have.has(n))
+      .map(n => `**Exempt:** names "${n}", which is not a skill block in this file`) };
 }
 
 // ---------------------------------------------------------------- the gate
@@ -530,20 +443,20 @@ export function checkClassDocs() {
     // is the same defect counted again.
     for (const { b, problems } of broken) bad(`${doc} / ${b.name} (line ${b.line}): ${problems.slice(0, 3).join('; ')}${problems.length > 3 ? ` (+${problems.length - 3} more)` : ''}`);
 
-    // -- 3. the same duration, stated twice, must agree --
+    // -- 3. the same duration, stated twice, must agree — and every
+    //       **Exempt:** marker must name a block that exists. Both are this
+    //       file agreeing with itself, and they share the one check slot.
     const dur = durationAgreement(doc, blocks, lines);
-    if (!dur.bad.length) ok(`${doc}: ${dur.compared} block(s) state a DoT in both RIDERS and DOT, and agree`);
-    for (const m of dur.bad) bad(`${doc} / ${m}`);
+    const ex = exemptLinkage(blocks, lines);
+    const trouble = [...dur.bad, ...ex.bad];
+    if (!trouble.length) ok(`${doc}: ${dur.compared} block(s) state a DoT in both RIDERS and DOT and agree; ${ex.count} **Exempt:** marker(s) resolve`);
+    for (const m of trouble) bad(`${doc} / ${m}`);
 
     // -- 4. an annotation that shows its arithmetic must be right --
     const ann = annotationArithmetic(doc, blocks, lines);
     if (!ann.bad.length) ok(`${doc}: ${ann.verified} annotation(s) cite a cooldown, and it matches PACE`);
     for (const m of ann.bad) bad(`${doc} / ${m}`);
 
-    // -- 5. ruling 6 itself: no rider longer than 70% of its own cooldown --
-    const r6 = ruling6(doc, blocks, lines);
-    if (!r6.bad.length) ok(`${doc}: ${r6.checked} rider duration(s) under 70% of their cooldown, ${r6.exempt} exempt + ${r6.grandfathered} grandfathered by the file`);
-    for (const m of r6.bad) bad(`${doc} / ${m}`);
   }
 
   const missingCompanions = [...NOT_A_CLASS].filter(f => !files.includes(f));

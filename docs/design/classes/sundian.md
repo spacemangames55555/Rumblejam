@@ -33,13 +33,7 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 **Ruling 6 (rider duration under cooldown) — APPLIED.** 2 rider durations cut across 2 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
 was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
-**Exempt:** Moonstone Ward held — it is worn regalia under this file's port ruling, and its 8000ms is a refresh cadence and its 10000ms a proc cooldown. Neither is a rider duration.
-
-**Grandfathered:** Mist Veil — rider 6000ms is 75% of its 8000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
-
-**Grandfathered:** Abyssal Weight — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
-
-**Grandfathered:** Drowned Man's Curse — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+**Exempt:** Moonstone Ward held — worn regalia under this file's port ruling. Its 8000ms is a refresh cadence and its 10000ms a proc cooldown; neither is the duration of anything, so neither is a rider duration to read or to cut.
 
 **Outstanding:** none.
 

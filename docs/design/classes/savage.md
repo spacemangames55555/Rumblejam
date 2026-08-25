@@ -27,8 +27,6 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 was. Nothing fell under the 500ms floor, so no rider was deleted outright. 1 form took the exception instead: cooldown moved to
 the capstone bucket at 30s, duration held at a third of it.
 
-**Grandfathered:** Blood Ward — rider 7000ms is 88% of its 8000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
-
 **Outstanding:** thirty skills read `cascade` instead of the trait — KNOWN-DEFECTS #19.
 
 ---

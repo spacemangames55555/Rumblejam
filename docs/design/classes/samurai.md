@@ -171,13 +171,7 @@ taunt and Rain of Arrows' hazard 3000→2100ms, Flaming Arrow's burn
 5000→2100ms, Hamstring Shot's slow 4000→1050ms, and **Guard Break's weaken
 4000→560ms, which is a casualty** — see its block.
 
-**Exempt:** Flaming Arrow held — its `RIDERS` line restates the burn DoT in `DOT:`, and stacking DoTs are exempt. Its own COST field is the arithmetic: 14 impact plus 6 per tick over five ticks is the "forty-four total damage over five seconds" it claims, which only holds at 5000ms.
-
-**Grandfathered:** Iaijutsu — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
-
-**Grandfathered:** Kiai — rider 900ms is 75% of its 1200ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
-
-**Grandfathered:** Whistling Arrow — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+**Exempt:** Flaming Arrow held — its `RIDERS` line restates the burn DoT already in `DOT:`, so the two fields are one statement and not two. Its own COST field is the arithmetic: 14 impact plus 6 per tick over five ticks is the "forty-four total damage over five seconds" it claims, which only holds at 5000ms.
 
 **Passive budget (ruling 4).** Four passives across the class — Razor's Edge,
 Relentless Tempo (Tactics), Counterstrike, Immovable Mind (Armor), plus Steady

@@ -27,15 +27,7 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 **Ruling 6 (rider duration under cooldown) — APPLIED.** 5 rider durations cut across 5 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
 was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
-**Exempt:** Lava Pocket held — its `RIDERS` line restates the burn DoT in `DOT:`, and stacking DoTs are exempt.
-
-**Grandfathered:** Fierce Peregrine Falcon — rider 1000ms is 83% of its 1200ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
-
-**Grandfathered:** Snow Leopard's Stealth — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
-
-**Grandfathered:** Elk Antlers — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
-
-**Grandfathered:** Earthquake — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+**Exempt:** Lava Pocket held — its `RIDERS` line restates the burn DoT already in `DOT:`, so the two fields are one statement and not two. Cutting one copy and leaving the other would make the block contradict itself; a stacking DoT is rationed by its stack ceiling rather than by the clock.
 
 **Outstanding:** none.
 

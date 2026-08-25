@@ -1077,6 +1077,66 @@ could not be resolved.
 
 ---
 
+## 21. `rankedDuration` and `rankCooldown` disagree on rank indexing
+
+**Where:** `js/compose.js:24-27` and `js/skills.js:296-300`.
+
+```js
+// js/compose.js:24
+export function rankedDuration(base, skill, rank) {
+  const inc = (skill.ranks && skill.ranks.duration) || 0;
+  return base * (1 + inc * rank);          // rank 1 -> base x 1.03
+}
+
+// js/skills.js:296
+export function rankCooldown(base, rank) {
+  if (!(rank > 1)) return base;            // rank 1 -> base, exactly
+  const r = base * Math.pow(1 - CONFIG.SKILL_RANK_CD_RATE, rank - 1);
+  return Math.max(base * CONFIG.SKILL_RANK_CD_FLOOR, r);
+}
+```
+
+**What is wrong.** The two functions index rank differently. `rankedDuration`
+multiplies by `rank` directly, so a rank-1 skill's durations are already
+**+3% above their authored value** the moment the skill is learned.
+`rankCooldown` early-returns at rank 1, so a rank-1 cooldown is *exactly*
+authored. Every call site passes the same `rank` to both — `rankedDuration` is
+called with `rank` at `js/compose.js:421, 437, 464, 471, 560, 572, 578`,
+`js/minions.js:292-293` and `js/skilltext.js:241, 247`; `rankCooldown` at
+`js/skillsim.js:440`.
+
+**Why it matters.** Any authored duration-to-cooldown ratio is off by 3% before
+a single point is spent past the first. A rider written at 70% of its cooldown
+measures 72% in play at rank 1. The same asymmetry shifts every duration the
+skill card displays (`js/skilltext.js`) against the cooldown displayed beside
+it.
+
+**It is not caught by anything.** `tools/patch_gate.mjs:85` asserts
+`rankCooldown(base, 1) === base` — the correct half — and nothing asserts the
+matching property for `rankedDuration`. The two were written to different
+conventions and the gate only covers one of them.
+
+**Which is right is a design call, not a bug report.** Either `rankedDuration`
+should read `(rank - 1)` so rank 1 is authored base, or `rankCooldown` should
+drop its early return so rank 1 is already discounted. The first preserves every
+authored duration in the game and is the smaller change; the second matches the
+"a rank is an investment" reading. GDD §4.2 states "+3% of base duration, linear
+against base" without saying which rank is the identity, so the document does
+not settle it either.
+
+**How it was found.** The rank-ladder survey, which measured rider durations
+against cooldowns across rank and needed both curves to agree on what rank 1
+means before it could report anything. Not raised by ruling 6 and not affected
+by ruling 6's retirement — the asymmetry is a property of the two functions and
+stands on its own.
+
+**Status:** `js/` change, behind the queued implementation order. **Nothing
+fixed here** — filed only. Changing either function moves every timed value in
+the game by 3% in one direction or the other, so it wants its own patch and its
+own measurement.
+
+---
+
 ## 12. A client-page eval dies on an undefined `.x` mid co-op
 
 **Where:** the client page, during the co-op phase.
