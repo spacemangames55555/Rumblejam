@@ -129,7 +129,7 @@ one. Flagged because the next reader will have the same doubt.
 ### 4. Engine scaling is stated as a condition, not folded in
 
 A step with `scaleWith` rides a live engine value, and so do `summonMult`, the
-post-dodge `_atkBuff` and Ingenuity on a minion's swing. A number that moved
+post-dodge `_atkBuff` and Summons on a minion's swing. A number that moved
 while a player read it would be worse than one stated with its conditions, so an
 engine-scaled step prints its base and names the engine and per-point rate
 beside it: `Scales with shift, +6.0% per point`. The displayed damage is

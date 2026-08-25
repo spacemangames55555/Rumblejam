@@ -378,7 +378,7 @@ export const PALETTE = {
 // `pct` controls tooltip formatting; `base` is the pre-modifier value.
 // KEY IS THE IDENTITY, `name` IS ONLY THE LABEL.
 //
-// The seven renames below are a DISPLAY change and nothing else. Every key here
+// The six renames below are a DISPLAY change and nothing else. Every key here
 // is load-bearing in a way a label is not: saves store stats by key, item and
 // weapon tags scale by key, `doc_gate` matches the GDD's mechanical tables by
 // key, and the wire format carries them by index. Renaming a key would break
@@ -388,7 +388,7 @@ export const PALETTE = {
 //
 // The old names were flavour where the player needed function. "Ferocity" and
 // "Attunement" are not distinguishable without the glossary open; "Damage" and
-// "Elemental Damage" are. `tools/statname_gate.mjs` asserts none of the seven
+// "Elemental Damage" are. `tools/statname_gate.mjs` asserts none of the six
 // retired words survives anywhere a player can read one.
 export const STATS = [
   { key: 'vitality',   name: 'Vitality',   pct: false, base: 80 }, // hit points

@@ -30,13 +30,13 @@ if (WEAPONS.length !== 26) throw new Error(`weapons ${WEAPONS.length} != 26`);
 // What each stat does + its formula as implemented (game.js/config.js).
 const STAT_DOC = {
   vitality: ['Your hit point pool. Downed at 0.', 'Base 80 + modifiers (min 1). Gaining Vitality also grants the difference as current HP. Scaling rate: 1% weapon damage per 4 points.'],
-  ferocity: ['The universal damage multiplier.', 'Hit = weapon base × tier mult × `(1 + Ferocity%/100)` × `(1 + scaling-tag bonus/100)`. Crits are granted-only, ×2 (×3 Duskblade).'],
-  tempo: ['One stat for all speed.', 'Attack cooldown = `base / max(0.25, 1 + Tempo%/100)`; move speed = `300 × (1 + Tempo%/100)`, floored at 60.'],
-  grit: ['Mitigation and stubbornness.', 'Damage taken = `raw × 15 / (15 + Grit)` (negative capped at +50% extra); pulls/knockback resisted by the same ratio. Scaling rate: 1%/point.'],
-  reflex: ['Chance to ignore a hit entirely.', 'Percent roll per hit, capped at 60 (Wisp raises to 90). Every on-dodge effect (Slipstream, Afterimage, items) keys off this.'],
+  ferocity: ['The universal damage multiplier.', 'Every point of damage the player deals is multiplied by `(1 + Damage%/100)` (`ferocityMult`, js/skillsim.js:511), floored at zero so a penalty roll cannot invert damage into healing.'],
+  tempo: ['Movement speed, and nothing else.', 'Move speed = `BASE_SPEED × (1 + Speed%/100)` (js/game.js:1842). It does NOT reduce cooldowns — no stat does; ROLL_EXCLUDED is empty on that claim and econ_gate measures it by effect. Cooldowns fall with a skill\'s own rank instead.'],
+  grit: ['Mitigation and stubbornness — flat on the sheet, diminishing in effect.', 'Damage taken = `raw × 15 / (15 + Defense)` (js/game.js:2903; negative capped at +50% extra); pulls and knockback resisted by the same ratio. The curve is the point: +1 at 40 buys far less than +1 at 0, and the sheet does not show it.'],
+  reflex: ['Chance to ignore a hit entirely — AND the game\'s only buyable crit chance.', 'Percent roll per hit, capped at DODGE_CAP 60. It is also crit chance at `Dodge × CRIT_CHANCE_PER_REFLEX` (0.5%/point, js/skillsim.js:529), so a build at the cap carries 30% crit beside 60% dodge. Every on-dodge effect keys off this.'],
   recovery: ['Amplifies ALL healing received.', 'Every healing source (regen, lifesteal, kill-heals, fight-clear breathers, floor heals) lands at `×(1 + Recovery%/100)`.'],
-  ingenuity: ['Power source for summons/structures.', 'Summon damage AND HP `×(1 + 0.1 × Ingenuity)`. Scaling rate: 1%/point on summon-tagged weapons.'],
-  attunement: ['Elemental/status amplifier.', 'Burns, chills (strength and duration), chains, novas, blasts and echoes all scale `×(1 + Attunement%/100)`.'],
+  ingenuity: ['Power source for summons/structures. Flat on the sheet, applied as a multiplier.', 'Summon damage AND HP `×(1 + 0.1 × Summons)` (js/minions.js:141). Read by nothing else — worth exactly zero to a character with no summons.'],
+  attunement: ['Elemental/status amplifier.', 'Burns, chills (strength and duration), chains, novas, blasts and echoes all scale `×(1 + Elemental Damage%/100)` (`_attuned`, js/game.js:639). Ordinary impact damage is not touched — that is Damage.'],
   greed: ['Fortune unified.', 'Rarity weights for uncommon+ `×(1 + Greed/100)` everywhere rarity rolls, AND `floor(Greed/2)` materials at every fight clear. No self-growth. Scaling rate: 1%/point.'],
   reach: ['Weapon reach and magnetism.', 'Ranged/lobbed weapons +100% of Reach, melee +30% (floor 40); pickup radius = `60 + Reach × 0.5`. Scaling rate: 1% per 12 points.'],
 };
