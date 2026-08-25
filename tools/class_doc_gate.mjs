@@ -7,7 +7,7 @@
 // drifts faster than the code it governs, and here the drift arrives as a wrong
 // number rather than a wrong sentence.
 //
-// FOUR CHECKS, AND THEY FAIL FOR DIFFERENT REASONS.
+// FIVE CHECKS, AND THEY FAIL FOR DIFFERENT REASONS.
 //
 // 1. THE TEMPLATE. Every block carries the same 27 fields in the same order.
 //    Names and order only. A missing or misspelled field name is what turns
@@ -31,7 +31,7 @@
 // green for both.
 //
 // SO THE FAILURE SHAPE IS CROSS-FIELD CONTRADICTION, and that is what checks 3
-// and 4 test. Neither one ranks a number or has an opinion about whether 840ms
+// 4 and 5 test. None of them ranks a number or has an opinion about whether 840ms
 // is the right stun: that judgment stays out of this file, exactly as before.
 // What they assert is INTERNAL CONSISTENCY — that a block which states the same
 // quantity twice states it the same way both times, and that an annotation
@@ -52,6 +52,8 @@
 //
 // 3. CROSS-FIELD DURATION AGREEMENT. See `dotSignature` below.
 // 4. ANNOTATION ARITHMETIC. See `PCT_OF_CD` below.
+// 5. ROSTER RULING 6 ITSELF. See `ruling6` below — and note that its exemption
+//    list is read out of the class files, never written down in here.
 //
 // Usage: node tools/class_doc_gate.mjs [--verbose]
 import { readdirSync, readFileSync } from 'node:fs';
@@ -335,6 +337,104 @@ function annotationArithmetic(doc, blocks, lines) {
   return { verified, bad };
 }
 
+// ---------------------------------------------- 5. ruling 6, asserted directly
+
+// THE RULE THE WHOLE SWEEP WAS ABOUT, AND THE ONE THAT HAD NO INSTRUMENT.
+//
+// Roster ruling 6: a rider's duration may not exceed its skill's cooldown, and
+// where it did, the cut was to ~70% of that cooldown. Checks 3 and 4 each catch
+// a way of getting this wrong, but both need something extra to compare
+// against — 3 needs the block to state the duration twice, 4 needs an
+// annotation that shows its own arithmetic. `necromancer/Tainted Dark Matter`
+// has neither: `DOT: none`, no annotation, and a 4000ms vulnerability on a
+// 2000ms cooldown. Nothing looked at it because nothing was asking the rule's
+// own question.
+//
+// So this asks it. Rider duration against the block's own PACE, directly.
+
+const RIDER_MAX_RATIO = 0.7;
+// The ruling's floor: a rider cut below 500ms is deleted rather than shortened,
+// so anything at or under it is not a candidate for this rule at all.
+const RIDER_FLOOR_MS = 500;
+
+// `(70% of the 1200ms cooldown)` survives `stripHistory` whenever the
+// annotation is not introduced by an em-dash. It states a COOLDOWN, and check 4
+// already owns it — read here it would look like a rider the length of the
+// cooldown, which is the false positive most likely to discredit this check.
+const PCT_CLAUSE = /\(\s*\d+%\s+of\s+the\s+[\d.]+\s*m?s\s+cooldown\s*\)/gi;
+
+// MILLISECONDS ONLY, DELIBERATELY. Every rider duration in the corpus is
+// written in ms; a bare `Ns` inside RIDERS is prose about a cooldown or a
+// bucket, not a rider — "the slow bucket's 3s sits under a 10s channel" is a
+// sentence about pacing. Reading those would flag the sentence rather than the
+// rider.
+//
+// THE COST OF THAT IS NAMED: `necromancer/Death Channel` states its numbers
+// only in prose seconds, so this check cannot see it. Its contradiction is
+// PACE against prose in RIDERS and COST, which is a fourth check and not a
+// looser version of this one.
+//
+// A TICK PERIOD IS NOT A DURATION either. "6 per 1000ms for 2800ms" is one
+// rider lasting 2800ms that ticks every second; reading the 1000ms as a rider
+// would flag every damage-over-time in the roster against its own tick rate.
+function riderDurations(text) {
+  const t = stripHistory(text)
+    .replace(PCT_CLAUSE, ' ')
+    .replace(/\bper\s+\d+\s*ms/gi, ' ');
+  return [...t.matchAll(/(\d+)\s*ms/g)].map(m => +m[1]);
+}
+
+// THE EXEMPTION IS READ FROM THE DOCUMENT, NEVER FROM A LIST IN HERE.
+//
+// Five skills are held out of ruling 6, and each says so in its own file:
+//
+//     **Exempt:** Toxic Bolt held — its `RIDERS` line restates the poison DoT
+//     in `DOT:`, and stacking DoTs are exempt.
+//
+// Hardcoding those five names here would put the judgment in the tool instead
+// of the document, and a reader of `wizard.md` would have no way to know the
+// skill was exempt. The declaration lives where the decision was made; this
+// only obeys it.
+//
+// IT IS A FILE-LEVEL LINE NAMING A SKILL, not a marker inside the block, so the
+// link between the two is a name match and a name match can rot. An `**Exempt:**`
+// line naming a skill this file does not contain is therefore a failure in its
+// own right — otherwise renaming a block silently revokes its exemption and the
+// gate goes red for a reason nobody wrote down.
+const EXEMPT_LINE = /^\*\*Exempt:\*\*\s+(.+?)\s+held\b/;
+
+function ruling6(doc, blocks, lines) {
+  const bad = [];
+  const declared = [];
+  for (const l of lines) {
+    const m = EXEMPT_LINE.exec(l);
+    if (m) declared.push(m[1].trim());
+  }
+  const names = new Set(blocks.map(b => b.name));
+  for (const d of declared) {
+    if (!names.has(d)) bad.push(`**Exempt:** names "${d}", which is not a skill block in this file`);
+  }
+  const exempt = new Set(declared);
+
+  let checked = 0;
+  for (const b of blocks) {
+    if (exempt.has(b.name)) continue;
+    const v = valuesOf(b, lines);
+    const paceM = PACE_MS.exec(v['PACE'] || '');
+    if (!paceM) continue;                 // passives and n/a carry no cooldown
+    const pace = +paceM[1];
+    const limit = pace * RIDER_MAX_RATIO;
+    for (const d of riderDurations(v['RIDERS'] || '')) {
+      checked++;
+      if (d <= RIDER_FLOOR_MS) continue;
+      if (d > limit) {
+        bad.push(`${b.name} (line ${b.line}): rider ${d}ms is ${Math.round(100 * d / pace)}% of its ${pace}ms cooldown, over the 70% ruling 6 allows`);
+      }
+    }
+  }
+  return { checked, exempt: declared.length, bad };
+}
+
 // ---------------------------------------------------------------- the gate
 
 // Returns { checks: [{ ok, msg }], fails } so a caller can report through its
@@ -413,6 +513,11 @@ export function checkClassDocs() {
     const ann = annotationArithmetic(doc, blocks, lines);
     if (!ann.bad.length) ok(`${doc}: ${ann.verified} annotation(s) cite a cooldown, and it matches PACE`);
     for (const m of ann.bad) bad(`${doc} / ${m}`);
+
+    // -- 5. ruling 6 itself: no rider longer than 70% of its own cooldown --
+    const r6 = ruling6(doc, blocks, lines);
+    if (!r6.bad.length) ok(`${doc}: ${r6.checked} rider duration(s) under 70% of their cooldown, ${r6.exempt} held exempt by the file`);
+    for (const m of r6.bad) bad(`${doc} / ${m}`);
   }
 
   const missingCompanions = [...NOT_A_CLASS].filter(f => !files.includes(f));
