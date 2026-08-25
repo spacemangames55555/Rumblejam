@@ -28,6 +28,10 @@ was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Exempt:** Poisoned Stars held — its `RIDERS` line restates the stacking DoT in `DOT:`, and stacking DoTs are exempt.
 
+**Grandfathered:** Flash Trap — rider 3500ms is 88% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
+**Grandfathered:** Smoke Bomb — rider 3200ms is 80% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
 **Outstanding:** the concealment feed has no built counterpart and is new `js/` work.
 
 ---

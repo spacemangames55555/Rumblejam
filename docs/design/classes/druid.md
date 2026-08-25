@@ -29,6 +29,14 @@ was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Exempt:** Lava Pocket held — its `RIDERS` line restates the burn DoT in `DOT:`, and stacking DoTs are exempt.
 
+**Grandfathered:** Fierce Peregrine Falcon — rider 1000ms is 83% of its 1200ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
+**Grandfathered:** Snow Leopard's Stealth — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
+**Grandfathered:** Elk Antlers — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
+**Grandfathered:** Earthquake — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
 **Outstanding:** none.
 
 ---

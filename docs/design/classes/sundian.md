@@ -35,6 +35,12 @@ was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Exempt:** Moonstone Ward held — it is worn regalia under this file's port ruling, and its 8000ms is a refresh cadence and its 10000ms a proc cooldown. Neither is a rider duration.
 
+**Grandfathered:** Mist Veil — rider 6000ms is 75% of its 8000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
+**Grandfathered:** Abyssal Weight — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
+**Grandfathered:** Drowned Man's Curse — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
 **Outstanding:** none.
 
 ---

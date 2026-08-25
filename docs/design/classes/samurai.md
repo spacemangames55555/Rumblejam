@@ -171,6 +171,14 @@ taunt and Rain of Arrows' hazard 3000→2100ms, Flaming Arrow's burn
 5000→2100ms, Hamstring Shot's slow 4000→1050ms, and **Guard Break's weaken
 4000→560ms, which is a casualty** — see its block.
 
+**Exempt:** Flaming Arrow held — its `RIDERS` line restates the burn DoT in `DOT:`, and stacking DoTs are exempt. Its own COST field is the arithmetic: 14 impact plus 6 per tick over five ticks is the "forty-four total damage over five seconds" it claims, which only holds at 5000ms.
+
+**Grandfathered:** Iaijutsu — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
+**Grandfathered:** Kiai — rider 900ms is 75% of its 1200ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
+**Grandfathered:** Whistling Arrow — rider 3000ms is 75% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
 **Passive budget (ruling 4).** Four passives across the class — Razor's Edge,
 Relentless Tempo (Tactics), Counterstrike, Immovable Mind (Armor), plus Steady
 Hand in Bow makes five. Against a four-slot budget that is very nearly
@@ -963,8 +971,8 @@ DAMAGE TIER:          low (12)
 PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — slow ×0.45 for 1400ms, cut from an authored
-                      4000ms by roster ruling 6 (70% of the 2s cooldown)
+RIDERS:               AUTHORED — slow ×0.45 for 840ms, cut from an authored
+                      4000ms by roster ruling 6 (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1117,9 +1125,9 @@ DAMAGE TIER:          low (14)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — burn DoT, 6 per 1000ms for 2800ms (cut from
-                      an authored 5000ms by roster ruling 6); the burn spreads
-                      once to an enemy within 60px on the target's death
+RIDERS:               AUTHORED — burn DoT, 6 per 1000ms for 5000ms; the burn
+                      spreads once to an enemy within 60px on the target's
+                      death
 DOT:                  6 per 1000ms for 5000ms
 AFFECTS:              enemies
 --- automation ---

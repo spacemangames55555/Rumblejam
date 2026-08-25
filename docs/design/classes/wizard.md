@@ -29,6 +29,8 @@ was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Exempt:** Toxic Bolt held — its `RIDERS` line restates the poison DoT in `DOT:`, and stacking DoTs are exempt.
 
+**Grandfathered:** Ethereal Form — rider 6000ms is 75% of its 8000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
 **Outstanding:** every `consumes N mana` line is void; and the duplicate tier-0 openers are now LOAD-BEARING — `shift` pays for rotating domains and three near-identical bolts give nothing to rotate between.
 
 ---
