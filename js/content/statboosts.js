@@ -1,7 +1,8 @@
 // Level-up stat boost pool: small/medium/large per stat, rarity-weighted.
 // Generated from a magnitude table so all ten stats are always offerable.
-// Percent stats (Ferocity/Tempo/Reflex/Recovery/Attunement) are in %; flat
-// stats in points. Crit is not a stat and never appears here.
+// Percent stats (Damage/Speed/Dodge/Recovery/Elemental Damage) are in %; flat
+// stats in points. Crit has no boost of its own and never appears here — it is
+// bought through Dodge, which carries 0.5% crit per point.
 
 const T = [
   // key         small  med  large

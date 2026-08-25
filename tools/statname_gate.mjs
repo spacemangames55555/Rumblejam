@@ -1,6 +1,6 @@
 // NO RETIRED STAT WORD REACHES A PLAYER.
 //
-// Seven stats were renamed at the display layer. The KEYS did not move —
+// Six stats were renamed at the display layer. The KEYS did not move —
 // `ferocity` is still `ferocity` in every save, every item tag, every gate that
 // matches the GDD's mechanical tables and every byte on the wire. Only the
 // label changed, and it changed in exactly one place: `STATS[].name` in
@@ -14,10 +14,18 @@
 // STAT_NAME, so the next rename cannot strand them either.
 //
 // WHAT IS CHECKED, AND WHERE. Anything a player can read: content tables
-// (item/skill/trait descriptions, the glossary), the UI layer, and the
-// renderer. Engine internals are NOT checked — a comment in skillsim.js
-// explaining why Ferocity works is documentation, and rewriting prose about the
-// history of a mechanic to match a new label would make the history unreadable.
+// (item/skill/trait descriptions, the glossary), the UI layer, the renderer —
+// and, since the vocabulary pass, `docs/`. Engine internals are NOT checked — a
+// comment in skillsim.js explaining why Ferocity works is documentation, and
+// rewriting prose about the history of a mechanic to match a new label would
+// make the history unreadable.
+//
+// DOCS WERE OUTSIDE THE NET AND THAT IS EXACTLY WHERE THE DRIFT WENT. This gate
+// scoped itself to content, UI and renderer; `docs/` was in none of those sets,
+// so nothing watched it and 356 lines across 12 files went on spelling retired
+// names — including a player-facing compendium whose stat table was also wrong
+// on mechanics. A gate that covers the code and not the document that rules the
+// code is watching the half that already had an owner.
 //
 // Usage: node tools/statname_gate.mjs
 import { readFileSync, readdirSync } from 'node:fs';
@@ -91,6 +99,83 @@ console.log('STAT LABELS — nothing a player reads may spell a retired name\n')
   const hits = files.filter(([, src]) => RE.test(src)).map(([n]) => n);
   if (!hits.length) ok(`the ${files.length} render-layer files hold no stat word at all — every label goes through STAT_NAME`);
   else bad(`${hits.length} render-layer file(s) hardcode a stat name: ${hits.join(', ')} — route them through STAT_NAME`);
+}
+
+// ---- 5. docs/ spells no retired stat name ----
+//
+// THREE THINGS LEGITIMATELY KEEP A RETIRED WORD, and lumping them in would make
+// this gate unpassable and then ignored:
+//
+//   PROPER NOUNS. `Jeweler's Attunement` and `Relentless Tempo` are SKILL names
+//   and `Grit` is a Blacksmith skill. The Wizard's tree is named Attunement —
+//   already filed above for the code side, and filed again here for the doc.
+//
+//   PROPOSED CLASS ENGINES. The conversion documents propose engines of their
+//   own, and one of them is called Tempo — 0-100, scales song radius, "consumes
+//   60 Tempo". Renaming it to Speed would name a proposed engine after a stat it
+//   is not.
+//
+//   QUOTED HISTORY. The rename table in the GDD has a "Was shown as" column, and
+//   that column IS the retired name. Rewriting it deletes the record of the
+//   rename.
+//
+// Each entry below names its file, what it matches and why. An entry that stops
+// matching anything is itself a failure — the same rule check 4 applies to tree
+// collisions, and for the same reason: a stale exemption keeps a fixed thing
+// filed as broken.
+const DOC_FILED = [
+  ['docs/design/classes/bard.md', /Tempo/,
+    'the Bard conversion doc proposes a class ENGINE named Tempo (0-100, scales song radius) — not the stat'],
+  ['docs/design/classes/monk.md', /Conviction, Kinship, Resolve, Tempo/,
+    'a list of engines the conversion documents propose, by their doc names'],
+  ['docs/design/classes/engines-doc-vs-built.md', /Doc: Tempo/,
+    'names the Bard doc\'s proposed engine while comparing it against the built one'],
+  ['docs/design/classes/sundian.md', /Jeweler's Attunement/, 'skill name'],
+  ['docs/design/classes/samurai.md', /Relentless Tempo/, 'skill name'],
+  ['docs/design/classes/blacksmith.md', /Grit/, 'skill name — the Blacksmith has a node called Grit'],
+  ['docs/design/classes/wizard.md', /\*\*Attunement\*\* holds all three/, 'the Wizard TREE named Attunement, filed for the code side too'],
+  ['docs/GDD.md', /^\| `(attunement|ferocity|tempo|grit|reflex|recovery|ingenuity)` \|/,
+    'the rename table: its "Was shown as" column is the retired name and is the record of the rename'],
+  ['docs/GDD.md', /skill tree is \*named\*/, 'the filed Wizard tree collision, restated in the GDD'],
+  ['docs/GDD.md', /Attunement, Arcana/, 'the Wizard\'s three TREE names'],
+  ['docs/GDD.md', /Tank \/ DPS \/ Runes/, 'retired aspirational tree names, quoted as history'],
+  ['docs/design-audit.md', /./,
+    'a FROZEN generated snapshot: its header says do not hand-edit the computed tables, and `gen_design_audit.mjs` cannot run — it asserts 33 characters against a 14-character roster. Its STAT_DOC is corrected, so a regenerated audit will be clean; until the generator runs the file is a dead artifact, not a document anyone maintains'],
+];
+
+{
+  const DOCS = new URL('../docs/', import.meta.url);
+  const walk = (dir, base) => {
+    const out = [];
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) out.push(...walk(new URL(e.name + '/', dir), base + e.name + '/'));
+      else if (e.name.endsWith('.md')) out.push([base + e.name, readFileSync(new URL(e.name, dir), 'utf8')]);
+    }
+    return out;
+  };
+  const files = walk(DOCS, 'docs/');
+  const offenders = [];
+  const used = new Set();
+  for (const [name, src] of files) {
+    let fenced = false;
+    src.split('\n').forEach((line, i) => {
+      if (/^\s*```/.test(line)) { fenced = !fenced; return; }
+      if (fenced) return;                       // code samples carry KEYS, not labels
+      if (!RE.test(line)) return;
+      const filed = DOC_FILED.findIndex(([f, rx]) => f === name && rx.test(line));
+      if (filed >= 0) { used.add(filed); return; }
+      offenders.push(`${name}:${i + 1}`);
+    });
+  }
+  checks++;
+  if (!offenders.length) console.log(`✓ none of the ${files.length} documents in docs/ spells a retired stat name outside a filed exemption`);
+  else { fails++; console.log(`✗ ${offenders.length} line(s) in docs/ spell a retired stat name: ${offenders.slice(0, 10).join(', ')}${offenders.length > 10 ? ` (+${offenders.length - 10})` : ''}`); }
+
+  // ---- 6. and no filed doc exemption has gone stale ----
+  checks++;
+  const dead = DOC_FILED.map((e, i) => [e, i]).filter(([, i]) => !used.has(i));
+  if (!dead.length) console.log(`✓ all ${DOC_FILED.length} filed doc exemptions still match a real line`);
+  else { fails++; console.log(`✗ ${dead.length} doc exemption(s) match nothing any more — remove them: ${dead.map(([e]) => e[0] + ' ' + e[1]).join(', ')}`); }
 }
 
 // ---- 4. filed collisions are still genuinely collisions ----

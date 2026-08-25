@@ -27,7 +27,7 @@ not because it was tolerated.
 drawing from `Math.random()` instead of the seeded stream. It was **43 calls**
 across `js/game.js` (29), `js/entities/enemies.js` (15), `js/telegraphs.js` (1)
 and `js/traits-toh.js` (2) — spawn jitter, cooldown scatter, proc chances, the
-Reflex dodge roll, material scatter, wander points, boss teleport targets.
+the Dodge roll, material scatter, wander points, boss teleport targets.
 
 **What it cost, concretely.** Every A/B comparison in patch-region-shell needed
 three runs to say anything, because one run proved nothing. It produced at least

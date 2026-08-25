@@ -24,16 +24,16 @@ const statList = stats => Object.entries(stats || {}).map(([k, v]) => statStr(k,
 // How each stat is actually applied by the engine, quoted from the formulas in
 // game.js / config.js rather than described loosely.
 const STAT_FORMULA = {
-  vitality: 'Max HP directly. Gaining Vitality heals you by the amount gained. As a weapon scaling tag it converts at **1% damage per 4 points**.',
-  ferocity: 'Multiplies all weapon damage by `1 + Ferocity/100`. As a scaling tag it contributes its percentage directly.',
-  tempo: 'Divides every weapon cooldown by `1 + Tempo/100` and multiplies move speed by the same factor — one stat for attack speed and footspeed. Contributes its percentage directly as a scaling tag.',
-  grit: 'Mitigation on a diminishing curve, **not** flat reduction: damage taken is `raw × 15 / (15 + Grit)`, so 15 Grit halves incoming damage, 45 Grit quarters it, and it never reaches zero. Also resists knockback and pulls. As a scaling tag it converts at **1% damage per point**.',
-  reflex: 'Percent chance to avoid a hit entirely. **Capped at 60%** (one trait raises that cap). A dodge also fires every "on dodge" effect you own.',
-  recovery: 'Multiplies every heal you *receive*, from any source (regen, lifesteal, kill-heals, room rest). Worth nothing on its own — it is an amplifier.',
-  ingenuity: 'Summon damage and HP scale by `1 + 0.1 × Ingenuity`. As a scaling tag it converts at **1% damage per point**.',
-  attunement: 'Multiplies burn, chill, chain-lightning, explosion and nova power and duration. Contributes its percentage directly as a scaling tag.',
-  greed: 'Biases the rarity of every offer, and pays `floor(Greed/2)` bonus materials per fight cleared. As a scaling tag it converts at **1% damage per point**.',
-  reach: 'Adds to weapon range and to your material pickup radius. As a scaling tag it converts at **1% damage per 12 points**.',
+  vitality: 'Max HP directly (`js/game.js:379`). Gaining Vitality grants you the difference as health rather than only raising the ceiling, and every room starts you at full.',
+  ferocity: 'A **percentage, not a flat figure** — it multiplies ALL damage you deal by `1 + Damage/100` (`ferocityMult`, `js/skillsim.js:511`). Floored at zero, so even a heavy penalty cannot invert damage into healing.',
+  tempo: '**Movement only.** Move speed is `BASE_SPEED × (1 + Speed/100)` (`js/game.js:1842`). It does NOT shorten cooldowns: no stat in the game touches a cooldown, which `js/config.js` states and `econ_gate` measures by rolling a penalty into every stat and counting how often skills fire. Cooldowns shorten with a skill\'s own RANK instead.',
+  grit: 'Shown as a flat number, **applied on a diminishing curve** — damage taken is `raw × 15 / (15 + Defense)` (`js/game.js:2903`), so 15 Defense halves incoming damage, 45 quarters it, and it never reaches zero. The consequence worth knowing: **+1 Defense at 40 is worth far less than +1 at 0**, and the number on your sheet does not show that. Also resists knockback and pulls.',
+  reflex: '**Two mechanics, and the name only covers one.** It is your percent chance to avoid a hit entirely, capped at 60% — and it is also your crit chance, at half a percent per point (`CRIT_CHANCE_PER_REFLEX`, `js/skillsim.js:529`). A build at the 60 cap therefore carries **30% crit alongside 60% dodge**. Buying "+5% Dodge" also buys +2.5% crit. A dodge additionally fires every "on dodge" effect you own.',
+  recovery: 'Multiplies every heal you *receive*, from any source — regen, lifesteal, kill-heals, room rest (`js/game.js:2162`). Worth nothing on its own; it is an amplifier. It also sizes the Priest\'s grace shield.',
+  ingenuity: 'Stored as a flat number but **applied as a multiplier**: summon damage and HP scale by `1 + 0.1 × Summons` (`js/minions.js:141`). Nothing else reads it — it is worth exactly zero to a character with no summons.',
+  attunement: 'A percentage that multiplies everything tagged elemental or status — burn, chill, chain-lightning, explosions and novas — by `1 + Elemental Damage/100` (`_attuned`, `js/game.js:639`). It does not touch ordinary weapon or skill impact damage; that is Damage\'s job.',
+  greed: 'Biases the rarity of every offer you are shown, and pays `floor(Greed/2)` bonus materials per fight cleared (`js/game.js:3471`).',
+  reach: 'Adds to skill and weapon range (`js/game.js:2246`) and to your material pickup radius (`js/game.js:3337`). It also widens several class traits that key off it, each at **half** your Reach — the Mage\'s singularity, the Bard\'s ensemble radius and the Wizard\'s Miracle among them.',
 };
 
 const CLASS_INFO = {
@@ -42,7 +42,7 @@ const CLASS_INFO = {
   single: ['Single shot', 'Ranged — one projectile per shot, stopped by the first thing it hits unless it pierces.'],
   spread: ['Spread', 'Ranged — several projectiles per shot in a fan.'],
   lobbed: ['Lobbed', 'Arcs over walls and detonates in an area. The only class that ignores line of sight.'],
-  summon: ['Summon', 'Places a structure that fights on its own. Scales with Ingenuity, not with your weapon stats.'],
+  summon: ['Summon', 'Places a structure that fights on its own. Scales with Summons, not with your weapon stats.'],
 };
 
 const RARITY_ORDER = ['common', 'uncommon', 'rare', 'legendary'];
@@ -90,9 +90,9 @@ w('## How a character works',
   '',
   '### Damage, in one paragraph',
   '',
-  'A weapon has a base damage and a cooldown. Damage is multiplied by its tier, then by `1 + Ferocity/100`, then by its **scaling tags** — one or two stats listed on the weapon that make *that* weapon hit harder. Percent stats (Ferocity, Tempo, Reflex, Recovery, Attunement) contribute their percentage directly; flat stats convert at the rates in the stat table below. Cooldown is divided by `1 + Tempo/100`.',
+  'Damage comes from your **skills**. A skill has a base damage and a cooldown; the damage is multiplied by `1 + Damage/100`, and anything tagged elemental or status is multiplied by `1 + Elemental Damage/100` on top. A skill\'s cooldown shortens with its own RANK — 3% per rank, down to a floor of 70% of the authored value — and **no stat shortens a cooldown**. Speed buys movement and nothing else.',
   '',
-  '**Crits are not a stat.** You cannot buy crit chance. Crits happen only where an item or trait grants them, and they deal ×2 by default.',
+  '**Crit chance is Dodge.** Every point of Dodge is half a percent of crit (`CRIT_CHANCE_PER_REFLEX`), so a defensive stat is also the game\'s only buyable offence-by-chance. Items and traits grant crit on top. Crits deal ×2 by default.',
   '',
   '---',
   '');
@@ -122,11 +122,11 @@ for (const s of STATS) {
     `**Where you find it:** ${wpn.length} weapon${wpn.length === 1 ? '' : 's'} scale with it${wpn.length ? ` (${wpn.map(x => x.name).join(', ')})` : ''} · ${items.length} items grant it · ${chars.length} characters carry it on their sheet.`,
     '');
 }
-w('### What Grit is actually worth',
+w('### What Defense is actually worth',
   '',
-  'Grit is the one stat whose value curves, so it is worth seeing the numbers.',
+  'Defense is the one stat whose value curves, so it is worth seeing the numbers. Note how each block of 5 buys less than the one before it.',
   '',
-  '| Grit | Damage taken | Effective HP multiplier |',
+  '| Defense | Damage taken | Effective HP multiplier |',
   '|---|---|---|');
 for (const g of [0, 5, 10, 15, 25, 40, 60]) {
   const mult = 15 / (15 + g);

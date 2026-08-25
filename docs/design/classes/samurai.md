@@ -51,7 +51,7 @@ footingGraceRefill    = 1.0
 ```
 
 Footing grants a shield pool and grit. **Not** Vitality — max HP has a
-destructive removal path — and **not** Reflex, because a stance that makes him
+destructive removal path — and **not** Dodge, because a stance that makes him
 harder to hit contradicts the mechanic he has surrendered dodging for.
 
 **What this costs the document.** Resolve was a currency: skills fed it and
