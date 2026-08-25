@@ -18,7 +18,13 @@ The cooldowns came from Thrones of Heaven, where a human pressed buttons every f
 
 **Target: a slotted 8-skill build fires 6–9 times per second**, measured as **`sum(1/cd)` over the eight slotted cooldowns.** Genre reference is Brotato's six weapons at one to two attacks each.
 
-**The band was widened from 6–8 to 6–9 after measuring all fourteen.** The alternative was a per-class ceiling of one very-fast node, which would have pulled every class into 6.67–7.50. That was rejected: it fixes the two outliers by deleting the only axis on which classes currently differ. **Widening the band makes very-fast count a legitimate dimension of class identity rather than a rule violation** — a class that owns three very-fast nodes is meant to feel faster than one that owns none, and 9.17/sec is that difference expressed as a number rather than a breach.
+**6–9 IS A TARGET, NOT A STRICT BOUNDARY.** It is where the roster is aimed until playtesting says otherwise, and a class landing outside it is a reading to explain rather than a number to correct.
+
+**The band was widened from 6–8 to 6–9 after measuring all fourteen.** The alternative was a per-class ceiling of one very-fast node, which would have pulled every class into 6.67–7.50. That was rejected: it fixes the two outliers by deleting the only axis on which classes currently differ. **Very-fast count is a legitimate dimension of class identity rather than a rule violation** — a class that owns three very-fast nodes is meant to feel faster than one that owns none.
+
+**THE TARGET DOES NOT CONTAIN ITS OWN CEILING CASE, AND THAT IS HELD OPEN.** The distribution rule permits one very-fast node per tree and there are three trees, so a class may own three: `6.67 + 3 × 0.83` = **9.17**, which 6–9 does not contain. The Necromancer is that case. **It stands as authored** — the very-fast allowance does not change and the per-class ceiling stays rejected.
+
+**This is a known tension, not a breach and not a defect.** The distribution rule and the target disagree at exactly one point, and arithmetic cannot say which of them is wrong: that is what playing the Necromancer against the other thirteen will answer. Recorded here so it is revisited deliberately rather than rediscovered as a violation. Wizard at 8.33 is inside the target.
 
 ### The activation-rate formula
 
@@ -60,7 +66,7 @@ The speed half was originally "at least 4 nodes in medium or faster". That is a 
 
 **At a floor of 2**, five of fourteen landed in band and eight sat in a 0.25-wide cluster at 5.50–5.75 — all of them exactly ON the minimum, because two fast-or-better per tree gives a spread build six fast slots and two leftovers.
 
-**At a floor of 3, all fourteen land in the 6–9 band.** Three per tree fills all eight slots from the fast heads: 8 × 1.2s is 6.67/sec.
+**At a floor of 3, thirteen of fourteen land in the 6–9 target and the Necromancer lands just above it at 9.17.** Three per tree fills all eight slots from the fast heads: 8 × 1.2s is 6.67/sec. See Ruling 1's note on why 9.17 stands.
 
 Each very-fast node is worth 0.83/sec more than a fast one, so a class's rate is fixed by how many it owns, and "at most 1 very fast **per tree**" permits three:
 
@@ -83,7 +89,7 @@ If pace is meant to be a dimension classes are distinguished along, ten of fourt
 
 **It constrains composition, not builds.** A player slots eight nodes and may take them all from one tree, and a mono-tree build is a different arithmetic from a spread one — the same tree that contributes its two fast nodes to a spread build also contributes its slow and very-slow ones when it has to fill all eight slots.
 
-Measured on the two classes carried furthest (at the floor of 2; the floor of 3 lifts both readings but not the shape):
+Measured on the two classes carried furthest (at the floor of 2; the floor of 3 lifts both readings — the Samurai's into the target, the Necromancer's spread build to 9.17, just above it — without changing the shape below):
 
 | build | Necromancer | Samurai |
 |---|---|---|
