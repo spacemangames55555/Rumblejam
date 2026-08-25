@@ -946,6 +946,137 @@ file.
 
 ---
 
+## 18. `samurai_agility` scales on Footing, and its own play pattern destroys Footing
+
+**Where:** `js/content/skills/samurai_agility.js` — the tree declares
+`scaleWith: 'footing'` and its nodes trigger on `MOVEMENT`. Footing is granted
+by **standing still** (GDD §8.4: one stack per 500ms stationary, cap 10, with a
+400ms grace *budget* rather than a timer).
+
+**What is wrong.** The tree scales on an engine its own play pattern spends. A
+player using Agility as designed — Quickstep, Running Cut, Slip Cut, Windwalk,
+all movement-triggered — is moving continuously, which drains the 400ms budget
+and drops every stack. The reward and the requirement are opposites, so the
+tree's scaling term reads as near-zero exactly when the tree is being played
+correctly. The GDD already names this in §8.1 and it has never been costed.
+
+**Reproduce:** `node tools/balance_probe.mjs toh_samurai` — the pilot bot
+kites, so it plays Agility's pattern by default. Footing stacks should sit near
+the floor for the whole run.
+
+**Ruled out.** Rescaling Agility onto another engine term. Two reasons: the
+conflict is not Agility's alone — Footing is stationary-fed in a game whose only
+input is movement, so every class scaling on it has this tension and Agility
+merely states it loudest — and `samurai_agility` is GDD §8.1's cited
+shape-spec reference for the whole roster, so making it a special case costs
+more than it fixes.
+
+**What a fix would have to do.** Widen the grace budget rather than change what
+Agility scales on. **Proposed: `footingGraceMs` 400 → 900**, `footingGraceRefill`
+unchanged at 1.0.
+
+- 900ms is chosen as roughly one *reposition* rather than one sidestep: enough
+  to leave a hazard and re-plant, still far short of a room crossing, which is
+  several seconds at player move speed. §8.4's boundary — "one sidestep out of
+  the fastest committed zone fits and a room crossing does not" — is preserved
+  and moved out one step.
+- The budget, not `footingTickMs`. Halving the tick would make stacks cheaper
+  for a Samurai who never moves; widening the budget pays only the player who
+  does, which is the population this defect is about.
+- §8.4 calls Footing "the most-iterated design in the project", so a fourth
+  iteration should be deliberate rather than incidental.
+
+**It does not ship without a fixture.** The test is whether an Agility build
+holds Footing **above ~5 stacks** while playing the tree as intended — which is
+a measurement, not an argument, and the number is what decides whether 900ms is
+the right widening or merely a different wrong one.
+
+**Status:** proposal accepted, `js/` change, lands in its own patch. Raised by
+the Samurai pass of the class-conversion revision
+(`docs/design/classes/samurai.md`).
+
+---
+
+## 19. The Savage's thirty skills scale on `cascade`, not on the engine in its own trait
+
+**Where:** `js/content/skills/savage_*.js` carry `scaleWith: 'cascade'` on 12
+skills (plus `armor` on 3). The class trait in `js/content/characters-toh.js` is
+`blood_dance`: `heatPer: 8`, `heatMax: 120`, `heatDecaySec: 3`.
+
+**What is wrong.** `blood_dance` is a momentum engine — it builds on hits, caps,
+and drains after three seconds of not connecting. That is the class's engine and
+it works. **No skill reads it.** The skills scale on `cascade`, which measures
+chain length (`ENGINE_SCALE.cascade`, max 18, uncapped by §8.3), a different
+quantity that happens to correlate with hitting things.
+
+So the Savage has a working engine its own kit ignores, and a scaling term
+nothing in the class was designed around. A player building for momentum is
+rewarded through a proxy, and every tuning change to `blood_dance` moves a
+number no skill consults.
+
+**Reproduce:** `node tools/balance_probe.mjs toh_savage` — heat climbs and
+decays as designed while output tracks chain length instead.
+
+**Ruled out.** Changing `blood_dance` to match `cascade`. The trait is the
+better engine and it is the one the conversion document independently arrived
+at, deriving Momentum from Warrior's Momentum's declared text without knowing
+the trait existed. Two designs converging is evidence for the design.
+
+**What a fix would have to do.** Repoint the class's `scaleWith` terms from
+`cascade` to the trait's heat. `ENGINE_SCALE` needs a `momentum` entry with a
+hard cap — `blood_dance` already has one at 120, unlike `cascade` which §8.3
+leaves uncapped, so this also closes an uncapped scaling term.
+
+**Status:** `js/` change, own patch. Raised by the engine ruling of the
+class-conversion revision (`docs/design/classes/engines-doc-vs-built.md`),
+which ruled the document's Momentum as the Savage's engine.
+
+---
+
+## 20. Two Druid trees are named for each other's contents
+
+**Where:** `js/content/skills/druid_*.js`. The class's three built trees are
+`Wild Kin`, `Tapestry of Beasts` and `Restoration`.
+
+**What is wrong.** The names are crossed against what the trees hold:
+
+| built tree | what it actually contains |
+|---|---|
+| **Wild Kin** | `strike ×3, cone ×2, hazard ×1, ward ×1` — **no summons at all** |
+| **Tapestry of Beasts** | `strike ×2, summon ×3, hazard, heal, line, cone` — **all three summons** |
+
+"Wild Kin" names a summoner tree that summons nothing. "Tapestry of Beasts" — a
+name that reads as *borrowed* animal traits, one at a time — holds every actual
+animal the class calls. A player reading the tree titles picks the wrong tree
+for the build they want, and every document that maps the class by name inherits
+the error.
+
+**This is independent of the conversion documents.** They arrange the same two
+axes the other way round and are internally consistent; the defect is that the
+code's own labels do not describe the code's own contents. It would still be
+wrong if the documents did not exist.
+
+**Reproduce:**
+```
+node -e "import('./js/skills.js').then(m=>{for(const id of m.TREES_BY_CLASS['toh_druid']){const t=m.TREES[id];const k={};for(const s of t.skills)for(const c of (s.compose||[]))k[c.kind]=(k[c.kind]||0)+1;console.log(t.name, JSON.stringify(k))}})"
+```
+
+**Ruled out.** Moving the skills. The trees are coherent as *designs* — one is a
+summoner tree and one is a melee-flex tree — so the cheap and correct fix is the
+labels, not the contents.
+
+**What a fix would have to do.** Swap the two tree `name` fields, leaving skills
+and ids where they are. Tree ids are referenced by saves through spent skill
+points, so the `id` must not move; only the display `name` does. Check
+`tools/class_doc_gate.mjs`'s tree inventory afterwards — it reads names and will
+show the change.
+
+**Status:** `js/` change, own patch. Raised by the twelve-class pass of the
+class-conversion revision, where it was the reason the Druid's tree-name mapping
+could not be resolved.
+
+---
+
 ## 12. A client-page eval dies on an undefined `.x` mid co-op
 
 **Where:** the client page, during the co-op phase.

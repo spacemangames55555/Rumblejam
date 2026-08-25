@@ -3,6 +3,34 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Kinship (doc).**
+
+**Tree names — RULED: this document's names are KEPT.** The standing rule is
+"built names win unless the doc's is clearly better", and here the built name is
+not merely worse — it is wrong. **The built names are crossed against their own contents.** The built `Wild Kin` tree has NO summons; the built `Tapestry of Beasts` has three. This document is the opposite way round. Logged separately as a code defect — see KNOWN-DEFECTS #20.
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 7.50/sec on a spread build — IN BAND.**
+
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 5 rider durations cut across 5 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
+
+**Exempt:** Lava Pocket held — its `RIDERS` line restates the burn DoT in `DOT:`, and stacking DoTs are exempt.
+
+**Outstanding:** none.
+
 ---
 
 ## CLASS ENGINE — KINSHIP
@@ -93,7 +121,7 @@ RANGE:                melee short (64px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (10 × 3 pulses = 30)
-PACE:                 fast (3000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               3 pulses 130ms apart, each rolling its own hits
@@ -162,7 +190,7 @@ RANGE:                melee long (90px)
 TARGETS:              1 per cast (nearest below max stacks)
 --- output ---
 DAMAGE TIER:          low (8 per tick)
-PACE:                 very fast (800ms)
+PACE:                 very fast (600ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               stacks to 6 on a single target
@@ -195,7 +223,7 @@ RANGE:                melee long (120px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -228,7 +256,7 @@ RANGE:                range medium (300px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 slow (9000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockdown — stun 1000ms per enemy hit; caster displaced
@@ -264,7 +292,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               stealth 3000ms — all enemy targeting drops her and
@@ -302,7 +330,7 @@ RANGE:                melee long (140px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 8 per 500ms tick
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -339,7 +367,7 @@ RANGE:                melee long (110px)
 TARGETS:              cap 5
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               grants the Druid a 30-point absorb shield for 3000ms
@@ -374,10 +402,11 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 8000ms — damageReduction +0.25
+RIDERS:               timed 5600ms — damageReduction +0.25
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -409,7 +438,7 @@ RANGE:                range short (170px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 very slow (20000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 120px and stun 800ms (port addition — see COST)
@@ -463,7 +492,7 @@ RANGE:                range medium (340px)
 TARGETS:              2 (one per bolt)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 fast (1500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -499,7 +528,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (8000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               heals 30 to self
@@ -534,7 +563,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 medium (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               heals 18 to self
@@ -567,7 +596,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               heals 22 instantly to self
@@ -602,10 +631,11 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 8000ms — regenPerSec 8
+RIDERS:               timed 2800ms — regenPerSec 8
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -638,10 +668,11 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 10000ms — damageReduction +0.25, maxHPMult +0.20
+RIDERS:               timed 2800ms — damageReduction +0.25, maxHPMult +0.20
+                      — roster ruling 6: 10000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -674,7 +705,7 @@ RANGE:                melee long (110px)
 TARGETS:              every ally and summon in the field
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (45000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -712,7 +743,7 @@ RANGE:                range short (200px)
 TARGETS:              every ally and summon in the field
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (45000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -750,13 +781,14 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — strips every affliction on the Druid and
-                      grants 8000ms immunity to all new debuffs (slow, stun,
+                      grants 5600ms immunity to all new debuffs (slow, stun,
                       weaken, root, DoT application). Damage still lands
                       normally
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -797,7 +829,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — heals 40% of maximum HP instantly, then
@@ -855,10 +887,11 @@ RANGE:                melee long (135px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 fast (2500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               slow ×0.55 for 3000ms
+RIDERS:               slow ×0.55 for 840ms
+                      — roster ruling 6: 3000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -892,7 +925,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 2, +1 per 5 ranks
 --- output ---
 DAMAGE TIER:          none (0) — the viper deals the damage
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               persists until killed; applies a poison DoT on its bites
@@ -927,7 +960,7 @@ RANGE:                range medium (340px)
 TARGETS:              chain, 3 jumps
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (5000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -963,7 +996,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 1
 --- output ---
 DAMAGE TIER:          none (0) — the wolverine deals the damage
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               persists until killed; aggressive — actively closes on
@@ -999,7 +1032,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               slow ×0.5 for 3000ms
@@ -1034,7 +1067,7 @@ RANGE:                n/a (spawns adjacent, two bodies)
 TARGETS:              n/a — cap 1 pair (2 units)
 --- output ---
 DAMAGE TIER:          none (0) — the pair deals the damage
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               persists until killed; the two coordinate — they
@@ -1073,7 +1106,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (6000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               burn DoT — 6 per 1000ms for 4000ms (port addition, see
@@ -1114,7 +1147,7 @@ RANGE:                n/a (spawns in a loose group)
 TARGETS:              n/a — 4 untargetable chip units, 15000ms lifespan
 --- output ---
 DAMAGE TIER:          none (0) — the scavengers deal small continuous damage
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               UNTARGETABLE and timed (ruling 3) — cannot be killed,
@@ -1154,7 +1187,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 1
 --- output ---
 DAMAGE TIER:          none (0) — the bear deals the damage
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               persists until killed; the toughest summon in the class
@@ -1194,7 +1227,7 @@ RANGE:                range short (220px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 slow (14000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               stun 900ms
