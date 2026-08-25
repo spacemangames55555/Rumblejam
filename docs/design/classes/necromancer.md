@@ -1132,8 +1132,9 @@ DAMAGE TIER:          medium (22)
 PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               vulnerability — target takes +20% damage for 4000ms
-                      (port addition, see COST)
+RIDERS:               vulnerability — target takes +20% damage for 1400ms
+                      (port addition, see COST) — roster ruling 6:
+                      4000ms→1400ms (70% of the 2000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
