@@ -24,9 +24,8 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 6.67/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 8 rider durations cut across 8 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Outstanding:** the doc's Tempo→song-radius payout is not in the built `rhythm` term.
 
@@ -196,7 +195,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 10000ms — damageMult +0.20 to everyone covered
+RIDERS:               timed 2800ms — damageMult +0.20 to everyone covered
+                      — roster ruling 6: 10000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self + allies + own summons
 --- automation ---
@@ -233,7 +233,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — regenPerSec 6 to everyone covered
+RIDERS:               timed 2800ms — regenPerSec 6 to everyone covered
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self + allies + own summons
 --- automation ---
@@ -269,10 +270,11 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               AUTHORED — timed 60000ms: everyone covered gains +20%
+RIDERS:               AUTHORED — timed 5600ms: everyone covered gains +20%
                       experience and +15% pickup radius, and every enemy
                       killed while the song runs has a 10% chance to drop an
                       extra pickup
+                      — roster ruling 6: 60000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self + allies + own summons
 --- automation ---
@@ -316,9 +318,10 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               AUTHORED — timed 8000ms: everyone covered becomes
+RIDERS:               AUTHORED — timed 2800ms: everyone covered becomes
                       immune to stun, knockback and root, and takes 40% less
                       duration from every other debuff
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self + allies + own summons
 --- automation ---
@@ -399,8 +402,9 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — damageMult +0.20, attackSpeedMult +0.20,
+RIDERS:               timed 2800ms — damageMult +0.20, attackSpeedMult +0.20,
                       moveSpeedMult +0.15 to everyone covered
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self + allies + own summons
 --- automation ---
@@ -563,8 +567,9 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 8000ms — attackSpeedMult +0.30, damageMult +0.15
+RIDERS:               timed 5600ms — attackSpeedMult +0.30, damageMult +0.15
                       to everyone covered
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self + allies + own summons
 --- automation ---
@@ -780,7 +785,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               absorb shield 50 for 5000ms
+RIDERS:               absorb shield 50 for 2800ms
+                      — roster ruling 6: 5000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1124,8 +1130,9 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               CONFUSION 4000ms (ruling 4) — the target attacks other
+RIDERS:               CONFUSION 2800ms (ruling 4) — the target attacks other
                       enemies and its threat on the player drops to zero
+                      — roster ruling 6: 4000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---

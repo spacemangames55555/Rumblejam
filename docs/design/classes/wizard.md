@@ -22,11 +22,12 @@ describes.
 brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
 at most 1 very fast, at most 2 very slow. All three trees comply.
 
-**Rate: 8.33/sec on a spread build — ABOVE the band.**
+**Rate: 8.33/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 6 rider durations cut across 5 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
+
+**Exempt:** Toxic Bolt held — its `RIDERS` line restates the poison DoT in `DOT:`, and stacking DoTs are exempt.
 
 **Outstanding:** every `consumes N mana` line is void; and the duplicate tier-0 openers are now LOAD-BEARING — `shift` pays for rotating domains and three near-identical bolts give nothing to rotate between.
 
@@ -619,7 +620,8 @@ DAMAGE TIER:          low (14)
 PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               slow ×0.5 for 4000ms; weaken 30% for 4000ms
+RIDERS:               slow ×0.5 for 840ms; weaken 30% for 840ms
+                      — roster ruling 6: 4000ms→840ms, 4000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -976,7 +978,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — regenPerSec 8
+RIDERS:               timed 2800ms — regenPerSec 8
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1010,7 +1013,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               absorb shield 60 for 8000ms
+RIDERS:               absorb shield 60 for 2800ms
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1085,7 +1089,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 6000ms — reflectPct 0.50
+RIDERS:               timed 2800ms — reflectPct 0.50
+                      — roster ruling 6: 6000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1197,7 +1202,8 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — regenPerSec 12, damageReduction +0.30
+RIDERS:               timed 5600ms — regenPerSec 12, damageReduction +0.30
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---

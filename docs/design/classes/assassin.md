@@ -23,9 +23,10 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 6.67/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 7 rider durations cut across 7 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
+
+**Exempt:** Poisoned Stars held — its `RIDERS` line restates the stacking DoT in `DOT:`, and stacking DoTs are exempt.
 
 **Outstanding:** the concealment feed has no built counterpart and is new `js/` work.
 
@@ -166,7 +167,8 @@ DAMAGE TIER:          none (0)
 PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               root 2800ms on whatever springs it
+RIDERS:               root 840ms on whatever springs it
+                      — roster ruling 6: 2800ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -350,7 +352,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               slow ×0.55 to everything inside the field for 4500ms
+RIDERS:               slow ×0.55 to everything inside the field for 2800ms
+                      — roster ruling 6: 4500ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -515,7 +518,8 @@ PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               ×1.8 stealthBonus when struck from concealment; the
-                      strike drops concealment for 2000ms (stealth ruling)
+                      strike drops concealment for 840ms (stealth ruling)
+                      — roster ruling 6: 2000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -550,9 +554,10 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               stealth 20000ms, flickering — attacking drops
+RIDERS:               stealth 5600ms, flickering — attacking drops
                       concealment for 2000ms and it re-enters automatically
                       while the buff runs (stealth ruling)
+                      — roster ruling 6: 20000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -675,7 +680,8 @@ PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               the Assassin arrives at the strike point; ×1.8 from
-                      concealment; drops concealment for 2000ms
+                      concealment; drops concealment for 840ms
+                      — roster ruling 6: 2000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies, self (movement)
 --- automation ---
@@ -933,7 +939,8 @@ DAMAGE TIER:          low (15) — 27 from concealment
 PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               ×1.8 from concealment; drops concealment for 2000ms
+RIDERS:               ×1.8 from concealment; drops concealment for 840ms
+                      — roster ruling 6: 2000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1227,9 +1234,10 @@ DAMAGE TIER:          low (12)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — slow ×0.4 for 5000ms and vulnerability: the
+RIDERS:               AUTHORED — slow ×0.4 for 2800ms and vulnerability: the
                       target takes +25% damage from all sources for the
                       duration
+                      — roster ruling 6: 5000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---

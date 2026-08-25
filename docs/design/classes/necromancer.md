@@ -50,7 +50,7 @@ Grasp of Death is held — see below. Distribution: Dark Matter passes on its ow
 (7 medium-or-faster, 0 very slow), Marrow passes (Stake promoted, its root cut
 under ruling 6), Summons **cannot pass** — see below.
 
-**Rate: 9.17/sec on a spread build, against a 6–8 target — ABOVE.**
+**Rate: 9.17/sec on a spread build, against a 6–9 target — IN BAND** (top of it).
 The bucket-mix rule took this class from 8.75 by demoting Internal Collapse
 (Dark Matter held two very-fast nodes; Blip keeps the slot as the tier-1
 opener). It did not close the gap, and the reason is arithmetic in the rule

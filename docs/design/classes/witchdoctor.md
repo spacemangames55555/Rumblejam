@@ -23,9 +23,11 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 6.67/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 6 rider durations cut across 6 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright. 1 form took the exception instead: cooldown moved to
+the capstone bucket at 30s, duration held at a third of it.
+
+**Exempt:** Venom Flask held — the 4000ms is the pool's lifetime carrying the `DOT:` field, not a rider on a target.
 
 **Outstanding:** none.
 
@@ -217,9 +219,10 @@ DAMAGE TIER:          none (0) — chip 8 per 600ms at its nearest fellow
 PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               CONFUSION 80% for 4000ms — the longest confusion in the
+RIDERS:               CONFUSION 80% for 840ms — the longest confusion in the
                       roster. Target attacks its nearest fellow; threat on
                       the player drops to zero
+                      — roster ruling 6: 4000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  8 per 600ms for the confusion's duration
 AFFECTS:              enemies
 --- automation ---
@@ -573,7 +576,8 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 10000ms — damageMult +0.20
+RIDERS:               timed 5600ms — damageMult +0.20
+                      — roster ruling 6: 10000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -747,11 +751,12 @@ RANGE:                n/a
 TARGETS:              aura: uncapped in r110
 --- output ---
 DAMAGE TIER:          low (6 per 500ms aura pulse)
-PACE:                 very slow (8000ms)
+PACE:                 capstone (30000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               form 9000ms — damageReduction +0.20; aura 6 damage /
                       r110 / 500ms pulse
+                      — roster ruling 6 (form exception): cooldown moved to the capstone bucket at 30s and the form kept at 9000ms, a third of it
 DOT:                  none
 AFFECTS:              self + enemies (aura)
 --- automation ---
@@ -825,8 +830,9 @@ DAMAGE TIER:          medium (30)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               weaken 35% for 5000ms — the largest weaken magnitude in
+RIDERS:               weaken 35% for 2800ms — the largest weaken magnitude in
                       the roster
+                      — roster ruling 6: 5000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -954,7 +960,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 9000ms — damageMult +0.15, attackSpeedMult +0.15
+RIDERS:               timed 2800ms — damageMult +0.15, attackSpeedMult +0.15
+                      — roster ruling 6: 9000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1101,7 +1108,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               stealth 5000ms, flickering per the Assassin's ruling
+RIDERS:               stealth 2800ms, flickering per the Assassin's ruling
+                      — roster ruling 6: 5000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---

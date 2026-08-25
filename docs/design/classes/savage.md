@@ -23,9 +23,9 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 6.67/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 5 rider durations cut across 5 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright. 1 form took the exception instead: cooldown moved to
+the capstone bucket at 30s, duration held at a third of it.
 
 **Outstanding:** thirty skills read `cascade` instead of the trait — KNOWN-DEFECTS #19.
 
@@ -343,8 +343,9 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               slow ×0.6 for 2500ms; weaken 25% for 4000ms — gated in
+RIDERS:               slow ×0.6 for 2500ms; weaken 25% for 2800ms — gated in
                       code on enemies being present
+                      — roster ruling 6: 4000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -750,8 +751,9 @@ PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               AUTHORED — spends 25% of CURRENT health and grants
-                      +50% damage for 10000ms, plus 3 immediate Momentum
+                      +50% damage for 5600ms, plus 3 immediate Momentum
                       stacks. Will not fire below 45% health
+                      — roster ruling 6: 10000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -966,8 +968,9 @@ DAMAGE TIER:          none (0) — chip 8 per 600ms during the confusion
 PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               CONFUSION 80% for 3500ms — the target attacks other
+RIDERS:               CONFUSION 80% for 840ms — the target attacks other
                       enemies and its threat on the Savage drops to zero
+                      — roster ruling 6: 3500ms→840ms (70% of the 1200ms cooldown)
 DOT:                  8 per 600ms for the confusion's duration
 AFFECTS:              enemies
 --- automation ---
@@ -1001,11 +1004,12 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (8000ms)
+PACE:                 capstone (30000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               form 10000ms — attackSpeedMult +0.25, moveSpeedMult
                       +0.15
+                      — roster ruling 6 (form exception): cooldown moved to the capstone bucket at 30s and the form kept at 10000ms, a third of it
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1082,8 +1086,9 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — moveSpeedMult +0.15, attackSpeedMult
+RIDERS:               timed 5600ms — moveSpeedMult +0.15, attackSpeedMult
                       +0.20
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---

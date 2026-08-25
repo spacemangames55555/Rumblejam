@@ -23,9 +23,8 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 6.67/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 9 rider durations cut across 9 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Outstanding:** none.
 
@@ -155,9 +154,10 @@ DAMAGE TIER:          none (0)
 PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               grants the recipient 1500ms harm immunity on spawn;
+RIDERS:               grants the recipient 840ms harm immunity on spawn;
                       guardian holds position, body-blocks, takes aggro above
                       the Priest (ruling 5)
+                      — roster ruling 6: 1500ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              allies + own summons
 --- automation ---
@@ -193,7 +193,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — reflectPct 0.35
+RIDERS:               timed 2800ms — reflectPct 0.35
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -528,7 +529,8 @@ DAMAGE TIER:          medium (20)
 PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               weaken 25% for 4000ms
+RIDERS:               weaken 25% for 840ms
+                      — roster ruling 6: 4000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -562,7 +564,8 @@ DAMAGE TIER:          low (12)
 PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               fear — target flees for 2000ms (port addition, see COST)
+RIDERS:               fear — target flees for 840ms (port addition, see COST)
+                      — roster ruling 6: 2000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -601,7 +604,8 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — damageMult +0.25
+RIDERS:               timed 5600ms — damageMult +0.25
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -637,7 +641,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               slow ×0.55 for 2500ms; weaken 25% for 4000ms
+RIDERS:               slow ×0.55 for 2500ms; weaken 25% for 2800ms
+                      — roster ruling 6: 4000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -821,7 +826,8 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — attackSpeedMult +0.25, damageMult +0.15
+RIDERS:               timed 5600ms — attackSpeedMult +0.25, damageMult +0.15
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -942,7 +948,8 @@ DAMAGE TIER:          none (0)
 PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — regenPerSec 8
+RIDERS:               timed 840ms — regenPerSec 8
+                      — roster ruling 6: 8000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1019,7 +1026,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 10000ms — damageMult +0.10, regenPerSec 6
+RIDERS:               timed 2800ms — damageMult +0.10, regenPerSec 6
+                      — roster ruling 6: 10000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---

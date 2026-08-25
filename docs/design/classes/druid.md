@@ -24,9 +24,10 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 7.50/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 5 rider durations cut across 5 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
+
+**Exempt:** Lava Pocket held — its `RIDERS` line restates the burn DoT in `DOT:`, and stacking DoTs are exempt.
 
 **Outstanding:** none.
 
@@ -404,7 +405,8 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 8000ms — damageReduction +0.25
+RIDERS:               timed 5600ms — damageReduction +0.25
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -632,7 +634,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 8000ms — regenPerSec 8
+RIDERS:               timed 2800ms — regenPerSec 8
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -668,7 +671,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 10000ms — damageReduction +0.25, maxHPMult +0.20
+RIDERS:               timed 2800ms — damageReduction +0.25, maxHPMult +0.20
+                      — roster ruling 6: 10000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -781,9 +785,10 @@ PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — strips every affliction on the Druid and
-                      grants 8000ms immunity to all new debuffs (slow, stun,
+                      grants 5600ms immunity to all new debuffs (slow, stun,
                       weaken, root, DoT application). Damage still lands
                       normally
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -885,7 +890,8 @@ DAMAGE TIER:          medium (26)
 PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               slow ×0.55 for 3000ms
+RIDERS:               slow ×0.55 for 840ms
+                      — roster ruling 6: 3000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---

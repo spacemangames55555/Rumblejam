@@ -30,9 +30,10 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 6.67/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 2 rider durations cut across 2 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
+
+**Exempt:** Moonstone Ward held — it is worn regalia under this file's port ruling, and its 8000ms is a refresh cadence and its 10000ms a proc cooldown. Neither is a rider duration.
 
 **Outstanding:** none.
 
@@ -687,7 +688,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               absorb shield 40 for 6000ms
+RIDERS:               absorb shield 40 for 2800ms
+                      — roster ruling 6: 6000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1193,7 +1195,8 @@ PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               slow ×0.55 for 3000ms to everything in r140; weaken 25%
-                      for 4000ms
+                      for 2800ms
+                      — roster ruling 6: 4000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---

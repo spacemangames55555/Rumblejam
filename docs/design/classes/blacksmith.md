@@ -25,9 +25,8 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 7.50/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 6 rider durations cut across 5 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Outstanding:** none.
 
@@ -322,7 +321,8 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — damageReduction +0.20, regenPerSec 6
+RIDERS:               timed 5600ms — damageReduction +0.20, regenPerSec 6
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self (co-op: allies within 200px receive the
                       regenPerSec component at half value — see note)
@@ -626,8 +626,9 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — attackSpeedMult +0.60, damageMult +0.40,
+RIDERS:               timed 5600ms — attackSpeedMult +0.60, damageMult +0.40,
                       damageReduction −0.30
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -913,7 +914,8 @@ DAMAGE TIER:          low (18)
 PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               stun 3000ms — the longest single stun in the game
+RIDERS:               stun 840ms — the longest single stun in the game
+                      — roster ruling 6: 3000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -948,7 +950,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               slow ×0.5 for 5000ms; weaken 30% for 5000ms
+RIDERS:               slow ×0.5 for 2800ms; weaken 30% for 2800ms
+                      — roster ruling 6: 5000ms→2800ms, 5000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1022,7 +1025,8 @@ DAMAGE TIER:          medium (28)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               slow ×0.35 for 4000ms
+RIDERS:               slow ×0.35 for 2800ms
+                      — roster ruling 6: 4000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---

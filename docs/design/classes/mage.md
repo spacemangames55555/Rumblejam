@@ -23,9 +23,8 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 6.67/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 6 rider durations cut across 6 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Outstanding:** every `consumes N energy` line is void; crystal stacks stay as the Crystalblade tree mechanic.
 
@@ -276,8 +275,9 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — attackSpeedMult +0.40, moveSpeedMult
+RIDERS:               timed 5600ms — attackSpeedMult +0.40, moveSpeedMult
                       +0.20
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -392,9 +392,10 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — damageReduction +0.25, blockChance
+RIDERS:               timed 5600ms — damageReduction +0.25, blockChance
                       +0.25, blockReduction 1.00 (a successful block negates
                       the hit ENTIRELY)
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -605,7 +606,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — damageMult +0.25
+RIDERS:               timed 2800ms — damageMult +0.25
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -641,7 +643,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               absorb shield 60 for 8000ms
+RIDERS:               absorb shield 60 for 2800ms
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -921,7 +924,8 @@ DAMAGE TIER:          medium (22)
 PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               slow ×0.6 for 2500ms; applies 1 crystal stack (ruling 1)
+RIDERS:               slow ×0.6 for 840ms; applies 1 crystal stack (ruling 1)
+                      — roster ruling 6: 2500ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1098,8 +1102,9 @@ DAMAGE TIER:          medium (26)
 PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               weaken 15% for 4000ms; applies 1 crystal stack to every
+RIDERS:               weaken 15% for 1400ms; applies 1 crystal stack to every
                       target hit
+                      — roster ruling 6: 4000ms→1400ms (70% of the 2000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---

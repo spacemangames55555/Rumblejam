@@ -23,9 +23,8 @@ at most 1 very fast, at most 2 very slow. All three trees comply.
 
 **Rate: 6.67/sec on a spread build — IN BAND.**
 
-**Ruling 6 (rider duration under cooldown) is NOT yet applied to this file.**
-Cooldowns moved; rider durations did not. Any rider now longer than its skill's
-cooldown is a permanent effect until that sweep runs.
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 4 rider durations cut across 4 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
 
 **Outstanding:** EVERY Bond-derived ENGINE line in this file still reads proximity and must invert.
 
@@ -623,8 +622,9 @@ DAMAGE TIER:          low (14)
 PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — slow ×0.45 for 4000ms, and the target's own
+RIDERS:               AUTHORED — slow ×0.45 for 1400ms, and the target's own
                       attack speed is reduced 30% for the duration
+                      — roster ruling 6: 4000ms→1400ms (70% of the 2000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -738,8 +738,9 @@ DAMAGE TIER:          none (0)
 PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 8000ms — attackSpeedMult +0.20, extended to the
+RIDERS:               timed 5600ms — attackSpeedMult +0.20, extended to the
                       Hunter's own beasts
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self + own summons
 --- automation ---
@@ -1059,7 +1060,8 @@ DAMAGE TIER:          none (0)
 PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 6000ms — reflectPct 0.30
+RIDERS:               timed 2800ms — reflectPct 0.30
+                      — roster ruling 6: 6000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1094,7 +1096,8 @@ DAMAGE TIER:          low (14)
 PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               slow ×0.5 for 2500ms
+RIDERS:               slow ×0.5 for 840ms
+                      — roster ruling 6: 2500ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---

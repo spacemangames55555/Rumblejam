@@ -16,7 +16,9 @@ The cooldowns came from Thrones of Heaven, where a human pressed buttons every f
 
 ## Ruling 1 — Pace
 
-**Target: a slotted 8-skill build fires 6–8 times per second**, measured as **`sum(1/cd)` over the eight slotted cooldowns.** Genre reference is Brotato's six weapons at one to two attacks each.
+**Target: a slotted 8-skill build fires 6–9 times per second**, measured as **`sum(1/cd)` over the eight slotted cooldowns.** Genre reference is Brotato's six weapons at one to two attacks each.
+
+**The band was widened from 6–8 to 6–9 after measuring all fourteen.** The alternative was a per-class ceiling of one very-fast node, which would have pulled every class into 6.67–7.50. That was rejected: it fixes the two outliers by deleting the only axis on which classes currently differ. **Widening the band makes very-fast count a legitimate dimension of class identity rather than a rule violation** — a class that owns three very-fast nodes is meant to feel faster than one that owns none, and 9.17/sec is that difference expressed as a number rather than a breach.
 
 ### The activation-rate formula
 
@@ -33,7 +35,7 @@ Recomputed on `sum(1/cd)`, with a representative build taken evenly across the t
 
 **The correct formula reproduces the measured number.** The built game measures 4.1/sec in play and computes to 4.52/sec on `sum(1/cd)`, against 3.40/sec on `8/mean`. That agreement is the evidence for the formula, and the 0.51 figure was never reconcilable with the 4.1 sitting beside it in the same sentence.
 
-**What this changes.** The gap is **4.1 → 6–8, roughly 1.5–1.8x**, not the ~8x the 0.51 figure implied. The bucket table below has been **rescaled once against the corrected gap** — see the note under it.
+**What this changes.** The gap is **4.1 → 6–9, roughly 1.5–2.2x**, not the ~8x the 0.51 figure implied. The bucket table below has been **rescaled once against the corrected gap** — see the note under it.
 
 Fixed bucket values. "Slow" means one thing roster-wide:
 
@@ -46,7 +48,7 @@ Fixed bucket values. "Slow" means one thing roster-wide:
 | very slow | 8 s |
 | capstone | 20–30 s |
 
-**Rescaled once, against the corrected gap.** The first table (0.4 / 0.8 / 1.5 / 3 / 6) was sized against the 0.51/sec figure and assumed an ~8x jump. The real gap is 1.5–1.8x, and the first table overshot: the Necromancer measured **12.92/sec** under it against a 6–8 target, because four very-fast slots produce 6.7/sec between them before anything else is slotted.
+**Rescaled once, against the corrected gap.** The first table (0.4 / 0.8 / 1.5 / 3 / 6) was sized against the 0.51/sec figure and assumed an ~8x jump. The real gap is 1.5–2.2x, and the first table overshot: the Necromancer measured **12.92/sec** under it against a 6–9 target, because four very-fast slots produce 6.7/sec between them before anything else is slotted.
 
 **Distribution rule, per tree of 10:** at least **3 nodes fast or better**, at most **1 very fast**, at most **2 in very slow**. Capstones are exempt from the distribution count.
 
@@ -58,23 +60,24 @@ The speed half was originally "at least 4 nodes in medium or faster". That is a 
 
 **At a floor of 2**, five of fourteen landed in band and eight sat in a 0.25-wide cluster at 5.50–5.75 — all of them exactly ON the minimum, because two fast-or-better per tree gives a spread build six fast slots and two leftovers.
 
-**At a floor of 3, twelve of fourteen land in band.** Three per tree fills all eight slots from the fast heads: 8 × 1.2s is 6.67/sec.
+**At a floor of 3, all fourteen land in the 6–9 band.** Three per tree fills all eight slots from the fast heads: 8 × 1.2s is 6.67/sec.
 
-| result | classes |
-|---|---|
-| in band | ten classes at **6.67**, plus Blacksmith and Druid at **7.50** |
-| above | **Wizard 8.33**, **Necromancer 9.17** |
+Each very-fast node is worth 0.83/sec more than a fast one, so a class's rate is fixed by how many it owns, and "at most 1 very fast **per tree**" permits three:
 
-**The two that miss, miss on the CEILING, not the floor.** Each very-fast node is worth 0.83/sec more than a fast one, so a class's rate is fixed by how many it owns:
+| very-fast nodes | rate | classes |
+|---|---|---|
+| 0 | **6.67** | ten classes |
+| 1 | **7.50** | Blacksmith, Druid |
+| 2 | **8.33** | Wizard |
+| 3 | **9.17** | Necromancer |
 
-| very-fast nodes | rate |
-|---|---|
-| 0 | 6.67 |
-| 1 | 7.50 |
-| 2 | **8.33** — Wizard |
-| 3 | **9.17** — Necromancer |
+### FLAG — ten of fourteen are identical on this measure
 
-"At most 1 very fast **per tree**" permits three per class, and those two use their whole allowance. **A per-CLASS ceiling of 1 very-fast would put all fourteen between 6.67 and 7.50** — the whole roster inside the band, with the band's own width left over for the differences that matter. Reported, not applied.
+Not clustered. **Identical: 6.67/sec, all ten, to the decimal.** They own no very-fast node, so the bucket-mix floor fills all eight slots from the 1.2s bucket and the arithmetic has no other input. Blacksmith and Druid differ from them by one node; Wizard by two; Necromancer by three. **Pace, as currently ruled, sorts the roster into four values, and ten classes share one of them.**
+
+If pace is meant to be a dimension classes are distinguished along, ten of fourteen are not on it. The bucket-mix rule is doing exactly what it was written to do — it guarantees every class can reach the band — but a floor that fills every slot from one bucket also makes every class that hits the floor exactly the same speed.
+
+**This is a design question for later, not a rule change now.** Recorded here so it is revisited deliberately rather than discovered when someone asks why two classes feel identical to play.
 
 ### What a per-tree rule cannot do
 
