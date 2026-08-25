@@ -29,6 +29,8 @@ the capstone bucket at 30s, duration held at a third of it.
 
 **Exempt:** Venom Flask held — the 4000ms is the pool's lifetime carrying the `DOT:` field, not a rider on a target.
 
+**Grandfathered:** Hallucinogenic Brew — rider 3200ms is 80% of its 4000ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+
 **Outstanding:** none.
 
 ---

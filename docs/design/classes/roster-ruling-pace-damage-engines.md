@@ -150,6 +150,16 @@ Passive counts run from 1 (Druid) to 12 (Blacksmith), median 4. A shared budget 
 
 **Exception: transformations and forms keep their duration and take a capstone-bucket cooldown instead** — **and a form's duration must be at most one third of its cooldown.** A form is the skill, so shortening it to 70% of a fast cooldown deletes it rather than balancing it; but the exception alone is not enough. The Necromancer's Marrownaut is a 30000ms form, and at the capstone bucket's 30s ceiling it was still permanently up. The one-third rule is the missing half: a 30s capstone carries a 10s form.
 
+**THE 70% FIGURE IS A TARGET, IN THE SAME SENSE THE PACE BAND IS.** It is a heuristic that has not yet met a controller. Sixteen riders across eight classes measure between 70% and 100% of their cooldown — over the target, under the cooldown — and they **stand until playtest**. They are recorded in their own class files as
+
+```
+**Grandfathered:** Kiai — rider 900ms is 75% of its 1200ms cooldown, over roster ruling 6's 70% target and under the cooldown. Accepted pending playtest, not a defect.
+```
+
+with the measured percentage in every line, so playtest can tell 75% from 99% without recomputing. `class_doc_gate` reads that marker and holds the block; the rule stays hard for anything written from here on.
+
+**GRANDFATHERED IS NOT EXEMPT, and the two markers are deliberately separate.** An exemption is a permanent category ruling — a stacking DoT is rationed by its stack ceiling, so the clock never applied to it and never will. A grandfathered rider is a live value breaking a live rule, held because the rule is a target. One is settled; the other is a question waiting for an answer. Collapsing them would lose the distinction exactly when playtest goes looking for it.
+
 **Stacking DoTs are not riders for this rule.** A stacking DoT whose duration exceeds its cooldown is rationed by its stack ceiling, not by the clock — Entropy Cascade's 5000ms DoT on a 600ms cooldown caps at 6 stacks and behaves correctly.
 
 This rule exists because ruling 1 sets cooldowns and says nothing about durations, so rebucketing silently converts every timed rider into a permanent one. It is not a per-class problem. Three landed in the Necromancer alone on the first pass:

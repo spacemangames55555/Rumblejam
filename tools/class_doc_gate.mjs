@@ -52,8 +52,9 @@
 //
 // 3. CROSS-FIELD DURATION AGREEMENT. See `dotSignature` below.
 // 4. ANNOTATION ARITHMETIC. See `PCT_OF_CD` below.
-// 5. ROSTER RULING 6 ITSELF. See `ruling6` below — and note that its exemption
-//    list is read out of the class files, never written down in here.
+// 5. ROSTER RULING 6 ITSELF. See `ruling6` below — and note that both of its
+//    suppression markers, `**Exempt:**` and `**Grandfathered:**`, are read out
+//    of the class files and never written down in here.
 //
 // Usage: node tools/class_doc_gate.mjs [--verbose]
 import { readdirSync, readFileSync } from 'node:fs';
@@ -401,20 +402,45 @@ function riderDurations(text) {
 // line naming a skill this file does not contain is therefore a failure in its
 // own right — otherwise renaming a block silently revokes its exemption and the
 // gate goes red for a reason nobody wrote down.
-const EXEMPT_LINE = /^\*\*Exempt:\*\*\s+(.+?)\s+held\b/;
+// TWO MARKERS, ONE PARSER, AND THEY MUST NOT MERGE.
+//
+//   **Exempt:** Toxic Bolt held — its `RIDERS` line restates the poison DoT ...
+//   **Grandfathered:** Kiai — rider 900ms is 75% of its 1200ms cooldown, ...
+//
+// EXEMPT is a permanent category ruling: a stacking DoT is rationed by its
+// stack ceiling, so the clock never applied to it and never will. GRANDFATHERED
+// is a live value breaking a live rule, kept because ruling 6's 70% is a target
+// that has not met a controller yet. One of those is settled and one is a
+// question waiting for playtest, and collapsing them would lose the distinction
+// exactly when playtest goes looking for it — so they suppress the same check
+// but are counted and reported apart.
+//
+// `**Held:**` was the proposed word and is NOT used: samurai.md already has a
+// `### HELD` section meaning open items, and that file carries three of the
+// sixteen.
+//
+// The two shapes differ only in an optional "held" before the em-dash, so one
+// expression reads both and the capture says which.
+const DECLARATION = /^\*\*(Exempt|Grandfathered):\*\*\s+(.+?)\s+(?:held\s+)?—/;
 
 function ruling6(doc, blocks, lines) {
   const bad = [];
-  const declared = [];
+  const declared = { Exempt: [], Grandfathered: [] };
   for (const l of lines) {
-    const m = EXEMPT_LINE.exec(l);
-    if (m) declared.push(m[1].trim());
+    const m = DECLARATION.exec(l);
+    if (m) declared[m[1]].push(m[2].trim());
   }
+  // THE NAME LINK IS THE WHOLE MECHANISM, so a broken one is a failure on its
+  // own terms — for both markers. Without this, renaming a block silently
+  // revokes its exemption or quietly promotes a grandfathered rider into an
+  // unnoticed one, which is the failure this marker exists to prevent.
   const names = new Set(blocks.map(b => b.name));
-  for (const d of declared) {
-    if (!names.has(d)) bad.push(`**Exempt:** names "${d}", which is not a skill block in this file`);
+  for (const kind of ['Exempt', 'Grandfathered']) {
+    for (const d of declared[kind]) {
+      if (!names.has(d)) bad.push(`**${kind}:** names "${d}", which is not a skill block in this file`);
+    }
   }
-  const exempt = new Set(declared);
+  const exempt = new Set([...declared.Exempt, ...declared.Grandfathered]);
 
   let checked = 0;
   for (const b of blocks) {
@@ -432,7 +458,7 @@ function ruling6(doc, blocks, lines) {
       }
     }
   }
-  return { checked, exempt: declared.length, bad };
+  return { checked, exempt: declared.Exempt.length, grandfathered: declared.Grandfathered.length, bad };
 }
 
 // ---------------------------------------------------------------- the gate
@@ -516,7 +542,7 @@ export function checkClassDocs() {
 
     // -- 5. ruling 6 itself: no rider longer than 70% of its own cooldown --
     const r6 = ruling6(doc, blocks, lines);
-    if (!r6.bad.length) ok(`${doc}: ${r6.checked} rider duration(s) under 70% of their cooldown, ${r6.exempt} held exempt by the file`);
+    if (!r6.bad.length) ok(`${doc}: ${r6.checked} rider duration(s) under 70% of their cooldown, ${r6.exempt} exempt + ${r6.grandfathered} grandfathered by the file`);
     for (const m of r6.bad) bad(`${doc} / ${m}`);
   }
 
