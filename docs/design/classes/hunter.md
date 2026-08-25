@@ -3,6 +3,31 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: `spread` (built). Bond is CUT.**
+
+**Tree names — built names win.** Beasts→Houndmaster, Marksman→Longshot, Frenzy→Pincer
+
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 6.67/sec on a spread build — IN BAND.**
+
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 4 rider durations cut across 4 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
+
+**Outstanding:** EVERY Bond-derived ENGINE line in this file still reads proximity and must invert.
+
 ---
 
 ## CLASS ENGINE — BOND (derived from two declared passives)
@@ -74,7 +99,7 @@ to every damaging skill. Same treatment as Razor's Edge and Poisoned Edge.
 
 ---
 
-## TREE: BEASTS
+## TREE: HOUNDMASTER  (was Beasts in the source conversion)
 
 Role read: **the pet master, and the class's role switch.** The bond, its
 two modes, two commands, two multiplier passives, a pet heal and a pet buff.
@@ -84,7 +109,7 @@ delivered by something else with teeth.
 ---
 
 SKILL NAME:           Tame Companion
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 0
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -94,7 +119,7 @@ RANGE:                range short (200px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          low (6)
-PACE:                 fast (2500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               manifests the bond in its current mode if it is not
@@ -122,7 +147,7 @@ FLAVOR:               Tame is the word other people use. What happened was a
                       genuine setbacks, and the terms are still under review.
 
 SKILL NAME:           Pack Tactics
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 1
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 1
 TYPE:                 passive
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -160,7 +185,7 @@ FLAVOR:               Neither of them leads. He has been asked which and has
                       because he does not know.
 
 SKILL NAME:           Focus Prey
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 2
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -170,7 +195,7 @@ RANGE:                range medium (300px)
 TARGETS:              1 (marked; all beasts redirect onto it)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (8000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               pet-command override, exclusive with Scatter the Pack —
@@ -200,7 +225,7 @@ FLAVOR:               The gesture is not the instruction. The gesture is for
                       finding that unsettling.
 
 SKILL NAME:           Scatter the Pack
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 3
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -210,7 +235,7 @@ RANGE:                n/a
 TARGETS:              own beasts, spread across separate prey
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               pet-command override, exclusive with Focus Prey
@@ -237,7 +262,7 @@ FLAVOR:               Three animals killing one thing is two animals wasting
                       needed to revise it.
 
 SKILL NAME:           Great Beast
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 4
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 4
 TYPE:                 active (MODE)
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -247,7 +272,7 @@ RANGE:                n/a
 TARGETS:              n/a — 1 large taunt-tank
 --- output ---
 DAMAGE TIER:          none (0) — the beast deals the damage
-PACE:                 medium (6000ms swap cooldown)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               MODE, exclusive with Beast Horde and Companion. Magnet
@@ -279,7 +304,7 @@ FLAVOR:               It has always been this large. The other shapes are the
                       costs it.
 
 SKILL NAME:           Beast Horde
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 5
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 5
 TYPE:                 active (MODE)
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -289,7 +314,7 @@ RANGE:                n/a
 TARGETS:              n/a — 3 fast strikers
 --- output ---
 DAMAGE TIER:          none (0) — the strikers deal the damage
-PACE:                 medium (6000ms swap cooldown)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               MODE, exclusive with Great Beast and Companion. Three
@@ -320,7 +345,7 @@ FLAVOR:               He does not know how many there really are. He has
                       and has decided the question was badly formed.
 
 SKILL NAME:           Beast Training
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 6
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 6
 TYPE:                 passive
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -357,7 +382,7 @@ FLAVOR:               Patience is not a virtue he possesses. It is a thing he
                       does, on purpose, badly, for years at a time.
 
 SKILL NAME:           Beast Bond
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 7
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -367,7 +392,7 @@ RANGE:                n/a — reaches the beast wherever it is
 TARGETS:              1 (the most-wounded beast)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               heals 40 to the beast
@@ -392,7 +417,7 @@ FLAVOR:               Nothing passes between them. He has been assured of
                       polite about it, and he has continued.
 
 SKILL NAME:           Bestial Rage
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 8
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -402,7 +427,7 @@ RANGE:                n/a
 TARGETS:              every living beast
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               timed pack buff — beasts gain damage and attack speed
@@ -428,7 +453,7 @@ FLAVOR:               He does not do anything to them. He stops doing the
                       what is left is what they were.
 
 SKILL NAME:           Beast Mastery
-CLASS / TREE / TIER:  hunter / Beasts / tier_code 9
+CLASS / TREE / TIER:  hunter / Houndmaster / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -438,7 +463,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               focus mark — every beast redirects onto the struck
@@ -467,7 +492,7 @@ FLAVOR:               Mastery is not the right word for it either. He has
 
 ---
 
-## TREE: MARKSMAN
+## TREE: LONGSHOT  (was Marksman in the source conversion)
 
 Role read: **the ranged spec, and the third tree in this project to ship as
 interchangeable arrows.** Six single-target shots, four of them with names
@@ -478,7 +503,7 @@ game reaches.
 ---
 
 SKILL NAME:           Steady Shot
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 0
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -488,7 +513,7 @@ RANGE:                range long (420px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 fast (2200ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -513,7 +538,7 @@ FLAVOR:               Steady is not about the hands. Everyone assumes it is
                       about the hands.
 
 SKILL NAME:           Precise Aim
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 1
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 1
 TYPE:                 passive
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -544,7 +569,7 @@ FLAVOR:               He does not aim. Aiming is what you do when you have
                       not already decided.
 
 SKILL NAME:           Multishot
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 2
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -555,7 +580,7 @@ TARGETS:              AUTHORED — 5 arrows in a spread, each seeking a
                       separate target
 --- output ---
 DAMAGE TIER:          low (12 per arrow)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -584,7 +609,7 @@ FLAVOR:               One string. He has been asked how and has demonstrated,
 > is *Multishot*. Made it a five-arrow spread.
 
 SKILL NAME:           Crippling Arrow
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 3
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -594,11 +619,12 @@ RANGE:                range long (400px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — slow ×0.45 for 4000ms, and the target's own
+RIDERS:               AUTHORED — slow ×0.45 for 1400ms, and the target's own
                       attack speed is reduced 30% for the duration
+                      — roster ruling 6: 4000ms→1400ms (70% of the 2000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -624,7 +650,7 @@ FLAVOR:               He was taught to do this to things he intended to eat,
 > **AUTHORED:** no rider in ToH. A Crippling Arrow that cripples nothing.
 
 SKILL NAME:           Hawk's Eye
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 4
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 4
 TYPE:                 passive
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -661,7 +687,7 @@ FLAVOR:               A wedge-tailed eagle can see a rabbit from two
 > else — range, projectile speed, or crit — before this ships.
 
 SKILL NAME:           Net Shot
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 5
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -671,7 +697,7 @@ RANGE:                range medium (340px)
 TARGETS:              AUTHORED — up to 4 enemies within r90 of the impact
 --- output ---
 DAMAGE TIER:          low (8)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — root 2500ms on everything the net catches
@@ -699,7 +725,7 @@ FLAVOR:               Nets are older than bows and considerably more useful
 > unambiguous name in it. Added the spread and the root.
 
 SKILL NAME:           Trueshot Aura
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 6
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 6
 TYPE:                 buff
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -709,11 +735,12 @@ RANGE:                n/a
 TARGETS:              self + own beasts (see COST)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 8000ms — attackSpeedMult +0.20, extended to the
+RIDERS:               timed 5600ms — attackSpeedMult +0.20, extended to the
                       Hunter's own beasts
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self + own summons
 --- automation ---
@@ -738,7 +765,7 @@ FLAVOR:               Trueshot is a word from a manual written by somebody
                       recruits liked it.
 
 SKILL NAME:           Boomerang
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 7
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -749,7 +776,7 @@ TARGETS:              AUTHORED — hits every enemy on the way out and again on
                       the way back
 --- output ---
 DAMAGE TIER:          low (16 per pass, 32 to anything hit twice)
-PACE:                 medium (6500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               the return pass is 400ms after the outbound, along the
@@ -781,7 +808,7 @@ FLAVOR:               Not all of them come back. That is the part people get
 > word.
 
 SKILL NAME:           Sniper's Focus
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 8
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 8
 TYPE:                 buff
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -791,7 +818,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (20000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               timed 5000ms — damageMult +0.35, the largest damage
@@ -820,7 +847,7 @@ FLAVOR:               There is a moment where the rest of it stops being
                       he is not sure he likes what it cost.
 
 SKILL NAME:           Eagle's Gaze
-CLASS / TREE / TIER:  hunter / Marksman / tier_code 9
+CLASS / TREE / TIER:  hunter / Longshot / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -830,7 +857,7 @@ RANGE:                range long (700px — the longest reach in the game)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          high (55)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -865,7 +892,7 @@ FLAVOR:               Seven hundred paces. He has never explained how he
 
 ---
 
-## TREE: FRENZY
+## TREE: PINCER  (was Frenzy in the source conversion)
 
 Role read: **the melee bruiser, and the tree that agrees with the engine.**
 Everything here happens inside 80px, which is exactly where the Bond band
@@ -875,7 +902,7 @@ and whose resource want the same thing.
 ---
 
 SKILL NAME:           Feral Swipe
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 0
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -885,7 +912,7 @@ RANGE:                melee short (76px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 fast (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -911,7 +938,7 @@ FLAVOR:               He did not intend to end up fighting like this. It came
                       anything else.
 
 SKILL NAME:           Twin Daggers
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 1
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -921,7 +948,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (10 × 2 pulses = 20)
-PACE:                 medium (4500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               2 pulses 140ms apart, each rolling its own hits
@@ -943,7 +970,7 @@ FLAVOR:               Two is not for the second cut. Two is so that the first
                       one does not have to be correct.
 
 SKILL NAME:           Venom Blades
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 2
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 2
 TYPE:                 passive
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -983,7 +1010,7 @@ FLAVOR:               Australia. He has never had to go looking for the
                       looking for somewhere without them.
 
 SKILL NAME:           Pack Leader
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 3
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 3
 TYPE:                 passive
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -1020,7 +1047,7 @@ FLAVOR:               Braver is his word for it and it is not accurate. What
                       commit has stopped being one he performs alone.
 
 SKILL NAME:           Quill Guard
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 4
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 4
 TYPE:                 buff
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -1030,10 +1057,11 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               timed 6000ms — reflectPct 0.30
+RIDERS:               timed 2800ms — reflectPct 0.30
+                      — roster ruling 6: 6000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -1055,7 +1083,7 @@ FLAVOR:               Echidna. Not a fast animal, not a strong one, and
                       about it in fifty million years.
 
 SKILL NAME:           Hamstring Slash
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 5
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -1065,10 +1093,11 @@ RANGE:                melee short (74px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               slow ×0.5 for 2500ms
+RIDERS:               slow ×0.5 for 840ms
+                      — roster ruling 6: 2500ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1088,7 +1117,7 @@ FLAVOR:               Same technique as Crippling Arrow and considerably less
                       dignified about it.
 
 SKILL NAME:           Call of the Wild
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 6
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -1098,7 +1127,7 @@ RANGE:                n/a (spawns in a loose ring)
 TARGETS:              n/a — a temporary wild pack, separate from the bond
 --- output ---
 DAMAGE TIER:          none (0) — the pack deals the damage
-PACE:                 very slow (22000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               the temporary pack does not count against the bond and
@@ -1126,7 +1155,7 @@ FLAVOR:               He does not summon them. He makes a particular noise
                       independently, that the noise concerns them.
 
 SKILL NAME:           Hunt as One
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 7
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -1136,7 +1165,7 @@ RANGE:                range medium (260px)
 TARGETS:              cap 5
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               focus mark, applied ONLY if beasts are out — every
@@ -1165,7 +1194,7 @@ FLAVOR:               The name is not a metaphor and he would prefer people
                       stopped treating it as one.
 
 SKILL NAME:           Bloodletter
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 8
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -1175,7 +1204,7 @@ RANGE:                melee long (80px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          medium (22) — plus 56 over the bleed
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none beyond the bleed
@@ -1203,7 +1232,7 @@ FLAVOR:               It is not about the blood loss. Four seconds of an
                       than the wound ever will.
 
 SKILL NAME:           Alpha's Fury
-CLASS / TREE / TIER:  hunter / Frenzy / tier_code 9
+CLASS / TREE / TIER:  hunter / Pincer / tier_code 9
 TYPE:                 transformation
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -1213,7 +1242,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               form 10000ms — damageMult +0.20, attackSpeedMult +0.20,

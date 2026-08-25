@@ -3,6 +3,31 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: `crystal` (built). Energy is CUT.**
+
+**Tree names — built names win.** Spacetime→Collapse, Arcane→Refraction, Crystalblade→Crystalblade
+
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 6.67/sec on a spread build — IN BAND.**
+
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 6 rider durations cut across 6 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
+
+**Outstanding:** every `consumes N energy` line is void; crystal stacks stay as the Crystalblade tree mechanic.
+
 ---
 
 ## CLASS ENGINE — ENERGY (derived from three nodes, not inferred)
@@ -75,7 +100,7 @@ teleport uses Blink's rule — safest reachable point, not simply away.
 
 ---
 
-## TREE: SPACETIME
+## TREE: COLLAPSE  (was Spacetime in the source conversion)
 
 Role read: **the controller, and the roster's best crowd-gatherer.** Pulls,
 slows, a stun, a teleport and a 50-second collapse. Almost nothing here does
@@ -85,7 +110,7 @@ Mage's other two trees are what he arranges things for.
 ---
 
 SKILL NAME:           Quantum Blast
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 0
+CLASS / TREE / TIER:  mage / Collapse / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -95,7 +120,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 fast (1800ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none
@@ -124,7 +149,7 @@ FLAVOR:               He does not think of it as a projectile. A projectile
                       unusually firmly.
 
 SKILL NAME:           Contraction
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 1
+CLASS / TREE / TIER:  mage / Collapse / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -134,7 +159,7 @@ RANGE:                melee long (140px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (10)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               pull — every enemy within 140px dragged up to 120px
@@ -162,7 +187,7 @@ FLAVOR:               Space is not a container. It is a relationship, and
                       to try.
 
 SKILL NAME:           Time Dilation
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 2
+CLASS / TREE / TIER:  mage / Collapse / tier_code 2
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -172,7 +197,7 @@ RANGE:                range short (150px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0) — the tick is 0 damage, purely a slow re-apply
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               slow ×0.5 to everything inside the field
@@ -199,7 +224,7 @@ FLAVOR:               Moscow winters taught him that time is not uniform. He
                       later found the mathematics and was unsurprised by it.
 
 SKILL NAME:           Photon Beam
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 3
+CLASS / TREE / TIER:  mage / Collapse / tier_code 3
 TYPE:                 channel
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -209,7 +234,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (locks nearest)
 --- output ---
 DAMAGE TIER:          low (12 per tick)
-PACE:                 slow (8000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               does NOT break on movement or on other skills firing
@@ -237,7 +262,7 @@ FLAVOR:               Light does not accumulate. It arrives, entirely, and
                       is how often.
 
 SKILL NAME:           Temporal Acceleration
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 4
+CLASS / TREE / TIER:  mage / Collapse / tier_code 4
 TYPE:                 buff
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -247,11 +272,12 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — attackSpeedMult +0.40, moveSpeedMult
+RIDERS:               timed 5600ms — attackSpeedMult +0.40, moveSpeedMult
                       +0.20
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -278,7 +304,7 @@ FLAVOR:               He is not faster. He would like people to stop saying
                       and a much larger one.
 
 SKILL NAME:           Graviton Surge
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 5
+CLASS / TREE / TIER:  mage / Collapse / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -288,7 +314,7 @@ RANGE:                range short (180px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (8)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               pull up to 90px toward the well centre; stun 900ms
@@ -315,7 +341,7 @@ FLAVOR:               Mass is not the thing that pulls. Mass is what happens
                       the distinction useful.
 
 SKILL NAME:           Antimatter Burst
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 6
+CLASS / TREE / TIER:  mage / Collapse / tier_code 6
 TYPE:                 active
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -325,7 +351,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (34)
-PACE:                 slow (8000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               none
@@ -353,7 +379,7 @@ FLAVOR:               There is nothing dramatic about the reaction itself.
                       disagreement in check.
 
 SKILL NAME:           Spatial Distortion
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 7
+CLASS / TREE / TIER:  mage / Collapse / tier_code 7
 TYPE:                 buff
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -363,12 +389,13 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — damageReduction +0.25, blockChance
+RIDERS:               timed 5600ms — damageReduction +0.25, blockChance
                       +0.25, blockReduction 1.00 (a successful block negates
                       the hit ENTIRELY)
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -393,7 +420,7 @@ FLAVOR:               He is exactly where you are looking. The difficulty is
                       allowed to disagree slightly.
 
 SKILL NAME:           Wormhole Rift
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 8
+CLASS / TREE / TIER:  mage / Collapse / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -404,7 +431,7 @@ TARGETS:              uncapped in the hazard (identity skill — breadth is the
                       point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 10 per 400ms tick
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               the Mage teleports 240px as part of the cast, leaving
@@ -436,7 +463,7 @@ FLAVOR:               The hole does not lead anywhere. That is the part
                       tidy up after itself.
 
 SKILL NAME:           Singularity Collapse
-CLASS / TREE / TIER:  mage / Spacetime / tier_code 9
+CLASS / TREE / TIER:  mage / Collapse / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -446,7 +473,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (20 per pulse)
-PACE:                 very slow (50000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               pull up to 12px per pulse toward the centre — a slow,
@@ -479,7 +506,7 @@ FLAVOR:               Collapse is the wrong word and he uses it because the
 
 ---
 
-## TREE: ARCANE
+## TREE: REFRACTION  (was Arcane in the source conversion)
 
 Role read: **the resource tree and the roster's only damage-share
 mechanic.** Three of the ten nodes exist to manage energy, which makes this
@@ -490,7 +517,7 @@ the game.
 ---
 
 SKILL NAME:           Arcane Orb
-CLASS / TREE / TIER:  mage / Arcane / tier_code 0
+CLASS / TREE / TIER:  mage / Refraction / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -500,7 +527,7 @@ RANGE:                range medium (340px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 fast (1500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -526,7 +553,7 @@ FLAVOR:               The oldest thing in the curriculum. Every school in
                       one of them has claimed to have refined it.
 
 SKILL NAME:           Arcane Blast
-CLASS / TREE / TIER:  mage / Arcane / tier_code 1
+CLASS / TREE / TIER:  mage / Refraction / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -536,7 +563,7 @@ RANGE:                range medium (300px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 medium (3500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               AUTHORED — splash r70 on impact for 60% of the hit
@@ -566,7 +593,7 @@ FLAVOR:               Blast is an aspiration. He has never been satisfied
 > candidate for cutting rather than saving.
 
 SKILL NAME:           Arcane Infusion
-CLASS / TREE / TIER:  mage / Arcane / tier_code 2
+CLASS / TREE / TIER:  mage / Refraction / tier_code 2
 TYPE:                 buff
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -576,10 +603,11 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               timed 8000ms — damageMult +0.25
+RIDERS:               timed 2800ms — damageMult +0.25
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -602,7 +630,7 @@ FLAVOR:               There is a quantity of it in the room at all times and
                       arrives is a separate skill and not a polite one.
 
 SKILL NAME:           Quantum Shielding
-CLASS / TREE / TIER:  mage / Arcane / tier_code 3
+CLASS / TREE / TIER:  mage / Refraction / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -612,10 +640,11 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               absorb shield 60 for 8000ms
+RIDERS:               absorb shield 60 for 2800ms
+                      — roster ruling 6: 8000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -636,7 +665,7 @@ FLAVOR:               It is not that the blow misses. It is that of the
                       removed the ones he objected to.
 
 SKILL NAME:           Arcane Missiles
-CLASS / TREE / TIER:  mage / Arcane / tier_code 4
+CLASS / TREE / TIER:  mage / Refraction / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -647,7 +676,7 @@ TARGETS:              4 missiles, each seeking a separate target where
                       available (port change — see COST)
 --- output ---
 DAMAGE TIER:          low (9 per missile)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -675,7 +704,7 @@ FLAVOR:               Missiles, plural, and the plural is the whole design.
 > a four-missile volley. Flagged.
 
 SKILL NAME:           Arcane Leech Shot
-CLASS / TREE / TIER:  mage / Arcane / tier_code 5
+CLASS / TREE / TIER:  mage / Refraction / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -685,7 +714,7 @@ RANGE:                range short (160px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               restores 6 energy per enemy, maximum 4 enemies — 24
@@ -714,7 +743,7 @@ FLAVOR:               He is not stealing anything they were using. Most of
                       and he has simply set up downstream of it.
 
 SKILL NAME:           Arcane Absorption
-CLASS / TREE / TIER:  mage / Arcane / tier_code 6
+CLASS / TREE / TIER:  mage / Refraction / tier_code 6
 TYPE:                 passive
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -753,7 +782,7 @@ FLAVOR:               The room is full of it. It has always been full of it.
                       resistance to noticing.
 
 SKILL NAME:           Mana Surge
-CLASS / TREE / TIER:  mage / Arcane / tier_code 7
+CLASS / TREE / TIER:  mage / Refraction / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -763,7 +792,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               restores 40 energy instantly (code value, unchanged)
@@ -791,7 +820,7 @@ FLAVOR:               There is a reserve. There has always been a reserve.
                       developed a policy of not investigating.
 
 SKILL NAME:           Black Hole
-CLASS / TREE / TIER:  mage / Arcane / tier_code 8
+CLASS / TREE / TIER:  mage / Refraction / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -801,7 +830,7 @@ RANGE:                range short (180px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (10 per pulse)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               pull up to 10px per pulse toward the centre
@@ -828,7 +857,7 @@ FLAVOR:               Nothing dramatic about it. It is simply that leaving
                       the difference compounds.
 
 SKILL NAME:           Entangled Chains
-CLASS / TREE / TIER:  mage / Arcane / tier_code 9
+CLASS / TREE / TIER:  mage / Refraction / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -838,7 +867,7 @@ RANGE:                range medium (300px)
 TARGETS:              4 bound
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (30000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               binds 4 enemies for 8000ms. 40% of damage dealt to any
@@ -892,10 +921,11 @@ RANGE:                range medium (300px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 fast (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               slow ×0.6 for 2500ms; applies 1 crystal stack (ruling 1)
+RIDERS:               slow ×0.6 for 840ms; applies 1 crystal stack (ruling 1)
+                      — roster ruling 6: 2500ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -966,7 +996,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 fast (2500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               applies 1 crystal stack (ruling 1)
@@ -1033,7 +1063,7 @@ RANGE:                melee short (66px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (9 × 3 pulses = 27)
-PACE:                 medium (5000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               3 pulses 130ms apart, each rolling its own hits and
@@ -1069,11 +1099,12 @@ RANGE:                range short (150px)
 TARGETS:              cap 6
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               weaken 15% for 4000ms; applies 1 crystal stack to every
+RIDERS:               weaken 15% for 1400ms; applies 1 crystal stack to every
                       target hit
+                      — roster ruling 6: 4000ms→1400ms (70% of the 2000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1104,7 +1135,7 @@ RANGE:                melee long (130px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 130px; knockback-stun 200ms; applies 1 crystal
@@ -1140,7 +1171,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (12 per banked stack)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               consumes every crystal stack on every enemy within
@@ -1186,7 +1217,7 @@ RANGE:                range short (180px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               applies 2 crystal stacks to everything hit
@@ -1222,7 +1253,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               form 12000ms — attackSpeedMult +0.50, lifestealPct

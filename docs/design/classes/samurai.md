@@ -1,62 +1,112 @@
-# SAMURAI — RUMBLEJAM CONVERSION (30 skills)
+# SAMURAI — RUMBLEJAM CONVERSION (26 skills)
 
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
 ---
 
-## CLASS ENGINE — RESOLVE (derived, not invented)
+## TREE RULING (settled)
 
-The other three engines I proposed. This one is already in your code.
-Counterstrike's declared text: *"every successful parry returns 10 Resolve."*
-The Samurai has a named resource that nothing else references — a system
-that was started and never finished. I have built the class around it rather
-than inventing a fourth thing.
+**Zero of thirty skill names were shared with the built class** — the widest
+divergence in the roster, and it did not resolve as one decision.
 
-**RESOLVE, 0–100.** Starts each run at 0.
+| doc tree | ruling | built counterpart |
+|---|---|---|
+| Blade | **→ Tactics, revise in place.** The doc is the better-specified side | Tactics (10, linear) |
+| Stances | **dissolved.** Water/Stone/Fire become a trait spec; five of the other seven move into Armor as its riposte layer, one is deleted | `three_stances` trait + Armor |
+| Bow | **held as a genuine gap, logged.** Needs `bolt`/`line` composes the class does not have — a `js/` patch for later | none exists |
 
-Feeds:
-- A successful parry: **+10** (the code's own number, unchanged)
-- Blocking a hit: **+5**
-- Landing any Blade-tree strike: **+3**
-- Holding a stance continuously for 5s: **+5** (rewards commitment, punishes
-  thrashing between stances)
+**Names kept: Armor / Tactics / Agility.** Two reasons, neither about taste.
+"Stances" is a collision the GDD already paid for once — §8.3 records it
+producing a false positive in an audit against the `three_stances` trait — and
+Agility is §8.1's cited shape-spec reference for the whole roster.
 
-Consumes:
-- Iaijutsu **25** · Perfect Form **60** · Thousand Cuts **60** ·
-  Heaven's Arc **40**
+**The gap is real and it is the largest in the project.** The built Samurai's
+thirty skills compose to `strike ×18, shield ×3, ward ×2, cone ×1`. No `bolt`,
+no `line`, **no projectile of any kind**; the longest reach in the class is one
+300px cone. A melee class with no ranged option at all is the hole the Bow tree
+was written to fill, and it is logged beside the Necromancer's commander tree.
 
-Decays **2/sec while no stance is active.** A stanceless Samurai leaks. This
-is the mechanical statement of the class's whole idea: form is not a bonus,
-it is the container, and without one he cannot hold anything.
+**Agility is not described by this document at all.** Ten built nodes —
+Quickstep, Light Feet, Running Cut, Slip Cut, Gale Step, Dancing Edge, Hundred
+Paces, Crescent, Windwalk, Moonfall — have no counterpart here. Armor is
+likewise only 7 of 10 documented. Both are open.
+
+---
+
+## CLASS ENGINE — FOOTING (built, and it supersedes Resolve)
+
+Ruled: **Footing wins, Resolve is superseded.** Footing is built, documented at
+GDD §8.4, and stack-per-half-second-standing-still is the more distinctive
+mechanic. Resolve's clauses were written against a stance tree that no longer
+exists in this document.
+
+```
+footingTickMs         = 500     // one stack per half-second stationary
+FOOTING_MAX_STACKS    = 10      // hard cap, no skill may raise it
+footingShieldPerStack = 4
+footingGritPerStack   = 2
+footingGraceMs        = 400     // a BUDGET, not a timer
+footingGraceRefill    = 1.0
+```
+
+Footing grants a shield pool and grit. **Not** Vitality — max HP has a
+destructive removal path — and **not** Reflex, because a stance that makes him
+harder to hit contradicts the mechanic he has surrendered dodging for.
+
+**What this costs the document.** Resolve was a currency: skills fed it and
+capstones spent it. Footing is not spendable, so every `consumes N Resolve`
+line is void rather than reprice-able, and the four gates that read a Resolve
+threshold now read a stack count instead. One node does not survive the swap —
+Disciplined Breath was a resource valve and is held.
+
+**The inversion worth stating plainly.** Resolve paid him for being attacked.
+Footing pays him for not moving. In a game whose only input is movement, that
+is a much harsher engine, and it is the built one.
+
+---
+
+## THE STANCE MACHINE — a trait spec, not three nodes
+
+Water, Stone and Fire Stance are **no longer skill blocks in this document.**
+The three-way exclusive stance machine is already built as the `three_stances`
+trait: `p.stance` = 0/1/2 = IRON / PRECISION / FLOW, swapped by
+`tohSwapStance` (`js/traits-toh.js`), read in eight places. The doc's version
+was the same mechanism at a different address, and the better specification of
+the two — so it is folded into the trait rather than competing with it.
+
+| doc stance | maps to | gives | costs |
+|---|---|---|---|
+| Water | FLOW | +15% move speed, +20% block chance, 60% block reduction | −10% damage reduction |
+| Stone | IRON | +20% damage reduction | −10% move speed |
+| Fire | PRECISION | +25% damage | −15% damage reduction |
+
+Exclusive, 2500ms swap cooldown, no duration, auto-swapping on condition —
+Stone when he is being hit, Water when he is running, Fire when he is safe.
+**These three occupy no slots.** That is the substantive change: the doc spent
+three of eight on the machine, and the trait spends none.
+
+### DELETED — Disciplined Breath
+
+Ruled out of the class, not held. It restored 12 HP and 25 Resolve; Resolve is
+superseded, Footing cannot be granted by a cast without contradicting its one
+rule, and what remained was a 12 HP heal on a 4s cooldown. That is not worth a
+tier slot. Recorded here rather than left as a stub, so the tree reads as six
+deliberate nodes rather than seven with one broken.
+
+Armor is now **6 of 10** documented. Four slots open.
+
+**Open:** the built trait's own numbers (`ironGrit: 6`, `ironRefundPct: 0.2`,
+`precisionBleedDur: 4`) are a different scheme from the table above, and
+reconciling them is `js/` work outside this pass.
 
 ---
 
 ## PORT RULINGS
 
-**1. The stance system — the structural question, answered.** Three
-transformations, `stanceGroup 'samurai_stance'`, exclusive, no duration,
-2500ms cooldown, each with a real drawback:
+**1. The stance system** — see the trait spec above. Superseded as a tree.
 
-| stance | gives | costs |
-|---|---|---|
-| Water | +15% move speed, +20% block chance, 60% block reduction | −10% damage reduction |
-| Stone | +20% damage reduction | −10% move speed |
-| Fire | +25% damage | −15% damage reduction |
-
-Ruling: **each stance occupies a slot and auto-swaps on its trigger; the
-2500ms cooldown is the swap cooldown; only one is ever active.** A Samurai
-who slots all three has spent three of eight slots on a machine that reads
-the room — Stone when he is being hit, Water when he is running, Fire when
-he is safe. A Samurai who slots one has that stance permanently and four
-more attacks.
-
-This is the best answer to auto-fire in the roster so far, because the
-stance machine is *legible*: the player can watch their character make
-correct decisions and understand why. I'd protect it.
-
-**2. Resolve decay requires a stance.** See engine above. It is what stops
-"slot one stance and forget it" from being strictly correct.
+**2. VOID — Resolve decay required a stance.** The engine is gone.
 
 **3. Four Bow nodes have no riders and I have added them.** Hamstring Shot,
 Whistling Arrow, Flaming Arrow and Pinning Shot are all 12–14 damage single
@@ -68,15 +118,84 @@ the class — every one is flagged on its block.
 
 **4. Parry and Perfect Form become `ON_DAMAGE_TAKEN` reactives.** Both are
 riposte skills built for a human reading an incoming swing. Auto-fired they
-become the counter layer, which is exactly what `ON_DAMAGE_TAKEN` is for and
-what makes Counterstrike's +10 Resolve reachable.
+become the counter layer, which is exactly what `ON_DAMAGE_TAKEN` is for — and
+under Footing they are better than they were under Resolve, because a riposte
+is answered from a plant and costs no grace budget.
 
 **5. Iaijutsu's armed state.** It arms the next strike for ×2.5 with a stun,
-inside a 3s window. Ruling: it fires **only when at least one Blade-tree
-attack is off cooldown and an enemy is in range of it** — otherwise the
+inside a 2100ms window (cut from 3s by roster ruling 6). Ruling: it fires
+**only when at least one Tactics attack is off cooldown and an enemy is in
+range of it** — otherwise the
 window expires on nothing, which auto-fire would otherwise do constantly.
 
 **6. Movement, allies, channels** carry from earlier classes.
+
+---
+
+## ROSTER RULING APPLIED
+
+**Pace (ruling 1).** All 21 timed actives rebucketed, then rescaled again when
+the bucket table was retuned. Three promotions to reach the distribution floor:
+Falling Petal (slow → medium) for Tactics, Kiai (slow → medium) for Armor,
+Running Draw (slow → medium) for Bow. Each was chosen for having no timed rider
+to break, so none needed a ruling-6 cut.
+
+**Rate: 6.67/sec on a spread build — IN BAND.** The
+bucket-mix rule took this class from 5.33 by promoting Parry and Piercing Arrow
+to fast, giving Armor and Bow their second fast-or-better node each. The class
+still owns **no very-fast node**, so its ceiling is structural: every build is a
+mix of 1.2s and 2.0s, and eight fast slots would top out at 6.67/sec. Spread and
+fastest-8 are identical here for that reason.
+
+**Mono-tree: 3.46/sec (Tactics), 3.67/sec (Bow) — both well below band.** Armor
+holds only four timed actives and cannot fill eight slots. A single-tree Samurai
+fires at roughly half the rate of a spread one, which is the per-tree rule's
+structural limit rather than a fact about this class.
+
+**Distribution.** Tactics 4 medium-or-faster of 7 non-capstone actives, 0 very
+slow — passes. Bow 4 of 8, 0 very slow — passes. **Armor is 3 of 4 and cannot
+be judged**: it holds seven of ten nodes, so the rule's "per tree of 10" has no
+denominator here until the other three are authored.
+
+**Damage share (ruling 2), under the reworded rule.** Tactics 7 damaging, Armor
+5 of 7, Bow 9 — all clear the floor of 5. **The high-tier half fails in two
+trees**: only Bow has one (Heaven's Arc, 55). Tactics tops out at Falling
+Petal's 34, Armor at Parry's 36 with Counterstrike. Held — the fix is a retune,
+and ruling 1's own "out of scope" clause forbids it. Unlike the Necromancer's
+Singularity there is no mislabelled total to correct here; these nodes are
+genuinely medium.
+
+**Rider duration (ruling 6).** Seven cuts: Iaijutsu's armed window and
+Duelist's Challenge's taunt-plus-damage window 4000→2100ms, Whistling Arrow's
+taunt and Rain of Arrows' hazard 3000→2100ms, Flaming Arrow's burn
+5000→2100ms, Hamstring Shot's slow 4000→1050ms, and **Guard Break's weaken
+4000→560ms, which is a casualty** — see its block.
+
+**Passive budget (ruling 4).** Four passives across the class — Razor's Edge,
+Relentless Tempo (Tactics), Counterstrike, Immovable Mind (Armor), plus Steady
+Hand in Bow makes five. Against a four-slot budget that is very nearly
+non-binding, which is the opposite of the Necromancer's nine.
+
+**Channels (ruling 5).** Not applicable — the class has none.
+
+**Engine cost (ruling 3).** Not applicable. Footing is not spendable.
+
+### HELD
+
+**RESOLVED — Disciplined Breath is deleted.** See the section above.
+
+**RESOLVED — Guard Break's weaken.** It was a ruling-6 casualty at 560ms under
+the first bucket table. The rescale to a 1.2s fast bucket puts it at 840ms,
+clear of the 500ms floor that this node's failure produced.
+
+**1. No high-tier node in Tactics or Armor.** Logged against the power-curve
+pass, which owns damage values. Ruling 1 forbids retuning them here, and unlike
+the Necromancer's Singularity there is no mislabelled total to correct — these
+nodes are genuinely medium.
+
+**2. Agility is undocumented and Armor is 6 of 10.** Fourteen built nodes have
+no counterpart in this file.
+
 
 ---
 
@@ -90,7 +209,7 @@ kill one thing well, and the swarm does not cooperate.
 ---
 
 SKILL NAME:           First Cut
-CLASS / TREE / TIER:  samurai / Blade / tier_code 0
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 0
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -100,7 +219,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          medium (20)
-PACE:                 fast (2000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -112,19 +231,21 @@ THREAT:               some
 --- growth ---
 RANK ADDS:            +3 damage; +1 target every 5th rank
 --- identity ---
-ENGINE:               feeds +3 Resolve per cast — at 2000ms this is the
-                      class's baseline income
+ENGINE:               Footing-neutral. A strike does not build Footing —
+                      standing still does — but at 800ms First Cut is the
+                      skill that makes standing still pay, since it is the
+                      fastest thing he can do without taking a step
 COST:                 seventy pixels and no rider. It is the plainest skill
                       in the class and it will be in every Blade build for
-                      the whole run, because Resolve has to come from
-                      somewhere
+                      the whole run, because at 800ms it is the fastest thing
+                      he can do without spending a step of grace
 VISUAL:               a single clean draw-and-return, the blade already sheathed
                       before the enemy registers the line
 FLAVOR:               The first cut is not the important one. The first cut
                       is a question. He has simply gotten very quick at asking.
 
 SKILL NAME:           Twin Fangs
-CLASS / TREE / TIER:  samurai / Blade / tier_code 1
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 1
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -134,7 +255,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (13 × 2 pulses = 26)
-PACE:                 fast (3200ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               2 pulses 140ms apart, each rolling its own hits
@@ -146,7 +267,8 @@ THREAT:               some
 --- growth ---
 RANK ADDS:            +3 damage per pulse; +1 pulse every 7th rank
 --- identity ---
-ENGINE:               feeds +3 Resolve per cast (per cast, not per pulse)
+ENGINE:               Footing-neutral, and both pulses land from a standing
+                      position, so it spends none of the grace budget
 COST:                 twenty-six over 3200ms against First Cut's twenty over
                       2000ms — it is slower damage per second at rank 1 and
                       only overtakes once ranks accumulate. It is also two
@@ -158,7 +280,7 @@ FLAVOR:               A snake does not bite twice because the first was
                       insufficient. It bites twice because it has two.
 
 SKILL NAME:           Razor's Edge
-CLASS / TREE / TIER:  samurai / Blade / tier_code 2
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 2
 TYPE:                 passive
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -184,9 +306,9 @@ THREAT:               none
 RANK ADDS:            +2 bleed damage per tick per rank; +1s bleed duration
                       every 5th rank
 --- identity ---
-ENGINE:               neutral directly, but it multiplies every Resolve-
-                      generating strike into more total damage without more
-                      casts
+ENGINE:               Footing-neutral directly, but it multiplies every
+                      strike he lands while planted, which is where the class
+                      spends most of its time
 COST:                 it does nothing for the Bow tree and nothing for the
                       Stances tree's Kiai or Guard Break. It is a Blade-only
                       multiplier occupying a general slot, and a hybrid
@@ -199,7 +321,7 @@ FLAVOR:               There is a stage past sharp that has no name in most
                       to do afterward.
 
 SKILL NAME:           Iaijutsu
-CLASS / TREE / TIER:  samurai / Blade / tier_code 3
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 3
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -209,12 +331,15 @@ RANGE:                n/a
 TARGETS:              self; the armed strike deals ×2.5 and stuns
 --- output ---
 DAMAGE TIER:          none (0) at cast
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               the armed strike gains ×2.5 damage and stun 700ms on
-                      its targets. Fires only when a Blade attack is off
-                      cooldown with an enemy in its range (ruling 5)
+                      its targets. Armed window 3000ms as authored — the
+                      rescaled slow bucket's 4s clears it, so ruling 6 makes no
+                      cut here. Fires only
+                      when a Tactics attack is off cooldown with an enemy in
+                      its range (ruling 5)
 DOT:                  none
 AFFECTS:              self + enemies (deferred)
 --- automation ---
@@ -224,10 +349,11 @@ THREAT:               some (delivered by the armed strike)
 RANK ADDS:            +0.15× to the multiplier per rank; +100ms stun every
                       4th rank
 --- identity ---
-ENGINE:               consumes 25 Resolve
+ENGINE:               Footing-neutral — no cost. The old Resolve price is
+                      gone with the engine; nothing replaces it, because
+                      Footing is not a currency that can be spent
 COST:                 it does nothing by itself. Twelve seconds of cooldown
-                      and twenty-five Resolve spent on making one other skill
-                      better, and if the window closes unspent it was a pure
+                      spent on making one other skill better, and if the window closes unspent it was a pure
                       loss. It is the only skill in the class that can be
                       wasted by the automation making a reasonable decision
 VISUAL:               the hand settles on the saya and stays there; the whole
@@ -239,7 +365,7 @@ FLAVOR:               The art is not in the cut. The cut takes a fifth of a
                       long as it takes.
 
 SKILL NAME:           Crescent Sweep
-CLASS / TREE / TIER:  samurai / Blade / tier_code 4
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 4
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -249,7 +375,7 @@ RANGE:                melee long (100px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -262,7 +388,7 @@ THREAT:               some
 --- growth ---
 RANK ADDS:            +4 damage; +6° cone width every 4th rank
 --- identity ---
-ENGINE:               feeds +3 Resolve per cast
+ENGINE:               Footing-neutral, and it fires from a plant
 COST:                 a hundred and forty degrees is the widest arc in the
                       class and it still leaves half the circle open. The
                       Samurai has no self-centred area skill anywhere in the
@@ -274,7 +400,7 @@ FLAVOR:               A wide cut is an admission that there is more than one
                       of them. He does not enjoy making it.
 
 SKILL NAME:           Dragonfly Cut
-CLASS / TREE / TIER:  samurai / Blade / tier_code 5
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 5
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -284,7 +410,7 @@ RANGE:                range short (190px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               NO knockdown — `knockdownMs 0`, deliberately zeroed in
@@ -298,7 +424,8 @@ THREAT:               some
 --- growth ---
 RANK ADDS:            +4 damage; +15px dash distance every 4th rank
 --- identity ---
-ENGINE:               feeds +3 Resolve per cast
+ENGINE:               Footing-HOSTILE — it displaces him 190px, which spends
+                      the whole 400ms grace budget and drops every stack
 COST:                 the zeroed knockdown is not an oversight to fix — it is
                       what distinguishes this from every other dash in the
                       game. He passes through and leaves them standing, which
@@ -312,7 +439,7 @@ FLAVOR:               A dragonfly does not turn. It goes, and then it is
                       facts is not available for inspection.
 
 SKILL NAME:           Relentless Tempo
-CLASS / TREE / TIER:  samurai / Blade / tier_code 6
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 6
 TYPE:                 passive
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -335,8 +462,8 @@ THREAT:               none
 RANK ADDS:            +4% attack speed per rank — applies to every skill the
                       character owns, including Bow
 --- identity ---
-ENGINE:               feeds indirectly — faster casts is more Resolve per
-                      minute across the whole kit
+ENGINE:               Footing-neutral. Attack speed does not build stacks,
+                      but it raises what a held stance is worth per second
 COST:                 attack speed is worth the most in a build with many
                       short-cooldown skills and almost nothing in a build
                       built around Heaven's Arc and Perfect Form. It quietly
@@ -348,7 +475,7 @@ FLAVOR:               Speed was never the goal. Speed is what is left over
                       once you stop doing the things that were not necessary.
 
 SKILL NAME:           Duelist's Challenge
-CLASS / TREE / TIER:  samurai / Blade / tier_code 7
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 7
 TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -358,12 +485,13 @@ RANGE:                range medium (300px)
 TARGETS:              1 marked
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               taunt 4000ms on the marked enemy, PLUS a 4000ms window
+RIDERS:               taunt 2800ms on the marked enemy, PLUS a 2800ms window
                       in which ALL of the player's damage is ×1.25 — global,
-                      not mark-only (see note)
+                      not mark-only (see note). Both cut from an authored
+                      4000ms by roster ruling 6 (70% of the 4s cooldown)
 DOT:                  none
 AFFECTS:              enemies + self
 --- automation ---
@@ -396,7 +524,7 @@ FLAVOR:               A challenge is a contract. He has never once issued one
 > almost certainly not what the skill's name intends, so it is your call.
 
 SKILL NAME:           Falling Petal
-CLASS / TREE / TIER:  samurai / Blade / tier_code 8
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 8
 TYPE:                 active
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -406,7 +534,7 @@ RANGE:                range short (170px)
 TARGETS:              uncapped in ring (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (34) — 75 against stunned or slowed targets
-PACE:                 slow (10000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               ×2.2 per target that is currently STUNNED or SLOWED,
@@ -421,7 +549,8 @@ THREAT:               some
 RANK ADDS:            +6 base damage (the ×2.2 does not scale, so a rank-10
                       Petal hits controlled targets for 207)
 --- identity ---
-ENGINE:               feeds +3 Resolve per cast
+ENGINE:               Footing-neutral, and it is placed rather than
+                      travelled, so it costs no grace
 COST:                 a 600ms telegraph on a swarm that moves. The ring is
                       drawn where they are and lands where they were, and its
                       doubling needs a control skill in another slot — Kiai
@@ -435,7 +564,7 @@ FLAVOR:               It falls when it falls. Not when the wind takes it,
                       not negotiable and everyone can see it coming.
 
 SKILL NAME:           Thousand Cuts
-CLASS / TREE / TIER:  samurai / Blade / tier_code 9
+CLASS / TREE / TIER:  samurai / Tactics / tier_code 9
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -445,7 +574,7 @@ RANGE:                range short (200px per link)
 TARGETS:              cascades from target to target for the duration
 --- output ---
 DAMAGE TIER:          low (12 per strike)
-PACE:                 very slow (55000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               auto-casts a chain of strikes over 6000ms, each finding
@@ -454,18 +583,21 @@ RIDERS:               auto-casts a chain of strikes over 6000ms, each finding
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
-TRIGGER:              CROWD_THRESHOLD (8+ within 250px), gated on 60 Resolve
+TRIGGER:              CROWD_THRESHOLD (8+ within 250px), gated on 6+ Footing
+                      stacks — it wants to fire from a set stance
 THREAT:               high
 --- growth ---
 RANK ADDS:            +2 damage per strike; +500ms cascade duration every
                       4th rank
 --- identity ---
-ENGINE:               consumes 60 Resolve
-COST:                 fifty-five seconds and sixty Resolve for twelve damage
-                      a strike. Its entire case rests on Razor's Edge — with
-                      bleeds it is the biggest thing in the class, and
-                      without them it is a light show. Two slots, one of them
-                      a passive, before the capstone works
+ENGINE:               Footing-neutral, and he ends the cascade standing
+                      where he started, which is the rare capstone that does
+                      not cost him his stance
+COST:                 twenty-five seconds for twelve damage a strike. Its
+                      entire case rests on Razor's Edge — with bleeds it is
+                      the biggest thing in the class, and without them it is a
+                      light show. Two slots, one of them a passive, before the
+                      capstone works
 VISUAL:               he stops being in one place. The strikes are visible as
                       afterimages resolving in sequence and he is standing
                       still again before the last one lands
@@ -487,9 +619,9 @@ automation in the roster.
 ---
 
 SKILL NAME:           Guard Break
-CLASS / TREE / TIER:  samurai / Stances / tier_code 0
+CLASS / TREE / TIER:  samurai / Armor / tier_code 0
 TYPE:                 active
-AXIS POSITION:        1 (of 10)
+AXIS POSITION:        1 (of 6)
 --- delivery ---
 CAST:                 melee
 SHAPE:                multi-target (uncapped circle r74)
@@ -497,10 +629,11 @@ RANGE:                melee short (74px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 fast (3000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               weaken 30% for 4000ms
+RIDERS:               weaken 30% for 840ms, cut from an authored 4000ms by
+                      roster ruling 6 (70% of the 1.2s cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -511,139 +644,28 @@ THREAT:               some
 RANK ADDS:            +3 damage; +2% weaken every 2nd rank; +400ms weaken
                       duration every 4th rank
 --- identity ---
-ENGINE:               neutral — it is not a Blade strike, so it generates no
-                      Resolve. Worth noticing: the Stances tree barely feeds
-                      the engine at all except through parries
+ENGINE:               Footing-neutral, and it is delivered from a plant.
+                      Under Resolve this node generated nothing because it was
+                      not a Blade strike; Footing does not make that
+                      distinction, so the old dead spot is gone
 COST:                 a 30% weaken on four enemies is the best defensive
-                      value in the class and it is invisible. Nothing on
-                      screen tells the player it is working, and a new player
-                      will drop it for something with a bigger number
+                      value in the class and it is invisible. Nothing on screen
+                      tells the player it is working, and a new player will drop
+                      it for something with a bigger number. Under the first
+                      bucket table this node was a ruling-6 casualty at 560ms —
+                      nine frames of weaken, which reads as a broken skill. The
+                      rescale to a 1.2s fast bucket puts it at 840ms, clear of
+                      the 500ms floor the casualty produced
 VISUAL:               a short hard strike at the guard hand; the enemy's next
                       swing visibly lacks commitment
 FLAVOR:               He is not trying to hurt them. He is trying to make
                       the next thing they do cost them slightly more than
                       they budgeted.
 
-SKILL NAME:           Water Stance
-CLASS / TREE / TIER:  samurai / Stances / tier_code 1
-TYPE:                 transformation
-AXIS POSITION:        2 (of 10)
---- delivery ---
-CAST:                 self
-SHAPE:                none
-RANGE:                n/a
-TARGETS:              self
---- output ---
-DAMAGE TIER:          none (0)
-PACE:                 fast (2500ms swap cooldown)
-DOMAIN:               mental
---- effects ---
-RIDERS:               TOGGLE, no duration; stanceGroup 'samurai_stance'
-                      (exclusive) — moveSpeedMult +0.15, blockChance +0.20,
-                      blockReduction 0.60, damageReduction −0.10
-DOT:                  none
-AFFECTS:              self
---- automation ---
-TRIGGER:              CROWD_THRESHOLD (6+ within 250px) — the running stance,
-                      entered when the room is too full to stand in
-THREAT:               none
---- growth ---
-RANK ADDS:            +3% block chance and +2% move speed per rank; the −10%
-                      damage reduction penalty does NOT scale down
---- identity ---
-ENGINE:               feeds +5 Resolve per 5s held; the block chance also
-                      makes it the best parry-adjacent Resolve stance
-COST:                 negative damage reduction. Water makes him faster and
-                      harder to connect with, and strictly worse at surviving
-                      the hits that do connect. It is the stance for a player
-                      who is confident, and it will kill an overconfident one
-VISUAL:               the guard drops to a loose low hold; his movement stops
-                      having discrete steps in it
-FLAVOR:               Water is not soft. Water is simply unwilling to be
-                      where the blow is, and has never in its history
-                      considered that cowardice.
-
-SKILL NAME:           Stone Stance
-CLASS / TREE / TIER:  samurai / Stances / tier_code 2
-TYPE:                 transformation
-AXIS POSITION:        3 (of 10)
---- delivery ---
-CAST:                 self
-SHAPE:                none
-RANGE:                n/a
-TARGETS:              self
---- output ---
-DAMAGE TIER:          none (0)
-PACE:                 fast (2500ms swap cooldown)
-DOMAIN:               mental
---- effects ---
-RIDERS:               TOGGLE, no duration; stanceGroup 'samurai_stance'
-                      (exclusive) — damageReduction +0.20, moveSpeedMult −0.10
-DOT:                  none
-AFFECTS:              self
---- automation ---
-TRIGGER:              SELF_HP_BELOW_X (50%) — highest stance priority; it
-                      overrides Water and Fire whenever it is eligible
-THREAT:               some
---- growth ---
-RANK ADDS:            +3% damage reduction per rank; the −10% move speed
-                      penalty does NOT scale down
---- identity ---
-ENGINE:               feeds +5 Resolve per 5s held
-COST:                 minus ten percent movement, in a game where movement is
-                      the only thing the player controls. Stone is the
-                      correct stance for surviving and the wrong stance for
-                      the actual skill the game is testing, and that tension
-                      is the best thing about the stance system
-VISUAL:               weight settles into the back foot; he stops drifting
-                      and starts planting
-FLAVOR:               A stone in a river is not winning. It is simply
-                      participating on a different timescale, and it has
-                      never once been asked to explain itself.
-
-SKILL NAME:           Fire Stance
-CLASS / TREE / TIER:  samurai / Stances / tier_code 3
-TYPE:                 transformation
-AXIS POSITION:        4 (of 10)
---- delivery ---
-CAST:                 self
-SHAPE:                none
-RANGE:                n/a
-TARGETS:              self
---- output ---
-DAMAGE TIER:          none (0)
-PACE:                 fast (2500ms swap cooldown)
-DOMAIN:               mental
---- effects ---
-RIDERS:               TOGGLE, no duration; stanceGroup 'samurai_stance'
-                      (exclusive) — damageMult +0.25, damageReduction −0.15
-DOT:                  none
-AFFECTS:              self
---- automation ---
-TRIGGER:              default stance — holds whenever neither Stone nor Water
-                      is eligible (above 50% HP, fewer than 6 enemies near)
-THREAT:               none
---- growth ---
-RANK ADDS:            +4% damage multiplier per rank; the −15% damage
-                      reduction penalty does NOT scale down
---- identity ---
-ENGINE:               feeds +5 Resolve per 5s held
-COST:                 the largest defensive penalty in the class, held by
-                      default. A Samurai with all three stances spends most
-                      of every fight in Fire and drops out of it exactly when
-                      things go wrong — which reads, correctly, as the
-                      character being brave rather than the automation being
-                      stupid
-VISUAL:               the blade comes up and forward; he stops guarding
-                      entirely and the stance is visibly all offer
-FLAVOR:               Fire does not have a defensive form. This has been
-                      pointed out to him, at length, by people who were
-                      trying to be helpful.
-
 SKILL NAME:           Parry
-CLASS / TREE / TIER:  samurai / Stances / tier_code 4
+CLASS / TREE / TIER:  samurai / Armor / tier_code 1
 TYPE:                 active
-AXIS POSITION:        5 (of 10)
+AXIS POSITION:        2 (of 6)
 --- delivery ---
 CAST:                 instant-at-range
 SHAPE:                multi-target (area at the attacker)
@@ -651,7 +673,7 @@ RANGE:                melee short (at the attacker)
 TARGETS:              cap 2
 --- output ---
 DAMAGE TIER:          medium (22 riposte, 36 with Counterstrike owned)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               riposte — resolves as an immediate counter-strike on
@@ -665,9 +687,9 @@ THREAT:               some
 RANK ADDS:            +4 riposte damage per rank; −300ms cooldown every 4th
                       rank, floor 3000ms
 --- identity ---
-ENGINE:               feeds heavily — a successful parry is +10 Resolve, the
-                      largest single-event feed in the class, and with
-                      Counterstrike owned it is +20
+ENGINE:               Footing-positive by position — a parry is answered
+                      without moving, so every riposte is a hit taken and
+                      returned with the stance intact
 COST:                 it requires being hit, which is the failure state of
                       the game. Every point in Parry is a bet against the
                       player's own movement, and a Samurai played well gets
@@ -678,50 +700,10 @@ FLAVOR:               He does not block. Blocking is agreeing to be hit
                       somewhere convenient. This is closer to declining to
                       accept delivery.
 
-SKILL NAME:           Disciplined Breath
-CLASS / TREE / TIER:  samurai / Stances / tier_code 5
-TYPE:                 active
-AXIS POSITION:        6 (of 10)
---- delivery ---
-CAST:                 self
-SHAPE:                none
-RANGE:                n/a
-TARGETS:              self
---- output ---
-DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
-DOMAIN:               mental
---- effects ---
-RIDERS:               restores 12 HP and, in RumbleJam, 25 Resolve (the
-                      35-energy restore has no referent — see note)
-DOT:                  none
-AFFECTS:              self
---- automation ---
-TRIGGER:              COOLDOWN_READY when Resolve is below 40
-THREAT:               none
---- growth ---
-RANK ADDS:            +4 HP and +5 Resolve per rank
---- identity ---
-ENGINE:               feeds — the only skill in the class that generates
-                      Resolve without requiring an enemy to do something
-COST:                 twelve health is not a heal. Its real function is to
-                      un-stick a Samurai whose Resolve has bottomed out, and
-                      a player who has not understood the engine will read it
-                      as a bad heal and drop it
-VISUAL:               one full breath, shoulders dropping, everything else
-                      briefly slowing around him
-FLAVOR:               Kyoto taught him that the breath is not preparation for
-                      the technique. The breath is the technique and
-                      everything after it is follow-through.
-
-> **Energy has no referent:** the code restores 35 energy, and RumbleJam has
-> no energy resource. I redirected it to Resolve, which is the class's actual
-> economy and makes this node coherent. Flagged as a substitution.
-
 SKILL NAME:           Counterstrike
-CLASS / TREE / TIER:  samurai / Stances / tier_code 6
+CLASS / TREE / TIER:  samurai / Armor / tier_code 2
 TYPE:                 passive
-AXIS POSITION:        7 (of 10)
+AXIS POSITION:        3 (of 6)
 --- delivery ---
 CAST:                 n/a
 SHAPE:                n/a
@@ -741,12 +723,14 @@ AFFECTS:              self, enemies
 TRIGGER:              always-on (no trigger; occupies a slot)
 THREAT:               none
 --- growth ---
-RANK ADDS:            +4 riposte damage per rank; +2 Resolve per parry every
-                      3rd rank
+RANK ADDS:            +4 riposte damage per rank. The +2-Resolve-per-parry
+                      half is void with the engine
 --- identity ---
-ENGINE:               this node IS the engine's origin — the +10 Resolve on
-                      parry is the code's own text, and everything in the
-                      Resolve system was derived from this line
+ENGINE:               Footing-neutral. Its declared text — "every successful
+                      parry returns 10 Resolve" — is the line the superseded
+                      Resolve engine was derived from. Footing is the built
+                      engine and it wins; this text is now the last live
+                      reference to a resource that does not exist
 COST:                 it modifies exactly two skills, Parry and Perfect Form,
                       both in this tree. Without Parry slotted it is a dead
                       node, and with it the pair costs two of eight slots
@@ -758,9 +742,9 @@ FLAVOR:               The counter is not a reaction. A reaction is late by
                       place he decided on some while ago.
 
 SKILL NAME:           Immovable Mind
-CLASS / TREE / TIER:  samurai / Stances / tier_code 7
+CLASS / TREE / TIER:  samurai / Armor / tier_code 3
 TYPE:                 passive
-AXIS POSITION:        8 (of 10)
+AXIS POSITION:        4 (of 6)
 --- delivery ---
 CAST:                 n/a
 SHAPE:                n/a
@@ -796,9 +780,9 @@ FLAVOR:               They have stopped trying to stagger him. Not out of
                       embarrassing to make.
 
 SKILL NAME:           Kiai
-CLASS / TREE / TIER:  samurai / Stances / tier_code 8
+CLASS / TREE / TIER:  samurai / Armor / tier_code 4
 TYPE:                 active
-AXIS POSITION:        9 (of 10)
+AXIS POSITION:        5 (of 6)
 --- delivery ---
 CAST:                 melee
 SHAPE:                fan (wide) (90° total)
@@ -806,7 +790,7 @@ RANGE:                melee long (110px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (10)
-PACE:                 slow (9000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               stun 900ms
@@ -832,9 +816,9 @@ FLAVOR:               It is not loud. That is what surprises people. It is
                       it before the ear does.
 
 SKILL NAME:           Perfect Form
-CLASS / TREE / TIER:  samurai / Stances / tier_code 9
+CLASS / TREE / TIER:  samurai / Armor / tier_code 5
 TYPE:                 active
-AXIS POSITION:        10 (of 10)
+AXIS POSITION:        6 (of 6)
 --- delivery ---
 CAST:                 self
 SHAPE:                none (auto-ripostes every hit for the duration)
@@ -842,26 +826,28 @@ RANGE:                n/a — ripostes resolve at each attacker
 TARGETS:              every attacker, for the window
 --- output ---
 DAMAGE TIER:          medium (26 per riposte, +14 with Counterstrike)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               for 6000ms every incoming hit is parried and answered
-                      with a 26-damage riposte; each parry still returns its
-                      Resolve
+                      with a 26-damage riposte. 6000ms sits under the 25s
+                      capstone cooldown, so ruling 6 leaves it alone
 DOT:                  none
 AFFECTS:              enemies + self
 --- automation ---
-TRIGGER:              CROWD_THRESHOLD (8+ within 150px), gated on 60 Resolve
+TRIGGER:              CROWD_THRESHOLD (8+ within 150px), gated on 6+ Footing
+                      stacks
 THREAT:               high
 --- growth ---
 RANK ADDS:            +5 riposte damage per rank; +500ms duration every 4th
                       rank
 --- identity ---
-ENGINE:               consumes 60 Resolve, and then refunds enormously — six
-                      seconds of parrying everything at +10 each is the only
-                      way in the class to go from empty to full in one skill
-COST:                 sixty seconds and sixty Resolve, and it only pays out
-                      if he is being hit constantly. It is a capstone that
+ENGINE:               Footing-positive, and strongly — the window is six
+                      seconds of standing still parrying everything, which is
+                      the single longest uninterrupted stack climb the class
+                      can buy
+COST:                 twenty-five seconds, and it only pays out if he is
+                      being hit constantly. It is a capstone that
                       requires the player to walk into the worst position on
                       the board and stay there, and the trigger I set will
                       fire it there deliberately
@@ -895,7 +881,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (16)
-PACE:                 fast (2200ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -907,13 +893,18 @@ THREAT:               some
 --- growth ---
 RANK ADDS:            +3 damage
 --- identity ---
-ENGINE:               neutral — Bow strikes are not Blade strikes and feed no
-                      Resolve. A pure Bow Samurai runs on almost nothing,
-                      which is the tree's real structural problem
-COST:                 sixteen damage every 2.2 seconds is the tree's entire
-                      floor, and it generates no Resolve, so a Bow build
-                      cannot afford Iaijutsu, Perfect Form, Thousand Cuts, or
-                      its own capstone. Bow is the safe tree and the poor one
+ENGINE:               Footing-POSITIVE, and this is the ruling's biggest
+                      single reversal. Under Resolve a pure Bow Samurai fed
+                      nothing and that was the tree's structural problem. Under
+                      Footing an archer who stands still is the best stack
+                      holder in the class, and the tree's problem inverts into
+                      its argument
+COST:                 sixteen damage every 800ms is the tree's entire floor.
+                      Under Resolve a Bow build could not afford Iaijutsu,
+                      Perfect Form, Thousand Cuts or its own capstone; under
+                      Footing all four are reachable, because standing at range
+                      is exactly how Footing is earned. Bow is now the safe
+                      tree and the well-fed one
 VISUAL:               a long asymmetric draw and a flat release; the arrow is
                       gone before the bow has finished moving
 FLAVOR:               The bow is longer than he is tall and the grip is a
@@ -932,7 +923,7 @@ TARGETS:              pierces all enemies along the line (port change — see
                       COST)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 medium (5000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -969,10 +960,11 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — slow ×0.45 for 4000ms
+RIDERS:               AUTHORED — slow ×0.45 for 1400ms, cut from an authored
+                      4000ms by roster ruling 6 (70% of the 2s cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1038,11 +1030,12 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
 RIDERS:               AUTHORED — on impact, taunts every enemy within 150px
-                      of the target for 3000ms, pulling them toward the
+                      of the target for 3000ms as authored — the rescaled
+                      slow bucket's 4s clears it — pulling them toward the
                       arrow rather than the Samurai
 DOT:                  none
 AFFECTS:              enemies
@@ -1083,7 +1076,7 @@ RANGE:                range short (220px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 slow (9000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               the caster dashes as part of the cast; the dash itself
@@ -1121,12 +1114,12 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               AUTHORED — burn DoT, 6 per 1000ms for 5000ms; the burn
-                      spreads once to an enemy within 60px on the target's
-                      death
+RIDERS:               AUTHORED — burn DoT, 6 per 1000ms for 2800ms (cut from
+                      an authored 5000ms by roster ruling 6); the burn spreads
+                      once to an enemy within 60px on the target's death
 DOT:                  6 per 1000ms for 5000ms
 AFFECTS:              enemies
 --- automation ---
@@ -1159,12 +1152,13 @@ TYPE:                 active
 AXIS POSITION:        8 (of 10)
 --- delivery ---
 CAST:                 placed
-SHAPE:                ground area (r130, persistent hazard 3000ms)
+SHAPE:                ground area (r130, persistent hazard 3000ms — as
+                      authored; the rescaled slow bucket's 4s clears it)
 RANGE:                range short (240px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0 direct) — 8 per 350ms tick
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -1200,7 +1194,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (12)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               AUTHORED — root 2500ms; the rooted target also takes
@@ -1241,23 +1235,25 @@ RANGE:                range long (460px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          high (55)
-PACE:                 very slow (45000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
-TRIGGER:              LOWEST_HP_ENEMY within 460px, gated on 40 Resolve
+TRIGGER:              LOWEST_HP_ENEMY within 460px, gated on 4+ Footing
+                      stacks
 THREAT:               some
 --- growth ---
 RANK ADDS:            +10 damage; at rank 6 the impact splashes r80, +12px
                       splash every 4 ranks thereafter
 --- identity ---
-ENGINE:               consumes 40 Resolve — which a pure Bow build cannot
-                      generate, since no Bow skill feeds Resolve. The
-                      capstone of this tree is locked behind the other two
-                      trees, and that is the honest structural verdict on Bow
+ENGINE:               Footing-neutral. Under Resolve this capstone was gated
+                      behind a resource the Bow tree could not produce, which
+                      was the honest structural verdict on Bow. Footing
+                      removes that gate — a stationary archer holds stacks
+                      better than anyone in the class
 COST:                 forty-five seconds for fifty-five damage into one
                       enemy. Every other tier-10 in the roster affects a
                       crowd; this one affects a target. Until the rank-6

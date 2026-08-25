@@ -5,6 +5,124 @@ fields authored. Class-wide rulings stated once here.
 
 ---
 
+## TREE RULING (settled)
+
+The three tree NAMES match the built trees exactly — Marrow, Summons, Dark
+Matter. The contents do not, and that is the part that needed a decision.
+
+| tree | shared with built | ruling |
+|---|---|---|
+| Dark Matter | 9 of 10 | **revise in place** — the built tree is the same tree; this document's Singularity replaces Dark Energy Burr |
+| Marrow | 8 of 10 | **revise in place** — Osteo Aura and Grasp of Death replace Quill and Banshee's Wail |
+| Summons | **1 of 10** | **this document supersedes the built tree.** Implementing it is `js/` work for a later patch |
+
+The built Summons tree shares only Army of the Dead. It has summons in it but
+no commander mechanics under any name — no aggro ladder, no summon-only
+multipliers — so this is not a renaming, it is a mechanism the code does not
+have. The Essence engine depends on it: the +8-per-summon-kill tier and the
++10-when-a-summon-dies refund are written against a tree that must exist.
+
+Two shared names are different skills and must not be transcribed across:
+**Blight** is a passive aura here and an active 4.2s hazard in code; **Bone
+Spur** is a 40% passive reflect here and an active `ward` in code.
+
+### OPEN, ROSTER-WIDE: tree shape
+
+The built Marrow and Summons are **branching** — six tiers, four exclusive
+pairs each, sixteen branch nodes across the two. This document is linear with
+exactly **one** branch pair in the whole class (`necro_skeleton_branch`, Blood
+against Marrow Skeleton), which is why it carries 31 blocks rather than 30.
+
+Linear-with-one-branch and four-pairs-per-tree are incompatible shapes and
+picking one renumbers every tier in the file. **Not resolved here** — it is a
+roster-wide decision, it affects all fourteen documents, and it cannot be
+settled in a documents-only pass because the built shape lives in `js/`.
+
+---
+
+## ROSTER RULING APPLIED
+
+Against `roster-ruling-pace-damage-engines.md`. What moved, what held.
+
+**Pace (ruling 1).** 21 of 22 timed actives rebucketed, then rescaled again
+when the bucket table was retuned against the corrected activation-rate gap.
+Grasp of Death is held — see below. Distribution: Dark Matter passes on its own
+(7 medium-or-faster, 0 very slow), Marrow passes (Stake promoted, its root cut
+under ruling 6), Summons **cannot pass** — see below.
+
+**Rate: 9.17/sec on a spread build, against a 6–9 target — IN BAND** (top of it).
+The bucket-mix rule took this class from 8.75 by demoting Internal Collapse
+(Dark Matter held two very-fast nodes; Blip keeps the slot as the tier-1
+opener). It did not close the gap, and the reason is arithmetic in the rule
+rather than anything in this class: **at most 1 very-fast per tree means 3 per
+class**, and a spread build takes all three. 3 × 1.667/sec is 5.0/sec before a
+single other slot is filled.
+
+At the raised floor of 3 fast-or-better this class reads 9.17/sec, and the cause
+is unchanged: **at most 1 very-fast per tree means 3 per class**, and this class
+uses its whole allowance. Each very-fast node is worth 0.83/sec more than a fast
+one, so 0 gives 6.67, 1 gives 7.50, 2 gives 8.33 and 3 gives 9.17. **A per-CLASS
+ceiling of 1 very-fast would put every class in the roster between 6.67 and
+7.50.** Reported, not applied — it is a change to the rule.
+
+**Mono-tree: 5.25/sec (Dark Matter), below band.** Marrow and Summons cannot
+fill eight slots at all — 7 and 6 timed actives against 8 slots, so a single-tree
+Necromancer is not merely slow, it is short of skills.
+
+**Damage share (ruling 2).** Marrow 6 damage nodes, 1 high. Dark Matter 10
+damage nodes, and its high-tier node comes from relabelling Singularity off
+its 8-pulse total rather than its per-pulse figure — no number changed, and
+ruling 2 could not otherwise be met without retuning, which the ruling's own
+"out of scope" clause forbids. Summons has 6 and passes, under the rewritten
+ruling 2 that counts a summon's damage as the node's damage.
+
+**Passive budget (ruling 4).** Nine passives across the class against a
+four-slot budget: Marrow 3, Summons 5, Dark Matter 1. Binding, and worth
+stating plainly — **a pure Summons build cannot slot its own passive set**,
+so Unyielding Beast, Necrotic Presence, Tentacles and the skeleton branch
+compete against each other for four of the class's slots.
+
+**Channels (ruling 5).** Already compliant — port ruling 4 wrote the 60%
+moving tick before the roster ruling existed. One clarification added: for
+Death Channel and Dark Energy Beam the cooldown now runs from the channel's
+END, since the slow bucket's 3s otherwise sits under a 10s channel.
+
+**Engine cost (ruling 3).** Not applicable. Essence is a bank that builds, not
+one of the two depleting engines.
+
+### THE RULING AGAINST THE CLASS — two resolved since, two still held
+
+**RESOLVED by roster ruling 6 (rider duration under cooldown).** Reported from
+this class, ruled roster-wide, applied back here. Stake's root went 2500ms to
+1000ms and Hex of Entropy's slow and weaken went 2000ms to 1000ms — both now
+sit under a 1500ms cooldown, and both gained uptime doing it: Stake pins 67% of
+the time against 25% before, Hex 67% against 22%.
+
+**RESOLVED by the reword of ruling 2 (summon damage counts).** Summons has six
+damaging nodes once a summon's output counts as the node's output, and passes.
+
+**STILL HELD 1 — Marrownaut is a form the exception cannot ration.** Ruling 6
+says a form keeps its duration and takes a capstone cooldown. Applied, at the
+bucket's 30s ceiling. A 30000ms form under a 30000ms cooldown is still
+permanent. The exception works for a 12s form under a 60s capstone; it cannot
+ration a form whose duration equals the bucket's entire range.
+
+**STILL HELD 2 — Summons cannot satisfy the DISTRIBUTION rule and stay a
+summoner tree.** Five passives plus a capstone leave five timed actives, of
+which four must be medium-or-faster. Two are. The other three are Unleash the
+Monster, Dark Matter and Death Channel — a single pet, a capped second summon,
+and a ten-second channel. A skeleton every 0.4s is not a commander, and a
+channel on a cooldown shorter than itself is not a channel. The damage half of
+this was fixed by rewording ruling 2; the pace half has no equivalent reading.
+
+**STILL HELD 3 — Grasp of Death is a capstone the capstone bucket destroys.**
+Marrow's tier-10 and the class's only self-heal: 40 damage on a 60% drain,
+currently 9s. The capstone bucket's 20–30s removes the Necromancer's sustain;
+the slow bucket's 3s makes a 24-point drain-heal available twenty times a
+minute. Held at 9s, in no bucket, deliberately.
+
+---
+
 ## CLASS ENGINE — ESSENCE
 
 The Necromancer is an economy class. He does not fight the swarm; he
@@ -110,9 +228,9 @@ THREAT:               some
 RANK ADDS:            +4 damage; pierces 1 additional enemy at rank 6, +1
                       per 6 ranks thereafter
 --- identity ---
-ENGINE:               neutral — but at 600ms it produces kills, and kills
+ENGINE:               neutral — but at 400ms it produces kills, and kills
                       are Essence
-COST:                 single target on a 600ms cycle is a rifle in a game
+COST:                 single target on a 400ms cycle is a rifle in a game
                       about crowds. It will out-damage everything early and
                       fall behind hard by the time enemies arrive twelve at
                       a time
@@ -133,7 +251,7 @@ RANGE:                melee short (72px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 fast (1500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -167,7 +285,7 @@ RANGE:                range short (165px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (7000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 90px; knockback-stun 160ms
@@ -234,10 +352,12 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (30000ms)
+PACE:                 capstone (30000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               form 30000ms — maxHPMult +0.50, damageReduction +0.45;
+RIDERS:               form 10000ms — maxHPMult +0.50, damageReduction +0.45;
+                      cut from 30000ms by ruling 6's one-third rule under the
+                      30s capstone cooldown;
                       caster size increases (the game's only size-change)
 DOT:                  none
 AFFECTS:              self
@@ -255,7 +375,12 @@ COST:                 the size increase is not cosmetic. A larger hitbox in
                       a bullet-hell room means more contacts, and this skill
                       makes the player physically harder to keep safe for
                       thirty seconds. It gives you durability and takes away
-                      evasion
+                      evasion. RESOLVED: reported from this node, ruling 6
+                      gained a one-third rule, and a 10s form on a 30s capstone
+                      is up a third of the time. The larger hitbox is now a
+                      window the player can wait out rather than a permanent
+                      condition, which is what made the drawback legible in the
+                      first place
 VISUAL:               he swells — the skeleton visibly thickening beneath,
                       plates of bone shouldering up through the coat, half a
                       head taller and much wider
@@ -280,24 +405,29 @@ RANGE:                melee long (84px)
 TARGETS:              cap 3
 --- output ---
 DAMAGE TIER:          low (14)
-PACE:                 slow (10000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               root 2500ms — port addition, see COST
+RIDERS:               root 1400ms — port addition; cut from an authored
+                      2500ms by roster ruling 6 (70% of the 2s cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
 TRIGGER:              ENEMY_BREACHES_RING (84px)
 THREAT:               some
 --- growth ---
-RANK ADDS:            +2 damage; +300ms root every 3rd rank
+RANK ADDS:            +2 damage; +150ms root every 3rd rank (was +300ms —
+                      rescaled with the shorter base so ranking cannot walk
+                      the root back above the cooldown)
 --- identity ---
 ENGINE:               neutral
-COST:                 fourteen damage on a ten-second cooldown is the worst
-                      damage-per-cooldown ratio in the class. Without the
-                      root it is unslottable, and even with it, it competes
-                      with skills that do not require an enemy to already be
-                      touching you
+COST:                 promoted from slow to medium (10s to 1.5s) because
+                      Marrow needs a fourth medium-or-faster node and this was
+                      the tree's weakest by its own former reckoning. Ruling 6
+                      took the root from 2500ms to 1000ms to keep it under the
+                      cooldown. The node is better for it: one second of pin
+                      every 1.5s is 67% uptime against the old 2500ms every
+                      10s, which was 25%. It pins more and locks less
 VISUAL:               a spike of yellowed bone driven down through the foot,
                       pinning the enemy in place; it snaps when they tear free
 FLAVOR:               A stake is not a weapon. It is a statement about where
@@ -397,7 +527,7 @@ RANGE:                range medium (320px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (28)
-PACE:                 slow (11000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockdown — stun 1500ms per enemy hit; caster displaced
@@ -432,7 +562,7 @@ RANGE:                melee long (120px)
 TARGETS:              1
 --- output ---
 DAMAGE TIER:          high (40)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               drain — heals caster for 60% of damage dealt
@@ -483,7 +613,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 3 standing, +1 per 4 ranks
 --- output ---
 DAMAGE TIER:          none (0) — the skeleton deals the damage, not the cast
-PACE:                 medium (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               summon persists until killed; takes aggro above the
@@ -501,16 +631,18 @@ RANK ADDS:            +10% skeleton damage and +10% skeleton HP per rank;
 ENGINE:               consumes 10 Essence per skeleton; feeds +8 whenever a
                       skeleton lands a killing blow, so a working skeleton
                       pays for itself in two kills
-COST:                 four seconds to replace one body. When a wave breaks
-                      through and takes all three at once, the tree's entire
-                      value takes twelve seconds to come back, and the
-                      Necromancer has to survive those twelve seconds with
-                      the Marrow tree he may not have bought
+COST:                 a second and a half to replace one body. When a wave
+                      breaks through and takes all three at once, the tree's
+                      entire value takes four and a half seconds to come
+                      back — the pace pass turned the class's worst moment
+                      from a twelve-second hole into a survivable one, and
+                      Essence at 10 a skeleton is now the real limit rather
+                      than the cooldown
 VISUAL:               the floor cracks and a hand comes up first; the rest
                       assembles in under a second, badly, and it works anyway
 FLAVOR:               The first one took him a year and left him weeping.
-                      This one took four seconds. He is not sure which of
-                      those facts he should be more troubled by.
+                      This one took a second and a half. He is not sure
+                      which of those facts he should be more troubled by.
 
 SKILL NAME:           Unleash the Monster
 CLASS / TREE / TIER:  necromancer / Summons / tier_code 1
@@ -523,7 +655,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 1, always
 --- output ---
 DAMAGE TIER:          none (0) — the Monster deals 26 per swing / 1100ms
-PACE:                 very slow (22000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               MAGNET aggro r300 — actively pulls enemy attention off
@@ -539,11 +671,13 @@ RANK ADDS:            +12% Monster damage and +12% Monster HP per rank;
                       +20px aggro magnet radius every 3rd rank
 --- identity ---
 ENGINE:               consumes 30 Essence
-COST:                 twenty-two seconds. If the Monster dies at the wrong
-                      moment the Necromancer spends a third of a minute as a
-                      soft caster with three skeletons and no wall. Every
-                      Monster death is a genuine crisis, which is the correct
-                      emotional weight for a single-target pet
+COST:                 six seconds. RULING CONFLICT — REPORTED: at twenty-two
+                      the Monster's death was a genuine crisis and the doc
+                      called that the correct emotional weight for a
+                      single-target pet. At six it is an inconvenience. The
+                      bucket is applied because the ruling asks for it, but
+                      the 30 Essence is now the only thing making the Monster
+                      feel scarce, and Essence caps at 100
 VISUAL:               a seam opens in the air at waist height and something
                       much larger than the seam comes through sideways
 FLAVOR:               He does not name it. Naming a thing implies you expect
@@ -634,7 +768,7 @@ RANGE:                n/a (spawns adjacent)
 TARGETS:              n/a — cap 2, +1 per 6 ranks
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (14000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               summon persists until killed
@@ -649,10 +783,12 @@ RANK ADDS:            +10% summon damage and HP per rank; +1 cap every 6th
 --- identity ---
 ENGINE:               consumes 25 Essence
 COST:                 it sits between Skeleton and Monster and is clearly
-                      better than neither. Fourteen seconds is too slow to
-                      be a replaceable body and too fast to feel like an
-                      event. Its argument is that it is the only summon that
-                      scales into the Dark Matter tree's fantasy
+                      better than neither. At three seconds it has stopped
+                      being too slow to be a replaceable body, which resolves
+                      half its old problem and sharpens the other half: it is
+                      now a Skeleton that costs 25 Essence instead of 10. Its
+                      argument is that it is the only summon that scales into
+                      the Dark Matter tree's fantasy
 VISUAL:               a fold of not-quite-space that moves like something
                       swimming, edges refusing to resolve
 FLAVOR:               It came out of the same door as the Monster and he
@@ -793,12 +929,15 @@ RANGE:                range medium (360px)
 TARGETS:              1 (locks nearest)
 --- output ---
 DAMAGE TIER:          low (14 per tick)
-PACE:                 slow (9000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               does NOT break on movement (port ruling 4); ticks at
-                      60% rate while the caster is moving; breaks on target
-                      death or leaving 360px
+RIDERS:               does NOT break on movement (port ruling 4, and roster
+                      ruling 5); ticks at 60% rate while the caster is moving;
+                      breaks on target death or leaving 360px. The cooldown
+                      runs from the moment the channel ENDS, not from the cast
+                      — the slow bucket's 3s sits under a 10s channel, and any
+                      other reading makes the cooldown meaningless
 DOT:                  14 per 500ms for up to 10000ms
 AFFECTS:              enemies
 --- automation ---
@@ -815,7 +954,9 @@ COST:                 it locks one target for up to ten seconds while the
                       swarm is a swarm. Enormous single-target throughput,
                       zero answer to being surrounded, and the 60% moving
                       penalty means it is worst exactly when the player is
-                      doing their job
+                      doing their job. At a 3s cooldown measured from the
+                      channel's end, the gap between channels is now shorter
+                      than the channel itself
 VISUAL:               a thin unlit line between his hand and the target —
                       not a beam of light, a beam of absence, with the floor
                       beneath it going grey
@@ -834,7 +975,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 per cast (nearest below max stacks)
 --- output ---
 DAMAGE TIER:          low (8 per tick)
-PACE:                 very fast (800ms)
+PACE:                 very fast (600ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               stacks to 6 on a single target
@@ -870,7 +1011,7 @@ RANGE:                n/a (spawns in a ring around the caster)
 TARGETS:              n/a — 6 at once, ignoring caps, expiring after 20000ms
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               the six do not count against the skeleton cap and
@@ -886,12 +1027,13 @@ RANK ADDS:            +10% army damage and HP per rank; +1 body every 5th
 --- identity ---
 ENGINE:               consumes 60 Essence — the largest single spend in the
                       class, and the reason Essence has a 100 ceiling at all
-COST:                 sixty seconds and sixty Essence for twenty seconds of
-                      wall. Fire it early and the run's economy never
-                      recovers; hold it and it goes off after the wave that
-                      needed it. It is the only skill in the class that
-                      genuinely punishes an auto-fire trigger, and I have set
-                      the threshold high on purpose
+COST:                 twenty-five seconds and sixty Essence for twenty
+                      seconds of wall — at the capstone bucket the wall is
+                      now up for most of its own cycle, and Essence is what
+                      rations it rather than the clock. Fire it early and the
+                      run's economy still never recovers. It is the only
+                      skill in the class that genuinely punishes an auto-fire
+                      trigger, and I have set the threshold high on purpose
 VISUAL:               the whole floor goes at once — not a rising, a
                       surfacing, six of them shouldering up through the
                       ground in a ring facing outward
@@ -921,7 +1063,7 @@ RANGE:                range long (480px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 very fast (350ms)
+PACE:                 very fast (600ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -953,7 +1095,7 @@ RANGE:                range long (420px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 medium (4000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -987,7 +1129,7 @@ RANGE:                range long (460px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 medium (6000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               vulnerability — target takes +20% damage for 4000ms
@@ -1028,23 +1170,28 @@ RANGE:                range medium (360px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (4)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               slow ×0.5 for 2000ms; weaken 40% for 2000ms
+RIDERS:               slow ×0.5 for 1400ms; weaken 40% for 1400ms — both cut
+                      from an authored 2000ms by roster ruling 6
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
 TRIGGER:              DENSEST_CLUSTER within 360px
 THREAT:               none
 --- growth ---
-RANK ADDS:            +400ms duration and +8px radius per rank (not damage —
-                      four damage is the joke and it should stay the joke)
+RANK ADDS:            +200ms duration and +8px radius per rank (was +400ms,
+                      rescaled under ruling 6; not damage — four damage is the
+                      joke and it should stay the joke)
 --- identity ---
 ENGINE:               neutral
-COST:                 two seconds. It is the shortest control window in the
-                      game on a seven-second cooldown, which means it is off
-                      more than five times as often as it is on
+COST:                 it was the shortest control window in the game on a
+                      seven-second cooldown, off five times as often as on. At
+                      the medium bucket it is one second in every 1.5 — still
+                      the shortest window in the game, now at 67% uptime
+                      instead of 22%. Ruling 6 is what keeps it from becoming
+                      permanent, and four damage is still the joke
 VISUAL:               a brief violet lattice snapping into place over a small
                       knot of enemies, then falling apart
 FLAVOR:               A hex is a request that something proceed slightly
@@ -1062,7 +1209,7 @@ RANGE:                range short (200px)
 TARGETS:              uncapped in cone (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (34)
-PACE:                 medium (6000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1097,7 +1244,7 @@ RANGE:                range medium (300px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 medium (7000ms)
+PACE:                 medium (2000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1168,7 +1315,7 @@ RANGE:                range medium (360px)
 TARGETS:              1 per cast (nearest below max stacks)
 --- output ---
 DAMAGE TIER:          low (10 per tick)
-PACE:                 very fast (900ms)
+PACE:                 fast (1200ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               stacks to 5 on a single target
@@ -1181,10 +1328,11 @@ THREAT:               none
 RANK ADDS:            +2 damage per tick; +1 maximum stack every 5th rank
 --- identity ---
 ENGINE:               neutral
-COST:                 a three-second window with a 900ms cycle means it can
-                      barely reach its own stack ceiling before the first
-                      stack lapses. It is the more fragile of the class's two
-                      stacking DoTs and it sits three tiers higher
+COST:                 a three-second window with a 400ms cycle now reaches
+                      its own five-stack ceiling comfortably, which is the
+                      pace pass quietly fixing the node's whole complaint. It
+                      is still the more fragile of the class's two stacking
+                      DoTs and it still sits three tiers higher
 VISUAL:               the target's outline pulls inward slightly with each
                       stack, as though something behind it is taking up slack
 FLAVOR:               Nothing is added. That is what he finds elegant about
@@ -1202,12 +1350,13 @@ RANGE:                range medium (360px)
 TARGETS:              1 (locks nearest)
 --- output ---
 DAMAGE TIER:          low (16 per tick)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               does NOT break on movement (port ruling 4); 60% tick
-                      rate while moving; breaks on target death or leaving
-                      range
+RIDERS:               does NOT break on movement (port ruling 4, and roster
+                      ruling 5); 60% tick rate while moving; breaks on target
+                      death or leaving range. Cooldown runs from the channel's
+                      END, as Death Channel's does
 DOT:                  16 per 500ms for up to 10000ms
 AFFECTS:              enemies
 --- automation ---
@@ -1239,8 +1388,11 @@ SHAPE:                ground area (r200 at 200px)
 RANGE:                range short (200px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
-DAMAGE TIER:          medium (22 per pulse × 8 pulses)
-PACE:                 very slow (45000ms)
+DAMAGE TIER:          high (176 across 8 pulses; 22 per pulse) — read off
+                      the total, not the pulse. No number changed: the tier
+                      label was wrong, and it is what gives Dark Matter the
+                      high-tier node ruling 2 requires
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               pull — each pulse drags every enemy in r200 up to 14px
@@ -1259,8 +1411,9 @@ COST:                 it gathers the swarm into a single dense point 200px
                       from a caster made of paper. Played well it is the best
                       skill in the class — everything the Necromancer owns
                       does more damage to a pile. Played badly it is a
-                      forty-five-second cooldown spent building the exact
-                      thing that kills him
+                      twenty-five-second cooldown spent building the exact
+                      thing that kills him, and at the capstone bucket that
+                      mistake now recurs twice as often
 VISUAL:               a fixed black point that does not grow; the floor
                       texture streams toward it in visible lines and enemies
                       lean before they slide

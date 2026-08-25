@@ -4,6 +4,32 @@ Mechanical fields carried over from the code export unchanged. The eight
 judgment fields are authored below. Rulings that apply across the class are
 stated once here rather than repeated in thirty blocks.
 
+
+---
+
+## ROSTER RULING APPLIED
+
+**Engine — RULED: Forge Heat (doc) AND `form` (built) — both.**
+
+**Tree names — RULED: this document's names are KEPT.** The standing rule is
+"built names win unless the doc's is clearly better", and here the built name is
+not merely worse — it is wrong. The built **Crystal** tree holds all three `form` nodes; this document spreads the three Crystals one per tree. Mapping Tank/Offense/Control onto Crystal/Forge/Anvil would put one Crystal in a tree named for all three.
+
+**Tree contents — the document wins**, per the standing rule. Applied without
+further asking; divergences from the built tree are what this file already
+describes.
+
+**Pace (ruling 1).** Every timed active rebucketed to the fixed values, then
+brought into the bucket-mix rule — at least **3** nodes fast-or-better per tree,
+at most 1 very fast, at most 2 very slow. All three trees comply.
+
+**Rate: 7.50/sec on a spread build — IN BAND.**
+
+**Ruling 6 (rider duration under cooldown) — APPLIED.** 6 rider durations cut across 5 skills, each to ~70% of its skill's new cooldown and each annotated inline with what it
+was. Nothing fell under the 500ms floor, so no rider was deleted outright.
+
+**Outstanding:** none.
+
 ---
 
 ## CLASS ENGINE — FORGE HEAT
@@ -98,7 +124,7 @@ RANGE:                melee short (70px)
 TARGETS:              cap 4 (was uncapped)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (7000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               stun 1000ms
@@ -195,7 +221,7 @@ RANGE:                melee long (130px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          low (6)
-PACE:                 slow (9000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 130px; knockback-stun 250ms
@@ -260,7 +286,7 @@ RANGE:                range short (150px)
 TARGETS:              cap 6, +1 per 4 ranks
 --- output ---
 DAMAGE TIER:          medium (30)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -292,10 +318,11 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (16000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — damageReduction +0.20, regenPerSec 6
+RIDERS:               timed 5600ms — damageReduction +0.20, regenPerSec 6
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self (co-op: allies within 200px receive the
                       regenPerSec component at half value — see note)
@@ -332,7 +359,7 @@ RANGE:                range medium (320px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 slow (10000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockback 110px (continuous shove-aside along the dash);
@@ -407,7 +434,7 @@ RANGE:                n/a
 TARGETS:              aura: uncapped in r150
 --- output ---
 DAMAGE TIER:          low (8 per pulse, 500ms pulses)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               form 12000ms — damageReduction +0.85, maxHPMult +0.50;
@@ -455,7 +482,7 @@ RANGE:                melee short (64px)
 TARGETS:              cap 3, +1 per 5 ranks
 --- output ---
 DAMAGE TIER:          medium (26)
-PACE:                 fast (2500ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -528,7 +555,7 @@ RANGE:                melee long (84px)
 TARGETS:              cap 5
 --- output ---
 DAMAGE TIER:          high (70)
-PACE:                 slow (8000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               wind-up 600ms telegraph
@@ -596,11 +623,12 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (18000ms)
+PACE:                 very slow (8000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               timed 8000ms — attackSpeedMult +0.60, damageMult +0.40,
+RIDERS:               timed 5600ms — attackSpeedMult +0.60, damageMult +0.40,
                       damageReduction −0.30
+                      — roster ruling 6: 8000ms→5600ms (70% of the 8000ms cooldown)
 DOT:                  none
 AFFECTS:              self
 --- automation ---
@@ -635,7 +663,7 @@ RANGE:                melee long (135px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          medium (24)
-PACE:                 medium (6000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -668,7 +696,7 @@ RANGE:                range medium (380px)
 TARGETS:              1 (first hit)
 --- output ---
 DAMAGE TIER:          medium (38)
-PACE:                 medium (7000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               none
@@ -770,7 +798,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               form 12000ms — damageMult +0.60, attackSpeedMult +0.60,
@@ -818,7 +846,7 @@ RANGE:                range medium (300px)
 TARGETS:              each enemy in path once, uncapped
 --- output ---
 DAMAGE TIER:          medium (22)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               knockdown — stun 1200ms per enemy hit; caster displaced
@@ -883,10 +911,11 @@ RANGE:                melee short (70px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          low (18)
-PACE:                 slow (8000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               stun 3000ms — the longest single stun in the game
+RIDERS:               stun 840ms — the longest single stun in the game
+                      — roster ruling 6: 3000ms→840ms (70% of the 1200ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -918,10 +947,11 @@ RANGE:                range short (180px)
 TARGETS:              uncapped in area (identity skill — breadth is the point)
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 slow (12000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               mental
 --- effects ---
-RIDERS:               slow ×0.5 for 5000ms; weaken 30% for 5000ms
+RIDERS:               slow ×0.5 for 2800ms; weaken 30% for 2800ms
+                      — roster ruling 6: 5000ms→2800ms, 5000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -955,7 +985,7 @@ RANGE:                n/a
 TARGETS:              1 (the attacker)
 --- output ---
 DAMAGE TIER:          low (20 per proc)
-PACE:                 very fast (1200ms internal cooldown)
+PACE:                 very fast (600ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               scene-keyed [declared, not derived] — "when you are
@@ -992,10 +1022,11 @@ RANGE:                melee short (72px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          medium (28)
-PACE:                 slow (9000ms)
+PACE:                 slow (4000ms)
 DOMAIN:               physical
 --- effects ---
-RIDERS:               slow ×0.35 for 4000ms
+RIDERS:               slow ×0.35 for 2800ms
+                      — roster ruling 6: 4000ms→2800ms (70% of the 4000ms cooldown)
 DOT:                  none
 AFFECTS:              enemies
 --- automation ---
@@ -1066,7 +1097,7 @@ RANGE:                melee short (72px)
 TARGETS:              cap 4
 --- output ---
 DAMAGE TIER:          medium (30) — 120 on the finisher
-PACE:                 slow (8000ms)
+PACE:                 fast (1200ms)
 DOMAIN:               physical
 --- effects ---
 RIDERS:               finisher — if any enemy in the circle is below 30% HP,
@@ -1156,7 +1187,7 @@ RANGE:                n/a
 TARGETS:              self
 --- output ---
 DAMAGE TIER:          none (0)
-PACE:                 very slow (60000ms)
+PACE:                 capstone (25000ms)
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               form 12000ms — maxHPMult +0.40, damageMult +0.40
