@@ -196,6 +196,20 @@ Read those annotations as history: they say what a duration used to be and why i
 
 ---
 
+## Ruling 7 — Always-on damaging auras must pulse
+
+**A continuously damaging aura that follows the caster cannot exist.** Built as one, with the magnitude the game had been shipping since phase 1, Blight let a **never-moving** Necromancer clear **20 of 25** statue rooms; at 1 damage per second with the slow removed it still broke **12 of 25**. No magnitude fixes it, because time does the work — a field that never stops removes the cost of not playing.
+
+**The gap is the mechanic.** It converts uptime into hit-rate, and hit-rate has a ceiling a stationary player cannot raise. The cadence carries the design; the magnitude is nearly free inside it. Measured, the ratio of what a moving player earns to what a stationary one earns **peaks and then falls** — 1.14× at 3000ms, 1.74× at 4200ms, 0.79× at 6000ms — because a rare pulse pays whoever happens to be surrounded when it fires, and a statue always is. **Slower is not safer.**
+
+**The bar is clearing zero rooms, not surviving.** The configurations that survived every room were the ones doing no damage.
+
+**Non-damaging always-on auras are unaffected** — Osteo Aura's amplification and item stat auras clear nothing on their own. A `slow` rider is likewise exonerated by the cadence: applied continuously it broke 14 of 25 by itself; pulsed at 4200ms it breaks none.
+
+**This applies to any class whose conversion declares an always-on aura that damages.** The Blacksmith's Dominance is the one still unconverted. The mechanism is in §5.7 of the GDD; the statue test is `tools/sim_test.mjs`.
+
+---
+
 ## Ruling 5 — Channels
 
 Channels do not break on movement. They tick at **60%** while the caster is moving. A channel that breaks on movement can never complete when movement is the only input.

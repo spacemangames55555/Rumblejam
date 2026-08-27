@@ -3227,10 +3227,14 @@ export class Sim {
   // (Osteo Aura, Blight, Dominance), a form's length is a form-bounded aura
   // (Elemental Storm, Miasma Armor, Celestial Calcite), and a plain duration is
   // a timed mobile field (Prayer Wheel). One mechanism, three lifetimes.
-  addAura(p, { radius, dps = 0, dur = Infinity, tickMs = 400, ampPct = 0, slow = null, key, domain }) {
+  // `pulseMs` is the GAP, and `damage` is what one pulse delivers. Stored as a
+  // rate against that interval so the zone tick's own arithmetic is unchanged —
+  // one damage path, and `dps * elapsed` lands exactly `damage` on each pulse.
+  addAura(p, { radius, dps = 0, damage = 0, pulseMs = 400, dur = Infinity, ampPct = 0, slow = null, key, domain }) {
+    const every = pulseMs / 1000;
     this.zones.push({
-      t: 0, acc: 0, x: p.x, y: p.y, r: radius,
-      dps,
+      t: 0, acc: 0, x: p.x, y: p.y, r: radius, every,
+      dps: damage ? damage / every : dps,
       dur, hurts: 'enemies', color: p.color,
       skillDomain: domain, ownerIdx: p.idx, owner: p.idx,
       follow: p.idx, auraKey: key, ampPct,
@@ -3354,7 +3358,11 @@ export class Sim {
         z.x = f.x; z.y = f.y;
       }
       z.t += dt; z.acc += dt;
-      if (z.acc >= 0.4) {
+      // THE GAP IS THE MECHANIC, so the interval is a property of the field and
+      // not a constant of the loop. Hazards and puddles keep the 0.4s they have
+      // always had; an always-on aura declares its own, and the space between
+      // its pulses is what a player standing still cannot convert into damage.
+      if (z.acc >= (z.every || 0.4)) {
         const mul = z.acc; z.acc = 0;
         if (z.hurts === 'enemies') {
           const owner = z.owner !== undefined ? this.players[z.owner] : null;

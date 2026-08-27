@@ -132,6 +132,10 @@ export function startRoomMinions(sim, p) {
           // Radius is the rankable term, and for these nodes it is the ONLY
           // one — "+12px radius per rank (not damage, not magnitude)".
           radius: a.radius + (a.radiusPerRank || 0) * (rank - 1),
+          // `damage` + `pulseMs` is the pulsed form and the one an always-on
+          // DAMAGING aura must use; `dps` remains for a field that is
+          // continuous because it does no damage at all.
+          damage: a.damage || 0, pulseMs: a.pulseMs || 400,
           dps: a.dps || 0, ampPct: a.ampPct || 0, slow: a.slow || null,
           dur: Infinity,
         });

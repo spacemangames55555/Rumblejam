@@ -327,6 +327,18 @@ const PASSIVE_TEXT = {
   footingGritBonus: v => `+${n1(v)} Defense per Footing stack`,
   footingAccrualPct: v => `Footing builds ${Math.round(v * 100)}% faster`,
   reflectPerGrit: v => `reflects ${(v * 100).toFixed(1)}% of blocked damage per Defense`,
+  // A FIELD READS AS A FIELD, and the gap is part of what the player is being
+  // told. An always-on aura that pulses every few seconds plays nothing like a
+  // patch of ground that hurts continuously, and the interval is the difference
+  // between them — so it is stated rather than folded into a rate.
+  aura: v => {
+    const parts = [`a field around you, ${Math.round(v.radius)}px`];
+    if (v.damage) parts.push(`${n1(v.damage)} damage every ${(v.pulseMs / 1000).toFixed(1)}s`);
+    else if (v.dps) parts.push(`${n1(v.dps)} damage per second`);
+    if (v.ampPct) parts.push(`enemies inside take ${Math.round(v.ampPct * 100)}% more damage from you and yours`);
+    if (v.slow) parts.push(`slows what it catches to ${Math.round(v.slow.mult * 100)}% for ${(v.slow.dur / 1000).toFixed(1)}s`);
+    return parts.join(', ');
+  },
 };
 // Every `<engine>ScaleWeight` reads the same way, so it is derived rather than
 // listed fourteen times — a list would be correct until the fifteenth engine.

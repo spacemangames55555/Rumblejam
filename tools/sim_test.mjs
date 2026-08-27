@@ -5451,6 +5451,25 @@ try {
       ok(`aura damages on the zone cadence: ${pulses} pulses in 4s at 400ms`);
     else fail(`aura cadence wrong: ${pulses} pulses in 4s (want 9-11)`);
 
+    // THE GAP IS THE MECHANIC, so the gap is what gets asserted. A field that
+    // pulses on its own interval and a field that pulses on the loop's 0.4s
+    // are indistinguishable from a total, and the difference between them is
+    // whether a player standing still can clear a room. This reads the SPACING
+    // between pulses, not their number.
+    ({ g, p } = auraSim());
+    {
+      const fires = [];
+      const origA = g._areaDamageEnemies.bind(g);
+      g._areaDamageEnemies = (x, y, r, d, o, opt) => { if (r === 121) fires.push(g.time); return origA(x, y, r, d, o, opt); };
+      g.addAura(p, { key: 'gap', radius: 121, damage: 30, pulseMs: 4200, dur: Infinity, domain: 'spiritual' });
+      still(g, p, 13);
+      const gaps = fires.slice(1).map((t, i) => t - fires[i]);
+      const tight = gaps.filter(x => x < 4.1);
+      if (fires.length >= 2 && !tight.length && gaps.every(x => x < 4.4))
+        ok(`an aura pulses on ITS OWN interval, with real gaps between: ${fires.length} pulses in 13s spaced ${gaps.map(x => x.toFixed(2)).join('/')}s — nothing fires on the zone loop's 0.4s in between, which is the whole reason a statue cannot clear a room with one`);
+      else fail(`aura pulse spacing wrong: ${fires.length} pulses, gaps ${gaps.map(x => x.toFixed(2)).join('/')}s (want ~4.20 each, none under 4.1)`);
+    }
+
     // THE SECOND DOOR. An always-on aura has no cast and none of the eleven
     // triggers is "always", so it arrives from a passive at the room hook. No
     // shipped skill declares one yet, so the probe registers a synthetic passive
