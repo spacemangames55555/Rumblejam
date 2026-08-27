@@ -142,6 +142,10 @@ const pctLess = mult => `${Math.round((1 - mult) * 100)}%`;
 // entry here is REPORTED by the gate rather than silently dropped — an unlisted
 // rider is a mechanic the player cannot see.
 const RIDERS = {
+  pierce: v => `passes through ${v} more ${v === 1 ? 'enemy' : 'enemies'}`,
+  // The distance is the CASTER'S, not the target's — the only rider that moves
+  // the person who cast it.
+  carry: v => `you are carried ${v === true ? 'the full length' : `${v}px`} along it`,
   stun: v => `stun ${secs(v)}`,
   root: v => `root ${secs(v)}`,
   taunt: v => `taunt ${secs(v)}`,
