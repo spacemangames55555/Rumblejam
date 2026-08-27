@@ -502,7 +502,7 @@ function assertTrees() {
 
       // `self` MEANS THE SKILL PICKS NOTHING, AND IT IS CHECKED BOTH WAYS.
       //
-      // §5.3: `select` is what a skill hits. Six of the fourteen primitives
+      // §5.3: `select` is what a skill hits. Six of the fifteen primitives
       // never consult it — shield, ward, form, shift, heal and summon write the
       // caster, the party or the field and have no target to choose. Those
       // skills used to declare `nearest` and ignore it, which read as a real

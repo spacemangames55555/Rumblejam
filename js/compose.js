@@ -442,6 +442,47 @@ export const PRIMITIVES = {
     out.states++;
   },
 
+  // GRAVITY PULL — the FIFTEENTH primitive, and the one with the widest
+  // cross-class demand of anything the conversion docs ask for that did not
+  // exist: the Mage's Contraction, Graviton Surge, Singularity Collapse and
+  // Black Hole, the Necromancer's Singularity, and the Sundian's Riptide.
+  //
+  // IT WAS NOT EXPOSURE. `pullSpd` looked like machinery waiting to be reached
+  // but it is a field on a `singularities` record, read by three lines inside a
+  // loop that also applies vulnerability, counts down a lifetime and detonates.
+  // There was arithmetic to reuse and no mechanism to expose. What exists now
+  // is `sim.gravityPull` — one mover, which the singularity trait also calls,
+  // so the two implementations are one.
+  //
+  // ONCE OR REPEATEDLY, decided by `duration`. Without one the pull lands now,
+  // in this call, and is done: Contraction drags 120px and ends. With one it
+  // registers a zone that deals no damage and pulls on the zone's own 400ms
+  // cadence, which is what "eight pulses of 14px" means — eight slices of a
+  // 3200ms field. Repetition needs no second list, no second lifetime and no
+  // second room reset, because `this.zones` already has all three.
+  //
+  // `centre` is where it pulls TO. `target` (the default) places the well on
+  // whatever the selector chose; `self` pulls toward the caster, which is what
+  // Contraction asks for and what a placed well cannot express.
+  //
+  // The count goes out as `out.pulled` rather than `out.hits`, because a pull
+  // is not a hit and `p.fireLog` records hits.
+  gravity_pull(sim, p, skill, step, rank, grid, out) {
+    const t = step.centre === 'self' ? null
+      : selectTarget(skill.select, grid, p.x, p.y, step.range || step.radius, sightFrom(sim, p.x, p.y));
+    const x = t ? t.x : p.x, y = t ? t.y : p.y;
+    const dur = step.duration ? rankedDuration(step.duration, skill, rank) / MS : 0;
+    if (dur > 0) {
+      sim.addZone({
+        x, y, r: step.radius, dps: 0, dur, hurts: 'enemies', color: p.color,
+        skillDomain: skill.domain, ownerIdx: p.idx, pull: step.distance,
+      });
+      out.states++;
+      return;
+    }
+    out.pulled += sim.gravityPull(x, y, step.radius, step.distance);
+  },
+
   // Restores HP to the caster and nearby allies.
   //
   // ROUTED THROUGH `_heal`, NOT WRITTEN TO `p.hp`. This function used to do the
@@ -756,7 +797,7 @@ export function applyBoltRiders(sim, p, skill, r, e, rank, out) {
 // ---------------------------------------------------------------- entry point
 
 export function runCompose(sim, p, skill, rank, grid) {
-  const out = { hits: 0, damage: 0, statuses: 0, states: 0 };
+  const out = { hits: 0, damage: 0, statuses: 0, states: 0, pulled: 0 };
   for (const step of skill.compose) {
     const prim = PRIMITIVES[step.kind];
     if (!prim) continue;      // load assertions reject unknown kinds; belt and braces
@@ -815,5 +856,9 @@ export const RIDERS_BY_PRIMITIVE = {
   trap: [],
   // `shift` takes no riders for the same reason `summon` takes none: riders
   // resolve on a target at the moment of impact, and a shift has no target.
+  // A pull takes no riders for the reason `trap` and `shift` take none:
+  // riders resolve on a target at the moment of impact and a pull has no
+  // impact. Graviton Surge's stun rides its damage step, not its pull.
+  gravity_pull: [],
   heal: [], shield: [], ward: [], drain: [], plague: [], shift: [],
 };

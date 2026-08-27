@@ -5161,12 +5161,91 @@ try {
   // nothing else provided. `shift` is named here because naming the exception is
   // the mechanism — the same shape as `rankGrants` having a registry rather than
   // a convention.
-  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form'];
+  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'gravity_pull', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form'];
   const missing = EXPECTED_PRIMS.filter(k => !PK.includes(k));
   const extra = PK.filter(k => !EXPECTED_PRIMS.includes(k));
-  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth and \`trap\` the thirteenth, each admitted under §5.7's three conditions and ruled before its tree`);
+  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, \`trap\` the thirteenth and \`gravity_pull\` the fifteenth, each admitted under §5.7's three conditions and ruled before its tree`);
   else if (missing.length) fail(`primitives missing from PRIMITIVES: ${missing.join(', ')}`);
   else fail(`UNDECLARED PRIMITIVE(S): ${extra.join(', ')} — §5.7 admits a new primitive only for a class engine needing a write path nothing else provides, ruled before the tree. A primitive that arrives without being listed here arrived while somebody was authoring content`);
+  // GATED BEFORE ANY TREE IS AUTHORED AGAINST IT, per the sequence every prior
+  // write path followed. `gravity_pull` has no skill user yet — the Necromancer's
+  // Singularity and the Mage's Contraction are its first — so nothing else in
+  // this suite would touch it, and a primitive nothing exercises is exactly the
+  // enum-wired-to-nothing this block exists to stop.
+  //
+  // Verified by defect before it was written down: neutering the mover to a zero
+  // step leaves every count intact and every distance at 0, so these assertions
+  // read the MOVEMENT and not the plumbing around it.
+  {
+    const { runCompose } = await import('../js/compose.js');
+    const pullSim = () => {
+      const g = new Sim({ seed: 771, regionIndex: 8, allowUnplayable: true, party: [{ charId: 'toh_necromancer', human: true }] });
+      const p = g.players[0];
+      const node = representativeNode(g);
+      g._travelTo(node.id);
+      for (let i = 0; i < 20; i++) g.tick();
+      return { g, p };
+    };
+    // Bodies that will not walk away mid-measurement, on a ring of known radius.
+    const ring = (g, p, n, r) => {
+      const es = [];
+      for (let i = 0; i < n; i++) {
+        const a = i / n * Math.PI * 2;
+        const e = g.spawnEnemyById('slabjaw', p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, { noMats: true });
+        if (e) { e.maxHp = e.hp = 9000; e.spd = 0; es.push(e); }
+      }
+      g.tick();                         // the spatial index is rebuilt per tick
+      for (const e of es) e.knockX = e.knockY = 0;
+      return es;
+    };
+    const gap = (e, p) => Math.hypot(e.x - p.x, e.y - p.y);
+    const probe = (steps, n, r) => {
+      const { g, p } = pullSim();
+      const es = ring(g, p, n, r);
+      const before = es.map(e => gap(e, p));
+      const out = runCompose(g, p, { id: 'gp_probe', select: 'self', domain: 'physical', trigger: { range: 0 }, compose: steps, ranks: {} }, 1, g.trigGrid);
+      return { g, p, es, before, out, after: () => es.map(e => gap(e, p)) };
+    };
+
+    // ONE PULL, no duration: lands in the call and is done.
+    let t = probe([{ kind: 'gravity_pull', centre: 'self', radius: 200, distance: 40 }], 8, 150);
+    let moved = t.before.map((b, i) => b - t.after()[i]);
+    if (t.out.pulled === 8 && moved.every(m => Math.abs(m - 40) < 0.5))
+      ok(`gravity_pull one-shot: 8 enemies at 150px dragged exactly 40px toward the caster, and \`out.pulled\` reports 8 — the count the Mage's engine is specified to pay on`);
+    else fail(`gravity_pull one-shot: pulled=${t.out.pulled} (want 8), distances moved ${moved.map(m => m.toFixed(1)).join(',')} (want 40 each)`);
+
+    // "UP TO" IS LITERAL: asking for more than the gap stops at the centre.
+    t = probe([{ kind: 'gravity_pull', centre: 'self', radius: 200, distance: 500 }], 4, 30);
+    if (t.after().every(a => a < 0.5 && Number.isFinite(a)))
+      ok(`gravity_pull "up to": 500px asked from 30px away lands ON the centre, not 470px past it — and no NaN, which is what the zero-distance guard is for`);
+    else fail(`gravity_pull overshot or produced a non-finite position: ${t.after().map(a => a.toFixed(1)).join(',')}`);
+
+    // BOSSES ARE NOT DRAGGED, matching the singularity this mover replaced.
+    t = probe([{ kind: 'gravity_pull', centre: 'self', radius: 200, distance: 50 }], 3, 120);
+    t.es[0].boss = true;
+    const b0 = gap(t.es[0], t.p);
+    const out2 = runCompose(t.g, t.p, { id: 'gp_boss', select: 'self', domain: 'physical', trigger: { range: 0 }, compose: [{ kind: 'gravity_pull', centre: 'self', radius: 200, distance: 50 }], ranks: {} }, 1, t.g.trigGrid);
+    if (out2.pulled === 2 && Math.abs(gap(t.es[0], t.p) - b0) < 0.01)
+      ok(`gravity_pull leaves bosses standing: 2 of 3 in radius pulled, the boss moved 0px`);
+    else fail(`gravity_pull dragged a boss or miscounted: pulled=${out2.pulled} (want 2), boss moved ${(b0 - gap(t.es[0], t.p)).toFixed(2)}px (want 0)`);
+
+    // RADIUS IS CENTRE-TO-CENTRE, and outside it nothing moves.
+    t = probe([{ kind: 'gravity_pull', centre: 'self', radius: 200, distance: 50 }], 4, 400);
+    if (t.out.pulled === 0 && t.before.every((b, i) => Math.abs(b - t.after()[i]) < 0.01))
+      ok(`gravity_pull respects its radius: nothing at 400px moved for an r200 well`);
+    else fail(`gravity_pull reached outside its radius: pulled=${t.out.pulled} (want 0)`);
+
+    // A DURATION MAKES IT A FIELD, on the zone tick's own cadence.
+    t = probe([{ kind: 'gravity_pull', centre: 'self', radius: 200, distance: 14, duration: 3200 }], 6, 190);
+    const fields = t.g.zones.filter(z => z.pull);
+    for (let i = 0; i < 60 * 4; i++) t.g.tick();
+    const net = t.before.map((b, i) => b - t.after()[i]);
+    const gone = t.g.zones.filter(z => z.pull).length === 0;
+    if (fields.length === 1 && fields[0].dps === 0 && net.every(m => m > 90 && m <= 112) && gone)
+      ok(`gravity_pull repeats through a zone that deals no damage: one 3200ms field dragged six enemies ${net[0].toFixed(0)}px in 14px pulses, then expired — a repeated pull needs no second list, lifetime or room reset`);
+    else fail(`gravity_pull field wrong: ${fields.length} field(s) dps=${fields[0] && fields[0].dps}, net ${net.map(m => m.toFixed(0)).join(',')} (want 90-112 each), expired=${gone}`);
+  }
+
   if (MOVE_KINDS.length >= 2) ok(`MOVE_KINDS is a declared, closed taxonomy: ${MOVE_KINDS.join('/')}`);
   else fail(`MOVE_KINDS is not a usable taxonomy: ${JSON.stringify(MOVE_KINDS)}`);
   // NO ENUM ENTRY WIRED TO NOTHING. The source project shipped 19 skill kinds

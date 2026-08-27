@@ -2857,6 +2857,59 @@ export class Sim {
     return hits;
   }
 
+  // THE ONE ENEMY-PULLING MOVER.
+  //
+  // Three pulls existed before this and none of them was reusable. The boss
+  // vortex (:3241) and the `magnetic` elite mod (js/entities/enemies.js:83)
+  // both drive `p.pullX/pullY` — the PLAYER channel, resisted by Grit and
+  // cleared every tick. Enemies had no channel at all: the singularity trait
+  // wrote `e.x`/`e.y` inline, three lines deep in a loop that also applied
+  // vulnerability, counted a lifetime and detonated. So "pull an enemy" was
+  // arithmetic somebody had written once, not a thing the engine could do.
+  //
+  // `distance` IS A DISTANCE, not a speed — what one application drags. A
+  // caller integrating over time passes `speed * dt`, which is what the
+  // singularity now does. Every doc block that asks for a pull asks in pixels
+  // per application, so that is the unit this takes.
+  //
+  // "UP TO" IS LITERAL. The drag stops at the centre instead of overshooting
+  // it, which the inline loop did not do: an enemy inside one step's reach of
+  // the middle used to be flung past it and dragged back next tick.
+  //
+  // Bosses are not dragged, matching the singularity. Distance is measured
+  // centre-to-centre, also matching it — a well's radius is the well's radius,
+  // not the well's radius plus the body's. `clampToRoom` is the hook no mover
+  // slips past (walls, push-out, beast bodies), so this ends there.
+  //
+  // Returns HOW MANY were moved. The Mage's engine is "+2 energy per enemy
+  // pulled" and five of its nodes feed on that count, so the count is the
+  // primitive's output and not a side effect somebody has to re-derive.
+  // Attribution is the CALLER'S — this moves bodies and counts them.
+  //
+  // No fx. The tell for a pull is the enemies visibly converging, which is a
+  // more direct read than any ring drawn over it, and a field pulsing eight
+  // times would otherwise stamp eight explosion rings on a fight nobody
+  // exploded in.
+  gravityPull(x, y, radius, distance) {
+    if (!(distance > 0) || !(radius > 0)) return 0;
+    const seen = new Set();
+    let pulled = 0;
+    this.grid.query(x, y, radius + 40, e => {
+      if (!e.active || seen.has(e.id)) return;
+      seen.add(e.id);
+      if (e.boss) return;                          // bosses are not dragged
+      const dx = x - e.x, dy = y - e.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > radius * radius || d2 < 1) return;
+      const d = Math.sqrt(d2), step = Math.min(distance, d);
+      e.x += dx / d * step;
+      e.y += dy / d * step;
+      this.clampToRoom(e);
+      pulled++;
+    });
+    return pulled;
+  }
+
   hurtPlayer(p, raw, src, opts = {}) {
     if (this.over || p.gone || p.downed || this.god) return;
     // Objective hazards (the storm's burn, the Breach collapse) are the LEVEL,
@@ -3212,6 +3265,16 @@ export class Sim {
           // Bramble declared a chill that never once landed. Same shape as the
           // cone/line gap (§13 rule 25): a value plumbed to a consumer that
           // ignores it, validated by a table that only checks the declaration.
+          // THE PULL FIELD. `gravity_pull` with a duration registers a zone
+          // that does no damage and drags instead, so a repeated pull needs no
+          // second list, no second lifetime and no second room-reset — the
+          // three places that clear `this.zones` clear it too. `mul` is the
+          // elapsed slice this tick covers, so a field declares pixels per
+          // 400ms slice, and the slice count is `dur / 0.4` however the frame
+          // rate wanders — so a field declaring 14px over eight pulses drags
+          // 112px on any machine. Pulse-locked, deliberately: `mul` scaling
+          // would make "up to 14px" mean 14.7 on a long frame.
+          if (z.pull) this.gravityPull(z.x, z.y, z.r, z.pull);
           if (z.slowMult && z.slowDur) {
             const src = z.ownerIdx !== undefined ? this.players[z.ownerIdx] : owner;
             const seen = new Set();
