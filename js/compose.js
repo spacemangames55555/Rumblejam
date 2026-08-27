@@ -442,15 +442,30 @@ export const PRIMITIVES = {
     out.states++;
   },
 
-  // Restores HP to the caster and nearby allies. No phase-1 skill uses it; the
-  // behaviour is real so phase 2 does not reopen this file.
+  // Restores HP to the caster and nearby allies.
+  //
+  // ROUTED THROUGH `_heal`, NOT WRITTEN TO `p.hp`. This function used to do the
+  // `Math.min(vitality, hp + amt)` itself, which reproduced the CAP and nothing
+  // else `_heal` does: Recovery, the `healHalf` curse, the fractional carry, the
+  // downed guard and every trait that fires on healing were all skipped. A skill
+  // heal is a healing SOURCE like lifesteal or regen, and those already go
+  // through the one door (js/game.js:2666, :1866) — so this one does too.
+  //
+  // `by: p` names the CASTER, which is what `_heal` attributes Grace to. It
+  // matches how the Priest's judgment-mark payout already credits its owner
+  // (js/game.js:2716), so healing an ally and marking one feed the same hook.
   heal(sim, p, skill, step, rank, grid, out) {
     const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
     for (const q of sim.livePlayers()) {
       const dx = q.x - p.x, dy = q.y - p.y;
       if (dx * dx + dy * dy > step.radius * step.radius) continue;
-      q.hp = Math.min(q.stats.vitality, q.hp + amt);
-      sim.fx.hits.push({ x: Math.round(q.x), y: Math.round(q.y - 20), a: Math.round(amt), c: 0 });
+      // The popup reports what LANDED, not what was asked for — `_heal` scales
+      // the request by Recovery and floors it, so the requested figure is no
+      // longer the number that reached the bar.
+      const before = q.hp;
+      sim._heal(q, amt, { by: p });
+      const got = q.hp - before;
+      if (got > 0) sim.fx.hits.push({ x: Math.round(q.x), y: Math.round(q.y - 20), a: Math.round(got), c: 0 });
       out.states++;
     }
   },
@@ -480,7 +495,8 @@ export const PRIMITIVES = {
     const t = selectTarget(skill.select, grid, p.x, p.y, step.range, sightFrom(sim, p.x, p.y));
     if (!t) return;
     const dealt = sim.skillDamage(t, dmg, p, skill);
-    p.hp = Math.min(p.stats.vitality, p.hp + dealt * step.healPct);
+    // Lifesteal is a healing source; it goes through the one door (see `heal`).
+    sim._heal(p, dealt * step.healPct);
     out.hits++;
   },
 
@@ -606,7 +622,11 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
   if (r.slow) { sim.applySlow(e, r.slow.mult, r.slow.dur / MS, p); out.statuses++; }
   if (r.weakenDamage) { e.weakDmgT = r.weakenDamage.dur / MS; e.weakDmgMult = r.weakenDamage.mult; out.statuses++; }
   if (r.weakenDefense) { e.defDownT = r.weakenDefense.dur / MS; e.defDownMult = r.weakenDefense.mult; out.statuses++; }
-  if (r.healPerHit) { p.hp = Math.min(p.stats.vitality, p.hp + r.healPerHit); out.states++; }
+  // Through `_heal` like the other two healing sources in this file. `p` may be
+  // the minion facade here, which forwards `hp` and `healAcc` to the owner —
+  // the same path an owner's lifesteal already takes from a minion's swing
+  // (js/minions.js:178), so the rider lands where the facade already sends it.
+  if (r.healPerHit) { sim._heal(p, r.healPerHit); out.states++; }
   // MEND — the same shape as healPerHit above, with a different recipient.
   //
   // §5.7 condition 2 asks whether a rider will do, and the precedent one line

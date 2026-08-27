@@ -391,14 +391,16 @@ if (want(8)) {
     // `gross 3.1` against `effective 5.1` for the priest, which is impossible
     // and was the multiplier missing. Mirrored here rather than approximated.
     //
-    // AND `_heal` IS NOT THE ONLY DOOR. js/compose.js writes `p.hp` directly in
-    // three places — the `heal` primitive (:452), `drain`'s lifesteal (:483) and
-    // the `healPerHit` rider (:609) — so every skill-composed heal skips
-    // `_heal` entirely, along with the `recovery` multiplier, the `healHalf`
-    // curse and the Priest's Grace hook. Measured, a level-82 bard takes ZERO
-    // `_heal` calls in 15 s and still gains 31.8 HP. So the two paths are
-    // counted separately: a cap written against `_heal` would not touch the
-    // second one at all, which is the lever T3 names.
+    // `_heal` IS NOW THE ONLY DOOR, and this split is what proves it stays one.
+    // js/compose.js used to write `p.hp` directly in three places — the `heal`
+    // primitive, `drain`'s lifesteal and the `healPerHit` rider — so every
+    // skill-composed heal skipped `_heal` entirely, along with the `recovery`
+    // multiplier, the `healHalf` curse and the Priest's Grace hook. Measured
+    // then, a level-82 bard took ZERO `_heal` calls in 15 s and still gained
+    // 31.8 HP. All three now route through `_heal`, so the `skill eff` column
+    // reads 0.00 for every class BY CONSTRUCTION — and a non-zero reading there
+    // means a second door has been cut again, which is exactly what a cap
+    // written against `_heal` would fail to bite on.
     let gross = 0, effHeal = 0;
     const origHeal = g._heal.bind(g);
     const origCurse = g._curse.bind(g);
@@ -438,9 +440,9 @@ if (want(8)) {
   const unkillable = rows.filter(r => r.G >= r.T15);
   console.log(`\n  ${unkillable.length}/${rows.length} classes ask _heal for at least as much as the room deals:`);
   for (const r of unkillable) console.log(`    ${r.c.padEnd(18)} gross ${f1(r.G)} HP/s against ${f1(r.T15)} taken  (x${(r.G / Math.max(0.01, r.T15)).toFixed(1)})`);
-  const skillOnly = rows.filter(r => r.ES > 0.5 && r.EH < 0.05);
-  console.log(`\n  ${skillOnly.length}/${rows.length} classes heal ONLY through js/compose.js, never through _heal:`);
-  for (const r of skillOnly) console.log(`    ${r.c.padEnd(18)} ${f1(r.ES)} HP/s of effective healing, 0 _heal calls — a cap on _heal misses it entirely`);
+  const secondDoor = rows.filter(r => r.ES > 0.05);
+  console.log(`\n  ${secondDoor.length}/${rows.length} classes gained HP through a door that is not \`_heal\` (expected: 0):`);
+  for (const r of secondDoor) console.log(`    ${r.c.padEnd(18)} ${f1(r.ES)} HP/s arriving outside \`_heal\` — a second door, and a cap on \`_heal\` misses it`);
   console.log('\n  T3 says sustain must not outrun incoming. The `gross/taken` column is');
   console.log('  what a per-second cap would bite on; the `eff/taken` column is what the');
   console.log('  room actually experienced. Where gross far exceeds 1.00, the margin is');
