@@ -5161,10 +5161,10 @@ try {
   // nothing else provided. `shift` is named here because naming the exception is
   // the mechanism — the same shape as `rankGrants` having a registry rather than
   // a convention.
-  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'gravity_pull', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form'];
+  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'gravity_pull', 'channel', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form'];
   const missing = EXPECTED_PRIMS.filter(k => !PK.includes(k));
   const extra = PK.filter(k => !EXPECTED_PRIMS.includes(k));
-  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, \`trap\` the thirteenth and \`gravity_pull\` the fifteenth, each admitted under §5.7's three conditions and ruled before its tree`);
+  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, \`trap\` the thirteenth, \`gravity_pull\` the fifteenth and \`channel\` the sixteenth, each admitted under §5.7's three conditions and ruled before its tree`);
   else if (missing.length) fail(`primitives missing from PRIMITIVES: ${missing.join(', ')}`);
   else fail(`UNDECLARED PRIMITIVE(S): ${extra.join(', ')} — §5.7 admits a new primitive only for a class engine needing a write path nothing else provides, ruled before the tree. A primitive that arrives without being listed here arrived while somebody was authoring content`);
   // GATED BEFORE ANY TREE IS AUTHORED AGAINST IT, per the sequence every prior
@@ -5244,6 +5244,84 @@ try {
     if (fields.length === 1 && fields[0].dps === 0 && net.every(m => m > 90 && m <= 112) && gone)
       ok(`gravity_pull repeats through a zone that deals no damage: one 3200ms field dragged six enemies ${net[0].toFixed(0)}px in 14px pulses, then expired — a repeated pull needs no second list, lifetime or room reset`);
     else fail(`gravity_pull field wrong: ${fields.length} field(s) dps=${fields[0] && fields[0].dps}, net ${net.map(m => m.toFixed(0)).join(',')} (want 90-112 each), expired=${gone}`);
+  }
+
+  // GATED BEFORE ANY TREE IS AUTHORED AGAINST IT, like `gravity_pull` above.
+  // `channel` has no skill user yet — the Necromancer's Death Channel and Dark
+  // Energy Beam, the Mage's Photon Beam and the Priest's Judgment Ray are its
+  // first — so nothing else here would touch it.
+  //
+  // TICKS ARE COUNTED AT `skillDamage`, NOT AS HP DROPS. The first version of
+  // this counted the target's health falling and read 16 ticks from a channel
+  // that fired 10: the Necromancer's trait layer hangs a plague off each hit,
+  // and a plague tick is not a channel tick. Counting at the source is the
+  // difference between measuring the primitive and measuring the class.
+  {
+    const { runCompose } = await import('../js/compose.js');
+    const chanSim = () => {
+      const g = new Sim({ seed: 771, regionIndex: 8, allowUnplayable: true, party: [{ charId: 'toh_necromancer', human: true }] });
+      const p = g.players[0];
+      g._travelTo(representativeNode(g).id);
+      for (let i = 0; i < 20; i++) g.tick();
+      g.god = true;                                  // measuring the channel, not survival
+      for (const e of g.enemyPool) e.active = false;  // one body, so `lowest_hp` cannot wander
+      const t = g.spawnEnemyById('slabjaw', p.x + 200, p.y, { noMats: true });
+      t.maxHp = t.hp = 999999; t.spd = 0;
+      g.tick(); g.trigGrid.rebuild(g.enemyPool);      // the selector reads the trigger grid
+      let ticks = 0;
+      const orig = g.skillDamage.bind(g);
+      g.skillDamage = (e, a, pp, sk) => { if (sk && sk.id === 'ch_probe') ticks++; return orig(e, a, pp, sk); };
+      return { g, p, t, n: () => ticks };
+    };
+    const CH = (over = {}) => ({ id: 'ch_probe', select: 'lowest_hp', domain: 'spiritual', cooldown: 1200,
+      trigger: { kind: 'NEAREST', range: 360 }, ranks: {},
+      compose: [{ kind: 'channel', damage: 14, range: 360, tickMs: 500, duration: 5000, ...over }] });
+    const chRun = (g, p, secs, moving = false) => {
+      for (let i = 0; i < 60 * secs; i++) { g.setInput(0, { mx: 0, my: 0 }); if (moving) { p.mx = 1; p.my = 0; } g.tick(); }
+    };
+
+    let c = chanSim();
+    runCompose(c.g, c.p, CH(), 1, c.g.trigGrid); chRun(c.g, c.p, 8);
+    if (c.n() === 10 && c.g.channels.length === 0)
+      ok(`channel ticks on its interval and stops at its maximum: 10 ticks from 5000ms at 500ms, then gone — a duration that is a real ceiling`);
+    else fail(`channel cadence wrong: ${c.n()} ticks (want 10), ${c.g.channels.length} still live (want 0)`);
+
+    c = chanSim();
+    runCompose(c.g, c.p, CH(), 1, c.g.trigGrid); chRun(c.g, c.p, 8, true);
+    if (c.n() === 6)
+      ok(`channel does NOT break on movement and costs rate instead (roster ruling 5): a caster moving the whole time got 6 of 10 ticks — 60%, over the same five seconds`);
+    else fail(`channel movement rule wrong: ${c.n()} ticks while moving (want 6 = 60% of 10). Breaking on movement would read 0`);
+
+    c = chanSim();
+    runCompose(c.g, c.p, CH(), 1, c.g.trigGrid); chRun(c.g, c.p, 0.5);
+    const liveD = c.g.channels.length; c.g.damageEnemy(c.t, 9999999, { owner: c.p }); chRun(c.g, c.p, 0.1);
+    if (liveD === 1 && c.g.channels.length === 0) ok(`channel breaks on its target's death — the one ending no existing primitive can observe`);
+    else fail(`channel survived its target's death: ${liveD} -> ${c.g.channels.length} (want 1 -> 0)`);
+
+    c = chanSim();
+    runCompose(c.g, c.p, CH(), 1, c.g.trigGrid); chRun(c.g, c.p, 0.5);
+    const liveR = c.g.channels.length; c.t.x = c.p.x + 900; chRun(c.g, c.p, 0.1);
+    if (liveR === 1 && c.g.channels.length === 0) ok(`channel breaks when its target leaves range`);
+    else fail(`channel followed its target out of range: ${liveR} -> ${c.g.channels.length} (want 1 -> 0)`);
+
+    c = chanSim();
+    runCompose(c.g, c.p, CH(), 1, c.g.trigGrid); chRun(c.g, c.p, 3);
+    const tMid = c.g.channels[0].t;
+    runCompose(c.g, c.p, CH(), 1, c.g.trigGrid);
+    if (c.g.channels.length === 1 && Math.abs(c.g.channels[0].t - tMid) < 0.001 && (c.p.skillCd.ch_probe || 0) > 0)
+      ok(`a channel cannot be cast on top of itself: the re-cast made no second channel and did not reset the clock, and \`skillCd\` is held above zero for the rest of its life — so "up to 5000ms" is a maximum rather than a refresh`);
+    else fail(`channel refreshed itself: ${c.g.channels.length} channel(s), t ${c.g.channels[0] && c.g.channels[0].t.toFixed(2)} against ${tMid.toFixed(2)}, skillCd ${(c.p.skillCd.ch_probe || 0).toFixed(2)}`);
+
+    c = chanSim(); c.p.skillCd.ch_probe = 1.2;        // what fireSkill stamps one step earlier
+    runCompose(c.g, c.p, CH({ cdFromEnd: true }), 1, c.g.trigGrid);
+    chRun(c.g, c.p, 3); const cdMid = c.p.skillCd.ch_probe || 0;
+    chRun(c.g, c.p, 2.1); const cdEnd = c.p.skillCd.ch_probe || 0;
+    c = chanSim(); c.p.skillCd.ch_probe = 1.2;
+    runCompose(c.g, c.p, CH(), 1, c.g.trigGrid);      // the same channel WITHOUT the flag
+    chRun(c.g, c.p, 5.1); const cdCast = c.p.skillCd.ch_probe || 0;
+    if (cdMid > 0 && cdEnd > 1 && cdCast === 0)
+      ok(`\`cdFromEnd\` measures the cooldown from the channel's END: ${cdEnd.toFixed(2)}s left after a 5s channel, against ${cdCast.toFixed(2)}s for the same channel without it — a 1200ms cooldown started at the cast is spent long before the channel is`);
+    else fail(`cdFromEnd wrong: mid ${cdMid.toFixed(2)} (want >0), after end ${cdEnd.toFixed(2)} (want >1), without the flag ${cdCast.toFixed(2)} (want 0)`);
   }
 
   if (MOVE_KINDS.length >= 2) ok(`MOVE_KINDS is a declared, closed taxonomy: ${MOVE_KINDS.join('/')}`);
