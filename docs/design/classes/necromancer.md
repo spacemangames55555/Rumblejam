@@ -467,20 +467,41 @@ RANK ADDS:            +12px radius per rank (not damage, not magnitude)
 --- identity ---
 ENGINE:               feeds indirectly — a +25% damage field produces more
                       kills, and kills are Essence
-COST:                 it amplifies *your* damage, not your summons'. A pure
-                      summoner build gets nothing from it, so the tier-7 node
-                      of the survival tree quietly demands you also be
-                      casting things
+COST:                 it is the summoner keystone, and it costs a slot on the
+                      survival tree to get it. Summons count as "you", so the
+                      field amplifies about four-fifths of what the class
+                      actually deals — but only inside 180px of him, which
+                      means the Necromancer has to stand where his skeletons
+                      are fighting. A summoner who kites is a summoner whose
+                      keystone is switched off
 VISUAL:               a dim bone-white circle on the floor; enemies inside it
                       look thinner, their outlines showing structure
 FLAVOR:               Everything alive is a wall built around a frame. He
                       finds it very hard to stop noticing where the frame is.
 
-> **Scope flagged:** the declared text says "+25% damage from you." Whether
-> summons count as "you" is the single most consequential ambiguity in this
-> class. I've read it narrowly (caster only) because that's what the text
-> says. If MainScene includes summon damage, Osteo becomes the summoner
-> keystone and my COST line above is wrong.
+> **RESOLVED by measurement, and the narrow reading was wrong.** The declared
+> text says "+25% damage from you," and this block used to read that as the
+> caster only, with a COST line saying a pure summoner build got nothing from
+> it. Measured at level 82 in a region-8 room, summons are **69-94% of what
+> this class deals** — 94.1% on a representative build. Filtered to what lands
+> inside the field:
+>
+> | reading | share amplified | effective damage gain |
+> |---|---|---|
+> | caster only | 5.9% | **+1.5%** |
+> | summons count | 80.7% | **+20.2%** |
+>
+> Thirteen and a half times. And under the narrow reading the node's entire
+> rank progression is inert: RANK ADDS is radius and only radius, the caster
+> stands at his own centre, and caster damage inside the circle measured
+> **537 at r180 and 537 at r276** — eight ranks buying nothing. That is not a
+> weak node, it is a broken one.
+>
+> Counting summons is also the free reading in code: the amplification keys on
+> `attacker.idx`, and the minion facade carries the owner's index by design, so
+> excluding them would take an extra clause. **Ruled: summons count.** Neither
+> middle — a split rate, or a rank-gated value — was taken; both are tuning on
+> top of a decision, and either is one number away if playtest disagrees.
 
 SKILL NAME:           Bone Spur
 CLASS / TREE / TIER:  necromancer / Marrow / tier_code 7

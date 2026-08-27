@@ -5161,10 +5161,10 @@ try {
   // nothing else provided. `shift` is named here because naming the exception is
   // the mechanism — the same shape as `rankGrants` having a registry rather than
   // a convention.
-  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'gravity_pull', 'channel', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form'];
+  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'gravity_pull', 'aura', 'channel', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form'];
   const missing = EXPECTED_PRIMS.filter(k => !PK.includes(k));
   const extra = PK.filter(k => !EXPECTED_PRIMS.includes(k));
-  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, \`trap\` the thirteenth, \`gravity_pull\` the fifteenth and \`channel\` the sixteenth, each admitted under §5.7's three conditions and ruled before its tree`);
+  if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, \`trap\` the thirteenth, \`gravity_pull\` the fifteenth, \`channel\` the sixteenth and \`aura\` the seventeenth, each admitted under §5.7's three conditions and ruled before its tree`);
   else if (missing.length) fail(`primitives missing from PRIMITIVES: ${missing.join(', ')}`);
   else fail(`UNDECLARED PRIMITIVE(S): ${extra.join(', ')} — §5.7 admits a new primitive only for a class engine needing a write path nothing else provides, ruled before the tree. A primitive that arrives without being listed here arrived while somebody was authoring content`);
   // GATED BEFORE ANY TREE IS AUTHORED AGAINST IT, per the sequence every prior
@@ -5322,6 +5322,153 @@ try {
     if (cdMid > 0 && cdEnd > 1 && cdCast === 0)
       ok(`\`cdFromEnd\` measures the cooldown from the channel's END: ${cdEnd.toFixed(2)}s left after a 5s channel, against ${cdCast.toFixed(2)}s for the same channel without it — a 1200ms cooldown started at the cast is spent long before the channel is`);
     else fail(`cdFromEnd wrong: mid ${cdMid.toFixed(2)} (want >0), after end ${cdEnd.toFixed(2)} (want >1), without the flag ${cdCast.toFixed(2)} (want 0)`);
+  }
+
+  // GATED BEFORE ANY TREE IS AUTHORED AGAINST IT, like `gravity_pull` and
+  // `channel`. `aura` has no shipped user: Blight was converted to one and
+  // reverted, because an always-on damaging field let a NEVER-MOVING
+  // Necromancer clear 20 of 25 rooms — the statue test below is the instrument
+  // that caught it, and the statue is a Necromancer by design (T1_REFERENCE).
+  // That is a ruling about shape rather than a number, so the mechanism ships
+  // and the node does not.
+  {
+    const { TREES: A_TREES, SKILL_BY_ID: A_BY_ID } = await import('../js/skills.js');
+    const auraSim = (treeId = 'necro_summons', charId = 'toh_necromancer', level = 31) => {
+      const g = new Sim({ seed: 771, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }] });
+      const p = g.players[0]; p.level = level;
+      for (const sk of [...A_TREES[treeId].skills].sort((a, b) => a.tier - b.tier)) { p.skillPoints++; SKILLSIM.spendSkillPoint(g, p, sk.id); }
+      g.god = true;                       // measuring the field, not survival
+      g._travelTo(representativeNode(g).id);
+      for (let i = 0; i < 60; i++) g.tick();
+      return { g, p };
+    };
+    // Bodies that stay where they are put, so a radius means a radius.
+    const pin = (g, p, dx) => {
+      const e = g.spawnEnemyById('slabjaw', p.x + dx, p.y, { noMats: true });
+      if (e) { e.maxHp = e.hp = 999999; e.spd = 0; }
+      return e;
+    };
+    const still = (g, p, secs, hold = []) => {
+      for (let i = 0; i < 60 * secs; i++) { g.setInput(0, { mx: 0, my: 0 }); for (const [e, d] of hold) { e.x = p.x + d; e.y = p.y; } g.tick(); }
+    };
+
+    // THE ONE THING THAT MAKES IT AN AURA: the field is bound to the body.
+    let { g, p } = auraSim();
+    g.addAura(p, { key: 'probe_follow', radius: 140, dps: 0, dur: Infinity, domain: 'spiritual' });
+    const zf = g.zones.find(x => x.auraKey === 'probe_follow');
+    const px0 = p.x, py0 = p.y;
+    for (let i = 0; i < 90; i++) { g.setInput(0, { mx: 1, my: 0 }); g.tick(); }
+    const walked = Math.hypot(p.x - px0, p.y - py0), drift = Math.hypot(zf.x - p.x, zf.y - p.y);
+    if (walked > 50 && drift < 1)
+      ok(`aura follows its caster: he walked ${Math.round(walked)}px and the field centre is ${drift.toFixed(2)}px off him — a \`hazard\` would have stayed where it was cast`);
+    else fail(`aura did not follow: caster moved ${walked.toFixed(0)}px, field centre ${drift.toFixed(2)}px away (want <1). Player 0's index is 0, so a truthiness test on \`follow\` strands exactly the solo case`);
+
+    // SOURCE ATTRIBUTION — the only term in `skillDamage` that asks WHO.
+    ({ g, p } = auraSim());
+    p.stats.reflex = 0; p.hookAgg.critChance = 0;         // crit multiplies last; keep it out
+    g.addAura(p, { key: 'probe_src', radius: 500, dps: 0, ampPct: 1.0, dur: Infinity, domain: 'spiritual' });
+    const srcPin = pin(g, p, 100);
+    still(g, p, 0.67, [[srcPin, 100]]);
+    const amped = [...g.enemyPool].find(x => x.active && x.ampT > 0 && x.ampBy === p.idx);
+    if (!amped) fail(`aura amp never reached an enemy standing 100px away inside an r500 field`);
+    else {
+      const probeSk = { id: 'aura_src_probe', domain: 'spiritual', select: 'self', trigger: { range: 0 }, ranks: {} };
+      amped.hp = 100000;
+      let h = amped.hp; SKILLSIM.skillDamage(g, amped, 100, p, probeSk); const withAmp = h - amped.hp;
+      amped.ampBy = p.idx + 7;                            // somebody else's field, same attacker
+      h = amped.hp; SKILLSIM.skillDamage(g, amped, 100, p, probeSk); const without = h - amped.hp;
+      if (without > 0 && Math.abs(withAmp / without - 2) < 0.01)
+        ok(`aura amplification is SOURCE-ATTRIBUTED: the same attacker on the same target dealt ${withAmp.toFixed(0)} inside his own field and ${without.toFixed(0)} when the field names somebody else — exactly x2 at +100%. \`defDownMult\` and \`vulnPct\` cannot express that`);
+      else fail(`aura amp is not source-attributed: ${withAmp.toFixed(1)} own vs ${without.toFixed(1)} other (want exactly 2x)`);
+    }
+
+    // SUMMONS COUNT AS "YOU" — ruled, and the reason the node is worth +20.2%.
+    ({ g, p } = auraSim());
+    g.addAura(p, { key: 'probe_minion', radius: 400, dps: 0, ampPct: 0.25, dur: Infinity, domain: 'spiritual' });
+    let minAmped = 0, minPlain = 0;
+    const origSD = g.skillDamage.bind(g);
+    g.skillDamage = (e, a, pp, sk) => {
+      if (pp && pp.minion) ((e.ampT > 0 && e.ampBy === pp.idx) ? minAmped++ : minPlain++);
+      return origSD(e, a, pp, sk);
+    };
+    for (let t = 0; t < 60 * 45; t++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); if (!p.downed) p.hp = p.stats.vitality; }
+    // AND THE MARKER IS NOT THE EFFECT. Counting hits that carried `ampT` says
+    // the field reached them; it does not say the blow landed harder. So the
+    // claim is settled the same way the source probe settles its own — one
+    // minion's actual swing, twice, with the field attributed to its owner and
+    // then to somebody else. Zeroing the multiplier while leaving the marker in
+    // place turns this red and left the count untouched, which is why the count
+    // alone was not enough.
+    const liveM = (p.minions || []).find(m => m.actor);
+    let mWith = 0, mWithout = 0;
+    if (liveM) {
+      const mSk = { id: 'aura_minion_probe', domain: 'spiritual', select: 'self', trigger: { range: 0 }, ranks: {} };
+      const victim = pin(g, p, 60);
+      still(g, p, 0.67, [[victim, 60]]);
+      victim.hp = 100000;
+      let h = victim.hp; SKILLSIM.skillDamage(g, victim, 100, liveM.actor, mSk); mWith = h - victim.hp;
+      victim.ampBy = p.idx + 7;
+      h = victim.hp; SKILLSIM.skillDamage(g, victim, 100, liveM.actor, mSk); mWithout = h - victim.hp;
+    }
+    if (minAmped > 0 && (p.minionStats && p.minionStats.spawned > 0) && mWithout > 0 && mWith > mWithout * 1.2)
+      ok(`a summoner's minions count as "you": ${p.minionStats.spawned} skeletons raised, ${minAmped} of their hits landed inside their owner's field, and one skeleton's swing dealt ${mWith.toFixed(0)} there against ${mWithout.toFixed(0)} when the field names somebody else. The facade carries the owner's \`idx\`, which is what makes this the free reading — and the one Osteo Aura is worth +20.2% under instead of +1.5%`);
+    else fail(`minion hits were not amplified: ${minAmped} marked / ${minPlain} plain, ${(p.minionStats || {}).spawned} spawned, one swing dealt ${mWith.toFixed(1)} in-field vs ${mWithout.toFixed(1)} out (want >1.25x)`);
+
+    // RANK BUYS RADIUS, AND RADIUS IS THE ONLY THING IT BUYS — so this is the
+    // term that has to be measurable. Under the rejected caster-only reading it
+    // was inert: 537 damage inside r180 and 537 inside r276.
+    const reach = R => {
+      const { g: gg, p: pp } = auraSim();
+      gg.addAura(pp, { key: 'probe_r', radius: R, dps: 0, ampPct: 0.25, dur: Infinity, domain: 'spiritual' });
+      const ring = [];
+      for (const d of [100, 150, 200, 250, 300]) { const e = pin(gg, pp, d); if (e) ring.push([e, d]); }
+      still(gg, pp, 0.67, ring);
+      return ring.filter(([e]) => e.active && e.ampT > 0 && e.ampPct > 0 && e.ampBy === pp.idx).length;
+    };
+    const rank1 = reach(180), rank8 = reach(180 + 12 * 7);
+    if (rank8 > rank1)
+      ok(`rank into radius is measurable: an r180 field amplified ${rank1} of a five-body ring, r264 amplified ${rank8} — eight ranks of "+12px, not damage, not magnitude" reach two more bodies`);
+    else fail(`rank into radius bought nothing: r180 reached ${rank1}, r264 reached ${rank8}`);
+
+    // `dur` IS THE ONLY THING SEPARATING THE THREE SHAPES THE DOCS ASK FOR.
+    ({ g, p } = auraSim());
+    g.addAura(p, { key: 'timed', radius: 150, dps: 4, dur: 2, domain: 'spiritual' });
+    g.addAura(p, { key: 'forever', radius: 150, dps: 4, dur: Infinity, domain: 'spiritual' });
+    still(g, p, 4);
+    if (!g.auraFor(p, 'timed') && g.auraFor(p, 'forever'))
+      ok(`one lifetime field separates all three aura shapes: a 2s field was gone after 4s and an \`Infinity\` one was not — a form's length, a plain duration and always-on are one record`);
+    else fail(`aura lifetimes wrong: timed present ${!!g.auraFor(p, 'timed')} (want false), always-on present ${!!g.auraFor(p, 'forever')} (want true)`);
+
+    // THE CADENCE, counted at the zone rather than at the target — a summoner's
+    // skeletons hit the same body and would be counted as field pulses.
+    ({ g, p } = auraSim());
+    let pulses = 0;
+    const origArea = g._areaDamageEnemies.bind(g);
+    g._areaDamageEnemies = (x, y, r, d, o, opt) => { if (r === 155) pulses++; return origArea(x, y, r, d, o, opt); };
+    g.addAura(p, { key: 'cad', radius: 155, dps: 10, dur: Infinity, domain: 'spiritual' });
+    still(g, p, 4);
+    if (pulses >= 9 && pulses <= 11)
+      ok(`aura damages on the zone cadence: ${pulses} pulses in 4s at 400ms`);
+    else fail(`aura cadence wrong: ${pulses} pulses in 4s (want 9-11)`);
+
+    // THE SECOND DOOR. An always-on aura has no cast and none of the eleven
+    // triggers is "always", so it arrives from a passive at the room hook. No
+    // shipped skill declares one yet, so the probe registers a synthetic passive
+    // in the table it borrows and removes it again.
+    ({ g, p } = auraSim());
+    const SYN = 'aura_door_probe';
+    A_BY_ID[SYN] = { id: SYN, tree: 'necro_summons', tier: 1, name: 'Probe', type: 'passive', domain: 'spiritual',
+      passive: { aura: { radius: 170, radiusPerRank: 12, dps: 3 } } };
+    try {
+      p.skillRanks[SYN] = 3;
+      SKILLSIM.startRoomMinions(g, p);
+      const made = g.auraFor(p, SYN);
+      SKILLSIM.startRoomMinions(g, p);                    // a second door must not stack it
+      const count = g.zones.filter(z => z.auraKey === SYN).length;
+      if (made && count === 1 && made.r === 170 + 12 * 2)
+        ok(`the always-on door works and does not stack: a passive with no cast and no trigger registered one r${made.r} field at the room hook (rank 3 of "+12px per rank"), and a second door did not add a second`);
+      else fail(`always-on door wrong: registered ${count} field(s) (want 1), radius ${made && made.r} (want ${170 + 12 * 2})`);
+    } finally { delete A_BY_ID[SYN]; delete p.skillRanks[SYN]; }
   }
 
   if (MOVE_KINDS.length >= 2) ok(`MOVE_KINDS is a declared, closed taxonomy: ${MOVE_KINDS.join('/')}`);

@@ -112,6 +112,31 @@ export function startRoomMinions(sim, p) {
       const want = step.maxAlive || 1;
       for (let i = have; i < want; i++) spawnMinions(sim, p, sk, step, rank);
     }
+    // ALWAYS-ON AURAS, AND THE SECOND DOOR ONTO THE SAME MECHANISM.
+    //
+    // An always-on aura has no cast, and none of the eleven TRIGGER_KINDS is
+    // "always" — every one of them is reactive. So it cannot arrive through the
+    // trigger loop, and it does not need to: it is a property of OWNING the
+    // node, which is what a passive already is. Registered here, at the one
+    // function the sim runs per player per door, beside the persistent summons
+    // that are restored for exactly the same reason.
+    //
+    // The FIELD does not fork — `sim.addAura` is the same call the `aura`
+    // primitive makes for a cast. Only the door differs, which is the shape
+    // `gravityPull` already has (a primitive and a trait calling one mover).
+    if (sk.type === 'passive' && sk.passive && sk.passive.aura) {
+      const a = sk.passive.aura;
+      if (!sim.auraFor(p, id)) {
+        sim.addAura(p, {
+          key: id, domain: sk.domain,
+          // Radius is the rankable term, and for these nodes it is the ONLY
+          // one — "+12px radius per rank (not damage, not magnitude)".
+          radius: a.radius + (a.radiusPerRank || 0) * (rank - 1),
+          dps: a.dps || 0, ampPct: a.ampPct || 0, slow: a.slow || null,
+          dur: Infinity,
+        });
+      }
+    }
   }
 }
 
@@ -214,6 +239,10 @@ export function passiveSum(p, key) {
   for (const [id, rank] of Object.entries(p.skillRanks || {})) {
     const sk = SKILL_BY_ID[id];
     if (!sk || sk.type !== 'passive' || !sk.passive || sk.passive[key] === undefined) continue;
+    // Not every passive value is a number any more: `aura` is a record, and
+    // summing it would hand every caller NaN rather than failing where the
+    // mistake is. Scaling weights are numbers; a structural grant is not.
+    if (typeof sk.passive[key] !== 'number') continue;
     n += sk.passive[key] * rank;
   }
   return n;
@@ -609,6 +638,16 @@ export function detonateTraps(sim, p) {
 export function skillDamage(sim, e, amount, p, skill) {
   let amt = amount * bestDomainMult(p, skill.domain, e.domain) * ferocityMult(p);
   if (e.defDownT > 0) amt /= e.defDownMult;         // defense down = takes more
+  // THE AURA AMP, and the one line in this chain that asks WHO is hitting.
+  // Every other term here is a property of the attacker or of the target;
+  // this one is a property of the PAIR. Osteo Aura reads "+25% damage from
+  // you", so an enemy standing in a Necromancer's field takes more from that
+  // Necromancer and nothing extra from anybody else's shot.
+  //
+  // `p.idx` is the owner's index even when `p` is the minion facade, which is
+  // what makes a summoner's skeletons count as "you" — ruled, and the free
+  // reading, because the facade was built to erase that distinction.
+  if (e.ampT > 0 && e.ampBy === p.idx) amt *= 1 + e.ampPct;
   amt *= eliteBossMult(p, e);                       // §9.2 magnitude, item-granted
   // Crit multiplies LAST, on top of every other term, so "×2 on a crit" means
   // twice the hit the player would otherwise have landed.
@@ -824,6 +863,10 @@ export function tickSkillStatuses(sim, dt) {
     if (e.tauntT > 0) e.tauntT -= dt;
     if (e.weakDmgT > 0) e.weakDmgT -= dt;
     if (e.defDownT > 0) e.defDownT -= dt;
+    // The aura amp lapses here like the rest. Its field refreshes it every 400ms
+    // while the enemy is inside, so an enemy that walks out stops being
+    // amplified within a tick rather than carrying the bonus away with it.
+    if (e.ampT > 0) e.ampT -= dt;
     // The judgment mark expires on the same block every other rider-applied
     // status does. One line in an existing loop rather than a decay function of
     // its own, which is what keeps the Priest content-shaped from here on.
