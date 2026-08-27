@@ -10,7 +10,7 @@ flagged — see **Corrections** at the bottom.
 
 ---
 
-## The fifteen
+## The sixteen
 
 | primitive | what a player sees | clearest example |
 |---|---|---|
@@ -21,6 +21,7 @@ flagged — see **Corrections** at the bottom.
 | **trap** | Something you leave on the ground that sits there doing nothing until it is set off. | Caltrops — Assassin (`asn_killbox.js:79`) |
 | **hazard** | A patch of ground that hurts anything standing in it, then fades. | Blight — Necromancer (`necro_dark_matter.js:64`) |
 | **gravity_pull** | Enemies slide toward a point — once, or in repeated tugs. Nothing is drawn; the movement is the tell. | *(built, no skill user yet — Mage's Contraction and the Necromancer's Singularity are its first)* |
+| **channel** | A beam that stays on one enemy and keeps hurting it, until it dies, walks out, or your time runs out. | *(built, no skill user yet — the Necromancer's Death Channel is its first)* |
 | **heal** | Green numbers on you and any ally standing close enough. | Intercession — Priest (`priest_grace.js:70`) |
 | **shield** | A bubble that soaks a set amount of damage and expires. | Null Field — Wizard (`wizard_arcana.js:140`) |
 | **ward** | A bubble that soaks damage **and hits back** at whatever struck it. | Prism Ward — Wizard (`wizard_attunement.js:111`) |
@@ -117,7 +118,7 @@ demand of the three missing primitives, so the build order it justified stands.
 | missing | doc demand | note |
 |---|---|---|
 | ~~gravity pull~~ | ~~6 nodes, 3 classes~~ | **BUILT** — `gravity_pull`, the fifteenth primitive. |
-| **channel** | 4 nodes, 3 classes (necromancer 2, mage, priest) | `compose.js:259` says so outright: *"a channel would need its own primitive and does not exist yet."* `multiPulse` is **not** a channel — its pulses land on the same tick. |
+| ~~channel~~ | ~~4 nodes, 3 classes~~ | **BUILT** — `channel`, the sixteenth primitive. The figure was exact: `TYPE: channel` is a declared field, not a word in prose. |
 | **aura** | 3 nodes, 2 classes (necromancer 2, blacksmith) | A field that follows the caster. `hazard` is placed and stays put. |
 | **ally-targeted defense** | **34 nodes, 8 classes** (priest 13, bard 10, monk 3, witchdoctor 3, druid 2, blacksmith) | `shield` and `ward` write the caster only. `heal` is the one primitive that reaches allies. |
 
@@ -140,6 +141,7 @@ primitive.
 | `line` | `damage` `width` `length` | `scaleWith` |
 | `trap` | `damage` `radius` `duration` | — |
 | `hazard` | `damage` `radius` `duration` `tickMs` | `scaleWith` |
+| `channel` | `damage` `range` `tickMs` `duration` | `moveRate` (default 0.6) · `cdFromEnd` · `scaleWith` |
 | `gravity_pull` | `radius` `distance` | `duration` (absent = one pull, present = a field) · `centre` (`target` default, or `self`) · `range` |
 | `heal` | `amount` | `radius` `scaleWith` |
 | `shield` | `amount` `duration` | `scaleWith` |

@@ -73,7 +73,7 @@ function dist2(a, x, y) { const dx = a.x - x, dy = a.y - y; return dx * dx + dy 
 // Weapons were removed and `_fireWeapon` — the one caller that tested sight —
 // stopped running with them (js/config.js says so in as many words). Every
 // composed skill selects through here, so this is the single place the rule
-// can be stated once and hold for all fifteen primitives. §13 rule 75: the
+// can be stated once and hold for all sixteen primitives. §13 rule 75: the
 // module was imported and still a graveyard.
 function candidates(grid, x, y, range, los) {
   const out = [];

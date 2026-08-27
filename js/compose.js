@@ -256,7 +256,11 @@ export const PRIMITIVES = {
     }
     for (let i = 0; i < pulses; i++) {
       // pulses land on the same tick; multiPulse is a damage shape, not a
-      // channel — a channel would need its own primitive and does not exist yet
+      // channel. `channel` is now its own primitive, and the difference is the
+      // whole reason it had to be: these pulses share one frame, one target
+      // selection and one cooldown, and a channel spends real time between its
+      // ticks — time in which the caster moves, the target dies or walks out,
+      // and the rate changes.
       for (const e of grid.near(p.x, p.y, reach + p.radius)) {
         const dx = e.x - p.x, dy = e.y - p.y;
         if (dx * dx + dy * dy > (reach + e.radius) * (reach + e.radius)) continue;
@@ -481,6 +485,53 @@ export const PRIMITIVES = {
       return;
     }
     out.pulled += sim.gravityPull(x, y, step.radius, step.distance);
+  },
+
+  // CHANNEL — the SIXTEENTH primitive. A sustained beam locked on one enemy
+  // that ticks on an interval for up to a maximum duration. Four nodes across
+  // three classes declare `TYPE: channel` in the conversion docs: the Mage's
+  // Photon Beam, the Priest's Judgment Ray and the Necromancer's Death Channel
+  // and Dark Energy Beam.
+  //
+  // §5.7 condition 1, and the file said so itself before this existed: the
+  // `multiPulse` rider's pulses land on the SAME TICK, so it is a damage shape.
+  // Nothing else in the vocabulary spends time between its own hits. `hazard`
+  // has a cadence but no target — it damages a patch of floor and does not care
+  // who is standing in it, cannot follow anyone, and cannot end because the
+  // thing it was aimed at died. `plague` has a duration but no rate the caster
+  // can affect and no way to break.
+  //
+  // MOVEMENT COSTS RATE, NOT THE CHANNEL (roster ruling 5). Movement is the
+  // player's only input in RumbleJam, so a channel that breaks on it can never
+  // complete. `moveRate` defaults to the 0.6 every block asks for. It scales the
+  // CLOCK rather than the damage, because a partial tick is not a tick.
+  //
+  // THE COOLDOWN CAN RUN FROM THE END. `cdFromEnd` stamps the cooldown when the
+  // channel finishes instead of when it starts, which is the only reading under
+  // which a 1200ms cooldown on a 10000ms channel means anything. It is opt-in
+  // because only two of the four blocks ask for it. Either way the skill cannot
+  // re-fire while its own channel runs — otherwise "up to 10000ms" refreshes
+  // forever and is not a maximum.
+  channel(sim, p, skill, step, rank, grid, out) {
+    if (sim.channelling(p, skill.id)) return;          // already running; do not refresh
+    const t = selectTarget(skill.select, grid, p.x, p.y, step.range, sightFrom(sim, p.x, p.y));
+    if (!t) return;
+    sim.addChannel({
+      ownerIdx: p.idx, skillId: skill.id, target: t, skill, rank,
+      range: step.range,
+      damage: stepDamage(step, skill, rank, p),
+      tickMs: step.tickMs,
+      dur: rankedDuration(step.duration, skill, rank) / MS,
+      moveRate: step.moveRate ?? 0.6,
+      // THE COOLDOWN THE FIRE PATH JUST DECIDED, read rather than recomputed.
+      // `fireSkill` stamps `p.skillCd[id]` — rank reduction, the Savage's
+      // cascade exemption and all — one step before it calls into here, so this
+      // is the number itself and cannot drift from the one place that owns it.
+      cdOnEnd: step.cdFromEnd ? (p.skillCd[skill.id] || 0) : 0,
+      riders: step.riders || null,
+      color: p.color,
+    });
+    out.states++;
   },
 
   // Restores HP to the caster and nearby allies.
@@ -856,6 +907,12 @@ export const RIDERS_BY_PRIMITIVE = {
   trap: [],
   // `shift` takes no riders for the same reason `summon` takes none: riders
   // resolve on a target at the moment of impact, and a shift has no target.
+  // A channel tick IS an impact — one named enemy, one moment — so it carries
+  // the full impact set. It re-applies them on EVERY tick, which makes `stun`
+  // on a 400ms cadence a permanent stun: legal, and almost never what a block
+  // meant. `slow`, `weakenDamage`, `mark` and `impactDot` are the ones that
+  // read as intended under repetition.
+  channel: [...IMPACT_RIDERS],
   // A pull takes no riders for the reason `trap` and `shift` take none:
   // riders resolve on a target at the moment of impact and a pull has no
   // impact. Graviton Surge's stun rides its damage step, not its pull.

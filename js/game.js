@@ -144,6 +144,7 @@ export class Sim {
     MIN.initTokens(this);     // skill-era soul-token pool + its counters
     this.telegraphs = [];
     this.zones = [];
+    this.channels = [];
     this.vortexes = [];
     this.activeBeams = [];
     this.fx = this._emptyFx();
@@ -800,7 +801,7 @@ export class Sim {
     this.cleared = false;
     this.hatch = null; this.extract = null;
     this.afterSiege = node.kind === 'siege';
-    this.telegraphs.length = 0; this.zones.length = 0; this.vortexes.length = 0;
+    this.telegraphs.length = 0; this.zones.length = 0; this.channels.length = 0; this.vortexes.length = 0;
     this.activeBeams.length = 0;
     this.corals.length = 0; this.coralWalls.length = 0; this.singularities.length = 0;
     this.enemyPool.clear();
@@ -1127,6 +1128,7 @@ export class Sim {
     if (this.wave) this.wave.done = true;
     this.telegraphs.length = 0;       // nothing lands after the fight ends
     this.zones.length = 0;            // acid puddles, lava fields, zone damage
+    this.channels.length = 0;         // a beam cannot survive the room it was aimed in
     this.vortexes.length = 0;
     this.activeBeams.length = 0;
     this.hazards = [];                // spike strips and lava pockets go quiet
@@ -1250,7 +1252,7 @@ export class Sim {
     this.hatch = null; this.extract = null;
     this.enemyPool.clear(); this.projPool.clear();
     this.pickups.length = 0; this.decoys.length = 0;
-    this.telegraphs.length = 0; this.zones.length = 0; this.vortexes.length = 0;
+    this.telegraphs.length = 0; this.zones.length = 0; this.channels.length = 0; this.vortexes.length = 0;
     this.hazards = [];
     // boons expire with the fight, and so does the map-end spend step — the
     // moment has passed, and the ◆ badge is what carries unspent points forward
@@ -3219,7 +3221,71 @@ export class Sim {
     }
   }
 
+  // A CHANNEL IS A LOCK, NOT A ZONE. It has a lifetime and a cadence like a
+  // zone does, and everything else about it is different: it follows ONE named
+  // enemy rather than a patch of floor, it ends on that enemy's death or its
+  // escape rather than on a clock alone, and its rate is a function of what the
+  // CASTER is doing. That is why it holds its own list.
+  addChannel(c) { this.channels.push({ t: 0, acc: 0, ...c }); }
+
+  // Does this player already have this skill channelling? Used to keep a
+  // channel from being re-cast on top of itself, which would refresh the
+  // maximum duration forever and make "up to 10000ms" mean nothing.
+  channelling(p, skillId) {
+    for (const c of this.channels) if (c.ownerIdx === p.idx && c.skillId === skillId) return c;
+    return null;
+  }
+
+  _tickChannels(dt) {
+    for (let i = this.channels.length - 1; i >= 0; i--) {
+      const c = this.channels[i];
+      const p = this.players[c.ownerIdx];
+      // THE FOUR WAYS A CHANNEL ENDS, and movement is not one of them.
+      // Roster ruling 5: movement is the player's only input, so a channel that
+      // breaks on it can never complete. It costs RATE instead — `moveRate`,
+      // 60% in every block that asks — which is a penalty the player feels
+      // exactly when they are doing the other half of their job.
+      const dead = !p || p.gone || p.downed
+        || !c.target || !c.target.active
+        || dist2(p.x, p.y, c.target.x, c.target.y) > c.range * c.range
+        || c.t >= c.dur;
+      if (dead) {
+        // THE COOLDOWN FROM THE CHANNEL'S END. Stamped here rather than at the
+        // cast, for the skills that declare it: a 1.2s cooldown started at the
+        // cast is spent six seconds before a ten-second channel finishes, which
+        // makes the cooldown a number with no consequence. Held-not-restamped
+        // is the other half — see the `skillCd` write below.
+        if (p && c.cdOnEnd > 0) p.skillCd[c.skillId] = c.cdOnEnd;
+        this.channels.splice(i, 1);
+        continue;
+      }
+      c.t += dt;
+      // THE RATE, not the damage. "Ticks at 60% while moving" is a frequency:
+      // the clock the cadence is measured against runs slow, so a moving caster
+      // gets fewer full ticks rather than weaker ones. Reading it as a damage
+      // multiplier would pay out on a partial tick, which is not what a tick is.
+      c.acc += dt * (p.moving ? c.moveRate : 1);
+      const period = c.tickMs / 1000;
+      while (c.acc >= period) {
+        c.acc -= period;
+        this.skillDamage(c.target, c.damage, p, c.skill);
+        if (c.riders) SK.channelTickRiders(this, p, c.skill, c.riders, c.target, c.rank,
+          Math.atan2(c.target.y - p.y, c.target.x - p.x));
+        if (!c.target.active) break;      // it died on this tick; end next pass
+      }
+      // THE SKILL CANNOT RE-FIRE WHILE ITS OWN CHANNEL RUNS, and this is where
+      // that is enforced — one number write against the check the trigger loop
+      // already makes first, rather than a second lookup in a loop whose whole
+      // performance story is "a skill on cooldown costs one comparison".
+      if (p) p.skillCd[c.skillId] = Math.max(p.skillCd[c.skillId] || 0, c.dur - c.t + dt);
+      // The tell, pushed every frame because `fx` is rebuilt every frame: a
+      // beam that is only drawn on a damage tick strobes at the cadence.
+      this.fx.beams.push({ x1: p.x, y1: p.y, x2: c.target.x, y2: c.target.y, color: c.color });
+    }
+  }
+
   _tickAreas(dt) {
+    this._tickChannels(dt);
     for (let i = this.telegraphs.length - 1; i >= 0; i--) {
       const tg = this.telegraphs[i];
       tg.t += dt;

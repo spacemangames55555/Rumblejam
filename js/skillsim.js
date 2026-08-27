@@ -52,6 +52,20 @@ export function initSkillPlayer(sim, p) {
 }
 
 export function treesFor(p) { return TREES_BY_CLASS[p.charId] || []; }
+
+// A CHANNEL TICK IS AN IMPACT, so it carries the impact riders — a target and a
+// moment is the whole test, and a tick has both. Forwarded from here rather
+// than imported into game.js directly, because the arrow runs one way:
+// game.js -> skillsim.js -> compose.js, and game.js owns the facade
+// (`skillDamage` is the same shape one file over).
+//
+// Note for authors: a channel re-applies its riders on EVERY tick. A `stun`
+// on a 400ms cadence is a permanent stun, which is legal and is almost never
+// what the block meant. `slow`, `weakenDamage`, `mark` and `impactDot` are the
+// ones that read as intended under repetition.
+export function channelTickRiders(sim, p, skill, riders, e, rank, angle) {
+  applyImpactRiders(sim, p, skill, riders, e, rank, angle, { hits: 0, damage: 0, statuses: 0, states: 0, pulled: 0 });
+}
 export { slotsAtLevel };
 
 // ROOM START, §8.5 rows 5 and 7. Lives here rather than in minions.js because
