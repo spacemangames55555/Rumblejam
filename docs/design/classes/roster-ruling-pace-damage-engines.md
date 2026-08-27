@@ -56,6 +56,17 @@ Fixed bucket values. "Slow" means one thing roster-wide:
 
 **Rescaled once, against the corrected gap.** The first table (0.4 / 0.8 / 1.5 / 3 / 6) was sized against the 0.51/sec figure and assumed an ~8x jump. The real gap is 1.5–2.2x, and the first table overshot: the Necromancer measured **12.92/sec** under it against a 6–9 target, because four very-fast slots produce 6.7/sec between them before anything else is slotted.
 
+**KNOWN INSTRUMENT GAP — `sum(1/cd)` CANNOT SEE A CHANNEL'S REAL CYCLE.** The formula reads a skill's declared cooldown, and for a channel whose cooldown runs from the channel's END that is not the rate it fires at. The two are separated by the whole length of the channel:
+
+| skill | bucket | on paper | in play | gap |
+|---|---|---|---|---|
+| Death Channel | fast 1.2s | 1/1.2 = **0.833/sec** | 1/(10 + 1.2) = **0.089/sec** | −0.744 |
+| Dark Energy Beam | slow 4s | 1/4 = **0.250/sec** | 1/(10 + 4) = **0.071/sec** | −0.179 |
+
+Both slotted is **−0.92/sec** the instrument does not subtract. Every reading in this document that includes a `cdFromEnd` channel is therefore high by that much, and the Necromancer — which owns both, and which is the 9.17 ceiling case above — is the class where it bites hardest. **The direction is toward the band, not away from it.**
+
+**The band is not adjusted for this.** 6–9 is a target aimed at how often a build actually fires, and the right response to an instrument that misreads one skill shape is to know where it misreads rather than to move the thing being measured. Recorded so a future reading of the Necromancer against the band is taken with the gap in hand — and so that whether it lands inside, which depends on which eight are slotted, is measured rather than assumed.
+
 **Distribution rule, per tree of 10:** at least **3 nodes fast or better**, at most **1 very fast**, at most **2 in very slow**. Capstones are exempt from the distribution count.
 
 The speed half was originally "at least 4 nodes in medium or faster". That is a floor on composition and it does not reach the target: 4 medium plus 4 slow satisfies it and yields 3.0/sec. Worse, it says nothing about the top of the range, and the top is what actually moves the number — the Necromancer's four very-fast nodes produced 6.7/sec between them before anything else was slotted, while the Samurai owned no very-fast node at all and could not exceed 6.67/sec even with all eight slots fast.
