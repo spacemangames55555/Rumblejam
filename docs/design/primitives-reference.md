@@ -10,7 +10,7 @@ flagged — see **Corrections** at the bottom.
 
 ---
 
-## The fourteen
+## The fifteen
 
 | primitive | what a player sees | clearest example |
 |---|---|---|
@@ -20,6 +20,7 @@ flagged — see **Corrections** at the bottom.
 | **line** | A beam that appears instantly along a straight lane and hits everything in it. | Refracted Lance — Wizard (`wizard_attunement.js:88`) |
 | **trap** | Something you leave on the ground that sits there doing nothing until it is set off. | Caltrops — Assassin (`asn_killbox.js:79`) |
 | **hazard** | A patch of ground that hurts anything standing in it, then fades. | Blight — Necromancer (`necro_dark_matter.js:64`) |
+| **gravity_pull** | Enemies slide toward a point — once, or in repeated tugs. Nothing is drawn; the movement is the tell. | *(built, no skill user yet — Mage's Contraction and the Necromancer's Singularity are its first)* |
 | **heal** | Green numbers on you and any ally standing close enough. | Intercession — Priest (`priest_grace.js:70`) |
 | **shield** | A bubble that soaks a set amount of damage and expires. | Null Field — Wizard (`wizard_arcana.js:140`) |
 | **ward** | A bubble that soaks damage **and hits back** at whatever struck it. | Prism Ward — Wizard (`wizard_attunement.js:111`) |
@@ -102,9 +103,20 @@ Live impact riders: `stun` `root` `taunt` `knockback` `slow` `weakenDamage`
 A skill correctly marked **needs gravity pull** is more useful than one
 mislabelled `bolt`.
 
+**Correction — the gravity-pull figure in an earlier version of this sheet was
+wrong.** It read **11 nodes, 6 classes** and it counted the word *pull*, not the
+effect. Five of those eleven redirect **attention**, not position: the MAGNET
+aggro decoys on the Monk's Astral Projection, the Wizard's golem and two
+Necromancer summons, plus the Samurai's Whistling Arrow, which is a `taunt`. All
+five are already expressible — `taunt` is an impact rider and magnet radius is a
+summon parameter. The real positional-pull demand is **6 nodes, 3 classes**:
+Mage (Contraction, Graviton Surge, Singularity Collapse, Black Hole),
+Necromancer (Singularity), Sundian (Riptide). Still the highest cross-class
+demand of the three missing primitives, so the build order it justified stands.
+
 | missing | doc demand | note |
 |---|---|---|
-| **gravity pull** | **11 nodes, 6 classes** (mage 4, necromancer 3, monk, samurai, sundian, wizard) | Exists only as Mage *trait* machinery (`traits-toh.js:435`), reachable by no skill. |
+| ~~gravity pull~~ | ~~6 nodes, 3 classes~~ | **BUILT** — `gravity_pull`, the fifteenth primitive. |
 | **channel** | 4 nodes, 3 classes (necromancer 2, mage, priest) | `compose.js:259` says so outright: *"a channel would need its own primitive and does not exist yet."* `multiPulse` is **not** a channel — its pulses land on the same tick. |
 | **aura** | 3 nodes, 2 classes (necromancer 2, blacksmith) | A field that follows the caster. `hazard` is placed and stays put. |
 | **ally-targeted defense** | **34 nodes, 8 classes** (priest 13, bard 10, monk 3, witchdoctor 3, druid 2, blacksmith) | `shield` and `ward` write the caster only. `heal` is the one primitive that reaches allies. |
@@ -128,6 +140,7 @@ primitive.
 | `line` | `damage` `width` `length` | `scaleWith` |
 | `trap` | `damage` `radius` `duration` | — |
 | `hazard` | `damage` `radius` `duration` `tickMs` | `scaleWith` |
+| `gravity_pull` | `radius` `distance` | `duration` (absent = one pull, present = a field) · `centre` (`target` default, or `self`) · `range` |
 | `heal` | `amount` | `radius` `scaleWith` |
 | `shield` | `amount` `duration` | `scaleWith` |
 | `ward` | `amount` `duration` | `reflectPct` (21/25) `scaleWith` |

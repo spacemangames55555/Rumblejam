@@ -25,7 +25,7 @@
 // Everything here is host-authoritative; clients read the snapshot.
 
 import { CONFIG } from './config.js';
-import { clamp, dist2, angleTo } from './util.js';
+import { clamp, dist2 } from './util.js';
 
 const D2 = (ax, ay, bx, by) => dist2(ax, ay, bx, by);
 const has = (p, key) => p.char.trait.key === key;
@@ -426,16 +426,19 @@ function tickSingularities(sim, dt) {
   for (const g of sim.singularities) {
     g.t -= dt;
     const owner = sim.players[g.owner];
+    // VULNERABILITY REACHES BOSSES; THE DRAG DOES NOT. Two passes because they
+    // are two rules, and fusing them is how the drag ended up written out
+    // longhand here in the first place.
     for (const e of sim.enemyPool) {
       if (D2(e.x, e.y, g.x, g.y) > g.r * g.r) continue;
       e.vulnT = Math.max(e.vulnT || 0, g.vulnDur);
       e.vulnPct = g.vulnPct;
-      if (e.boss) continue;                      // bosses are not dragged
-      const a = angleTo(e.x, e.y, g.x, g.y);
-      e.x += Math.cos(a) * g.pullSpd * dt;
-      e.y += Math.sin(a) * g.pullSpd * dt;
-      sim.clampToRoom(e);
     }
+    // The drag is `sim.gravityPull` — the same mover the `gravity_pull`
+    // primitive uses, integrated over time by passing a distance per tick
+    // rather than a speed. This trait owned the only enemy-pull in the game
+    // and now owns none of it.
+    sim.gravityPull(g.x, g.y, g.r, g.pullSpd * dt);
     if (g.t <= 0 && owner) {
       const dmg = Math.max(1, Math.round(sim._attuned(owner, g.burst)));
       sim._areaDamageEnemies(g.x, g.y, g.r, dmg, owner);
