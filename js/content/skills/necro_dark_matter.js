@@ -15,6 +15,12 @@ export const TUNING = {
   // tier 2 — Blight
   blightDamage: 4, blightRadius: 120, blightCount: 2, blightDuration: 3000,
   blightTickMs: 400, blightCd: 4200, blightSlowMult: 0.7, blightSlowDur: 800,
+  // THE PULSE. `blightCd` was the cooldown of the cast this node no longer has,
+  // and it is now the gap between the field's own pulses — the rate the player
+  // used to be able to fire it is the rate it fires itself. `blightPulseDamage`
+  // is what ONE cast used to deliver: 4 per 400ms across a 3000ms patch, which
+  // is 30 to a body that stood in it for the whole thing.
+  blightPulseMs: 4200, blightPulseDamage: 30, blightRadiusPerRank: 12,
   // tier 3 — Dark Energy Rift
   riftDamage: 7, riftSpeed: 480, riftRadius: 200, riftCount: 3,
   riftTargets: 3,          // EXACT (source project): target plus two nearby
@@ -61,17 +67,43 @@ export const NECRO_DARK_MATTER = [
     ranks: R,
   },
   {
+    // BLIGHT IS AN AURA, and it was a hazard because there was no aura.
+    //
+    // The conversion doc declares it `TYPE: passive (aura)`, `SHAPE: ground area
+    // (circle on caster, always active)`, `TRIGGER: always-on (no trigger;
+    // occupies a slot)`. `hazard` could express a patch on the floor and
+    // nothing else, so a patch is what shipped.
+    //
+    // AND IT PULSES, because a continuous one cannot exist. Built as a field
+    // that damaged every 400ms it let a NEVER-MOVING Necromancer clear 20 of 25
+    // rooms, and at 1 dps it still broke 12 — time did the work, so no
+    // magnitude fixed it. The ruling is in §5.7 of the GDD and in the roster
+    // ruling file: an always-on damaging aura must pulse with gaps, because the
+    // gap is the thing a statue cannot convert into damage.
+    //
+    // THE GAP IS THE NODE'S OWN OLD COOLDOWN. 4200ms was how often the player
+    // could cast this; it is now how often the field fires itself. Measured
+    // across all 25 statue rooms it is also the best of the cadences tried at
+    // rewarding play: a moving player earns 1.74x what a stationary one does at
+    // 4200ms, against 1.14x at 3000ms and 0.79x at 6000ms — slower is not
+    // better, because a rare pulse pays whoever happens to be surrounded and a
+    // statue always is.
+    //
+    // 30 IS WHAT ONE CAST USED TO DELIVER: 4 damage per 400ms tick across a
+    // 3000ms patch. The throughput is preserved and the cast is gone.
+    //
+    // The rank buys RADIUS and only radius — `field`, the third PASSIVE_EFFECT
+    // class, exists so the rank-1 rule does not take the only growth it has.
     id: 'necro_blight', tree: 'necro_dark_matter', tier: 2, name: 'Blight',
-    flavor: 'A chilling aura settles on the ground, damaging and slowing what stands in it.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_blip',
-    select: 'densest_cluster',   // what it hits; the trigger above is only WHEN
-    trigger: { kind: 'PROXIMITY', radius: T.blightRadius, count: T.blightCount },
-    cooldown: T.blightCd,
-    compose: [{
-      kind: 'hazard', damage: T.blightDamage, radius: T.blightRadius,
-      duration: T.blightDuration, tickMs: T.blightTickMs,
-      riders: { slow: { mult: T.blightSlowMult, dur: T.blightSlowDur } },
-    }],
+    flavor: 'A chilling field of dark matter surrounds you, damaging and slowing what comes near.',
+    type: 'passive', domain: 'spiritual', prereq: 'necro_blip',
+    passive: {
+      aura: {
+        radius: T.blightRadius, radiusPerRank: T.blightRadiusPerRank,
+        damage: T.blightPulseDamage, pulseMs: T.blightPulseMs,
+        slow: { mult: T.blightSlowMult, dur: T.blightSlowDur },
+      },
+    },
     ranks: R,
   },
   {

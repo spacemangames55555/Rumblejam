@@ -474,6 +474,23 @@ Any active is data: an ordered list of steps from **seventeen** primitives plus 
 
 **Source-attributed amplification, which nothing else in the damage chain does.** `defDownMult` and `vulnPct` are source-agnostic: anything that hits a weakened enemy gets the bonus. Osteo Aura reads "+25% damage **from you**", so the enemy has to remember whose field it is standing in. The precedent is the Priest's judgment mark, which writes `e.markBy = p.idx` for exactly this reason. Every other term in `skillDamage` is a property of the attacker or of the target; this is the only one that is a property of the pair. **A summoner's minions count as "you"**, because the minion facade carries the owner's `idx` — measured, ruled, and the reading under which the node is worth +20.2% instead of +1.5%.
 
+**A CONTINUOUSLY DAMAGING AURA CANNOT EXIST IN RUMBLEJAM, and this is the ruling rather than a tuning note.** Blight was built as one, with the magnitude the game had been shipping since phase 1 — 4 damage per 400ms, radius 120. A **never-moving** Necromancer then cleared **20 of 25** statue rooms. At 1 damage per second with the slow removed it still broke **12 of 25**. No magnitude fixes it, because time is what does the work: a field that never stops removes the cost of not playing, which is exactly what the statue test exists to catch.
+
+**So an always-on damaging aura must pulse with gaps.** The gap converts uptime into hit-rate, and hit-rate has a ceiling a stationary player cannot raise. Measured across all 25 rooms, the cadence is the whole design and the magnitude is nearly free inside it:
+
+| cadence × per-pulse | statue | moving ÷ stationary |
+|---|---|---|
+| 400ms × 4 | **cleared 19** | — |
+| 1000ms × 10 | **cleared 18** | — |
+| 2000ms × 20 | **cleared 8** | — |
+| 3000ms × 30 | cleared 0 | 1.14 |
+| **4200ms × 30** | cleared 0 | **1.74** |
+| 6000ms × 60 | cleared 0 | 0.79 |
+
+**Slower is not safer.** The ratio peaks and then falls, because a rare pulse pays whoever happens to be surrounded when it fires and a statue always is. The bar is **clearing zero rooms**, not surviving: the configurations that "survived" every room were the ones doing no damage.
+
+**Non-damaging always-on auras are unaffected.** Osteo Aura's amplification and `allyAura`'s stat grants clear nothing on their own and are not subject to this. Blight's `slow` rider is also exonerated *by the cadence*: applied continuously, slow alone broke 14 of 25; pulsed at 4200ms it breaks none. It was never the slow — it was the continuity.
+
 **An aura takes only `slow`, for `hazard`'s reason.** Its pulse has no single target and no impact frame; `slow` is the one rider a field can hold and apply continuously.
 
 **`channel` — the sixteenth primitive, and the one the file asked for in writing.** `js/compose.js` carried the sentence *"a channel would need its own primitive and does not exist yet"* beside `multiPulse` since phase 1. Four nodes across three classes declare `TYPE: channel` — the Mage's Photon Beam, the Priest's Judgment Ray, and the Necromancer's Death Channel and Dark Energy Beam. All four are the same shape: a beam locked on one enemy, ticking on an interval up to a maximum duration.
