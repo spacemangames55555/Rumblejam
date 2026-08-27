@@ -148,6 +148,15 @@ export const PASSIVE_EFFECT = {
   chiScaleWeight: 'damage',       // Still Water: more per point of Chi held
   cascadeScaleWeight: 'damage',   // Red Memory: more per rank banked in the cascade
   formScaleWeight: 'damage',      // Facet: more while a crystal form holds
+  // A FIELD IS THE THIRD THING A RANK MAY BUY, and the rank-1 rule needed a
+  // third class to say so. `damage` and `duration` were the whole list because
+  // every passive before this one bought a multiplier; an always-on aura buys
+  // RADIUS — "+12px per rank (not damage, not magnitude)" in all three blocks
+  // that ask for one. That is a real investment and the rule would otherwise
+  // force it to `maxRank: 1`, which would delete the only growth these nodes
+  // have. The grant itself is registered in RANK_GRANTS below, two-way locked
+  // like `summonSlots`, so a second skill cannot pick it up by copy-paste.
+  aura: 'field',                  // Blight, Osteo Aura, Dominance: radius per rank
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the
@@ -189,7 +198,7 @@ export function readsTokens(charId) { return TOKEN_READERS.has(charId); }
 
 // A skill is "damaging" if any step deals damage. Used by the tier-1 assertion
 // and by the anti-softlock floor, so both read the same definition.
-const DAMAGING_KINDS = new Set(['strike', 'bolt', 'cone', 'line', 'hazard', 'drain', 'plague']);
+const DAMAGING_KINDS = new Set(['strike', 'bolt', 'cone', 'line', 'hazard', 'aura', 'drain', 'plague']);
 export function isDamaging(skill) {
   return skill.type === 'active' && (skill.compose || []).some(s => DAMAGING_KINDS.has(s.kind) && s.damage > 0);
 }
@@ -502,7 +511,7 @@ function assertTrees() {
 
       // `self` MEANS THE SKILL PICKS NOTHING, AND IT IS CHECKED BOTH WAYS.
       //
-      // §5.3: `select` is what a skill hits. Six of the sixteen primitives
+      // §5.3: `select` is what a skill hits. Six of the seventeen primitives
       // never consult it — shield, ward, form, shift, heal and summon write the
       // caster, the party or the field and have no target to choose. Those
       // skills used to declare `nearest` and ignore it, which read as a real
@@ -616,14 +625,14 @@ function assertTrees() {
         if (!keys.length) problems.push(`${s.id}: passive with no passive block — it grants nothing at any rank`);
         const unknown = keys.filter(k => !(k in PASSIVE_EFFECT));
         if (unknown.length) {
-          problems.push(`${s.id}: passive key(s) ${unknown.join(', ')} are not in PASSIVE_EFFECT — classify them as 'damage', 'duration' or 'other' so the rank-1 rule can be applied rather than guessed`);
+          problems.push(`${s.id}: passive key(s) ${unknown.join(', ')} are not in PASSIVE_EFFECT — classify them as 'damage', 'duration', 'field' or 'other' so the rank-1 rule can be applied rather than guessed`);
         }
-        const buysScaling = keys.some(k => PASSIVE_EFFECT[k] === 'damage' || PASSIVE_EFFECT[k] === 'duration');
+        const buysScaling = keys.some(k => ['damage', 'duration', 'field'].includes(PASSIVE_EFFECT[k]));
         if (!buysScaling && s.maxRank !== 1) {
-          problems.push(`${s.id}: passive grants only ${keys.map(k => `${k} (${PASSIVE_EFFECT[k] || '?'})`).join(', ')} — neither damage nor duration, so a second point buys nothing. Declare maxRank: 1; it is an unlock, not an investment`);
+          problems.push(`${s.id}: passive grants only ${keys.map(k => `${k} (${PASSIVE_EFFECT[k] || '?'})`).join(', ')} — none of damage, duration or field, so a second point buys nothing. Declare maxRank: 1; it is an unlock, not an investment`);
         }
         if (buysScaling && s.maxRank === 1) {
-          problems.push(`${s.id}: passive grants damage/duration scaling but is capped at maxRank 1 — either it is an investment or it is not`);
+          problems.push(`${s.id}: passive grants damage/duration/field scaling but is capped at maxRank 1 — either it is an investment or it is not`);
         }
       }
       if (s.maxRank !== undefined && !(s.maxRank >= 1 && Number.isInteger(s.maxRank))) {

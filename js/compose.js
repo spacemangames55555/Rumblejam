@@ -487,6 +487,41 @@ export const PRIMITIVES = {
     out.pulled += sim.gravityPull(x, y, step.radius, step.distance);
   },
 
+  // AURA — the SEVENTEENTH primitive. A field bound to the caster's body rather
+  // than to a patch of floor, which is the entire difference between this and
+  // `hazard`: a hazard is placed and the floor does not move.
+  //
+  // §5.7 condition 1 is answered by EXPOSURE, not construction, and this is the
+  // first primitive in the set for which that is true. `contactAura`
+  // (js/game.js:1873) has always been a caster-following damage pulse on a
+  // 0.4s cadence, `allyAura` (js/game.js:604, :4941) a caster-following stat
+  // grant with a render publish, and telegraphs have carried `follow` since
+  // phase 1. All three are item- or trait-driven and reachable by no skill.
+  // What was missing was a door, not a mechanism.
+  //
+  // ONE LIFETIME FIELD SEPARATES THE THREE SHAPES THE DOCS ASK FOR, and nothing
+  // else does. `Infinity` is always-on (Osteo Aura, Blight, Dominance); a form's
+  // length is a form-bounded aura (Elemental Storm, Miasma Armor, Celestial
+  // Calcite); a plain duration is a timed mobile field (Prayer Wheel, whose own
+  // note offers itself as the conversion model). Seven nodes across five
+  // classes, one record.
+  //
+  // THIS STEP IS THE CAST DOOR. The always-on three arrive through the other
+  // one — `startRoomMinions`, from a passive the player owns — because none of
+  // the eleven triggers is "always" and a passive is already the shape of a
+  // node with no trigger that is simply true. Both doors call `sim.addAura`.
+  aura(sim, p, skill, step, rank, grid, out) {
+    if (sim.auraFor(p, skill.id)) return;            // one field per node
+    sim.addAura(p, {
+      key: skill.id, domain: skill.domain, radius: step.radius,
+      dps: step.damage ? stepDamage(step, skill, rank, p) / (step.tickMs / MS) : 0,
+      tickMs: step.tickMs, ampPct: step.ampPct || 0,
+      slow: (step.riders && step.riders.slow) || null,
+      dur: rankedDuration(step.duration, skill, rank) / MS,
+    });
+    out.states++;
+  },
+
   // CHANNEL — the SIXTEENTH primitive. A sustained beam locked on one enemy
   // that ticks on an interval for up to a maximum duration. Four nodes across
   // three classes declare `TYPE: channel` in the conversion docs: the Mage's
@@ -912,6 +947,10 @@ export const RIDERS_BY_PRIMITIVE = {
   // on a 400ms cadence a permanent stun: legal, and almost never what a block
   // meant. `slow`, `weakenDamage`, `mark` and `impactDot` are the ones that
   // read as intended under repetition.
+  // An aura's pulse has no single target and no impact frame — it is a zone
+  // that follows a body. Same reasoning as `hazard`, and the same answer:
+  // `slow` is the one rider a field can hold and apply continuously.
+  aura: ['slow'],
   channel: [...IMPACT_RIDERS],
   // A pull takes no riders for the reason `trap` and `shift` take none:
   // riders resolve on a target at the moment of impact and a pull has no

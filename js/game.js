@@ -3221,6 +3221,30 @@ export class Sim {
     }
   }
 
+  // THE ONE PLACE AN AURA IS REGISTERED, whether it arrived from a cast or from
+  // a passive the player simply owns. `dur` is what separates the three shapes
+  // the conversion docs ask for and nothing else does: `Infinity` is always-on
+  // (Osteo Aura, Blight, Dominance), a form's length is a form-bounded aura
+  // (Elemental Storm, Miasma Armor, Celestial Calcite), and a plain duration is
+  // a timed mobile field (Prayer Wheel). One mechanism, three lifetimes.
+  addAura(p, { radius, dps = 0, dur = Infinity, tickMs = 400, ampPct = 0, slow = null, key, domain }) {
+    this.zones.push({
+      t: 0, acc: 0, x: p.x, y: p.y, r: radius,
+      dps,
+      dur, hurts: 'enemies', color: p.color,
+      skillDomain: domain, ownerIdx: p.idx, owner: p.idx,
+      follow: p.idx, auraKey: key, ampPct,
+      slowMult: slow ? slow.mult : 0, slowDur: slow ? slow.dur / 1000 : 0,
+    });
+  }
+
+  // Is this player already carrying this aura? Always-on auras are registered
+  // once per room rather than per frame, and this is what makes that idempotent.
+  auraFor(p, key) {
+    for (const z of this.zones) if (z.follow === p.idx && z.auraKey === key) return z;
+    return null;
+  }
+
   // A CHANNEL IS A LOCK, NOT A ZONE. It has a lifetime and a cadence like a
   // zone does, and everything else about it is different: it follows ONE named
   // enemy rather than a patch of floor, it ends on that enemy's death or its
@@ -3319,6 +3343,16 @@ export class Sim {
     }
     for (let i = this.zones.length - 1; i >= 0; i--) {
       const z = this.zones[i];
+      // A ZONE THAT FOLLOWS ITS CASTER IS AN AURA, and that is the whole
+      // difference. `hazard` puts a patch on the floor and the floor does not
+      // move; an aura is the same field with its centre bound to a body. The
+      // pattern is the telegraph `follow` one screen up, applied to the list
+      // that already owns lifetimes, cadences and room resets.
+      if (z.follow !== undefined) {         // player 0 is index 0; truthiness would strand it
+        const f = this.players[z.follow];
+        if (!f || f.gone || f.downed) { this.zones.splice(i, 1); continue; }
+        z.x = f.x; z.y = f.y;
+      }
       z.t += dt; z.acc += dt;
       if (z.acc >= 0.4) {
         const mul = z.acc; z.acc = 0;
@@ -3341,6 +3375,27 @@ export class Sim {
           // 112px on any machine. Pulse-locked, deliberately: `mul` scaling
           // would make "up to 14px" mean 14.7 on a long frame.
           if (z.pull) this.gravityPull(z.x, z.y, z.r, z.pull);
+          // SOURCE-ATTRIBUTED AMPLIFICATION. `vulnPct` and `defDownMult` are
+          // both source-agnostic — anything that hits a vulnerable enemy gets
+          // the bonus. Osteo Aura says "+25% damage FROM YOU", so the enemy has
+          // to remember whose field it is standing in. The precedent is the
+          // Priest's judgment mark, which writes `e.markBy = p.idx` for exactly
+          // this reason: state on the enemy that names its owner.
+          //
+          // Refreshed a little longer than the cadence, so an enemy inside the
+          // field is continuously amplified rather than flickering between
+          // pulses. Walk out and it lapses within one tick.
+          if (z.ampPct) {
+            const seen = new Set();
+            this.grid.query(z.x, z.y, z.r + 40, e => {
+              if (!e.active || seen.has(e.id)) return;
+              seen.add(e.id);
+              if (dist2(z.x, z.y, e.x, e.y) > z.r * z.r) return;
+              e.ampT = Math.max(e.ampT || 0, 0.5);
+              e.ampPct = z.ampPct;
+              e.ampBy = z.ownerIdx;
+            });
+          }
           if (z.slowMult && z.slowDur) {
             const src = z.ownerIdx !== undefined ? this.players[z.ownerIdx] : owner;
             const seen = new Set();
