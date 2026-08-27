@@ -85,7 +85,8 @@ compete against each other for four of the class's slots.
 **Channels (ruling 5).** Already compliant — port ruling 4 wrote the 60%
 moving tick before the roster ruling existed. One clarification added: for
 Death Channel and Dark Energy Beam the cooldown now runs from the channel's
-END, since the slow bucket's 3s otherwise sits under a 10s channel.
+END, since either skill's own cooldown — Death Channel's fast 1.2s, Dark
+Energy Beam's slow 4s — otherwise sits under a 10s channel.
 
 **Engine cost (ruling 3).** Not applicable. Essence is a bank that builds, not
 one of the two depleting engines.
@@ -118,7 +119,7 @@ this was fixed by rewording ruling 2; the pace half has no equivalent reading.
 **STILL HELD 3 — Grasp of Death is a capstone the capstone bucket destroys.**
 Marrow's tier-10 and the class's only self-heal: 40 damage on a 60% drain,
 currently 9s. The capstone bucket's 20–30s removes the Necromancer's sustain;
-the slow bucket's 3s makes a 24-point drain-heal available twenty times a
+the slow bucket's 4s makes a 24-point drain-heal available fifteen times a
 minute. Held at 9s, in no bucket, deliberately.
 
 ---
@@ -936,8 +937,8 @@ RIDERS:               does NOT break on movement (port ruling 4, and roster
                       ruling 5); ticks at 60% rate while the caster is moving;
                       breaks on target death or leaving 360px. The cooldown
                       runs from the moment the channel ENDS, not from the cast
-                      — the slow bucket's 3s sits under a 10s channel, and any
-                      other reading makes the cooldown meaningless
+                      — its own fast 1.2s sits under a 10s channel, and
+                      any other reading makes the cooldown meaningless
 DOT:                  14 per 500ms for up to 10000ms
 AFFECTS:              enemies
 --- automation ---
@@ -954,7 +955,7 @@ COST:                 it locks one target for up to ten seconds while the
                       swarm is a swarm. Enormous single-target throughput,
                       zero answer to being surrounded, and the 60% moving
                       penalty means it is worst exactly when the player is
-                      doing their job. At a 3s cooldown measured from the
+                      doing their job. At a 1.2s cooldown measured from the
                       channel's end, the gap between channels is now shorter
                       than the channel itself
 VISUAL:               a thin unlit line between his hand and the target —
