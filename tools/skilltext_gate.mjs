@@ -110,6 +110,13 @@ console.log(`SKILL TEXT — ${ALL.length} skills, ${ACTIVES.length} active, ${PA
 {
   const flat = [];
   for (const s of ACTIVES) {
+    // A SKILL CAPPED AT ONE RANK CANNOT BE AT RANK 10, so comparing its two
+    // renders compares a state the game will not produce. `maxRank: 1` is the
+    // codebase's own word for "an unlock, not an investment" — the passive rule
+    // has said so since phase 1 — and Hex of Entropy is the first ACTIVE to
+    // need it: its document ranks a radius and a zone's slow duration, and
+    // neither is a dial `ranks` has. Skipped rather than exempted by id.
+    if (s.maxRank === 1) continue;
     const a = mechanics(s, 1).fields.find(f => f.key === 'damage' || f.key === 'amount');
     const b = mechanics(s, 10).fields.find(f => f.key === 'damage' || f.key === 'amount');
     if (a && b && a.now === b.now) flat.push(s.id);

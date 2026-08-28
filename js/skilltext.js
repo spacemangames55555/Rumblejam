@@ -58,6 +58,7 @@ export const SHAPES = {
   LINE: 'line',                      // 20 skills: a rectangle, not a widening cone
   GROUND: 'ground area',             // 21 skills: trap/hazard, persists where it lands
   CONTAGION: 'contagion',            // 8 skills: spreads target to target on its own
+  BEAM: 'beam',                      // `channel`: one locked target, held over time
   NONE: null,                        // heal/shield/ward/summon/shift/form: no enemy geometry
 };
 export const SHAPE_ADDED = [SHAPES.LINE, SHAPES.GROUND, SHAPES.CONTAGION];
@@ -87,6 +88,12 @@ export function shapeOfStep(step) {
     case 'line': return SHAPES.LINE;
     case 'trap': case 'hazard': return SHAPES.GROUND;
     case 'plague': return SHAPES.CONTAGION;
+    // A CHANNEL IS A BEAM AND NOT A SINGLE TARGET, and the difference is the
+    // one the player has to see: the same enemy, held, for as long as it lives
+    // and stays in range. `gravity_pull` and `aura` have no enemy geometry of
+    // their own — a pull moves bodies and an aura is a field that follows —
+    // so they fall through to NONE with the other caster-writing steps.
+    case 'channel': return SHAPES.BEAM;
     default: return SHAPES.NONE;     // heal, shield, ward, summon, shift, form
   }
 }

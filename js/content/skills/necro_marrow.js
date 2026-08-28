@@ -23,6 +23,8 @@
 //   and it goes through the same hook as Footing — see engineScale() in
 //   js/compose.js. The value is published on p.engines.armor by skillsim.
 
+import { docTrigger, rankPer } from './_conversion.js';
+
 export const TUNING = {
   // tier_code 0 — Bone Dart
   dartDamage: 26, dartSpeed: 500, dartRange: 460, dartCd: 600, dartPierce: 1,
@@ -53,12 +55,8 @@ export const TUNING = {
 
 const T = TUNING;
 const R = { damage: T.rankDamage, duration: T.rankDuration };
-// RANK RATES THE DOCUMENT STATES AS FLAT ADDITIONS. `ranks` is a FRACTION of the
-// base per rank, and every RANK ADDS line in the document is written as "+4
-// damage". The conversion is arithmetic the document does not do: +4 on a base
-// of 26 is 0.154. Derived per node rather than shared, because a flat increment
-// against a different base is a different fraction.
-const per = (add, base) => ({ damage: +(add / base).toFixed(4), duration: T.rankDuration });
+// Rank rates, the document's flat additions turned into fractions of the base
+// — `rankPer` in ./_conversion.js, so the arithmetic happens in one place.
 
 export const NECRO_MARROW = [
   {
@@ -66,7 +64,7 @@ export const NECRO_MARROW = [
     flavor: 'A splinter of your own frame, thrown hard.',
     type: 'active', domain: 'physical', prereq: null,
     select: 'nearest',   // "single target", and the trigger names the nearest
-    trigger: { kind: 'NEAREST', range: T.dartRange },
+    trigger: docTrigger('NEAREST_IN_RANGE', { range: T.dartRange }),
     cooldown: T.dartCd,
     // PIERCE FROM RANK 1, not from rank 6. The document says "pierces 1
     // additional enemy at rank 6" — a rank that turns a rider ON, which is the
@@ -74,20 +72,20 @@ export const NECRO_MARROW = [
     // rank model scales values and never changes what a step is made of.
     compose: [{ kind: 'bolt', damage: T.dartDamage, speed: T.dartSpeed, range: T.dartRange,
       riders: { pierce: T.dartPierce } }],
-    ranks: per(4, T.dartDamage),
+    ranks: rankPer(4, T.dartDamage),
   },
   {
     id: 'necro_spiked_punch', tree: 'necro_marrow', tier: 2, name: 'Spiked Punch',
     flavor: 'Close enough to be hit, which is where this tree wants you.',
     type: 'active', domain: 'physical', prereq: 'necro_bone_dart',
     select: 'densest_cluster',   // "multi-target (uncapped circle r72)"
-    trigger: { kind: 'PROXIMITY', radius: T.punchReach, count: 1 },
+    trigger: docTrigger('ENEMY_BREACHES_RING', { radius: T.punchReach }),
     cooldown: T.punchCd,
     // A CIRCLE, WRITTEN AS A FULL-ARC STRIKE. The document says "uncapped circle
     // r72"; `strike` with a 2pi arc is that circle, and it is the only primitive
     // that sweeps around the caster rather than away from him.
     compose: [{ kind: 'strike', damage: T.punchDamage, arc: T.punchArc, reach: T.punchReach, riders: {} }],
-    ranks: per(5, T.punchDamage),
+    ranks: rankPer(5, T.punchDamage),
   },
   {
     id: 'necro_calcify', tree: 'necro_marrow', tier: 3, name: 'Calcify',
@@ -109,24 +107,24 @@ export const NECRO_MARROW = [
     flavor: 'Everything within arm\'s reach goes somewhere else.',
     type: 'active', domain: 'physical', prereq: 'necro_calcify',
     select: 'densest_cluster',   // "uncapped in area — breadth is the point"
-    trigger: { kind: 'PROXIMITY', radius: T.novaReach, count: T.novaCount },
+    trigger: docTrigger('CROWD_THRESHOLD', { radius: T.novaReach, count: T.novaCount }),
     cooldown: T.novaCd,
     // "circle r165 on caster" — the same full-arc strike as Spiked Punch, and
     // the reason `nova` did not need to be an eighteenth primitive.
     compose: [{ kind: 'strike', damage: T.novaDamage, arc: T.novaArc, reach: T.novaReach,
       riders: { knockback: T.novaKnock, stun: T.novaStun } }],
-    ranks: per(4, T.novaDamage),
+    ranks: rankPer(4, T.novaDamage),
   },
   {
     id: 'necro_stake', tree: 'necro_marrow', tier: 5, name: 'Stake',
     flavor: 'Pins a wounded thing in place for a long, long moment.',
     type: 'active', domain: 'physical', prereq: 'necro_bone_nova',
     select: 'densest_cluster',   // "multi-target (uncapped circle r84)"
-    trigger: { kind: 'PROXIMITY', radius: T.stakeReach, count: 1 },
+    trigger: docTrigger('ENEMY_BREACHES_RING', { radius: T.stakeReach }),
     cooldown: T.stakeCd,
     compose: [{ kind: 'strike', damage: T.stakeDamage, arc: T.stakeArc, reach: T.stakeReach,
       riders: { root: T.stakeRoot } }],
-    ranks: per(2, T.stakeDamage),
+    ranks: rankPer(2, T.stakeDamage),
   },
   {
     id: 'necro_quill', tree: 'necro_marrow', tier: 6, name: 'Quill',
@@ -146,7 +144,7 @@ export const NECRO_MARROW = [
     // the only one and it scales with Defense — so it stays the shipped `ward`,
     // which reflects a flat fraction and fires on the trigger the document
     // names. See the report.
-    trigger: { kind: 'ON_HIT_TAKEN' },
+    trigger: docTrigger('ON_DAMAGE_TAKEN'),
     cooldown: T.spurCd,
     compose: [{ kind: 'ward', amount: T.spurAmount, duration: T.spurDuration, reflectPct: T.spurReflect }],
     ranks: R,
@@ -156,14 +154,14 @@ export const NECRO_MARROW = [
     flavor: 'You become the thing that goes through the room.',
     type: 'active', domain: 'physical', prereq: 'necro_bone_spur',
     select: 'densest_cluster',   // the direction is resolved from the crowd
-    trigger: { kind: 'PROXIMITY', radius: T.ballRadius, count: T.ballCount },
+    trigger: docTrigger('ENEMY_BREACHES_RING', { radius: T.ballRadius, count: T.ballCount }),
     cooldown: T.ballCd,
     // `carry` IS THE DISPLACEMENT, ruled as a rider rather than a dash
     // primitive: `line` already picks the direction, clips on walls and hits
     // every body in the lane once.
     compose: [{ kind: 'line', damage: T.ballDamage, width: T.ballWidth, length: T.ballLength,
       riders: { stun: T.ballStun, carry: T.ballCarry } }],
-    ranks: per(4, T.ballDamage),
+    ranks: rankPer(4, T.ballDamage),
   },
   {
     id: 'necro_grasp_of_death', tree: 'necro_marrow', tier: 9, name: 'Grasp of Death',
@@ -175,17 +173,17 @@ export const NECRO_MARROW = [
     // fallback, and a skill has one trigger. The threshold is kept, because it
     // is the half that makes this the class's emergency; the fallback survives
     // as the SELECTOR, which is where "lowest HP enemy" belongs anyway.
-    trigger: { kind: 'SELF_THRESHOLD', pct: T.graspPct },
+    trigger: docTrigger('SELF_HP_BELOW_X', { pct: T.graspPct }),
     cooldown: T.graspCd,
     compose: [{ kind: 'drain', damage: T.graspDamage, range: T.graspRange, healPct: T.graspHealPct }],
-    ranks: per(6, T.graspDamage),
+    ranks: rankPer(6, T.graspDamage),
   },
   {
     id: 'necro_marrownaut', tree: 'necro_marrow', tier: 10, name: 'Marrownaut',
     flavor: 'The frame closes over you. Whatever is left outside can try.',
     type: 'active', domain: 'spiritual', prereq: 'necro_grasp_of_death',
     select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: { kind: 'SELF_THRESHOLD', pct: T.marrowPct },
+    trigger: docTrigger('SELF_HP_BELOW_X', { pct: T.marrowPct }),
     cooldown: T.marrowCd,
     // A FORM, which is what the document's `TYPE: transformation` is. It shipped
     // as shield+ward, which is a buff rather than a transformation and could not
