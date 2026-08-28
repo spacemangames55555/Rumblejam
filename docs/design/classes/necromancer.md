@@ -441,7 +441,16 @@ FLAVOR:               A stake is not a weapon. It is a statement about where
 > This is invention, not derivation. Cut it and the skill should probably
 > be cut too.
 
-SKILL NAME:           Osteo Aura
+> **TABLED — not built, and not deleted.** Marrow holds ten nodes and the built
+> tree is full, so Osteo Aura is set aside rather than displacing anything. Its
+> slot in the plan on line 16 — "Osteo Aura and Grasp of Death replace Quill and
+> Banshee's Wail" — resolves first-for-first, so **`necro_quill` keeps tier 6**
+> and Grasp of Death replaces Banshee's Wail as planned. The mechanism Osteo
+> needs is built and gated (`aura`, the seventeenth primitive, with
+> source-attributed amplification); only the slot is missing. Bring it back by
+> deciding which node it displaces.
+
+SKILL NAME:           Osteo Aura   [TABLED — see the note above]
 CLASS / TREE / TIER:  necromancer / Marrow / tier_code 6
 TYPE:                 passive (aura)
 AXIS POSITION:        7 (of 10)
@@ -1298,14 +1307,22 @@ SHAPE:                ground area (circle on caster, always active)
 RANGE:                range short (180px — verify against MainScene)
 TARGETS:              uncapped in radius
 --- output ---
-DAMAGE TIER:          low (continuous)
-PACE:                 n/a (continuous)
+DAMAGE TIER:          low (30 per pulse)
+PACE:                 n/a (continuous) — but the FIELD pulses every 4200ms
 DOMAIN:               spiritual
 --- effects ---
-RIDERS:               scene-keyed [declared, not derived] — "a chilling field
-                      of dark matter surrounds you: it damages and slows
-                      nearby enemies while unlocked"
-DOT:                  yes — continuous field damage, magnitude in MainScene
+RIDERS:               a chilling field of dark matter surrounds you, r120,
+                      pulsing every 4200ms for 30 damage and slowing what it
+                      catches to x0.7 for 800ms. The gap is the mechanic, not
+                      a compromise: built as a continuous field this let a
+                      never-moving Necromancer clear 20 of 25 statue rooms, and
+                      at 1 dps it still broke 12 — no magnitude fixes it,
+                      because time does the work. See ruling 7
+DOT:                  30 per 4200ms pulse — the magnitude was never in
+                      MainScene; the built game has carried it since phase 1
+                      (js/content/skills/necro_dark_matter.js). 4200ms is this
+                      node's own former cooldown: the rate the player could
+                      cast it is now the rate it fires itself
 AFFECTS:              enemies
 --- automation ---
 TRIGGER:              always-on (no trigger; occupies a slot)

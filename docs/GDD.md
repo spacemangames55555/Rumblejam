@@ -520,7 +520,7 @@ Gated before any tree was authored against it, per the sequence every prior writ
 **`select` and the `self` selector.** Six of the fourteen primitives — `shield`, `ward`, `form`, `shift`, `heal`, `summon` — never consult `select`: they write the caster, the party or the field and have no target to choose. Those skills declare **`select: 'self'`**. The rule is asserted in both directions from a table DERIVED from the primitive sources (`PRIMITIVE_SELECTS`), so a skill that picks nothing must say so, and a skill that picks something may not claim otherwise.
 
 **Impact riders** (13, land wherever damage lands): `stun` · `taunt` · `root` · `knockback` · `slow` · `weakenDamage` · `weakenDefense` · `healPerHit` · `mend` · `mark` · `doll` · `drench` · `sluice`
-**Shape riders** (2, shape a swing): `windUp` · `multiPulse`
+**Shape riders** (3, shape a swing): `windUp` · `multiPulse` · `carry`
 **Projectile riders** (4): `pierce` · `splash` · `impactDot` · `defenseDown`
 
 **`arc` is a step PARAMETER, not a rider**, and it was listed here as one for several drafts. It is a required field on `strike` and `cone` — the width of the swing — read directly off the step by the primitive. Riders are optional keys inside a step's `riders` object and are enumerated in `IMPACT_RIDERS` / `SHAPE_RIDERS` / `BOLT_RIDERS`; `arc` is in none of them. The distinction matters because `rider_gate` iterates those three lists, so anything called a rider here that is not in them is a capability nobody checks.

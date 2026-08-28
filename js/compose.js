@@ -379,6 +379,22 @@ export const PRIMITIVES = {
       if (sim.walls.length) sim._areaDamageWalls(p.x + ca * len, p.y + sa * len, half + 12, dmg, p);
     }
     sim.fx.beams.push({ x1: p.x, y1: p.y, x2: p.x + ca * len, y2: p.y + sa * len, color: p.color, w: step.width });
+    // CASTER DISPLACEMENT — Wrecking Ball's "the caster is displaced 320px",
+    // and a RIDER rather than a dash primitive. `line` already does everything
+    // else the skill needs: it picks the direction, clips on walls, hits every
+    // body in the lane once and carries the knockdown. What was missing was
+    // that the caster ends up at the far end of it, which is one property of
+    // this step and not a new step.
+    //
+    // It travels the CLIPPED length, so a beam that stopped on a wall does not
+    // put the player inside it, and it ends at `clampToRoom` like every other
+    // mover in the game.
+    if (r.carry) {
+      const d = Math.min(len, r.carry === true ? len : r.carry);
+      p.x += ca * d; p.y += sa * d;
+      sim.clampToRoom(p);
+      out.states++;
+    }
   },
 
   // AN INERT PLACED OBJECT. The THIRTEENTH primitive (§5.7), and the two
@@ -920,7 +936,11 @@ export function stepPicksTarget(kind) { return PRIMITIVE_SELECTS[kind] === true;
 // hook in `_killEnemy` read `killer.hookAgg`, the ITEM aggregate.
 export const IMPACT_RIDERS = ['stun', 'taunt', 'root', 'knockback', 'slow', 'weakenDamage', 'weakenDefense', 'healPerHit', 'mend', 'mark', 'doll', 'drench', 'sluice'];
 // Riders that shape the swing itself rather than the target.
-export const SHAPE_RIDERS = ['windUp', 'multiPulse'];
+// `carry` moves the CASTER along the step's own axis. It is shape rather than
+// impact for the reason `windUp` is: it writes no enemy state and belongs to
+// the swing. Ruled additively — a dash primitive for one node was the
+// alternative and `line` already owns the direction, the clip and the lane.
+export const SHAPE_RIDERS = ['windUp', 'multiPulse', 'carry'];
 // Riders that need a projectile: a flight to pierce, an impact point to splash.
 export const BOLT_RIDERS = ['pierce', 'splash', 'impactDot', 'defenseDown'];
 

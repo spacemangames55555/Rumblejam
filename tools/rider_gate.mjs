@@ -293,6 +293,12 @@ const OBSERVERS = {
   // applied to an enemy: multiPulse repeats the hit loop, windUp defers the step
   // by a timer. Both are measured as damage against the same skill with the
   // rider stripped, which is the only observable they have.
+  // CARRY IS THE ONLY RIDER WHOSE SUBJECT IS THE CASTER'S OWN POSITION. Every
+  // displacement rider before it moved an ENEMY, so `displacement` reads the
+  // enemy ring; this one is read off the player, through the same `player` hook
+  // `healPerHit` and `mend` use. Measured against a stationary control rather
+  // than an absolute, because the fixture lets the caster drift.
+  carry:         { what: 'the caster ends up somewhere else', player: (g, p) => Math.round(Math.hypot(p.x - p.carryX0, p.y - p.carryY0)) },
   multiPulse:    { what: 'the step lands more damage than without it', stripped: true },
   windUp:        { what: 'the step is delayed before it lands',        stripped: true, timing: true },
 };
@@ -382,6 +388,7 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
   const bystander = obs.bystander ? target(g, p.x + 120, p.y) : null;
   let peak = 0, firstDamageT = -1;
   const hp0 = es.reduce((a, e) => a + e.hp, 0);
+  p.carryX0 = p.x; p.carryY0 = p.y;    // origin for `carry`, stamped where the run starts
   for (let i = 0; i < 60 * SECONDS; i++) {
     // A MOVEMENT/`moving` skill has to be WALKED or it never fires, and a
     // rider on a skill that never fires reads as a rider that never LANDS —
