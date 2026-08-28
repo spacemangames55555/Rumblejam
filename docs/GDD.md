@@ -1722,6 +1722,12 @@ A separate small player-level store holds unlocked classes and nothing else.
 
 Hosting is not privileged; it only decides which region everyone is in. Two friends at the same frontier both advance by playing together.
 
+**Carry, and say so.** There is **no entry check over the party**. A joiner admitted at a world map stop enters whatever region the party enters, whatever their own frontier — a frontier-1 friend walks into region 5 with you. `partyCanEnter` in `js/worldmap.js` states the rule in runnable form and is deliberately **not wired into the running game**: as a gate it deadlocks, because a party standing at region 2 that admits a frontier-1 joiner could then enter nothing.
+
+**Frontier does not travel**, which is what makes the open door safe. On the boss kill a member's frontier advances **only if their frontier already equals or exceeds that region's index**. A carried member takes levels, xp and loot as normal and no frontier advance. You unlock a region by clearing it **at your own frontier**, never by being carried past it.
+
+**Class unlocks follow the frontier, not the kill.** A carried member does not earn the region's native class either — being present at a boss you could not have reached alone is not the achievement the unlock is for. This is currently true by call site rather than by rule: `recordUnlock` reads the region index and the device-wide player store, and no frontier at all. It is flagged in `js/saves.js` and is the first thing to fix when per-peer saves travel.
+
 ### 11.3 Mid-region state parks
 
 A character three maps into region 3 who joins a friend's region 3 plays the host's rolled tree for that session. Their own tree and cleared nodes are untouched.

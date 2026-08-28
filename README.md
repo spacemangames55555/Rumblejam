@@ -666,6 +666,17 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/replay_gate.mjs` — **the same seed replays the same region.** Run
+  continuity rests on a wiped party getting its layout back, and reusing the seed
+  only guarantees that when nothing else feeds the generator — which this project
+  has been burned by before (KNOWN-DEFECTS #1 was `Math.random()` in the sim,
+  named as one call and actually 43). Seven checks: identical layout from one
+  seed and 200 more, 200 distinct layouts so a constant generator cannot pass,
+  900 ticks of a real fight matching tick for tick, and the two that guard the
+  non-obvious input — `objectiveHistory` also feeds the tree, so replay identity
+  depends on `js/main.js` appending to it only on `win && regionCleared`. That
+  guard is read out of the source with brace-aware scoping and verified to go red
+  under three separate ways of removing it.
 - `node tools/skilltext_gate.mjs [--verbose]` — **every skill states its
   mechanics, and no skill states them by hand.** Catches the two opposite
   failures: a skill shipped with flavour and no numbers, and a number typed into
