@@ -192,7 +192,12 @@ function statSummary(stats) {
 // canLobby: this client can drive the party back to character select (host or
 // solo). Everyone else is told the host is doing it — the room, the code and
 // every peer connection survive a defeat.
-export function showResults(result, myIdx, canLobby = true) {
+// `opts.next` is what the party does from here, and it is the whole of the
+// run-continuity change on this screen. A cleared region with content-ready
+// regions left offers the WORLD MAP; a wipe offers the same region again; only
+// a completed run or a client with no host to speak for it falls back to the
+// new-run prompt this screen used to be.
+export function showResults(result, myIdx, canLobby = true, opts = {}) {
   hideScreens();
   const el = $('screen-results');
   el.classList.remove('hidden');
@@ -200,7 +205,7 @@ export function showResults(result, myIdx, canLobby = true) {
   el.innerHTML = `
     <div class="panel">
       <h2 class="rt">${title}</h2>
-      <div style="text-align:center;" class="dim">${result.win ? `${escapeHtml(result.regionName || 'The region')} is cleared.` : `Wiped in ${escapeHtml(result.regionName || 'the region')}.`}</div>
+      <div style="text-align:center;" class="dim">${result.win ? `${escapeHtml(result.regionName || 'The region')} is cleared.` : `Wiped in ${escapeHtml(result.regionName || 'the region')}.${opts.next && opts.next.retry ? ' The region waits, unchanged.' : ''}`}</div>
       <div class="results-grid">${result.players.map(p => `
         <div class="result-card" style="border-top:4px solid ${p.color}">
           <h4>${escapeHtml(p.name)} ${p.idx === myIdx ? '(you)' : ''} — ${CHAR_BY_ID[p.charId] ? CHAR_BY_ID[p.charId].name : ''} ${p.gone ? '(left)' : ''}</h4>
@@ -215,9 +220,11 @@ export function showResults(result, myIdx, canLobby = true) {
       <div class="row spread">
         <div class="seed-line">run seed: <b>${result.seed >>> 0}</b></div>
         <div class="row">
-          ${canLobby
-    ? '<button class="primary big" id="btn-lobby" style="width:auto;">▶ NEW RUN (same room)</button>'
-    : '<span class="dim small">waiting for the host to start a new run…</span>'}
+          ${opts.next && canLobby
+    ? `<button class="primary big" id="btn-next" style="width:auto;">${escapeHtml(opts.next.label)}</button>`
+    : canLobby
+      ? '<button class="primary big" id="btn-lobby" style="width:auto;">▶ NEW RUN (same room)</button>'
+      : `<span class="dim small">${escapeHtml(opts.waiting || 'waiting for the host to start a new run…')}</span>`}
           <button id="btn-title">Leave</button>
         </div>
       </div>
@@ -225,6 +232,8 @@ export function showResults(result, myIdx, canLobby = true) {
   $('btn-title').onclick = () => { sfx.click(); A.leave(); };
   const lb = $('btn-lobby');
   if (lb) lb.onclick = () => { sfx.click(); A.backToLobby(); };
+  const nx = $('btn-next');
+  if (nx) nx.onclick = () => { sfx.click(); opts.next.go(); };
 }
 
 function summarizeItems(ids) {

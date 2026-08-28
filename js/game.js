@@ -1203,10 +1203,17 @@ export class Sim {
     this.lootT = null;
     const lost = this._fizzleLoot();
     this.pushEvent({ k: 'lootOver', collected: this.fightLoot, lost });
-    // THE REGION BOSS ENDS THE RUN. There is no floor 2 to descend to: a run is
-    // one region, and what follows is the world map, the frontier advance and
-    // the class unlock — none of which the sim owns. The post-boss shop still
-    // opens, because the spoils of the boss are spent before leaving.
+    // THE REGION BOSS ENDS THE REGION, NOT THE RUN. It used to end the run —
+    // there was no floor 2 to descend to and nothing above a region to return
+    // to — and a party that cleared region 1 could only reach region 2 by
+    // starting over. A run is now a SESSION that crosses regions: the boss
+    // kill routes to the world map with the party intact, and the run ends
+    // when the last content-ready region is cleared or the players quit.
+    //
+    // What the sim owns is unchanged. The frontier advance, the class unlock
+    // and the map itself all live above this, and this event is still the only
+    // thing the sim says about it. The post-boss shop still opens, because the
+    // spoils of the boss are spent before leaving.
     this.regionCleared = true;
     this.pushEvent({ k: 'regionCleared', regionIndex: this.regionIndex,
       regionId: this.region, objectives: this.floor.objectives || [] });

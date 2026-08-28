@@ -34,7 +34,7 @@ import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
 import { ENEMIES } from './content/enemies.js';
 import { ALL_BOSS_DEFS } from './content/bosses.js';
-import { bossForRegion, TOTAL_REGIONS } from './regions.js';
+import { bossForRegion, TOTAL_REGIONS, REGION_BY_INDEX } from './regions.js';
 import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
 import { projSpriteFor, PYLON_SPRITE } from './content/sprites.js';
 import { clamp } from './util.js';
@@ -184,6 +184,51 @@ function hostOpenWorldMap() {
 // solo host — the card was already inert if the host could not enter it, and
 // the multi-character party check belongs with real per-peer saves, which do
 // not travel yet.
+// THE THREE WAYS A REGION ENDS, and only the third leaves the session.
+//
+// CLEARED: back to the world map with the party intact. The frontier has
+// already advanced in the `end` handler; this only moves the players. Held
+// joiners are admitted here, because this is the one moment the roster can be
+// edited without splicing an index into a live fight.
+function hostContinueToWorldMap() {
+  if (app.role !== 'host') return;
+  admitHeldJoiners();
+  app.mode = 'lobby';           // the world map is a lobby-mode screen
+  app.sim = null;
+  showHud(false);
+  closeAllOverlays();
+  hideMapScreen();
+  hideScreens();
+  showWorldMap(app.character, app.player, { canLeave: true });
+}
+
+// WIPED: the same region again, from the same seed. Levels, xp, skills,
+// passives and the frontier are all on the character and the party, none of
+// which this touches — so a party that keeps wiping keeps its levels, which is
+// the intended ramp rather than an oversight.
+function hostRetryRegion() {
+  if (app.role !== 'host') return;
+  if (app.hostT) app.hostT.broadcast({ t: 'retry', regionIndex: app.regionIndex });
+  hostStartRun(app.regionSeed);
+}
+
+// A player refused entry mid-region waits rather than being kicked. Admitted
+// into the lobby roster at the next world map stop, where indices are assigned
+// once and nothing is holding a `p.idx` against a live enemy.
+function admitHeldJoiners() {
+  if (!app.heldJoiners || !app.heldJoiners.size || !app.lobby) return;
+  for (const [key, name] of app.heldJoiners) {
+    if (!app.hostT || !app.hostT.conns.has(key)) continue;     // gave up waiting
+    if (app.lobby.players.some(p => p.key === key)) continue;
+    if (app.lobby.players.length >= CONFIG.MAX_PLAYERS) break;
+    const used = new Set(app.lobby.players.map(p => p.color));
+    const color = PALETTE.players.find(c => !used.has(c)) || PALETTE.players[app.lobby.players.length % PALETTE.players.length];
+    app.lobby.players.push({ key, name, color, charId: null, ready: false, isHost: false });
+  }
+  app.heldJoiners.clear();
+  refreshLobby(); broadcastLobby();
+}
+
 function hostEnterRegion(regionIndex) {
   hideWorldMap();
   app.regionIndex = regionIndex;
@@ -455,7 +500,18 @@ function hostOnMessage(key, msg) {
   app.hostT.lastSeen.set(key, performance.now());
   switch (msg.t) {
     case 'hello': {
-      if (app.mode !== 'lobby') { app.hostT.send(key, { t: 'refused', reason: 'Run already in progress' }); app.hostT.kick(key); return; }
+      // HELD, NOT KICKED. A region in progress cannot take a new player:
+      // `p.idx` is written into enemy and field state all over the engine —
+      // judgment marks, aura amplification, aura follow, minion ownership, the
+      // netcodec — so splicing into `this.players` mid-region either shifts
+      // indices under all of it or leaves holes. The player waits for the next
+      // world map stop instead of being disconnected and told to try again.
+      if (app.mode !== 'lobby') {
+        app.heldJoiners = app.heldJoiners || new Map();
+        app.heldJoiners.set(key, String(msg.name || 'ANON').slice(0, 12));
+        app.hostT.send(key, { t: 'held', reason: 'A region is in progress — you will join at the next world map stop.' });
+        return;
+      }
       if (app.lobby.players.length >= CONFIG.MAX_PLAYERS) { app.hostT.send(key, { t: 'refused', reason: 'Room is full' }); app.hostT.kick(key); return; }
       if (!app.lobby.players.some(p => p.key === key)) {
         const used = new Set(app.lobby.players.map(p => p.color));
@@ -594,12 +650,18 @@ function refreshLobby() {
   if (app.mode === 'lobby') showLobby(app.lobby, app.role === 'host', app.myKey);
 }
 
-function hostStartRun() {
+function hostStartRun(seedOverride = null) {
   const l = app.lobby;
   if (!l.players.every(p => p.charId && (p.ready || p.isHost))) return;
   gateOnAssets(() => {
     if (app.mode !== 'lobby' || !app.lobby) return;   // left the lobby while we waited
-    const seed = randomRunSeed();
+    // THE SEED IS PER REGION AND SURVIVES A WIPE. A replay must walk the
+    // identical layout — that is the whole property that makes a region
+    // learnable — so the seed is generated when a region is ENTERED and reused
+    // for every attempt at it. `hostStartRun(seed)` passes it back on retry;
+    // entering any region from the world map passes nothing and rolls a new one.
+    const seed = seedOverride ?? randomRunSeed();
+    app.regionSeed = seed;
     app.party = app.lobby.players.map((p, i) => ({ idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color }));
     app.myIdx = 0;
     // The difficulty rides the start message as well as the Sim. Clients do not
@@ -758,6 +820,16 @@ function clientOnMessage(msg) {
       if (app.mode === 'lobby' && sig !== app._lobbySig) { app._lobbySig = sig; showLobby(app.lobby, false, app.myKey); }
       break;
     }
+    case 'held':
+      // Not an error and not a disconnect: the connection stays open and the
+      // host admits us at its next world map stop.
+      setNetStatus(msg.reason || 'Waiting for the party to reach the world map…');
+      break;
+    case 'retry':
+      // The host is replaying the region we just wiped in. Nothing to do but
+      // leave the results screen; the `start` that follows carries the rest.
+      setNetStatus('Retrying the region…');
+      break;
     case 'refused':
       clientCleanup();
       app.mode = 'title';
@@ -1072,10 +1144,46 @@ function handleEvent(ev) {
         console.log(`[world] region ${ev.result.region} cleared — frontier ${moved.before} → ${moved.after} (${moved.outcome})`
           + (unlocked ? `, unlocked ${unlocked}` : ''));
       }
-      showResults(ev.result, app.myIdx, app.role !== 'client');
+      // WHERE THE PARTY GOES FROM HERE. The run no longer ends at a region
+      // boundary: a clear routes to the world map, a wipe replays the region,
+      // and only the last content-ready region completes the run.
+      //
+      // The last region is READ, never a literal. `REGION_ORDER` is currently
+      // 1..2 by virtue of what is built, and regions 3-8 slot in by setting
+      // `contentReady` — a hardcoded 2 here would silently keep ending runs at
+      // region 2 for the rest of the project.
+      showResults(ev.result, app.myIdx, app.role !== 'client', resultsNext(ev.result));
       break;
     }
   }
+}
+
+// The highest region with content, which is what "the last region" means. Read
+// rather than declared, so building region 3 extends the run with no edit here.
+function lastContentReadyRegion() {
+  let last = 1;
+  for (let i = 1; i <= TOTAL_REGIONS; i++) {
+    const r = REGION_BY_INDEX[i];
+    if (r && r.contentReady) last = i;
+  }
+  return last;
+}
+
+function resultsNext(result) {
+  if (app.role === 'client') {
+    return { waiting: result && result.win
+      ? 'waiting for the host at the world map…'
+      : 'waiting for the host to retry the region…' };
+  }
+  if (!result || !result.win) {
+    return { next: { label: '↻ RETRY REGION', retry: true, go: hostRetryRegion } };
+  }
+  // A clear that was not the last region goes back to the map. The last one
+  // completes the run, and the new-run prompt is correct there.
+  if (result.regionCleared && (result.region | 0) < lastContentReadyRegion()) {
+    return { next: { label: '▶ CONTINUE — THE WORLD MAP', go: hostContinueToWorldMap } };
+  }
+  return {};
 }
 
 // ---------------- host loop ----------------
