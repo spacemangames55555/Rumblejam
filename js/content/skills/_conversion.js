@@ -59,6 +59,13 @@ export const DOC_TRIGGER = {
   // rather than a constant is a wounded target. The divergence is real and
   // reported: a skill written to spread a debuff will refresh it instead.
   TARGET_UNAFFECTED:   ({ range, pct = 95 })    => ({ kind: 'TARGET_THRESHOLD', pct, range }),
+  // "COOLDOWN_READY, gated on being under cap" — the engine has no
+  // unconditional trigger, and it should not: a skill that fires with nothing
+  // to fight is a skill that fires into an empty room. The honest reading of
+  // "whenever it is ready" is "whenever there is something to be ready FOR",
+  // which is proximity with a count of one. The cap gate is enforced by the
+  // summon primitive's own `maxAlive`, not by the trigger.
+  COOLDOWN_READY:      ({ radius = 260, count = 1 }) => ({ kind: 'PROXIMITY', radius, count }),
   // "always-on (no trigger; occupies a slot)" — a passive, which is the shape
   // of a node that has no moment because it is simply true.
   ALWAYS_ON:           ()                       => null,

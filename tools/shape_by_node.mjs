@@ -27,7 +27,7 @@ const LEVEL = 70;                 // the region-8 anchor; §4.2 puts a run in th
 const SECONDS = 90;   // matches balance_summoners, so only the node shape differs
 const SEEDS = [4711, 90210];
 const TREE_IDS = ['samurai_armor', 'samurai_tactics', 'necro_marrow', 'necro_dark_matter', 'necro_summons', 'druid_beasts'];
-const SIGNATURE = { necro_summons: 'necro_raise_skeleton', druid_beasts: 'druid_call_wolf' };
+const SIGNATURE = { necro_summons: 'necro_summon_skeleton', druid_beasts: 'druid_call_wolf' };
 
 const SHAPES = [
   { id: 'horde', kind: 'combat', why: '§2.4 baseline: many, thin' },

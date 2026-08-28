@@ -157,6 +157,13 @@ export const PASSIVE_EFFECT = {
   // have. The grant itself is registered in RANK_GRANTS below, two-way locked
   // like `summonSlots`, so a second skill cannot pick it up by copy-paste.
   aura: 'field',                  // Blight, Osteo Aura, Dominance: radius per rank
+  // SUMMON STATS, WHICH ONLY ITEMS COULD GRANT UNTIL NOW. `summonDmgMult` and
+  // `summonHpMult` have always read `hookAgg`, the ITEM aggregate, so five
+  // Necromancer passives that say "your summons deal more" had nowhere to land.
+  // Classified `damage` and `other` respectively: more summon damage is an
+  // investment, more summon health is an unlock the rank rule already covers.
+  summonDmg: 'damage',            // Blood Skeleton, Necrotic Presence
+  summonHp: 'other',              // Unyielding Beast, Marrow Skeleton, Necrotic Presence
 };
 
 // WHAT A RANK MAY BUY BESIDES DAMAGE AND DURATION — the whole list, and the
@@ -179,7 +186,7 @@ export const PASSIVE_EFFECT = {
 // seventeen, inflating every per-stack term derived from it. That was a rank
 // buying a structural quantity with no registry to stop it.
 export const RANK_GRANTS = {
-  summonSlots: 'necro_raise_skeleton',
+  summonSlots: 'necro_summon_skeleton',
 };
 
 // WHO CAN SEE A SOUL TOKEN (§8.5 row 2). Tokens are state and ride the

@@ -181,7 +181,7 @@ const PROBES = {
     what: 'damage a summoned minion deals',
     char: () => NECRO.id,
     run: ({ g, p }) => {
-      const sk = SKILL_BY_ID['necro_raise_skeleton'];
+      const sk = SKILL_BY_ID['necro_summon_skeleton'];
       if (!sk) return NaN;
       const e = target(g, p.x + 50, p.y);
       if (!e) return NaN;

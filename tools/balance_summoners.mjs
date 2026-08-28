@@ -71,7 +71,7 @@ function spendDeep(g, p, treeId, signatureId, POINTS) {
   while (left > 0) { p.skillPoints++; left--; if (!spendSkillPoint(g, p, signatureId)) break; }
 }
 
-const SIGNATURE = { necro_summons: 'necro_raise_skeleton', druid_beasts: 'druid_call_wolf' };
+const SIGNATURE = { necro_summons: 'necro_summon_skeleton', druid_beasts: 'druid_call_wolf' };
 
 function run(treeId, seed, shape, LEVEL) {
   const charId = TREES[treeId].classId;

@@ -446,7 +446,7 @@ const HOOKS = {
     payload: { damage: 900, hp: 900 },
     char: NECRO,
     run: ({ g, p }) => {
-      const sk = SKILL_BY_ID['necro_raise_skeleton']; if (!sk) return NaN;
+      const sk = SKILL_BY_ID['necro_summon_skeleton']; if (!sk) return NaN;
       const e = target(g, p.x + 50, p.y); if (!e) return NaN;
       g.tick();                       // slots resolve on the skill tick
       benchSkills(p);                 // every point landing is the minion's
