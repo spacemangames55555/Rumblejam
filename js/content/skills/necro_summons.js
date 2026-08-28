@@ -2,7 +2,7 @@
 //
 // CONVERTED FROM docs/design/classes/necromancer.md, and the tree the document
 // says supersedes its built counterpart outright — it shared exactly one node
-// with what shipped. Built through the three tables in ./_conversion.js.
+// with what shipped. Built through the three tables in ../doc_conversion.js.
 //
 // THE THREAT LADDER (port ruling 1) is Monster > Skeletons > Necromancer, and
 // it is expressed by REACH rather than by a ladder field the engine does not
@@ -14,7 +14,7 @@
 // confirmed cause of the two worst tree_dps outliers, +4123% and +2313%. Every
 // value below is four digits for a reason.
 
-import { docTrigger, rankPer, RANK_NONE } from './_conversion.js';
+import { docTrigger, rankPer, RANK_NONE } from '../doc_conversion.js';
 
 export const TUNING = {
   // tier_code 0 — Summon Skeleton

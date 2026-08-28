@@ -23,7 +23,7 @@
 //   and it goes through the same hook as Footing — see engineScale() in
 //   js/compose.js. The value is published on p.engines.armor by skillsim.
 
-import { docTrigger, rankPer } from './_conversion.js';
+import { docTrigger, rankPer } from '../doc_conversion.js';
 
 export const TUNING = {
   // tier_code 0 — Bone Dart

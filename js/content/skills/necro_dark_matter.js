@@ -4,7 +4,7 @@
 // class, and the one that exists to make the three conversion tables real:
 // every trigger here comes from `DOC_TRIGGER` and every rank from `rankPer`, so
 // the thirteen classes after this one transcribe against a table instead of
-// re-deciding. See ./_conversion.js.
+// re-deciding. See ../doc_conversion.js.
 //
 // TWO NODES DIVERGE FROM THE CLASSIFICATION PASS, and both for the same reason:
 // Hex of Entropy and Dark Energy Rift were classified `mortar`, and `mortar` is
@@ -13,7 +13,7 @@
 // with a telegraph — it is a single-tick `hazard`, which exists. Built that way
 // and reported; an eighteenth primitive is a stage of its own.
 
-import { docTrigger, rankPer, RANK_NONE, pctRemaining, pctToFraction } from './_conversion.js';
+import { docTrigger, rankPer, RANK_NONE, pctRemaining, pctToFraction } from '../doc_conversion.js';
 
 export const TUNING = {
   // tier_code 0 — Dark Energy Blip
