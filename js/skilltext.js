@@ -333,6 +333,8 @@ export function mechanicalLine(skill, rank = 1) {
 // Same plain style, from `skill.passive`. Each key states what it does and its
 // magnitude; an unlisted key is reported by the gate rather than skipped.
 const PASSIVE_TEXT = {
+  summonDmg: v => `your summons deal ${n1(v)}% more damage`,
+  summonHp: v => `your summons have ${n1(v)}% more health`,
   armorGrit: v => `+${n1(v)} Defense`,
   armorVit: v => `+${n1(v)} max health`,
   footingGritBonus: v => `+${n1(v)} Defense per Footing stack`,

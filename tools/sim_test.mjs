@@ -5634,7 +5634,7 @@ try {
   // skeleton is at the TOKEN, not at the Necromancer.
   {
     const { g, p } = armTree('toh_necromancer', 'necro_summons');
-    const sk = SK_BY_ID['necro_raise_skeleton'];
+    const sk = SK_BY_ID['necro_summon_skeleton'];
     if (sk.trigger.kind === 'ON_TOKEN') ok('Raise Skeleton is triggered by ON_TOKEN, not by a crowd');
     else fail(`Raise Skeleton trigger is ${sk.trigger.kind}, want ON_TOKEN (§8.5 row 4)`);
     if (sk.compose[0].deliver) ok(`Raise Skeleton delivers its summon (speed ${sk.compose[0].deliver.speed})`);
@@ -5730,7 +5730,7 @@ try {
     // fail a player walking through a door, so this travels between nodes.
     {
       const { g, p } = armTree('toh_druid', 'druid_beasts', { level: 31 });
-      const necroSk = SK_BY_ID['necro_raise_skeleton'];
+      const necroSk = SK_BY_ID['necro_summon_skeleton'];
       // Fight first so the pack is in a REAL mid-run state, then stage the
       // disposable minion. Staging it before the fight let it die inside the
       // six seconds, and the wipe assertion then passed vacuously at 0 -> 0 —

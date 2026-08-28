@@ -1,238 +1,223 @@
-// NECROMANCER — Summons tree. The class's named engine (§8.3).
+// NECROMANCER — Summons tree. The commander: bodies, a threat ladder, Essence.
 //
-// Three things in this file are firsts for the project, and each is here to be
-// tested rather than to be clever:
+// CONVERTED FROM docs/design/classes/necromancer.md, and the tree the document
+// says supersedes its built counterpart outright — it shared exactly one node
+// with what shipped. Built through the three tables in ./_conversion.js.
 //
-//   1. `summon` steps. A minion is a compose step; its ATTACK is another
-//      compose step, run through the same primitives a player uses. Nothing in
-//      js/minions.js knows what a skeleton is.
-//   2. `rankGrants: 'summonSlots'` on Raise Skeleton — the only skill in the
-//      game where a rank buys a structural quantity instead of damage or
-//      duration. Registered and asserted in js/skills.js so a second one cannot
-//      appear by accident.
-//   3. `ON_TOKEN`, used twice, on two different primitives. One use would not
-//      have shown whether the trigger composes; two on different shapes does.
+// THE THREAT LADDER (port ruling 1) is Monster > Skeletons > Necromancer, and
+// it is expressed by REACH rather than by a ladder field the engine does not
+// have: the Monster carries the widest taunt, the skeletons a narrower one, and
+// the caster none. Summons are already targetable, aggro-taking and mortal.
 //
-// Tier 1 is a DIRECT attack, not a summon. §6.3 requires a tree's opening pick
-// to be a damaging active, and a summon's damage is deferred by a spawn, a walk
-// and an attack cooldown — "something that kills" has to kill now.
+// ALL FOUR SUMMONS DECLARE `attackCd` IN MILLISECONDS. Four built summons
+// across hun_pincer and wd_swarm declare seconds in that field and are the
+// confirmed cause of the two worst tree_dps outliers, +4123% and +2313%. Every
+// value below is four digits for a reason.
+
+import { docTrigger, rankPer, RANK_NONE } from './_conversion.js';
 
 export const TUNING = {
-  // Skeletons are disposable and wipe every room (§8.5 row 5), so their HP is
-  // about surviving one fight rather than a map. These are BASE values: HP is
-  // the rank's duration term (§9.5) and rankedDuration scales them, so the flat
-  // inflation applied as a balance patch is reverted.
-  //
-  // Bone Shard stays raised — that was never about minions. The wide shape of
-  // this tree measured 7.2 dps against the Druid's 18.0, and the tree's own
-  // direct damage is what a Necromancer has during the cold start §8.5 gives it.
-  // tier 1 — Bone Shard
-  shardDamage: 11, shardSpeed: 520, shardRange: 240, shardCd: 900,
-  // tier 2 — Raise Skeleton (the slot grant)
-  skelSlotsPerRank: 1,          // one skeleton per point, capped by SUMMON_SLOT_CAP
-  skelHp: 26, skelRadius: 10, skelDamage: 5, skelReach: 46, skelArc: 1.6,
-  skelAtkCd: 1100, skelSpawnRadius: 44, skelCd: 2600,
-  // ON_TOKEN: the range within which a soul token can be reached, and the
-  // flight of the throw that reaches it. §8.5 row 4.
+  // tier_code 0 — Summon Skeleton
+  skelHp: 60, skelRadius: 13, skelSpawnRadius: 44, skelCd: 1200, skelCap: 3,
+  skelDamage: 9, skelArc: 1.4, skelReach: 46, skelAtkCd: 1100,   // ms
+  skelTaunt: 1600,
+  // ON_TOKEN: the reach for a soul token, and the flight of the throw that
+  // reaches it. §8.5 row 4.
   skelTokenRange: 320, skelSeedSpeed: 620, skelSeedRadius: 6,
-  // tier 3 — Gravechill
-  chillDamage: 5, chillRadius: 120, chillDuration: 4000, chillTickMs: 500,
-  chillSlowMult: 0.55, chillSlowDur: 1200, chillCd: 6000, chillTrigCount: 3,
-  // tier 4 — Soul Harvest (ON_TOKEN → a temporary wisp)
-  wispHp: 12, wispRadius: 7, wispDamage: 6, wispSpeed: 460, wispRange: 260,
-  wispAtkCd: 900, wispOrbit: 62, wispDuration: 9000, wispCd: 4200, wispTokenRange: 260,
-  // tier 5 — Bone Plate (passive)
-  plateGrit: 3, plateVit: 8,
-  // tier 6 — Grave Bolt
-  graveDamage: 12, graveSpeed: 500, graveRange: 250, graveCd: 3200,
-  graveDotDamage: 9, graveDotDur: 3000,
-  // tier 7 — Charnel Pact (ON_TOKEN → a cone)
-  pactDamage: 15, pactAngle: 2.2, pactRange: 190, pactCd: 5200, pactTokenRange: 200,
-  // tier 8 — Bone Golem
-  golemHp: 90, golemRadius: 15, golemDamage: 13, golemReach: 62, golemArc: 1.9,
-  golemAtkCd: 1600, golemSpawnRadius: 54, golemCd: 9000, golemKnock: 180,
-  golemTrigRadius: 220, golemTrigCount: 4,
-  // tier 9 — Dread Howl
-  howlDamage: 14, howlAngle: 2.8, howlRange: 200, howlRadius: 200, howlCount: 3,
-  howlCd: 7500, howlWeakenMult: 0.7, howlWeakenDur: 3200,
-  // tier 10 — Army of the Dead
-  armyCount: 3, armyHp: 30, armyRadius: 10, armyDamage: 9, armyReach: 50, armyArc: 1.7,
-  armyAtkCd: 1000, armySpawnRadius: 66, armyDuration: 14000, armyCd: 16000,
-  armyBurstDamage: 16, armyBurstAngle: 3.0, armyBurstRange: 210,
-  // the burst rides the pack: more bodies standing, harder it lands. Same hook
-  // as Footing and armour — see engineScale() in js/compose.js.
-  armyWeight: 0.75,
-  armyTrigPct: 45,
-  // rank increments — linear, never compounding
-  rankDamage: 0.04, rankDuration: 0.03,
+  // tier_code 1 — Unleash the Monster
+  monsterHp: 220, monsterRadius: 22, monsterSpawnRadius: 54, monsterCd: 8000,
+  monsterDamage: 26, monsterArc: 1.6, monsterReach: 70, monsterAtkCd: 1100,   // ms
+  monsterTaunt: 3000,                 // the widest on the ladder — MAGNET aggro r300
+  // tier_code 2 — Unyielding Beast (passive)
+  beastHp: 50,
+  // tier_code 3 — Necrotic Presence (passive)
+  presenceDmg: 20, presenceHp: 20,
+  // tier_code 5a — Blood Skeleton (passive)
+  bloodDmg: 50,
+  // tier_code 5b — Marrow Skeleton (passive)
+  marrowSkelHp: 40,
+  // tier_code 6 — Tentacles of Dark Matter (passive)
+  tentacleReach: 24,
+  // tier_code 7 — Death Channel
+  channelDamage: 14, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
+  // tier_code 8 — Entropy Cascade
+  cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 600,
+  // tier_code 9 — Army of the Dead
+  armyHp: 45, armyRadius: 13, armySpawnRadius: 66, armyCount: 6,
+  armyDuration: 20000, armyCd: 25000, armyCrowdRadius: 400, armyCrowdCount: 10,
+  armyDamage: 8, armyArc: 1.4, armyReach: 44, armyAtkCd: 1000,   // ms
 };
 
 const T = TUNING;
-const R = { damage: T.rankDamage, duration: T.rankDuration };
 
 export const NECRO_SUMMONS = [
   {
-    id: 'necro_bone_shard', tree: 'necro_summons', tier: 1, name: 'Bone Shard',
-    flavor: 'The first thing you learn is that bone is already a weapon.',
-    type: 'active', domain: 'physical', prereq: null,
-    select: 'nearest',
-    trigger: { kind: 'NEAREST', range: T.shardRange },
-    cooldown: T.shardCd,
-    compose: [{ kind: 'bolt', damage: T.shardDamage, speed: T.shardSpeed, range: T.shardRange, riders: {} }],
-    ranks: R,
-  },
-  {
-    id: 'necro_raise_skeleton', tree: 'necro_summons', tier: 2, name: 'Raise Skeleton',
+    id: 'necro_summon_skeleton', tree: 'necro_summons', tier: 2, name: 'Summon Skeleton',
     flavor: 'It remembers how to hold a weapon. It remembers nothing else.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_bone_shard',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    // §8.5: Raise Skeleton is triggered by a SOUL TOKEN in range, not by a
-    // crowd. The skill throws at the token and the skeleton rises where the
-    // throw lands, which is what makes a token a place rather than a counter —
-    // a Necromancer's positioning becomes about where things DIED.
+    type: 'active', domain: 'spiritual', prereq: 'necro_entropy_cascade',
+    select: 'self',   // writes the caster's field, picks no target (§5.3)
+    // §8.5 ROW 4 OVERRIDES THE DOCUMENT HERE. The block says "COOLDOWN_READY,
+    // gated on being under cap" and never mentions soul tokens at all — but the
+    // GDD makes the Necromancer's summons rise from tokens the dead leave, and
+    // token VISIBILITY is derived from owning an ON_TOKEN skill, so a Summons
+    // tree without one blinds the class to its own resource. The document's
+    // omission is the finding; the ruling is the GDD's.
     trigger: { kind: 'ON_TOKEN', range: T.skelTokenRange },
     cooldown: T.skelCd,
-    // THE ONE SKILL WHERE A RANK BUYS SOMETHING STRUCTURAL. Every other rank in
-    // the game buys damage or duration; this one buys room on the field. It is
-    // declared here, registered in RANK_GRANTS, and asserted at load — the
-    // unstated version of this rule let a passive raise the Footing cap from a
-    // designed ten to a measured seventeen.
-    rankGrants: 'summonSlots', rankGrantPer: T.skelSlotsPerRank,
+    // "+1 to the standing cap every 4th rank" — a rank buying a STRUCTURAL
+    // quantity, which is the one exception RANK_GRANTS registers. It moved here
+    // with the node: the registry named `necro_raise_skeleton`, which this tree
+    // no longer contains.
+    // ONE PER RANK, not the document's "+1 every 4th". `summonSlotsFor` FLOORS
+    // `rankGrantPer x rank` and has no base term, so 0.25 leaves a summoner with
+    // zero slots at ranks 1-3 and a skill that silently refuses every spawn.
+    // The document's "cap 3 standing, +1 per 4 ranks" is a base-plus-increment
+    // shape the engine does not have. Reported.
+    rankGrants: 'summonSlots', rankGrantPer: 1,
     compose: [{
       kind: 'summon', archetype: 'skeleton', move: 'chase',
+      // NO `maxAlive` — the standing cap IS the summon-slot count, which the
+      // rank grant above buys. A second cap on the step fights it and pinned
+      // the pack at three however many slots the player had earned.
       count: 1, slotted: true, revives: false,
       hp: T.skelHp, radius: T.skelRadius, spawnRadius: T.skelSpawnRadius,
       duration: 0,                        // permanent: it holds a slot, not a timer
-      // THE THROW. `deliver` makes the summon travel to the spot the trigger
-      // spent and rise there. It is a property of the step, so any future
-      // summon can be delivered without the engine learning a new skill.
+      // THE THROW. `deliver` makes the summon travel to the token and rise
+      // there rather than at the caster's feet — §8.5 row 4 again.
       deliver: { speed: T.skelSeedSpeed, radius: T.skelSeedRadius },
-      attackCd: T.skelAtkCd,
-      attack: { kind: 'strike', damage: T.skelDamage, arc: T.skelArc, reach: T.skelReach, select: 'nearest', riders: {} },
+      attackCd: T.skelAtkCd,              // MILLISECONDS
+      // The middle rung of the threat ladder: a narrower taunt than the
+      // Monster's, so aggro settles above the caster and below the Monster.
+      attack: { kind: 'strike', damage: T.skelDamage, arc: T.skelArc, reach: T.skelReach,
+        select: 'nearest', riders: { taunt: T.skelTaunt } },
     }],
-    ranks: R,
+    // "+10% skeleton damage and HP per rank; +1 cap every 4th rank." Ranks buy
+    // SUMMON stats, and `ranks` scales the STEP's damage — which is 0 for a
+    // summon, because the skeleton deals the damage and not the cast. The
+    // step's `hp` does move, through `rankedDuration`. Reported.
+    ranks: rankPer(0, 0, { durationAdd: 6, durationBase: T.skelHp }),
   },
   {
-    id: 'necro_gravechill', tree: 'necro_summons', tier: 4, name: 'Gravechill',
-    flavor: 'The ground goes cold and stays cold.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_raise_skeleton',
-    select: 'densest_cluster',
-    trigger: { kind: 'PROXIMITY', radius: T.chillRadius, count: T.chillTrigCount },
-    cooldown: T.chillCd,
-    compose: [{
-      kind: 'hazard', damage: T.chillDamage, radius: T.chillRadius,
-      duration: T.chillDuration, tickMs: T.chillTickMs,
-      riders: { slow: { mult: T.chillSlowMult, dur: T.chillSlowDur } },
-    }],
-    ranks: R,
-  },
-  {
-    id: 'necro_soul_harvest', tree: 'necro_summons', tier: 4, name: 'Soul Harvest',
-    flavor: 'What the dead leave behind is still worth something to you.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_raise_skeleton',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    // ON_TOKEN, first use. The token is a world resource left by any enemy
-    // death — the trigger reads the floor, not a Necromancer counter.
-    trigger: { kind: 'ON_TOKEN', range: T.wispTokenRange },
-    cooldown: T.wispCd,
-    compose: [{
-      kind: 'summon', archetype: 'wisp', move: 'orbit',
-      count: 1, slotted: false, revives: false,
-      hp: T.wispHp, radius: T.wispRadius, spawnRadius: T.wispOrbit, orbitRadius: T.wispOrbit,
-      duration: T.wispDuration,           // temporary: a token buys a short escort
-      attackCd: T.wispAtkCd,
-      attack: { kind: 'bolt', damage: T.wispDamage, speed: T.wispSpeed, range: T.wispRange, select: 'nearest', riders: {} },
-    }],
-    ranks: R,
-  },
-  {
-    id: 'necro_bone_plate', tree: 'necro_summons', tier: 6, name: 'Bone Plate',
-    flavor: 'You wear the parts that did not get up.',
-    type: 'passive', domain: 'physical', prereq: 'necro_soul_harvest',
-    trigger: null, cooldown: 0, compose: [],
-    passive: { armorGrit: T.plateGrit, armorVit: T.plateVit },
-    maxRank: 1,                            // §1.3: neither damage nor duration
-    ranks: R,
-  },
-  {
-    id: 'necro_grave_bolt', tree: 'necro_summons', tier: 8, name: 'Grave Bolt',
-    flavor: 'It lands, and then it keeps happening.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_bone_plate',
-    select: 'highest_hp',
-    trigger: { kind: 'NEAREST', range: T.graveRange },
-    cooldown: T.graveCd,
-    compose: [{
-      kind: 'bolt', damage: T.graveDamage, speed: T.graveSpeed, range: T.graveRange,
-      riders: { impactDot: { damage: T.graveDotDamage, dur: T.graveDotDur } },
-    }],
-    ranks: R,
-  },
-  {
-    id: 'necro_charnel_pact', tree: 'necro_summons', tier: 10, name: 'Charnel Pact',
-    flavor: 'You spend a soul the way other people spend a coin.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_grave_bolt',
-    select: 'densest_cluster',
-    // ON_TOKEN, second use, on a DIFFERENT primitive. One use proves a trigger
-    // fires; two on different shapes prove it composes.
-    trigger: { kind: 'ON_TOKEN', range: T.pactTokenRange },
-    cooldown: T.pactCd,
-    compose: [{ kind: 'cone', damage: T.pactDamage, angle: T.pactAngle, range: T.pactRange, riders: {} }],
-    ranks: R,
-  },
-  {
-    id: 'necro_bone_golem', tree: 'necro_summons', tier: 6, name: 'Bone Golem',
-    flavor: 'Enough of them, stacked well enough, and it stands on its own.',
-    type: 'active', domain: 'physical', prereq: 'necro_gravechill',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: { kind: 'PROXIMITY', radius: T.golemTrigRadius, count: T.golemTrigCount },
-    cooldown: T.golemCd,
+    id: 'necro_unleash_the_monster', tree: 'necro_summons', tier: 3, name: 'Unleash the Monster',
+    flavor: 'You did not make it. You only let it out.',
+    type: 'active', domain: 'spiritual', prereq: 'necro_summon_skeleton',
+    select: 'self',
+    trigger: docTrigger('COOLDOWN_READY', { radius: 300 }),
+    cooldown: T.monsterCd,
     compose: [{
       kind: 'summon', archetype: 'golem', move: 'chase',
-      count: 1, slotted: true, revives: false,
-      hp: T.golemHp, radius: T.golemRadius, spawnRadius: T.golemSpawnRadius,
+      count: 1, maxAlive: 1, slotted: true, revives: false,
+      hp: T.monsterHp, radius: T.monsterRadius, spawnRadius: T.monsterSpawnRadius,
       duration: 0,
-      attackCd: T.golemAtkCd,
-      attack: { kind: 'strike', damage: T.golemDamage, arc: T.golemArc, reach: T.golemReach,
-        select: 'densest_cluster', riders: { knockback: T.golemKnock } },
+      attackCd: T.monsterAtkCd,           // MILLISECONDS
+      // TOP OF THE THREAT LADDER. "MAGNET aggro r300" is not a field a summon
+      // has; the widest taunt in the class is how the engine says the same
+      // thing — every enemy it swings at looks at IT, for longest.
+      attack: { kind: 'strike', damage: T.monsterDamage, arc: T.monsterArc, reach: T.monsterReach,
+        select: 'nearest', riders: { taunt: T.monsterTaunt } },
     }],
-    ranks: R,
+    ranks: rankPer(0, 0, { durationAdd: 26, durationBase: T.monsterHp }),
   },
   {
-    id: 'necro_dread_howl', tree: 'necro_summons', tier: 8, name: 'Dread Howl',
-    flavor: 'Every skull in the room opens at once.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_bone_golem',
-    select: 'densest_cluster',
-    trigger: { kind: 'PROXIMITY', radius: T.howlRadius, count: T.howlCount },
-    cooldown: T.howlCd,
-    compose: [{
-      kind: 'cone', damage: T.howlDamage, angle: T.howlAngle, range: T.howlRange,
-      riders: { weakenDamage: { mult: T.howlWeakenMult, dur: T.howlWeakenDur } },
-    }],
-    ranks: R,
+    id: 'necro_unyielding_beast', tree: 'necro_summons', tier: 4, name: 'Unyielding Beast',
+    flavor: 'It has been killed before. It did not take.',
+    type: 'passive', domain: 'spiritual', prereq: 'necro_unleash_the_monster',
+    trigger: docTrigger('ALWAYS_ON'), cooldown: 0, compose: [],
+    // "+50% Monster life and −30% damage taken." `summonHp` reaches every
+    // summon rather than the Monster alone — the engine has no per-archetype
+    // modifier — and the damage-reduction half has no key at all. Both reported.
+    passive: { summonHp: T.beastHp },
+    maxRank: 1,
+    ranks: RANK_NONE,
+  },
+  {
+    id: 'necro_necrotic_presence', tree: 'necro_summons', tier: 5, name: 'Necrotic Presence',
+    flavor: 'Being near you is good for the dead and bad for everyone else.',
+    type: 'passive', domain: 'spiritual', prereq: 'necro_unyielding_beast',
+    trigger: docTrigger('ALWAYS_ON'), cooldown: 0, compose: [],
+    passive: { summonDmg: T.presenceDmg, summonHp: T.presenceHp },
+    ranks: rankPer(6, 100),             // "+6% summon damage per rank"
+  },
+  {
+    id: 'necro_blood_skeleton', tree: 'necro_summons', tier: 6, name: 'Blood Skeleton',
+    flavor: 'Sharpened rather than reinforced. It will not last, and it does not need to.',
+    type: 'passive', domain: 'spiritual', prereq: 'necro_necrotic_presence',
+    trigger: docTrigger('ALWAYS_ON'), cooldown: 0, compose: [],
+    // HALF THE BRANCH PAIR, and not exclusive — both sit at tier_code 5 in the
+    // document and a player may own both. The engine has no exclusivity
+    // mechanism, so "not exclusive" costs nothing to honour; what it cannot
+    // honour is "SKELETONS deal more", since `summonDmg` reaches every summon.
+    passive: { summonDmg: T.bloodDmg },
+    ranks: rankPer(12, 100),
+  },
+  {
+    id: 'necro_marrow_skeleton', tree: 'necro_summons', tier: 6, name: 'Marrow Skeleton',
+    flavor: 'Reinforced rather than sharpened. It stands where you would rather not.',
+    type: 'passive', domain: 'spiritual', prereq: 'necro_necrotic_presence',
+    trigger: docTrigger('ALWAYS_ON'), cooldown: 0, compose: [],
+    passive: { summonHp: T.marrowSkelHp },
+    maxRank: 1,
+    ranks: RANK_NONE,
+  },
+  {
+    id: 'necro_tentacles_of_dark_matter', tree: 'necro_summons', tier: 7, name: 'Tentacles of Dark Matter',
+    flavor: 'It reaches further than it looks like it can.',
+    type: 'passive', domain: 'spiritual', prereq: 'necro_blood_skeleton',
+    trigger: docTrigger('ALWAYS_ON'), cooldown: 0, compose: [],
+    // "+1 cleave target every 2nd rank; +8px Monster reach per rank." Neither a
+    // summon's reach nor its cleave count is a passive key, so this lands as
+    // summon damage instead — the closest expressible reading of "the Monster
+    // hits more things". Reported.
+    passive: { summonDmg: T.tentacleReach },
+    ranks: rankPer(8, 100),
+  },
+  {
+    id: 'necro_death_channel', tree: 'necro_summons', tier: 9, name: 'Death Channel',
+    flavor: 'Dying is a process with a rate, and the rate can be adjusted.',
+    type: 'active', domain: 'spiritual', prereq: 'necro_tentacles_of_dark_matter',
+    select: 'lowest_hp',
+    trigger: docTrigger('LOWEST_HP_ENEMY', { range: T.channelRange }),
+    cooldown: T.channelCd,
+    // PACE STAYS `fast (1200ms)` — it matches the current bucket table, and
+    // `cdFromEnd` is a RIDERS property, which is where the document declares
+    // it. The two are different facts about the same cooldown.
+    compose: [{ kind: 'channel', damage: T.channelDamage, range: T.channelRange,
+      tickMs: T.channelTick, duration: T.channelDur, cdFromEnd: true }],
+    ranks: rankPer(2, T.channelDamage),
+  },
+  {
+    id: 'necro_entropy_cascade', tree: 'necro_summons', tier: 1, name: 'Entropy Cascade',
+    flavor: 'It does not spread. It simply keeps arriving.',
+    type: 'active', domain: 'spiritual', prereq: null,
+    select: 'nearest',
+    trigger: docTrigger('TARGET_UNAFFECTED', { range: T.cascadeRange }),
+    cooldown: T.cascadeCd,
+    // `plague` with NO spread radius, per the classification. "Stacks to 6" is
+    // not expressible — `applyPlague` refreshes rather than stacking — so this
+    // is a refreshing DoT and the stack count is reported, not faked.
+    compose: [{ kind: 'plague', damage: T.cascadeDamage, duration: T.cascadeDur,
+      tick: T.cascadeTick, range: T.cascadeRange, spreadRadius: 0 }],
+    ranks: rankPer(2, T.cascadeDamage),
   },
   {
     id: 'necro_army_of_the_dead', tree: 'necro_summons', tier: 10, name: 'Army of the Dead',
     flavor: 'You stop asking. The floor answers anyway.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_dread_howl',
-    select: 'densest_cluster',
-    trigger: { kind: 'SELF_THRESHOLD', pct: T.armyTrigPct },
+    type: 'active', domain: 'spiritual', prereq: 'necro_death_channel',
+    select: 'self',
+    trigger: docTrigger('CROWD_THRESHOLD', { radius: T.armyCrowdRadius, count: T.armyCrowdCount }),
     cooldown: T.armyCd,
-    compose: [
-      {
-        kind: 'summon', archetype: 'risen', move: 'chase',
-        count: T.armyCount, slotted: false, revives: false,
-        hp: T.armyHp, radius: T.armyRadius, spawnRadius: T.armySpawnRadius,
-        duration: T.armyDuration,
-        attackCd: T.armyAtkCd,
-        attack: { kind: 'strike', damage: T.armyDamage, arc: T.armyArc, reach: T.armyReach, select: 'nearest', riders: {} },
-      },
-      // The burst reads `pack` — the count of minions standing — through the
-      // same engineScale() hook Footing and armour use. Summons feeding the
-      // existing engine hook is the cheapest evidence that they are inside the
-      // schema rather than beside it.
-      { kind: 'cone', damage: T.armyBurstDamage, angle: T.armyBurstAngle, range: T.armyBurstRange,
-        scaleWith: 'pack', scaleWeight: T.armyWeight, riders: {} },
-    ],
-    ranks: R,
+    compose: [{
+      kind: 'summon', archetype: 'skeleton', move: 'chase',
+      count: T.armyCount, maxAlive: T.armyCount, slotted: false, revives: false,
+      hp: T.armyHp, radius: T.armyRadius, spawnRadius: T.armySpawnRadius,
+      // TIMED, AND OUTSIDE THE CAP. `slotted: false` is what "do not count
+      // against the skeleton cap" means, and the duration is what "when they
+      // expire they expire" means. Neither needed a new field.
+      duration: T.armyDuration,
+      attackCd: T.armyAtkCd,              // MILLISECONDS
+      attack: { kind: 'strike', damage: T.armyDamage, arc: T.armyArc, reach: T.armyReach,
+        select: 'nearest', riders: {} },
+    }],
+    ranks: rankPer(0, 0, { durationAdd: 4, durationBase: T.armyHp }),
   },
 ];

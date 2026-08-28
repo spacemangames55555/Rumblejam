@@ -281,6 +281,12 @@ export function tickSkills(sim, dt) {
     if (p.gone) continue;
     // publish the engines other trees read
     p.engines.armor = Math.max(0, p.stats.grit);
+  // SUMMON-STAT PASSIVES, STASHED FOR js/minions.js. That module cannot import
+  // this one — the arrow runs minions -> compose and game owns the facade — so
+  // the totals are written onto the player instead, beside the engines, and
+  // `summonDmgMult`/`summonHpMult` add them to the item aggregate they already
+  // read. Five Necromancer passives depend on it.
+  p.summonPassive = { dmg: passiveSum(p, 'summonDmg'), hp: passiveSum(p, 'summonHp') };
     // THE WIZARD'S SHIFT ENGINE (§8.3): attunements banked this room, written by
     // the `shift` primitive and reset at every door. One publish line, beside
     // armor's, which is what "content-shaped" was supposed to mean.

@@ -147,8 +147,8 @@ export function ingenuityMult(p) {
 // moved. Both were read only by `_summonStats` — the weapon-era structure path
 // — so an item promising stronger summons did nothing for a skill-era summon
 // (D-25).
-export function summonDmgMult(p) { return 1 + ((p && p.hookAgg ? p.hookAgg.summonDmg : 0) || 0) / 100; }
-export function summonHpMult(p) { return 1 + ((p && p.hookAgg ? p.hookAgg.summonHp : 0) || 0) / 100; }
+export function summonDmgMult(p) { return 1 + (((p && p.hookAgg ? p.hookAgg.summonDmg : 0) || 0) + ((p && p.summonPassive ? p.summonPassive.dmg : 0) || 0)) / 100; }
+export function summonHpMult(p) { return 1 + (((p && p.hookAgg ? p.hookAgg.summonHp : 0) || 0) + ((p && p.summonPassive ? p.summonPassive.hp : 0) || 0)) / 100; }
 
 // ---------------------------------------------------------------- the actor
 //
