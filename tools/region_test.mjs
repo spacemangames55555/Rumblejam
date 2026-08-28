@@ -270,7 +270,15 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
       ['truncated file', SV.exportBundle([c], store).slice(0, 120)],
       ['wrong version', JSON.stringify({ v: 99, characters: [c], player: store })],
       ['unknown class', JSON.stringify({ v: SV.SAVE_VERSION, characters: [{ ...c, class: 'toh_nobody' }], player: store })],
+      // A LIVE ID OF ANOTHER CLASS, AND IT HAS TO STAY LIVE. A save claiming
+      // points on an id that no longer exists is also refused — for the wrong
+      // reason. This case is named "another class's skill", so it must fail on
+      // OWNERSHIP; a dead id would turn it into the unknown-id case below
+      // without saying so, and the Necromancer's id rule will retire this exact
+      // id when its Dark Matter tree converts. The two reasons are separated
+      // here so that rename cannot quietly hollow the case out.
       ['points on another class\'s skill', JSON.stringify({ v: SV.SAVE_VERSION, characters: [{ ...c, points: { spent: { necro_blip: 3 }, unspent: 0 } }], player: store })],
+      ['points on a skill that does not exist', JSON.stringify({ v: SV.SAVE_VERSION, characters: [{ ...c, points: { spent: { necro_not_a_skill: 3 }, unspent: 0 } }], player: store })],
       ['frontier out of range', JSON.stringify({ v: SV.SAVE_VERSION, characters: [{ ...c, frontier: 99 }], player: store })],
     ];
     const refused = bad.filter(([, text]) => !SV.importBundle(text).ok);
