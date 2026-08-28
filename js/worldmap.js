@@ -90,10 +90,26 @@ export function worldMapState(character, playerStore) {
   };
 }
 
-// A party enters together, so the entry check is over every member. The rule is
-// the HOST's frontier gates the room — a friend below their frontier is carried
-// (loot and XP, no world progress), a friend above it cannot be, because a
-// region they have not reached is a region they cannot legally be in.
+// CARRY, AND SAY SO. This function is NOT wired into the running game, and that
+// is the ruling rather than an oversight — nothing calls it but
+// `tools/region_wire_gate.mjs`.
+//
+// A joiner admitted at a world map stop enters whatever region the party
+// enters, whatever their own frontier. There is no entry check over the party:
+// the host's active character sets the region and everyone goes.
+//
+// FRONTIER DOES NOT TRAVEL, which is what makes that safe. A carried member
+// takes levels, xp and loot as normal and no world progress —
+// `onRegionCleared` returns 'above-frontier' and moves nothing. A region is
+// unlocked by clearing it AT your own frontier, never by being carried past
+// it. Class unlocks are meant to follow the same rule; see the flag on
+// `recordUnlock` in `js/saves.js`, which is the one progression path that does
+// not read a frontier at all.
+//
+// The alternative was wiring this as a real gate, and it deadlocks: a party
+// standing at region 2 that admits a frontier-1 joiner could then enter
+// nothing. Kept as the executable statement of the frontier rule, because a
+// rule with no runnable form is a rule that drifts.
 export function partyCanEnter(characters, regionIndex) {
   const region = REGION_BY_INDEX[regionIndex];
   if (!region) return { ok: false, reason: `region ${regionIndex} does not exist` };

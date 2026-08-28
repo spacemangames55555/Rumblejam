@@ -64,6 +64,16 @@ export function canEnter(character, regionIndex) {
 // Clearing region N records its native class as unlocked. The class does not
 // exist yet — the store proves it works, the UI shows a named but unplayable
 // entry, and no class comes into scope to prove a store.
+//
+// FLAGGED — THE ONE PROGRESSION PATH THAT READS NO FRONTIER. The carry ruling
+// says a carried member earns no class unlock, the same way they earn no
+// frontier advance. Today that holds only because the single call site is
+// host-only (`js/main.js`, guarded on `app.role !== 'client'`) and the host's
+// own world map never offers a region above their frontier. That is a CALL-SITE
+// guarantee, not a store guarantee: the day per-peer saves travel and a carried
+// member's device runs this, it grants the unlock unconditionally. The thing to
+// check against is the CHARACTER's frontier — `store` here is the device-wide
+// player store, which does not have one.
 export function recordUnlock(store, regionIndex) {
   const region = REGION_BY_INDEX[regionIndex];
   if (!region || !region.nativeClass) return null;
