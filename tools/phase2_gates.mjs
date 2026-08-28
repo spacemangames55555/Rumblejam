@@ -157,14 +157,14 @@ const CONFIGS = [
     level: 21,
     learn: p => (p.charId === 'toh_samurai'
       ? [['sam_sweeping_guard', 0]]
-      : [['necro_hex', 0]]),
+      : [['necro_hex_of_entropy', 0]]),
   },
   {
     label: 'B: phase-2 (both trees, level 66, 8 slots)',
     level: 66,
     learn: p => (p.charId === 'toh_samurai'
       ? [['sam_unbroken', 0], ['sam_unsheathed', 0]]
-      : [['necro_bomb', 0], ['necro_marrownaut', 0]]),
+      : [['necro_dark_matter_bomb', 0], ['necro_marrownaut', 0]]),
   },
 ];
 

@@ -227,7 +227,7 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   else fail(`loadout drew from ${slotTrees.size} tree(s): ${JSON.stringify(p.loadout)}`);
 
   // and a skill from the other class must still be refused
-  if (!SK.spendSkillPoint(g, p, 'necro_blip')) ok('a Samurai still cannot buy a Necromancer skill — free spending is across YOUR trees, not all trees');
+  if (!SK.spendSkillPoint(g, p, 'necro_dark_energy_blip')) ok('a Samurai still cannot buy a Necromancer skill — free spending is across YOUR trees, not all trees');
   else fail('a Samurai bought a Necromancer skill');
 }
 
@@ -277,7 +277,7 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
       // without saying so, and the Necromancer's id rule will retire this exact
       // id when its Dark Matter tree converts. The two reasons are separated
       // here so that rename cannot quietly hollow the case out.
-      ['points on another class\'s skill', JSON.stringify({ v: SV.SAVE_VERSION, characters: [{ ...c, points: { spent: { necro_blip: 3 }, unspent: 0 } }], player: store })],
+      ['points on another class\'s skill', JSON.stringify({ v: SV.SAVE_VERSION, characters: [{ ...c, points: { spent: { necro_dark_energy_blip: 3 }, unspent: 0 } }], player: store })],
       ['points on a skill that does not exist', JSON.stringify({ v: SV.SAVE_VERSION, characters: [{ ...c, points: { spent: { necro_not_a_skill: 3 }, unspent: 0 } }], player: store })],
       ['frontier out of range', JSON.stringify({ v: SV.SAVE_VERSION, characters: [{ ...c, frontier: 99 }], player: store })],
     ];
