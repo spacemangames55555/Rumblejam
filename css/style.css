@@ -334,6 +334,10 @@ body.touch-on .wdetail{font-size:13px;}
 #settings-panel label{display:block; font-size:14px; margin-bottom:10px;}
 #settings-panel input[type=range]{width:100%;}
 #net-status{position:absolute; left:50%; bottom:10px; transform:translateX(-50%); background:#101220cc; color:var(--dim); font-size:12px; padding:3px 12px; border-radius:6px; border:1px solid var(--line);}
+/* the status pill can carry one action — see setNetStatus's note on why a held
+   joiner needs an exit that does not exist anywhere else on the title screen */
+#net-status{display:flex; align-items:center; gap:10px;}
+#net-status .net-leave{min-height:0; padding:1px 10px; font-size:11px; width:auto; letter-spacing:1px;}
 
 /* ---------- Touch / mobile ---------- */
 #interact-btn{position:absolute; right:128px; bottom:10px; min-height:48px; padding:10px 20px;

@@ -445,6 +445,12 @@ function hostReturnToLobby(clearChars = true) {
 // ---------------- lobby: host ----------------
 
 function hostGame() {
+  // A HELD JOINER IS STILL CONNECTED, and sitting on the title screen where
+  // this button lives. Hosting straight from that state left the old client
+  // transport and its 33 ms keepalive running against the other host. Nothing
+  // could reach this before the hold: a client was never on the title screen
+  // with a live connection.
+  if (app.role === 'client') leaveToTitle();
   app.role = 'host';
   app.mode = 'lobby';
   app.myKey = '_local';
@@ -724,13 +730,26 @@ function startRunCommon() {
 let joinPending = false;
 function joinGame(code) {
   if (joinPending) return; // one attempt at a time
+  // A HELD JOINER IS ALREADY CONNECTED, and sitting on the title screen where
+  // this button lives. Attempting a second join left "Connecting…" on screen
+  // forever, whichever way it went: the resolve path bails on `app.role`, and
+  // the reject path only speaks when `app.mode === 'title'` — which a held
+  // client's is not. Refused up front, so the answer arrives immediately.
+  if (app.role) { setTitleError('Already in a room — leave first.'); return; }
   joinPending = true;
   const t = new ClientTransport();
   setTitleError('Connecting…');
   t.join(code).then(() => {
     joinPending = false;
     // stale resolve: the user moved on (hosted a game / left the title) meanwhile
-    if (app.mode !== 'title' || app.role) { t.close(); return; }
+    if (app.mode !== 'title' || app.role) {
+      t.close();
+      // NOT an error, but not silence either. `setTitleError('Connecting…')`
+      // is already on screen and this path never clears it, so a held joiner
+      // who pressed JOIN sat under a "Connecting…" that would never resolve.
+      setTitleError(app.role ? 'Already in a room — leave first.' : '');
+      return;
+    }
     app.role = 'client';
     app.clientT = t;
     app.mode = 'lobby';
@@ -822,8 +841,11 @@ function clientOnMessage(msg) {
     }
     case 'held':
       // Not an error and not a disconnect: the connection stays open and the
-      // host admits us at its next world map stop.
-      setNetStatus(msg.reason || 'Waiting for the party to reach the world map…');
+      // host admits us at its next world map stop. The wait has no upper bound
+      // — a party that keeps wiping never reaches a world map stop — so it
+      // ships with its own way out rather than leaving a reload as the only one.
+      setNetStatus(msg.reason || 'Waiting for the party to reach the world map…',
+        { label: 'Leave', go: leaveToTitle });
       break;
     case 'retry':
       // The host is replaying the region we just wiped in. Nothing to do but

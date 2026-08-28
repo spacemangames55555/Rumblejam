@@ -320,11 +320,18 @@ function initSettings() {
   };
 }
 
-export function setNetStatus(text) {
+// `action` is an ESCAPE HATCH for a status the player cannot dismiss any other
+// way. A held joiner waits on the TITLE screen, which has no Leave control —
+// it never needed one, because before the hold a client on the title screen
+// was always a client with no connection. Without this the only exit from the
+// wait is a page reload.
+export function setNetStatus(text, action = null) {
   const el = $('net-status');
-  if (!text) { el.classList.add('hidden'); return; }
+  if (!text) { el.classList.add('hidden'); el.innerHTML = ''; return; }
   el.classList.remove('hidden');
-  el.textContent = text;
+  if (!action) { el.textContent = text; return; }
+  el.innerHTML = `<span>${escapeHtml(text)}</span> <button id="btn-net-leave" class="net-leave">${escapeHtml(action.label)}</button>`;
+  $('btn-net-leave').onclick = () => { sfx.click(); action.go(); };
 }
 
 export function escapeHtml(s) {
