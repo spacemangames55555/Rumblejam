@@ -1406,3 +1406,89 @@ and reported `REGENERATION` here, because two hits did land. Two hits out of
 twenty-three is not regeneration; the branch was too coarse and would have sent
 the fix at the elite mod. It now compares hits-on-target against
 selections-of-target and names `DELIVERY` when the gap is wide.
+
+---
+
+## #22 — the converted Dark Matter tree makes standing still a winning strategy
+
+**Shipped deliberately, open, and the thing Casey is playtesting.**
+
+The Necromancer's Dark Matter tree is converted from
+`docs/design/classes/necromancer.md`. Converted, a **never-moving** Necromancer
+survives all 25 statue rooms and **clears 20 of them**. The built tree, at built
+numbers, dies in all 25.
+
+**No single node or dial is responsible.** Eleven full suite runs:
+
+| configuration | statue rooms survived |
+|---|---|
+| doc damage + doc pace | 25 |
+| doc damage + built pace | 25 |
+| built damage + doc pace | 25 |
+| **built damage + built pace + doc shapes** | **25** |
+| doc numbers + built selectors | 25 |
+| trigger conditions restored | 25 |
+| the three area nodes silenced | 25 |
+| the channel silenced | 25 |
+| the plague silenced | 25 |
+| every range at its built value | 25 |
+
+Built numbers with the document's shapes still fail, so this is not a magnitude
+problem and there is no number to tune. It is ruling 7's lesson arriving through
+a whole tree rather than through one aura: nine ranged actives, each
+individually reasonable, remove the cost of not playing. **Marrow is the
+control** — melee, converted, and it passes. The difference is reach.
+
+**What was done about it: nothing, on purpose.** The tree ships as authored so
+the problem can be felt rather than read about. The statue check still runs for
+the whole roster — its reference character moved to the Samurai, which is melee
+and unconverted — and the Necromancer still runs beside it, reporting the room
+count against this defect. The day that line reports zero clears, the exception
+can be retired and `STATUE_REF` pointed back at the Necromancer.
+
+**AND THE TREE IS NOT UNIQUE — the test is already false of six classes.**
+Measured across all fourteen as motionless statues, 15 rooms each:
+
+| outcome | classes |
+|---|---|
+| dies in every room | druid, mage, bard, witch doctor, priest, sundian |
+| dies in most | assassin (11 of 15) |
+| **never dies, clears rooms** | **blacksmith, wizard, necromancer, samurai, monk, savage** |
+
+The **Wizard clears 15 of 15** — more than the Necromancer's 10 — and the
+**Samurai ends every room at 100% health**, never touched at all. The converted
+Dark Matter tree joined an existing group of six rather than creating a new
+problem, and the statue check has been asserting something false of nearly half
+the roster.
+
+Its reference character is now the Priest, which dies in every room. The
+Samurai was the first choice and was the worst possible one.
+
+**So the ruling is probably about the test, not only the tree.** Whether a
+motionless character *should* be able to clear a room is a design question;
+whether this check can tell you is now answered — it cannot, for six classes.
+
+---
+
+## #23 — the converted Necromancer can barely break a barricade
+
+**Shipped with #22, same reason, and the cause is a field the document never mentions.**
+
+`toh_necromancer cannot break a barricade: 27/135 damage in 150s`. Not a
+softlock — it chips — but a barricade that took seconds now takes minutes.
+
+**The built tier-1 node declared `select: 'objective_target'` and the
+conversion changed it to `nearest`.** That selector was the class's
+barricade-breaker, and no line in `docs/design/classes/necromancer.md` mentions
+objectives, barricades or walls at all. The document specifies what a skill
+hits in terms of enemies only, so a faithful conversion silently drops the one
+target type that is not an enemy.
+
+**This is the sharpest instance of the `select` finding.** `select` is the one
+category that still needs a judgment call per node, and this shows the call is
+not merely "which enemy" — it is sometimes "an enemy at all". Any of the twelve
+remaining classes whose built tree uses `objective_target` will lose the same
+capability when converted, invisibly, because the documents cannot express it.
+
+Not fixed: restoring the selector would change ranged targeting behaviour, and
+that is the ruling Casey is playtesting.
