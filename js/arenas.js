@@ -149,8 +149,8 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 // rate(t) = r0 → r1 (enemies/sec, pre-co-op-scaling), linear.
 
 // THE ONBOARDING RAMP. Region 1's first maps carry a fraction of the normal
-// spawn rate, indexed by node column — 50% on map 1, 75% on map 2, full from
-// map 3.
+// spawn rate, indexed by node column — FULL on map 1 (see the reversal below),
+// 75% on map 2, full from map 3.
 //
 // WHY A RAMP AND NOT A ONE-MAP DISCOUNT. Measured on the live build, a character
 // finishes map 1 at LEVEL 6 with two slots open and five unspent points, having
@@ -162,7 +162,51 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 //
 // Depth is `node.col`, which `waveConfig` already receives — this is arithmetic
 // inside an existing parameter, not a new channel.
-export const ONBOARDING_RATE = [0.5, 0.75, 1];
+//
+// ---------------------------------------------------------------------------
+// MAP 1'S HALVING IS REVERSED: 0.5 -> 1.0. The reasoning above still stands for
+// map 2's half-step and is left intact, because the ramp was not wrong in kind
+// — it was wrong in degree on the one map it hit hardest.
+//
+// WHAT IT COST, MEASURED. Nine runs, three party sizes, three fixed seeds,
+// deterministic. At 0.5 a solo map 1 spawned one enemy every 2.8 s at t=0 and
+// fielded ~41 across the whole 65 s. The consequence was not a long wait but a
+// STUTTER — sixteen separate gaps in one run, the longest 3.4 s:
+//
+//   - the field sat at ONE enemy or fewer for 71% of the opening twenty
+//     seconds solo, and at two or fewer for 83% of it
+//   - across the whole map it sat at two or fewer (with something still alive)
+//     for 57.7% of its duration, and completely empty for 9.6%
+//   - the same figures at 4p and 8p were 14.5% and 3.3%, because `coopSpawn`
+//     multiplies the rate by party size — so the halving was felt almost
+//     entirely by the solo player it was written to protect
+//
+// A player who kills the one thing in the room and waits ~3 s for the next is
+// not being onboarded, they are being idled. Map 2 keeps its 75% precisely
+// because the measurement did not indict it.
+//
+// THE THREE LEVELS RETURN BY DESIGN — AND THEY NOW RETURN TWICE. Mind this
+// before touching either number again. The three levels the halving cost had
+// ALREADY been paid back once, by ONBOARDING_XP_MULT's 3.4x below, which exists
+// only to undo this halving's effect on materials. With the halving gone that
+// multiplier compensates for something that no longer happens, and map 1 pays
+// out roughly twice what it is meant to.
+//
+// Measured on the same god-mode probe `region_test` uses (kill on contact, walk
+// the loot, so survivability cannot confound it), a character leaving map 1:
+//
+//   seed 777    level 6 -> level 9   (41 -> 71 materials banked)
+//   seed a11ce  level 6 -> level 8   (40 -> 64 materials banked)
+//
+// AND NO GATE CATCHES THAT. `region_test`'s check is `p.level >= WANT_LEVEL` —
+// a FLOOR, not a band — so an overshoot to level 9 passes as silently as level
+// 6 does. The comment on ONBOARDING_XP_MULT says any change to the rate "lands
+// here by name"; that is true only for a change that makes the room pay LESS.
+// This one makes it pay more and the gate stays green.
+//
+// Retuning ONBOARDING_XP_MULT[0], and widening that assertion into a band, are
+// both separate calls and are deliberately NOT made here.
+export const ONBOARDING_RATE = [1, 0.75, 1];
 export function onboardingMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
   return ONBOARDING_RATE[Math.min(depth, ONBOARDING_RATE.length - 1)];

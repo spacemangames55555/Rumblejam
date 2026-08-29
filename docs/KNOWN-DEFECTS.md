@@ -1492,3 +1492,65 @@ capability when converted, invisibly, because the documents cannot express it.
 
 Not fixed: restoring the selector would change ranged targeting behaviour, and
 that is the ruling Casey is playtesting.
+
+## #24 — straight-line harness movers stall on map 1's obstacle walls
+
+**Harness, not the game.** Nothing a player experiences; everything a
+*measurement* experiences. It froze four of nine runs in the spawn-gap
+measurement and silently zeroed the XP figure in two more, so it has now
+corrupted two different numbers in one session.
+
+**What it is.** `driveEngage` (`tools/fixture_build.mjs:228`) walks a straight
+line at `trigGrid.nearest` and stops at a standoff. Region 1 map 1 has 60-wide
+obstacle walls — measured on seed `cafe`, `{x:786, y:36, w:60, h:827}` — and
+`warden`-behaviour enemies (`pnw_sapling`) that never move toward the player.
+Put those together and the driver parks against the wall with a stationary
+enemy 85 units away on the other side of it, pressing into stone forever.
+
+Measured, solo, seed `cafe`: **31 kills, 8 alive, frozen for 230 seconds** —
+player hp 76 and total enemy hp 71 both unchanged tick after tick, nearest
+enemy 85 units away the whole time. The player can move (pushed +x it travelled
+600 units); it just never chooses to, because the target is straight through a
+wall. Sweeping the standoff (110 / 60 / 30 / 0) did not fix it: at every value
+the run plateaued with enemies alive.
+
+**It is not only `driveEngage`.** `region_test`'s XP probe walks loot with the
+same straight-line rule (`tools/region_test.mjs:341`). On seeds where the loot
+falls across a wall the character banks nothing, the drops fizzle, and the probe
+reports **level 1 from a room that paid 79 kills** — indistinguishable, from the
+outside, from a room that pays nothing. Measured on seed `cafe`: 0 materials
+banked from ~79 kills. `region_test` is green today only because it hardcodes
+seed 777, which happens not to sit behind a wall.
+
+**Workaround, so the next measurement does not rediscover this.** Add a stall
+detector and commit to a perpendicular detour for a beat, alternating sides —
+the same shape `rushMove` already uses for enemies
+(`js/entities/enemies.js:20`). Roughly:
+
+```js
+const moved = Math.hypot(p.x - lastX, p.y - lastY);
+if (moved < 0.4) stuck++; else stuck = Math.max(0, stuck - 2);
+if (stuck > 12 && detour <= 0) { detour = 48; side = -side; stuck = 0; }
+if (detour > 0) { detour--; setInput({ mx: -dy / d * side, my: dx / d * side }); }
+else setInput({ mx: dx / d, my: dy / d });
+```
+
+With that in place the same seed `cafe` fight clears at **82.5 s with 39 kills**
+instead of hanging. It is a floor on human competence, not a model of good play
+— a person sees the wall and goes around it immediately — so tail and duration
+figures measured this way stay pessimistic, and it does not rescue every seed:
+`cafe` still banks 0 loot, so seeds must be checked for collection before their
+XP numbers are trusted.
+
+**Not fixed.** The workaround lives in the probes that need it rather than in
+`fixture_build.mjs`, because changing `driveEngage` changes the numbers every
+existing tuning tool has already reported. Promoting it is a separate call —
+and the right version is pathfinding, not a sidestep.
+
+**Unrelated to the map 1 onboarding change** it was found alongside. It
+reproduces at both `ONBOARDING_RATE[0]` values, in two flavours: at 0.5 the run
+freezes outright (kills and both sides' hp unchanged for 230 s), and at 1.0 it
+degrades into a crawl instead — measured, 62 to 65 kills across 100 seconds with
+16 enemies alive, the nearest parked at 84 units, while the player's own hp
+bleeds 35 to 23. Same cause, and the second flavour is the more dangerous one to
+a measurement because it still looks like progress.
