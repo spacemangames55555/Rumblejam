@@ -8,6 +8,10 @@
       114
     ]
   },
+  "beast.necro_skeleton": {
+    "w": 128,
+    "h": 128
+  },
   "char.toh_assassin": {
     "w": 128,
     "h": 128,

@@ -24,7 +24,7 @@ import { ALL_BOSS_DEFS } from '../js/content/bosses.js';
 import { WEAPONS } from '../js/content/weapons.js';
 import { ITEMS } from '../js/content/items.js';
 import {
-  SPRITE_SIZE, PROP, PROP_BOTTOM_ANCHORED, FX, UI, PYLON_SPRITE, BEAST_SPRITE, allProjSpriteIds,
+  SPRITE_SIZE, PROP, PROP_BOTTOM_ANCHORED, FX, UI, PYLON_SPRITE, BEAST_SPRITE, MINION_SPRITE, allProjSpriteIds,
   UNIT_DIRECTIONS, DIRECTIONAL_NAMESPACES,
 } from '../js/content/sprites.js';
 import { BIOMES, tileSpriteIds, tileFile } from '../js/biomes.js';
@@ -82,6 +82,9 @@ for (const id of Object.values(PROP)) {
 
 // ---- combat pets: eight facings, like any other unit ----
 for (const id of Object.values(BEAST_SPRITE)) add(id);
+
+// ---- summoned minions: same namespace, same eight rows ----
+for (const id of Object.values(MINION_SPRITE)) add(id);
 
 // ---- world FX and UI chrome ----
 for (const id of Object.values(FX)) add(id);

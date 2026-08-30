@@ -24,7 +24,7 @@ import { ALL_ENEMY_DEFS } from '../js/content/enemies.js';
 import { ALL_BOSS_DEFS } from '../js/content/bosses.js';
 import { REGION_ENEMIES } from '../js/content/regions-enemies.js';
 import { REGION_BY_ID } from '../js/regions.js';
-import { PYLON_SPRITE, BEAST_SPRITE } from '../js/content/sprites.js';
+import { PYLON_SPRITE, BEAST_SPRITE, MINION_SPRITE } from '../js/content/sprites.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ANCHOR = join(ROOT, 'docs', 'STYLE_ANCHOR.md');
@@ -86,6 +86,15 @@ for (const b of ALL_BOSS_DEFS) {
 // Combat pets are units with eight facings like any other; `beast.bear` was
 // manifested, silhouetted by nobody and skipped here as if it were an icon.
 for (const id of Object.values(BEAST_SPRITE)) subject[id] = 'Bear, a hunter\'s bonded combat beast, quadruped';
+// Summoned minions. Hand-drawn rather than generated so far, but a directional
+// id without a subject is an id this pipeline cannot describe — and the gate
+// that says so is the same one that catches a unit sheet nobody can regenerate.
+const MINION_SUBJECT = {
+  skeleton: 'Risen Skeleton, a necromancer\'s summoned armoured swordsman, skull-faced, humanoid',
+};
+for (const [arch, id] of Object.entries(MINION_SPRITE)) {
+  subject[id] = MINION_SUBJECT[arch] || `${arch}, a summoned minion, humanoid`;
+}
 
 // ---- batches, from docs/ART-GENERATION.md §5 ----
 //

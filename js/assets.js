@@ -426,6 +426,46 @@ export const Assets = {
   size() { return registry.size; },
 };
 
+// ---------------- owner tinting ----------------
+//
+// A minion is drawn in its OWNER's colour so a four-Necromancer party can tell
+// whose skeleton is whose (see MINION_ART in js/render.js). Giving it a sprite
+// would throw that signal away, so the sprite carries the colour instead.
+//
+// THE SHEET IS TINTED ONCE PER COLOUR, NOT ONCE PER DRAW. `source-atop` needs
+// its own canvas — composited onto the live context it would tint whatever is
+// already painted under the sprite as well — and a scratch canvas per entity
+// per frame is real cost for ten skeletons times eight players. Tinting the
+// whole sheet once and caching it is the same picture for one composite per
+// colour for the life of the run.
+//
+// Returns null on a headless harness or a tainted canvas, and the caller then
+// draws the sprite untinted: losing the owner tint is a worse picture, losing
+// the sprite is a missing one.
+const tintCache = new Map();
+function tintedSheet(s, color, strength) {
+  const key = `${s.file}|${color}|${strength}`;
+  if (tintCache.has(key)) return tintCache.get(key);
+  let out = null;
+  try {
+    if (typeof document !== 'undefined') {
+      const cv = document.createElement('canvas');
+      cv.width = s.img.width; cv.height = s.img.height;
+      const g = cv.getContext('2d');
+      if (g) {
+        g.drawImage(s.img, 0, 0);
+        g.globalCompositeOperation = 'source-atop';   // paints only where the art already is
+        g.globalAlpha = strength;
+        g.fillStyle = color;
+        g.fillRect(0, 0, cv.width, cv.height);
+        out = cv;
+      }
+    }
+  } catch { out = null; }
+  tintCache.set(key, out);
+  return out;
+}
+
 // ---------------- the draw helper ----------------
 
 // Frame column. A sheet is a horizontal strip of frames; a directional sheet
@@ -506,6 +546,10 @@ export function drawSprite(ctx, id, x, y, opts) {
   //   TUNE_*   the ?spritescale / ?playerscale flags, 1 unless on the URL.
   const scale = callerScale * s.fit * s.scale * (s.player ? TUNE_PLAYER : TUNE_ALL);
 
+  // The tint changes WHICH image is sampled, never the cell, the transform or
+  // the fast-path test — so a tinted sprite stays on whichever path it earned.
+  const img = (opts && opts.tint && tintedSheet(s, opts.tint, opts.tintStrength ?? 0.35)) || s.img;
+
   // Fast path: an unrotated, unscaled, opaque sprite. save()/restore() around
   // every one of a few hundred entities is real cost for nothing. Every
   // directional sprite qualifies on the rotation half of the test by
@@ -517,7 +561,7 @@ export function drawSprite(ctx, id, x, y, opts) {
   // global: an entry without `scale` composes to exactly 1 and stays on the
   // fast path, bit-identical to before the key existed.
   if (rot === 0 && !flipX && scale === 1 && alpha === 1) {
-    ctx.drawImage(s.img, sx, sy, w, h, x - w / 2, y - ay, w, h);
+    ctx.drawImage(img, sx, sy, w, h, x - w / 2, y - ay, w, h);
     if (directional && SPRITE_MODE === 'debug') debugDir(ctx, row, s, x, y);
     return true;
   }
@@ -527,7 +571,7 @@ export function drawSprite(ctx, id, x, y, opts) {
   ctx.translate(x, y);
   if (rot) ctx.rotate(rot);
   if (scale !== 1 || flipX) ctx.scale(scale * (flipX ? -1 : 1), scale);
-  ctx.drawImage(s.img, sx, sy, w, h, -w / 2, -ay, w, h);
+  ctx.drawImage(img, sx, sy, w, h, -w / 2, -ay, w, h);
   ctx.restore();
   if (directional && SPRITE_MODE === 'debug') debugDir(ctx, row, s, x, y);
   return true;

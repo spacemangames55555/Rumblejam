@@ -215,6 +215,23 @@ export const BEAST_SPRITE = {
   bear: 'beast.bear',
 };
 
+// SUMMONED MINIONS, KEYED BY ARCHETYPE. `m.arch` is what the snapshot carries
+// and what `MINION_ART.radius` already switches on, so the sprite is looked up
+// by the same key rather than by a second name nobody else uses.
+//
+// THE `beast.` NAMESPACE IS DELIBERATE REUSE. A summoned pet is what that
+// namespace already holds, it is already in DIRECTIONAL_NAMESPACES above — so
+// these get their eight rows with no edit — and its per-sprite size arrives
+// through assets/sprite-overrides.json exactly as `beast.bear`'s does. A
+// `minion.` namespace would have needed a SPRITE_SIZE entry, a directional
+// registration and a folder, to hold the same thing under a second name.
+//
+// An archetype with no entry here draws as its coloured circle, which is what
+// every minion did before any of them had art.
+export const MINION_SPRITE = {
+  skeleton: 'beast.necro_skeleton',
+};
+
 // ---------------- world FX and pickups ----------------
 export const FX = {
   material: 'fx.material',

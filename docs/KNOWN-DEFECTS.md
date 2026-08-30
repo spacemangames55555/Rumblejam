@@ -1554,3 +1554,33 @@ degrades into a crawl instead — measured, 62 to 65 kills across 100 seconds wi
 16 enemies alive, the nearest parked at 84 units, while the player's own hp
 bleeds 35 to 23. Same cause, and the second flavour is the more dangerous one to
 a measurement because it still looks like progress.
+
+## #25 — minion facing flickers when the minion list reorders — DEFERRED, fix identified
+
+**Ruled acceptable, not undiscovered.** Recorded so the next person to see a
+skeleton snap to a wrong heading for a frame does not re-derive the cause.
+
+**What it is.** Minion sprites are directional, and their facing is derived from
+movement by `_faceAngle(key, x, y, null)` (`js/render.js:131`) — the same way
+enemies get theirs, and deliberately so, because it needs nothing on the wire.
+`_faceAngle` remembers the last position per KEY, and minions have no id to key
+on: the snapshot tuple is `[ownerIdx, arch, x, y, hpFrac, downFrac]`
+(`js/game.js:4854`). The key is therefore array-positional —
+`` `m${m.owner}:${m.arch}:${mi}` `` — so when a skeleton dies, every minion
+after it in the array shifts down one index and inherits the dead one's
+remembered position. The next frame's delta is then measured between two
+different creatures, and the survivors face a direction nobody walked in until
+they move far enough to correct.
+
+**How bad.** One frame per death, and only for same-owner same-archetype
+minions behind the one that died. A ten-skeleton Necromancer losing one mid-
+fight is the worst case and it self-corrects on the next movement tick. It
+cannot desync anything — facing is presentation only and never reaches the sim.
+
+**The fix, already identified.** Add a stable minion id as a seventh field on
+the snapshot tuple and key the facing on that. It is a netcodec change, which
+is why it was not taken: the flicker is a frame of cosmetics and the wire is
+not a place to spend a change casually. If the tuple is being touched for some
+other reason, take this at the same time.
+
+**Not fixed** by ruling, on the record, at the time the sprites were wired.
