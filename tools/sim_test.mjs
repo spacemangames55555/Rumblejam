@@ -3770,6 +3770,7 @@ try {
     ...S.allProjSpriteIds(),
     ...Object.values(S.PROP), ...Object.values(S.FX), ...Object.values(S.UI),
     ...Object.values(S.BEAST_SPRITE),
+    ...Object.values(S.MINION_SPRITE),
     // floor tiles: every variant of every biome, derived from js/biomes.js the
     // same way the generator derives them, so a biome added in one place and
     // not the other reads as an orphan here rather than as silent flat floor

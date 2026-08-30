@@ -8,6 +8,15 @@
       114
     ]
   },
+  "beast.necro_skeleton": {
+    "w": 128,
+    "h": 128,
+    "scale": 2.18,
+    "content": [
+      99,
+      124
+    ]
+  },
   "char.toh_assassin": {
     "w": 128,
     "h": 128,

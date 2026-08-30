@@ -10,7 +10,7 @@
 import { CONFIG, PALETTE } from './config.js';
 import { WEAPON_BY_ID } from './content/weapons.js';
 import { Assets, drawSprite, spriteScaleFor, DEFAULT_FACING } from './assets.js';
-import { PROP, FX, BEAST_SPRITE } from './content/sprites.js';
+import { PROP, FX, BEAST_SPRITE, MINION_SPRITE } from './content/sprites.js';
 import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
 import { DOMAIN_COLOR } from './domains.js';
 import { clamp } from './util.js';
@@ -22,6 +22,24 @@ import { clamp } from './util.js';
 // supposed to be a data change and must not need this file edited to appear.
 const MINION_ART = {
   radius: { skeleton: 9, golem: 15, risen: 10, wisp: 7, wolf: 11, bear: 15, hawk: 8 },
+  // How hard the owner's colour is pushed into a minion's sprite. THE NUMBER IS
+  // MEASURED AGAINST THE ART IT TINTS, which is the part that is easy to get
+  // wrong: 0.35 was picked on `beast.bear`, which is brown and saturated, and
+  // on the skeleton — bone and steel, nearly desaturated — the same alpha
+  // buries it. Rendered and measured across a ladder, as share of the art's
+  // luminance contrast that survives:
+  //
+  //     none 100%   0.12 88%   0.18 82%   0.25 75%   0.35 65%   0.50 50%
+  //
+  // At 0.35 a yellow or green owner reads as a coloured figure rather than as a
+  // skeleton, which is the failure the ruling names. At 0.18 the skull still
+  // reads bone, the armour steel and the sash red, and the owner colour is
+  // still unmistakable — helped by the hp bar and the down-ring, which carry
+  // the same colour and are not competing with the art for it.
+  //
+  // One number, deliberately easy to find. Re-judge it against NEW art rather
+  // than inheriting it: a dark or already-saturated minion will want less.
+  tint: 0.18,
   radiusDefault: 10,
   diamond: ['wisp', 'hawk'],       // flyers
   fallbackColor: '#9aa0bd',
@@ -286,7 +304,7 @@ export class Renderer {
     for (const d of view.decoys || []) { if (inView(d.x, d.y)) this._drawDecoy(ctx, d, view); }
     for (const s of view.summons || []) { if (inView(s.x, s.y)) this._drawSummon(ctx, s, view); }
     for (const tk of view.tokens || []) { if (inView(tk.x, tk.y)) this._drawSoulToken(ctx, tk); }
-    for (const m of view.minions || []) { if (inView(m.x, m.y)) this._drawMinion(ctx, m, view); }
+    (view.minions || []).forEach((m, i) => { if (inView(m.x, m.y)) this._drawMinion(ctx, m, view, i); });
     for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e); }
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
     // projectiles
@@ -1260,7 +1278,7 @@ export class Renderer {
   // tell whose bear is whose, with a shape per archetype family and — for the
   // Druid's animals — the same revive ring the Hunter's beast already uses, so
   // "down and coming back" reads identically wherever it appears.
-  _drawMinion(ctx, m, view) {
+  _drawMinion(ctx, m, view, mi) {
     const owner = (view.players || []).find(p => p.idx === m.owner);
     const col = owner ? owner.color : MINION_ART.fallbackColor;
     const r = MINION_ART.radius[m.arch] || MINION_ART.radiusDefault;
@@ -1279,6 +1297,29 @@ export class Renderer {
       ctx.strokeStyle = PALETTE.outline;
       ctx.lineWidth = MINION_ART.outline;
     }
+    // SPRITE FIRST, SHAPE IF THERE IS NONE — the same order and the same
+    // fallback `_drawBeast` uses, so a missing or unbuilt sheet costs the art
+    // and never the unit. An archetype absent from MINION_SPRITE skips straight
+    // to the circle it has always drawn.
+    const sid = MINION_SPRITE[m.arch];
+    if (sid) {
+      // FACING IS DERIVED FROM MOVEMENT, and the key is ARRAY-POSITIONAL —
+      // minions carry no id in the snapshot, so a minion that dies re-indexes
+      // the ones after it and they inherit each other's heading for a frame.
+      // Ruled as acceptable; see KNOWN-DEFECTS #25, which names the fix.
+      const drew = drawSprite(ctx, sid, 0, 0, {
+        scale: spriteScaleFor(sid, r * 2),
+        facing: m.down ? DEFAULT_FACING : this._faceAngle(`m${m.owner}:${m.arch}:${mi}`, m.x, m.y, null),
+        tint: col,
+        tintStrength: MINION_ART.tint,
+        seed: (m.owner + 1) * 31 + mi,
+      });
+      if (drew) {
+        this._minionHpBar(ctx, m, col, r);
+        ctx.restore();
+        return;
+      }
+    }
     ctx.fillStyle = col;
     ctx.beginPath();
     if (MINION_ART.diamond.includes(m.arch)) {
@@ -1288,14 +1329,19 @@ export class Renderer {
       ctx.arc(0, 0, r, 0, Math.PI * 2);
     }
     ctx.fill(); ctx.stroke();
-    // health, only once it matters — a full bar over every minion is noise
-    if (!m.down && m.hpP < MINION_ART.hpBarBelow) {
-      ctx.fillStyle = PALETTE.outline;
-      ctx.fillRect(-r, -r - MINION_ART.hpBarGap, r * 2, MINION_ART.hpBarH);
-      ctx.fillStyle = col;
-      ctx.fillRect(-r, -r - MINION_ART.hpBarGap, r * 2 * clamp(m.hpP, 0, 1), MINION_ART.hpBarH);
-    }
+    this._minionHpBar(ctx, m, col, r);
     ctx.restore();
+  }
+
+  // Health, only once it matters — a full bar over every minion is noise. Drawn
+  // from both the sprite and the shape path, so it is one function rather than
+  // two copies that drift.
+  _minionHpBar(ctx, m, col, r) {
+    if (m.down || m.hpP >= MINION_ART.hpBarBelow) return;
+    ctx.fillStyle = PALETTE.outline;
+    ctx.fillRect(-r, -r - MINION_ART.hpBarGap, r * 2, MINION_ART.hpBarH);
+    ctx.fillStyle = col;
+    ctx.fillRect(-r, -r - MINION_ART.hpBarGap, r * 2 * clamp(m.hpP, 0, 1), MINION_ART.hpBarH);
   }
 
   _drawSummon(ctx, s, view) {
