@@ -389,8 +389,48 @@
       "w": 32,
       "h": 32
     },
+    "fx.impact": {
+      "file": "fx/impact.png",
+      "w": 32,
+      "h": 32
+    },
     "fx.material": {
       "file": "fx/material.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.muzzle": {
+      "file": "fx/muzzle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_cleave": {
+      "file": "fx/sam_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_shockwave": {
+      "file": "fx/sam_shockwave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_slash": {
+      "file": "fx/sam_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_smite": {
+      "file": "fx/sam_smite.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_thrust": {
+      "file": "fx/sam_thrust.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_wardShell": {
+      "file": "fx/sam_wardShell.png",
       "w": 32,
       "h": 32
     },
@@ -406,6 +446,51 @@
     },
     "fx.telegraph_mark": {
       "file": "fx/telegraph_mark.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_beam": {
+      "file": "fx/wiz_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_bolt": {
+      "file": "fx/wiz_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_cleave": {
+      "file": "fx/wiz_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_healPulse": {
+      "file": "fx/wiz_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_puddle": {
+      "file": "fx/wiz_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_shockwave": {
+      "file": "fx/wiz_shockwave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_smite": {
+      "file": "fx/wiz_smite.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_spread": {
+      "file": "fx/wiz_spread.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_wardShell": {
+      "file": "fx/wiz_wardShell.png",
       "w": 32,
       "h": 32
     },

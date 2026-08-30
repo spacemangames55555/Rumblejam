@@ -13,7 +13,8 @@ import { Assets, drawSprite, spriteScaleFor, DEFAULT_FACING } from './assets.js'
 import { PROP, FX, BEAST_SPRITE, MINION_SPRITE } from './content/sprites.js';
 import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
 import { DOMAIN_COLOR } from './domains.js';
-import { clamp } from './util.js';
+import { clamp, angDiff } from './util.js';
+import { fxSpec, SHAPE } from './content/skillfx.js';
 
 // Minion and soul-token presentation. Rule 14: no inline constants in
 // behaviour code, and a renderer is behaviour code that happens to draw.
@@ -86,6 +87,9 @@ export class Renderer {
     this.arcs = [];
     this.flashBeams = [];
     this.rings = [];
+    this.casts = [];
+    this.impacts = [];
+    this.muzzles = [];
     this.shakeEnabled = true;
     this.showHitboxes = false;
     this.t = 0;
@@ -181,6 +185,11 @@ export class Renderer {
       const color = kind === 1 ? PALETTE.crit : kind === 2 ? '#9aa0bd' : kind === 3 ? '#ff5d6c' : '#ffffff';
       this.floaters.push({ x: h.x + (Math.random() * 16 - 8), y: h.y, vy: -60, t: 0, dur: 0.8, text, color, scale: kind === 1 ? 1.4 : 1 });
       if (this.floaters.length > 90) this.floaters.splice(0, this.floaters.length - 90);
+      // impact linger — the hit spark that used to vanish with the projectile
+      if (kind !== 2) {
+        this.impacts.push({ x: h.x, y: h.y, t: 0, dur: 0.45, color: kind === 3 ? '#ff5d6c' : '#fff6e8' });
+        if (this.impacts.length > 48) this.impacts.splice(0, this.impacts.length - 48);
+      }
     }
     for (const d of fx.deaths || []) {
       for (let i = 0; i < 10; i++) {
@@ -195,10 +204,82 @@ export class Renderer {
         this.particles.push({ x: b.x, y: b.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, dur: 0.35, color: i % 2 ? '#ffab4f' : '#ff5d3a', size: 2 + Math.random() * 3 });
       }
     }
-    for (const bm of fx.beams || []) this.flashBeams.push({ ...bm, t: 0, dur: 0.16 });
-    for (const s of fx.swings || []) this.arcs.push({ ...s, t: 0, dur: 0.16 });
+    for (const bm of fx.beams || []) {
+      const spec = bm.sid ? fxSpec(bm.sid) : null;
+      this.flashBeams.push({ ...bm, t: 0, dur: spec ? spec.dur : 0.42, spec, color: spec ? spec.color : bm.color });
+    }
+    for (const s of fx.swings || []) this._ingestSwing(s);
     for (const bl of fx.blocks || []) this.rings.push({ x: bl.x, y: bl.y, r: 30, t: 0, dur: 0.25, color: '#5ea8ff' });
+    for (const f of fx.skillFires || []) this._spawnSkillFire(f);
     if (this.particles.length > CONFIG.POOL_PARTICLES) this.particles.splice(0, this.particles.length - CONFIG.POOL_PARTICLES);
+    if (this.arcs.length > 56) this.arcs.splice(0, this.arcs.length - 56);
+    if (this.casts.length > 40) this.casts.splice(0, this.casts.length - 40);
+    if (this.flashBeams.length > 32) this.flashBeams.splice(0, this.flashBeams.length - 32);
+  }
+
+  // Overlapping swipes of the same cut stack width/alpha instead of spawning
+  // a second pie that reads as flicker. Weapon swings (no sid) still stack
+  // with each other if they share origin and heading.
+  _ingestSwing(s) {
+    const spec = s.sid ? fxSpec(s.sid) : null;
+    const arc = (s.arc > 0 ? s.arc : (spec ? spec.arc : 1.5));
+    const dur = spec ? spec.dur : 0.34;
+    const color = spec ? spec.color : (s.color || '#fff');
+    const shape = spec ? spec.shape : SHAPE.slash;
+    const lw0 = shape === SHAPE.cleave ? 11 : shape === SHAPE.thrust ? 5 : 7;
+    for (let i = this.arcs.length - 1; i >= 0; i--) {
+      const a = this.arcs[i];
+      if (a.t > a.dur * 0.72) continue;
+      if (Math.abs(a.x - s.x) > 10 || Math.abs(a.y - s.y) > 10) continue;
+      if (Math.abs(a.r - s.r) > 22) continue;
+      if (Math.abs(angDiff(a.a, s.a)) > 0.4) continue;
+      a.stack = Math.min(5, (a.stack || 1) + 1);
+      a.lw = Math.min(22, (a.lw || lw0) + 3.2);
+      a.t = Math.min(a.t, a.dur * 0.12);
+      a.color = color;
+      return;
+    }
+    this.arcs.push({
+      x: s.x, y: s.y, a: s.a, r: s.r, arc, color, spec, shape,
+      t: 0, dur, stack: 1, lw: lw0,
+    });
+  }
+
+  _spawnSkillFire(f) {
+    const spec = fxSpec(f.id);
+    if (!spec) return;
+    const a = (f.a !== undefined && f.a !== null) ? f.a : 0;
+    const x = f.x, y = f.y;
+    const tx = f.tx !== undefined ? f.tx : x + Math.cos(a) * spec.reach;
+    const ty = f.ty !== undefined ? f.ty : y + Math.sin(a) * spec.reach;
+    // Geometry channels already draw slash/cleave/thrust/beam. The fire still
+    // drops a muzzle spark so a 4-skill auto-fire loadout has a beat at the
+    // caster even when the arc is stacked into a neighbour.
+    if (spec.role === 'arc' || spec.role === 'beam') {
+      this._burst(x, y, spec, 4, 50);
+      return;
+    }
+    if (spec.role === 'bolt') {
+      this.muzzles.push({ x, y, a, t: 0, dur: spec.dur, spec });
+      this._burst(x + Math.cos(a) * 12, y + Math.sin(a) * 12, spec, 5, 90);
+      if (this.muzzles.length > 24) this.muzzles.splice(0, this.muzzles.length - 24);
+      return;
+    }
+    this.casts.push({ x, y, tx, ty, a, t: 0, dur: spec.dur, spec, reach: spec.reach, arc: spec.arc });
+    this._burst(spec.role === 'cast' ? tx : x, spec.role === 'cast' ? ty : y, spec, 6, 70);
+  }
+
+  _burst(x, y, spec, n, speed) {
+    const kit = spec.kit;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, s = speed * (0.4 + Math.random());
+      this.particles.push({
+        x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+        t: 0, dur: 0.22 + Math.random() * 0.18,
+        color: i % 2 ? spec.color : kit.core,
+        size: 1.5 + Math.random() * 2.2,
+      });
+    }
   }
 
   draw(view, dtFrame) {
@@ -266,6 +347,20 @@ export class Renderer {
       ctx.strokeStyle = z.color; ctx.lineWidth = 2;
       circle(ctx, z.x, z.y, z.r); ctx.stroke();
     }
+    for (const tr of view.traps || []) {
+      if (!inView(tr.x, tr.y, tr.r || 24)) continue;
+      const pulse = 0.55 + 0.45 * Math.sin(this.t * 7 + tr.x * 0.05);
+      ctx.globalAlpha = 0.22 * pulse;
+      ctx.fillStyle = tr.color || '#a3e635';
+      diamond(ctx, tr.x, tr.y, (tr.r || 22) * 0.55);
+      ctx.fill();
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = tr.color || '#a3e635';
+      ctx.lineWidth = 2;
+      diamond(ctx, tr.x, tr.y, (tr.r || 22) * 0.55);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     // the hold-the-circle sub-objective (siege)
     if (view.hold) {
       const [hx, hy, hr, held] = view.hold;
@@ -310,17 +405,26 @@ export class Renderer {
     // projectiles
     for (const pr of view.projs || []) {
       if (!inView(pr.x, pr.y)) continue;
-      // point the art the way the shot is travelling; a bolt is the one thing
-      // that always has a heading worth honouring
+      const heading = pr.vx !== undefined ? Math.atan2(pr.vy, pr.vx) : 0;
+      const spec = pr.skillId ? fxSpec(pr.skillId) : null;
+      // short trail so a 47ms bolt still reads as travel
+      if (pr.friendly && (pr.vx || pr.vy)) {
+        const spd = Math.hypot(pr.vx || 0, pr.vy || 0) || 1;
+        const ux = (pr.vx || 0) / spd, uy = (pr.vy || 0) / spd;
+        const col = spec ? spec.boltColor : (pr.color || '#fff');
+        for (let k = 1; k <= 3; k++) {
+          ctx.globalAlpha = 0.28 / k;
+          ctx.fillStyle = col;
+          circle(ctx, pr.x - ux * k * 7, pr.y - uy * k * 7, Math.max(1.4, (pr.radius || 5) * (0.7 - k * 0.12)));
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
       if (drawSprite(ctx, pr.spriteId, pr.x, pr.y, {
         scale: spriteScaleFor(pr.spriteId, (pr.radius || 5) * 3),
-        rot: pr.vx !== undefined ? Math.atan2(pr.vy, pr.vx) : 0,
+        rot: heading,
       })) continue;
-      ctx.fillStyle = pr.color || (pr.friendly ? '#fff' : '#ff5d6c');
-      ctx.strokeStyle = PALETTE.outline;
-      ctx.lineWidth = 1.5;
-      circle(ctx, pr.x, pr.y, pr.radius || 5);
-      ctx.fill(); ctx.stroke();
+      this._drawBoltPrimitive(ctx, pr, spec, heading);
     }
     // persistent boss beams
     for (const bm of view.beams || []) {
@@ -1451,26 +1555,35 @@ export class Renderer {
       const a = this.arcs[i];
       a.t += dt;
       if (a.t >= a.dur) { this.arcs.splice(i, 1); continue; }
-      const pr = a.t / a.dur;
-      ctx.globalAlpha = 0.55 * (1 - pr);
-      ctx.fillStyle = a.color || '#fff';
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.arc(a.x, a.y, a.r, a.a - a.arc / 2, a.a + a.arc / 2);
-      ctx.closePath();
-      ctx.fill();
+      this._drawArc(ctx, a);
     }
     ctx.globalAlpha = 1;
     for (let i = this.flashBeams.length - 1; i >= 0; i--) {
       const b = this.flashBeams[i];
       b.t += dt;
       if (b.t >= b.dur) { this.flashBeams.splice(i, 1); continue; }
-      ctx.globalAlpha = 1 - b.t / b.dur;
-      ctx.strokeStyle = b.color || '#ff5d6c';
-      ctx.lineWidth = (b.w || 4) * (1 - b.t / b.dur) + 1;
-      ctx.beginPath();
-      ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2);
-      ctx.stroke();
+      this._drawBeam(ctx, b);
+    }
+    ctx.globalAlpha = 1;
+    for (let i = this.muzzles.length - 1; i >= 0; i--) {
+      const m = this.muzzles[i];
+      m.t += dt;
+      if (m.t >= m.dur) { this.muzzles.splice(i, 1); continue; }
+      this._drawMuzzle(ctx, m);
+    }
+    ctx.globalAlpha = 1;
+    for (let i = this.casts.length - 1; i >= 0; i--) {
+      const c = this.casts[i];
+      c.t += dt;
+      if (c.t >= c.dur) { this.casts.splice(i, 1); continue; }
+      this._drawCast(ctx, c);
+    }
+    ctx.globalAlpha = 1;
+    for (let i = this.impacts.length - 1; i >= 0; i--) {
+      const im = this.impacts[i];
+      im.t += dt;
+      if (im.t >= im.dur) { this.impacts.splice(i, 1); continue; }
+      this._drawImpact(ctx, im);
     }
     ctx.globalAlpha = 1;
     // damage numbers
@@ -1490,6 +1603,380 @@ export class Renderer {
       ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
+  }
+
+  _drawArc(ctx, a) {
+    const pr = a.t / a.dur;
+    const fade = 1 - pr;
+    const stack = a.stack || 1;
+    const spec = a.spec;
+    const kit = spec && spec.kit;
+    const edge = kit ? kit.edge : PALETTE.outline;
+    const core = kit ? kit.core : '#ffffff';
+    const shape = a.shape || SHAPE.slash;
+    const r = a.r * (0.82 + 0.18 * fade);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (shape === SHAPE.thrust) {
+      const ca = Math.cos(a.a), sa = Math.sin(a.a);
+      const half = Math.max(6, (a.arc || 1.2) * 10);
+      ctx.globalAlpha = 0.55 * fade;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = (a.lw || 5) + 2;
+      ctx.beginPath();
+      ctx.moveTo(a.x + ca * 8, a.y + sa * 8);
+      ctx.lineTo(a.x + ca * r, a.y + sa * r);
+      ctx.stroke();
+      ctx.globalAlpha = (0.7 + 0.08 * stack) * fade;
+      ctx.strokeStyle = a.color;
+      ctx.lineWidth = a.lw || 5;
+      ctx.beginPath();
+      ctx.moveTo(a.x + ca * 10 - sa * half * 0.15, a.y + sa * 10 + ca * half * 0.15);
+      ctx.lineTo(a.x + ca * r, a.y + sa * r);
+      ctx.lineTo(a.x + ca * 10 + sa * half * 0.15, a.y + sa * 10 - ca * half * 0.15);
+      ctx.stroke();
+      ctx.strokeStyle = core;
+      ctx.lineWidth = 1.6;
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.beginPath();
+      ctx.moveTo(a.x + ca * 12, a.y + sa * 12);
+      ctx.lineTo(a.x + ca * r, a.y + sa * r);
+      ctx.stroke();
+    } else {
+      // crescent stroke — a filled pie reads as a wedge of fog at 8-player
+      // density; a stroke reads as a cut. Stacks thicken it.
+      const a0 = a.a - a.arc / 2, a1 = a.a + a.arc / 2;
+      ctx.globalAlpha = 0.55 * fade;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = (a.lw || 7) + 3;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, r, a0, a1);
+      ctx.stroke();
+      ctx.globalAlpha = Math.min(0.95, (0.62 + 0.1 * stack) * fade);
+      ctx.strokeStyle = a.color;
+      ctx.lineWidth = a.lw || 7;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, r, a0, a1);
+      ctx.stroke();
+      ctx.strokeStyle = core;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.75 * fade;
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, r * 0.92, a0 + 0.04, a1 - 0.04);
+      ctx.stroke();
+      if (shape === SHAPE.cleave) {
+        ctx.globalAlpha = 0.35 * fade;
+        ctx.strokeStyle = a.color;
+        ctx.lineWidth = (a.lw || 7) * 0.45;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, r * 0.62, a0, a1);
+        ctx.stroke();
+      }
+    }
+    if (spec && spec.spriteId) {
+      const mid = r * 0.72;
+      ctx.globalAlpha = 0.9 * fade;
+      drawSprite(ctx, spec.spriteId, a.x + Math.cos(a.a) * mid, a.y + Math.sin(a.a) * mid, {
+        scale: spriteScaleFor(spec.spriteId, 22 + stack * 3),
+        rot: a.a,
+        alpha: fade,
+      });
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  _drawBeam(ctx, b) {
+    const pr = b.t / b.dur;
+    const fade = 1 - pr;
+    const spec = b.spec;
+    const kit = spec && spec.kit;
+    const w = (b.w || 4) * (0.55 + 0.45 * fade) + 1;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.5 * fade;
+    ctx.strokeStyle = kit ? kit.edge : PALETTE.outline;
+    ctx.lineWidth = w + 4;
+    ctx.beginPath();
+    ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.85 * fade;
+    ctx.strokeStyle = b.color || '#ff5d6c';
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2);
+    ctx.stroke();
+    ctx.strokeStyle = kit ? kit.core : '#ffffff';
+    ctx.lineWidth = Math.max(1.4, w * 0.35);
+    ctx.globalAlpha = fade;
+    ctx.beginPath();
+    ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2);
+    ctx.stroke();
+    if (spec && spec.spriteId) {
+      const mx = (b.x1 + b.x2) / 2, my = (b.y1 + b.y2) / 2;
+      drawSprite(ctx, spec.spriteId, mx, my, {
+        scale: spriteScaleFor(spec.spriteId, 20),
+        rot: Math.atan2(b.y2 - b.y1, b.x2 - b.x1),
+        alpha: fade,
+      });
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  _drawMuzzle(ctx, m) {
+    const pr = m.t / m.dur;
+    const fade = 1 - pr;
+    const spec = m.spec;
+    const kit = spec.kit;
+    const ca = Math.cos(m.a), sa = Math.sin(m.a);
+    const x = m.x + ca * 14, y = m.y + sa * 14;
+    if (drawSprite(ctx, 'fx.muzzle', x, y, {
+      scale: spriteScaleFor('fx.muzzle', 16 + 10 * fade),
+      rot: m.a, alpha: fade,
+    })) return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(m.a);
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = spec.boltColor || spec.color;
+    ctx.strokeStyle = kit.edge;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(10, 0); ctx.lineTo(-4, -5); ctx.lineTo(-1, 0); ctx.lineTo(-4, 5);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = kit.core;
+    ctx.beginPath();
+    ctx.moveTo(6, 0); ctx.lineTo(-1, -2.2); ctx.lineTo(-1, 2.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  _drawImpact(ctx, im) {
+    const pr = im.t / im.dur;
+    const fade = 1 - pr;
+    const r = 4 + 10 * pr;
+    if (drawSprite(ctx, 'fx.impact', im.x, im.y, {
+      scale: spriteScaleFor('fx.impact', 12 + 10 * fade),
+      alpha: fade,
+    })) return;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.strokeStyle = im.color;
+    ctx.lineWidth = 2.2 * fade + 0.6;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + pr * 0.6;
+      ctx.moveTo(im.x + Math.cos(a) * r * 0.35, im.y + Math.sin(a) * r * 0.35);
+      ctx.lineTo(im.x + Math.cos(a) * r, im.y + Math.sin(a) * r);
+    }
+    ctx.stroke();
+    ctx.fillStyle = im.color;
+    ctx.globalAlpha = 0.55 * fade;
+    circle(ctx, im.x, im.y, 2.4 * fade + 0.8); ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  _drawCast(ctx, c) {
+    const spec = c.spec;
+    const kit = spec.kit;
+    const pr = c.t / c.dur;
+    const fade = 1 - pr;
+    const shape = spec.shape;
+    const x = c.x, y = c.y, tx = c.tx, ty = c.ty;
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    switch (shape) {
+      case SHAPE.smite: {
+        const h = 28 + 40 * fade;
+        ctx.globalAlpha = 0.35 * fade;
+        ctx.fillStyle = spec.color;
+        ctx.fillRect(tx - 6, ty - h, 12, h);
+        ctx.globalAlpha = fade;
+        ctx.strokeStyle = kit.edge;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(tx - 6, ty - h, 12, h);
+        ctx.strokeStyle = kit.core;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty - h); ctx.lineTo(tx, ty);
+        ctx.stroke();
+        ctx.fillStyle = spec.color;
+        circle(ctx, tx, ty, 5 + 4 * pr); ctx.fill();
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 1.8; ctx.stroke();
+        break;
+      }
+      case SHAPE.shockwave:
+      case SHAPE.ring: {
+        const R = (c.reach || 80) * (0.35 + 0.65 * pr);
+        ctx.globalAlpha = 0.7 * fade;
+        ctx.strokeStyle = kit.edge;
+        ctx.lineWidth = 5;
+        circle(ctx, x, y, R); ctx.stroke();
+        ctx.strokeStyle = spec.color;
+        ctx.lineWidth = 2.6;
+        circle(ctx, x, y, R); ctx.stroke();
+        ctx.strokeStyle = kit.core;
+        ctx.lineWidth = 1.2;
+        circle(ctx, x, y, R * 0.86); ctx.stroke();
+        break;
+      }
+      case SHAPE.healPulse: {
+        const R = 22 + 28 * pr;
+        ctx.globalAlpha = 0.28 * fade;
+        ctx.fillStyle = spec.color;
+        circle(ctx, x, y, R); ctx.fill();
+        ctx.globalAlpha = fade;
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 3;
+        circle(ctx, x, y, R); ctx.stroke();
+        ctx.strokeStyle = spec.color; ctx.lineWidth = 2;
+        circle(ctx, x, y, R * 0.7); ctx.stroke();
+        ctx.fillStyle = kit.core;
+        const arm = 7 + 3 * fade;
+        ctx.fillRect(x - 2, y - arm, 4, arm * 2);
+        ctx.fillRect(x - arm, y - 2, arm * 2, 4);
+        break;
+      }
+      case SHAPE.wardShell: {
+        const R = 22 + 6 * Math.sin(pr * Math.PI);
+        ctx.globalAlpha = 0.22 * fade;
+        ctx.fillStyle = spec.color;
+        poly(ctx, x, y, R, 6, this.t * 0.4); ctx.fill();
+        ctx.globalAlpha = fade;
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 3;
+        poly(ctx, x, y, R, 6, this.t * 0.4); ctx.stroke();
+        ctx.strokeStyle = kit.core; ctx.lineWidth = 1.4;
+        poly(ctx, x, y, R * 0.78, 6, this.t * 0.4); ctx.stroke();
+        break;
+      }
+      case SHAPE.puddle: {
+        const R = (c.reach || 40) * (0.45 + 0.2 * fade);
+        ctx.globalAlpha = 0.4 * fade;
+        ctx.fillStyle = spec.color;
+        circle(ctx, tx, ty, R); ctx.fill();
+        ctx.globalAlpha = fade;
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2.4;
+        circle(ctx, tx, ty, R); ctx.stroke();
+        ctx.strokeStyle = kit.core; ctx.lineWidth = 1.2;
+        circle(ctx, tx, ty, R * 0.55); ctx.stroke();
+        break;
+      }
+      case SHAPE.trap: {
+        const s = 10 + 4 * fade;
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = spec.color;
+        diamond(ctx, tx, ty, s); ctx.fill();
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2;
+        diamond(ctx, tx, ty, s); ctx.stroke();
+        ctx.strokeStyle = kit.core; ctx.lineWidth = 1.2;
+        diamond(ctx, tx, ty, s * 0.5); ctx.stroke();
+        break;
+      }
+      case SHAPE.detonate: {
+        const R = 10 + 22 * pr;
+        ctx.globalAlpha = fade;
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 3;
+        star(ctx, tx, ty, R, R * 0.45, 6); ctx.stroke();
+        ctx.fillStyle = spec.color;
+        ctx.globalAlpha = 0.45 * fade;
+        star(ctx, tx, ty, R * 0.8, R * 0.35, 6); ctx.fill();
+        break;
+      }
+      case SHAPE.tether: {
+        ctx.globalAlpha = fade;
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.strokeStyle = spec.color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.fillStyle = kit.core;
+        circle(ctx, tx, ty, 4); ctx.fill();
+        break;
+      }
+      case SHAPE.blight: {
+        const R = (c.reach || 50) * (0.4 + 0.35 * pr);
+        ctx.globalAlpha = 0.3 * fade;
+        ctx.fillStyle = spec.color;
+        circle(ctx, tx, ty, R); ctx.fill();
+        ctx.globalAlpha = fade;
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2;
+        circle(ctx, tx, ty, R); ctx.stroke();
+        ctx.strokeStyle = spec.color;
+        ctx.setLineDash([5, 4]);
+        circle(ctx, tx, ty, R * (0.55 + 0.2 * Math.sin(this.t * 8))); ctx.stroke();
+        ctx.setLineDash([]);
+        break;
+      }
+      case SHAPE.summonBurst: {
+        ctx.globalAlpha = fade;
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2 + pr * 1.2;
+          const rr = 10 + 16 * pr;
+          ctx.fillStyle = i % 2 ? spec.color : kit.core;
+          diamond(ctx, x + Math.cos(ang) * rr, y + Math.sin(ang) * rr - 8 * pr, 4);
+          ctx.fill();
+        }
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2;
+        circle(ctx, x, y, 8 + 10 * pr); ctx.stroke();
+        break;
+      }
+      default: {
+        const R = 16 + 10 * fade;
+        ctx.globalAlpha = fade;
+        ctx.fillStyle = spec.color;
+        circle(ctx, tx, ty, R * 0.45); ctx.fill();
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2.2;
+        circle(ctx, tx, ty, R); ctx.stroke();
+      }
+    }
+    if (spec.spriteId) {
+      const atx = (shape === SHAPE.shockwave || shape === SHAPE.ring || shape === SHAPE.healPulse
+        || shape === SHAPE.wardShell || shape === SHAPE.summonBurst) ? x : tx;
+      const aty = atx === x ? y : ty;
+      drawSprite(ctx, spec.spriteId, atx, aty, {
+        scale: spriteScaleFor(spec.spriteId, 28),
+        rot: c.a,
+        alpha: fade,
+      });
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  _drawBoltPrimitive(ctx, pr, spec, heading) {
+    const r = pr.radius || 5;
+    const col = spec ? spec.boltColor : (pr.color || (pr.friendly ? '#fff' : '#ff5d6c'));
+    const edge = spec ? spec.kit.edge : PALETTE.outline;
+    ctx.save();
+    ctx.translate(pr.x, pr.y);
+    ctx.rotate(heading);
+    ctx.fillStyle = col;
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 1.6;
+    const particle = spec ? spec.kit.particle : 'spark';
+    if (!pr.friendly) {
+      circle(ctx, 0, 0, r); ctx.fill(); ctx.stroke();
+    } else if (particle === 'shard' || spec && spec.shape === SHAPE.spread) {
+      ctx.beginPath();
+      ctx.moveTo(r * 1.6, 0);
+      ctx.lineTo(-r * 0.9, -r * 0.7);
+      ctx.lineTo(-r * 0.4, 0);
+      ctx.lineTo(-r * 0.9, r * 0.7);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    } else if (particle === 'spark' || particle === 'crystal') {
+      diamond(ctx, 0, 0, r * 1.15); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = spec ? spec.kit.core : '#fff';
+      diamond(ctx, 0, 0, r * 0.4); ctx.fill();
+    } else {
+      circle(ctx, 0, 0, r); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   _drawHitboxes(ctx, view) {
