@@ -117,7 +117,10 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 /* ---------- Overlays (shop / levelup / treasure) ---------- */
 .overlay{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#0a0b12b8;}
 /* ---- the node map (between fights) ---- */
-#screen-map{background:#0a0b12d8; z-index:5;}
+#screen-map{background:#0a0b12d8; z-index:5; background-size:cover; background-position:center; background-repeat:no-repeat;}
+#screen-map.has-atlas{background-color:#0a0b12;}
+#screen-map.has-atlas::before{content:""; position:absolute; inset:0; background:linear-gradient(180deg,#0a0b12aa 0%,#0a0b1233 22%,#0a0b1258 100%); pointer-events:none;}
+#screen-map.has-atlas .map-panel{background:#1d203099; border-color:#3a3f5c99; position:relative; z-index:1;}
 .map-panel{width:min(96vw,1000px);}
 .map-flow{position:relative; display:flex; justify-content:space-between; align-items:stretch; gap:12px; margin-top:16px; min-height:260px;}
 .map-edges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none;}
@@ -470,11 +473,39 @@ h2.rt{font-size:38px; letter-spacing:4px; text-align:center; margin-bottom:4px;}
 body.touch-on .diff-pick{min-height:44px; font-size:13px; padding:8px 14px;}
 
 /* ---- the world map (region select) ---- */
-/* Eight cards, in order, with a stated reason on every locked one. A locked
-   door with no explanation reads as a bug rather than as a goal — the rule is
-   js/worldmap.js's and this is where it becomes visible. */
+/* Eight pins on a 2:1 equirectangular Earth. A locked pin still states why —
+   a locked door with no explanation reads as a bug rather than as a goal. */
 #screen-world{background:#0a0b12e0; z-index:6;}
 .world-panel{width:min(96vw,1080px);}
+.world-atlas{width:min(96vw,1200px); padding:18px 20px 16px; max-height:94vh;}
+.world-head{margin-bottom:8px;}
+.world-earth{position:relative; width:min(100%, calc(56vh * 2)); aspect-ratio:2/1; border:1px solid var(--line); border-radius:10px;
+  overflow:hidden; background:#07080d; margin:8px auto 0;}
+.world-plate{display:block; width:100%; height:100%; object-fit:cover; pointer-events:none;}
+.world-pin{position:absolute; transform:translate(-50%,-90%); min-width:44px; min-height:44px;
+  padding:0 8px 6px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+  gap:1px; background:transparent; border:0; color:var(--ink); cursor:default; z-index:1;}
+.world-pin .wp-num{width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background:#12141fd9; border:2px solid var(--line); font-size:13px; font-weight:bold; color:var(--gold);}
+.world-pin .wp-label{font-size:9px; letter-spacing:0.6px; text-transform:uppercase; color:var(--ink);
+  background:#0a0b12d8; padding:1px 5px; border-radius:3px; max-width:92px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.world-pin.enterable{cursor:pointer;}
+.world-pin.enterable .wp-num{border-color:#5ee0a8; box-shadow:0 0 10px #5ee0a855;}
+.world-pin.wp-frontier .wp-num{border-color:var(--gold); box-shadow:0 0 12px #ffd45e66;}
+.world-pin.wp-cleared .wp-num{border-color:#c9b36a; color:#c9b36a;}
+.world-pin.wp-unbuilt{opacity:.55;}
+.world-pin.wp-unbuilt .wp-num{border-style:dashed; color:var(--dim);}
+.world-pin.wp-locked{opacity:.7;}
+.world-pin.selected{z-index:2;}
+.world-pin.selected .wp-num{transform:scale(1.12);}
+.world-pin.enterable:hover .wp-num{transform:scale(1.08);}
+.world-dossier{display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-top:12px; flex-wrap:wrap;}
+.wd-kicker{font-size:10px; letter-spacing:2px; color:var(--gold); text-transform:uppercase;}
+.wd-name{font-size:20px; letter-spacing:2px; text-transform:uppercase; margin-top:2px;}
+.wd-reason{font-size:12px; color:var(--dim); margin-top:4px;}
+.wd-facts{display:flex; flex-wrap:wrap; gap:8px 14px; font-size:11px; color:var(--dim); margin-top:6px;}
+.wd-act{flex:0 0 auto;}
+.wd-act .big{width:auto; min-width:180px;}
 .world-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-top:16px;}
 .world-card{padding:12px 14px; border-radius:12px; background:var(--panel2);
   border:2px solid var(--line); opacity:.5; cursor:default; position:relative;}
@@ -491,3 +522,8 @@ body.touch-on .diff-pick{min-height:44px; font-size:13px; padding:8px 14px;}
 .wc-parked{color:#5ee0a8;}
 .wc-content{margin-top:6px; font-size:10.5px;}
 .world-foot{margin-top:14px;}
+@media (max-width:720px){
+  .world-pin .wp-label{display:none;}
+  .world-atlas{padding:12px;}
+  .wd-name{font-size:16px;}
+}

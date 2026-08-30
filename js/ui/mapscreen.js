@@ -2,10 +2,14 @@
 // branching shape as tappable node buttons (≥44px), shows visited/current/
 // reachable states, the party consent countdown, and a reopen-shop button
 // when parked on a shop stop. Pure view: taps forward to actions.
+//
+// The regional atlas is a backdrop under the same tree. Missing art is a
+// no-op: the screen is the panel it has always been.
 
 import { escapeHtml } from './screens.js';
 import { sfx } from '../audio.js';
 import { OBJECTIVE_META } from '../objectives.js';
+import { geoFor } from '../content/mapgeo.js';
 
 const $ = id => document.getElementById(id);
 let A = null;
@@ -35,7 +39,10 @@ export function showMapScreen(state) {
 }
 
 export function hideMapScreen() {
-  $('screen-map').classList.add('hidden');
+  const el = $('screen-map');
+  el.classList.add('hidden');
+  el.classList.remove('has-atlas');
+  el.style.backgroundImage = '';
   lastDigest = '';
 }
 
@@ -60,6 +67,14 @@ function renderMap(state) {
   for (const n of layout.nodes) byCol[n.col].push(n);
   const visited = new Set(state.visited);
   const reachable = new Set(state.reachable);
+  const geo = geoFor(state.regionIndex);
+  if (geo && geo.regionMap) {
+    el.classList.add('has-atlas');
+    el.style.backgroundImage = `url("${geo.regionMap}")`;
+  } else {
+    el.classList.remove('has-atlas');
+    el.style.backgroundImage = '';
+  }
 
   // node buttons per column; edges drawn in an SVG underlay
   const colHtml = byCol.map(col => `
@@ -80,6 +95,7 @@ function renderMap(state) {
       </button>`;
     }).join('')}</div>`).join('');
 
+  const where = geo && geo.where ? ` · ${geo.where}` : '';
   el.innerHTML = `
     <div class="panel map-panel">
       <div class="row spread">
@@ -87,7 +103,7 @@ function renderMap(state) {
           <div class="ov-title">${escapeHtml(state.regionName || `REGION ${state.regionIndex}`).toUpperCase()} — REGION ${state.regionIndex} / 8</div>
           <div class="ov-sub">${state.vote
             ? `${escapeHtml(state.voteName || 'A player')} chose a path — ${Math.ceil(state.vote.t)}s to redirect (once)`
-            : 'pick the party\'s next map · five maps, then the boss · every route passes the reliquary and the trader'}</div>
+            : `pick the party's next map · five maps, then the boss${where}`}</div>
         </div>
         ${state.onShop ? '<button id="map-reopen-shop">◆ Reopen shop</button>' : ''}
       </div>
