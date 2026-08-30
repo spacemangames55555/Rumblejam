@@ -37,6 +37,7 @@ import { ALL_BOSS_DEFS } from './content/bosses.js';
 import { bossForRegion, TOTAL_REGIONS, REGION_BY_INDEX } from './regions.js';
 import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
 import { projSpriteFor, PYLON_SPRITE } from './content/sprites.js';
+import { fxSpec } from './content/skillfx.js';
 import { clamp } from './util.js';
 
 const { WALL } = CONFIG;
@@ -1398,10 +1399,16 @@ function viewFromSim(sim) {
       // client resolves the same id from the type index on the wire
       spriteId: e.boss ? e.bossDef.spriteId : (e.typeIdx === -2 ? PYLON_SPRITE : (e.def && e.def.spriteId)),
     })),
-    projs: [...sim.projPool].map(pr => ({
-      x: pr.x, y: pr.y, vx: pr.vx, vy: pr.vy, radius: pr.radius, color: pr.color, friendly: pr.friendly,
-      spriteId: projSpriteFor(pr.color, pr.friendly, pr.radius),
-    })),
+    projs: [...sim.projPool].map(pr => {
+      const spec = pr.skill && pr.skill.id ? fxSpec(pr.skill.id) : null;
+      return {
+        x: pr.x, y: pr.y, vx: pr.vx, vy: pr.vy, radius: pr.radius,
+        color: spec ? spec.boltColor : pr.color,
+        friendly: pr.friendly,
+        spriteId: spec ? spec.spriteId : projSpriteFor(pr.color, pr.friendly, pr.radius),
+        skillId: pr.skill && pr.skill.id,
+      };
+    }),
     pickups: sim.pickups,
     summons: sim.summons.filter(s => !s.dead).map(s => ({ owner: s.owner, type: s.type, x: s.x, y: s.y, aimA: s.aimA, packed: s.deployT > 0,
       down: !!s.down, downP: s.down ? s.downT / BEAST.DOWN_S : 0 })),
@@ -1427,6 +1434,9 @@ function viewFromSim(sim) {
       ...sim.zones.map(z => ({ x: z.x, y: z.y, r: z.r, color: z.color, hostile: z.hurts === 'players' })),
       ...sim.vortexes.map(v => ({ x: v.x, y: v.y, r: v.coreR, color: '#a86ae8', hostile: true })),
     ],
+    // Host-only this pass — traps are not on the wire. Canvas mark so a
+    // placed killbox is visible to the player who set it.
+    traps: (sim.traps || []).map(t => ({ x: t.x, y: t.y, r: t.radius, color: '#a3e635' })),
     beams: sim.activeBeams,
     hazards: sim.hazards || [],
     boss: sim.boss ? { name: sim.boss.bossDef.name, hp: sim.boss.hp, max: sim.boss.maxHp } : null,

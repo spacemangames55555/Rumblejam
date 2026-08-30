@@ -27,6 +27,7 @@ import {
   SPRITE_SIZE, PROP, PROP_BOTTOM_ANCHORED, FX, UI, PYLON_SPRITE, BEAST_SPRITE, MINION_SPRITE, allProjSpriteIds,
   UNIT_DIRECTIONS, DIRECTIONAL_NAMESPACES,
 } from '../js/content/sprites.js';
+import { SKILL_FX_SPRITE_IDS } from '../js/content/skillfx.js';
 import { BIOMES, tileSpriteIds, tileFile } from '../js/biomes.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -88,6 +89,7 @@ for (const id of Object.values(MINION_SPRITE)) add(id);
 
 // ---- world FX and UI chrome ----
 for (const id of Object.values(FX)) add(id);
+for (const id of SKILL_FX_SPRITE_IDS) if (!sprites[id]) add(id);
 for (const id of Object.values(UI)) add(id);
 
 // ---- floor tiles: one entry per biome variant ----

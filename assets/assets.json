@@ -364,6 +364,51 @@
       "h": 128,
       "directions": 8
     },
+    "fx.asn_beam": {
+      "file": "fx/asn_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.asn_bolt": {
+      "file": "fx/asn_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.asn_cleave": {
+      "file": "fx/asn_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.asn_puddle": {
+      "file": "fx/asn_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.asn_slash": {
+      "file": "fx/asn_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.asn_spread": {
+      "file": "fx/asn_spread.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.asn_tether": {
+      "file": "fx/asn_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.asn_trap": {
+      "file": "fx/asn_trap.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.asn_wardShell": {
+      "file": "fx/asn_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
     "fx.block": {
       "file": "fx/block.png",
       "w": 32,
@@ -384,8 +429,178 @@
       "w": 32,
       "h": 32
     },
+    "fx.brd_beam": {
+      "file": "fx/brd_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.brd_bolt": {
+      "file": "fx/brd_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.brd_cleave": {
+      "file": "fx/brd_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.brd_healPulse": {
+      "file": "fx/brd_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.brd_puddle": {
+      "file": "fx/brd_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.brd_slash": {
+      "file": "fx/brd_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.brd_spread": {
+      "file": "fx/brd_spread.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.brd_tether": {
+      "file": "fx/brd_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.brd_wardShell": {
+      "file": "fx/brd_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.dru_beam": {
+      "file": "fx/dru_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.dru_cleave": {
+      "file": "fx/dru_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.dru_healPulse": {
+      "file": "fx/dru_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.dru_puddle": {
+      "file": "fx/dru_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.dru_slash": {
+      "file": "fx/dru_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.dru_summonBurst": {
+      "file": "fx/dru_summonBurst.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.dru_wardShell": {
+      "file": "fx/dru_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
     "fx.heal": {
       "file": "fx/heal.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_beam": {
+      "file": "fx/hun_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_bolt": {
+      "file": "fx/hun_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_cleave": {
+      "file": "fx/hun_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_healPulse": {
+      "file": "fx/hun_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_slash": {
+      "file": "fx/hun_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_spread": {
+      "file": "fx/hun_spread.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_summonBurst": {
+      "file": "fx/hun_summonBurst.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_tether": {
+      "file": "fx/hun_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.hun_wardShell": {
+      "file": "fx/hun_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.impact": {
+      "file": "fx/impact.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mag_beam": {
+      "file": "fx/mag_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mag_bolt": {
+      "file": "fx/mag_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mag_cleave": {
+      "file": "fx/mag_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mag_puddle": {
+      "file": "fx/mag_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mag_slash": {
+      "file": "fx/mag_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mag_spread": {
+      "file": "fx/mag_spread.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mag_tether": {
+      "file": "fx/mag_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mag_wardShell": {
+      "file": "fx/mag_wardShell.png",
       "w": 32,
       "h": 32
     },
@@ -394,8 +609,243 @@
       "w": 32,
       "h": 32
     },
+    "fx.mnk_beam": {
+      "file": "fx/mnk_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mnk_cleave": {
+      "file": "fx/mnk_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mnk_healPulse": {
+      "file": "fx/mnk_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mnk_slash": {
+      "file": "fx/mnk_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mnk_tether": {
+      "file": "fx/mnk_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mnk_trap": {
+      "file": "fx/mnk_trap.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.mnk_wardShell": {
+      "file": "fx/mnk_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.muzzle": {
+      "file": "fx/muzzle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_beam": {
+      "file": "fx/ncr_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_blight": {
+      "file": "fx/ncr_blight.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_bolt": {
+      "file": "fx/ncr_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_cleave": {
+      "file": "fx/ncr_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_puddle": {
+      "file": "fx/ncr_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_slash": {
+      "file": "fx/ncr_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_summonBurst": {
+      "file": "fx/ncr_summonBurst.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_tether": {
+      "file": "fx/ncr_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.ncr_wardShell": {
+      "file": "fx/ncr_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.pri_beam": {
+      "file": "fx/pri_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.pri_bolt": {
+      "file": "fx/pri_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.pri_cleave": {
+      "file": "fx/pri_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.pri_healPulse": {
+      "file": "fx/pri_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.pri_puddle": {
+      "file": "fx/pri_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.pri_slash": {
+      "file": "fx/pri_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.pri_tether": {
+      "file": "fx/pri_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.pri_wardShell": {
+      "file": "fx/pri_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_cleave": {
+      "file": "fx/sam_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_shockwave": {
+      "file": "fx/sam_shockwave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_slash": {
+      "file": "fx/sam_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_smite": {
+      "file": "fx/sam_smite.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_thrust": {
+      "file": "fx/sam_thrust.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sam_wardShell": {
+      "file": "fx/sam_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_beam": {
+      "file": "fx/sav_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_blight": {
+      "file": "fx/sav_blight.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_bolt": {
+      "file": "fx/sav_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_cleave": {
+      "file": "fx/sav_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_healPulse": {
+      "file": "fx/sav_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_puddle": {
+      "file": "fx/sav_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_slash": {
+      "file": "fx/sav_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_tether": {
+      "file": "fx/sav_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sav_wardShell": {
+      "file": "fx/sav_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
     "fx.smoke": {
       "file": "fx/smoke.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.smt_blight": {
+      "file": "fx/smt_blight.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.smt_bolt": {
+      "file": "fx/smt_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.smt_cleave": {
+      "file": "fx/smt_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.smt_healPulse": {
+      "file": "fx/smt_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.smt_slash": {
+      "file": "fx/smt_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.smt_tether": {
+      "file": "fx/smt_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.smt_wardShell": {
+      "file": "fx/smt_wardShell.png",
       "w": 32,
       "h": 32
     },
@@ -404,8 +854,148 @@
       "w": 32,
       "h": 32
     },
+    "fx.sun_beam": {
+      "file": "fx/sun_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sun_blight": {
+      "file": "fx/sun_blight.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sun_bolt": {
+      "file": "fx/sun_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sun_cleave": {
+      "file": "fx/sun_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sun_healPulse": {
+      "file": "fx/sun_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sun_puddle": {
+      "file": "fx/sun_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sun_slash": {
+      "file": "fx/sun_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sun_tether": {
+      "file": "fx/sun_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.sun_wardShell": {
+      "file": "fx/sun_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
     "fx.telegraph_mark": {
       "file": "fx/telegraph_mark.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_beam": {
+      "file": "fx/wd_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_blight": {
+      "file": "fx/wd_blight.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_bolt": {
+      "file": "fx/wd_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_cleave": {
+      "file": "fx/wd_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_puddle": {
+      "file": "fx/wd_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_slash": {
+      "file": "fx/wd_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_summonBurst": {
+      "file": "fx/wd_summonBurst.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_tether": {
+      "file": "fx/wd_tether.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wd_wardShell": {
+      "file": "fx/wd_wardShell.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_beam": {
+      "file": "fx/wiz_beam.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_bolt": {
+      "file": "fx/wiz_bolt.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_cleave": {
+      "file": "fx/wiz_cleave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_healPulse": {
+      "file": "fx/wiz_healPulse.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_puddle": {
+      "file": "fx/wiz_puddle.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_shockwave": {
+      "file": "fx/wiz_shockwave.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_slash": {
+      "file": "fx/wiz_slash.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_smite": {
+      "file": "fx/wiz_smite.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_spread": {
+      "file": "fx/wiz_spread.png",
+      "w": 32,
+      "h": 32
+    },
+    "fx.wiz_wardShell": {
+      "file": "fx/wiz_wardShell.png",
       "w": 32,
       "h": 32
     },

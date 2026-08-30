@@ -541,7 +541,11 @@ function fireSkill(sim, p, sk) {
   p.fireLog.push({ id: sk.id, trigger: sk.trigger.kind, t: sim.time, hits: out.hits });
   if (p.fireLog.length > 20) p.fireLog.shift();
   // Broadcast: clients render the fire, they never originate it.
-  sim.fx.skillFires.push({ idx: p.idx, x: Math.round(p.x), y: Math.round(p.y), id: sk.id, d: sk.domain });
+  sim.fx.skillFires.push({
+    idx: p.idx, x: Math.round(p.x), y: Math.round(p.y), id: sk.id, d: sk.domain,
+    a: tgt ? Math.atan2(tgt.y - p.y, tgt.x - p.x) : (p.aimA || 0),
+    tx: Math.round(tgt ? tgt.x : p.x), ty: Math.round(tgt ? tgt.y : p.y),
+  });
   return out;
 }
 

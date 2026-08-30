@@ -275,7 +275,7 @@ export const PRIMITIVES = {
       }
       chewWalls(sim, p, reach, dmg);
     }
-    sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: reach, color: p.color });
+    sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: reach, arc, color: p.color, sid: skill.id });
   },
 
   // Travelling projectile. Riders ride the projectile and resolve on impact.
@@ -345,7 +345,7 @@ export const PRIMITIVES = {
       out.hits++;
     }
     chewWalls(sim, p, step.range, dmg);
-    sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: step.range, color: p.color });
+    sim.fx.swings.push({ x: p.x, y: p.y, a: a0, r: step.range, arc: step.angle || step.arc || 1.57, color: p.color, sid: skill.id });
   },
 
   // Straight beam, clipped by walls like every other beam in the game.
@@ -378,7 +378,7 @@ export const PRIMITIVES = {
       // plus the sweep's own slack, so a beam grazing a corner still bites.
       if (sim.walls.length) sim._areaDamageWalls(p.x + ca * len, p.y + sa * len, half + 12, dmg, p);
     }
-    sim.fx.beams.push({ x1: p.x, y1: p.y, x2: p.x + ca * len, y2: p.y + sa * len, color: p.color, w: step.width });
+    sim.fx.beams.push({ x1: p.x, y1: p.y, x2: p.x + ca * len, y2: p.y + sa * len, color: p.color, w: step.width, sid: skill.id });
     // CASTER DISPLACEMENT — Wrecking Ball's "the caster is displaced 320px",
     // and a RIDER rather than a dash primitive. `line` already does everything
     // else the skill needs: it picks the direction, clips on walls, hits every
