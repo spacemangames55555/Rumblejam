@@ -666,6 +666,20 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/summon_gate.mjs` — **a class's summons stand together.**
+  `necro_unleash_the_monster` shipped `slotted: true`, and `slotsFilled()`
+  counts every slotted minion whatever its archetype — so the Monster spent a
+  currency it does not mint, since `summonSlots` is granted by one skill in the
+  game and was drawn from by two. At skeleton rank 1 the two were mutually
+  exclusive IN BOTH DIRECTIONS, and which one lost depended on which fired
+  first: the skeleton triggers on `ON_TOKEN`, the Monster on `COOLDOWN_READY`.
+  A symptom that swaps sides between runs reads as two different bugs, so the
+  gate asserts both orders — one order would have passed on the shipped build
+  half the time. It also asserts the system rule the fix rests on (the pool is
+  minted and drawn by the same single skill), that the Monster keeps its own cap
+  of 1, that skeleton capacity still equals rank, and — as a control that the
+  gate can tell the two mechanisms apart — that the Druid's three animals still
+  coexist on per-archetype caps with no slot pool at all.
 - `node tools/carry_gate.mjs` — **progression survives a region boundary and a
   wipe.** It exists because the defect it catches shipped: run continuity was
   written with a comment asserting that levels, xp, skills and passives "are all
