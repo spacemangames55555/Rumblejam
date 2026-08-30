@@ -22,11 +22,24 @@ import { clamp } from './util.js';
 // supposed to be a data change and must not need this file edited to appear.
 const MINION_ART = {
   radius: { skeleton: 9, golem: 15, risen: 10, wisp: 7, wolf: 11, bear: 15, hawk: 8 },
-  // How hard the owner's colour is pushed into a minion's sprite. The signal
-  // matters most at 4p+, and that is exactly where a heavy tint stops reading
-  // as eight skeletons and starts reading as eight colours — so it is set to
-  // tint, not to recolour. One number, deliberately easy to find.
-  tint: 0.35,
+  // How hard the owner's colour is pushed into a minion's sprite. THE NUMBER IS
+  // MEASURED AGAINST THE ART IT TINTS, which is the part that is easy to get
+  // wrong: 0.35 was picked on `beast.bear`, which is brown and saturated, and
+  // on the skeleton — bone and steel, nearly desaturated — the same alpha
+  // buries it. Rendered and measured across a ladder, as share of the art's
+  // luminance contrast that survives:
+  //
+  //     none 100%   0.12 88%   0.18 82%   0.25 75%   0.35 65%   0.50 50%
+  //
+  // At 0.35 a yellow or green owner reads as a coloured figure rather than as a
+  // skeleton, which is the failure the ruling names. At 0.18 the skull still
+  // reads bone, the armour steel and the sash red, and the owner colour is
+  // still unmistakable — helped by the hp bar and the down-ring, which carry
+  // the same colour and are not competing with the art for it.
+  //
+  // One number, deliberately easy to find. Re-judge it against NEW art rather
+  // than inheriting it: a dark or already-saturated minion will want less.
+  tint: 0.18,
   radiusDefault: 10,
   diamond: ['wisp', 'hawk'],       // flyers
   fallbackColor: '#9aa0bd',

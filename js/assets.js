@@ -442,6 +442,11 @@ export const Assets = {
 // Returns null on a headless harness or a tainted canvas, and the caller then
 // draws the sprite untinted: losing the owner tint is a worse picture, losing
 // the sprite is a missing one.
+// The fallback when a caller asks for a tint without saying how hard. Minions
+// pass their own from MINION_ART.tint in js/render.js, which is the live value
+// and carries the measurement behind it; this only catches a caller that has
+// not thought about it.
+const DEFAULT_TINT = 0.18;
 const tintCache = new Map();
 function tintedSheet(s, color, strength) {
   const key = `${s.file}|${color}|${strength}`;
@@ -548,7 +553,7 @@ export function drawSprite(ctx, id, x, y, opts) {
 
   // The tint changes WHICH image is sampled, never the cell, the transform or
   // the fast-path test — so a tinted sprite stays on whichever path it earned.
-  const img = (opts && opts.tint && tintedSheet(s, opts.tint, opts.tintStrength ?? 0.35)) || s.img;
+  const img = (opts && opts.tint && tintedSheet(s, opts.tint, opts.tintStrength ?? DEFAULT_TINT)) || s.img;
 
   // Fast path: an unrotated, unscaled, opaque sprite. save()/restore() around
   // every one of a few hundred entities is real cost for nothing. Every
