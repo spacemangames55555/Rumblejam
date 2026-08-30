@@ -666,6 +666,20 @@ never loads them:
   disjoint from region 1, both stops on every route, no objective twice in one
   region, a locked region refused and a frontier advanced. The region layer sat
   green and dead for 165 commits because every gate provisioned its own fixture.
+- `node tools/carry_gate.mjs` — **progression survives a region boundary and a
+  wipe.** It exists because the defect it catches shipped: run continuity was
+  written with a comment asserting that levels, xp, skills and passives "are all
+  on the character and the party" and therefore survived. Only the frontier was
+  — the character save declares `level` and `points` and nothing has ever
+  written them, so clearing region 1 handed the player a level-1 character with
+  the opening pick offered again, and so did retrying after a wipe. It was
+  reasoned about rather than measured. This gate MEASURES: it plays a region
+  until the character is unmistakably not a default, crosses both exits the way
+  `js/main.js` crosses them, and asserts the FULL carry list rather than a
+  sample — the list read off `Sim.carryState()` so a field added to the engine
+  is asserted here without anyone remembering to. It also tests the opening-pick
+  guard separately, because a carried player arrives holding unspent points and
+  `skillPoints <= 0` cannot tell that from a new character.
 - `node tools/replay_gate.mjs` — **the same seed replays the same region.** Run
   continuity rests on a wiped party getting its layout back, and reusing the seed
   only guarantees that when nothing else feeds the generator — which this project
