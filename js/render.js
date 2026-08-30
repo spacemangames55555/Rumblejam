@@ -407,24 +407,32 @@ export class Renderer {
       if (!inView(pr.x, pr.y)) continue;
       const heading = pr.vx !== undefined ? Math.atan2(pr.vy, pr.vx) : 0;
       const spec = pr.skillId ? fxSpec(pr.skillId) : null;
-      // short trail so a 47ms bolt still reads as travel
+      // Skill shots are radius 5 on purpose (hitbox). The art is a dagger, not
+      // a spark — painted size is cosmetic and does not change collision.
+      const paint = spec ? 32 : Math.max(12, (pr.radius || 5) * 3);
       if (pr.friendly && (pr.vx || pr.vy)) {
         const spd = Math.hypot(pr.vx || 0, pr.vy || 0) || 1;
         const ux = (pr.vx || 0) / spd, uy = (pr.vy || 0) / spd;
         const col = spec ? spec.boltColor : (pr.color || '#fff');
-        for (let k = 1; k <= 3; k++) {
-          ctx.globalAlpha = 0.28 / k;
+        const tr = spec ? 4.5 : Math.max(1.4, (pr.radius || 5) * 0.55);
+        for (let k = 1; k <= 4; k++) {
+          ctx.globalAlpha = 0.32 / k;
           ctx.fillStyle = col;
-          circle(ctx, pr.x - ux * k * 7, pr.y - uy * k * 7, Math.max(1.4, (pr.radius || 5) * (0.7 - k * 0.12)));
+          circle(ctx, pr.x - ux * k * 9, pr.y - uy * k * 9, tr * (1 - k * 0.14));
           ctx.fill();
         }
         ctx.globalAlpha = 1;
       }
-      if (drawSprite(ctx, pr.spriteId, pr.x, pr.y, {
-        scale: spriteScaleFor(pr.spriteId, (pr.radius || 5) * 3),
-        rot: heading,
-      })) continue;
-      this._drawBoltPrimitive(ctx, pr, spec, heading);
+      // Canvas first: a sprite is an overlay, never a replacement. A 32px
+      // stamp drawn at 15 world units was why wizard bolts read as dots.
+      this._drawBoltPrimitive(ctx, pr, spec, heading, paint / 3);
+      if (pr.spriteId) {
+        drawSprite(ctx, pr.spriteId, pr.x, pr.y, {
+          scale: spriteScaleFor(pr.spriteId, paint),
+          rot: heading,
+          alpha: 0.92,
+        });
+      }
     }
     // persistent boss beams
     for (const bm of view.beams || []) {
@@ -1644,9 +1652,11 @@ export class Renderer {
       ctx.lineTo(a.x + ca * r, a.y + sa * r);
       ctx.stroke();
     } else {
-      // crescent stroke — a filled pie reads as a wedge of fog at 8-player
-      // density; a stroke reads as a cut. Stacks thicken it.
-      const a0 = a.a - a.arc / 2, a1 = a.a + a.arc / 2;
+      // Crescent that WIPES along the swing, then holds and fades. A static
+      // pie of the reach reads as a range wedge; a growing stroke reads as a cut.
+      const a0 = a.a - a.arc / 2;
+      const wipe = Math.max(0.14, Math.min(1, pr / 0.38));
+      const a1 = a0 + a.arc * wipe;
       ctx.globalAlpha = 0.55 * fade;
       ctx.strokeStyle = edge;
       ctx.lineWidth = (a.lw || 7) + 3;
@@ -1673,14 +1683,33 @@ export class Renderer {
         ctx.arc(a.x, a.y, r * 0.62, a0, a1);
         ctx.stroke();
       }
+      // class particle ticks along the live edge
+      const particle = kit && kit.particle;
+      if (particle && wipe > 0.2) {
+        const n = shape === SHAPE.cleave ? 5 : 3;
+        ctx.globalAlpha = 0.8 * fade;
+        ctx.fillStyle = core;
+        for (let i = 0; i < n; i++) {
+          const t = a0 + (a1 - a0) * ((i + 1) / (n + 1));
+          const px = a.x + Math.cos(t) * r, py = a.y + Math.sin(t) * r;
+          if (particle === 'blood' || particle === 'spark') {
+            ctx.beginPath(); ctx.moveTo(px + 4, py); ctx.lineTo(px - 2, py - 3); ctx.lineTo(px - 2, py + 3); ctx.closePath(); ctx.fill();
+          } else if (particle === 'leaf' || particle === 'note') {
+            diamond(ctx, px, py, 3.2); ctx.fill();
+          } else if (particle === 'dust' || particle === 'glint') {
+            circle(ctx, px, py, 2.2); ctx.fill();
+          } else {
+            circle(ctx, px, py, 1.8); ctx.fill();
+          }
+        }
+      }
     }
     if (spec && spec.spriteId) {
       const mid = r * 0.72;
-      ctx.globalAlpha = 0.9 * fade;
       drawSprite(ctx, spec.spriteId, a.x + Math.cos(a.a) * mid, a.y + Math.sin(a.a) * mid, {
-        scale: spriteScaleFor(spec.spriteId, 22 + stack * 3),
+        scale: spriteScaleFor(spec.spriteId, 28 + stack * 4),
         rot: a.a,
-        alpha: fade,
+        alpha: 0.85 * fade,
       });
     }
     ctx.restore();
@@ -1948,33 +1977,152 @@ export class Renderer {
     ctx.globalAlpha = 1;
   }
 
-  _drawBoltPrimitive(ctx, pr, spec, heading) {
-    const r = pr.radius || 5;
+  _drawBoltPrimitive(ctx, pr, spec, heading, visR) {
+    const r = visR || (spec ? 10 : (pr.radius || 5));
     const col = spec ? spec.boltColor : (pr.color || (pr.friendly ? '#fff' : '#ff5d6c'));
     const edge = spec ? spec.kit.edge : PALETTE.outline;
+    const core = spec ? spec.kit.core : '#fff';
+    const particle = spec ? spec.kit.particle : 'spark';
     ctx.save();
     ctx.translate(pr.x, pr.y);
     ctx.rotate(heading);
     ctx.fillStyle = col;
     ctx.strokeStyle = edge;
-    ctx.lineWidth = 1.6;
-    const particle = spec ? spec.kit.particle : 'spark';
+    ctx.lineWidth = 2;
     if (!pr.friendly) {
       circle(ctx, 0, 0, r); ctx.fill(); ctx.stroke();
-    } else if (particle === 'shard' || spec && spec.shape === SHAPE.spread) {
-      ctx.beginPath();
-      ctx.moveTo(r * 1.6, 0);
-      ctx.lineTo(-r * 0.9, -r * 0.7);
-      ctx.lineTo(-r * 0.4, 0);
-      ctx.lineTo(-r * 0.9, r * 0.7);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-    } else if (particle === 'spark' || particle === 'crystal') {
-      diamond(ctx, 0, 0, r * 1.15); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = spec ? spec.kit.core : '#fff';
-      diamond(ctx, 0, 0, r * 0.4); ctx.fill();
-    } else {
-      circle(ctx, 0, 0, r); ctx.fill(); ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    switch (particle) {
+      case 'shard': // samurai — long cream blade
+        ctx.beginPath();
+        ctx.moveTo(r * 2.1, 0);
+        ctx.lineTo(-r * 1.1, -r * 0.55);
+        ctx.lineTo(-r * 0.4, 0);
+        ctx.lineTo(-r * 1.1, r * 0.55);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.moveTo(r * 1.4, 0); ctx.lineTo(-r * 0.2, -r * 0.18); ctx.lineTo(-r * 0.2, r * 0.18);
+        ctx.closePath(); ctx.fill();
+        break;
+      case 'fletch': // hunter — arrow
+        ctx.beginPath();
+        ctx.moveTo(r * 2.2, 0);
+        ctx.lineTo(-r * 0.6, -r * 0.7);
+        ctx.lineTo(-r * 0.1, 0);
+        ctx.lineTo(-r * 0.6, r * 0.7);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = core; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(-r * 0.8, 0); ctx.lineTo(r * 1.6, 0); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-r * 1.3, -r * 0.55); ctx.lineTo(-r * 0.5, 0); ctx.lineTo(-r * 1.3, r * 0.55);
+        ctx.stroke();
+        break;
+      case 'crystal': // mage
+        diamond(ctx, 0, 0, r * 1.35); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = core;
+        diamond(ctx, 0, 0, r * 0.5); ctx.fill();
+        break;
+      case 'spark': // wizard / smith
+        ctx.beginPath();
+        ctx.moveTo(r * 1.8, 0);
+        ctx.lineTo(-r * 0.7, -r * 0.85);
+        ctx.lineTo(-r * 0.15, 0);
+        ctx.lineTo(-r * 0.7, r * 0.85);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = core;
+        diamond(ctx, r * 0.2, 0, r * 0.4); ctx.fill();
+        break;
+      case 'ray': // priest
+        ctx.beginPath();
+        ctx.moveTo(r * 2.0, 0);
+        ctx.lineTo(-r * 0.9, -r * 0.4);
+        ctx.lineTo(-r * 0.9, r * 0.4);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = core;
+        circle(ctx, r * 0.3, 0, r * 0.35); ctx.fill();
+        break;
+      case 'note': // bard
+        circle(ctx, r * 0.4, r * 0.15, r * 0.7); ctx.fill(); ctx.stroke();
+        ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.moveTo(r * 1.05, r * 0.15); ctx.lineTo(r * 1.05, -r * 1.3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(r * 1.05, -r * 1.3); ctx.lineTo(r * 0.15, -r * 1.0); ctx.stroke();
+        break;
+      case 'bone': // necro
+        ctx.beginPath();
+        ctx.moveTo(r * 1.7, 0);
+        ctx.lineTo(r * 0.9, -r * 0.45);
+        ctx.lineTo(-r * 1.1, -r * 0.35);
+        ctx.lineTo(-r * 1.5, 0);
+        ctx.lineTo(-r * 1.1, r * 0.35);
+        ctx.lineTo(r * 0.9, r * 0.45);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = core;
+        circle(ctx, r * 1.15, 0, r * 0.28); ctx.fill();
+        break;
+      case 'thread': // witch doctor
+        ctx.beginPath();
+        ctx.moveTo(r * 1.6, 0);
+        ctx.quadraticCurveTo(0, -r * 1.1, -r * 1.4, 0);
+        ctx.quadraticCurveTo(0, r * 1.1, r * 1.6, 0);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        break;
+      case 'spray': // sundian
+        ctx.beginPath();
+        ctx.moveTo(r * 1.9, 0);
+        ctx.lineTo(-r * 0.4, -r * 0.95);
+        ctx.lineTo(-r * 0.9, 0);
+        ctx.lineTo(-r * 0.4, r * 0.95);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = core;
+        circle(ctx, r * 0.5, 0, r * 0.3); ctx.fill();
+        break;
+      case 'leaf': // druid
+        ctx.beginPath();
+        ctx.moveTo(r * 1.8, 0);
+        ctx.quadraticCurveTo(r * 0.2, -r * 1.0, -r * 1.3, 0);
+        ctx.quadraticCurveTo(r * 0.2, r * 1.0, r * 1.8, 0);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = core; ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.moveTo(-r * 0.8, 0); ctx.lineTo(r * 1.2, 0); ctx.stroke();
+        break;
+      case 'blood': // savage
+        ctx.beginPath();
+        ctx.moveTo(r * 1.7, 0);
+        ctx.lineTo(-r * 0.5, -r * 0.9);
+        ctx.lineTo(-r * 1.2, -r * 0.2);
+        ctx.lineTo(-r * 0.5, r * 0.9);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        break;
+      case 'dust': // monk
+        diamond(ctx, 0, 0, r * 1.15); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = core;
+        circle(ctx, r * 0.15, 0, r * 0.35); ctx.fill();
+        break;
+      case 'glint': // assassin
+        ctx.beginPath();
+        ctx.moveTo(r * 2.0, 0);
+        ctx.lineTo(-r * 0.3, -r * 0.35);
+        ctx.lineTo(-r * 1.4, 0);
+        ctx.lineTo(-r * 0.3, r * 0.35);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        break;
+      default:
+        diamond(ctx, 0, 0, r * 1.15); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = core;
+        diamond(ctx, 0, 0, r * 0.4); ctx.fill();
     }
     ctx.restore();
   }

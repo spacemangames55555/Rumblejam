@@ -103,6 +103,42 @@ export const TREE_ACCENT = {
   wizard_arcana:    '#fb923c',
   wizard_attunement:'#c4b5fd',
   wizard_dissonance:'#5eead4',
+  sav_primal_fury:  '#ff5d3a',
+  sav_bloodbound:   '#7a1f1f',
+  sav_aftermath:    '#fb923c',
+  monk_chi:         '#e8c547',
+  monk_empty_hand:  '#f5f0d8',
+  monk_stonegarden: '#a8a29e',
+  smith_forge:      '#ffab4f',
+  smith_crystal:    '#7dd3fc',
+  smith_anvil:      '#d4a017',
+  asn_killbox:      '#a3e635',
+  asn_shadow:       '#7c6a9a',
+  asn_range:        '#94a3b8',
+  hun_longshot:     '#f59e0b',
+  hun_houndmaster:  '#c4a574',
+  hun_pincer:       '#fb923c',
+  mage_crystalblade:'#67e8f9',
+  mage_collapse:    '#312e81',
+  mage_refraction:  '#818cf8',
+  priest_judgment:  '#f5e6a3',
+  priest_grace:     '#fafafa',
+  priest_reckoning: '#f59e0b',
+  bard_cadence:     '#fde047',
+  bard_ensemble:    '#fb7185',
+  bard_requiem:     '#c084fc',
+  necro_dark_matter:'#a3e635',
+  necro_marrow:     '#4d7c0f',
+  necro_summons:    '#d9f99d',
+  wd_blight:        '#3f6212',
+  wd_effigy:        '#c4b5fd',
+  wd_swarm:         '#bbf7d0',
+  sun_reef:         '#2dd4bf',
+  sun_tidewrack:    '#5eead4',
+  sun_undertow:     '#0e7490',
+  druid_beasts:     '#a3e635',
+  druid_wildkin:    '#4d7c0f',
+  druid_restoration:'#86efac',
 };
 
 const CLASS_SHORT = {
@@ -190,13 +226,17 @@ export function fxSpec(skillOrId) {
   };
 }
 
-// Sprite ids we actually author files for in this pass. Missing files fall
-// back to the canvas drawing — same contract as every other sprite.
-export const SKILL_FX_SPRITE_IDS = [
-  'fx.sam_slash', 'fx.sam_cleave', 'fx.sam_thrust', 'fx.sam_smite',
-  'fx.sam_shockwave', 'fx.sam_wardShell',
-  'fx.wiz_bolt', 'fx.wiz_spread', 'fx.wiz_beam', 'fx.wiz_cleave',
-  'fx.wiz_smite', 'fx.wiz_shockwave', 'fx.wiz_puddle', 'fx.wiz_healPulse',
-  'fx.wiz_wardShell',
-  'fx.impact', 'fx.muzzle',
-];
+// Sprite ids we actually author files for. Missing files fall back to the
+// canvas drawing — same contract as every other sprite. Built from the live
+// catalog so a new class×shape cannot be forgotten.
+export const SKILL_FX_SPRITE_IDS = (() => {
+  const ids = new Set([
+    'fx.impact', 'fx.muzzle',
+    'fx.sam_thrust', 'fx.sam_smite', 'fx.sam_shockwave', 'fx.wiz_smite',
+  ]);
+  for (const sk of Object.values(SKILL_BY_ID)) {
+    const spec = fxSpec(sk);
+    if (spec && spec.spriteId) ids.add(spec.spriteId);
+  }
+  return [...ids].sort();
+})();
