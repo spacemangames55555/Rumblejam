@@ -373,6 +373,7 @@ export function tickMinions(sim, dt) {
 
       // Temporary summons expire. Permanent ones (ttl 0) never do.
       if (m.ttl > 0 && (m.ttl -= dt) <= 0) {
+        m.dead = true;              // an enemy may be holding a taunt on it
         p.minions.splice(i, 1);
         p.minionStats.expired++;
         continue;
@@ -500,6 +501,29 @@ function attackMinion(sim, p, m, dt) {
   prim(sim, m.actor, m.skillView, m.attack, m.rank, sim.trigGrid, { hits: 0, damage: 0, statuses: 0, states: 0 });
 }
 
+// THE DEFENSIVE DOOR, and the reason it cannot reuse `makeActor`. That facade
+// aliases `hp`, `shield` and `damageDealt` to the OWNER by reference, which is
+// exactly right for a swing — a skeleton's lifesteal heals the necromancer —
+// and exactly wrong for being hit: routing an enemy's blow through it would
+// damage the necromancer instead of the skeleton. So damage taken has its own
+// entrance, and it writes the minion's own HP.
+//
+// Kill attribution is unaffected: nothing here credits anyone. What killed a
+// minion is the enemy, and the game keeps no ledger for that.
+export function hurtMinion(sim, m, amount) {
+  if (!m || m.dead || m.down || !(m.hp > 0) || !(amount > 0)) return 0;
+  const p = sim.players[m.ownerIdx];
+  if (!p) return 0;
+  const before = m.hp;
+  m.hp -= amount;
+  sim.fx.hits.push({ x: Math.round(m.x), y: Math.round(m.y - m.radius), a: 0, c: 0 });
+  if (m.hp <= 0) {
+    const i = p.minions.indexOf(m);
+    if (i >= 0) killMinion(sim, p, m, i);
+  }
+  return Math.min(before, amount);
+}
+
 function contactDamage(sim, p, m, i) {
   if (m.contactCd > 0) return;
   for (const e of sim.enemyPool) {
@@ -540,7 +564,11 @@ export function healMinions(p, amount) {
 export function killMinion(sim, p, m, i) {
   sim.fx.deaths.push({ x: Math.round(m.x), y: Math.round(m.y), c: m.color, r: m.radius });
   p.minionStats.died++;
-  if (!m.revives) { p.minions.splice(i, 1); return; }
+  // `dead` MEANS GONE FROM THE ARRAY, not "at zero HP". A Druid animal is
+  // DOWNED and revives — it stays in `p.minions` holding its slot — so stamping
+  // it here would leave a revived animal permanently untauntable.
+  // `_tauntHolderAlive` checks `down` separately for exactly that case.
+  if (!m.revives) { m.dead = true; p.minions.splice(i, 1); return; }
   // It stays in the array — which is what makes totalAnimals() count it, and
   // what keeps its slot occupied while it is down.
   m.down = true;

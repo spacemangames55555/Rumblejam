@@ -118,7 +118,7 @@ export function updateEnemy(sim, e, dt) {
   if (telegraphBusy(e)) return;
 
   const t = e.def;
-  const p = sim.tauntTarget(e.x, e.y);
+  const p = sim.tauntTarget(e.x, e.y, e);
   // once the fight's spawning stops, survivors press the attack instead of
   // kiting — the field must be cleared to end the fight, so nobody hides
   const rush = sim.wave && sim.wave.done;
@@ -379,7 +379,7 @@ export function updateEnemy(sim, e, dt) {
 function updateBoss(sim, e, dt, spd) {
   const b = e.bossDef;
   const s = e.bs; // boss state bag
-  const p = sim.tauntTarget(e.x, e.y);
+  const p = sim.tauntTarget(e.x, e.y, e);
   const p2 = e.hp < e.maxHp * 0.5;
   if (p2 && !s.phase2) {
     s.phase2 = true;

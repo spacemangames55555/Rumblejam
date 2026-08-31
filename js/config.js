@@ -60,6 +60,12 @@ export const CONFIG = {
   // invented to fix a problem the design does not have, and a shared pool
   // silently couples two engines the section keeps deliberately opposite. If a
   // future class needs standing capacity, it belongs to that class's engine.
+  // A taunted enemy swings at the minion holding it from a little further out
+  // than body-on-body: `rushMove` targets 240u PAST what it is chasing, so an
+  // enemy converging on a minion passes through a near-miss rather than
+  // settling into contact. Measured closest approach without this: 44u against
+  // a 25u contact sum, which is a taunt that redirects and never lands.
+  MINION_CONTACT_REACH: 26,
   MINION_CAP_PER_PLAYER: 64,   // runaway backstop only — §8.5 caps nothing by design
   MINION_SPEED: 250,           // u/s; below BASE_SPEED so a pack cannot outrun its owner
   MINION_AGGRO_RANGE: 420,     // how far a chaser will look for something to fight
