@@ -757,7 +757,18 @@ export function applyImpactRiders(sim, p, skill, r, e, rank, angle, out) {
     out.statuses++;
   }
   if (r.root) { e.rootT = Math.max(e.rootT || 0, r.root / MS); out.statuses++; }
-  if (r.taunt) { e.tauntT = Math.max(e.tauntT || 0, r.taunt / MS); e.tauntIdx = p.idx; out.statuses++; }
+  // THE TAUNT NOW NAMES ITS HOLDER. It used to write only `tauntIdx = p.idx`,
+  // a PLAYER index — and minions borrow `idx` from their owner by reference, so
+  // even a working reader would have pulled the enemy onto the necromancer
+  // rather than onto the skeleton that swung. `p.minion` is set by the minion
+  // actor facade and by nothing else, which is how a summon's swing is told
+  // apart from its owner's.
+  if (r.taunt) {
+    e.tauntT = Math.max(e.tauntT || 0, r.taunt / MS);
+    e.tauntBy = p.minion || sim.players[p.idx] || null;
+    e.tauntIdx = p.idx;          // kept: the OWNER, for attribution and the HUD
+    out.statuses++;
+  }
   if (r.knockback) {
     const k = r.knockback * knockMult(p);           // §9.2 magnitude (D-25)
     e.knockX += Math.cos(angle) * k; e.knockY += Math.sin(angle) * k; out.statuses++;

@@ -15,6 +15,7 @@
 // during wind-up produces an undodgeable attack and defeats the patch.
 
 import { inZone } from './compose.js';
+import { hurtMinion } from './minions.js';
 import { domainMult } from './domains.js';
 // ALL_ENEMY_DEFS, not ENEMIES: region populations are registered in the same
 // table and must be covered by the same assertions. Reading the base twelve
@@ -77,7 +78,7 @@ export const TELEGRAPHED_IDS = ALL_ENEMY_DEFS.filter(e => e.telegraph).map(e => 
 // Built once, at commit. `angle0` is frozen here and nothing reads the enemy's
 // facing again — which is what makes the zone a promise rather than a guess.
 function buildZone(sim, e, t) {
-  const target = sim.tauntTarget(e.x, e.y);
+  const target = sim.tauntTarget(e.x, e.y, e);
   const angle0 = target ? Math.atan2(target.y - e.y, target.x - e.x) : (e.aimA || 0);
   const z = { kind: t.shape.kind, x: e.x, y: e.y, angle0, domain: t.domain, enemyId: e.id };
   if (t.shape.kind === 'circle') z.radius = t.shape.radius;
@@ -199,7 +200,7 @@ export function tickTelegraphs(sim, dt) {
         if (e.telCd > 0) break;
         // only commit when there is someone to commit AT, and only when they
         // are close enough that the attack is about them rather than ambient
-        const target = sim.tauntTarget(e.x, e.y);
+        const target = sim.tauntTarget(e.x, e.y, e);
         if (!target) break;
         const zone = buildZone(sim, e, t);
         // WHO IS INSIDE AT COMMIT. The dodge check compares this set against
@@ -281,6 +282,17 @@ function resolveTelegraph(sim, e, t) {
       sim.telStats.dodged++;
       sim.onTelegraphDodge(p, e);
       sim.telDodgeLog.push({ p: p.idx, e: e.id, kind: z.kind, dodged: true, wasCaught: true, t: sim.time });
+    }
+    // A TAUNTED ENEMY WINDS UP AT THE SKELETON, so the skeleton has to be
+    // standing in the blast. Minions were absent from this loop entirely — an
+    // enemy could aim a slam at one and the slam would pass through it. No
+    // dodge bookkeeping: `telDodgeLog` measures a PLAYER skill (inside at
+    // commit, outside at resolve) and a minion does not dodge.
+    for (const m of p.minions || []) {
+      if (m.down || m.dead || !(m.hp > 0)) continue;
+      if (inZone(z, m.x, m.y, m.radius) && zoneSees(sim, z, m.x, m.y)) {
+        hurtMinion(sim, m, (e.telDamage ?? t.damage) * domainMult(z.domain, null));
+      }
     }
   }
   if (sim.telDodgeLog.length > 10) sim.telDodgeLog.splice(0, sim.telDodgeLog.length - 10);

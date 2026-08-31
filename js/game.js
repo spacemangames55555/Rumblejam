@@ -2604,8 +2604,38 @@ export class Sim {
     }
     return best;
   }
-  // What enemies aim at: a nearby Mirage decoy wins over real players.
-  tauntTarget(x, y) {
+  // Is a taunt's holder still a thing an enemy can walk to? A minion that died
+  // or expired is spliced out of its owner's array, so the enemy would be
+  // holding a reference to a corpse — `dead` is stamped at both exits for an
+  // O(1) answer, because this runs per enemy per frame.
+  _tauntHolderAlive(t) {
+    if (!t) return false;
+    if (t.arch === undefined) return !t.gone && !t.downed;             // a player
+    // A MINION, and the membership check is not redundant with the `dead`
+    // stamp. The stamp is set at the two exits that exist today; membership is
+    // what makes a THIRD exit added later fail safe instead of stranding every
+    // enemy that was taunted by the minion it removed. The list is at most a
+    // handful long and the stamp short-circuits the common case.
+    if (t.dead || t.down || !(t.hp > 0)) return false;
+    const o = this.players[t.ownerIdx];
+    return !!(o && o.minions.includes(t));
+  }
+
+  // What enemies aim at, in priority order:
+  //   1. A LIVE TAUNT on this enemy — the deliberate, directed effect wins.
+  //   2. A nearby Mirage decoy.
+  //   3. On a Relic Run, the carrier, weighted as if much closer.
+  //   4. The nearest living player.
+  //
+  // `e` IS NEW AND OPTIONAL. A taunt lives on the ENEMY, so the function has to
+  // know which enemy is asking — it used to take coordinates alone, which is
+  // why `e.tauntT` could be written by seven skills and read by nothing. A
+  // caller that passes no enemy gets exactly the old behaviour.
+  tauntTarget(x, y, e) {
+    if (e && e.tauntT > 0 && e.tauntBy) {
+      if (this._tauntHolderAlive(e.tauntBy)) return e.tauntBy;
+      e.tauntT = 0; e.tauntBy = null;   // the holder died: fall through, never strand
+    }
     let best = null, bd = Infinity;
     for (const d of this.decoys) {
       const dd = dist2(x, y, d.x, d.y);
@@ -3451,6 +3481,23 @@ export class Sim {
     for (const e of this.enemyPool) {
       if (e.contactCd > 0) e.contactCd -= dt;
       if (e.bulwarkCd > 0) e.bulwarkCd -= dt;
+      // A TAUNTED ENEMY HITS WHAT IT WAS TAUNTED BY. Contact used to be the
+      // minion's problem alone: `contactDamage` in js/minions.js fires when the
+      // MINION walks into an enemy, which is the wrong way round for a taunt —
+      // measured, a taunted enemy closed to 44u and never reached the 25u the
+      // minion-side check needs, because `rushMove` aims 240u PAST its target
+      // and charges through rather than settling on it. So the enemy gets the
+      // same contact swing at a minion that it has always had at a player,
+      // with the same cooldown, and the reach is widened by the overshoot the
+      // enemy's own movement builds in.
+      if (e.tauntT > 0 && e.contactCd <= 0 && this._tauntHolderAlive(e.tauntBy) && e.tauntBy.arch !== undefined) {
+        const m = e.tauntBy;
+        const rr = e.radius + m.radius + CONFIG.MINION_CONTACT_REACH;
+        if (dist2(e.x, e.y, m.x, m.y) <= rr * rr) {
+          e.contactCd = CONFIG.CONTACT_COOLDOWN;
+          MIN.hurtMinion(this, m, e.dmg);
+        }
+      }
       for (const p of this.livePlayers()) {
         if (p.downed) continue;
         const rr = e.radius + p.radius;
