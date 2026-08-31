@@ -106,7 +106,29 @@ export const NECRO_SUMMONS = [
     cooldown: T.monsterCd,
     compose: [{
       kind: 'summon', archetype: 'golem', move: 'chase',
-      count: 1, maxAlive: 1, slotted: true, revives: false,
+      // NOT SLOTTED — TWO INDEPENDENT CAPS, per §8.5's own wording: "Skeletons
+      // cap 3 (+1 per 4 ranks). Monster caps 1 (never more — it is a pet, not a
+      // swarm)." Two per-skill caps, not one shared pool.
+      //
+      // It shipped `slotted: true`, and `slotsFilled` counts every slotted
+      // minion regardless of archetype, so the Monster spent a currency it does
+      // not mint: `summonSlots` is granted by ONE skill in the game — the
+      // skeleton, at 1 per rank — and was drawn from by two. Measured, at
+      // skeleton rank 1 that made them MUTUALLY EXCLUSIVE IN BOTH DIRECTIONS:
+      // Monster first and four skeletons were refused; skeletons first and the
+      // Monster was refused. At every higher rank the Monster still cost a
+      // skeleton permanently, because both are `duration: 0`.
+      //
+      // The both-ways symptom is why it survived play: the skeleton fires on
+      // ON_TOKEN and the Monster on COOLDOWN_READY, so which one loses depends
+      // on which got there first.
+      //
+      // `maxAlive: 1` is now the whole of its cap, which is what every other
+      // summon in the game already does — the Druid's three animals, the
+      // Hunter's, the Witch Doctor's, and Army of the Dead are all
+      // `slotted: false` with their own ceiling. The slot pool is skeletons-only,
+      // which is what the skeleton step's own comment already assumes.
+      count: 1, maxAlive: 1, slotted: false, revives: false,
       hp: T.monsterHp, radius: T.monsterRadius, spawnRadius: T.monsterSpawnRadius,
       duration: 0,
       attackCd: T.monsterAtkCd,           // MILLISECONDS
