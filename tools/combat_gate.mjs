@@ -18,6 +18,8 @@ import { FixtureSim as Sim } from './fixture_sim.mjs';
 import * as SKILLSIM from '../js/skillsim.js';
 import { TREES, TREES_BY_CLASS } from '../js/skills.js';
 import { selectTarget } from '../js/selectors.js';
+import { spawnMinions, summonSlotsFor } from '../js/minions.js';
+import { SKILL_BY_ID } from '../js/skills.js';
 import { bossForRegion } from '../js/regions.js';
 import { ALL_BOSS_DEFS } from '../js/content/bosses.js';
 
@@ -155,10 +157,29 @@ for (const [charId, treeId, label] of [
   ['toh_hunter', 'hun_houndmaster', 'hunter hounds'],
 ]) {
   const { g, p } = armTree(charId, treeId, { ranks: 4 });
-  for (let i = 0; i < 60 * 25; i++) { g.tick(); pump(g, p); }
+  // THE MINION IS PLACED, NOT EARNED. This used to run 25 s of live combat and
+  // then take whatever pet was still standing, which made an obstacle test
+  // sensitive to PET SURVIVABILITY — a thing it does not test and should not
+  // care about. It went red the moment taunt started working (#127) and the
+  // Druid's animals began tanking: measured either side, the pack was already
+  // 2-of-3 dead before that and the gate was passing on one hawk's 22 HP.
+  //
+  // So the fixture stages what it needs directly: arm the tree, spawn the
+  // tree's own summon through the real `spawnMinions` path, and EMPTY THE ROOM
+  // so nothing can kill, shove or distract the minion during the 40 frames the
+  // ejection is measured over. Every shape the test covers — skeleton, wolf,
+  // bear, hawk, hound — is still the real one from its own step.
+  for (let i = 0; i < 30; i++) { g.tick(); pump(g, p); }        // let the arena settle
+  const summon = TREES[treeId].skills.find(sk => (sk.compose || []).some(st => st.kind === 'summon'));
+  if (summon) {
+    p.summonSlots = Math.max(p.summonSlots || 0, 8, summonSlotsFor(p, p.skillRanks, SKILL_BY_ID));
+    const step = summon.compose.find(st => st.kind === 'summon');
+    for (let k = 0; k < 3 && !p.minions.length; k++) spawnMinions(g, p, summon, step, 4);
+  }
+  for (const e of [...g.enemyPool]) g.enemyPool.release(e);      // nobody left to interfere
   const o = bigBlock(g);
   const m = p.minions.find(x => !x.down);
-  if (!o || !m) { fail(`${label}: fixture never staged (block ${!!o}, minion ${!!m}) — restage it`); continue; }
+  if (!o || !m) { fail(`${label}: fixture never staged (block ${!!o}, minion ${!!m}, summon skill ${summon ? summon.id : 'none'}) — restage it`); continue; }
   const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
   m.x = cx; m.y = cy;
   let insideAfter = 0;
