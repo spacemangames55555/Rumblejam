@@ -77,6 +77,9 @@ const app = {
   player: null,           // the player-level store (unlocked classes)
   character: null,        // the one being played this run
   objectiveHistory: [],   // objectives dealt in earlier regions of this sitting
+  // Progression carried across a region boundary — see Sim.carryState(). Null
+  // means "start fresh", which is what a genuinely new run wants.
+  carry: null,
   map: null,              // latest 'map' event (node layout + reachable)
   arena: null,            // latest 'arena' event (dims + obstacles)
   runMode: 'map',         // 'map' | 'arena'
@@ -203,13 +206,42 @@ function hostContinueToWorldMap() {
   showWorldMap(app.character, app.player, { canLeave: true });
 }
 
-// WIPED: the same region again, from the same seed. Levels, xp, skills,
-// passives and the frontier are all on the character and the party, none of
-// which this touches — so a party that keeps wiping keeps its levels, which is
-// the intended ramp rather than an oversight.
+// WIPED: the same region again, from the same seed, with the party's
+// progression intact.
+//
+// THIS COMMENT USED TO CLAIM THAT ALREADY HAPPENED. It said levels, xp, skills
+// and passives "are all on the character and the party, none of which this
+// touches". Only the frontier was: the character save declares `level` and
+// `points` and NOTHING has ever written them, and `_makePlayer` builds every
+// player at level 1 regardless. A wipe reset the party to level 1 with an
+// unspent point and the opening pick offered again, and so did clearing a
+// region and walking to the next one. It shipped because it was reasoned about
+// rather than measured.
+//
+// It is true now, and `tools/carry_gate.mjs` is what keeps it true — the
+// progression is snapshotted at the results screen and written back over the
+// new Sim's players. Session only; nothing here is saved to disk.
 function hostRetryRegion() {
   if (app.role !== 'host') return;
   if (app.hostT) app.hostT.broadcast({ t: 'retry', regionIndex: app.regionIndex });
+  // THE MODE RESET IS LOAD-BEARING, and its absence made this button a silent
+  // no-op. `hostStartRun` refuses unless the app is in LOBBY mode — a guard
+  // against a lobby abandoned while assets loaded — and the results screen is
+  // 'results'. So RETRY REGION broadcast a retry, returned, and left the dead
+  // Sim on screen: same object, `over` still true, tick count frozen.
+  //
+  // It shipped in #120 because the button was verified to RENDER and never
+  // verified to DO anything. The continue path never hit it: the world map is
+  // a lobby-mode screen, so `hostContinueToWorldMap` had already set this.
+  //
+  // Carry is already captured — it is snapshotted at the results screen, not
+  // here — so dropping the Sim now costs nothing.
+  app.mode = 'lobby';
+  app.sim = null;
+  showHud(false);
+  closeAllOverlays();
+  hideMapScreen();
+  hideScreens();
   hostStartRun(app.regionSeed);
 }
 
@@ -435,6 +467,11 @@ function hostReturnToLobby(clearChars = true) {
   app.snaps = [];
   app.meta = null;
   app.predicted = null;
+  // A NEW RUN STARTS AT LEVEL 1. This is the character-select path, not the
+  // world map — the run is over and the next one must not inherit its build.
+  // Carry survives a region boundary and a retry, and nothing else.
+  app.carry = null;
+  app.objectiveHistory = [];
   app.lobby = { code: app.hostT ? app.hostT.code : null, codePending: false, players };
   showHud(false);
   closeAllOverlays();
@@ -669,7 +706,13 @@ function hostStartRun(seedOverride = null) {
     // entering any region from the world map passes nothing and rolls a new one.
     const seed = seedOverride ?? randomRunSeed();
     app.regionSeed = seed;
-    app.party = app.lobby.players.map((p, i) => ({ idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color }));
+    // `carry` rides the party member because that is the only thing `_makePlayer`
+    // is handed. Absent on the first region of a run, which is exactly when a
+    // player SHOULD arrive at level 1 with one point and an opening pick.
+    app.party = app.lobby.players.map((p, i) => ({
+      idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color,
+      carry: (app.carry && app.carry[i]) || null,
+    }));
     app.myIdx = 0;
     // The difficulty rides the start message as well as the Sim. Clients do not
     // simulate today — `app.sim` is assigned on the host only — so this is not
@@ -1003,6 +1046,8 @@ function leaveToTitle() {
   if (app.hostT) { clearInterval(app.hostT.watch); app.hostT.close(); app.hostT = null; }
   clientCleanup();
   app.sim = null;
+  app.carry = null;             // leaving the room ends the run; see hostReturnToLobby
+  app.objectiveHistory = [];
   app.mode = 'title';
   app.lobby = null;
   app.party = null;
@@ -1151,6 +1196,13 @@ function handleEvent(ev) {
     case 'bossPhase': banner('ENRAGED', '', 1200); sfx.roar(); break;
     case 'bossDown': banner('BOSS DEFEATED', 'sweep the field — the spoils fizzle when the count hits zero', 2600); break;
     case 'end': {
+      // CAPTURED HERE BECAUSE BOTH EXITS PASS THROUGH IT. Continue-to-world-map
+      // drops the Sim and retry builds a new one over it; taking the snapshot
+      // at the results screen means neither path can forget to, and a path
+      // added later inherits it. Host-side only: the host owns every Sim
+      // player, so one capture covers the whole party without any save
+      // travelling between peers.
+      if (app.sim && app.role !== 'client') app.carry = app.sim.carryState();
       app.mode = 'results';
       showHud(false);
       closeAllOverlays();

@@ -76,6 +76,33 @@ const TIER_WEIGHTS = [
   [5, 35, 40, 20],  // 8  the endgame shelf, unchanged
 ];
 
+// THE SESSION-CARRY FIELD LIST, stated once because it is read in one place
+// and written in another and the whole defect it fixes was a field owned by
+// nobody. Adding a progression field to `_makePlayer` or `initSkillPlayer`
+// means adding it here, or it silently resets at every region boundary.
+//
+// Split by which initialiser resets it, so the two stay traceable:
+const CARRY_FIELDS = [
+  // js/game.js `_makePlayer`
+  'level', 'xp', 'xpEarned', 'xpNext', 'materials', 'matsCollected', 'banked',
+  'items', 'itemState', 'weapons', 'boosts', 'permStats', 'respecs',
+  // js/skillsim.js `initSkillPlayer`
+  'skillRanks', 'skillPoints', 'loadout',
+];
+
+// Every carried field is plain data — id arrays, id->number maps, and weapon
+// records of `{id, tier, cd, uid, invested}`. Copied rather than aliased so a
+// dropped Sim cannot be mutated through the new one's player.
+function plainCopy(v) {
+  if (Array.isArray(v)) return v.map(plainCopy);
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k in v) o[k] = plainCopy(v[k]);
+    return o;
+  }
+  return v;
+}
+
 export class Sim {
   constructor({ seed, party, allowUnplayable = false, difficulty = DEFAULT_DIFFICULTY, regionIndex = 1, objectiveHistory = [], tree = null, cleared = [] }) {
     // see _makePlayer: an explicit, named opt-out for tests that measure a
@@ -232,6 +259,10 @@ export class Sim {
     this.payout = { kills: 0, gold: 0, xp: 0 };
     this.holdCircle = null;   // {x,y,r,held} — spawn-choke sub-objective
     this.pylonId = null; this.enemyBuff = 1;
+    // Carried progression lands here — see `carryState`. Before `_startRegion`
+    // because that is where the opening pick is offered, and a player arriving
+    // with a spent tree must not be asked to choose one again.
+    for (const p of this.players) this._applyCarry(p, party[p.idx] && party[p.idx].carry);
     this._startRegion();
     for (const p of this.players) this._initStartingGear(p);
   }
@@ -278,6 +309,44 @@ export class Sim {
     const k = target ? (target.bounty ? 'MARK' : target.isNest ? 'nest' : target.boss ? 'boss' : target.elite ? 'elite' : 'chaff') : 'none';
     const key = `${skillId}->${k}${available === true ? '|markInRange' : ''}`;
     this.selLog.set(key, (this.selLog.get(key) || 0) + 1);
+  }
+
+  // ---- SESSION CARRY -------------------------------------------------
+  //
+  // A REGION BOUNDARY IS NOT A NEW CHARACTER. `_makePlayer` builds every player
+  // at level 1 and `initSkillPlayer` wipes the tree, which is correct for the
+  // start of a run and wrong for the start of region 2 — so the progression a
+  // player earned is captured before the old Sim is dropped and written back
+  // over the fresh one here.
+  //
+  // THIS IS SESSION STATE, NOT A SAVE. Nothing here is persisted: the character
+  // save's `level` and `points` fields remain what they have always been —
+  // declared, validated, and written by nothing. Quitting still loses the
+  // character. That is existing behaviour and a separate decision.
+  //
+  // ONE LIST, READ AND WRITTEN BY THE SAME CONSTANT, because the failure this
+  // fixes was two lists disagreeing about who owned a field.
+  carryState() {
+    const out = {};
+    for (const p of this.players) {
+      const blk = {};
+      for (const k of CARRY_FIELDS) blk[k] = plainCopy(p[k]);
+      out[p.idx] = blk;
+    }
+    return out;
+  }
+
+  // Applied AFTER `_makePlayer` (which includes `initSkillPlayer`) and BEFORE
+  // `_startRegion`, which is the only window that works: earlier and
+  // `initSkillPlayer` wipes it, later and `_offerOpening` has already fired at
+  // a player it believes has one unspent point and no tree.
+  _applyCarry(p, carry) {
+    if (!carry) return;
+    for (const k of CARRY_FIELDS) if (carry[k] !== undefined) p[k] = plainCopy(carry[k]);
+    this._recomputeItems(p);
+    this._recomputeStats(p);
+    p.hp = p.stats.vitality;    // a new region starts healed; the build is what carries
+    p.metaDirty = true;
   }
 
   _makePlayer(member, idx) {
@@ -3779,6 +3848,19 @@ export class Sim {
   // every client. A tier-1 pick is the same shape of decision.
   _offerOpening(p) {
     if (p.openingOffer || p.skillPoints <= 0) return;
+    // THE TEST IS "HAS NOTHING TO FIGHT WITH", NOT "HAS A POINT TO SPEND".
+    // `skillPoints <= 0` was correct only while every player holding points was
+    // a brand-new character. Session carry breaks that: a player crossing into
+    // region 2 arrives with a ranked tree AND eight unspent points, and this
+    // asked them to choose a first ability they had already chosen — measured,
+    // and the reason `tools/carry_gate.mjs` tests the guard separately from the
+    // fields.
+    //
+    // An empty tree is the honest test of what this exists to prevent: a
+    // character standing in a fight with no way to affect it. It is also true
+    // of a player who has just respecced to nothing, who genuinely does need a
+    // first pick again.
+    if (Object.keys(p.skillRanks || {}).length > 0) return;
     const picks = SK.openingPicks(p);
     if (!picks.length) return;
     p.openingOffer = picks;

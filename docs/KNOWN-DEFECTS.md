@@ -1584,3 +1584,28 @@ not a place to spend a change casually. If the tuple is being touched for some
 other reason, take this at the same time.
 
 **Not fixed** by ruling, on the record, at the time the sprites were wired.
+
+## #26 — shop pricing assumes materials reset per region — FLAGGED, not fixed
+
+**Raised by session carry, deliberately left alone.** `materials` is one of the
+sixteen fields that now cross a region boundary and a retry (see
+`CARRY_FIELDS` in `js/game.js` and `tools/carry_gate.mjs`). Before that, every
+region began at zero and the shop was priced against what a single region
+takes.
+
+**Why it matters.** Prices are set against a floor's takings rather than against
+a level — that is stated in the XP-compensation note in `js/arenas.js`, which
+compensates XP and deliberately does NOT compensate gold, on the grounds that
+"the shop is priced against a floor's takings". Carrying materials forward
+breaks that assumption in the player's favour: region 2's shop is now met with
+region 1's leftovers on top of region 2's earnings, and the effect compounds
+across a run and across every retry of a region.
+
+**Measured, one region:** a god-mode probe leaves region 1 map 1 with **71
+materials** banked. That is the size of the carry into region 2's first shop,
+per player, per region cleared.
+
+**Not fixed** because pricing is a design pass, not a bug fix: the options —
+scale prices by region, tax the boundary, or let the ramp stand as a
+deliberate power curve — are different games, and choosing between them is not
+something a carry patch should decide silently.
