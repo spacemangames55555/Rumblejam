@@ -2224,6 +2224,126 @@
       "w": 64,
       "h": 64
     },
+    "tile.abyss_00": {
+      "file": "assets/tiles/abyss/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.abyss_01": {
+      "file": "assets/tiles/abyss/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.abyss_02": {
+      "file": "assets/tiles/abyss/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.abyss_03": {
+      "file": "assets/tiles/abyss/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.abyss_04": {
+      "file": "assets/tiles/abyss/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.delta_00": {
+      "file": "assets/tiles/delta/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.delta_01": {
+      "file": "assets/tiles/delta/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.delta_02": {
+      "file": "assets/tiles/delta/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.delta_03": {
+      "file": "assets/tiles/delta/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.delta_04": {
+      "file": "assets/tiles/delta/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.norse_00": {
+      "file": "assets/tiles/norse/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.norse_01": {
+      "file": "assets/tiles/norse/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.norse_02": {
+      "file": "assets/tiles/norse/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.norse_03": {
+      "file": "assets/tiles/norse/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.norse_04": {
+      "file": "assets/tiles/norse/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.outback_00": {
+      "file": "assets/tiles/outback/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.outback_01": {
+      "file": "assets/tiles/outback/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.outback_02": {
+      "file": "assets/tiles/outback/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.outback_03": {
+      "file": "assets/tiles/outback/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.outback_04": {
+      "file": "assets/tiles/outback/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
     "tile.pnw_00": {
       "file": "assets/tiles/pnw/tile-00.png",
       "w": 64,
@@ -2250,6 +2370,66 @@
     },
     "tile.pnw_04": {
       "file": "assets/tiles/pnw/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.sahel_00": {
+      "file": "assets/tiles/sahel/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.sahel_01": {
+      "file": "assets/tiles/sahel/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.sahel_02": {
+      "file": "assets/tiles/sahel/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.sahel_03": {
+      "file": "assets/tiles/sahel/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.sahel_04": {
+      "file": "assets/tiles/sahel/tile-04.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.steppe_00": {
+      "file": "assets/tiles/steppe/tile-00.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.steppe_01": {
+      "file": "assets/tiles/steppe/tile-01.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.steppe_02": {
+      "file": "assets/tiles/steppe/tile-02.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.steppe_03": {
+      "file": "assets/tiles/steppe/tile-03.png",
+      "w": 64,
+      "h": 64,
+      "strict": true
+    },
+    "tile.steppe_04": {
+      "file": "assets/tiles/steppe/tile-04.png",
       "w": 64,
       "h": 64,
       "strict": true

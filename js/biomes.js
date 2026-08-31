@@ -14,6 +14,10 @@
 // sources of truth that drift — which is exactly how `FLOOR_BIOMES` came to
 // dress the Pacific Northwest in tundra. The mapping is DERIVED from `REGIONS`
 // below, so a region changes its ground by editing the region.
+//
+// Unassigned entries (tundra, norse, sahel, …) are declared so the atlas can
+// land before the region does. `js/content/mapgeo.js` names the intended
+// tileset per pin; REGION_BIOMES does not guess a slot for them.
 
 import { REGIONS, TOTAL_REGIONS } from './regions.js';
 
@@ -35,8 +39,8 @@ export const BIOMES = {
     groundValue: 0.50,
     fallbackFill: '#131a14',
   },
-  // REGION 2 — Xibalba. Declared, no atlas yet: the flat fill is what it draws
-  // and that is a normal state, not a missing dependency.
+  // REGION 2 — Xibalba. Jungle temple earth, dark enough that the spiritual
+  // roster still reads.
   xibalba: {
     id: 'xibalba',
     atlas: 'assets/tiles/xibalba/',
@@ -64,6 +68,50 @@ export const BIOMES = {
     // roster, which reads dark-on-light. Grey-blue packed snow, not powder.
     groundValue: 0.60,
     fallbackFill: '#14161f',
+  },
+  // Unbuilt-region floors. Art is on disk; REGION_BIOMES stays null until the
+  // region itself declares a tileset. The Earth map uses these names as gloss.
+  sahel: {
+    id: 'sahel',
+    atlas: 'assets/tiles/sahel/',
+    variants: 5,
+    groundValue: 0.42,
+    fallbackFill: '#2a2216',
+  },
+  norse: {
+    id: 'norse',
+    atlas: 'assets/tiles/norse/',
+    variants: 5,
+    groundValue: 0.55,
+    fallbackFill: '#161920',
+  },
+  steppe: {
+    id: 'steppe',
+    atlas: 'assets/tiles/steppe/',
+    variants: 5,
+    groundValue: 0.45,
+    fallbackFill: '#1c1d14',
+  },
+  delta: {
+    id: 'delta',
+    atlas: 'assets/tiles/delta/',
+    variants: 5,
+    groundValue: 0.36,
+    fallbackFill: '#141810',
+  },
+  abyss: {
+    id: 'abyss',
+    atlas: 'assets/tiles/abyss/',
+    variants: 5,
+    groundValue: 0.22,
+    fallbackFill: '#0b1018',
+  },
+  outback: {
+    id: 'outback',
+    atlas: 'assets/tiles/outback/',
+    variants: 5,
+    groundValue: 0.38,
+    fallbackFill: '#1c120e',
   },
 };
 
