@@ -4,6 +4,10 @@
   --ink:#e8e9f2; --dim:#9aa0bd; --gold:#ffd45e; --hp:#ff5d6c; --xp:#5ee0a8;
   --c-common:#b8bdd4; --c-uncommon:#5ee0a8; --c-rare:#5ea8ff; --c-legendary:#ffd45e;
   --accent:#7a5cff; --danger:#ff5d6c;
+  /* Atlas node-map box. READ BY js/ui/mapscreen.js to decide whether the
+     campaign layout fits — if these change, the fit test follows them. */
+  --map-node-box:56px; --map-node-max:78px;
+  --map-node-boss-box:84px; --map-node-boss-max:96px;
 }
 *{box-sizing:border-box; margin:0; padding:0;}
 html,body{height:100%; overflow:hidden; background:#0c0d13; overscroll-behavior:none;}
@@ -121,7 +125,11 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 #screen-map.has-atlas{display:block; background-color:#0a0b12;}
 #screen-map.has-atlas::before{content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
   background:linear-gradient(180deg,#0a0b12cc 0%,#0a0b1244 16%,#0a0b1218 40%,#0a0b1228 82%,#0a0b12bb 100%);}
-.map-panel{width:min(96vw,1000px);}
+/* The seven node columns are wider than a portrait phone and `.panel` is the
+   scroller, so this surface has to pan BOTH ways: `.panel`'s `touch-action:
+   pan-y` alone leaves the right-hand half of the tree — six of thirteen nodes
+   at 390x844, boss included — unreachable by touch. Measured, not assumed. */
+.map-panel{width:min(96vw,1000px); touch-action:pan-x pan-y;}
 .map-flow{position:relative; display:flex; justify-content:space-between; align-items:stretch; gap:12px; margin-top:16px; min-height:260px;}
 .map-edges{position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1;}
 .map-col{display:flex; flex-direction:column; justify-content:space-around; gap:14px; flex:1; position:relative; z-index:1;}
@@ -156,14 +164,14 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 #screen-map.has-atlas .map-node{
   position:absolute; z-index:2; margin:0;
   transform:translate(-50%,-50%);
-  min-width:56px; max-width:78px; min-height:56px; padding:6px 5px;
+  min-width:var(--map-node-box); max-width:var(--map-node-max); min-height:var(--map-node-box); padding:6px 5px;
   background:#1c2030f2; box-shadow:0 6px 18px #000a;}
 #screen-map.has-atlas .map-node .mn-name{
   font-size:9px; letter-spacing:0.4px; line-height:1.15; white-space:normal; max-width:70px;}
 #screen-map.has-atlas .map-node.reachable:hover{
   transform:translate(-50%, calc(-50% - 2px)); background:#252a40;}
 #screen-map.has-atlas .map-node.mn-siege{
-  min-height:84px; min-width:84px; max-width:96px;
+  min-height:var(--map-node-boss-box); min-width:var(--map-node-boss-box); max-width:var(--map-node-boss-max);
   box-shadow:0 0 22px #ff5d6c44, 0 6px 18px #000a;}
 
 /* the enemy counter — top-center, readable at a glance, clear of tap targets */
