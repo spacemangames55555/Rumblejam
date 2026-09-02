@@ -60,9 +60,49 @@ const R = { damage: T.rankDamage, duration: T.rankDuration };
 
 export const NECRO_MARROW = [
   {
-    id: 'necro_bone_dart', tree: 'necro_marrow', tier: 1, name: 'Bone Dart',
-    flavor: 'A splinter of your own frame, thrown hard.',
+    id: 'necro_spiked_punch', tree: 'necro_marrow', tier: 1, name: 'Spiked Punch',
+    flavor: 'Close enough to be hit, which is where this tree wants you.',
     type: 'active', domain: 'physical', prereq: null,
+    select: 'densest_cluster',   // "multi-target (uncapped circle r72)"
+    trigger: docTrigger('ENEMY_BREACHES_RING', { radius: T.punchReach }),
+    cooldown: T.punchCd,
+    // A CIRCLE, WRITTEN AS A FULL-ARC STRIKE. The document says "uncapped circle
+    // r72"; `strike` with a 2pi arc is that circle, and it is the only primitive
+    // that sweeps around the caster rather than away from him.
+    compose: [{ kind: 'strike', damage: T.punchDamage, arc: T.punchArc, reach: T.punchReach, riders: {} }],
+    ranks: rankPer(5, T.punchDamage),
+  },
+  {
+    id: 'necro_marrownaut', tree: 'necro_marrow', tier: 2, name: 'Marrownaut',
+    flavor: 'The frame closes over you. Whatever is left outside can try.',
+    type: 'active', domain: 'spiritual', prereq: 'necro_spiked_punch',
+    select: 'self',   // writes the caster, picks no target (§5.3)
+    trigger: docTrigger('SELF_HP_BELOW_X', { pct: T.marrowPct }),
+    cooldown: T.marrowCd,
+    // A FORM, which is what the document's `TYPE: transformation` is. It shipped
+    // as shield+ward, which is a buff rather than a transformation and could not
+    // be read by `formHolds`. The stats are flat points because that is what a
+    // form grants; the document's "+50% max HP, +45% damage reduction" are
+    // percentages with no key to land on, and the size change it asks for — "the
+    // game's only size-change" — is a mechanic that does not exist. See the report.
+    // AND A SHIELD BESIDE THE FORM, WHICH IS NOT IN THE DOCUMENT. `armor` is
+    // the class's engine and Marrownaut is the only node in the game that reads
+    // it — `engine_gate` fails a resource that fills and multiplies nothing, and
+    // converting this node to a pure form orphaned it. The shield carries the
+    // `scaleWith: 'armor'` hook the shipped node had, at the magnitude it
+    // shipped with, for the duration the document gives the form. Structural
+    // requirement of the codebase rather than a value the document supplied.
+    compose: [
+      { kind: 'form', form: 'marrownaut', duration: T.marrowDuration,
+        stats: { grit: T.marrowGrit, vitality: T.marrowVit } },
+      { kind: 'shield', amount: T.marrowShield, duration: T.marrowShieldDur, scaleWith: 'armor' },
+    ],
+    ranks: R,
+  },
+  {
+    id: 'necro_bone_dart', tree: 'necro_marrow', tier: 3, name: 'Bone Dart',
+    flavor: 'A splinter of your own frame, thrown hard.',
+    type: 'active', domain: 'physical', prereq: 'necro_marrownaut',
     select: 'nearest',   // "single target", and the trigger names the nearest
     trigger: docTrigger('NEAREST_IN_RANGE', { range: T.dartRange }),
     cooldown: T.dartCd,
@@ -75,37 +115,9 @@ export const NECRO_MARROW = [
     ranks: rankPer(4, T.dartDamage),
   },
   {
-    id: 'necro_spiked_punch', tree: 'necro_marrow', tier: 2, name: 'Spiked Punch',
-    flavor: 'Close enough to be hit, which is where this tree wants you.',
-    type: 'active', domain: 'physical', prereq: 'necro_bone_dart',
-    select: 'densest_cluster',   // "multi-target (uncapped circle r72)"
-    trigger: docTrigger('ENEMY_BREACHES_RING', { radius: T.punchReach }),
-    cooldown: T.punchCd,
-    // A CIRCLE, WRITTEN AS A FULL-ARC STRIKE. The document says "uncapped circle
-    // r72"; `strike` with a 2pi arc is that circle, and it is the only primitive
-    // that sweeps around the caster rather than away from him.
-    compose: [{ kind: 'strike', damage: T.punchDamage, arc: T.punchArc, reach: T.punchReach, riders: {} }],
-    ranks: rankPer(5, T.punchDamage),
-  },
-  {
-    id: 'necro_calcify', tree: 'necro_marrow', tier: 3, name: 'Calcify',
-    flavor: 'Bone thickens where it has been broken.',
-    type: 'passive', domain: 'physical', prereq: 'necro_spiked_punch',
-    trigger: null, cooldown: 0, compose: [],
-    // THE DOCUMENT ASKS FOR PERCENTAGES AND THE ENGINE HAS POINTS. It declares
-    // "damageReduction +0.12, maxHPMult +0.15"; `armorGrit` and `armorVit` are
-    // flat Defense and flat max health, which is what a passive can grant. Kept
-    // at the shipped magnitudes rather than inventing a percentage key.
-    passive: { armorGrit: T.calcifyGrit, armorVit: T.calcifyVit },
-    // Grants no damage, duration or field, so a second point buys nothing —
-    // which the document's "+2.5% per rank" line disagrees with. See the report.
-    maxRank: 1,
-    ranks: R,
-  },
-  {
     id: 'necro_bone_nova', tree: 'necro_marrow', tier: 4, name: 'Bone Nova',
     flavor: 'Everything within arm\'s reach goes somewhere else.',
-    type: 'active', domain: 'physical', prereq: 'necro_calcify',
+    type: 'active', domain: 'physical', prereq: 'necro_bone_dart',
     select: 'densest_cluster',   // "uncapped in area — breadth is the point"
     trigger: docTrigger('CROWD_THRESHOLD', { radius: T.novaReach, count: T.novaCount }),
     cooldown: T.novaCd,
@@ -179,30 +191,18 @@ export const NECRO_MARROW = [
     ranks: rankPer(6, T.graspDamage),
   },
   {
-    id: 'necro_marrownaut', tree: 'necro_marrow', tier: 10, name: 'Marrownaut',
-    flavor: 'The frame closes over you. Whatever is left outside can try.',
-    type: 'active', domain: 'spiritual', prereq: 'necro_grasp_of_death',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: docTrigger('SELF_HP_BELOW_X', { pct: T.marrowPct }),
-    cooldown: T.marrowCd,
-    // A FORM, which is what the document's `TYPE: transformation` is. It shipped
-    // as shield+ward, which is a buff rather than a transformation and could not
-    // be read by `formHolds`. The stats are flat points because that is what a
-    // form grants; the document's "+50% max HP, +45% damage reduction" are
-    // percentages with no key to land on, and the size change it asks for — "the
-    // game's only size-change" — is a mechanic that does not exist. See the report.
-    // AND A SHIELD BESIDE THE FORM, WHICH IS NOT IN THE DOCUMENT. `armor` is
-    // the class's engine and Marrownaut is the only node in the game that reads
-    // it — `engine_gate` fails a resource that fills and multiplies nothing, and
-    // converting this node to a pure form orphaned it. The shield carries the
-    // `scaleWith: 'armor'` hook the shipped node had, at the magnitude it
-    // shipped with, for the duration the document gives the form. Structural
-    // requirement of the codebase rather than a value the document supplied.
-    compose: [
-      { kind: 'form', form: 'marrownaut', duration: T.marrowDuration,
-        stats: { grit: T.marrowGrit, vitality: T.marrowVit } },
-      { kind: 'shield', amount: T.marrowShield, duration: T.marrowShieldDur, scaleWith: 'armor' },
-    ],
+    id: 'necro_calcify', tree: 'necro_marrow', tier: 10, name: 'Calcify',
+    flavor: 'Bone thickens where it has been broken.',
+    type: 'passive', domain: 'physical', prereq: 'necro_grasp_of_death',
+    trigger: null, cooldown: 0, compose: [],
+    // THE DOCUMENT ASKS FOR PERCENTAGES AND THE ENGINE HAS POINTS. It declares
+    // "damageReduction +0.12, maxHPMult +0.15"; `armorGrit` and `armorVit` are
+    // flat Defense and flat max health, which is what a passive can grant. Kept
+    // at the shipped magnitudes rather than inventing a percentage key.
+    passive: { armorGrit: T.calcifyGrit, armorVit: T.calcifyVit },
+    // Grants no damage, duration or field, so a second point buys nothing —
+    // which the document's "+2.5% per rank" line disagrees with. See the report.
+    maxRank: 1,
     ranks: R,
   },
 ];
