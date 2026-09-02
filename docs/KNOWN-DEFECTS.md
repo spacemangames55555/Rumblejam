@@ -1609,3 +1609,148 @@ per player, per region cleared.
 scale prices by region, tax the boundary, or let the ramp stand as a
 deliberate power curve — are different games, and choosing between them is not
 something a carry patch should decide silently.
+
+## #27 — a weapon swing repaints a live skill arc in the wrong colour
+
+**From #123's render rewrite, accepted rather than fixed.** Cosmetic, bounded,
+and in a merge that is doing the right thing for the wrong swing.
+
+**Reproduce.**
+
+    node tools/fx_defect_repro.mjs
+
+**What it is.** `_ingestSwing` (`js/render.js:223`) folds a second swipe of the
+same cut into a live arc instead of spawning a second pie that reads as
+flicker. The merge is right; what it copies across is not. It takes the
+INCOMING swing's `color` and keeps the EXISTING arc's `spec` and `shape`:
+
+    a.stack = Math.min(5, (a.stack || 1) + 1);
+    a.lw    = Math.min(22, (a.lw || lw0) + 3.2);
+    a.t     = Math.min(a.t, a.dur * 0.12);
+    a.color = color;                      // <- the only field that follows the newcomer
+
+Weapon swings carry no `sid` (`js/game.js:2427` and `:2446`), so their spec is
+null and their colour is the weapon's. A basic attack landing within 10 units
+and 0.4 radians of a live skill arc therefore recolours that arc to the weapon
+while it goes on drawing the skill's class particle and its class sprite. The
+reverse case loses more: a skill swing merging into a weapon arc takes the
+skill's colour but inherits `spec: undefined, shape: slash`, so the class kit
+and the authored sprite are dropped entirely. Which of the two wins is decided
+by arrival order and nothing else.
+
+Measured, one merge — a necromancer slash arc met by one weapon swing:
+
+    before: color #a3e635  spec necro_abyssal_blast  shape slash  t 0
+    after : color #ff5d6c  spec necro_abyssal_blast  shape slash  t 0.041
+
+**Second effect, same three lines.** `a.t = Math.min(a.t, a.dur * 0.12)` rewinds
+the arc. An arc 59% through its life goes back to 12% and replays its wipe. At
+a high enough attack speed a cut restarts instead of stacking — which is the
+flicker the merge exists to prevent, arriving by a different door. It is not a
+leak: the array is capped at 56 and one arc is kept per cluster.
+
+**How bad.** Presentation only, on a swipe that lives 0.34 s. Nothing here
+reaches the sim, the snapshot or the wire. It cannot change what an attack hits;
+`_ingestSwing` runs after the primitive has already resolved.
+
+**What a fix would have to do.** Decide which swing owns the merged arc rather
+than splitting the answer across fields. The cheap version is to merge only
+swings whose `sid` matches — a weapon swing and a skill swing then stack
+separately, which is honest, at the cost of two arcs where the merge wanted
+one. The better version keeps the merge and lets the SPEC-bearing swing own
+colour, spec and shape together, with a plain weapon swing contributing only
+width and stack.
+
+**Not fixed** because the fix is a design choice about what a stacked swipe is,
+and #123 landed as art rather than as a behaviour pass.
+
+## #28 — a targeted cast's sprite lands on the caster when the target is due north
+
+**From #123's render rewrite, accepted rather than fixed.** One comparison, one
+axis, 44 skills.
+
+**Reproduce.**
+
+    node tools/fx_defect_repro.mjs
+
+**What it is.** `_drawCast` (`js/render.js:1814`) picks the sprite's anchor by
+asking whether it chose the caster:
+
+    const atx = (shape === SHAPE.shockwave || shape === SHAPE.ring || shape === SHAPE.healPulse
+      || shape === SHAPE.wardShell || shape === SHAPE.summonBurst) ? x : tx;
+    const aty = atx === x ? y : ty;
+
+The second line infers the branch from the VALUE rather than reading the
+condition again. When the target sits directly above or below the caster, `tx`
+and `x` are the same number, so a target-anchored shape is misread as
+caster-anchored and the y falls back to the caster's:
+
+    target east        : target (300,100) -> sprite (300,100)
+    target due north   : target (100, 40) -> sprite (100,100)   <- the caster
+
+**Who it reaches.** The five caster-anchored shapes are unaffected by
+construction. The target-anchored ones that exist in the catalog today are
+`blight` (9 skills), `tether` (13), `trap` (5) and `puddle` (17) — **44 skills**,
+each of them whenever the cast is aimed along the vertical. The canvas drawing
+underneath is unaffected: it reads `tx`/`ty` directly and lands correctly, so
+only the sprite overlay separates from its own effect.
+
+**How bad.** One frame's worth of sprite, on a cast that lives 0.4–0.5 s, on a
+bearing the player has to be roughly on. No sim, snapshot or wire contact.
+
+**What a fix would have to do.** Compute the anchor once — `const atCaster =
+CASTER_ANCHORED.has(shape); const ax = atCaster ? x : tx, ay = atCaster ? y :
+ty;` — so the two coordinates come from one decision instead of one and an
+inference. Two lines.
+
+**Not fixed** here only because it arrived with #27 in the same review and both
+were held for one pass over `_drawCast`.
+
+## #29 — 64 declared fx sprites have no file, and nothing says which are meant to
+
+**Recorded, not a break.** The loader is built for missing art and says so; what
+is missing is any way to tell art that has not been drawn yet from art whose
+path is wrong.
+
+**Reproduce.**
+
+    node -e "const m=require('./assets/assets.json'),fs=require('fs');
+      const fx=Object.keys(m.sprites).filter(i=>i.startsWith('fx.'));
+      const miss=fx.filter(i=>!fs.existsSync('assets/sprites/'+i.replace('.','/')+'.png'));
+      console.log(fx.length+' fx ids, '+miss.length+' with no png')"
+
+**The numbers.** `assets/assets.json` declares 127 `fx.*` sprite ids. **64 have
+no PNG on disk.** They split cleanly:
+
+* **55** are class×shape ids from #123's generator. `SKILL_FX_SPRITE_IDS`
+  (`js/content/skillfx.js`) is built by walking the live catalog so "a new
+  class×shape cannot be forgotten", which declares 118 ids while 63 files
+  exist. Only the samurai is complete (6/6); the wizard is 9/10; the other
+  twelve classes sit at 3–4 of 7–9.
+* **9** predate #123 entirely: `fx.block`, `fx.blood`, `fx.bonedust`, `fx.boom`,
+  `fx.heal`, `fx.material`, `fx.smoke`, `fx.spark`, `fx.telegraph_mark`.
+
+**Why this is not a visual defect.** #123's rule is that the canvas primitive is
+drawn first and a sprite is an overlay on top of it, never a replacement
+(`js/render.js`, the projectile and `_drawArc` paths). A missing sprite
+therefore draws nothing and the authored canvas shape stands on its own — which
+is the intended look, not a degraded one. `Assets.load` agrees and logs the
+count at info level with a comment saying a long, shrinking list "is the normal
+state of the project — it is not a warning and it is definitely not an error".
+
+**What IS wrong.** The declaration and the authoring have no relationship that
+anything checks. A typo'd path, a sheet dropped in the wrong folder and a
+sprite nobody has drawn yet all present identically: one more number in
+`64 still to be drawn`. Two authored files already sit on the other side of the
+same gap — `fx.sam_smite` and `fx.wiz_smite` exist on disk while **no skill in
+the catalog classifies as `smite`**, so nothing can ever draw them.
+
+**What a fix would have to do.** Split "declared" from "expected". A manifest
+entry could carry an `authored` flag, or `SKILL_FX_SPRITE_IDS` could be
+intersected with a checked-in list of what art has actually been commissioned,
+so the loader's count means "these are late" and anything outside it is an
+error. That is a pipeline decision, not a patch.
+
+**Not fixed** because deciding what a declared-but-undrawn sprite means is the
+art pipeline's contract, and this file's job is to stop the next person
+counting to 64 by hand.
