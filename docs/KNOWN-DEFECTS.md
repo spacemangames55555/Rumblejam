@@ -1754,3 +1754,47 @@ error. That is a pipeline decision, not a patch.
 **Not fixed** because deciding what a declared-but-undrawn sprite means is the
 art pipeline's contract, and this file's job is to stop the next person
 counting to 64 by hand.
+
+## #30 — DPS summons taunt, and now fight the tank they stand beside
+
+**Ruled, scheduled, deliberately not implemented here.** Recorded because the
+conflict is live from the moment a Marrownaut is slotted, and the next person to
+watch an enemy flip between a skeleton and its owner should find this rather
+than re-derive it.
+
+**Casey's ruling, for a later pass: DPS summons should not taunt. Defensive
+summons should.**
+
+**Reproduce.**
+
+    node tools/summon_survival.mjs --seconds 90 --seeds 12
+
+**What it is.** Three summons in the game taunt on their OWN attack, which is
+what makes the minion — rather than its owner — the thing an enemy is sent at:
+`tauntBy` is set to `p.minion`, and that is populated only when the taunting
+attack is the minion's. Everything else with a taunt rider carries it on
+`compose.0`, the owner's cast, and points enemies at the player.
+
+| summon | taunt | tree |
+| --- | --- | --- |
+| skeleton | 1600 ms | `necro_summons` |
+| the Monster | 3000 ms | `necro_summons` |
+| druid bear | 2200 ms | `druid_beasts` |
+
+**Why it is a conflict now.** Marrownaut's pull is a persistent field resolved
+at step 3 of `tauntTarget`; a summon's taunt is a cast effect resolved at step
+1. A Necromancer running Marrow-tank plus Summons therefore has both, and they
+alternate: the skeleton wins its 1600 ms window, the field reclaims the enemy
+between windows, and aggro oscillates for as long as both are on the field. The
+precedence is correct — a deliberate taunt must beat a persistent state, and
+that ordering is asserted in `tools/persist_gate.mjs` — so the fix is not a
+precedence change. It is that a DPS summon should never have been asking for
+aggro in the first place.
+
+**Both Necromancer summons need classifying** when that pass happens. Neither is
+obviously defensive: the skeleton is the tree's damage, and the Monster is a
+single large body that reads as a tank until you look at what it does.
+
+**Not fixed** because the classification is a design pass over every summon in
+the game and it lands with the balance rebalance, not with the node that
+exposed it.

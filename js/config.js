@@ -3,6 +3,18 @@
 
 export const DEV = true; // enables F1–F7 debug keys (host only; see README). Set false for clean runs.
 
+// A LIFETIME THAT IS NOT A CLOCK. `formT` and `shieldT` are countdowns, and a
+// persistent state — a form held for as long as its skill is slotted — has to
+// sit in those same fields without pretending to be one. `Infinity` would work
+// by float accident (`Infinity - dt` is `Infinity`) and an accident is not a
+// statement: it reads as "a very long duration" to anyone scanning an expiry
+// path, and it leaves "is this persistent?" untestable. A named sentinel is
+// checkable by identity, which is what the guard in `tickForm` and the teardown
+// in `exitPersistent` both do.
+//
+// Outside CONFIG because it is not tunable — it is the absence of a duration.
+export const PERSIST_T = Number.POSITIVE_INFINITY;
+
 export const CONFIG = {
   TICK_RATE: 60,
   DT: 1 / 60,

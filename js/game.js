@@ -2693,8 +2693,18 @@ export class Sim {
   // What enemies aim at, in priority order:
   //   1. A LIVE TAUNT on this enemy — the deliberate, directed effect wins.
   //   2. A nearby Mirage decoy.
-  //   3. On a Relic Run, the carrier, weighted as if much closer.
-  //   4. The nearest living player.
+  //   3. A Marrownaut whose pull field has this enemy.
+  //   4. On a Relic Run, the carrier, weighted as if much closer.
+  //   5. The nearest living player.
+  //
+  // THE PULL SITS AT 3, BELOW EVERY DELIBERATE TAUNT AND ABOVE EVERYTHING THAT
+  // DOES NOT PULL. A cast taunt is a thing a player spent an action on and it
+  // expires; the Marrownaut field is a state someone is permanently in. Putting
+  // the permanent state above the cast would mean the Mage's Provoke silently
+  // failing whenever a tank stood nearby — one class's passive overriding
+  // another's decision, with nothing on screen to say why. It goes above the
+  // relic carrier because that is a soft x0.35 distance nudge rather than a
+  // target, and a tank taking the room off a carrier is the tank working.
   //
   // `e` IS NEW AND OPTIONAL. A taunt lives on the ENEMY, so the function has to
   // know which enemy is asking — it used to take coordinates alone, which is
@@ -2711,6 +2721,25 @@ export class Sim {
       if (dd < d.tauntR * d.tauntR && dd < bd) { bd = dd; best = d; }
     }
     if (best) return best;
+    // THE PULL FIELD — Marrownaut today, and anything else that declares a
+    // `taunt` rider on an aura tomorrow. Found by the marker the zone carries
+    // rather than by a skill id, so the engine stays out of the content's
+    // business. A radius test like the decoy's rather than a weighting term, so
+    // it either has you or it does not — and `pullT` lets an enemy that has just
+    // left the field keep coming for a beat rather than peeling on the frame it
+    // crosses the edge. Nearest wins when a party fields more than one, the
+    // same tiebreak the decoy loop uses.
+    let pull = null, pd = Infinity;
+    for (const z of this.zones) {
+      if (!z.pullMs || z.follow === undefined) continue;   // not a pull field
+      const q = this.players[z.follow];
+      if (!q || q.gone || q.downed) continue;
+      const d = dist2(x, y, q.x, q.y);
+      const held = e && e.pullT > 0 && e.pullBy === q.idx;
+      if (!held && d > z.r * z.r) continue;
+      if (d < pd) { pd = d; pull = q; }
+    }
+    if (pull) return pull;
     // Relic Run: a relic carrier is loud — enemies weigh them as if they
     // stood much closer, so carrying really does pull the room onto you
     if (this.obj && this.obj.type === 'relic') {
@@ -3336,7 +3365,7 @@ export class Sim {
   // `pulseMs` is the GAP, and `damage` is what one pulse delivers. Stored as a
   // rate against that interval so the zone tick's own arithmetic is unchanged —
   // one damage path, and `dps * elapsed` lands exactly `damage` on each pulse.
-  addAura(p, { radius, dps = 0, damage = 0, pulseMs = 400, dur = Infinity, ampPct = 0, slow = null, key, domain }) {
+  addAura(p, { radius, dps = 0, damage = 0, pulseMs = 400, dur = Infinity, ampPct = 0, slow = null, taunt = 0, key, domain }) {
     const every = pulseMs / 1000;
     this.zones.push({
       t: 0, acc: 0, x: p.x, y: p.y, r: radius, every,
@@ -3345,6 +3374,7 @@ export class Sim {
       skillDomain: domain, ownerIdx: p.idx, owner: p.idx,
       follow: p.idx, auraKey: key, ampPct,
       slowMult: slow ? slow.mult : 0, slowDur: slow ? slow.dur / 1000 : 0,
+      pullMs: taunt,
     });
   }
 
@@ -3472,7 +3502,19 @@ export class Sim {
         const mul = z.acc; z.acc = 0;
         if (z.hurts === 'enemies') {
           const owner = z.owner !== undefined ? this.players[z.owner] : null;
-          this._areaDamageEnemies(z.x, z.y, z.r, z.dps * mul, owner, { silent: true });
+          // A FIELD THAT DOES NO DAMAGE MUST NOT CALL THE DAMAGE PATH AT ALL.
+          // `damageEnemy` floors every hit at `Math.max(1, ...)`, which is right
+          // for a rounding-down attack and wrong for a zone whose whole point is
+          // that it deals nothing: a zero-dps field was landing 1 damage per
+          // enemy per pulse and killing rooms on its own. Measured on the
+          // Marrownaut pull — 21 kills and 225 damage over 45 seconds from a
+          // field declaring `dps: 0`, which is exactly 56 pulses x 4 bodies x
+          // the floor.
+          //
+          // This is not only the new field's problem. `gravity_pull` registers
+          // a zone that "does no damage and drags instead" and has been paying
+          // the same floor since it was written.
+          if (z.dps > 0) this._areaDamageEnemies(z.x, z.y, z.r, z.dps * mul, owner, { silent: true });
           // THE HAZARD'S `slow` RIDER, which was carried here and dropped.
           // `PRIMITIVES.hazard` has always passed `slowMult`/`slowDur` into the
           // zone and this loop read only `z.dps`, so Blight, Gravechill and
@@ -3518,6 +3560,30 @@ export class Sim {
               seen.add(e.id);
               if (dist2(z.x, z.y, e.x, e.y) > (z.r + e.radius) * (z.r + e.radius)) return;
               this.applySlow(e, z.slowMult, z.slowDur, src);
+            });
+          }
+          // THE PULL MARKER, AND WHY IT IS NOT `e.tauntT`.
+          //
+          // Writing the taunt clock would make this field a LIVE TAUNT, which
+          // is step 1 of `tauntTarget` — so a permanent aura would silently
+          // outrank every cast taunt in the game, including the Mage's whole
+          // Invite branch. The ruling puts the pull BELOW deliberate taunts, so
+          // it writes its own marker and `tauntTarget` reads it at step 3.
+          //
+          // The marker is what makes the cadence mean something. Resolution
+          // could have been a bare radius test, and then an enemy clipping the
+          // edge would peel to whoever else is nearer on the very next frame.
+          // Refreshed a little past its own pulse — the `ampPct` precedent
+          // above — so the field is continuous inside and lets go shortly after
+          // you leave it.
+          if (z.pullMs) {
+            const seen = new Set();
+            this.grid.query(z.x, z.y, z.r + 40, e => {
+              if (!e.active || seen.has(e.id)) return;
+              seen.add(e.id);
+              if (dist2(z.x, z.y, e.x, e.y) > z.r * z.r) return;
+              e.pullT = Math.max(e.pullT || 0, z.pullMs / 1000);
+              e.pullBy = z.ownerIdx;
             });
           }
         } else {

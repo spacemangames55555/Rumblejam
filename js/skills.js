@@ -444,10 +444,15 @@ function assertTrees() {
   // Every form name any `form` step enters, DERIVED rather than restated — a
   // hand-written list here would go stale the moment a fourth form is authored,
   // which is §13 rule 12 and the same reason CLASS_OF in skill_sweep is derived.
+  // TWO DOORS ENTER A FORM NOW, so the derivation walks both: a `form` step
+  // cast through the trigger loop, and a `persist` block held while slotted.
+  // Collecting only the first would leave a persistent form failing its own
+  // name check and `form: 'none'` unable to describe the gap beside it.
   const FORM_NAMES = new Set();
   for (const tree of Object.values(TREES)) {
     for (const s of tree.skills) {
       for (const c of s.compose || []) if (c.kind === 'form' && c.form) FORM_NAMES.add(c.form);
+      if (s.persist && s.persist.form) FORM_NAMES.add(s.persist.form);
     }
   }
 
@@ -539,7 +544,39 @@ function assertTrees() {
         }
       }
 
-      if (s.type === 'active') {
+      // A PERSISTENT ACTIVE IS A THIRD SHAPE, and it is asserted rather than
+      // waved through. An active normally owes a trigger, a cooldown and a
+      // compose because those are what firing means; a `persist` node never
+      // fires — it is a state held for as long as it is slotted, registered at
+      // the door in `applyPersistents` — so those three questions have no
+      // answer for it and demanding one would be the file asserting a shape
+      // that does not exist.
+      //
+      // What it owes instead is checked below: at least one of the three
+      // things a persistent state can be, and nothing left over. It still owes
+      // `select` and it still occupies a slot, because it is still an active.
+      if (s.type === 'active' && s.persist) {
+        const q = s.persist;
+        if (s.trigger) problems.push(`${s.id}: persistent active with a trigger — it never fires, so a trigger would be evaluated forever and never used`);
+        if (s.cooldown) problems.push(`${s.id}: persistent active with a cooldown — there is no cast to put on one`);
+        if (s.compose && s.compose.length) problems.push(`${s.id}: persistent active with a compose — a step here would never run; put the effect in "persist"`);
+        if (!q.form && !q.aura && !q.shield) problems.push(`${s.id}: persist declares none of form/aura/shield — it holds nothing`);
+        const known = ['form', 'stats', 'aura', 'shield'];
+        for (const k of Object.keys(q)) {
+          if (!known.includes(k)) problems.push(`${s.id}: persist key "${k}" is read by nothing — ${known.join('/')} are the ones applyPersistents applies`);
+        }
+        if (q.form && !FORM_NAMES.has(q.form)) problems.push(`${s.id}: persist form ${JSON.stringify(q.form)} is not one of ${[...FORM_NAMES].join('/')}`);
+        if (q.stats && !q.form) problems.push(`${s.id}: persist declares stats with no form — nothing would apply them`);
+        // ZERO DAMAGE ON A PERSISTENT FIELD, asserted rather than trusted. A
+        // permanent aura that damages is an always-on damaging aura, which is
+        // the statue test's whole subject: a stationary character clearing a
+        // room. The rule is what lets a permanent PULL exist at all, so it is
+        // enforced here rather than left to whoever writes the next one.
+        if (q.aura && (q.aura.damage || q.aura.dps)) {
+          problems.push(`${s.id}: persist aura declares damage — a permanent damaging aura is the statue test (§13), and a persistent field may only pull`);
+        }
+        if (q.aura && !(q.aura.radius > 0)) problems.push(`${s.id}: persist aura with no radius`);
+      } else if (s.type === 'active') {
         const tg = s.trigger;
         if (!tg || !TRIGGER_KINDS.includes(tg.kind)) {
           problems.push(`${s.id}: trigger kind ${JSON.stringify(tg && tg.kind)} is not one of ${TRIGGER_KINDS.join('/')}`);

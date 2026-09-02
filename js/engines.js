@@ -43,8 +43,8 @@
 // returns a silent 1.0 through `engineScale`; that is the exact failure mode
 // §8.3 says this group is prone to, and a registry is what makes it visible.
 
-import { CONFIG } from './config.js';
-import { TREES_BY_CLASS } from './skills.js';
+import { CONFIG, PERSIST_T } from './config.js';
+import { TREES, TREES_BY_CLASS } from './skills.js';
 import { TUNING as SAM } from './content/skills/samurai_armor.js';
 
 // ---------------------------------------------------------------- footing
@@ -293,6 +293,12 @@ function hasEngineTree(p, tree) {
 // That hook was built for Footing in the Monk patch and had exactly one user
 // until now. A form is its second, and the shape it was generalised for.
 function tickForm(sim, p, dt) {
+  // A PERSISTENT FORM IS NEVER ON THE CLOCK. Checked by name rather than left
+  // to `Infinity - dt === Infinity`: the float behaviour is correct today and
+  // is still an accident, and a reader of this line should be able to see that
+  // a persistent form is exempt without knowing what `formT` was set to.
+  // Un-slotting is what ends it — `exitPersistent` in js/skillsim.js.
+  if (p.formT === PERSIST_T) { p.engines.form = p.form ? CONFIG.FORM_POWER : 0; return; }
   if (p.formT > 0) {
     p.formT -= dt;
     if (p.formT <= 0) {
@@ -353,16 +359,46 @@ export function formHolds(p, sk) {
 
 // ---------------------------------------------------------------- the table
 
-// One row per accumulator. `tree` is what gates it — an engine belongs to the
+// EVERY TREE THAT CAN ENTER A FORM, derived rather than named. The form row was
+// gated on `smith_crystal` because the Blacksmith was the only class with one,
+// and a form is now a cross-class mechanic: the Necromancer holds Marrownaut
+// through `persist` and enters it at a different door entirely. A hardcoded
+// tree there is not a small staleness — it is the engine silently not running,
+// which is `formStats` returning nothing and a form that changes the player's
+// state while changing none of their numbers.
+//
+// Both doors are walked, for the same reason `FORM_NAMES` in js/skills.js walks
+// both: a form entered by a compose step and a form held by a persist block are
+// the same state and must not disagree about who owns it.
+const FORM_TREES = (() => {
+  const out = new Set();
+  for (const tree of Object.values(TREES)) {
+    for (const sk of tree.skills) {
+      if (sk.persist && sk.persist.form) out.add(sk.tree);
+      for (const c of sk.compose || []) if (c.kind === 'form') out.add(sk.tree);
+    }
+  }
+  return [...out];
+})();
+
+// One row per accumulator. `trees` is what gates it — an engine belongs to the
 // tree that pays for it, not to the class, so a Monk who never spends a point in
 // Chi never accrues any. `key` is the engine it writes, and it is here so
 // `engine_gate` can assert the registry rather than trusting it.
+//
+// A LIST RATHER THAN ONE NAME, because `form` has two owners and would have had
+// three the moment a fourth class wanted a transformation. The other three rows
+// name one tree each and say so as a one-element list rather than by having a
+// different shape.
 export const ENGINE_TICKS = [
-  { tree: 'samurai_armor', key: 'footing', tick: tickFooting, stats: footingStats },
-  { tree: 'monk_chi', key: 'chi', tick: tickChi },
-  { tree: 'sav_primal_fury', key: 'cascade', tick: tickCascade },
-  { tree: 'smith_crystal', key: 'form', tick: tickForm, stats: formStats },
+  { trees: ['samurai_armor'], key: 'footing', tick: tickFooting, stats: footingStats },
+  { trees: ['monk_chi'], key: 'chi', tick: tickChi },
+  { trees: ['sav_primal_fury'], key: 'cascade', tick: tickCascade },
+  { trees: FORM_TREES, key: 'form', tick: tickForm, stats: formStats },
 ];
+
+// Does this player own any tree that pays for this engine?
+export function ownsEngine(e, trees) { return e.trees.some(t => trees.includes(t)); }
 
 // The stat half of the same table. An accumulator that feeds the sheet declares
 // a `stats` function; one that does not, does not. Chi does not — it is read by
@@ -376,7 +412,7 @@ export function engineStats(p, passives) {
   const trees = TREES_BY_CLASS[p.charId] || [];
   const out = {};
   for (const e of ENGINE_TICKS) {
-    if (!e.stats || !trees.includes(e.tree)) continue;
+    if (!e.stats || !ownsEngine(e, trees)) continue;
     const s = e.stats(p, passives) || {};
     for (const k in s) out[k] = (out[k] || 0) + s[k];
   }

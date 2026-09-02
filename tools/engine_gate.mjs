@@ -383,8 +383,19 @@ if (orphanProbes.length) fail(`probe(s) for engines that no longer exist: ${orph
 // two want different fixes.
 const CLAIMED = {};
 for (const t of Object.values(TREES)) {
-  for (const s of t.skills) for (const c of s.compose || []) {
-    if (c.scaleWith) (CLAIMED[c.scaleWith] = CLAIMED[c.scaleWith] || []).push({ skill: s.id, cls: t.classId, kind: c.kind });
+  for (const s of t.skills) {
+    for (const c of s.compose || []) {
+      if (c.scaleWith) (CLAIMED[c.scaleWith] = CLAIMED[c.scaleWith] || []).push({ skill: s.id, cls: t.classId, kind: c.kind });
+    }
+    // AND THE PERSIST DOOR. A `scaleWith` hook does not stop being a claim
+    // because the thing carrying it is held rather than cast: Marrownaut's
+    // shield moved from `compose` into `persist` and `armor` — the engine only
+    // that node reads — went from claimed to unclaimed without one number
+    // changing. Walking one door and calling the result "authored content" is
+    // the gate measuring where it happens to look.
+    for (const [k, v] of Object.entries(s.persist || {})) {
+      if (v && v.scaleWith) (CLAIMED[v.scaleWith] = CLAIMED[v.scaleWith] || []).push({ skill: s.id, cls: t.classId, kind: k, persist: true });
+    }
   }
 }
 {
@@ -485,13 +496,18 @@ function measure(key) {
   // PROXIMITY count 4 and never fires against one dummy. Both read DEAD on a
   // room that suited neither — the same defect the rider gate hit ten times, so
   // the staging is per-trigger here too rather than one generous room.
+  // A PERSISTENT CLAIM HAS NO TRIGGER TO ARM. It holds while slotted and never
+  // fires, so there is no condition to stage — being in the bar IS the
+  // condition, and `slot` above already put it there. Reading `sk.trigger.kind`
+  // on one would throw, and a probe that throws reports BROKEN rather than the
+  // engine's real state.
   const arms = { hurt: false, kill: false };
-  if (sk) {
+  if (sk && sk.trigger) {
     const t = sk.trigger;
     if (t.kind === 'SELF_THRESHOLD') arms.hurt = Math.max(0.02, (t.pct / 100) * 0.5);
     if (t.kind === 'ON_KILL') arms.kill = true;
   }
-  const need = sk && sk.trigger.count ? Math.max(5, sk.trigger.count + 1) : 5;
+  const need = sk && sk.trigger && sk.trigger.count ? Math.max(5, sk.trigger.count + 1) : 5;
 
   const run = (starve) => {
     const { g: g2, p: p2 } = stage(pr.char, slot);
@@ -1014,7 +1030,9 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
   {
     const seen = new Set();
     for (const e of ENG.ENGINE_TICKS) {
-      if (!TREES[e.tree]) { fail(`the engine registry names tree "${e.tree}", which is not in the registry — a tick gated on a tree that does not exist never runs`); continue; }
+      const missing = e.trees.filter(t => !TREES[t]);
+      if (!e.trees.length) { fail(`the engine registry gates "${e.key}" on no tree at all — a tick nothing owns never runs`); continue; }
+      if (missing.length) { fail(`the engine registry names tree(s) "${missing.join(', ')}" for "${e.key}", which are not in the registry — a tick gated on a tree that does not exist never runs`); continue; }
       if (!ENGINE_KEYS.includes(e.key)) { fail(`the engine registry claims key "${e.key}", which is not in p.engines — a tick writing a key nothing reads is the silent 1.0`); continue; }
       if (seen.has(e.key)) { fail(`two registered ticks both claim "${e.key}" — one of them is overwriting the other every frame`); continue; }
       seen.add(e.key);

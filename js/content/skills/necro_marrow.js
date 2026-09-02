@@ -46,9 +46,16 @@ export const TUNING = {
   ballCd: 4000, ballStun: 1500, ballCarry: 320,
   // tier_code 9 — Grasp of Death — replaces Banshee's Wail
   graspDamage: 40, graspRange: 120, graspHealPct: 0.60, graspCd: 4000, graspPct: 65,
-  // tier_code 4 — Marrownaut
-  marrowGrit: 20, marrowVit: 40, marrowDuration: 10000, marrowCd: 30000, marrowPct: 45,
-  marrowShield: 34, marrowShieldDur: 10000,   // shipped values — see the shield step
+  // tier_code 4 — Marrownaut. A PERSISTENT FORM: no duration, no cooldown, no
+  // trigger. `marrowDuration`, `marrowCd` and `marrowPct` are deliberately gone
+  // rather than left unread — a tuning key nothing consumes is the shape this
+  // file keeps finding elsewhere.
+  marrowGrit: 20, marrowVit: 40,
+  marrowTempo: -3,              // 300 -> 291 u/s; one of the two negative rungs the item table uses
+  marrowAuraR: 165,             // Bone Nova's reach: the pull ends where the tank's own swing does
+  marrowAuraTick: 800,          // under the shortest shipped taunt (1400ms), so the pull does not flicker
+  marrowPull: 1000,             // how long a pulled enemy stays pulled after leaving the radius
+  marrowShield: 34,             // carried forward from the emergency shield, unretuned
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -77,26 +84,45 @@ export const NECRO_MARROW = [
     flavor: 'The frame closes over you. Whatever is left outside can try.',
     type: 'active', domain: 'spiritual', prereq: 'necro_spiked_punch',
     select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: docTrigger('SELF_HP_BELOW_X', { pct: T.marrowPct }),
-    cooldown: T.marrowCd,
-    // A FORM, which is what the document's `TYPE: transformation` is. It shipped
-    // as shield+ward, which is a buff rather than a transformation and could not
-    // be read by `formHolds`. The stats are flat points because that is what a
-    // form grants; the document's "+50% max HP, +45% damage reduction" are
-    // percentages with no key to land on, and the size change it asks for — "the
-    // game's only size-change" — is a mechanic that does not exist. See the report.
-    // AND A SHIELD BESIDE THE FORM, WHICH IS NOT IN THE DOCUMENT. `armor` is
-    // the class's engine and Marrownaut is the only node in the game that reads
-    // it — `engine_gate` fails a resource that fills and multiplies nothing, and
-    // converting this node to a pure form orphaned it. The shield carries the
-    // `scaleWith: 'armor'` hook the shipped node had, at the magnitude it
-    // shipped with, for the duration the document gives the form. Structural
-    // requirement of the codebase rather than a value the document supplied.
-    compose: [
-      { kind: 'form', form: 'marrownaut', duration: T.marrowDuration,
-        stats: { grit: T.marrowGrit, vitality: T.marrowVit } },
-      { kind: 'shield', amount: T.marrowShield, duration: T.marrowShieldDur, scaleWith: 'armor' },
-    ],
+    // NO TRIGGER, NO COOLDOWN, NO DURATION. The identity of the tree is not an
+    // emergency button: this is a state you are in because you chose to spend a
+    // slot on being a bone construct. It shipped on `SELF_HP_BELOW_X pct 45`
+    // with a 30s cooldown and a 10s life, which is a panic cast, and the ruling
+    // is that the form IS the tree.
+    //
+    // AN ACTIVE THAT NEVER FIRES, which is why `persist` exists rather than a
+    // conversion to `passive`. It occupies one of the eight slots — slotting it
+    // is the decision to tank, and a passive would hand that out for free
+    // alongside everything else. But it has no trigger for the trigger loop to
+    // evaluate and never enters the swarm pace band, so it is not a firing
+    // skill either. `js/skillsim.js` registers this block per player per room
+    // from the loadout, the same door `passive.aura` already came through.
+    //
+    // ZERO DAMAGE, AND THAT IS LOAD-BEARING. The aura pulls and does nothing
+    // else — no contact damage, no retaliation, no pulse damage. It is what
+    // keeps a permanent aggro field on the right side of the statue test: a
+    // stationary Marrownaut drags the room onto itself and kills none of it.
+    persist: {
+      // THE FORM. Same `stats` block the `form` primitive would have written,
+      // read by `formStats()` through the registry hook Footing uses, so WHAT
+      // the form does to the sheet stays content rather than code. `tempo` is
+      // the cost of tanking and rides the same passthrough — `_recomputeStats`
+      // applies any key that exists on the sheet.
+      form: 'marrownaut',
+      stats: { grit: T.marrowGrit, vitality: T.marrowVit, tempo: T.marrowTempo },
+      // THE PULL. A zero-damage aura carrying a taunt rider: `dps` stays 0 and
+      // the pulse writes only the pull marker. Radius is Bone Nova's reach, so
+      // the field ends where the tank's own longest swing ends.
+      aura: { radius: T.marrowAuraR, pulseMs: T.marrowAuraTick, taunt: T.marrowPull },
+      // THE SHIELD, now persistent. `armor` is the Necromancer's class engine
+      // and this is still the only node in the game that reads it, so the
+      // `scaleWith` hook has to survive the conversion or `engine_gate` fails a
+      // resource that multiplies nothing. Armor mirrors `grit` rather than
+      // accumulating over a fight, so a door-time grant scales correctly — and
+      // it is computed AFTER the form lands, so the +20 Grit is in it.
+      shield: { amount: T.marrowShield, scaleWith: 'armor' },
+    },
+    compose: [],
     ranks: R,
   },
   {
