@@ -75,6 +75,11 @@ export function showWorldMap(character, playerStore, opts = {}) {
         ${pins}
       </div>
       <div class="world-dossier" id="world-dossier"></div>
+      <div class="world-foot dim small">
+        Frontier: region ${st.frontier}. A region below it replays for loot and levels but no
+        world progress; a region above it cannot be entered. Clearing a region's boss advances
+        your frontier and unlocks its native class for your NEXT character.
+      </div>
     </div>`;
 
   const dossier = $('world-dossier');
