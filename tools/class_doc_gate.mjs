@@ -118,14 +118,31 @@ export const TEMPLATE = [
   '--- automation ---', 'TRIGGER', 'THREAT',
   '--- growth ---', 'RANK ADDS',
   '--- identity ---', 'ENGINE', 'COST', 'VISUAL', 'FLAVOR',
+  // OPTIONAL, AND ROLLING OUT ONE CLASS AT A TIME. `PRIMITIVE` names the engine
+  // kind a node's delivery compiles to, and it exists on the Necromancer first
+  // because that document is the worked example the other thirteen are built
+  // against. Requiring it would fail thirteen documents for not yet having had
+  // the pass; forbidding it would fail the one that has. So it is known, it is
+  // ordered last, and it is not required — see OPTIONAL below. Once all
+  // fourteen carry it, move it out of OPTIONAL and the gate starts insisting.
+  'PRIMITIVE',
 ];
 const TEMPLATE_SET = new Set(TEMPLATE);
+// Fields the template knows about and does not demand. An entry here is a field
+// mid-rollout; an empty set means every field is required of every block.
+export const OPTIONAL = new Set(['PRIMITIVE']);
 
 // Departures from 30, each for a stated reason, so that losing a block is a red
 // check rather than a quiet 30.
 //
-//   necromancer 31 — `necro_skeleton_branch`, an exclusive pair (Blood Skeleton
-//                    / Marrow Skeleton) both at tier_code 5.
+//   necromancer 31 — 30 built nodes plus one block that is not a built node.
+//                    The 30 include `necro_skeleton_branch`, a pair (Blood
+//                    Skeleton / Marrow Skeleton) sharing tier_code 5 — whether
+//                    that pair is exclusive is itself unresolved, see the
+//                    document's CONFLICTS section. The 31st is Osteo Aura,
+//                    TABLED: a design proposal kept in the file with no slot in
+//                    the built tree. The Dark Matter summon that used to make up
+//                    this count is cut.
 //   samurai     26 — Water, Stone and Fire Stance left the tree by ruling: the
 //                    stance machine is the built `three_stances` trait, not
 //                    three slotted nodes, so they are a trait spec in the
@@ -187,7 +204,7 @@ function problemsOf(b) {
   const counts = new Map();
   for (const n of names) counts.set(n, (counts.get(n) || 0) + 1);
 
-  for (const want of TEMPLATE) if (!counts.has(want)) problems.push(`missing field "${want}"`);
+  for (const want of TEMPLATE) if (!counts.has(want) && !OPTIONAL.has(want)) problems.push(`missing field "${want}"`);
   for (const [n, c] of counts) {
     if (!TEMPLATE_SET.has(n)) problems.push(`unknown field "${n}" (line ${b.seen.find(s => s.name === n).line})`);
     else if (c > 1) problems.push(`field "${n}" appears ${c} times`);

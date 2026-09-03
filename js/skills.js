@@ -349,6 +349,66 @@ export function canLearn(p, skill) {
 // The attack is validated as what it is — a compose step in its own right —
 // against the same primitive and rider tables the outer step uses. That is the
 // check that keeps a minion's attack inside the schema instead of beside it.
+// THE TEN HEALS THAT PREDATE THE RADIUS RULE.
+//
+// A heal with no radius reached the entire map — `dx*dx+dy*dy > undefined*undefined`
+// is a comparison against NaN, which is false for every ally, so none was ever
+// skipped. Ten of the thirteen heals in the game are in that state and the
+// numbers to fix them are a design decision, not a mechanical one: a touch heal
+// and a battlefield-wide rally are the same code with different reach.
+//
+// So the rule is a RATCHET rather than a switch. Every heal must declare a
+// positive radius; these ten are named here, so they load while they wait for
+// their values, and NOTHING ELSE CAN JOIN THEM — a new heal without a radius
+// fails at import like any other content error. The list only shrinks.
+// `tools/heal_gate.mjs` is red while it has entries.
+//
+// Delete a name here the moment its skill declares a radius. When the list is
+// empty, delete the list.
+export const HEAL_RADIUS_PENDING = new Set([
+  'wiz_arcane_recovery', 'pri_intercession', 'bard_refrain', 'sun_brine_draught',
+  'hun_feed_the_pack', 'monk_gathering_breath', 'monk_mend', 'monk_quiet_the_body',
+  'sav_second_wind', 'smith_mend_the_seam',
+]);
+
+// Anything that reaches across the floor has to say how far. One function for
+// both, because a heal's radius and an ally shield's radius are the same
+// question and a second copy would drift.
+function reachStepProblems(s, step) {
+  const out = [];
+  if (step.kind === 'heal' && !(step.radius > 0) && !HEAL_RADIUS_PENDING.has(s.id)) {
+    out.push(`${s.id}: heal step needs a positive "radius" — without one the range check compares against NaN and the heal reaches every ally on the map`);
+  }
+  if (step.kind === 'heal' && step.radius > 0 && HEAL_RADIUS_PENDING.has(s.id)) {
+    out.push(`${s.id}: declares a radius but is still listed in HEAL_RADIUS_PENDING — remove it from the list`);
+  }
+  // ALLY-FACING ABSORB. `allies` is the opt-in; everything else here exists so
+  // the opt-in cannot be half-declared.
+  if (step.allies !== undefined) {
+    if (!['shield', 'ward'].includes(step.kind)) {
+      out.push(`${s.id}: "allies" is only meaningful on shield or ward, not ${step.kind}`);
+    }
+    if (!(step.allies > 0)) out.push(`${s.id}: "allies" must be a positive radius`);
+    if (typeof step.includeSelf !== 'boolean') {
+      out.push(`${s.id}: an ally-facing absorb must declare "includeSelf" true or false — whether the caster keeps a share is the skill's decision and there is no safe default`);
+    }
+    // THE ONE INTERACTION NOBODY HAS RULED ON. `engineScale` reads the engine
+    // off whichever player is passed to it, and an ally shield has two
+    // candidates: the CASTER's engine (the Priest's marks earned the shield) or
+    // the RECIPIENT's (the shield is worth what the wearer can hold). Both are
+    // defensible and they play very differently. Refused at load rather than
+    // guessed, because a guess here would be invisible and would set the
+    // precedent for every ally shield authored afterwards.
+    if (step.scaleWith) {
+      out.push(`${s.id}: an ally-facing absorb cannot also declare "scaleWith" until it is ruled whose engine drives it — the caster's or the recipient's`);
+    }
+  }
+  if (step.includeSelf !== undefined && step.allies === undefined) {
+    out.push(`${s.id}: declares "includeSelf" with no "allies" — it reaches nobody but the caster, so the flag reads as a rule that is not in force`);
+  }
+  return out;
+}
+
 function summonStepProblems(s, step) {
   const out = [];
   if (!step.archetype) out.push(`${s.id}: summon step with no archetype name`);
@@ -649,6 +709,7 @@ function assertTrees() {
             if (!allowed.includes(r)) problems.push(`${s.id}: rider "${r}" is not valid on ${step.kind}`);
           }
           if (step.kind === 'summon') problems.push(...summonStepProblems(s, step));
+          problems.push(...reachStepProblems(s, step));
         }
       } else if (s.type !== 'passive') {
         problems.push(`${s.id}: type ${JSON.stringify(s.type)} is neither active nor passive`);

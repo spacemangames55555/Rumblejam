@@ -119,7 +119,9 @@ console.log('STAT LABELS — nothing a player reads may spell a retired name\n')
 //   that column IS the retired name. Rewriting it deletes the record of the
 //   rename.
 //
-// Each entry below names its file, what it matches and why. An entry that stops
+// Each entry below names its file, what it matches and why. A path ending in `/`
+// files a whole DIRECTORY — used only for frozen archives, where per-file entries
+// would go stale every time a file lands. An entry that stops
 // matching anything is itself a failure — the same rule check 4 applies to tree
 // collisions, and for the same reason: a stale exemption keeps a fixed thing
 // filed as broken.
@@ -141,6 +143,8 @@ const DOC_FILED = [
   ['docs/GDD.md', /Tank \/ DPS \/ Runes/, 'retired aspirational tree names, quoted as history'],
   ['docs/design-audit.md', /./,
     'a FROZEN generated snapshot: its header says do not hand-edit the computed tables, and `gen_design_audit.mjs` cannot run — it asserts 33 characters against a 14-character roster. Its STAT_DOC is corrected, so a regenerated audit will be clean; until the generator runs the file is a dead artifact, not a document anyone maintains'],
+  ['docs/design/toh/', /./,
+    'the FROZEN source conversions, filed as a DIRECTORY. These are the documents the `docs/design/classes/` set was revised FROM, kept verbatim so a revision can be read against its source. They predate the stat rename and spell the retired names throughout — correcting them would delete the record they exist to be. No gate reads them, no code reads them, no player reaches them; the live document for every class is its `docs/design/classes/` counterpart, which IS in the net'],
 ];
 
 {
@@ -162,7 +166,8 @@ const DOC_FILED = [
       if (/^\s*```/.test(line)) { fenced = !fenced; return; }
       if (fenced) return;                       // code samples carry KEYS, not labels
       if (!RE.test(line)) return;
-      const filed = DOC_FILED.findIndex(([f, rx]) => f === name && rx.test(line));
+      const filed = DOC_FILED.findIndex(([f, rx]) =>
+        (f.endsWith('/') ? name.startsWith(f) : f === name) && rx.test(line));
       if (filed >= 0) { used.add(filed); return; }
       offenders.push(`${name}:${i + 1}`);
     });
