@@ -9,15 +9,15 @@
 
 import { EnemyGrid, triggerHolds, triggerConsume, triggerOrigin, TRIGGER_TICK_MS, MAX_TRIGGER_EVALS_PER_TICK } from './triggers.js';
 import { selectTarget } from './selectors.js';
-import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage } from './compose.js';
+import { runCompose, applyBoltRiders, applyImpactRiders, rankedDamage, stepDamage, engineScale } from './compose.js';
 import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank, canLearn, rankCooldown } from './skills.js';
 import { mechanicalLine } from './skilltext.js';
 import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
-import { CONFIG } from './config.js';
+import { CONFIG, PERSIST_T } from './config.js';
 import { tohHitDamage, tohOnHit } from './traits-toh.js';
 import { passiveBonusPer } from './enginescale.js';
-import { ENGINE_TICKS, engineStats, footingShieldFor, resetEnginesForRoom, initEnginePlayer, gainChi, spendChi, chiCostOf, cascadeAdvance, cascadeCooldown, formHolds } from './engines.js';
+import { ENGINE_TICKS, ownsEngine, engineStats, footingShieldFor, resetEnginesForRoom, initEnginePlayer, gainChi, spendChi, chiCostOf, cascadeAdvance, cascadeCooldown, formHolds } from './engines.js';
 
 const S = TRIGGER_TICK_MS / 1000;
 
@@ -142,6 +142,94 @@ export function startRoomMinions(sim, p) {
       }
     }
   }
+  applyPersistents(sim, p);
+}
+
+// PERSISTENT ACTIVES — the third door, and the same door widened.
+//
+// The always-on aura above is registered because the player OWNS the node,
+// which is what a passive is. Marrownaut is the other half of that sentence: it
+// is an ACTIVE occupying one of the eight slots, and what makes it hold is
+// being SLOTTED. Slotting it is the decision to tank; a passive would hand that
+// out beside everything else for free.
+//
+// So the condition is ownership OR the loadout, and nothing else about the
+// mechanism changes — `addAura` is the same call, `dur: Infinity` is the same
+// lifetime, `auraFor` is the same idempotency check. The shared `form`
+// primitive is deliberately NOT touched: the Blacksmith's three forms keep
+// arriving through the trigger loop with real durations, and a permanent form
+// that reached them through `PRIMITIVES.form` would be a change to all four.
+//
+// AND THE TEARDOWN IS HERE, BESIDE IT, for the reason the registration is:
+// a loadout can change between rooms, so the two have to run on one cadence or
+// a dropped skill keeps its form for the rest of the run. Un-slot clears the
+// form, its stats, its field and its shield; re-slot builds them again from
+// nothing rather than on top of a residue.
+export function applyPersistents(sim, p) {
+  for (const [id, rank] of Object.entries(p.skillRanks || {})) {
+    if (!(rank > 0)) continue;
+    const sk = SKILL_BY_ID[id];
+    if (!sk || !sk.persist) continue;
+    const slotted = (p.loadout || []).includes(id);
+    if (slotted) enterPersistent(sim, p, sk, id, rank);
+    else exitPersistent(sim, p, sk, id);
+  }
+}
+
+function enterPersistent(sim, p, sk, id, rank) {
+  const q = sk.persist;
+  if (q.form && p.form !== q.form) {
+    p.form = q.form;
+    // NOT Infinity. `tickForm` counts this down, and `Infinity - dt` staying
+    // Infinity is a float accident rather than a statement — a persistent form
+    // is one that is NEVER ON THE CLOCK, so it says so with a sentinel the
+    // expiry path checks by name.
+    p.formT = PERSIST_T;
+    p.formStats = q.stats || null;
+    sim._recomputeStats(p);
+    sim.pushEvent({ k: 'toast', idx: p.idx, text: `${q.form.toUpperCase()}` });
+  }
+  if (q.aura && !sim.auraFor(p, id)) {
+    sim.addAura(p, {
+      key: id, domain: sk.domain,
+      radius: q.aura.radius + (q.aura.radiusPerRank || 0) * (rank - 1),
+      // ZERO DAMAGE, stated rather than defaulted. The pull is the whole effect.
+      damage: 0, dps: 0,
+      pulseMs: q.aura.pulseMs || 400,
+      ampPct: q.aura.ampPct || 0, slow: q.aura.slow || null,
+      taunt: q.aura.taunt || 0,
+      dur: Infinity,
+    });
+  }
+  // The shield is recomputed at the door rather than held, because `scaleWith:
+  // 'armor'` reads `p.engines.armor` — which mirrors `grit`, so it has to be
+  // taken AFTER the form's stats have landed or the form's own Grit is missing
+  // from it. `Math.max` tops up without stacking on a re-entry.
+  if (q.shield) {
+    p.shield = Math.max(p.shield || 0, rankedDamage(q.shield.amount, sk, rank) * engineScale(q.shield, p));
+    p.shieldT = PERSIST_T;
+  }
+}
+
+function exitPersistent(sim, p, sk, id) {
+  const q = sk.persist;
+  let changed = false;
+  if (q.form && p.form === q.form) {
+    p.form = null; p.formT = 0; p.formStats = null;
+    changed = true;
+  }
+  if (q.aura) {
+    const z = sim.auraFor(p, id);
+    if (z) { sim.zones.splice(sim.zones.indexOf(z), 1); changed = true; }
+  }
+  // Only the PERSISTENT shield is dropped. `PERSIST_T` is what marks it as this
+  // node's rather than something a cast put there in the same room, so a Bone
+  // Spur shield ticking down on its own clock survives un-slotting Marrownaut.
+  if (q.shield && p.shieldT === PERSIST_T) {
+    p.shield = 0; p.shieldT = 0;
+    changed = true;
+  }
+  if (changed) sim._recomputeStats(p);
 }
 
 // §5.6, THE OPENING ABILITY. The tier-1 nodes of this character's own trees,
@@ -205,6 +293,12 @@ export function setLoadout(sim, p, slot, id) {
   if (ownsDamage && !anyDamage) return { ok: false, reason: 'at least one damaging active must stay slotted' };
   p.loadout = next;
   p.metaDirty = true;
+  // A PERSISTENT ACTIVE ENDS WHEN IT LEAVES THE BAR, not at the next door. The
+  // room-start door is the other half of this and catches a loadout that
+  // changed by any path; this is what makes un-slotting Marrownaut at the skill
+  // screen drop the form there and then, which is what a player watching their
+  // own speed and Grit expects.
+  applyPersistents(sim, p);
   return { ok: true };
 }
 
@@ -385,11 +479,26 @@ export function tickSkills(sim, dt) {
     // import; §16 flagged it in phase 2 and the Monk is the second of four that
     // would have widened it.
     const trees = treesFor(p);
-    for (const e of ENGINE_TICKS) if (trees.includes(e.tree)) e.tick(sim, p, dt, passiveSum);
+    for (const e of ENGINE_TICKS) if (ownsEngine(e, trees)) e.tick(sim, p, dt, passiveSum);
+    // PERSISTENT ACTIVES CONVERGE EVERY TICK, for the reason the line above
+    // recomputes `summonSlots` every tick rather than on spend: a state derived
+    // from the loadout has to be REDERIVED, or every path that writes a loadout
+    // becomes a place the derivation can be forgotten. `setLoadout` is not the
+    // only such path — a snapshot restore, a save load and every harness that
+    // stages a bar write `p.loadout` directly, and each of those left the form
+    // stale until something else happened to run. Measured: `engine_gate` read
+    // `armor` as filled-and-never-read because its fixture set a loadout the
+    // door had already passed.
+    //
+    // Cheap by construction: one `sk.persist` miss per learned skill, and the
+    // enter/exit bodies are no-ops once the state already matches.
+    applyPersistents(sim, p);
     for (const id of Object.keys(p.skillCd)) {
       if ((p.skillCd[id] -= dt) <= 0) delete p.skillCd[id];
     }
-    if (p.shieldT > 0 && (p.shieldT -= dt) <= 0) { p.shield = 0; p.shieldT = 0; }
+    // Same sentinel, same reason as `tickForm`: a persistent shield is not on a
+    // clock, and saying so by name beats relying on `Infinity - dt`.
+    if (p.shieldT !== PERSIST_T && p.shieldT > 0 && (p.shieldT -= dt) <= 0) { p.shield = 0; p.shieldT = 0; }
     if (p.wardT > 0 && (p.wardT -= dt) <= 0) { p.ward = 0; p.wardT = 0; p.wardReflect = 0; }
     for (let i = p.queuedSteps.length - 1; i >= 0; i--) {
       const q = p.queuedSteps[i];
@@ -426,6 +535,14 @@ function runTriggerTick(sim) {
       if (!id) continue;
       const sk = SKILL_BY_ID[id];
       if (!sk) continue;
+      // A PERSISTENT ACTIVE IS NOT A FIRING SKILL, and this is the line that
+      // makes that true rather than a claim in a comment. It holds a slot and
+      // has no trigger, no cooldown and no compose, so the loop below would
+      // dereference a trigger that is not there — and even guarded, evaluating
+      // it would spend one of the tick's `MAX_TRIGGER_EVALS_PER_TICK` on a
+      // skill that can never fire, which is the swarm pace band losing a slot
+      // of its budget to something that is not in the rotation.
+      if (sk.persist) continue;
       // COOLDOWN FIRST, before any spatial query. This ordering is most of the
       // performance win: a skill on cooldown costs one number comparison.
       if (p.skillCd[id] > 0) continue;

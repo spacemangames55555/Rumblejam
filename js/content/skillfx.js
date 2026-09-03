@@ -189,9 +189,33 @@ export function classifyShape(skill) {
   return SHAPE.smite;
 }
 
+// CACHED, BECAUSE THIS IS CALLED FROM TWO PER-FRAME LOOPS. The renderer's
+// projectile pass looks a spec up for every bolt it draws, and `viewFromSim`
+// does it again for the same bolt when it builds the frame's view — so an
+// uncached `fxSpec` allocated a fresh fifteen-field object twice per
+// projectile per frame. Measured at 297 ns and one object per call: 36,000
+// objects a second at 300 live projectiles, for a pure function of a skill id
+// over a catalog that cannot change at runtime.
+//
+// The returned spec is therefore SHARED and frozen. Nothing reads it as
+// anything but presentation constants today, and a caller that starts writing
+// to one would otherwise be scribbling on every other holder of the same skill.
+const SPEC_CACHE = new Map();
+
 export function fxSpec(skillOrId) {
   const skill = typeof skillOrId === 'string' ? SKILL_BY_ID[skillOrId] : skillOrId;
   if (!skill) return null;
+  // Keyed on the id rather than the object: both call shapes must land on the
+  // same entry, or the cache would miss for half the callers and quietly hold
+  // two specs for one skill.
+  const key = skill.id;
+  if (key !== undefined && SPEC_CACHE.has(key)) return SPEC_CACHE.get(key);
+  const spec = buildSpec(skill);
+  if (key !== undefined) SPEC_CACHE.set(key, spec);
+  return spec;
+}
+
+function buildSpec(skill) {
   const shape = classifyShape(skill);
   if (!shape) return null;
   const tree = TREES[skill.tree];
@@ -200,7 +224,7 @@ export function fxSpec(skillOrId) {
   const accent = TREE_ACCENT[skill.tree] || kit.accent;
   const short = CLASS_SHORT[classId] || 'fx';
   const boltColor = DOMAIN_BOLT[skill.domain] || accent;
-  return {
+  return Object.freeze({
     skillId: skill.id,
     classId,
     tree: skill.tree,
@@ -223,7 +247,7 @@ export function fxSpec(skillOrId) {
       || ((skill.compose || [])[0] || {}).angle
       || 1.5,
     width: ((skill.compose || [])[0] || {}).width || 10,
-  };
+  });
 }
 
 // Sprite ids we actually author files for. Missing files fall back to the
