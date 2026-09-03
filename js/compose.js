@@ -26,6 +26,50 @@ export function rankedDuration(base, skill, rank) {
   return base * (1 + inc * rank);
 }
 
+// A REACH THAT CANNOT SILENTLY BECOME INFINITE.
+//
+// Every radius check in this file is `dx*dx + dy*dy > r*r`, and an undeclared
+// radius made `r*r` NaN — where EVERY comparison is false, so the check never
+// skipped anyone and the effect reached the whole map. Ten of the game's
+// thirteen heals were in that state: measured, `monk_mend` healed an ally three
+// thousand units away exactly as well as one standing next to the caster, while
+// `druid_rejuvenate`, which declares 260, correctly stopped between 250 and 600.
+//
+// The load assertion in js/skills.js is the real fix and refuses a heal with no
+// radius. This is the second line of defence, for a radius that goes non-finite
+// somewhere the assertion cannot see — a rank multiplier, a future scaling hook.
+// It fails CLOSED: an unusable radius becomes zero reach, which includes the
+// caster (distance zero) and nobody else. A self-heal is visibly wrong and
+// costs one player; a map-wide heal is invisibly wrong and costs the role.
+export function reachOf(radius) {
+  return Number.isFinite(radius) && radius > 0 ? radius : 0;
+}
+
+// WHO AN ABSORB LANDS ON. Caster-only unless the step opts in.
+//
+// Every shield and ward in the game wrote `p.shield` — the caster and nobody
+// else — so "protect the tank" was not a thing any class could do. A step now
+// reaches allies by declaring `allies: <radius>`, and the default is unchanged:
+// no declaration, no ally, and all 45 existing skills behave exactly as before.
+//
+// `includeSelf` is REQUIRED alongside `allies` rather than defaulted, and that
+// is a deliberate refusal to guess. "The Priest shields the party including
+// herself" and "the Priest spends her own protection on someone else" are two
+// different skills, and a default would silently pick one for every node
+// converted later. The load assertion makes the author say which.
+function absorbTargets(sim, p, step) {
+  if (!(step.allies > 0)) return [p];
+  const r = reachOf(step.allies);
+  const out = [];
+  for (const q of sim.livePlayers()) {
+    if (q === p) { if (step.includeSelf) out.push(q); continue; }
+    const dx = q.x - p.x, dy = q.y - p.y;
+    if (dx * dx + dy * dy > r * r) continue;
+    out.push(q);
+  }
+  return out;
+}
+
 // ENGINE SCALING. A step may declare `scaleWith: '<engine>'`, and its magnitude
 // then rides that engine's current value. It arrived in phase 1 on `shield`
 // alone (Iron Sleeve, absorb scaled by Footing); the Samurai's Tactics tree
@@ -606,9 +650,10 @@ export const PRIMITIVES = {
   // (js/game.js:2716), so healing an ally and marking one feed the same hook.
   heal(sim, p, skill, step, rank, grid, out) {
     const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
+    const r = reachOf(step.radius);
     for (const q of sim.livePlayers()) {
       const dx = q.x - p.x, dy = q.y - p.y;
-      if (dx * dx + dy * dy > step.radius * step.radius) continue;
+      if (dx * dx + dy * dy > r * r) continue;
       // The popup reports what LANDED, not what was asked for — `_heal` scales
       // the request by Recovery and floors it, so the requested figure is no
       // longer the number that reached the bar.
@@ -625,18 +670,33 @@ export const PRIMITIVES = {
     // `amount` rather than `damage`, so it cannot use stepDamage — but it rides
     // the same engine hook, through the same function.
     const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
-    p.shield = Math.max(p.shield, amt);
-    p.shieldT = Math.max(p.shieldT || 0, rankedDuration(step.duration, skill, rank) / MS);
-    out.states++;
+    const dur = rankedDuration(step.duration, skill, rank) / MS;
+    for (const q of absorbTargets(sim, p, step)) {
+      // THE EXISTING STACKING RULE, UNCHANGED AND DELIBERATELY SO. Absorb has
+      // always been keep-the-bigger and refresh-to-the-longer, and an ally
+      // shield inherits that rather than inventing a second answer: two shields
+      // on one player behave the same however they arrived.
+      q.shield = Math.max(q.shield, amt);
+      q.shieldT = Math.max(q.shieldT || 0, dur);
+      out.states++;
+    }
   },
 
   // Absorb that also returns a fraction of what it eats.
   ward(sim, p, skill, step, rank, grid, out) {
-    p.ward = Math.max(p.ward || 0, rankedDamage(step.amount, skill, rank) * engineScale(step, p));
-    p.wardT = Math.max(p.wardT || 0, rankedDuration(step.duration, skill, rank) / MS);
-    p.wardReflect = Math.max(p.wardReflect || 0, step.reflectPct || 0);
-    p.wardDomain = skill.domain;
-    out.states++;
+    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
+    const dur = rankedDuration(step.duration, skill, rank) / MS;
+    for (const q of absorbTargets(sim, p, step)) {
+      q.ward = Math.max(q.ward || 0, amt);
+      q.wardT = Math.max(q.wardT || 0, dur);
+      q.wardReflect = Math.max(q.wardReflect || 0, step.reflectPct || 0);
+      // Domain is last-writer-wins today and stays that way. It is the one
+      // field of the four that is not a `Math.max`, so an ally ward hands the
+      // recipient the CASTER's domain — which is the existing behaviour for a
+      // second self-ward too, not a new rule.
+      q.wardDomain = skill.domain;
+      out.states++;
+    }
   },
 
   // Damage that returns a fraction as healing. Unused in phase 1.
