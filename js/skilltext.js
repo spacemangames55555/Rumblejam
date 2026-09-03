@@ -36,6 +36,7 @@
 import { rankedDamage, rankedDuration } from './compose.js';
 import { rankCooldown } from './skills.js';
 import { scalePerFor } from './enginescale.js';
+import { STAT_NAME } from './config.js';
 
 const MS = 1000;                     // structural: step params are milliseconds
 const NARROW = Math.PI / 2;          // structural: the right angle that splits narrow from wide
@@ -303,6 +304,65 @@ export function mechanics(skill, rank = 1) {
       fields.push(field('scaling', 'Scales with',
         `${s.scaleWith}, +${(scalePerFor(s) * 100).toFixed(1)}% per point`));
     }
+  }
+
+  // --- persistent state: a slotted active that never fires ---
+  //
+  // `persist` IS THE THIRD DOOR into a player's sheet, beside `compose` and
+  // `passive`, and it needs its own reader for the reason the other two have
+  // one: nothing in it is a step, so every loop above sees an empty skill and
+  // prints nothing. Marrownaut shipped as a blank node at level 3 — a purchase
+  // a player was asked to make with no text under it at all.
+  //
+  // READ OFF `persist`, NOT OFF AN ID. The next persistent active gets its
+  // description from this block without anybody remembering to come back, which
+  // is the same rule the rest of the file follows: derive it or it is wrong on
+  // the next edit.
+  //
+  // THE ORDER IS THE ORDER THE QUESTIONS ARRIVE IN. What does holding it get me,
+  // what does it do to my sheet, what does it do to the room, and what does it
+  // cost to keep. The absent fields are the headline for this kind of skill —
+  // there is no cooldown and no duration to print — so "holds while slotted" is
+  // stated outright rather than left as a gap the player has to notice.
+  const q = skill.persist;
+  if (q) {
+    if (q.shield) {
+      // The one figure here that moves with rank. `enterPersistent` runs the
+      // declared amount through this same `rankedDamage` at the door, so the
+      // number a player reads is the number that lands.
+      fields.push(field('amount', 'Absorbs',
+        n1(rankedDamage(q.shield.amount, skill, rk)),
+        n1(rankedDamage(q.shield.amount, skill, nx))));
+    }
+    if (q.form) {
+      // Stat keys go through STAT_NAME rather than being spelled here — six of
+      // these were renamed once already and 154 hardcoded copies had to be
+      // found afterwards.
+      const st = Object.entries(q.stats || {})
+        .map(([k, v]) => `${v > 0 ? '+' : ''}${n1(v)} ${STAT_NAME[k] || k}`);
+      fields.push(field('form', 'Form', st.length ? `${q.form} — ${st.join(', ')}` : String(q.form)));
+    }
+    if (q.aura) {
+      const a = q.aura;
+      const parts = [`${Math.round(a.radius + (a.radiusPerRank || 0) * (rk - 1))}px around you`];
+      // A PULL IS NOT DAMAGE and the description must not imply it is. This
+      // field deals nothing by design — that is what keeps a permanent aggro
+      // aura on the right side of the statue test — so the text names what it
+      // does to enemy attention and stays silent about damage it never deals.
+      if (a.taunt) parts.push(`pulls enemies onto you every ${secs(a.pulseMs || 400)}`);
+      if (a.damage) parts.push(`${n1(a.damage)} damage every ${secs(a.pulseMs || 400)}`);
+      if (a.ampPct) parts.push(`enemies inside take ${Math.round(a.ampPct * 100)}% more damage from you and yours`);
+      if (a.slow) parts.push(`slows what it catches to ${Math.round(a.slow.mult * 100)}% for ${secs(a.slow.dur)}`);
+      const next = a.radiusPerRank
+        ? [`${Math.round(a.radius + a.radiusPerRank * (nx - 1))}px around you`, ...parts.slice(1)].join(', ')
+        : undefined;
+      fields.push(field('aura', 'Field', parts.join(', '), next));
+    }
+    if (q.shield && q.shield.scaleWith) {
+      fields.push(field('scaling', 'Scales with',
+        `${q.shield.scaleWith}, +${(scalePerFor(q.shield) * 100).toFixed(1)}% per point`));
+    }
+    fields.push(field('holds', 'Holds', 'while slotted — no cooldown, no trigger, no duration'));
   }
 
   // --- riders ---

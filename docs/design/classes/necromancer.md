@@ -1,4 +1,4 @@
-# NECROMANCER — RUMBLEJAM CONVERSION (31 skills)
+# NECROMANCER — RUMBLEJAM CONVERSION (30 skills)
 
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
@@ -31,7 +31,9 @@ Spur** is a 40% passive reflect here and an active `ward` in code.
 The built Marrow and Summons are **branching** — six tiers, four exclusive
 pairs each, sixteen branch nodes across the two. This document is linear with
 exactly **one** branch pair in the whole class (`necro_skeleton_branch`, Blood
-against Marrow Skeleton), which is why it carries 31 blocks rather than 30.
+against Marrow Skeleton). It carried 31 blocks rather than 30 for that reason;
+it now carries 30, because the Dark Matter summon is cut and the branch pair's
+exclusivity is itself unresolved — see CONFLICTS.
 
 Linear-with-one-branch and four-pairs-per-tree are incompatible shapes and
 picking one renumbers every tier in the file. **Not resolved here** — it is a
@@ -109,12 +111,15 @@ permanent. The exception works for a 12s form under a 60s capstone; it cannot
 ration a form whose duration equals the bucket's entire range.
 
 **STILL HELD 2 — Summons cannot satisfy the DISTRIBUTION rule and stay a
-summoner tree.** Five passives plus a capstone leave five timed actives, of
-which four must be medium-or-faster. Two are. The other three are Unleash the
-Monster, Dark Matter and Death Channel — a single pet, a capped second summon,
-and a ten-second channel. A skeleton every 0.4s is not a commander, and a
-channel on a cooldown shorter than itself is not a channel. The damage half of
-this was fixed by rewording ruling 2; the pace half has no equivalent reading.
+summoner tree.** Five passives plus a capstone leave four timed actives, of
+which four must be medium-or-faster. Two are. The other two are Unleash the
+Monster and Death Channel — a single pet and a ten-second channel. A skeleton
+every 0.4s is not a commander, and a channel on a cooldown shorter than itself
+is not a channel. The damage half of this was fixed by rewording ruling 2; the
+pace half has no equivalent reading. **Cutting the Dark Matter summon made this
+worse rather than better**: it removed one of the three offending actives and
+one of the tree's timed nodes at the same time, so the ratio is unchanged and
+the tree is a node shorter.
 
 **STILL HELD 3 — Grasp of Death is a capstone the capstone bucket destroys.**
 Marrow's tier-10 and the class's only self-heal: 40 damage on a 60% drain,
@@ -137,7 +142,7 @@ Feeds:
 - A summon of his dying: **+10** (he gets the material back)
 
 Consumes:
-- Summon Skeleton: **10** · Unleash the Monster: **30** · Dark Matter: **25**
+- Summon Skeleton: **10** · Unleash the Monster: **30**
 - Army of the Dead: **60** · Singularity: **40**
 - A summon skill will not fire below its cost.
 
@@ -165,8 +170,8 @@ trigger for nearly the whole Summons tree, and it means the tree plays
 itself — correctly, because the fantasy is a commander, not a caster.
 
 **3. Summon caps and rank.** Skeletons cap 3 (+1 per 4 ranks). Monster caps
-1 (never more — it is a pet, not a swarm). Dark Matter caps 2 (+1 per 6
-ranks). Army of the Dead spawns 6 at once on a 60s cooldown, ignoring caps,
+1 (never more — it is a pet, not a swarm). Army of the Dead spawns 6 at once
+on a 60s cooldown, ignoring caps,
 and those expire after 20s. Ranks on summon skills buy **summon stats**, not
 caster damage — stated per skill.
 
@@ -193,6 +198,64 @@ and a slightly smaller damage number.
 **7. Auras rank into radius** (carried from Blacksmith ruling 2). Osteo Aura
 and Blight both occupy a slot and are always-on.
 
+## MERGE PROVENANCE
+
+This file is the reconciliation of two divergent Necromancer conversions.
+Neither contained the other. The archived source of each is kept verbatim at
+`docs/design/toh/necromancer.md`; this is the merged, live document.
+
+| what | taken from | why |
+|---|---|---|
+| `PRIMITIVE:` on every node | the archive, **corrected against the engine** | only the archive had the field; a third of its values were wrong (below) |
+| the OPEN ITEMS section | the archive | live questions, re-checked against what has since shipped |
+| pace and cooldown values | this document's previous revision | the roster-ruling pass |
+| `## ROSTER RULING APPLIED` | this document's previous revision | records that the pass happened |
+| the tree ruling, the engine, the port rulings | this document's previous revision | longer and later |
+| Stake as a 360px projectile | the archive | Casey's explicit ruling; **not yet built** |
+| the Dark Matter summon, cut | the archive | Casey's explicit ruling; the class is 30 skills |
+| Marrow node order, Marrownaut, Quill, the opener set | **the shipped engine** | the engine wins on structure |
+
+### The archive's primitive classification was stale, and not in one direction
+
+It is the only source for the field and it could not simply be copied. Eleven of
+its thirty values disagree with what ships:
+
+- **`NEEDS aura`, `NEEDS channel`, `NEEDS gravity_pull` are all satisfied.** All
+  three primitives exist and ship. The archive was written when they did not.
+  Blight uses the aura mechanism, Death Channel and Dark Energy Beam are
+  `channel`, and Singularity is `hazard + gravity_pull`.
+- **`nova` and `mortar` are not primitives.** The engine has no such kinds and
+  never did. Bone Nova ships as `strike`; Hex of Entropy and Dark Energy Rift
+  ship as `hazard`.
+- **`none` was wrong three times.** Calcify is `passive { armorGrit, armorVit }`,
+  Bone Spur is an active `ward`, and Marrownaut is `persist`.
+
+Every `PRIMITIVE:` line in this file now names what the code actually runs. A
+line reading `NEEDS <x>` means the engine genuinely lacks it; there are none
+left in this class.
+
+### Changed because the engine disagreed — every one, named
+
+Neither source document reflects work that has since shipped. Nine changes were
+made against the code rather than against either document. None was made
+silently.
+
+| # | what changed | was (both documents) | is (shipped) |
+|---|---|---|---|
+| 1 | **Marrow node order** | Bone Dart, Spiked Punch, Bone Nova, Calcify, Marrownaut, Stake, Osteo Aura, Bone Spur, Wrecking Ball, Grasp of Death | Spiked Punch, Marrownaut, Bone Dart, Bone Nova, Stake, Quill, Bone Spur, Wrecking Ball, Grasp of Death, Calcify |
+| 2 | **unlock levels** | not stated | stated per node; they move with tier — 1, 3, 5, 8, 11, 15, 19, 24, 30, 36 |
+| 3 | **Marrownaut** | a 30s-cooldown panic form on `SELF_HP_BELOW_X 45%`, lasting 10–30s, growing the caster's hitbox | a persistent slotted state: no trigger, no cooldown, no duration, no size change |
+| 4 | **Quill** | absent from both; Osteo Aura sat at this tier | built at Marrow tier 6, written here from behaviour |
+| 5 | **the Summons opener** | Summon Skeleton | **Entropy Cascade**; Summon Skeleton moved to tier 2 |
+| 6 | **the class's opening three** | Bone Dart / Dark Energy Blip / Summon Skeleton | **Spiked Punch / Dark Energy Blip / Entropy Cascade** — Bone Dart is no longer an opener in any tree |
+| 7 | **Bone Spur** | a passive reflect | an active `ward` (the previous revision already flagged this; it is now on the node) |
+| 8 | **Summons tier 8** | occupied | empty in code; Death Channel sits at tier 9 |
+| 9 | **Bone Dart's prose** | said "400ms" beside a `PACE` line reading 600ms | 600ms throughout; the code agrees with the `PACE` line |
+
+**One change went the other way.** Stake is documented as a 360px projectile on
+Casey's ruling and ships as an 84px melee `strike`. It is the only deliberate
+disagreement in the file and it is marked on the node.
+
 ---
 
 ## TREE: MARROW
@@ -205,46 +268,10 @@ hold the line.
 
 ---
 
-SKILL NAME:           Bone Dart
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 0
+SKILL NAME:           Spiked Punch
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 0  (built tier 1, unlocks at level 1)
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
---- delivery ---
-CAST:                 projectile
-SHAPE:                single target
-RANGE:                range long (460px)
-TARGETS:              1 (first hit)
---- output ---
-DAMAGE TIER:          medium (26)
-PACE:                 very fast (600ms)
-DOMAIN:               physical
---- effects ---
-RIDERS:               none
-DOT:                  none
-AFFECTS:              enemies
---- automation ---
-TRIGGER:              NEAREST_IN_RANGE (460px)
-THREAT:               some
---- growth ---
-RANK ADDS:            +4 damage; pierces 1 additional enemy at rank 6, +1
-                      per 6 ranks thereafter
---- identity ---
-ENGINE:               neutral — but at 400ms it produces kills, and kills
-                      are Essence
-COST:                 single target on a 400ms cycle is a rifle in a game
-                      about crowds. It will out-damage everything early and
-                      fall behind hard by the time enemies arrive twelve at
-                      a time
-VISUAL:               a splinter of bone leaves his hand flat and fast, no
-                      arc, a dry crack on impact
-FLAVOR:               He does not carry ammunition. He is, at all times,
-                      carrying two hundred and six pieces of it, and has
-                      long since stopped thinking of them as his.
-
-SKILL NAME:           Spiked Punch
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 1
-TYPE:                 active
-AXIS POSITION:        2 (of 10)
 --- delivery ---
 CAST:                 melee
 SHAPE:                multi-target (uncapped circle r72)
@@ -274,11 +301,115 @@ VISUAL:               a jab that lands with an audible splintering; bone
 FLAVOR:               Murmansk taught him that the body is a toolkit you are
                       standing inside. Most people find that thought
                       unpleasant. He finds it convenient.
+PRIMITIVE:            strike
 
-SKILL NAME:           Bone Nova
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 2
+SKILL NAME:           Marrownaut
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 1  (built tier 2, unlocks at level 3)
+TYPE:                 active (persistent — occupies a slot, never fires)
+AXIS POSITION:        2 (of 10)
+--- delivery ---
+CAST:                 self
+SHAPE:                none (a field follows the caster while it holds)
+RANGE:                n/a
+TARGETS:              self; the field takes every enemy inside it
+--- output ---
+DAMAGE TIER:          none (0) — and the zero is load-bearing, see COST
+PACE:                 n/a — NO COOLDOWN, NO TRIGGER, NO DURATION
+DOMAIN:               spiritual
+--- effects ---
+RIDERS:               persistent while slotted:
+                      · form "marrownaut" — +20 Defense, +40 Vitality, −3 Speed
+                      · a 165px field around the caster, pulsing every 800ms,
+                        pulling enemy attention onto him and dealing NOTHING
+                      · an absorb shield, scaling with `armor`, recomputed at
+                        the moment of slotting so the form's own Defense is
+                        already in it
+                      · teardown on un-slot: form, field and shield all go
+DOT:                  none
+AFFECTS:              self; enemies (attention only)
+--- automation ---
+TRIGGER:              none. It is not in the trigger loop at all
+THREAT:               high, continuous — the pull is the skill
+--- growth ---
+RANK ADDS:            +absorb per rank (the shield is the only figure that
+                      moves). The form's stats, the field's radius and the
+                      pulse interval are flat at every rank
+--- identity ---
+ENGINE:               neutral on Essence, and the only node in the game that
+                      reads `armor` — the class engine's one consumer. The
+                      shield is taken AFTER the form lands, so the +20 Defense
+                      is inside the number
+COST:                 a slot, permanently, for a skill that never fires. That
+                      is the whole decision: slotting Marrownaut is the choice
+                      to tank, and it is paid once rather than on a cooldown.
+                      The −3 Speed is the running cost. **The zero damage is
+                      not an oversight** — a permanent aggro field that also
+                      dealt damage would clear rooms while the player stood
+                      still, which is the failure the statue test exists to
+                      catch. It drags the room onto itself and kills none of it
+VISUAL:               he swells — the skeleton visibly thickening beneath,
+                      plates of bone shouldering up through the coat, half a
+                      head taller and much wider, and it does not subside
+FLAVOR:               The armour was always in there. Getting into it is
+                      simply a matter of persuading the body that its own
+                      frame belongs on the outside.
+PRIMITIVE:            persist { form, stats, aura, shield }  — not `form`
+
+> **REWRITTEN AGAINST THE SHIPPED ENGINE.** Both source documents describe a
+> timed panic button: `SELF_HP_BELOW_X 45%`, a 30s cooldown, a form lasting
+> 10–30s, and a caster size increase. None of that is what ships. Marrownaut
+> is now a persistent state entered by putting it in the bar and left by taking
+> it out, and the tree's identity rather than its emergency.
+>
+> **The size change is gone.** It was the node's most-discussed idea and the
+> thing both documents flagged; the shipped form changes stats only. Recorded
+> here because a reader of either source document will come looking for it.
+>
+> **`persist` is a third door into the sheet**, beside `compose` and `passive`,
+> and Marrownaut is the first skill through it. Any other node written as "a
+> state you hold while it is slotted" uses the same shape.
+
+SKILL NAME:           Bone Dart
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 2  (built tier 3, unlocks at level 5)
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
+--- delivery ---
+CAST:                 projectile
+SHAPE:                single target
+RANGE:                range long (460px)
+TARGETS:              1 (first hit)
+--- output ---
+DAMAGE TIER:          medium (26)
+PACE:                 very fast (600ms)
+DOMAIN:               physical
+--- effects ---
+RIDERS:               none
+DOT:                  none
+AFFECTS:              enemies
+--- automation ---
+TRIGGER:              NEAREST_IN_RANGE (460px)
+THREAT:               some
+--- growth ---
+RANK ADDS:            +4 damage; pierces 1 additional enemy at rank 6, +1
+                      per 6 ranks thereafter
+--- identity ---
+ENGINE:               neutral — but at 600ms it produces kills, and kills
+                      are Essence
+COST:                 single target on a 600ms cycle is a rifle in a game
+                      about crowds. It will out-damage everything early and
+                      fall behind hard by the time enemies arrive twelve at
+                      a time
+VISUAL:               a splinter of bone leaves his hand flat and fast, no
+                      arc, a dry crack on impact
+FLAVOR:               He does not carry ammunition. He is, at all times,
+                      carrying two hundred and six pieces of it, and has
+                      long since stopped thinking of them as his.
+PRIMITIVE:            bolt
+
+SKILL NAME:           Bone Nova
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 3  (built tier 4, unlocks at level 8)
+TYPE:                 active
+AXIS POSITION:        4 (of 10)
 --- delivery ---
 CAST:                 self
 SHAPE:                ground area (circle r165 on caster)
@@ -307,11 +438,234 @@ VISUAL:               a ring of bone shards erupting from the floor at the
                       radius edge and collapsing inward
 FLAVOR:               There is more bone under any ground than people care
                       to know. He simply asks it to stand up for a moment.
+PRIMITIVE:            strike
+
+SKILL NAME:           Stake
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 4  (built tier 5, unlocks at level 11)
+TYPE:                 active
+AXIS POSITION:        5 (of 10)
+--- delivery ---
+CAST:                 projectile
+SHAPE:                single target
+RANGE:                range medium (360px)
+TARGETS:              1 (first hit)
+--- output ---
+DAMAGE TIER:          low (14)
+PACE:                 medium (2000ms)
+DOMAIN:               physical
+--- effects ---
+RIDERS:               root 1400ms — port addition; cut from an authored
+                      2500ms by roster ruling 6 (70% of the 2s cooldown)
+DOT:                  none
+AFFECTS:              enemies
+--- automation ---
+TRIGGER:              NEAREST_IN_RANGE (360px)
+THREAT:               some
+--- growth ---
+RANK ADDS:            +2 damage; +150ms root every 3rd rank (was +300ms —
+                      rescaled with the shorter base so ranking cannot walk
+                      the root back above the cooldown)
+--- identity ---
+ENGINE:               neutral
+COST:                 promoted from slow to medium (10s to 2s) because Marrow
+                      needs a fourth medium-or-faster node and this was the
+                      tree's weakest by its own former reckoning. Ruling 6 took
+                      the root from 2500ms to 1400ms to keep it under the
+                      cooldown. The node is better for it: 1.4s of pin every 2s
+                      is 70% uptime against the old 2500ms every 10s, which was
+                      25%. It pins more and locks less. **Ranged, per Casey's
+                      ruling** — as a melee node it asked the Necromancer to be
+                      within 84px to pin the thing he was running from, which
+                      is the position the pin exists to avoid
+VISUAL:               a length of yellowed bone launched flat and hard,
+                      punching through the foot and into the floor; it snaps
+                      when they tear free
+FLAVOR:               A stake is not a weapon. It is a statement about where
+                      something is going to remain.
+PRIMITIVE:            bolt
+
+> **Port addition flagged:** ToH's Stake has no rider — 14 damage on a 10s
+> cooldown and nothing else, which is a dead node in a game where slots are
+> scarce. A 2.5s root was added rather than inflating the damage, because
+> "pin something in place" is what the name and animation already promise.
+> This is invention, not derivation. Cut it and the skill should probably
+> be cut too.
+
+> **RULED BUT NOT BUILT — this block is ahead of the engine.** Casey ruled Stake
+> ranged and this document carries the ruling, but `necro_stake` still ships as
+> a melee `strike`: `ENEMY_BREACHES_RING` at 84px, an 84px reach, a 6.28 arc and
+> a cap of three targets. Damage (14), cooldown (2000ms) and root (1400ms) all
+> match; only the delivery does not. Building it means `NEAREST_IN_RANGE` at
+> 360px and a `bolt` step in place of the `strike`. **This is the one place in
+> the document that deliberately disagrees with shipped code**, and it is
+> recorded rather than reconciled because the ruling is the newer fact.
+
+SKILL NAME:           Quill
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 5  (built tier 6, unlocks at level 15)
+TYPE:                 passive
+AXIS POSITION:        6 (of 10)
+--- delivery ---
+CAST:                 n/a
+SHAPE:                n/a
+RANGE:                n/a
+TARGETS:              1 (whatever struck the ward)
+--- output ---
+DAMAGE TIER:          n/a — its output is a fraction of what it absorbs
+PACE:                 n/a
+DOMAIN:               spiritual
+--- effects ---
+RIDERS:               reflects 0.4% of ABSORBED damage back per point of
+                      Defense. It reads Defense as it moves rather than
+                      freezing at cast, and the returned fraction is capped
+                      at 100%
+DOT:                  none
+AFFECTS:              enemies, self
+--- automation ---
+TRIGGER:              always-on (no trigger; occupies a passive slot)
+THREAT:               none
+--- growth ---
+RANK ADDS:            +reflect fraction per point of Defense per rank
+--- identity ---
+ENGINE:               feeds — a reflect kill is the caster's kill, and a
+                      caster's kill is +5 Essence
+COST:                 **it does nothing without a ward up.** The fraction is
+                      added to the ward's own return and applied to damage the
+                      ward absorbs; with no ward there is nothing to take a
+                      fraction of. The class's only ward is Bone Spur, one tier
+                      above it, so Quill is a node that pays a node the player
+                      has not bought yet. It is also the second Marrow node
+                      whose value is a function of Defense — Marrownaut's +20
+                      is 8% more ward reflect on its own — so the tank build
+                      compounds and the caster build gets nothing at all
+VISUAL:               where a blow is stopped, a short spine comes out through
+                      the block and goes back the way the blow came
+FLAVOR:               The harder your shell, the worse it is to strike.
+PRIMITIVE:            passive { reflectPerGrit }
+
+> **NOT IN EITHER SOURCE DOCUMENT.** `necro_quill` ships at Marrow tier 6 and
+> neither conversion describes it — both put Osteo Aura there instead. This
+> block is written from the code, and it is the one node in the file with no
+> conversion heritage at all: its judgment fields are authored against
+> behaviour rather than carried across from Thrones of Heaven.
+>
+> Osteo Aura is kept below, tabled, exactly as the previous revision left it.
+
+SKILL NAME:           Bone Spur
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 6  (built tier 7, unlocks at level 19)
+TYPE:                 passive
+AXIS POSITION:        7 (of 10)
+--- delivery ---
+CAST:                 n/a
+SHAPE:                n/a
+RANGE:                n/a
+TARGETS:              1 (the attacker)
+--- output ---
+DAMAGE TIER:          n/a (reflects 40% of damage taken)
+PACE:                 n/a
+DOMAIN:               physical
+--- effects ---
+RIDERS:               stat mods: reflectPct 0.40
+DOT:                  none
+AFFECTS:              enemies, self
+--- automation ---
+TRIGGER:              ON_DAMAGE_TAKEN
+THREAT:               none
+--- growth ---
+RANK ADDS:            +5% reflect per rank
+--- identity ---
+ENGINE:               feeds — reflect kills count as caster kills, +5 Essence
+COST:                 it scales off incoming damage, so it is strongest
+                      exactly when the run is going worst, and it does
+                      nothing at all for a player who is not being hit. On a
+                      class that wants its skeletons taking the hits instead,
+                      it is in direct conflict with the Summons tree
+VISUAL:               spurs of bone snap outward from wherever he was struck,
+                      then withdraw
+FLAVOR:               Touching him has consequences. He has never once
+                      warned anyone about this and does not consider that
+                      dishonest.
+PRIMITIVE:            ward
+
+SKILL NAME:           Wrecking Ball
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 7  (built tier 8, unlocks at level 24)
+TYPE:                 active
+AXIS POSITION:        8 (of 10)
+--- delivery ---
+CAST:                 melee
+SHAPE:                line (movement path)
+RANGE:                range medium (320px)
+TARGETS:              each enemy in path once, uncapped
+--- output ---
+DAMAGE TIER:          medium (28)
+PACE:                 slow (4000ms)
+DOMAIN:               physical
+--- effects ---
+RIDERS:               knockdown — stun 1500ms per enemy hit; caster displaced
+                      320px
+DOT:                  none
+AFFECTS:              enemies, self (movement)
+--- automation ---
+TRIGGER:              ENEMY_BREACHES_RING (100px) — direction resolved away
+                      from the densest cluster per the movement ruling
+THREAT:               high
+--- growth ---
+RANK ADDS:            +4 damage; +150ms knockdown every 3rd rank
+--- identity ---
+ENGINE:               neutral
+COST:                 320px of forced displacement on a class that has spent
+                      the whole run carefully placing summons between itself
+                      and the swarm. It will regularly throw the Necromancer
+                      out from behind his own wall
+VISUAL:               he tucks into a hunched roll and the bone plating
+                      closes over him; enemies go down like skittles
+FLAVOR:               Undignified. Effective. He has made his peace with the
+                      trade, and the skeletons do not comment.
+PRIMITIVE:            line
+
+SKILL NAME:           Grasp of Death
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 8  (built tier 9, unlocks at level 30)
+TYPE:                 active
+AXIS POSITION:        9 (of 10)
+--- delivery ---
+CAST:                 instant-at-range
+SHAPE:                single target (nearest)
+RANGE:                melee long (120px)
+TARGETS:              1
+--- output ---
+DAMAGE TIER:          high (40)
+PACE:                 slow (4000ms)
+DOMAIN:               spiritual
+--- effects ---
+RIDERS:               drain — heals caster for 60% of damage dealt
+DOT:                  none
+AFFECTS:              enemies + self
+--- automation ---
+TRIGGER:              SELF_HP_BELOW_X (65%), falling back to
+                      LOWEST_HP_ENEMY within 120px when at full health
+THREAT:               some
+--- growth ---
+RANK ADDS:            +6 damage (the 60% drain ratio does not scale, so heal
+                      grows with damage automatically)
+--- identity ---
+ENGINE:               feeds — the highest single-hit damage in the class
+                      finishes things, and finishing things is +5 Essence
+COST:                 120px. The only reliable heal in the Necromancer's
+                      kit requires him to be within arm's reach of something
+                      hostile, which is where he is least able to survive
+                      being wrong
+VISUAL:               a skeletal hand of black vapour closes around the
+                      target's chest; a thread of dull red runs back along
+                      his arm
+FLAVOR:               He is not taking their life. Life does not transfer
+                      like that. He is taking the arrangement — the pattern
+                      that was holding them together — and wearing it for a
+                      while.
+PRIMITIVE:            drain
 
 SKILL NAME:           Calcify
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 3
+CLASS / TREE / TIER:  necromancer / Marrow / tier_code 9  (built tier 10, unlocks at level 36)
 TYPE:                 passive
-AXIS POSITION:        4 (of 10)
+AXIS POSITION:        10 (of 10)
 --- delivery ---
 CAST:                 n/a
 SHAPE:                n/a
@@ -341,114 +695,9 @@ VISUAL:               skin over the sternum and forearms takes on a chalky,
 FLAVOR:               Bone is the only part of a person that was never
                       really alive. He has been quietly increasing his
                       proportion of it for some years.
+PRIMITIVE:            passive { armorGrit, armorVit }
 
-SKILL NAME:           Marrownaut
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 4
-TYPE:                 transformation
-AXIS POSITION:        5 (of 10)
---- delivery ---
-CAST:                 self
-SHAPE:                none
-RANGE:                n/a
-TARGETS:              self
---- output ---
-DAMAGE TIER:          none (0)
-PACE:                 capstone (30000ms)
-DOMAIN:               physical
---- effects ---
-RIDERS:               form 10000ms — maxHPMult +0.50, damageReduction +0.45;
-                      cut from 30000ms by ruling 6's one-third rule under the
-                      30s capstone cooldown;
-                      caster size increases (the game's only size-change)
-DOT:                  none
-AFFECTS:              self
---- automation ---
-TRIGGER:              SELF_HP_BELOW_X (45%)
-THREAT:               high
---- growth ---
-RANK ADDS:            +4% damage reduction and +6% max HP per rank; +2s
-                      duration every 4th rank
---- identity ---
-ENGINE:               neutral — no Essence cost. This is the one big
-                      cooldown the class can always afford, which is the
-                      point
-COST:                 the size increase is not cosmetic. A larger hitbox in
-                      a bullet-hell room means more contacts, and this skill
-                      makes the player physically harder to keep safe for
-                      thirty seconds. It gives you durability and takes away
-                      evasion. RESOLVED: reported from this node, ruling 6
-                      gained a one-third rule, and a 10s form on a 30s capstone
-                      is up a third of the time. The larger hitbox is now a
-                      window the player can wait out rather than a permanent
-                      condition, which is what made the drawback legible in the
-                      first place
-VISUAL:               he swells — the skeleton visibly thickening beneath,
-                      plates of bone shouldering up through the coat, half a
-                      head taller and much wider
-FLAVOR:               The armour was always in there. Getting into it is
-                      simply a matter of persuading the body that its own
-                      frame belongs on the outside.
-
-> **Size-change flagged:** this is the only skill in ToH that changes the
-> player's dimensions, and RumbleJam's entire difficulty is hitbox
-> avoidance. I've written the drawback in deliberately rather than hiding
-> it, but if RumbleJam's collision can't handle a variable player hitbox,
-> this becomes a plain defensive buff and loses its best idea.
-
-SKILL NAME:           Stake
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 5
-TYPE:                 active
-AXIS POSITION:        6 (of 10)
---- delivery ---
-CAST:                 melee
-SHAPE:                multi-target (uncapped circle r84)
-RANGE:                melee long (84px)
-TARGETS:              cap 3
---- output ---
-DAMAGE TIER:          low (14)
-PACE:                 medium (2000ms)
-DOMAIN:               physical
---- effects ---
-RIDERS:               root 1400ms — port addition; cut from an authored
-                      2500ms by roster ruling 6 (70% of the 2s cooldown)
-DOT:                  none
-AFFECTS:              enemies
---- automation ---
-TRIGGER:              ENEMY_BREACHES_RING (84px)
-THREAT:               some
---- growth ---
-RANK ADDS:            +2 damage; +150ms root every 3rd rank (was +300ms —
-                      rescaled with the shorter base so ranking cannot walk
-                      the root back above the cooldown)
---- identity ---
-ENGINE:               neutral
-COST:                 promoted from slow to medium (10s to 1.5s) because
-                      Marrow needs a fourth medium-or-faster node and this was
-                      the tree's weakest by its own former reckoning. Ruling 6
-                      took the root from 2500ms to 1000ms to keep it under the
-                      cooldown. The node is better for it: one second of pin
-                      every 1.5s is 67% uptime against the old 2500ms every
-                      10s, which was 25%. It pins more and locks less
-VISUAL:               a spike of yellowed bone driven down through the foot,
-                      pinning the enemy in place; it snaps when they tear free
-FLAVOR:               A stake is not a weapon. It is a statement about where
-                      something is going to remain.
-
-> **Port addition flagged:** ToH's Stake has no rider — 14 damage on a 10s
-> cooldown and nothing else, which is a dead node in a game where slots are
-> scarce. I added a 2.5s root rather than inflating the damage, because
-> "pin something in place" is what the name and animation already promise.
-> This is invention, not derivation. Cut it and the skill should probably
-> be cut too.
-
-> **TABLED — not built, and not deleted.** Marrow holds ten nodes and the built
-> tree is full, so Osteo Aura is set aside rather than displacing anything. Its
-> slot in the plan on line 16 — "Osteo Aura and Grasp of Death replace Quill and
-> Banshee's Wail" — resolves first-for-first, so **`necro_quill` keeps tier 6**
-> and Grasp of Death replaces Banshee's Wail as planned. The mechanism Osteo
-> needs is built and gated (`aura`, the seventeenth primitive, with
-> source-attributed amplification); only the slot is missing. Bring it back by
-> deciding which node it displaces.
+### TABLED — kept as a proposal, not part of the built tree
 
 SKILL NAME:           Osteo Aura   [TABLED — see the note above]
 CLASS / TREE / TIER:  necromancer / Marrow / tier_code 6
@@ -487,6 +736,7 @@ VISUAL:               a dim bone-white circle on the floor; enemies inside it
                       look thinner, their outlines showing structure
 FLAVOR:               Everything alive is a wall built around a frame. He
                       finds it very hard to stop noticing where the frame is.
+PRIMITIVE:            aura  — the primitive exists; the tree slot does not
 
 > **RESOLVED by measurement, and the narrow reading was wrong.** The declared
 > text says "+25% damage from you," and this block used to read that as the
@@ -512,117 +762,6 @@ FLAVOR:               Everything alive is a wall built around a frame. He
 > middle — a split rate, or a rank-gated value — was taken; both are tuning on
 > top of a decision, and either is one number away if playtest disagrees.
 
-SKILL NAME:           Bone Spur
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 7
-TYPE:                 passive
-AXIS POSITION:        8 (of 10)
---- delivery ---
-CAST:                 n/a
-SHAPE:                n/a
-RANGE:                n/a
-TARGETS:              1 (the attacker)
---- output ---
-DAMAGE TIER:          n/a (reflects 40% of damage taken)
-PACE:                 n/a
-DOMAIN:               physical
---- effects ---
-RIDERS:               stat mods: reflectPct 0.40
-DOT:                  none
-AFFECTS:              enemies, self
---- automation ---
-TRIGGER:              ON_DAMAGE_TAKEN
-THREAT:               none
---- growth ---
-RANK ADDS:            +5% reflect per rank
---- identity ---
-ENGINE:               feeds — reflect kills count as caster kills, +5 Essence
-COST:                 it scales off incoming damage, so it is strongest
-                      exactly when the run is going worst, and it does
-                      nothing at all for a player who is not being hit. On a
-                      class that wants its skeletons taking the hits instead,
-                      it is in direct conflict with the Summons tree
-VISUAL:               spurs of bone snap outward from wherever he was struck,
-                      then withdraw
-FLAVOR:               Touching him has consequences. He has never once
-                      warned anyone about this and does not consider that
-                      dishonest.
-
-SKILL NAME:           Wrecking Ball
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 8
-TYPE:                 active
-AXIS POSITION:        9 (of 10)
---- delivery ---
-CAST:                 melee
-SHAPE:                line (movement path)
-RANGE:                range medium (320px)
-TARGETS:              each enemy in path once, uncapped
---- output ---
-DAMAGE TIER:          medium (28)
-PACE:                 slow (4000ms)
-DOMAIN:               physical
---- effects ---
-RIDERS:               knockdown — stun 1500ms per enemy hit; caster displaced
-                      320px
-DOT:                  none
-AFFECTS:              enemies, self (movement)
---- automation ---
-TRIGGER:              ENEMY_BREACHES_RING (100px) — direction resolved away
-                      from the densest cluster per the movement ruling
-THREAT:               high
---- growth ---
-RANK ADDS:            +4 damage; +150ms knockdown every 3rd rank
---- identity ---
-ENGINE:               neutral
-COST:                 320px of forced displacement on a class that has spent
-                      the whole run carefully placing summons between itself
-                      and the swarm. It will regularly throw the Necromancer
-                      out from behind his own wall
-VISUAL:               he tucks into a hunched roll and the bone plating
-                      closes over him; enemies go down like skittles
-FLAVOR:               Undignified. Effective. He has made his peace with the
-                      trade, and the skeletons do not comment.
-
-SKILL NAME:           Grasp of Death
-CLASS / TREE / TIER:  necromancer / Marrow / tier_code 9
-TYPE:                 active
-AXIS POSITION:        10 (of 10)
---- delivery ---
-CAST:                 instant-at-range
-SHAPE:                single target (nearest)
-RANGE:                melee long (120px)
-TARGETS:              1
---- output ---
-DAMAGE TIER:          high (40)
-PACE:                 slow (4000ms)
-DOMAIN:               spiritual
---- effects ---
-RIDERS:               drain — heals caster for 60% of damage dealt
-DOT:                  none
-AFFECTS:              enemies + self
---- automation ---
-TRIGGER:              SELF_HP_BELOW_X (65%), falling back to
-                      LOWEST_HP_ENEMY within 120px when at full health
-THREAT:               some
---- growth ---
-RANK ADDS:            +6 damage (the 60% drain ratio does not scale, so heal
-                      grows with damage automatically)
---- identity ---
-ENGINE:               feeds — the highest single-hit damage in the class
-                      finishes things, and finishing things is +5 Essence
-COST:                 120px. The only reliable heal in the Necromancer's
-                      kit requires him to be within arm's reach of something
-                      hostile, which is where he is least able to survive
-                      being wrong
-VISUAL:               a skeletal hand of black vapour closes around the
-                      target's chest; a thread of dull red runs back along
-                      his arm
-FLAVOR:               He is not taking their life. Life does not transfer
-                      like that. He is taking the arrangement — the pattern
-                      that was holding them together — and wearing it for a
-                      while.
-
----
-
 ## TREE: SUMMONS
 
 Role read: **the commander, and the class's answer to every role at once.**
@@ -633,10 +772,47 @@ that makes a solo Necromancer feel like a five-man group.
 
 ---
 
-SKILL NAME:           Summon Skeleton
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 0
-TYPE:                 active
+SKILL NAME:           Entropy Cascade
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 0  (built tier 1, unlocks at level 1)
+TYPE:                 stacking_dot
 AXIS POSITION:        1 (of 10)
+--- delivery ---
+CAST:                 instant-at-range
+SHAPE:                single target
+RANGE:                range medium (360px)
+TARGETS:              1 per cast (nearest below max stacks)
+--- output ---
+DAMAGE TIER:          low (8 per tick)
+PACE:                 very fast (600ms)
+DOMAIN:               spiritual
+--- effects ---
+RIDERS:               stacks to 6 on a single target
+DOT:                  8 per 600ms for 5000ms, stacks to 6
+AFFECTS:              enemies
+--- automation ---
+TRIGGER:              TARGET_UNAFFECTED — nearest enemy below max stacks, so
+                      it spreads across the swarm and tops up as stacks lapse
+THREAT:               none
+--- growth ---
+RANK ADDS:            +2 damage per tick; +1 maximum stack every 5th rank
+--- identity ---
+ENGINE:               feeds — a fully stacked cascade kills things without
+                      the Necromancer's attention, and every death is Essence
+COST:                 it takes five seconds of stacking before it is doing
+                      real damage, and swarm enemies frequently die to
+                      something else first. Against anything short-lived it
+                      is entirely wasted throughput
+VISUAL:               small motes of dark come away from the target and do
+                      not fall; each stack adds another and they orbit
+                      faster
+FLAVOR:               Nothing he does here is destruction. He is only
+                      declining, very precisely, to hold something together.
+PRIMITIVE:            plague
+
+SKILL NAME:           Summon Skeleton
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 1  (built tier 2, unlocks at level 3)
+TYPE:                 active
+AXIS POSITION:        2 (of 10)
 --- delivery ---
 CAST:                 summoned
 SHAPE:                none
@@ -674,11 +850,12 @@ VISUAL:               the floor cracks and a hand comes up first; the rest
 FLAVOR:               The first one took him a year and left him weeping.
                       This one took a second and a half. He is not sure
                       which of those facts he should be more troubled by.
+PRIMITIVE:            summon
 
 SKILL NAME:           Unleash the Monster
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 1
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 2  (built tier 3, unlocks at level 5)
 TYPE:                 active
-AXIS POSITION:        2 (of 10)
+AXIS POSITION:        3 (of 10)
 --- delivery ---
 CAST:                 summoned
 SHAPE:                none
@@ -713,11 +890,12 @@ VISUAL:               a seam opens in the air at waist height and something
                       much larger than the seam comes through sideways
 FLAVOR:               He does not name it. Naming a thing implies you expect
                       to be introducing it to someone.
+PRIMITIVE:            summon
 
 SKILL NAME:           Unyielding Beast
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 2
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 3  (built tier 4, unlocks at level 8)
 TYPE:                 passive
-AXIS POSITION:        3 (of 10)
+AXIS POSITION:        4 (of 10)
 --- delivery ---
 CAST:                 n/a
 SHAPE:                n/a
@@ -750,11 +928,12 @@ VISUAL:               the Monster's hide takes a wet obsidian sheen; hits
 FLAVOR:               He rebuilt it. Again. There is more of the repair in
                       it now than there ever was of the original, and it has
                       never once objected.
+PRIMITIVE:            passive { summonHp }
 
 SKILL NAME:           Necrotic Presence
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 3
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 4  (built tier 5, unlocks at level 11)
 TYPE:                 passive
-AXIS POSITION:        4 (of 10)
+AXIS POSITION:        5 (of 10)
 --- delivery ---
 CAST:                 n/a
 SHAPE:                n/a
@@ -787,49 +966,12 @@ VISUAL:               a faint grey-green cast to every summon he owns, like
 FLAVOR:               They are not separate things that he happens to own.
                       They are the far ends of a single intention, and the
                       intention has been getting stronger.
-
-SKILL NAME:           Dark Matter
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 4
-TYPE:                 active
-AXIS POSITION:        5 (of 10)
---- delivery ---
-CAST:                 summoned
-SHAPE:                none
-RANGE:                n/a (spawns adjacent)
-TARGETS:              n/a — cap 2, +1 per 6 ranks
---- output ---
-DAMAGE TIER:          none (0)
-PACE:                 slow (4000ms)
-DOMAIN:               spiritual
---- effects ---
-RIDERS:               summon persists until killed
-DOT:                  none
-AFFECTS:              own summons
---- automation ---
-TRIGGER:              COOLDOWN_READY, gated on being under cap
-THREAT:               none
---- growth ---
-RANK ADDS:            +10% summon damage and HP per rank; +1 cap every 6th
-                      rank
---- identity ---
-ENGINE:               consumes 25 Essence
-COST:                 it sits between Skeleton and Monster and is clearly
-                      better than neither. At three seconds it has stopped
-                      being too slow to be a replaceable body, which resolves
-                      half its old problem and sharpens the other half: it is
-                      now a Skeleton that costs 25 Essence instead of 10. Its
-                      argument is that it is the only summon that scales into
-                      the Dark Matter tree's fantasy
-VISUAL:               a fold of not-quite-space that moves like something
-                      swimming, edges refusing to resolve
-FLAVOR:               It came out of the same door as the Monster and he
-                      does not believe it is the same kind of thing. He has
-                      stopped asking.
+PRIMITIVE:            passive { summonDmg, summonHp }
 
 SKILL NAME:           Blood Skeleton
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 5
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 5  (built tier 6, unlocks at level 15)
 TYPE:                 passive
-AXIS POSITION:        6 (of 10) — BRANCH PAIR 'necro_skeleton_branch'
+AXIS POSITION:        6 (of 10)
                       (exclusive with Marrow Skeleton)
 --- delivery ---
 CAST:                 n/a
@@ -863,11 +1005,12 @@ VISUAL:               the bone runs dark and wet at the joints; they move
                       faster and hit like they mean it
 FLAVOR:               He sharpened them. That is the entire explanation and
                       it is more disquieting than a longer one would be.
+PRIMITIVE:            passive { summonDmg }
 
 SKILL NAME:           Marrow Skeleton
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 5
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 5  (built tier 6, unlocks at level 15)
 TYPE:                 passive
-AXIS POSITION:        6 (of 10) — BRANCH PAIR 'necro_skeleton_branch'
+AXIS POSITION:        6 (of 10)
                       (exclusive with Blood Skeleton)
 --- delivery ---
 CAST:                 n/a
@@ -903,6 +1046,7 @@ FLAVOR:               He asked them to stand between. That is all. They have
                       never needed to be asked twice, and he has never
                       worked out whether that is loyalty or just the shape
                       he built them in.
+PRIMITIVE:            passive { summonHp }
 
 > **Role fork note:** this is the clearest tank-versus-DPS choice in the
 > game and it is already in your code. In co-op, Marrow Skeleton is a real
@@ -912,7 +1056,7 @@ FLAVOR:               He asked them to stand between. That is all. They have
 > without adding systems.
 
 SKILL NAME:           Tentacles of Dark Matter
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 6
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 6  (built tier 7, unlocks at level 19)
 TYPE:                 passive
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -948,11 +1092,12 @@ VISUAL:               the swing arc trails black filaments that keep moving
 FLAVOR:               It has been reaching for things slightly beyond where
                       its arms end for some time now. He noticed. He decided
                       to encourage it.
+PRIMITIVE:            passive { summonDmg }
 
 SKILL NAME:           Death Channel
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 7
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 8  (built tier 9, unlocks at level 30)
 TYPE:                 channel
-AXIS POSITION:        8 (of 10)
+AXIS POSITION:        9 (of 10)
 --- delivery ---
 CAST:                 instant-at-range
 SHAPE:                beam
@@ -994,45 +1139,10 @@ VISUAL:               a thin unlit line between his hand and the target —
 FLAVOR:               Dying is not an event. It is a process with a rate,
                       and the rate can be adjusted by someone standing
                       nearby who knows how.
-
-SKILL NAME:           Entropy Cascade
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 8
-TYPE:                 stacking_dot
-AXIS POSITION:        9 (of 10)
---- delivery ---
-CAST:                 instant-at-range
-SHAPE:                single target
-RANGE:                range medium (360px)
-TARGETS:              1 per cast (nearest below max stacks)
---- output ---
-DAMAGE TIER:          low (8 per tick)
-PACE:                 very fast (600ms)
-DOMAIN:               spiritual
---- effects ---
-RIDERS:               stacks to 6 on a single target
-DOT:                  8 per 600ms for 5000ms, stacks to 6
-AFFECTS:              enemies
---- automation ---
-TRIGGER:              TARGET_UNAFFECTED — nearest enemy below max stacks, so
-                      it spreads across the swarm and tops up as stacks lapse
-THREAT:               none
---- growth ---
-RANK ADDS:            +2 damage per tick; +1 maximum stack every 5th rank
---- identity ---
-ENGINE:               feeds — a fully stacked cascade kills things without
-                      the Necromancer's attention, and every death is Essence
-COST:                 it takes five seconds of stacking before it is doing
-                      real damage, and swarm enemies frequently die to
-                      something else first. Against anything short-lived it
-                      is entirely wasted throughput
-VISUAL:               small motes of dark come away from the target and do
-                      not fall; each stack adds another and they orbit
-                      faster
-FLAVOR:               Nothing he does here is destruction. He is only
-                      declining, very precisely, to hold something together.
+PRIMITIVE:            channel
 
 SKILL NAME:           Army of the Dead
-CLASS / TREE / TIER:  necromancer / Summons / tier_code 9
+CLASS / TREE / TIER:  necromancer / Summons / tier_code 9  (built tier 10, unlocks at level 36)
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -1071,8 +1181,7 @@ VISUAL:               the whole floor goes at once — not a rising, a
 FLAVOR:               He does not remember all of their names. He remembers
                       that they had them, and he considers that the minimum
                       decency the arrangement allows.
-
----
+PRIMITIVE:            summon
 
 ## TREE: DARK MATTER
 
@@ -1084,7 +1193,7 @@ and no bone to soak with, and dies to the first thing that reaches him.
 ---
 
 SKILL NAME:           Dark Energy Blip
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 0
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 0  (built tier 1, unlocks at level 1)
 TYPE:                 active
 AXIS POSITION:        1 (of 10)
 --- delivery ---
@@ -1114,9 +1223,10 @@ COST:                 eighteen damage. It is the tick-over of the class, and
 VISUAL:               a fast dark bead with a faint violet halo, no trail
 FLAVOR:               A small hole where a small amount of the world used to
                       be. It closes almost immediately. Almost.
+PRIMITIVE:            bolt
 
 SKILL NAME:           Dark Matter Bomb
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 1
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 1  (built tier 2, unlocks at level 3)
 TYPE:                 active
 AXIS POSITION:        2 (of 10)
 --- delivery ---
@@ -1148,9 +1258,10 @@ VISUAL:               a heavier, slower bead that visibly bends the light
 FLAVOR:               Weight without mass. He has tried to explain the
                       distinction twice and both listeners changed the
                       subject.
+PRIMITIVE:            bolt
 
 SKILL NAME:           Tainted Dark Matter
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 2
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 2  (built tier 3, unlocks at level 5)
 TYPE:                 active
 AXIS POSITION:        3 (of 10)
 --- delivery ---
@@ -1185,6 +1296,7 @@ VISUAL:               the bead breaks on impact into a clinging violet
 FLAVOR:               Tainted is his word, not a technical one. What he
                       means is that some of it stays, and that what stays
                       remembers what it was for.
+PRIMITIVE:            bolt
 
 > **Port addition flagged:** "Tainted" has no rider in ToH — 22 damage on a
 > 6s cooldown, strictly worse than the tier below. I gave it the
@@ -1192,7 +1304,7 @@ FLAVOR:               Tainted is his word, not a technical one. What he
 > flagged as such.
 
 SKILL NAME:           Hex of Entropy
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 3
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 3  (built tier 4, unlocks at level 8)
 TYPE:                 active
 AXIS POSITION:        4 (of 10)
 --- delivery ---
@@ -1229,9 +1341,10 @@ VISUAL:               a brief violet lattice snapping into place over a small
 FLAVOR:               A hex is a request that something proceed slightly
                       worse than it had intended to. It is rarely refused
                       and never resented, because nothing notices.
+PRIMITIVE:            hazard
 
 SKILL NAME:           Abyssal Blast
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 4
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 4  (built tier 5, unlocks at level 11)
 TYPE:                 active
 AXIS POSITION:        5 (of 10)
 --- delivery ---
@@ -1264,9 +1377,10 @@ VISUAL:               a wedge of the room simply stops being lit, and
 FLAVOR:               He opened it once by accident and spent four years
                       learning to do it on purpose. He is fairly sure the
                       accident was not his.
+PRIMITIVE:            cone
 
 SKILL NAME:           Dark Energy Rift
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 5
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 5  (built tier 6, unlocks at level 15)
 TYPE:                 active
 AXIS POSITION:        6 (of 10)
 --- delivery ---
@@ -1296,9 +1410,10 @@ COST:                 placed at range with no lingering field — it resolves
 VISUAL:               a disc of floor drops out of existence for a fraction
                       of a second and comes back with everything on it broken
 FLAVOR:               The room is not as continuous as the room believes.
+PRIMITIVE:            hazard
 
 SKILL NAME:           Blight
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 6
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 6  (built tier 7, unlocks at level 19)
 TYPE:                 passive (aura)
 AXIS POSITION:        7 (of 10)
 --- delivery ---
@@ -1343,9 +1458,10 @@ VISUAL:               a low violet-black haze at knee height, thickest at
 FLAVOR:               He stopped noticing it years ago. Everyone else
                       notices it immediately, and this is most of why he
                       lives where he lives.
+PRIMITIVE:            passive { aura }
 
 SKILL NAME:           Internal Collapse
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 7
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 7  (built tier 8, unlocks at level 24)
 TYPE:                 stacking_dot
 AXIS POSITION:        8 (of 10)
 --- delivery ---
@@ -1378,9 +1494,10 @@ VISUAL:               the target's outline pulls inward slightly with each
 FLAVOR:               Nothing is added. That is what he finds elegant about
                       it. The shape simply discovers that it has been
                       supporting itself on nothing for some time.
+PRIMITIVE:            plague
 
 SKILL NAME:           Dark Energy Beam
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 8
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 8  (built tier 9, unlocks at level 30)
 TYPE:                 channel
 AXIS POSITION:        9 (of 10)
 --- delivery ---
@@ -1417,9 +1534,10 @@ VISUAL:               a wide unlit column, edges fraying, the target lit
 FLAVOR:               Not a beam of anything. A sustained argument that the
                       space between them should not be occupied, and he is
                       better at arguing than most things are at existing.
+PRIMITIVE:            channel
 
 SKILL NAME:           Singularity
-CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 9
+CLASS / TREE / TIER:  necromancer / Dark Matter / tier_code 9  (built tier 10, unlocks at level 36)
 TYPE:                 active
 AXIS POSITION:        10 (of 10)
 --- delivery ---
@@ -1460,3 +1578,137 @@ VISUAL:               a fixed black point that does not grow; the floor
 FLAVOR:               He is not making a hole. Holes are an absence of
                       material. He is making a place where the arrangement
                       of things has agreed to stop being negotiable.
+PRIMITIVE:            hazard + gravity_pull
+
+---
+
+## CONFLICTS — BOTH READINGS DELIBERATE, CASEY RULES
+
+Not split, not averaged, not quietly resolved. Each is a place where the two
+source documents disagree and each side has an argument.
+
+### 1. Is the skeleton branch pair exclusive?
+
+| | reading | what it costs |
+|---|---|---|
+| **the archive** | **not exclusive.** A player may take Blood Skeleton and Marrow Skeleton both, and pays two of four passive slots to be a generalist | half the passive budget on one fork. The other three Summons passives — Unyielding Beast, Necrotic Presence, Tentacles — then compete for the remaining two slots |
+| **the previous revision** | **exclusive.** One arm or the other, and the choice is the class's role fork | one passive slot, and a real decision. But the "role fork" only reads as a fork if the engine refuses both |
+
+**What ships:** both nodes sit at built tier 6 with the same prerequisite and
+nothing in the loader refuses the pair, so **the engine currently behaves as
+"not exclusive"** — by absence rather than by decision.
+
+**What each implies.** Exclusive makes the Necromancer the one class with a
+declared spec choice, and the previous revision leans on that: it is cited as
+"a model for how the other thirteen classes could express role choice without
+adding systems." Non-exclusive makes the passive budget the limiter instead,
+which is the roster-wide mechanism ruling 4 already established, and needs no
+new machinery. **The two readings also disagree about the class's node count**
+— exclusivity is why the previous revision carried 31 blocks rather than 30.
+
+### 2. Where does Osteo Aura go, if anywhere?
+
+The previous revision's tree ruling says "Osteo Aura and Grasp of Death replace
+Quill and Banshee's Wail." **Half of that shipped**: Grasp of Death is built at
+Marrow tier 9. The other half did not — Quill is built at tier 6 and Osteo Aura
+does not exist in code.
+
+The previous revision then tabled Osteo Aura rather than deleting it, on the
+grounds that Marrow already holds ten nodes. That table is kept. The question it
+leaves open is unchanged and is Casey's: **Osteo Aura needs a slot, and taking
+one means naming the node it displaces.** The mechanism it wants is built.
+
+### 3. Tree shape, still open and still roster-wide
+
+Carried forward unresolved from the previous revision. The built Marrow and
+Summons trees are **branching**; this document is linear with one branch pair.
+Picking either renumbers every tier in all fourteen files. Unchanged by this
+merge.
+
+---
+
+## RECORDED, NOT ACTED ON
+
+### The summon taunt split — ruled, scheduled, not implemented
+
+**Casey's ruling: DPS summons should not taunt. Defensive summons should.**
+Filed as KNOWN-DEFECTS #30 and deliberately left unbuilt.
+
+Three summons in the game taunt on their own attack, which is what makes the
+minion rather than its owner the thing an enemy is sent at. Two of the three are
+this class's:
+
+| summon | taunt | tree |
+|---|---|---|
+| skeleton | 1600 ms | Summons |
+| the Monster | 3000 ms | Summons |
+| druid bear | 2200 ms | (Druid) |
+
+**Why it is live from the moment Marrownaut is slotted.** Marrownaut's pull is a
+persistent field and resolves third in the targeting order; a summon's taunt is
+a cast effect and resolves first. A Necromancer running Marrow-tank plus Summons
+has both, and they alternate — the skeleton wins its 1600 ms window, the field
+reclaims the enemy between windows, and aggro oscillates for as long as both are
+on the field. **The precedence is correct and deliberate**: a taunt somebody cast
+must beat a state somebody is merely in. The oscillation is the ruling's absence,
+not the precedence's fault.
+
+### The `bonelord` trait, and what Marrownaut's permanence did to it — UNRULED
+
+`bonelord` is the Necromancer's **character trait**, and it is a different thing
+from the Marrow skill that shares a name. The character carries no weapons and
+four summon mounts instead; fuse all four into one and the result is called the
+Marrownaut, and while it stands the player is meant to gain **100% of its
+Defense and 50% of its Vitality**.
+
+**The Vitality half does what it says.** Measured: a fused mount with 200 max HP
+puts +100 Vitality on the sheet, once, and it stays put.
+
+**The Defense half reads the wrong number, and Marrownaut-the-skill has just
+made that matter.** The term takes the *player's* Defense rather than the
+*mount's*, and adds it back to the player. Until now that multiplied zero — the
+Necromancer's base Defense is 0, so the term was inert and nobody could see it.
+Marrownaut-the-skill puts +20 Defense on the sheet permanently. Measured, with
+the form slotted and one fused mount standing, Defense over eight successive
+stat recomputations:
+
+    20 → 40 → 60 → 80 → 100 → 120 → 140 → 160 → 180 …
+
+It does not converge and there is no ceiling. Each recomputation adds the sheet's
+current Defense to itself, so the growth continues for as long as both the form
+is slotted and the fused mount is alive — which, now that the form is permanent,
+is the rest of the run.
+
+**Two separate faults in one term:** it reads the wrong body's Defense, and
+reading the player's makes the term its own input. Reproduce with
+`node tools/bonelord_probe.mjs`. **Not fixed here** — recorded, unruled, and
+flagged as the most consequential thing this merge turned up.
+
+---
+
+## OPEN ITEMS
+
+Live questions. Re-checked against what has shipped since the archive was
+written; three of the archive's items are now closed and are marked as such.
+
+- **`NEEDS aura`** — ~~Osteo Aura, Blight~~. **CLOSED.** The aura mechanism ships
+  and Blight uses it. Osteo Aura's problem is a tree slot, not a primitive.
+- **`NEEDS channel`** — ~~Death Channel, Dark Energy Beam~~. **CLOSED.** `channel`
+  ships and both nodes use it.
+- **`NEEDS gravity_pull`** — ~~Singularity~~. **CLOSED.** `gravity_pull` ships and
+  Singularity uses it. It remains the only shipped user of that primitive.
+- **Rank-gated primitive** — Dark Matter Bomb's rank-8 splash would make the node
+  `bolt` at low rank and `bolt + mortar` above it. Nothing else in the roster
+  changes shape with rank. Still open, and now also blocked on the fact that
+  `mortar` is not a primitive: the splash would have to be a rider on the bolt.
+- **Wrecking Ball** — a dash that damages along its path. Ships as `line`, which
+  resolves from the caster's position and does not carry the caster along it.
+  The displacement is not expressed. Still open.
+- **Stake, ruled ranged and still melee** — the one place this document
+  deliberately disagrees with shipped code. See its block.
+- **The `_heal` bypass** — Grasp of Death makes the Necromancer the fourteenth
+  class touching it. Still open.
+- **Summons tier gap** — built tier 8 is empty and tier 6 is doubled by the
+  branch pair. Left as-is; tree structure is deferred roster-wide.
+- **Branch pair exclusivity** — see CONFLICTS above. Casey rules.
+- **`bonelord` × Marrownaut** — see RECORDED above. Unruled.
