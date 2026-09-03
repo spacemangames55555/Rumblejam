@@ -1,41 +1,53 @@
 # SOURCE CONVERSIONS — ARCHIVE
 
-These are the class conversion documents **as written**, before any roster
-ruling was applied to them. They are kept verbatim.
+Fourteen class conversion documents plus the roster ruling they were revised
+against. Kept verbatim as supplied.
 
 ## This is not the live document set
 
-For every class here there is a counterpart in `docs/design/classes/`, and the
-counterpart is the one the project works from. It is the same document carried
-forward: same structure, same 30-node layout, same authored fields — plus a
-`## ROSTER RULING APPLIED` block at the top recording what was decided, and the
-edits those decisions required.
+Every file here has a counterpart in `docs/design/classes/`, and the counterpart
+is the one the project works from.
 
 | | `docs/design/toh/` | `docs/design/classes/` |
 |---|---|---|
-| what it is | the conversion as authored | the conversion after rulings |
+| what it is | the conversions as supplied | the conversions the project works from |
 | read by a gate | no | yes — `class_doc_gate`, `statname_gate` |
 | read by the code | no | numbers are read out of it by `sim_test` |
 | edited going forward | no | yes |
 
-The five files here were re-supplied after the `classes/` set already existed.
-Comparing them shows the `classes/` versions are the later ones — they carry
-ruling blocks these do not, and the diffs run one way: pace values rebucketed,
-rider durations cut to ~70% of their skill's cooldown, tree names resolved
-against the built trees.
+## Which version is later, per file
 
-Concretely, per file:
+**Thirteen of the fourteen are earlier.** Their `classes/` counterparts carry a
+`## ROSTER RULING APPLIED` block these do not, and the diffs run one way: pace
+values rebucketed to the fixed table, rider durations cut to ~70% of their
+skill's cooldown, tree names resolved against the built trees.
 
-- **priest** — trees renamed Light→Reckoning and Rebuke→Judgment; Grace held.
-- **druid** — tree names held (the built names are crossed against their own
-  contents; filed as KNOWN-DEFECTS #20). Pace and rider passes applied.
-- **blacksmith** — tree names held. Pace and rider passes applied.
-- **bard** — tree names held; the built pair Cadence/Requiem carried no role
-  signal strong enough to decide the mapping. Pace and rider passes applied.
-- **samurai** — the largest divergence. The archived version documents 30 nodes
-  and a `Resolve` engine; the live version documents 26, supersedes that engine
-  with the built one, dissolves the Stances tree, and logs the missing Bow tree
-  as a real gap.
+**`roster-ruling-pace-damage-engines.md` is also earlier** — 96 lines here
+against 236 in `classes/`. The longer version is not an expansion; it *corrects*
+this one. This version computes a slotted build's firing rate as `8 / mean_cd`
+and gets 0.51/sec. The `classes/` version replaces that with `sum(1/cd)`, gets
+2.62/sec, and notes that the corrected formula reproduces the game's measured
+4.1/sec while the old one does not. Working from the copy in this directory
+would reinstate an arithmetic error the project has already found and fixed.
+
+**`necromancer.md` is the exception, and it is not simply later or earlier.**
+It and its `classes/` counterpart are two branches off a common ancestor, and
+neither contains the other:
+
+| | `toh/necromancer.md` | `classes/necromancer.md` |
+|---|---|---|
+| pace values | original (9000ms, 45000ms, 60000ms…) | rebucketed (600/1200/2000/4000ms, capstones) |
+| `PRIMITIVE:` field | on all 30 nodes | absent |
+| `NEEDS aura` / `NEEDS channel` / `NEEDS gravity_pull` | flagged, with an OPEN ITEMS list | absent |
+| Dark Matter summon (tier_code 4) | cut per ruling — 30 skills | present — 31 skills |
+| Stake | ranged, 360px projectile ("on Casey's ruling") | melee, 84px on breach |
+| branch pair exclusivity | dropped; costs two of four passive slots | exclusive |
+| roster ruling block | absent | present |
+
+So this file carries a primitive-classification pass and two rulings the live
+document has never received, while the live document carries a pace pass this
+one has never received. **Merging them is a decision, not a copy**, and it has
+not been made.
 
 ## Why keep them
 
@@ -53,11 +65,17 @@ describe edits to a document nobody can read.
    without a new exemption per file.
 3. **They are not authoritative.** Where an archived file and its `classes/`
    counterpart disagree, the `classes/` file is the project's document, and the
-   built engine outranks both on structural matters.
+   built engine outranks both on structural matters. The Necromancer is the one
+   place where that rule loses information, which is why it is called out above
+   rather than left to be discovered.
 
 ## Open
 
-Whether these five supersede their `classes/` counterparts is **Casey's call and
-has not been made.** This README records the observed relationship — later
-revision in `classes/`, source here — not a ruling. If the intent was to replace
-the live set rather than archive the source, say so and the direction reverses.
+Which set is authoritative is **Casey's call and has not been made.** This
+README records the observed relationship, not a ruling. Two things need
+deciding rather than assuming:
+
+- whether the `classes/` set stands as the live one (the README assumes it does
+  because the gates and `sim_test` already read it);
+- what happens to the Necromancer, where taking either side whole discards work
+  that only exists on the other.
