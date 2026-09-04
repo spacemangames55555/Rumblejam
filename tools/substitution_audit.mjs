@@ -46,6 +46,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { TREES, TREES_BY_CLASS } from '../js/skills.js';
+import { RIDERS_BY_PRIMITIVE } from '../js/compose.js';
 import { CLASS_DOCS } from './class_doc_gate.mjs';
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -71,6 +72,8 @@ function docBlocks(file) {
       name: field('SKILL NAME').replace(/\s*\[.*$/, '').trim(),
       type: field('TYPE').toLowerCase(),
       dmg: field('DAMAGE TIER').toLowerCase(),
+      cast: field('CAST').toLowerCase(),
+      riderText: (field('RIDERS') + ' ' + field('DOT')).toLowerCase(),
       riders: (field('RIDERS') + ' ' + field('DOT') + ' ' + field('CAST') + ' ' + field('SHAPE')).toLowerCase(),
     };
   });
@@ -115,7 +118,58 @@ const CONCEPTS = [
   { re: /\btaunt|magnet aggro\b/, needs: b => b.riders.includes('taunt') || b.kinds.includes('summon'), say: 'a taunt' },
 ];
 
-let typeMismatch = [], dmgMismatch = [], conceptMiss = [], unmatched = 0, compared = 0;
+// DELIVERY. The document's CAST field is a closed vocabulary — self, melee,
+// projectile, instant-at-range, placed, summoned — and each word rules some
+// primitives in and the rest out. Only the three unambiguous directions are
+// checked, because "instant-at-range built as a bolt" is a travel-time quibble
+// and this tool is worthless the moment it starts making those.
+//
+// This is the check that would have caught Smite. Its document says melee, a
+// 72px circle and a breach-ring trigger; what shipped is a projectile at range
+// picking the highest-HP enemy. Type agreed (both active), damage agreed (both
+// 20-ish), concept found no keyword to grab — so the first three checks all
+// passed a skill that was rebuilt from the ground up.
+const PLACED = ['hazard', 'trap', 'summon', 'gravity_pull'];
+const MELEE = ['strike', 'cone', 'line'];
+const DELIVERY = [
+  { when: c => c.startsWith('melee'), bad: b => b.kinds.includes('bolt') && !b.kinds.some(k => MELEE.includes(k)),
+    say: 'melee', got: 'a projectile at range' },
+  { when: c => c.startsWith('placed'), bad: b => b.kinds.length && !b.kinds.some(k => PLACED.includes(k)),
+    say: 'placed on the ground', got: 'nothing that is placed' },
+  { when: c => c.startsWith('projectile'), bad: b => b.kinds.length && !b.kinds.includes('bolt'),
+    say: 'a projectile', got: 'no projectile' },
+];
+
+// RIDERS. A document naming a rider the build does not carry splits two ways,
+// and the split is the whole point: if the engine HAS that rider, dropping it
+// was a substitution; if the engine does not, it is one of the gaps §2 of the
+// ledger is already counting. Reporting them together would let a real omission
+// hide inside a known engine limitation.
+const RIDER_WORDS = [
+  [/\bweaken|damage down\b/, ['weakenDamage', 'weakenDefense'], 'weaken'],
+  [/\bslow\b/, ['slow'], 'slow'],
+  [/\bstun\b/, ['stun'], 'stun'],
+  // KNOCKDOWN IS NOT KNOCKBACK, and conflating them reported a faithful skill.
+  // The Necromancer's Wrecking Ball says "knockdown — stun 1500ms per enemy hit;
+  // caster displaced 320px" and ships as `stun` plus `carry`, which is that
+  // sentence exactly. The documents spell displacement "knockback" and spell a
+  // floor-stun "knockdown"; only the first is the engine's `knockback`.
+  [/\bknockback|knocks? back\b/, ['knockback'], 'knockback'],
+  [/\bknockdown\b/, ['stun'], 'knockdown (a stun)'],
+  [/\broot\b/, ['root'], 'root'],
+  [/\btaunt\b/, ['taunt'], 'taunt'],
+  [/\bpierce|pierces\b/, ['pierce'], 'pierce'],
+  [/\bsplash\b/, ['splash'], 'splash'],
+];
+// Named by documents, absent from IMPACT_RIDERS/SHAPE_RIDERS/BOLT_RIDERS. These
+// are gaps, and listing them here is what keeps them out of the substitution
+// column — the audit must not report a missing `confusion` as somebody's slip.
+const RIDER_GAPS = [
+  [/\bconfus/, 'confusion'], [/\bfear|flee\b/, 'fear'], [/\bstealth|conceal/, 'stealth'],
+  [/\bcleanse|immunity\b/, 'cleanse'],
+];
+
+let typeMismatch = [], dmgMismatch = [], conceptMiss = [], deliveryMiss = [], riderMiss = [], riderGap = [], unmatched = 0, compared = 0;
 
 for (const [docName, classId] of Object.entries(CLASS_DOCS)) {
   if (ONLY && docName !== ONLY) continue;
@@ -142,6 +196,34 @@ for (const [docName, classId] of Object.entries(CLASS_DOCS)) {
     } else if (!docNone && d.dmg && b.damage === 0 && b.type === 'active' && !b.persist && b.kinds.length) {
       dmgMismatch.push({ cls: docName, name: d.name, id: sk.id, doc: d.dmg.split(' ')[0], code: 'deals nothing' });
     }
+    for (const d2 of DELIVERY) {
+      if (d2.when(d.cast) && d2.bad(b)) {
+        deliveryMiss.push({ cls: docName, name: d.name, id: sk.id, doc: d2.say,
+          code: `${d2.got} (${b.kinds.join('+')})` });
+      }
+    }
+    // "DOES THE ENGINE HAVE THIS RIDER" IS THE WRONG QUESTION. The right one is
+    // whether the engine has it ON THIS PRIMITIVE, because RIDERS_BY_PRIMITIVE
+    // is where the real restriction lives: `hazard` and `aura` take `slow` and
+    // nothing else, `trap` and `summon` take none at all. Asked globally, the
+    // Necromancer's Hex of Entropy reads as somebody dropping a weaken; asked
+    // per-primitive, it is a hazard, and a hazard cannot hold a weaken — which
+    // is the ledger's §2 gap rather than anyone's slip. A missing rider only
+    // counts against the author when the author could have written it.
+    const legal = new Set(b.kinds.flatMap(k => RIDERS_BY_PRIMITIVE[k] || []));
+    for (const [re, keys, word] of RIDER_WORDS) {
+      if (!re.test(d.riderText) || keys.some(k => b.riders.includes(k))) continue;
+      if (keys.some(k => legal.has(k))) {
+        riderMiss.push({ cls: docName, name: d.name, id: sk.id, doc: `a ${word} rider`,
+          code: b.riders.length ? `riders ${b.riders.join(', ')}` : 'no riders at all' });
+      } else {
+        riderGap.push({ cls: docName, name: d.name, id: sk.id, doc: word,
+          code: `${b.kinds.join('+') || b.type} cannot carry it` });
+      }
+    }
+    for (const [re, word] of RIDER_GAPS) {
+      if (re.test(d.riderText)) riderGap.push({ cls: docName, name: d.name, id: sk.id, doc: word, code: 'no such rider in the engine at all' });
+    }
     for (const c of CONCEPTS) {
       if (c.re.test(d.riders) && !c.needs(b)) {
         conceptMiss.push({ cls: docName, name: d.name, id: sk.id, want: c.say, code: b.kinds.join('+') || b.type });
@@ -160,8 +242,30 @@ console.log(`## TYPE — the document and the build disagree about passive vs ac
 typeMismatch.forEach(r => console.log(row(r)));
 console.log(`\n## DAMAGE — one says it hurts and the other does not  (${dmgMismatch.length})`);
 dmgMismatch.forEach(r => console.log(row(r)));
+console.log(`\n## DELIVERY — the document and the build disagree about how it reaches  (${deliveryMiss.length})`);
+deliveryMiss.forEach(r => console.log(row(r)));
+console.log(`\n## RIDERS DROPPED — the document names a rider the engine HAS and the build omits  (${riderMiss.length})`);
+riderMiss.forEach(r => console.log(row(r)));
 console.log(`\n## CONCEPT — the document names a mechanic the build cannot deliver  (${conceptMiss.length})  [heuristic]`);
 conceptMiss.forEach(r => console.log(row(r)));
 
-const hard = typeMismatch.length + dmgMismatch.length;
-console.log(`\n${hard} exact mismatch(es), ${conceptMiss.length} heuristic flag(s), over ${compared} comparable skills.`);
+console.log(`\n## RIDERS WITH NO FORM — the document names a rider that has no legal place on what shipped  (${riderGap.length})  [a gap, not a slip]`);
+riderGap.forEach(r => console.log(row(r)));
+
+const hard = typeMismatch.length + dmgMismatch.length + deliveryMiss.length + riderMiss.length;
+console.log(`\n${hard} exact mismatch(es), ${conceptMiss.length} heuristic flag(s), `
+  + `${riderGap.length} engine gap(s), over ${compared} comparable skills.`);
+
+// The skills that tripped more than one check are the rebuilds rather than the
+// slips — Smite disagrees on delivery AND riders, Undertow on damage AND
+// delivery AND concept. A one-check flag is usually a detail; three is a
+// different skill wearing the same name.
+const byId = new Map();
+for (const [label, list] of [['type', typeMismatch], ['damage', dmgMismatch], ['delivery', deliveryMiss],
+                             ['riders', riderMiss], ['concept', conceptMiss]])
+  for (const r of list) byId.set(r.id, [...(byId.get(r.id) || []), label]);
+const deep = [...byId].filter(([, v]) => v.length > 1).sort((a, b) => b[1].length - a[1].length);
+if (deep.length) {
+  console.log(`\n## REBUILT, NOT ADJUSTED — skills that fail more than one check  (${deep.length})`);
+  deep.forEach(([id, v]) => console.log(`  ${id.padEnd(22)} ${v.length} checks: ${v.join(', ')}`));
+}
