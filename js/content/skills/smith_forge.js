@@ -98,7 +98,7 @@ export const SMITH_FORGE = [
     trigger: { kind: 'NEAREST', range: T.sparksRange },
     cooldown: T.sparksCd,
     compose: [{
-      kind: 'plague', damage: T.sparksDamage, range: T.sparksRange,
+      kind: 'plague', damage: T.sparksDamage,
       tick: T.sparksTick, duration: T.sparksDuration,
     }],
     ranks: R,

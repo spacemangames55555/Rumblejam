@@ -111,7 +111,19 @@ export const HUN_HOUNDMASTER = [
     trigger: { kind: 'NEAREST', range: T.bayRange },
     cooldown: T.hound2Cd,
     compose: [{
-      kind: 'summon', archetype: 'wolf', maxAlive: 1, move: 'orbit',
+      // TWO, BECAUSE THE CEILING COUNTS THE ARCHETYPE AND NOT THE SKILL. Both
+      // hounds are `wolf`, and `maxAlive` is enforced as "how many of this
+      // archetype may stand" — so at 1 the first hound filled the quota and this
+      // node, whose whole content is a second hound, could never spawn anything.
+      // A purchasable node that does nothing.
+      //
+      // Same shape as the Monster drawing on a summon-slot pool only the
+      // skeleton minted, and the same resolution: stop sharing the first
+      // summon's ceiling and declare the correct one. Two hounds may stand, and
+      // this is the node that says so — the archetype stays `wolf` because they
+      // are both hounds, which keeps the per-archetype ceiling doing its real
+      // job of stopping one animal crowding out a pack tree.
+      kind: 'summon', archetype: 'wolf', maxAlive: 2, move: 'orbit',
       count: 1, slotted: false,
       revives: true, reviveBase: T.houndReviveBase, revivePerAnimal: T.houndRevivePer,
       hp: T.hound2Hp, radius: T.hound2Radius, spawnRadius: T.hound2Spawn,

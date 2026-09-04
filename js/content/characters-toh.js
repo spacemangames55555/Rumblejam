@@ -37,9 +37,16 @@ export const CHARACTERS_TOH = [
     stats: { ingenuity: 10 }, weapon: null,
     trait: {
       key: 'bonelord', mounts: 4, boneDustRadius: 200, boneDustRepair: 6,
-      marrownautGritShare: 1.0, marrownautVitShare: 0.5,
+      // PLACEHOLDER RATE, ANCHORED AND NOT TUNED. The Defence half used to be a
+      // `share` of a Defence the mount does not have; a minion carries no
+      // mitigation of any kind, so its bulk is its maxHp and that is what both
+      // halves now read. 0.09 makes a Monster-scale mount (220 HP, the largest
+      // this class fields) worth about +20 Defence — the same grant Marrownaut's
+      // own form gives, which is the only comparable number in the class.
+      // Casey sets the real one.
+      marrownautGritPerHp: 0.09, marrownautVitShare: 0.5,
     },
-    desc: `Bonelord: no weapons — 4 summon mounts instead. Summons inherit 100% of your stats on top of ${STAT_NAME.ingenuity}, combine in the shop, and can be picked up (E) and redeployed. Enemies dying within 200 drop bone-dust that repairs your most damaged summon by 6 HP. Combine all four mounts into one and it becomes the Marrownaut: while it stands you gain 100% of its ${STAT_NAME.grit} and 50% of its Vitality.` },
+    desc: `Bonelord: no weapons — 4 summon mounts instead. Summons inherit 100% of your stats on top of ${STAT_NAME.ingenuity}, combine in the shop, and can be picked up (E) and redeployed. Enemies dying within 200 drop bone-dust that repairs your most damaged summon by 6 HP. Combine all four mounts into one and it becomes the Marrownaut: while it stands you gain ${STAT_NAME.grit} and Vitality from its bulk.` },
 
   { id: 'toh_druid', name: 'Druid', sym: '◐', roles: ['economy', 'summons'],
     stats: { greed: 5 }, weapon: 'fanblade',

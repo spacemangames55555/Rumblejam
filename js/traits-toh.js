@@ -152,10 +152,13 @@ export function tohStats(sim, p, s) {
       s.ferocity += p.contractsDone * t.ferPerContract;
       break;
     case 'bonelord': {
-      // Marrownaut: all four mounts fused into one, and it lends you its bulk
+      // Marrownaut: all four mounts fused into one, and it lends you its bulk.
+      // BOTH HALVES READ THE MOUNT — see `marrownaut()` for why the Defence half
+      // cannot read a Defence the mount does not have, and for the loop this
+      // replaced.
       const m = marrownaut(sim, p);
       if (m) {
-        s.grit += Math.round((m.grit || 0) * t.marrownautGritShare);
+        s.grit += Math.round((m.maxHp || 0) * t.marrownautGritPerHp);
         s.vitality += Math.round((m.maxHp || 0) * t.marrownautVitShare);
       }
       break;
@@ -347,13 +350,32 @@ function beastWeight(b) { return Math.max(1, b.tier || 1) >= 2 ? 2 : 1; }
 // never earns the Hunter a replacement.
 function beastsOf(sim, p) { return ownedUnits(sim, p).filter(s => !s.carried && !s.down); }
 
+// THE FUSED MOUNT, and the one number it has to lend.
+//
+// THIS USED TO RETURN THE PLAYER'S OWN DEFENCE. `grit: p.stats.grit` — the
+// sheet from the PREVIOUS recompute — which the caller then added back to the
+// sheet it was building. The term was its own input, so every recompute added
+// the running total to itself again: 20 → 40 → 60 → 80 → … with no ceiling,
+// for as long as the mount stood.
+//
+// It multiplied zero for as long as nothing put Defence on this character's
+// sheet, which is why it survived. Marrownaut-the-skill puts +20 there
+// permanently, and a dormant loop became a live one.
+//
+// WHAT IT READS NOW, AND WHY IT CANNOT BE WHAT THE TRAIT TEXT ASKS FOR. The
+// text says "100% of ITS Defence". A minion has no Defence: the spawn record
+// carries hp, maxHp, an attack and a movement mode, and `hurtMinion` subtracts
+// raw damage with no mitigation step anywhere. **A mount's entire durability is
+// its maxHp**, which is also what the Vitality half already reads. So both
+// halves read the same real number at different rates, and neither reads
+// anything this term writes.
 function marrownaut(sim, p) {
   const mine = sim.summons.filter(s => s.owner === p.idx && !s.dead);
   if (mine.length !== 1) return null;
   const s = mine[0];
   // one summon holding every mount: tier IV is four mounts fused
   if ((s.tier || 1) < 4) return null;
-  return { grit: p.stats ? p.stats.grit : 0, maxHp: s.maxHp };
+  return { maxHp: s.maxHp };
 }
 
 function nearestEnemyWithin(sim, x, y, r) {

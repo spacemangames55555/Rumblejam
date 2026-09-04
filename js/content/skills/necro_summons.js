@@ -9,10 +9,11 @@
 // have: the Monster carries the widest taunt, the skeletons a narrower one, and
 // the caster none. Summons are already targetable, aggro-taking and mortal.
 //
-// ALL FOUR SUMMONS DECLARE `attackCd` IN MILLISECONDS. Four built summons
-// across hun_pincer and wd_swarm declare seconds in that field and are the
-// confirmed cause of the two worst tree_dps outliers, +4123% and +2313%. Every
-// value below is four digits for a reason.
+// ALL FOUR SUMMONS DECLARE `attackCd` IN MILLISECONDS. Every value below is
+// four digits for a reason — and the reason is no longer a warning to the next
+// reader: the four summons that declared seconds are converted, and the loader
+// now refuses any `attackCd` under 50 outright. A comment could only tell
+// somebody who read it.
 
 import { docTrigger, rankPer, RANK_NONE } from '../doc_conversion.js';
 
@@ -218,7 +219,7 @@ export const NECRO_SUMMONS = [
     // not expressible — `applyPlague` refreshes rather than stacking — so this
     // is a refreshing DoT and the stack count is reported, not faked.
     compose: [{ kind: 'plague', damage: T.cascadeDamage, duration: T.cascadeDur,
-      tick: T.cascadeTick, range: T.cascadeRange, spreadRadius: 0 }],
+      tick: T.cascadeTick, spreadRadius: 0 }],
     ranks: rankPer(2, T.cascadeDamage),
   },
   {
