@@ -175,7 +175,7 @@ export const NECRO_DARK_MATTER = [
     // not expressible — `applyPlague` refreshes rather than stacking — so this
     // is a refreshing DoT and the stack count is reported, not faked.
     compose: [{ kind: 'plague', damage: T.collapseDamage, duration: T.collapseDur,
-      tick: T.collapseTick, range: T.collapseRange, spreadRadius: 0 }],
+      tick: T.collapseTick, spreadRadius: 0 }],
     ranks: rankPer(2, T.collapseDamage),
   },
   {

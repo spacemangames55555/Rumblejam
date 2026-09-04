@@ -48,7 +48,7 @@
 export const TUNING = {
   loosedDamage: 13, loosedRange: 250, loosedSpeed: 450, loosedRadius: 7, loosedCd: 1250,
   loosedHp: 30, loosedRadiusBody: 12, loosedSpawnRadius: 60,
-  loosedAttackCd: 1.1, loosedBeastDamage: 8, loosedBeastArc: 1.5, loosedBeastReach: 58,
+  loosedAttackCd: 1100, loosedBeastDamage: 8, loosedBeastArc: 1.5, loosedBeastReach: 58,
   jawsWeight: 0.15,
 
   // ---- branch A: Crossfire (the Hunter's half of the jaw) ----

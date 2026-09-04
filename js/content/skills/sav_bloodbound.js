@@ -74,7 +74,7 @@ export const SAV_BLOODBOUND = [
     trigger: { kind: 'NEAREST', range: T.bleedRange },
     cooldown: T.bleedCd,
     compose: [{
-      kind: 'plague', damage: T.bleedDamage, range: T.bleedRange,
+      kind: 'plague', damage: T.bleedDamage,
       tick: T.bleedTick, duration: T.bleedDuration,
     }],
     ranks: R,

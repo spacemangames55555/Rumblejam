@@ -45,12 +45,12 @@ export const TUNING = {
   pandemicDamage: 26, pandemicDuration: 5200, pandemicRange: 300, pandemicCd: 7800,
 
   // ---- branch B: Fetish (stop being outnumbered) ----
-  fetishHp: 26, fetishRadius: 12, fetishSpawnRadius: 60, fetishAttackCd: 1.1,
+  fetishHp: 26, fetishRadius: 12, fetishSpawnRadius: 60, fetishAttackCd: 1100,
   fetishDamage: 7, fetishMaxAlive: 2, fetishDuration: 14000, fetishPct: 60, fetishCd: 6000,
   hutWeight: 0.18,
-  gravecallHp: 34, gravecallRadius: 13, gravecallSpawnRadius: 70, gravecallAttackCd: 1.0,
+  gravecallHp: 34, gravecallRadius: 13, gravecallSpawnRadius: 70, gravecallAttackCd: 1000,
   gravecallDamage: 9, gravecallMaxAlive: 2, gravecallDuration: 15000, gravecallCd: 6600,
-  legionHp: 46, legionRadius: 15, legionSpawnRadius: 80, legionAttackCd: 0.9,
+  legionHp: 46, legionRadius: 15, legionSpawnRadius: 80, legionAttackCd: 900,
   legionDamage: 12, legionMaxAlive: 3, legionDuration: 17000, legionCd: 9400,
 
   rankDamage: 0.04, rankDuration: 0.03,
@@ -88,7 +88,7 @@ export const WD_SWARM = [
     select: 'densest_cluster',
     trigger: { kind: 'NEAREST', range: T.contagionRange },
     cooldown: T.contagionCd,
-    compose: [{ kind: 'plague', damage: T.contagionDamage, duration: T.contagionDuration, range: T.contagionRange, ...DOLL, riders: {} }],
+    compose: [{ kind: 'plague', damage: T.contagionDamage, duration: T.contagionDuration, ...DOLL, riders: {} }],
     ranks: R,
   },
   {
@@ -120,7 +120,7 @@ export const WD_SWARM = [
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.pandemicRange, count: 3 },
     cooldown: T.pandemicCd,
-    compose: [{ kind: 'plague', damage: T.pandemicDamage, duration: T.pandemicDuration, range: T.pandemicRange, ...DOLL, riders: {} }],
+    compose: [{ kind: 'plague', damage: T.pandemicDamage, duration: T.pandemicDuration, ...DOLL, riders: {} }],
     ranks: R,
   },
 

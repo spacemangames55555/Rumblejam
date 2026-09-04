@@ -231,9 +231,20 @@ export function mechanics(skill, rank = 1) {
   // (js/compose.js:415, :431). Read off the same expression rather than
   // re-derived, so the number cannot disagree with where the zone lands.
   const placed = steps.find(s => s.kind === 'trap' || s.kind === 'hazard');
+  // AND A TRIGGER'S REACH IS `range` OR `radius` DEPENDING ON THE TRIGGER, which
+  // is why the fallback reads both. `NEAREST` looks out to a `range`;
+  // `PROXIMITY` and `CROWD` look out to a `radius`. They are the same question —
+  // how far this skill looks — asked by two kinds of trigger, so a skill whose
+  // steps carry no reach of their own takes whichever its trigger declares.
+  //
+  // `plague` is where this surfaced: the primitive has no reach at all (its
+  // spread is `spreadRadius` and its target comes from the trigger), and four
+  // contagions had been carrying a decorative `range` on the step that the
+  // engine never read. Removing it left `wd_pandemic` — the one contagion on a
+  // PROXIMITY trigger — with no range to print.
   const range = ranges.length ? Math.max(...ranges)
     : placed ? (t.radius ?? t.range ?? placed.radius ?? null)
-      : (t.range ?? null);
+      : (t.range ?? t.radius ?? null);
   const radii = steps.map(radiusOfStep).filter(v => v !== null && v !== undefined);
   const radius = radii.length ? Math.max(...radii) : null;
   // A zone whose placement reach and own size are the same number is the common

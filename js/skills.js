@@ -371,6 +371,62 @@ export const HEAL_RADIUS_PENDING = new Set([
   'sav_second_wind', 'smith_mend_the_seam',
 ]);
 
+// A CONTAGION THAT DOES NOT SPREAD IS A DOT WITH A MISLEADING NAME.
+//
+// `plague` seeds every enemy within `spreadRadius` at cast. Nine skills use the
+// primitive and are rendered to the player as "contagion". Three spread. The
+// other six divide into two very different cases that looked identical in the
+// content:
+//
+//   FOUR DECLARE `range` AND NO `spreadRadius`. `plague` does not read `range`
+//   at all — the three that work declare `spreadRadius` and no `range` — so the
+//   field was doing nothing and the spread was never happening. The player is
+//   told "Shape contagion · Range 215" and gets a single-target DoT.
+//
+//   ONE DECLARES `spreadRadius: 0` AND MEANS TO SPREAD. `necro_internal_collapse`
+//   — its own flavour says "and spreads".
+//
+// AND ONE IS CORRECT AND MUST NOT BE "FIXED". `necro_entropy_cascade` declares
+// `spreadRadius: 0` deliberately: its flavour is "It does not spread. It simply
+// keeps arriving", and it covers a crowd by re-targeting on TARGET_THRESHOLD
+// rather than by contagion. A blanket rule against a zero radius would break
+// the one node that is right. So a deliberate single-target plague is NAMED
+// here, which is the point — the whole defect is that "meant it" and "forgot"
+// were indistinguishable.
+export const PLAGUE_SINGLE_TARGET = new Map([
+  ['necro_entropy_cascade', 'flavour is "It does not spread. It simply keeps arriving" — it covers a crowd by re-targeting, not by contagion'],
+]);
+// A RATCHET, exactly like HEAL_RADIUS_PENDING. These five are named as
+// spreading and do not; the radius each should carry is Casey's to set and is
+// not invented here. Nothing may join this list — a new plague must declare a
+// radius or be filed as single-target above — and the gate stays red until it
+// is empty.
+export const PLAGUE_SPREAD_PENDING = new Set([
+  'wd_contagion', 'wd_pandemic', 'sav_bleed_them', 'smith_sparks',
+  'necro_internal_collapse',
+]);
+
+function plagueStepProblems(s, step) {
+  const out = [];
+  const deliberate = PLAGUE_SINGLE_TARGET.has(s.id);
+  const pending = PLAGUE_SPREAD_PENDING.has(s.id);
+  // `range` is not a field of this primitive. Carrying one is how four skills
+  // came to look like they had a reach when they had no spread.
+  if (step.range !== undefined) {
+    out.push(`${s.id}: plague step declares "range" — the primitive does not read it. A contagion's reach is "spreadRadius"`);
+  }
+  if (!(step.spreadRadius > 0) && !deliberate && !pending) {
+    out.push(`${s.id}: plague step needs a positive "spreadRadius" — without one it seeds nobody and is a single-target DoT rendered to the player as a contagion. If that is intended, file it in PLAGUE_SINGLE_TARGET with a reason`);
+  }
+  if (step.spreadRadius > 0 && pending) {
+    out.push(`${s.id}: declares a spreadRadius but is still listed in PLAGUE_SPREAD_PENDING — remove it from the list`);
+  }
+  if (step.spreadRadius > 0 && deliberate) {
+    out.push(`${s.id}: is filed in PLAGUE_SINGLE_TARGET and declares a spreadRadius — one of the two is wrong`);
+  }
+  return out;
+}
+
 // Anything that reaches across the floor has to say how far. One function for
 // both, because a heal's radius and an ally shield's radius are the same
 // question and a second copy would drift.
@@ -417,6 +473,22 @@ function summonStepProblems(s, step) {
   }
   for (const k of ['hp', 'radius', 'spawnRadius', 'attackCd']) {
     if (!(step[k] > 0)) out.push(`${s.id}: summon step needs a positive "${k}"`);
+  }
+  // `attackCd` IS MILLISECONDS, AND FOUR SUMMONS SAID SECONDS. `wd_fetish`,
+  // `wd_gravecall`, `wd_legion` and `hun_loosed` declared 1.1, 1.0, 0.9 and 1.1
+  // against every neighbour's 900–1500. The spawn path divides by 1000, so those
+  // minions swung about a thousand times a second and their two trees were the
+  // roster's worst damage outliers by an order of magnitude — `wd_swarm` at
+  // +727% and `hun_pincer` at +1862% of their own classes.
+  //
+  // IT WAS FOUND, WRITTEN INTO A COMMENT, AND LEFT. A positive-number check
+  // cannot catch it: 1.1 is positive. The unit is the thing that was wrong, and
+  // the only way a unit error is visible to a loader is a floor — a swing faster
+  // than any real one is not a fast summon, it is a seconds value. 50ms is well
+  // under the fastest shipped swing (900ms) and far above any plausible
+  // seconds-value (a 20-second swing would be 0.02).
+  if (step.attackCd > 0 && step.attackCd < 50) {
+    out.push(`${s.id}: summon attackCd ${step.attackCd} is below 50 — this field is MILLISECONDS and that looks like seconds. ${step.attackCd} would mean ${Math.round(1000 / step.attackCd)} swings a second; write ${Math.round(step.attackCd * 1000)} if you meant ${step.attackCd}s`);
   }
   if (step.slotted === undefined) out.push(`${s.id}: summon step must declare "slotted" — whether it occupies a summon slot or is a timed extra`);
   // EVERY SUMMON MUST BE BOUNDED BY SOMETHING. Three bounds are legitimate and
@@ -709,6 +781,7 @@ function assertTrees() {
             if (!allowed.includes(r)) problems.push(`${s.id}: rider "${r}" is not valid on ${step.kind}`);
           }
           if (step.kind === 'summon') problems.push(...summonStepProblems(s, step));
+          if (step.kind === 'plague') problems.push(...plagueStepProblems(s, step));
           problems.push(...reachStepProblems(s, step));
         }
       } else if (s.type !== 'passive') {
