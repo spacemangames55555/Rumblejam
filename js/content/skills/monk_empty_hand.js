@@ -159,7 +159,8 @@ export const MONK_EMPTY_HAND = [
     chi: T.gatherChi,
     trigger: { kind: 'SELF_THRESHOLD', pct: T.gatherPct },
     cooldown: T.gatherCd,
-    compose: [{ kind: 'heal', amount: T.gatherAmount, radius: T.gatherRadius, ...CHI }],
+    compose: [{ kind: 'heal', amount: T.gatherAmount,
+      selection: 'all_in_range', shape: 'point', searchRadius: T.gatherRadius, ...CHI }],
     ranks: R,
   },
   {

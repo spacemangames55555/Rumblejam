@@ -38,6 +38,112 @@ export const SELECT_KINDS = [
   'self',
 ];
 
+// ---------------------------------------------------------------- allies
+//
+// THE SAME QUESTION POINTED THE OTHER WAY. `select` above answers "which enemy",
+// and a heal has to answer "which ally" — so the two live in one file and share
+// the ranking shape rather than growing a parallel module.
+//
+// WHAT COULD NOT BE SHARED, and why there are two functions rather than one.
+// The RANKING is generic over anything with a position and a health bar. The
+// CANDIDATE SET is not: enemies come out of a spatial grid and are filtered by
+// `attackable` (active, not nest-shielded); allies are a party of at most eight
+// in a plain array, filtered by whether a heal can land on them at all. Forcing
+// one function to do both would mean passing a fake grid or a null predicate at
+// every call site, which is more machinery than the duplication it saves.
+//
+// A DOWNED ALLY IS NOT A CANDIDATE. `_heal` refuses a downed player outright, so
+// selecting one would spend the whole cast on a body that cannot receive it —
+// and under single-target selection that is the entire heal wasted, not a
+// fraction of an area. The old primitive iterated every live player and let
+// `_heal` refuse silently, which was harmless when the heal hit everyone and is
+// not harmless now.
+export const ALLY_SELECT_KINDS = [
+  'self',                 // the caster only — a real design choice, not a gap
+  'nearest_ally',         // closest living ally
+  'nearest_n',            // closest N living allies; N is the step's `count`
+  'furthest_ally',        // the one out on their own, within searchRadius
+  'lowest_hp_ally',       // lowest current HP — the one closest to going down
+  'lowest_hp_pct_ally',   // lowest fraction of max — the one worst off for their size
+  'all_in_range',         // every living ally within searchRadius
+];
+
+// WHERE THE EFFECT LANDS, which is a separate question from who it finds.
+// Orthogonal by construction: every selection pairs with every shape, and the
+// pair is what produces healer variety out of two small fields.
+export const HEAL_SHAPES = [
+  'point',            // the selected target(s) and nobody else
+  'aoe_on_target',    // an area centred on the selected target
+  'aoe_on_caster',    // an area centred on the healer, wherever the target was
+];
+
+// Selections that need somewhere to look. `self` is the only one that does not.
+export const ALLY_SELECT_NEEDS_SEARCH = new Set(
+  ALLY_SELECT_KINDS.filter(k => k !== 'self'));
+// Shapes that need a size.
+export const SHAPE_NEEDS_EFFECT = new Set(['aoe_on_target', 'aoe_on_caster']);
+
+function healable(q) { return q && !q.gone && !q.downed; }
+
+function rankAlly(kind, q, x, y) {
+  switch (kind) {
+    case 'nearest_ally': case 'nearest_n': return -dist2(q, x, y);
+    case 'furthest_ally': return dist2(q, x, y);
+    case 'lowest_hp_ally': return -q.hp;
+    // Guarded against a zero max: a sheet mid-build can report one, and
+    // dividing by it would rank that ally as -Infinity or NaN and either
+    // always win or never be chosen.
+    case 'lowest_hp_pct_ally': return -(q.hp / Math.max(1, q.stats ? q.stats.vitality : 1));
+    default: return -dist2(q, x, y);
+  }
+}
+
+// The allies a heal finds. Returns [] when nothing qualifies, so a caller that
+// forgets to check length heals nobody rather than everybody.
+//
+// RANGE IS PART OF THE CANDIDATE SET, exactly as line of sight is for enemies.
+// A selector that could reach past its own searchRadius would hand every heal
+// infinite reach — the defect the previous pass closed for `radius` and the one
+// this must not reopen through a new door.
+// THE CASTER IS NOT THEIR OWN ALLY, for every selector that ranks. This is not
+// a preference: the caster stands at distance zero from themself, so a
+// `nearest_ally` that included them would return the caster every single time
+// and be an exact synonym for `self`. The same argument retires
+// `lowest_hp_ally` on any healer who is the hurt one. A vocabulary where five of
+// seven entries collapse into one is not a vocabulary.
+//
+// `all_in_range` IS THE EXCEPTION and keeps the caster, because it is the name
+// for what heals already did — the old loop covered everyone inside the radius,
+// the healer included, and three shipped heals are that behaviour.
+const RANKED_EXCLUDES_CASTER = new Set(
+  ['nearest_ally', 'nearest_n', 'furthest_ally', 'lowest_hp_ally', 'lowest_hp_pct_ally']);
+
+export function selectAllies(kind, allies, caster, searchRadius, count) {
+  if (kind === 'self') return healable(caster) ? [caster] : [];
+  // FAILS CLOSED. A non-finite or non-positive radius is no reach, not every
+  // reach — the same rule `reachOf` states for the primitive. At zero reach the
+  // caster still passes their own distance check, which is the established
+  // fallback: an unusable radius makes a heal caster-only, never party-wide.
+  const r = Number.isFinite(searchRadius) && searchRadius > 0 ? searchRadius : 0;
+  const r2 = r * r;
+  const skipCaster = RANKED_EXCLUDES_CASTER.has(kind);
+  const list = [];
+  for (const q of allies) {
+    if (skipCaster && q === caster) continue;
+    if (!healable(q)) continue;
+    if (dist2(q, caster.x, caster.y) > r2) continue;
+    list.push(q);
+  }
+  if (!list.length) return [];
+  if (kind === 'all_in_range') return list;
+  const ranked = list
+    .map(q => ({ q, sc: rankAlly(kind, q, caster.x, caster.y) }))
+    .sort((a, b) => b.sc - a.sc)
+    .map(o => o.q);
+  if (kind === 'nearest_n') return ranked.slice(0, Math.max(1, count | 0));
+  return ranked.slice(0, 1);
+}
+
 // Roles the level cares about, in the order a player would prioritise them.
 // Read off tags the sim already sets; this adds no new bookkeeping.
 function objectivePriority(e) {

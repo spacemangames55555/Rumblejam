@@ -52,7 +52,7 @@ import { DRUID_BEASTS, TUNING as BEASTS_TUNING } from './content/skills/druid_be
 import { TRIGGER_KINDS, TRIGGER_PARAMS, SPATIAL_TRIGGERS, TRIGGER_FROM } from './triggers.js';
 import { PRIMITIVE_KINDS, RIDERS_BY_PRIMITIVE, PRIMITIVE_SELECTS, stepPicksTarget } from './compose.js';
 import { isDomain } from './domains.js';
-import { SELECT_KINDS } from './selectors.js';
+import { SELECT_KINDS, ALLY_SELECT_KINDS, HEAL_SHAPES, ALLY_SELECT_NEEDS_SEARCH, SHAPE_NEEDS_EFFECT } from './selectors.js';
 import { ENGINE_SCALE } from './enginescale.js';
 import { MOVE_KINDS } from './minions.js';
 
@@ -432,11 +432,70 @@ function plagueStepProblems(s, step) {
 // question and a second copy would drift.
 function reachStepProblems(s, step) {
   const out = [];
-  if (step.kind === 'heal' && !(step.radius > 0) && !HEAL_RADIUS_PENDING.has(s.id)) {
-    out.push(`${s.id}: heal step needs a positive "radius" — without one the range check compares against NaN and the heal reaches every ally on the map`);
-  }
-  if (step.kind === 'heal' && step.radius > 0 && HEAL_RADIUS_PENDING.has(s.id)) {
-    out.push(`${s.id}: declares a radius but is still listed in HEAL_RADIUS_PENDING — remove it from the list`);
+  // A HEAL DECLARES WHO IT FINDS AND WHERE THE EFFECT LANDS. Two fields, both
+  // required, because the single `radius` they replace was ambiguous: it was a
+  // search radius and an effect radius at once, and no skill could say "find
+  // the ally furthest out, then drop an area on THEM".
+  //
+  // THE TEN PENDING HEALS ARE EXEMPT AND STAY EXEMPT. They declare nothing at
+  // all, which the fail-closed default makes `self` x `point` — the caster and
+  // nobody else, which is exactly what the previous pass's `reachOf` already
+  // made them. Their selection and shape are a design ruling per skill, not
+  // something a load assertion can pick, so the ratchet holds them and the gate
+  // stays red. Nothing new may join: a heal not on the list must declare.
+  if (step.kind === 'heal') {
+    const pending = HEAL_RADIUS_PENDING.has(s.id);
+    if (step.radius !== undefined) {
+      out.push(`${s.id}: heal step declares "radius" — that field is split. "searchRadius" is how far the healer looks, "effectRadius" is how big the area is`);
+    }
+    if (!pending) {
+      if (!ALLY_SELECT_KINDS.includes(step.selection)) {
+        out.push(`${s.id}: heal step needs a "selection" — one of ${ALLY_SELECT_KINDS.join('/')}. There is no default: who a heal finds is the skill's decision`);
+      }
+      if (!HEAL_SHAPES.includes(step.shape)) {
+        out.push(`${s.id}: heal step needs a "shape" — one of ${HEAL_SHAPES.join('/')}`);
+      }
+      // A LOOK NEEDS A DISTANCE. Every selection but `self` searches, and a
+      // missing radius is the defect this whole area exists because of: the
+      // range check compares against NaN, every comparison is false, and the
+      // heal reaches every ally on the map.
+      if (ALLY_SELECT_NEEDS_SEARCH.has(step.selection) && !(step.searchRadius > 0)) {
+        out.push(`${s.id}: selection "${step.selection}" searches for a target and needs a positive "searchRadius"`);
+      }
+      if (step.selection === 'self' && step.searchRadius !== undefined) {
+        out.push(`${s.id}: selection "self" looks for nobody, so "searchRadius" reads as a reach that is not in force — self-only is a design choice and needs no radius`);
+      }
+      // AN AREA NEEDS A SIZE, and a point must not claim one. Both directions,
+      // because a `point` heal carrying an effectRadius is a skill somebody
+      // meant to be an area and half-converted.
+      if (SHAPE_NEEDS_EFFECT.has(step.shape) && !(step.effectRadius > 0)) {
+        out.push(`${s.id}: shape "${step.shape}" is an area and needs a positive "effectRadius"`);
+      }
+      if (step.shape === 'point' && step.effectRadius !== undefined) {
+        out.push(`${s.id}: shape "point" heals what selection found and nothing else, so "effectRadius" is not in force — use an area shape or drop the field`);
+      }
+      if (step.selection === 'nearest_n' && !(step.count >= 1 && Number.isInteger(step.count))) {
+        out.push(`${s.id}: selection "nearest_n" needs a whole "count" of at least 1 — N is the skill's decision`);
+      }
+      if (step.selection !== 'nearest_n' && step.count !== undefined) {
+        out.push(`${s.id}: "count" only means something to selection "nearest_n"`);
+      }
+    } else if (step.selection !== undefined || step.shape !== undefined
+      || step.searchRadius !== undefined || step.effectRadius !== undefined) {
+      out.push(`${s.id}: declares heal targeting but is still listed in HEAL_RADIUS_PENDING — remove it from the list`);
+    }
+    // THE NaN GUARD, ON BOTH RADII. A declared radius that is not a finite
+    // positive number is the same defect wearing a value: `reachOf` and
+    // `selectAllies` both fail closed at runtime, and this refuses it at load so
+    // nobody has to rely on that.
+    for (const k of ['searchRadius', 'effectRadius']) {
+      if (step[k] !== undefined && !(Number.isFinite(step[k]) && step[k] > 0)) {
+        // String(), not JSON.stringify(): the values this catches are exactly
+        // the ones JSON cannot represent, and reporting NaN and Infinity as
+        // "null" would send the next reader looking for a missing field.
+        out.push(`${s.id}: "${k}" is ${String(step[k])} — a radius must be a finite positive number, and a range check against anything else reaches everybody`);
+      }
+    }
   }
   // ALLY-FACING ABSORB. `allies` is the opt-in; everything else here exists so
   // the opt-in cannot be half-declared.

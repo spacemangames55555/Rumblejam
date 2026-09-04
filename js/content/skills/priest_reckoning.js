@@ -109,7 +109,12 @@ export const PRIEST_RECKONING = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.solacePct },
     cooldown: T.solaceCd,
-    compose: [{ kind: 'heal', amount: T.solaceAmount, radius: T.solaceRadius, ...MARKS }],
+    compose: [{ kind: 'heal', amount: T.solaceAmount,
+      // RESTATED, NOT REINTERPRETED. The old single `radius` both searched and
+      // applied, so `all_in_range` x `point` at the same number is exactly what
+      // it did. `self` x `aoe_on_caster` with the number in `effectRadius` is
+      // the same behaviour under a different label — see the split's note.
+      selection: 'all_in_range', shape: 'point', searchRadius: T.solaceRadius, ...MARKS }],
     ranks: R,
   },
   {

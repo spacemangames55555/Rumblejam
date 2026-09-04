@@ -11,7 +11,7 @@
 // each one is marked. A magnitude literal in this file is a bug.
 
 import { domainMult } from './domains.js';
-import { selectTarget, selectTargets } from './selectors.js';
+import { selectTarget, selectTargets, selectAllies, SHAPE_NEEDS_EFFECT } from './selectors.js';
 import { scalePerFor } from './enginescale.js';
 
 // Rank scaling. LINEAR against base, never compounding: `damage *= 1.04` per
@@ -648,12 +648,66 @@ export const PRIMITIVES = {
   // `by: p` names the CASTER, which is what `_heal` attributes Grace to. It
   // matches how the Priest's judgment-mark payout already credits its owner
   // (js/game.js:2716), so healing an ally and marking one feed the same hook.
+  // HEALING IS TWO INDEPENDENT QUESTIONS AND USED TO BE ONE FIELD.
+  //
+  // Every heal in the game fired on the CASTER's own health and hit everyone
+  // inside one `radius`, so a healer could not react to an ally being hurt and
+  // could not aim. `selection` now answers who it finds and `shape` answers
+  // where the effect lands; they are orthogonal, and the pair is what makes a
+  // healer's identity out of two small fields.
+  //
+  // THE TWO RADII ARE NOT THE SAME NUMBER. `searchRadius` is how far the healer
+  // LOOKS; `effectRadius` is how big the area IS. The old single `radius` was
+  // both at once because selection and shape were fused — a heal that finds the
+  // ally furthest out at 400 and drops a 150 area on them cannot be written with
+  // one number, and that skill is the point of the system.
+  //
+  // BACK-COMPATIBLE BY CONSTRUCTION. A step that declares neither field is
+  // `self` × `point`, which is what the previous pass's fail-closed `reachOf`
+  // already made a radius-less heal do. Nothing changes for a skill nobody has
+  // converted yet.
   heal(sim, p, skill, step, rank, grid, out) {
     const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
-    const r = reachOf(step.radius);
-    for (const q of sim.livePlayers()) {
-      const dx = q.x - p.x, dy = q.y - p.y;
-      if (dx * dx + dy * dy > r * r) continue;
+    const selection = step.selection || 'self';
+    const shape = step.shape || 'point';
+    const found = selectAllies(selection, sim.livePlayers(), p, step.searchRadius, step.count);
+    if (!found.length) return;
+    // THE EFFICIENCY GATE, and it runs AFTER selection because selection is what
+    // decides whose wound is being measured. A heal fires only if it can deliver
+    // at least half its value: worth 10, it waits for someone missing 5.
+    //
+    // It self-scales, which is why it replaces a per-skill threshold — a big
+    // heal waits for a big wound and a small one fires on a scratch, with no
+    // number to tune per skill.
+    //
+    // ANY, NOT ALL. A multi-target heal fires when ONE of its targets qualifies.
+    // Casey named this the obvious reading and it is implemented as such; the
+    // alternative is `.every` on this line and nothing else. Requiring all would
+    // make a heal weaker the more allies it reaches, which inverts the point of
+    // reaching them.
+    //
+    // MEASURED AGAINST THE STEP'S OWN NUMBER — the figure the description shows.
+    // `_heal` scales the delivered amount by the recipient's Recovery on top of
+    // this, so what actually lands is this or more; the gate is permissive by
+    // exactly that margin rather than strict.
+    const half = amt / 2;
+    if (!found.some(q => (q.stats ? q.stats.vitality : q.hp) - q.hp >= half)) return;
+    // WHERE IT LANDS. `point` heals what was found; either area re-derives the
+    // recipients from a centre, which is why a shape can reach allies selection
+    // never looked at — an area on the furthest ally covers whoever is beside
+    // THEM, not whoever is beside the healer.
+    let recipients = found;
+    if (SHAPE_NEEDS_EFFECT.has(shape)) {
+      const er = reachOf(step.effectRadius);
+      const cx = shape === 'aoe_on_caster' ? p.x : found[0].x;
+      const cy = shape === 'aoe_on_caster' ? p.y : found[0].y;
+      recipients = sim.livePlayers().filter(q => {
+        if (q.downed) return false;
+        const dx = q.x - cx, dy = q.y - cy;
+        return dx * dx + dy * dy <= er * er;
+      });
+    }
+    for (const q of recipients) {
       // The popup reports what LANDED, not what was asked for — `_heal` scales
       // the request by Recovery and floors it, so the requested figure is no
       // longer the number that reached the bar.

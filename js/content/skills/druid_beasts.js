@@ -166,7 +166,8 @@ export const DRUID_BEASTS = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.rejuvPct },
     cooldown: T.rejuvCd,
-    compose: [{ kind: 'heal', amount: T.rejuvAmount, radius: T.rejuvRadius }],
+    compose: [{ kind: 'heal', amount: T.rejuvAmount,
+      selection: 'all_in_range', shape: 'point', searchRadius: T.rejuvRadius }],
     ranks: R,
   },
   {

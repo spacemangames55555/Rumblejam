@@ -111,6 +111,10 @@ export function rangeOfStep(step) {
   if (step.range !== undefined) return step.range;
   if (step.reach !== undefined) return step.reach;
   if (step.length !== undefined) return step.length;
+  // A heal's reach is how far it LOOKS for somebody. `self` declares none,
+  // correctly — it looks for nobody — so this returns null and the description
+  // states no range rather than inventing one.
+  if (step.kind === 'heal' && step.searchRadius !== undefined) return step.searchRadius;
   return null;
 }
 
@@ -118,8 +122,13 @@ export function rangeOfStep(step) {
 // a summon's is its hitbox and tells a player nothing.
 export function radiusOfStep(step) {
   switch (step.kind) {
-    // exactly the three primitives whose `radius` the sim actually reads
-    case 'trap': case 'hazard': case 'heal': return step.radius ?? null;
+    // exactly the primitives whose `radius` the sim actually reads
+    case 'trap': case 'hazard': return step.radius ?? null;
+    // A HEAL HAS TWO AND THE AREA IS THE ONE THAT IS A SIZE. `searchRadius` is
+    // how far the healer LOOKS, which is a reach and belongs beside Range;
+    // `effectRadius` is how big the area IS, which is what Radius has always
+    // meant everywhere else in this file.
+    case 'heal': return step.effectRadius ?? null;
     default: return null;
   }
 }
@@ -315,6 +324,36 @@ export function mechanics(skill, rank = 1) {
       fields.push(field('scaling', 'Scales with',
         `${s.scaleWith}, +${(scalePerFor(s) * 100).toFixed(1)}% per point`));
     }
+  }
+
+  // --- who a heal finds, and where the effect lands ---
+  //
+  // THE NUMBERS WERE NEVER THE INTERESTING PART OF A HEAL. Two heals with the
+  // same amount and cooldown can be completely different skills — one covers
+  // whoever is standing near the healer, the other reaches across the room for
+  // whoever is worst off — and until `selection` and `shape` existed there was
+  // no way to say which, because there was one radius and it meant both.
+  //
+  // Stated in plain words rather than as the field values, because "who does
+  // this heal" is a question a player asks in words. A `self` x `point` heal
+  // says so outright: self-only is a design choice and reads as one.
+  for (const s of steps) {
+    if (s.kind !== 'heal') continue;
+    const who = {
+      self: 'you',
+      nearest_ally: 'the nearest ally',
+      nearest_n: `the ${s.count ?? '?'} nearest allies`,
+      furthest_ally: 'the ally furthest out',
+      lowest_hp_ally: 'the ally with the least health',
+      lowest_hp_pct_ally: 'the ally worst off for their size',
+      all_in_range: 'every ally in range',
+    }[s.selection || 'self'];
+    const where = {
+      point: '',
+      aoe_on_target: ', and everyone around them',
+      aoe_on_caster: ', and everyone around you',
+    }[s.shape || 'point'];
+    fields.push(field('healTarget', 'Heals', `${who}${where}`));
   }
 
   // --- persistent state: a slotted active that never fires ---
