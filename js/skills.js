@@ -396,15 +396,13 @@ export const HEAL_RADIUS_PENDING = new Set([
 export const PLAGUE_SINGLE_TARGET = new Map([
   ['necro_entropy_cascade', 'flavour is "It does not spread. It simply keeps arriving" — it covers a crowd by re-targeting, not by contagion'],
 ]);
-// A RATCHET, exactly like HEAL_RADIUS_PENDING. These five are named as
-// spreading and do not; the radius each should carry is Casey's to set and is
-// not invented here. Nothing may join this list — a new plague must declare a
-// radius or be filed as single-target above — and the gate stays red until it
-// is empty.
-export const PLAGUE_SPREAD_PENDING = new Set([
-  'wd_contagion', 'wd_pandemic', 'sav_bleed_them', 'smith_sparks',
-  'necro_internal_collapse',
-]);
+// A RATCHET, exactly like HEAL_RADIUS_PENDING, AND IT IS EMPTY. Five plagues
+// were named as spreading and carried no radius; Casey ruled all five to 150 on
+// 2026-09-05 — the median of the three that already worked (rot 130, rime 150,
+// spoil 175) — and each now declares it. The set stays, empty, because that is
+// what a ratchet is: nothing may join it, a new plague must declare a radius or
+// be filed as single-target above, and an empty list is the gate's green.
+export const PLAGUE_SPREAD_PENDING = new Set([]);
 
 function plagueStepProblems(s, step) {
   const out = [];

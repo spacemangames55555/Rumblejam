@@ -35,7 +35,12 @@ export const TUNING = {
   quenchDamage: 9, quenchAngle: 1.8, quenchRange: 185, quenchRadius: 160,
   quenchCount: 2, quenchCd: 2700, quenchSlowMult: 0.68, quenchSlowDur: 1500,
   // tier 4 — Sparks
+  // Casey's ruling, 2026-09-05: the five plagues that named a spread and
+  // carried none take 150, the median of the three that already worked
+  // (rot 130, rime 150, spoil 175). Refined per class later. NOT the old
+  // `range` value — that was the cast reach and is still the trigger's.
   sparksDamage: 8, sparksRange: 235, sparksTick: 4, sparksDuration: 3400, sparksCd: 2900,
+  sparksSpread: 150,
   // tier 5 — Deadweight (passive)
   deadGrit: 7,
   // tier 6 — Swage Block
@@ -98,7 +103,7 @@ export const SMITH_FORGE = [
     trigger: { kind: 'NEAREST', range: T.sparksRange },
     cooldown: T.sparksCd,
     compose: [{
-      kind: 'plague', damage: T.sparksDamage,
+      kind: 'plague', damage: T.sparksDamage, spreadRadius: T.sparksSpread,
       tick: T.sparksTick, duration: T.sparksDuration,
     }],
     ranks: R,

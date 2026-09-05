@@ -30,7 +30,12 @@ export const TUNING = {
   // tier 1 — Headbutt
   headDamage: 3, headReach: 88, headArc: 1.3, headRadius: 116, headCount: 1, headCd: 1150,
   // tier 2 — Bleed Them
+  // Casey's ruling, 2026-09-05: the five plagues that named a spread and
+  // carried none take 150, the median of the three that already worked
+  // (rot 130, rime 150, spoil 175). Refined per class later. NOT the old
+  // `range` value — that was the cast reach and is still the trigger's.
   bleedDamage: 4, bleedRange: 215, bleedTick: 4, bleedDuration: 3600, bleedCd: 2400,
+  bleedSpread: 150,
   // tier 3 — Thick Hide
   hideAmount: 20, hideDuration: 4600, hideCd: 5600,
   // tier 4 — Scent of It
@@ -74,7 +79,7 @@ export const SAV_BLOODBOUND = [
     trigger: { kind: 'NEAREST', range: T.bleedRange },
     cooldown: T.bleedCd,
     compose: [{
-      kind: 'plague', damage: T.bleedDamage,
+      kind: 'plague', damage: T.bleedDamage, spreadRadius: T.bleedSpread,
       tick: T.bleedTick, duration: T.bleedDuration,
     }],
     ranks: R,
