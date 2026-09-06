@@ -846,6 +846,52 @@ export const PRIMITIVES = {
     out.states++;
   },
 
+  // THE EIGHTEENTH PRIMITIVE, and the second admitted by EXPOSURE rather than
+  // construction — the machinery was already here, reachable by no skill.
+  //
+  // WHY A PRIMITIVE AND NOT A RIDER (§5.7 condition 2): a rider resolves on a
+  // TARGET at the moment of impact. Concealment has no target and no impact
+  // frame — it writes the caster, exactly like `shift` and `form`. It is the
+  // same reasoning that gives `summon`, `trap`, `shift` and `gravity_pull` an
+  // empty rider list, and it points the same way here.
+  //
+  // WHY NOT AN EXISTING PRIMITIVE (§5.7 condition 1): `form` is the near miss
+  // and the conversion documents reach for it, but a form is a named identity
+  // with a stat delta and a `FORM_NAMES` entry, and these skills have no stat
+  // delta to declare. `ward` and `shield` write absorb pools, which is a
+  // different answer to being hit — a pool is spent, a window is waited out.
+  //
+  // WHAT THE ENGINE ALREADY HAD: `p.vanishT`, the Assassin contract's
+  // untargetable beat. `targetable()` and `nearestLivingPlayer()` already
+  // exclude a vanished player, and `nearestLivingPlayer` already carries the
+  // all-players-hidden fallback that this ruling needs. Concealment joins that
+  // path through `sim.untargetable()` rather than opening a parallel one.
+  //
+  // THE DUTY CYCLE IS NOT BUILT HERE, because two thirds of it already exist.
+  // The ruling asks for a window of `windowMs` every `intervalMs` while enemies
+  // are within a radius. The interval IS the skill's cooldown and the gate IS
+  // this step's `radius`; writing an `intervalMs` onto the step would be a
+  // second source of truth for a number the cooldown already holds, and they
+  // would drift the first time someone edited one. The loader refuses it and
+  // says where it lives. See stealthStepProblems in js/skills.js.
+  //
+  // NO DAMAGE, EVER (Part 4). A concealed character who is standing still
+  // clears nothing, which is what keeps this side of the statue test.
+  stealth(sim, p, skill, step, rank, grid, out) {
+    // THE PROXIMITY GATE, checked at apply time rather than left to the
+    // trigger, so the ruling holds whatever fires the skill. A stealth on
+    // SELF_THRESHOLD would otherwise open a window in an empty room, which is
+    // invisibility with nothing to hide from.
+    if (!sim._nearestEnemy(p.x, p.y, step.radius)) return;
+    const win = rankedDuration(step.windowMs, skill, rank) / MS;
+    // KEEP THE LONGER WINDOW rather than adding. Two stealth skills on one
+    // player should not sum into permanent concealment; this is the same
+    // keep-the-bigger rule the absorb pools use, for the same reason.
+    p.concealT = Math.max(p.concealT || 0, win);
+    sim.pushEvent({ k: 'toast', idx: p.idx, text: 'Unseen' });
+    out.states++;
+  },
+
   plague(sim, p, skill, step, rank, grid, out) {
     const seed = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.spreadRadius);
     if (!seed) return;
@@ -1108,5 +1154,9 @@ export const RIDERS_BY_PRIMITIVE = {
   // riders resolve on a target at the moment of impact and a pull has no
   // impact. Graviton Surge's stun rides its damage step, not its pull.
   gravity_pull: [],
+  // And stealth takes none for that reason exactly: it writes the caster and
+  // touches no enemy. A concealment that applied a slow would be hitting
+  // something, which is the one thing it must not do.
+  stealth: [],
   heal: [], shield: [], ward: [], drain: [], plague: [], shift: [],
 };

@@ -44,7 +44,7 @@ optional everywhere they appear.
 
 ---
 
-## The seventeen
+## The eighteen
 
 ### `strike` — a swing around the caster
 The most-used primitive in the game: 108 skills. Everything within a reach and
@@ -305,6 +305,31 @@ duration by design.
 
 Riders: none.
 Example: `wiz_attune_physical`.
+
+### `stealth` — a window where nothing can touch you
+0 skills. Built and reachable; no skill has been converted to it yet, because
+which skills get it is a separate ruling.
+
+While the window is open the character cannot be hit and enemies lose track of
+them — they stop being a target and stop being aggro. It deals no damage and
+cannot be given any: a concealed character standing still must clear nothing.
+
+The window does NOT break when the character attacks. That is the deliberate
+departure from the tabletop rules these documents come from, and it is forced:
+everything in this game fires by itself, so a concealment that broke on attack
+would end on its first tick and never be seen.
+
+| parameter | units | always set? | observed |
+|---|---|---|---|
+| `windowMs` | milliseconds the window stays open | always | — |
+| `radius` | pixels; no window unless an enemy is this close | always | — |
+
+The gap BETWEEN windows is the skill's own cooldown, not a field on the step —
+writing it twice is how two numbers that must agree stop agreeing. A step that
+declares `intervalMs` is refused when the game loads, with a message saying so.
+
+Riders: none — it touches no enemy, and a rider needs something to land on.
+Example: none yet.
 
 ---
 
