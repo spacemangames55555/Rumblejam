@@ -37,6 +37,7 @@ export const TUNING = {
   blightSlowMult: 0.7, blightSlowDur: 800,
   // tier_code 7 — Internal Collapse
   collapseDamage: 10, collapseTick: 600, collapseDur: 3000, collapseRange: 360, collapseCd: 1200,
+  collapseSpread: 150,
   // tier_code 8 — Dark Energy Beam
   beamDamage: 16, beamTick: 500, beamDur: 10000, beamRange: 360, beamCd: 4000,
   // tier_code 9 — Singularity
@@ -170,12 +171,17 @@ export const NECRO_DARK_MATTER = [
     select: 'nearest',
     trigger: docTrigger('TARGET_UNAFFECTED', { range: T.collapseRange }),
     cooldown: T.collapseCd,
-    // A STACKING DOT WITH NO SPREAD, per the classification: `plague` with no
-    // `spreadRadius` lands on the seed alone. The document's "stacks to 5" is
-    // not expressible — `applyPlague` refreshes rather than stacking — so this
-    // is a refreshing DoT and the stack count is reported, not faked.
+    // IT SPREADS, per Casey's ruling of 2026-09-05, and the flavour above always
+    // said so — "Rot already in the body is turned inward, and spreads". The
+    // zero here was the archive's classification read literally, and it was the
+    // one place in the file where the comment contradicted the line above it.
+    // 150 is the median of the three plagues that already worked.
+    //
+    // The document's "stacks to 5" is still not expressible — `applyPlague`
+    // refreshes rather than stacking — so this is a refreshing DoT that seeds
+    // its neighbours, and the stack count is reported, not faked.
     compose: [{ kind: 'plague', damage: T.collapseDamage, duration: T.collapseDur,
-      tick: T.collapseTick, spreadRadius: 0 }],
+      tick: T.collapseTick, spreadRadius: T.collapseSpread }],
     ranks: rankPer(2, T.collapseDamage),
   },
   {

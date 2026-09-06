@@ -69,6 +69,12 @@ Both slotted is **−0.92/sec** the instrument does not subtract. Every reading 
 
 **Distribution rule, per tree of 10:** at least **3 nodes fast or better**, at most **1 very fast**, at most **2 in very slow**. Capstones are exempt from the distribution count.
 
+**IT IS A DAMAGE-OUTPUT RULE AND DOES NOT APPLY TO HEALING TREES — RULED.** Everything the rule is derived from is about output: the band it serves is `sum(1/cd)` over a slotted attack build, and the failure it prevents is a class that cannot fire often enough to keep up with a swarm. A healing tree is not trying to keep up with a swarm. **Heals fire slower than damaging skills**, deliberately, and a healing tree measured against a floor of three fast-or-better nodes would be told to fix something that is not broken.
+
+The shipped numbers already read that way rather than needing to be moved there: the thirteen heals in the game run **2500–9000 ms**, against a slotted attack build's ~1.1 s mean. The job was to make that a rule instead of an accident.
+
+**Floor: no heal cooldown below 2500 ms.** Derived, not invented — it is the fastest heal anybody has written (`pri_solace`), so it invalidates no existing content and it sits just under the `slow` bucket's 3 s. The alternative reading, "a heal is at least `slow`", would put the floor at 3000 ms and make `pri_solace` non-compliant by 500 ms; that is a retune, and retuning is out of scope here. If Casey would rather the floor be a bucket than a measured minimum, 3000 ms is the number and `pri_solace` is the one skill it moves.
+
 The speed half was originally "at least 4 nodes in medium or faster". That is a floor on composition and it does not reach the target: 4 medium plus 4 slow satisfies it and yields 3.0/sec. Worse, it says nothing about the top of the range, and the top is what actually moves the number — the Necromancer's four very-fast nodes produced 6.7/sec between them before anything else was slotted, while the Samurai owned no very-fast node at all and could not exceed 6.67/sec even with all eight slots fast.
 
 **A bucket-mix rule fixes both ends.** The floor of fast-or-better nodes guarantees a class can reach the band; the ceiling on very-fast stops one class running away with it. The floor was set at 2, measured, and raised to 3 — see below.

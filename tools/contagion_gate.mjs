@@ -43,8 +43,12 @@ if (!PLAGUE_SPREAD_PENDING.size) {
 // weakened rather than that content drifted.
 const EXPECTED = new Set(['wd_contagion', 'wd_pandemic', 'sav_bleed_them', 'smith_sparks', 'necro_internal_collapse']);
 const added = [...PLAGUE_SPREAD_PENDING].filter(id => !EXPECTED.has(id));
-if (!added.length) ok(`the ratchet holds only the five it was opened with (${EXPECTED.size})`);
-else bad(`${added.length} contagion(s) JOINED the ratchet — it only ever shrinks: ${added.join(', ')}`);
+// REPORT THE LIVE SET, NOT THE FROZEN ONE. Printing EXPECTED.size said "five"
+// on the day the last of them was cleared, which reads as five still pending.
+// A ratchet's whole point is that it ends empty; the gate should say when it has.
+if (added.length) bad(`${added.length} contagion(s) JOINED the ratchet — it only ever shrinks: ${added.join(', ')}`);
+else if (!PLAGUE_SPREAD_PENDING.size) ok(`the ratchet is EMPTY — all ${EXPECTED.size} it opened with have been ruled and cleared`);
+else ok(`${PLAGUE_SPREAD_PENDING.size} of the ${EXPECTED.size} still pending, and nothing joined`);
 
 // ---- 3. every plague is accounted for, one way or the other ----
 const unaccounted = plagues.filter(({ s, step }) =>

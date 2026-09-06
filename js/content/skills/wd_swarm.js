@@ -38,11 +38,17 @@ export const TUNING = {
   manyWeight: 0.15,
 
   // ---- branch A: Plague (contact and count, never designation) ----
+  // Casey's ruling, 2026-09-05: the five plagues that named a spread and
+  // carried none take 150, the median of the three that already worked
+  // (rot 130, rime 150, spoil 175). Refined per class later. NOT the old
+  // `range` value — that was the cast reach and is still the trigger's.
   contagionDamage: 13, contagionDuration: 3400, contagionRange: 250, contagionCd: 2600,
+  contagionSpread: 150,
   virulenceWeight: 0.18,
   miasmaDamage: 16, miasmaRadius: 165, miasmaDuration: 3800, miasmaTickMs: 400, miasmaCd: 4400,
   miasmaSlowMult: 0.55, miasmaSlowDur: 2200,
   pandemicDamage: 26, pandemicDuration: 5200, pandemicRange: 300, pandemicCd: 7800,
+  pandemicSpread: 150,
 
   // ---- branch B: Fetish (stop being outnumbered) ----
   fetishHp: 26, fetishRadius: 12, fetishSpawnRadius: 60, fetishAttackCd: 1100,
@@ -88,7 +94,8 @@ export const WD_SWARM = [
     select: 'densest_cluster',
     trigger: { kind: 'NEAREST', range: T.contagionRange },
     cooldown: T.contagionCd,
-    compose: [{ kind: 'plague', damage: T.contagionDamage, duration: T.contagionDuration, ...DOLL, riders: {} }],
+    compose: [{ kind: 'plague', damage: T.contagionDamage, duration: T.contagionDuration,
+      spreadRadius: T.contagionSpread, ...DOLL, riders: {} }],
     ranks: R,
   },
   {
@@ -120,7 +127,8 @@ export const WD_SWARM = [
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.pandemicRange, count: 3 },
     cooldown: T.pandemicCd,
-    compose: [{ kind: 'plague', damage: T.pandemicDamage, duration: T.pandemicDuration, ...DOLL, riders: {} }],
+    compose: [{ kind: 'plague', damage: T.pandemicDamage, duration: T.pandemicDuration,
+      spreadRadius: T.pandemicSpread, ...DOLL, riders: {} }],
     ranks: R,
   },
 

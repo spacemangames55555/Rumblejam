@@ -49,12 +49,18 @@ for (const s of Object.values(SKILL_BY_ID)) {
   else bad(`reachOf() wrong for: ${wrong.map(([i, w]) => `${i} → ${reachOf(i)}, want ${w}`).join('; ')}`);
 }
 
-// ---- 2. every heal either declares a radius or is a named exemption ----
+// ---- 2. every heal either declares its targeting or is a named exemption ----
+//
+// `radius` IS SPLIT. A heal now declares who it finds (`selection`, with a
+// `searchRadius` for everything but `self`) and where the effect lands (`shape`,
+// with an `effectRadius` for an area). "Declared" therefore means a selection
+// and a shape, not a single number — a `self` x `point` heal is fully declared
+// and correctly carries no radius at all.
 {
-  const undeclared = healSteps.filter(({ c }) => !(c.radius > 0));
+  const undeclared = healSteps.filter(({ c }) => !c.selection || !c.shape);
   const unnamed = undeclared.filter(({ s }) => !HEAL_RADIUS_PENDING.has(s.id));
-  if (!unnamed.length) ok(`every heal without a radius is a named exemption — ${healSteps.length} heal step(s), ${undeclared.length} pending`);
-  else bad(`${unnamed.length} heal(s) have no radius and are not exempt: ${unnamed.map(x => x.s.id).join(', ')}`);
+  if (!unnamed.length) ok(`every heal without declared targeting is a named exemption — ${healSteps.length} heal step(s), ${undeclared.length} pending`);
+  else bad(`${unnamed.length} heal(s) declare no selection or shape and are not exempt: ${unnamed.map(x => x.s.id).join(', ')}`);
 
   const stale = [...HEAL_RADIUS_PENDING].filter(id => {
     const sk = SKILL_BY_ID[id];
