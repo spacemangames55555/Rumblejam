@@ -418,6 +418,47 @@ export const PLAGUE_SPREAD_PENDING = new Set([]);
 // will usually match. The gate has to hold whatever fires the skill: a stealth
 // on SELF_THRESHOLD has no proximity trigger at all, and without a step-level
 // gate it would open a window in an empty room.
+// A RATCHET FOR A UNIT ERROR, exactly like PLAGUE_SPREAD_PENDING was.
+//
+// `reflectPct` IS A FRACTION. `skillsim.js:1045` multiplies the absorbed damage
+// by it, and `skillsim.js:1043` — the one place the engine does arithmetic on
+// the field rather than just storing it — clamps the result to 1. The engine's
+// own ceiling is the proof: 0.32 is thirty-two percent and 32 is thirty-two
+// TIMES. `skilltext.js:287` renders it as `× 100` for the player, so a ward
+// declaring 30 currently prints "Reflects 3000%" and means it.
+//
+// Eight wards across seven classes were authored as whole numbers. They are
+// named here rather than corrected, because correcting them is a content
+// decision — every one of the eight has a plausible intent (30 meaning 30%)
+// and a plausible history (the file two lines up uses whole-number percentages
+// for SELF_THRESHOLD, which is how it happens), and picking the fraction for
+// somebody is retuning eight skills across seven classes on my own authority.
+//
+// Nothing may join. A ward authored from here on declares a fraction or fails
+// to load, and the gate stays red until this list is empty.
+export const REFLECT_UNIT_PENDING = new Set([
+  'mage_adamant', 'sav_ashfield', 'monk_one_breath', 'wiz_reversal',
+  'dru_bramblehide', 'pri_vespers', 'smith_forge_weld', 'druid_stoneskin',
+]);
+
+function wardStepProblems(s, step) {
+  const out = [];
+  const r = step.reflectPct;
+  if (r === undefined) return out;
+  const pending = REFLECT_UNIT_PENDING.has(s.id);
+  if (typeof r !== 'number' || !Number.isFinite(r)) {
+    out.push(`${s.id}: ward reflectPct is ${String(r)} — it must be a finite number`);
+  } else if (r < 0) {
+    out.push(`${s.id}: ward reflectPct ${r} is negative — a ward cannot reflect less than nothing`);
+  } else if (r > 1 && !pending) {
+    out.push(`${s.id}: ward reflectPct ${r} is above 1 — this field is a FRACTION and that looks like a percentage. `
+      + `${r} means ${r}x the damage absorbed is thrown back; write ${(r / 100).toFixed(2)} if you meant ${r}%`);
+  } else if (r <= 1 && pending) {
+    out.push(`${s.id}: reflectPct ${r} is already a fraction but the skill is still listed in REFLECT_UNIT_PENDING — remove it from the list`);
+  }
+  return out;
+}
+
 function stealthStepProblems(s, step) {
   const out = [];
   if (!(step.windowMs > 0)) {
@@ -878,6 +919,7 @@ function assertTrees() {
           if (step.kind === 'summon') problems.push(...summonStepProblems(s, step));
           if (step.kind === 'plague') problems.push(...plagueStepProblems(s, step));
           if (step.kind === 'stealth') problems.push(...stealthStepProblems(s, step));
+          if (step.kind === 'ward') problems.push(...wardStepProblems(s, step));
           problems.push(...reachStepProblems(s, step));
         }
       } else if (s.type !== 'passive') {
