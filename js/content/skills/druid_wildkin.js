@@ -49,7 +49,10 @@ export const TUNING = {
   thornDamage: 14, thornRadius: 155, thornDuration: 3600, thornTickMs: 400,
   thornPct: 65, thornCd: 4600, thornSlowMult: 0.55, thornSlowDur: 2000,
   rootsWeight: 0.18,
-  stoneAmount: 42, stoneDuration: 5000, stoneReflect: 25, stonePct: 45, stoneCd: 8600,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 25 meant 25x the damage absorbed thrown back, not 25%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  stoneAmount: 42, stoneDuration: 5000, stoneReflect: 0.25, stonePct: 45, stoneCd: 8600,
   quakeDamage: 25, quakeArc: 3.0, quakeRange: 280, quakePct: 40, quakeCd: 8800,
   quakeStun: 700,
 

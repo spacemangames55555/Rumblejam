@@ -96,18 +96,26 @@ export const SMITH_CRYSTAL = [
     ranks: R,
   },
   {
-    // THE FIRST FORM, and the shallowest threshold — the one a Blacksmith is in
-    // most often. Grit and Vitality, because Pyrite is the trait's Grit crystal.
+    // A CRYSTAL FORM IS A STATE YOU CHOSE, NOT AN EMERGENCY BUTTON. Casey's
+    // ruling of 2026-09-09: the forms hold permanently while slotted, exactly as
+    // Marrownaut does. It shipped as a 7000ms form on a 12000ms cooldown
+    // firing at 70% health, which is a panic cast — and a panic cast cannot
+    // be a commitment to a tree.
+    //
+    // AN ACTIVE THAT NEVER FIRES, through the same `persist` door Marrownaut
+    // uses. It occupies one of the eight slots, and spending that slot IS the
+    // specialisation; a passive would hand the form out for free. It has no
+    // trigger for the trigger loop to read and never enters the pace band.
+    //
+    // The stat delta is carried forward unchanged from the timed version.
     id: 'smith_iron_pyrite', tree: 'smith_crystal', tier: 2, name: 'Iron Pyrite',
     type: 'active', domain: 'physical', prereq: 'smith_hammer_blow',
     select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: { kind: 'SELF_THRESHOLD', pct: T.pyritePct },
-    cooldown: T.pyriteCd,
-    compose: [{
-      kind: 'form', form: 'pyrite', duration: T.pyriteDuration,
-      stats: { grit: T.pyriteGrit, vitality: T.pyriteVit },
-    }],
-    ranks: R,
+    // ONE RANK. A form is a state, not an investment: the stat delta is what it
+    // is, and a second point in it would buy nothing. Same rule the rank-1
+    // passives declare, for the same reason.
+    maxRank: 1,
+    persist: { form: 'pyrite', stats: { grit: T.pyriteGrit, vitality: T.pyriteVit } },
   },
   {
     // A FORM-GATED SKILL, and the reason forms are more than a stat buff. This
@@ -142,16 +150,26 @@ export const SMITH_CRYSTAL = [
     ranks: R,
   },
   {
+    // A CRYSTAL FORM IS A STATE YOU CHOSE, NOT AN EMERGENCY BUTTON. Casey's
+    // ruling of 2026-09-09: the forms hold permanently while slotted, exactly as
+    // Marrownaut does. It shipped as a 6500ms form on a 13000ms cooldown
+    // firing at 55% health, which is a panic cast — and a panic cast cannot
+    // be a commitment to a tree.
+    //
+    // AN ACTIVE THAT NEVER FIRES, through the same `persist` door Marrownaut
+    // uses. It occupies one of the eight slots, and spending that slot IS the
+    // specialisation; a passive would hand the form out for free. It has no
+    // trigger for the trigger loop to read and never enters the pace band.
+    //
+    // The stat delta is carried forward unchanged from the timed version.
     id: 'smith_prism_quartz', tree: 'smith_crystal', tier: 5, name: 'Prism Quartz',
     type: 'active', domain: 'mental', prereq: 'smith_slag',
     select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: { kind: 'SELF_THRESHOLD', pct: T.quartzPct },
-    cooldown: T.quartzCd,
-    compose: [{
-      kind: 'form', form: 'quartz', duration: T.quartzDuration,
-      stats: { attunement: T.quartzAtt, ferocity: T.quartzFer },
-    }],
-    ranks: R,
+    // ONE RANK. A form is a state, not an investment: the stat delta is what it
+    // is, and a second point in it would buy nothing. Same rule the rank-1
+    // passives declare, for the same reason.
+    maxRank: 1,
+    persist: { form: 'quartz', stats: { attunement: T.quartzAtt, ferocity: T.quartzFer } },
   },
   {
     id: 'smith_refraction', tree: 'smith_crystal', tier: 6, name: 'Refraction',
@@ -173,20 +191,26 @@ export const SMITH_CRYSTAL = [
     ranks: R,
   },
   {
-    // THE DEEPEST THRESHOLD, and Recovery rather than damage — the form you
-    // enter when the fight has already gone wrong. Its stats are the largest in
-    // the tree and its cooldown is the longest, so it is a rescue rather than a
-    // rotation.
+    // A CRYSTAL FORM IS A STATE YOU CHOSE, NOT AN EMERGENCY BUTTON. Casey's
+    // ruling of 2026-09-09: the forms hold permanently while slotted, exactly as
+    // Marrownaut does. It shipped as a 6000ms form on a 15000ms cooldown
+    // firing at 35% health, which is a panic cast — and a panic cast cannot
+    // be a commitment to a tree.
+    //
+    // AN ACTIVE THAT NEVER FIRES, through the same `persist` door Marrownaut
+    // uses. It occupies one of the eight slots, and spending that slot IS the
+    // specialisation; a passive would hand the form out for free. It has no
+    // trigger for the trigger loop to read and never enters the pace band.
+    //
+    // The stat delta is carried forward unchanged from the timed version.
     id: 'smith_celestial_calcite', tree: 'smith_crystal', tier: 8, name: 'Celestial Calcite',
     type: 'active', domain: 'spiritual', prereq: 'smith_facet',
     select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: { kind: 'SELF_THRESHOLD', pct: T.calcitePct },
-    cooldown: T.calciteCd,
-    compose: [{
-      kind: 'form', form: 'calcite', duration: T.calciteDuration,
-      stats: { recovery: T.calciteRec, vitality: T.calciteVit },
-    }],
-    ranks: R,
+    // ONE RANK. A form is a state, not an investment: the stat delta is what it
+    // is, and a second point in it would buy nothing. Same rule the rank-1
+    // passives declare, for the same reason.
+    maxRank: 1,
+    persist: { form: 'calcite', stats: { recovery: T.calciteRec, vitality: T.calciteVit } },
   },
   {
     id: 'smith_mend_the_seam', tree: 'smith_crystal', tier: 9, name: 'Mend the Seam',

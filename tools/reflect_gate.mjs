@@ -18,7 +18,7 @@
 //
 //   node tools/reflect_gate.mjs
 
-import { TREES, REFLECT_UNIT_PENDING } from '../js/skills.js';
+import { TREES } from '../js/skills.js';
 
 let checks = 0, fails = 0;
 const ok = m => { checks++; console.log('  ✓ ' + m); };
@@ -31,42 +31,46 @@ for (const t of Object.values(TREES)) for (const s of t.skills) for (const step 
 
 console.log(`REFLECT UNITS — ${wards.length} wards declare a reflectPct\n`);
 
-// ---- 1. nothing outside the ratchet is a percentage ----
-const rogue = wards.filter(({ s, step }) => step.reflectPct > 1 && !REFLECT_UNIT_PENDING.has(s.id));
-if (!rogue.length) ok('every reflect outside the ratchet is a fraction');
-else bad(`${rogue.length} ward(s) declare a reflect above 1 and are NOT on the ratchet — a percentage in a fraction field: `
+// ---- 1. every reflect is a fraction ----
+const rogue = wards.filter(({ step }) => step.reflectPct > 1);
+if (!rogue.length) ok(`every one is a fraction — none above 1`);
+else bad(`${rogue.length} ward(s) declare a reflect above 1, a percentage in a fraction field: `
   + rogue.map(({ s, step }) => `${s.id} ${step.reflectPct}`).join(', '));
 
-// ---- 2. the ratchet only ever shrinks ----
-const EXPECTED = new Set(['mage_adamant', 'sav_ashfield', 'monk_one_breath', 'wiz_reversal',
-  'dru_bramblehide', 'pri_vespers', 'smith_forge_weld', 'druid_stoneskin']);
-const added = [...REFLECT_UNIT_PENDING].filter(id => !EXPECTED.has(id));
-if (added.length) bad(`${added.length} ward(s) JOINED the ratchet — it only ever shrinks: ${added.join(', ')}`);
-else if (!REFLECT_UNIT_PENDING.size) ok(`the ratchet is EMPTY — all ${EXPECTED.size} it opened with have been ruled and corrected`);
-else bad(`${REFLECT_UNIT_PENDING.size} of ${EXPECTED.size} still carry a percentage where a fraction belongs — `
-  + `this gate stays red until Casey rules them: ${[...REFLECT_UNIT_PENDING].join(', ')}`);
+// ---- 2. nobody sits where a typo would be invisible ----
+// The clamp at skillsim.js:1043 guards only the quill path; a value arriving
+// through `compose` is not clamped anywhere, which is why this is load-bearing
+// rather than cosmetic. Between 1 and 1.5 is the dangerous band: too small to
+// read as a percentage at a glance, too large to be a fraction.
+const near = wards.filter(({ step }) => step.reflectPct > 1 && step.reflectPct <= 1.5);
+if (!near.length) ok('none sits between 1 and 1.5, where a unit error would read as plausible');
+else bad(`${near.length} ward(s) between 1 and 1.5: ${near.map(({ s }) => s.id).join(', ')}`);
 
-// ---- 3. a listed skill still actually has the defect ----
+// ---- 3. the eight converted skills stayed converted ----
+// Named individually because a revert would otherwise pass check 1 silently if
+// somebody restored one file from an older revision.
+const CONVERTED = { mage_adamant: 0.35, sav_ashfield: 0.34, monk_one_breath: 0.34, wiz_reversal: 0.32,
+  dru_bramblehide: 0.32, pri_vespers: 0.30, smith_forge_weld: 0.30, druid_stoneskin: 0.25 };
 const byId = new Map(wards.map(({ s, step }) => [s.id, step.reflectPct]));
-const stale = [...REFLECT_UNIT_PENDING].filter(id => !(byId.get(id) > 1));
-if (!stale.length) ok(`all ${REFLECT_UNIT_PENDING.size} listed ward(s) still carry the defect they were listed for`);
-else bad(`${stale.length} listed ward(s) no longer have the defect — remove them from the list: ${stale.join(', ')}`);
+const reverted = Object.entries(CONVERTED).filter(([id, v]) => {
+  const got = byId.get(id);
+  return got === undefined || Math.abs(got - v) > 1e-9;
+});
+if (!reverted.length) ok(`all ${Object.keys(CONVERTED).length} converted wards still carry their fraction`);
+else bad(`${reverted.length} converted ward(s) no longer match: `
+  + reverted.map(([id, v]) => `${id} wants ${v}, has ${byId.get(id)}`).join('; '));
 
-// ---- 4. nobody reflects more than they absorb ----
-// The clamp at skillsim.js:1043 only guards the quill path. A fraction above 1
-// arriving through `compose` is not clamped anywhere, which is why the value
-// being a fraction is load-bearing rather than cosmetic.
-const over = wards.filter(({ step }) => step.reflectPct > 1 && step.reflectPct <= 1.5);
-if (!over.length) ok('no ward sits just above 1, where a typo would be invisible to the eye');
-else bad(`${over.length} ward(s) between 1 and 1.5 — too small to read as a percentage, too large to be a fraction`);
+// ---- 4. the spread is sane ----
+const vals = wards.map(({ step }) => step.reflectPct).filter(v => v > 0);
+const hi = Math.max(...vals), lo = Math.min(...vals);
+if (hi <= 1 && lo > 0) ok(`the roster's reflects span ${lo} to ${hi} — all fractions`);
+else bad(`reflect spread is ${lo} to ${hi}`);
 
 // ---- what the offenders would print to a player right now ----
-if (REFLECT_UNIT_PENDING.size) {
-  console.log('\nwhat the description generator tells the player today:');
-  for (const id of [...REFLECT_UNIT_PENDING].sort()) {
-    const v = byId.get(id);
-    if (v !== undefined) console.log(`  ${id.padEnd(20)} "Reflects ${Math.round(v * 100)}%"   (means ${v}x absorbed)`);
-  }
+if (rogue.length) {
+  console.log('\nwhat the description generator tells the player for each:');
+  for (const { s: sk, step } of rogue)
+    console.log(`  ${sk.id.padEnd(20)} "Reflects ${Math.round(step.reflectPct * 100)}%"   (means ${step.reflectPct}x absorbed)`);
 }
 
 console.log(`\n${checks} check(s), ${fails} failure(s)`);

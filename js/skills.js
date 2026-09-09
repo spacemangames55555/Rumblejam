@@ -418,43 +418,36 @@ export const PLAGUE_SPREAD_PENDING = new Set([]);
 // will usually match. The gate has to hold whatever fires the skill: a stealth
 // on SELF_THRESHOLD has no proximity trigger at all, and without a step-level
 // gate it would open a window in an empty room.
-// A RATCHET FOR A UNIT ERROR, exactly like PLAGUE_SPREAD_PENDING was.
+// A REFLECT IS A FRACTION, AND THE UNIT IS WHAT GOES WRONG.
 //
-// `reflectPct` IS A FRACTION. `skillsim.js:1045` multiplies the absorbed damage
-// by it, and `skillsim.js:1043` — the one place the engine does arithmetic on
-// the field rather than just storing it — clamps the result to 1. The engine's
-// own ceiling is the proof: 0.32 is thirty-two percent and 32 is thirty-two
-// TIMES. `skilltext.js:287` renders it as `× 100` for the player, so a ward
-// declaring 30 currently prints "Reflects 3000%" and means it.
+// `skillsim.js:1045` throws back `eaten * p.wardReflect`, and `skillsim.js:1043`
+// — the one place the engine does arithmetic on the field rather than storing
+// it — clamps the result to 1. `skilltext.js:287` renders it to the player as
+// `x 100`. So 0.32 is thirty-two percent and 32 is thirty-two TIMES.
 //
-// Eight wards across seven classes were authored as whole numbers. They are
-// named here rather than corrected, because correcting them is a content
-// decision — every one of the eight has a plausible intent (30 meaning 30%)
-// and a plausible history (the file two lines up uses whole-number percentages
-// for SELF_THRESHOLD, which is how it happens), and picking the fraction for
-// somebody is retuning eight skills across seven classes on my own authority.
+// Eight wards across seven classes were authored as whole numbers and were
+// converted on 2026-09-09 by Casey's ruling: 30 became 0.30, not retuned. This
+// is now a hard rule with nothing exempted — the ratchet it replaced is gone
+// because the list it held is empty.
 //
-// Nothing may join. A ward authored from here on declares a fraction or fails
-// to load, and the gate stays red until this list is empty.
-export const REFLECT_UNIT_PENDING = new Set([
-  'mage_adamant', 'sav_ashfield', 'monk_one_breath', 'wiz_reversal',
-  'dru_bramblehide', 'pri_vespers', 'smith_forge_weld', 'druid_stoneskin',
-]);
-
+// A POSITIVE-NUMBER CHECK CANNOT CATCH THIS, which is the whole point: every one
+// of the eight was a perfectly good positive number. The unit is what was wrong,
+// exactly as with the summon `attackCd` that read seconds into a milliseconds
+// field. And the mistake is easy to see happening: in smith_anvil.js the line
+// that carried it sits two lines from `weldPct: 35` and `quenchPct: 60`, which
+// ARE whole-number percentages, because SELF_THRESHOLD uses that convention.
 function wardStepProblems(s, step) {
   const out = [];
   const r = step.reflectPct;
   if (r === undefined) return out;
-  const pending = REFLECT_UNIT_PENDING.has(s.id);
   if (typeof r !== 'number' || !Number.isFinite(r)) {
     out.push(`${s.id}: ward reflectPct is ${String(r)} — it must be a finite number`);
   } else if (r < 0) {
     out.push(`${s.id}: ward reflectPct ${r} is negative — a ward cannot reflect less than nothing`);
-  } else if (r > 1 && !pending) {
+  } else if (r > 1) {
     out.push(`${s.id}: ward reflectPct ${r} is above 1 — this field is a FRACTION and that looks like a percentage. `
-      + `${r} means ${r}x the damage absorbed is thrown back; write ${(r / 100).toFixed(2)} if you meant ${r}%`);
-  } else if (r <= 1 && pending) {
-    out.push(`${s.id}: reflectPct ${r} is already a fraction but the skill is still listed in REFLECT_UNIT_PENDING — remove it from the list`);
+      + `${r} means ${r}x the damage absorbed is thrown back at whatever hit you; write ${(r / 100).toFixed(2)} if you meant ${r}%. `
+      + `A threshold pct in the same tuning block IS a whole number, which is how this happens`);
   }
   return out;
 }

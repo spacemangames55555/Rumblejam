@@ -87,7 +87,17 @@ function stage(charId, slot = null) {
   for (const e of [...g.enemyPool]) if (e.active) { e.hp = 0; e.active = false; }
   // §13 rule 20: learned is not slotted. A probe measuring one skill's scaling
   // has to put that skill in the loadout the way its player would.
-  if (slot) { p.loadout = new Array(8).fill(null); slot.forEach((id, i) => { p.loadout[i] = id; }); }
+  if (slot) {
+    p.loadout = new Array(8).fill(null); slot.forEach((id, i) => { p.loadout[i] = id; });
+    // AND THE DOOR HAS TO RUN AGAIN. `applyPersistents` fires on `_travelTo`,
+    // which is above this line, so a persistent node slotted here was never
+    // entered — the bar said the form was equipped and the player was not in
+    // it. It cost nothing while Marrownaut was the only persistent node,
+    // because no engine probe slots the Necromancer's tank. The Blacksmith's
+    // crystal forms ARE the form engine's filler, so the probe was staging its
+    // own subject and then measuring its absence.
+    SKROOM.applyPersistents(g, p);
+  }
   p.hp = p.stats.vitality;
   return { g, p };
 }
@@ -343,13 +353,32 @@ const PROBES = {
     // A STATE, NOT A QUANTITY, and the only engine of that kind. The starve
     // takes the form away each frame — the honest opposite of being transformed
     // — rather than lowering a number, because there is no number to lower.
-    low: (g, p) => { p.form = null; p.formT = 0; p.formStats = null; p.engines.form = 0; },
+    // STARVING A PERSISTENT FORM MEANS TAKING IT OUT OF THE BAR, not nulling the
+    // field. `p.form = null` held while forms were timed casts; a `persist` form
+    // is re-entered by `applyPersistents` at the next door, so the starve was
+    // being undone and the filled and starved runs measured the same player —
+    // which is exactly how an engine reads as "filled and read by nothing".
+    // Un-slot, then clear, then run the door so the teardown actually lands.
+    low: (g, p) => {
+      p.loadout = (p.loadout || []).map(id => {
+        const s = id && SKILL_BY_ID[id];
+        return (s && s.persist && s.persist.form) ? null : id;
+      });
+      SKROOM.applyPersistents(g, p);
+      p.form = null; p.formT = 0; p.formStats = null; p.engines.form = 0;
+      g._recomputeStats(p);
+    },
     // Entered by a `form` step, which fires on SELF_THRESHOLD — so the fixture
     // has to be HURT for the engine to fill at all. That is the whole class:
     // every form is a response to a fight going badly.
     each: (g, p) => { p.hp = Math.min(p.hp, p.stats.vitality * 0.5); },
-    fills: sk => (sk.compose || []).some(c => c.kind === 'form'),
-    fillsFirst: sk => (sk.compose || []).some(c => c.kind === 'form'),
+    // A FORM ARRIVES TWO WAYS NOW. It was a `form` step on a SELF_THRESHOLD
+    // trigger; since 2026-09-09 the Blacksmith's three are `persist` nodes that
+    // hold while slotted and have no trigger at all. Staging that looked only
+    // for a compose step found nothing to slot and reported the engine as never
+    // filling — the fixture's fault, not the engine's.
+    fills: sk => (sk.compose || []).some(c => c.kind === 'form') || !!(sk.persist && sk.persist.form),
+    fillsFirst: sk => (sk.compose || []).some(c => c.kind === 'form') || !!(sk.persist && sk.persist.form),
     // A `form`-gated skill cannot be the measured claim — it does not fire in
     // the starved run BY DESIGN, so the comparison would be a skill against
     // nothing rather than an engine against itself.
@@ -960,6 +989,24 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
   // in kind: it is something the player IS rather than something they hold.
   {
     const { g, p } = stage('toh_blacksmith');
+    // UNLEARN THE PERSISTENT FORMS FIRST, and unlearn rather than un-slot.
+    // These sub-tests drive the `form` PRIMITIVE directly and then expire it by
+    // hand. Un-slotting is not enough: `applyPersistents` walks every LEARNED
+    // persist node each tick and calls `exitPersistent` on the ones out of the
+    // bar, which tears down any form of that name — including one the primitive
+    // had just entered. So the expiry test was watching the door reclaim the
+    // form rather than the clock failing to release it. At rank 0 the door
+    // skips them entirely and the primitive owns the state, which is the only
+    // arrangement in which this measures the primitive at all.
+    const parked = [];
+    for (const id of Object.keys(p.skillRanks || {})) {
+      const s = SKILL_BY_ID[id];
+      if (s && s.persist && s.persist.form) { parked.push([id, p.skillRanks[id]]); p.skillRanks[id] = 0; }
+    }
+    p.loadout = (p.loadout || []).map(id => (parked.some(([pid]) => pid === id) ? null : id));
+    SKROOM.applyPersistents(g, p);
+    p.form = null; p.formT = 0; p.formStats = null; p.engines.form = 0;
+    g._recomputeStats(p);
     const step = { damage: 10, scaleWith: 'form', scalePer: 0.2 };
     const baseGrit = p.stats.grit;
 
@@ -1083,6 +1130,17 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
   const cold = 'smith_cold_work';
   const runFor = (formValue) => {
     const { g, p } = stage('toh_blacksmith', [cold]);
+    // UNLEARN THE PERSISTENT FORMS. `stage` learns every node in the class, and
+    // `applyPersistents` walks every LEARNED persist node on each door — calling
+    // `exitPersistent` on the ones out of the bar, which tears down a form of
+    // that name whoever put it there. This loop pins `p.form` by hand each
+    // frame, so the teardown landed inside the tick and `formHolds` saw no form:
+    // Cold Work fired in Iron Pyrite, which is the one thing it must never do.
+    // At rank 0 the door ignores them and the pin holds.
+    for (const id of Object.keys(p.skillRanks || {})) {
+      const s = SKILL_BY_ID[id];
+      if (s && s.persist && s.persist.form) p.skillRanks[id] = 0;
+    }
     for (const e of [...g.enemyPool]) if (e.active) { e.hp = 0; e.active = false; }
     g.spawnEnemyById('skulker', p.x + 70, p.y);
     p.fireLog = [];

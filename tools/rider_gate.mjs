@@ -145,8 +145,21 @@ function stageFor(g, p, sk) {
     p.form = null; p.formT = 0; p.formStats = null;
     if (p.engines) p.engines.form = 0;
   } else if (sk.form) {
-    const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === sk.form));
-    const step = src && src.compose.find(c => c.kind === 'form');
+    // THE STAT DELTA NOW LIVES IN TWO PLACES. A form used to arrive only as a
+    // `form` compose step; the Blacksmith's three are `persist` nodes since
+    // 2026-09-09 and carry their stats there, so a lookup that searched only
+    // compose found nothing and staged the form with no sheet behind it.
+    const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === sk.form))
+      || ALL_SKILLS.find(x => x.persist && x.persist.form === sk.form);
+    const step = src && (src.compose || []).find(c => c.kind === 'form') || (src && src.persist) || null;
+    // AND THE PIN HAS TO SURVIVE THE DOOR. `applyPersistents` walks every
+    // LEARNED persist node and tears down a form of its name whenever that node
+    // is out of the bar — including one pinned here by hand. At rank 0 it is
+    // ignored, which is the only way a hand-set form holds for the window.
+    for (const id of Object.keys(p.skillRanks || {})) {
+      const s = SKILL_BY_ID[id];
+      if (s && s.persist && s.persist.form === sk.form) p.skillRanks[id] = 0;
+    }
     p.form = sk.form;
     p.formT = 60;
     p.formStats = step ? step.stats || null : null;

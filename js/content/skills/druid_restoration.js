@@ -87,7 +87,10 @@ export const TUNING = {
   huskAmount: 34, huskDuration: 5200, huskPct: 60, huskCd: 4200,
   hidebindGrit: 6, hidebindVit: 14,
   goreDamage: 26, goreReach: 130, goreArc: 2.0, goreCd: 3400, goreKnock: 210,
-  bramblehideAmount: 48, bramblehideDuration: 6400, bramblehideReflect: 32,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 32 meant 32x the damage absorbed thrown back, not 32%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  bramblehideAmount: 48, bramblehideDuration: 6400, bramblehideReflect: 0.32,
   bramblehidePct: 42, bramblehideCd: 8800,
 
   rankDamage: 0.04, rankDuration: 0.03,

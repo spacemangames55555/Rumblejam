@@ -30,7 +30,7 @@
 //   node tools/persist_gate.mjs [--verbose]
 
 import { Sim } from '../js/game.js';
-import { SKILL_BY_ID, TREES } from '../js/skills.js';
+import { SKILL_BY_ID, TREES, TIER_LEVELS } from '../js/skills.js';
 import { spendSkillPoint, setLoadout, applyPersistents } from '../js/skillsim.js';
 import { PERSIST_T } from '../js/config.js';
 
@@ -43,7 +43,19 @@ const bad = m => { checks++; fails++; console.log(`✗ ${m}`); };
 // without editing this.
 const PERSISTENT = Object.values(SKILL_BY_ID).filter(s => s.persist);
 
-function build(charId, learn, level = 20) {
+// THE LEVEL IS DERIVED FROM THE DEEPEST NODE UNDER TEST, not fixed at 20.
+// It was 20 while Marrownaut — tier 2, unlock level 3 — was the only persistent
+// node. The Blacksmith's Celestial Calcite is tier 8, unlock level 24, so a
+// level-20 fixture could not learn it: `spendSkillPoint` no-opped, the rank
+// stayed 0, `applyPersistents` skipped it, and the gate reported the form as
+// simply absent. A fixture that cannot reach its subject reports the subject
+// broken, which is the most expensive kind of green-to-red there is.
+function levelFor(ids) {
+  const deepest = Math.max(...ids.map(id => (SKILL_BY_ID[id] || {}).tier || 1));
+  return Math.max(20, TIER_LEVELS[deepest - 1] || 36);
+}
+
+function build(charId, learn, level = levelFor(learn)) {
   const g = new Sim({ seed: 4711, party: [{ idx: 0, key: 'k', name: 'P', charId, color: '#fff' }] });
   const p = g.players[0];
   p.level = level;

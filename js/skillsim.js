@@ -186,6 +186,14 @@ function enterPersistent(sim, p, sk, id, rank) {
     // expiry path checks by name.
     p.formT = PERSIST_T;
     p.formStats = q.stats || null;
+    // THE ENGINE VALUE IS SET AT THE DOOR, not left to the next tick. `tickForm`
+    // owns it during play, but `applyPersistents` runs outside that loop, so for
+    // one frame after a slot change `p.engines.form` described the PREVIOUS
+    // state — reading 0 with the form up, and 1 with it already gone. A
+    // `scaleWith: 'form'` step firing in that frame took the bonus without the
+    // form. One frame, and it is the exact silent-persistence shape the form
+    // teardown was written to avoid.
+    p.engines.form = CONFIG.FORM_POWER;
     sim._recomputeStats(p);
     sim.pushEvent({ k: 'toast', idx: p.idx, text: `${q.form.toUpperCase()}` });
   }
@@ -216,6 +224,7 @@ function exitPersistent(sim, p, sk, id) {
   let changed = false;
   if (q.form && p.form === q.form) {
     p.form = null; p.formT = 0; p.formStats = null;
+    p.engines.form = 0;      // same reason as the door above, other direction
     changed = true;
   }
   if (q.aura) {

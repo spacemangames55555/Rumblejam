@@ -57,7 +57,10 @@ export const TUNING = {
   quenchAmount: 34, quenchDuration: 4600, quenchPct: 60, quenchCd: 5000,
   grainWeight: 0.18,
   drawDamage: 20, drawReach: 125, drawArc: 2.4, drawPct: 50, drawCd: 4600,
-  weldAmount: 52, weldDuration: 5400, weldReflect: 30, weldPct: 35, weldCd: 9000,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 30 meant 30x the damage absorbed thrown back, not 30%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  weldAmount: 52, weldDuration: 5400, weldReflect: 0.30, weldPct: 35, weldCd: 9000,
 
   rankDamage: 0.04, rankDuration: 0.03,
 };
