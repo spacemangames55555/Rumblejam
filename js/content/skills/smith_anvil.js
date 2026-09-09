@@ -101,7 +101,13 @@ export const SMITH_ANVIL = [
     form: 'none',
     trigger: { kind: 'NEAREST', range: T.coldReach },
     cooldown: T.coldCd,
-    compose: [{ kind: 'strike', damage: T.coldDamage, arc: T.coldArc, reach: T.coldReach, ...FORM, riders: {} }],
+      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
+      // `form: 'none'` skill fires only while no form is held, which forces
+      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
+      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
+      // is worse than having none — Casey's ruling of 2026-09-09 pays this
+      // branch in raw damage and area instead, set separately.
+    compose: [{ kind: 'strike', damage: T.coldDamage, arc: T.coldArc, reach: T.coldReach, riders: {} }],
     ranks: R,
   },
   {
@@ -120,7 +126,13 @@ export const SMITH_ANVIL = [
     form: 'none',
     trigger: { kind: 'PROXIMITY', radius: T.swageRange, count: 2 },
     cooldown: T.swageCd,
-    compose: [{ kind: 'cone', damage: T.swageDamage, arc: T.swageArc, range: T.swageRange, ...FORM, riders: {} }],
+      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
+      // `form: 'none'` skill fires only while no form is held, which forces
+      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
+      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
+      // is worse than having none — Casey's ruling of 2026-09-09 pays this
+      // branch in raw damage and area instead, set separately.
+    compose: [{ kind: 'cone', damage: T.swageDamage, arc: T.swageArc, range: T.swageRange, riders: {} }],
     ranks: R,
   },
   {
@@ -132,7 +144,13 @@ export const SMITH_ANVIL = [
     trigger: { kind: 'NEAREST', range: T.proofReach },
     cooldown: T.proofCd,
     compose: [{
-      kind: 'strike', damage: T.proofDamage, arc: T.proofArc, reach: T.proofReach, ...FORM,
+      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
+      // `form: 'none'` skill fires only while no form is held, which forces
+      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
+      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
+      // is worse than having none — Casey's ruling of 2026-09-09 pays this
+      // branch in raw damage and area instead, set separately.
+      kind: 'strike', damage: T.proofDamage, arc: T.proofArc, reach: T.proofReach,
       riders: { multiPulse: T.proofPulses, knockback: T.proofKnock },
     }],
     ranks: R,

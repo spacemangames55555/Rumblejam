@@ -269,6 +269,64 @@ for (const sk of PERSISTENT) {
   if (VERBOSE) console.log(`      baseline is the character's own weapon/trait, not the field`);
 }
 
+// ---- ONE FORM AT A TIME, ENFORCED AT THE BAR ----
+//
+// Slotting a second form used to overwrite in silence: `enterPersistent` guards
+// on `p.form !== q.form`, so whichever the loadout iteration reached last won,
+// and the loser's teardown never ran because `exitPersistent` guards on
+// `p.form === q.form`. The player kept a slot that did nothing.
+//
+// The rule is measured on DISTINCT FORM NAMES rather than on slot count, and
+// the three checks below are the three readings that matters: two different
+// forms refused, the same form twice allowed (it is inert), and a swap in one
+// edit accepted — a player changing specialisation should not have to unslot
+// first.
+{
+  const forms = PERSISTENT.filter(s => s.persist && s.persist.form);
+  const byClass = new Map();
+  for (const f of forms) {
+    const c = TREES[f.tree].classId;
+    byClass.set(c, [...(byClass.get(c) || []), f]);
+  }
+  const pair = [...byClass.values()].find(v => v.length >= 2);
+  if (!pair) {
+    console.log('  — only one class has two forms to test the rule with; skipped');
+  } else {
+    const [A, B] = pair;
+    const deepest = A.tier > B.tier ? A : B;
+    const { g, p } = build(TREES[deepest.tree].classId, chainTo(deepest.id));
+    g.cleared = true;
+    const dmgId = Object.values(SKILL_BY_ID).find(x => x.tree === deepest.tree && x.type === 'active'
+      && !x.persist && p.skillRanks[x.id] > 0);
+    p.loadout = new Array(8).fill(null);
+    if (dmgId) setLoadout(g, p, 0, dmgId.id);
+
+    const first = setLoadout(g, p, 1, A.id);
+    if (first.ok) ok(`one form: ${A.id} slots cleanly on its own`);
+    else bad(`one form: the FIRST form was refused — ${first.reason}`);
+
+    const second = setLoadout(g, p, 2, B.id);
+    if (!second.ok && /one form/i.test(second.reason || '')) {
+      ok(`one form: a SECOND, different form is refused — "${second.reason}"`);
+    } else bad(`one form: two different forms were accepted (${JSON.stringify(second)}) — the bar allows a state the engine cannot hold`);
+
+    // The same form twice is inert, not an error: the door reads
+    // `loadout.includes(id)`, so a second copy adds nothing and removing one
+    // leaves the form standing. Refusing it here would be a rule about
+    // duplicates, which is a different question.
+    const twice = setLoadout(g, p, 3, A.id);
+    if (twice.ok) ok('one form: the SAME form in two slots is allowed — inert, and a duplicate rule is a separate question');
+    else bad(`one form: a duplicate of the same form was refused (${twice.reason}) — that is a duplicate rule, not this one`);
+
+    // And the swap: B into the slot A occupies. One edit, no un-slot first.
+    setLoadout(g, p, 3, null);
+    const swap = setLoadout(g, p, 1, B.id);
+    if (swap.ok && p.form === B.persist.form) {
+      ok(`one form: swapping ${A.id} for ${B.id} in its own slot is ACCEPTED and the form actually changes — p.form is "${p.form}"`);
+    } else bad(`one form: the swap failed — ${JSON.stringify(swap)}, p.form is ${JSON.stringify(p.form)}`);
+  }
+}
+
 console.log(`\n${checks} check(s), ${fails} failure(s)`);
 if (!fails) console.log('A PERSISTENT ACTIVE HOLDS WHILE SLOTTED, AND ONLY WHILE SLOTTED');
 process.exit(fails ? 1 : 0);
