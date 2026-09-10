@@ -186,6 +186,9 @@ function enterPersistent(sim, p, sk, id, rank) {
     // expiry path checks by name.
     p.formT = PERSIST_T;
     p.formStats = q.stats || null;
+    // WHICH TREE THIS FORM PAYS. Read by `engineScale`; null means class-wide,
+    // which is what a form that declares no tree has always been.
+    p.formTree = q.tree || null;
     // THE ENGINE VALUE IS SET AT THE DOOR, not left to the next tick. `tickForm`
     // owns it during play, but `applyPersistents` runs outside that loop, so for
     // one frame after a slot change `p.engines.form` described the PREVIOUS
@@ -214,7 +217,7 @@ function enterPersistent(sim, p, sk, id, rank) {
   // taken AFTER the form's stats have landed or the form's own Grit is missing
   // from it. `Math.max` tops up without stacking on a re-entry.
   if (q.shield) {
-    p.shield = Math.max(p.shield || 0, rankedDamage(q.shield.amount, sk, rank) * engineScale(q.shield, p));
+    p.shield = Math.max(p.shield || 0, rankedDamage(q.shield.amount, sk, rank) * engineScale(q.shield, p, sk));
     p.shieldT = PERSIST_T;
   }
 }
@@ -224,6 +227,7 @@ function exitPersistent(sim, p, sk, id) {
   let changed = false;
   if (q.form && p.form === q.form) {
     p.form = null; p.formT = 0; p.formStats = null;
+    p.formTree = null;
     p.engines.form = 0;      // same reason as the door above, other direction
     changed = true;
   }

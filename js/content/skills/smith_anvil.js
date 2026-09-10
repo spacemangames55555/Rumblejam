@@ -49,7 +49,12 @@ export const TUNING = {
   // ---- branch A: Cold Iron (form: 'none' — the interval itself) ----
   coldDamage: 16, coldReach: 115, coldArc: 1.9, coldCd: 2400,
   hammerWeight: 0.18,
-  swageDamage: 19, swageArc: 1.6, swageRange: 290, swageCd: 4200,
+  // 19 -> 25 by Casey's ruling of 2026-09-10. Swage was the one Cold Iron node
+  // BEHIND its form-boosted equivalent — 19 against Drawing Out's 24.8 effective,
+  // 77% — and a no-form branch that is worse at everything is not a choice.
+  // 25 is parity on damage; the advantage stays the area it already had, which
+  // is range 290 against every other cone in the class at 185-200. Area unchanged.
+  swageDamage: 25, swageArc: 1.6, swageRange: 290, swageCd: 4200,
   proofDamage: 28, proofReach: 145, proofArc: 2.9, proofCd: 7600,
   proofPulses: 2, proofKnock: 250,
 

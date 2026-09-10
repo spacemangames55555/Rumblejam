@@ -115,7 +115,10 @@ export const SMITH_CRYSTAL = [
     // is, and a second point in it would buy nothing. Same rule the rank-1
     // passives declare, for the same reason.
     maxRank: 1,
-    persist: { form: 'pyrite', stats: { grit: T.pyriteGrit, vitality: T.pyriteVit } },
+    // TREE-SCOPED. Recorded as the tree this form ACTUALLY sits in today,
+    // not the one the restructure will move it to — that layout is Casey's
+    // and is not invented here.
+    persist: { form: 'pyrite', tree: 'smith_crystal', stats: { grit: T.pyriteGrit, vitality: T.pyriteVit } },
   },
   {
     // A FORM-GATED SKILL, and the reason forms are more than a stat buff. This
@@ -169,7 +172,10 @@ export const SMITH_CRYSTAL = [
     // is, and a second point in it would buy nothing. Same rule the rank-1
     // passives declare, for the same reason.
     maxRank: 1,
-    persist: { form: 'quartz', stats: { attunement: T.quartzAtt, ferocity: T.quartzFer } },
+    // TREE-SCOPED. Recorded as the tree this form ACTUALLY sits in today,
+    // not the one the restructure will move it to — that layout is Casey's
+    // and is not invented here.
+    persist: { form: 'quartz', tree: 'smith_crystal', stats: { attunement: T.quartzAtt, ferocity: T.quartzFer } },
   },
   {
     id: 'smith_refraction', tree: 'smith_crystal', tier: 6, name: 'Refraction',
@@ -210,7 +216,10 @@ export const SMITH_CRYSTAL = [
     // is, and a second point in it would buy nothing. Same rule the rank-1
     // passives declare, for the same reason.
     maxRank: 1,
-    persist: { form: 'calcite', stats: { recovery: T.calciteRec, vitality: T.calciteVit } },
+    // TREE-SCOPED. Recorded as the tree this form ACTUALLY sits in today,
+    // not the one the restructure will move it to — that layout is Casey's
+    // and is not invented here.
+    persist: { form: 'calcite', tree: 'smith_crystal', stats: { recovery: T.calciteRec, vitality: T.calciteVit } },
   },
   {
     id: 'smith_mend_the_seam', tree: 'smith_crystal', tier: 9, name: 'Mend the Seam',

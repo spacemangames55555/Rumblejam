@@ -88,8 +88,19 @@ function absorbTargets(sim, p, step) {
 // maximum and its intended contribution and derives the rest; a step may
 // declare a dimensionless `scaleWeight` (default 1) to ride heavier or lighter
 // than the standard. `scalePer` is rejected at load.
-export function engineScale(step, p) {
+export function engineScale(step, p, skill) {
   if (!step.scaleWith) return 1;
+  // A FORM BOOSTS ONLY ITS OWN TREE (Casey's ruling, 2026-09-10). Slotting a
+  // form is a commitment to one branch of the class, and a boost that reached
+  // every tree would make it a flat power button instead.
+  //
+  // SCOPED ONLY WHEN THE FORM SAYS SO. `p.formTree` is set from the form's own
+  // `tree` field; a form that declares none scopes nothing and behaves exactly
+  // as before, which is what keeps Marrownaut and every future form that wants
+  // to be class-wide working without a special case here. `skill` is optional
+  // for the same reason — a caller that cannot name the owning skill gets the
+  // old answer rather than a silent zero.
+  if (step.scaleWith === 'form' && p.formTree && skill && skill.tree !== p.formTree) return 1;
   // Passives may raise what a stack is WORTH without touching the step. Held
   // Edge does exactly that for Footing; the bonus is keyed by engine name so a
   // future tree can do it for any other engine with no code here. It arrives
@@ -108,7 +119,7 @@ export function stepDamage(step, skill, rank, p) {
   // `_atkBuff` is the post-dodge one-shot buff (§9.2), set and cleared around a
   // single fire in `fireSkill`. A minion's facade does not carry it, which is
   // correct — the player dodged, not the skeleton.
-  return rankedDamage(step.damage, skill, rank) * engineScale(step, p)
+  return rankedDamage(step.damage, skill, rank) * engineScale(step, p, skill)
     * (p.ingMult || 1) * (p.summonMult || 1) * (p._atkBuff || 1);
 }
 
@@ -667,7 +678,7 @@ export const PRIMITIVES = {
   // already made a radius-less heal do. Nothing changes for a skill nobody has
   // converted yet.
   heal(sim, p, skill, step, rank, grid, out) {
-    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
+    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p, skill);
     const selection = step.selection || 'self';
     const shape = step.shape || 'point';
     const found = selectAllies(selection, sim.livePlayers(), p, step.searchRadius, step.count);
@@ -723,7 +734,7 @@ export const PRIMITIVES = {
   shield(sim, p, skill, step, rank, grid, out) {
     // `amount` rather than `damage`, so it cannot use stepDamage — but it rides
     // the same engine hook, through the same function.
-    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
+    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p, skill);
     const dur = rankedDuration(step.duration, skill, rank) / MS;
     for (const q of absorbTargets(sim, p, step)) {
       // THE EXISTING STACKING RULE, UNCHANGED AND DELIBERATELY SO. Absorb has
@@ -738,7 +749,7 @@ export const PRIMITIVES = {
 
   // Absorb that also returns a fraction of what it eats.
   ward(sim, p, skill, step, rank, grid, out) {
-    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p);
+    const amt = rankedDamage(step.amount, skill, rank) * engineScale(step, p, skill);
     const dur = rankedDuration(step.duration, skill, rank) / MS;
     for (const q of absorbTargets(sim, p, step)) {
       q.ward = Math.max(q.ward || 0, amt);
@@ -841,6 +852,8 @@ export const PRIMITIVES = {
     p.form = step.form;
     p.formT = dur;
     p.formStats = step.stats || null;
+    // BOTH DOORS AGREE. A timed form scopes the same way a persistent one does.
+    p.formTree = step.tree || null;
     sim._recomputeStats(p);
     sim.pushEvent({ k: 'toast', idx: p.idx, text: `${step.form.toUpperCase()}` });
     out.states++;

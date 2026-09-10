@@ -32,7 +32,8 @@
 import { Sim } from '../js/game.js';
 import { SKILL_BY_ID, TREES, TIER_LEVELS } from '../js/skills.js';
 import { spendSkillPoint, setLoadout, applyPersistents } from '../js/skillsim.js';
-import { PERSIST_T } from '../js/config.js';
+import { PERSIST_T, CONFIG as CFG } from '../js/config.js';
+import { engineScale } from '../js/compose.js';
 
 const VERBOSE = process.argv.includes('--verbose');
 let checks = 0, fails = 0;
@@ -324,6 +325,55 @@ for (const sk of PERSISTENT) {
     if (swap.ok && p.form === B.persist.form) {
       ok(`one form: swapping ${A.id} for ${B.id} in its own slot is ACCEPTED and the form actually changes — p.form is "${p.form}"`);
     } else bad(`one form: the swap failed — ${JSON.stringify(swap)}, p.form is ${JSON.stringify(p.form)}`);
+  }
+}
+
+// ---- A FORM BOOSTS ONLY ITS OWN TREE ----
+//
+// Ruled 2026-09-10. `engineScale` returns 1 for a `scaleWith: 'form'` step whose
+// owning skill sits outside the held form's tree. A form declaring no tree
+// scopes nothing and behaves as it always did, which is what keeps Marrownaut
+// and any future class-wide form working with no special case.
+//
+// THE THIRD CHECK IS THE ONE THAT MATTERS RIGHT NOW. All three crystal forms
+// still live in smith_crystal, so every form-scaled Anvil node is at x1.00
+// until the layout moves a form into that tree. That is the ruling meeting
+// content the restructure has not reached yet, not a defect — and it is written
+// down here so the redistribution can be checked against it rather than
+// discovered in play.
+{
+  const scoped = PERSISTENT.filter(s => s.persist && s.persist.form && s.persist.tree);
+  if (!scoped.length) console.log('  — no form declares a tree; scoping untested');
+  else {
+    const f = scoped[0];
+    const inTree = [], outTree = [];
+    for (const t of Object.values(TREES)) {
+      if (TREES[f.tree].classId !== t.classId) continue;
+      for (const sk of t.skills) for (const st of (sk.compose || [])) {
+        if (st.scaleWith !== 'form') continue;
+        (sk.tree === f.persist.tree ? inTree : outTree).push({ sk, st });
+      }
+    }
+    const held = { engines: { form: CFG.FORM_POWER }, formTree: f.persist.tree };
+    const free = { engines: { form: CFG.FORM_POWER }, formTree: null };
+
+    const insideOk = inTree.every(({ sk, st }) => engineScale(st, held, sk) > 1);
+    if (inTree.length && insideOk) ok(`tree-scoped form: all ${inTree.length} form-scaled skill(s) INSIDE ${f.persist.tree} still scale while ${f.persist.form} is held`);
+    else if (!inTree.length) bad(`tree-scoped form: ${f.persist.tree} holds no form-scaled skill at all — the form pays nothing`);
+    else bad('tree-scoped form: a skill inside the form\'s own tree lost its boost');
+
+    const outsideOff = outTree.every(({ sk, st }) => engineScale(st, held, sk) === 1);
+    if (outsideOff) ok(`tree-scoped form: all ${outTree.length} form-scaled skill(s) OUTSIDE it are at x1.00 — the boost does not reach another tree`);
+    else bad('tree-scoped form: a skill outside the form\'s tree still takes the boost — the scope is not holding');
+
+    const unscopedStillWorks = outTree.every(({ sk, st }) => engineScale(st, free, sk) > 1);
+    if (!outTree.length || unscopedStillWorks) ok('tree-scoped form: a form declaring NO tree still boosts class-wide — Marrownaut and any future class-wide form are unaffected');
+    else bad('tree-scoped form: an unscoped form stopped boosting — scoping leaked into the default');
+
+    if (outTree.length) {
+      console.log(`      ${outTree.length} form-scaled node(s) are at x1.00 today because all three forms sit in smith_crystal: `
+        + `${[...new Set(outTree.map(x => x.sk.id))].join(', ')}`);
+    }
   }
 }
 

@@ -391,6 +391,8 @@ export class Sim {
       // Seconds of open concealment window. Written by the `stealth`
       // primitive, read by untargetable() and by hurtPlayer.
       concealT: 0,
+      // Which tree the held form pays, or null for class-wide. See engineScale.
+      formTree: null,
       // `xp` is the bar and RESETS on every level-up; `xpEarned` never does, so
       // anything measuring experience over a run reads the second one. Reading
       // the bar reports a smaller number the better the player did.
@@ -958,6 +960,7 @@ export class Sim {
       // the moment a room's enemies spawn on top of you, which is the one place
       // it is worth the most and was earned the least.
       p.concealT = 0;
+      p.formTree = null;
       p.hp = p.stats.vitality;   // every room starts at full health
       // §8.5, rows 5 and 7, and they are one moment because they are two halves
       // of the same rule: the Necromancer's summons WIPE and the Druid's pack
