@@ -822,7 +822,16 @@ function assertTrees() {
         if (s.cooldown) problems.push(`${s.id}: persistent active with a cooldown — there is no cast to put on one`);
         if (s.compose && s.compose.length) problems.push(`${s.id}: persistent active with a compose — a step here would never run; put the effect in "persist"`);
         if (!q.form && !q.aura && !q.shield) problems.push(`${s.id}: persist declares none of form/aura/shield — it holds nothing`);
-        const known = ['form', 'stats', 'aura', 'shield'];
+        const known = ['form', 'stats', 'aura', 'shield', 'tree'];
+        // `tree` SCOPES THE FORM'S BOOST and is meaningless without one, so it
+        // is checked rather than merely allowed: a tree named on a node with no
+        // form scopes nothing, and a tree that is not a real tree scopes to a
+        // string no skill can match, which reads as "this form boosts nothing"
+        // and would be invisible in play.
+        if (q.tree !== undefined) {
+          if (!q.form) problems.push(`${s.id}: persist declares "tree" with no form — a tree scopes a form's boost and there is no form here to scope`);
+          else if (!(q.tree in TREES)) problems.push(`${s.id}: persist tree "${q.tree}" is not a tree — a form scoped to a name no skill carries boosts nothing, silently`);
+        }
         for (const k of Object.keys(q)) {
           if (!known.includes(k)) problems.push(`${s.id}: persist key "${k}" is read by nothing — ${known.join('/')} are the ones applyPersistents applies`);
         }

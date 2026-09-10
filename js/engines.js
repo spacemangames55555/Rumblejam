@@ -307,7 +307,7 @@ function tickForm(sim, p, dt) {
       // standing on a player who is no longer in the form, which is the exact
       // silent-persistence failure `shift` and `crystal` each needed a door
       // reset to avoid.
-      p.formT = 0; p.form = null; p.formStats = null;
+      p.formT = 0; p.form = null; p.formStats = null; p.formTree = null;
       sim._recomputeStats(p);
       sim.pushEvent({ k: 'toast', idx: p.idx, text: 'The crystal dims' });
     }
@@ -437,7 +437,7 @@ export function resetEnginesForRoom(p) {
   // AND NO FORM SURVIVES A DOOR EITHER. A transformation is a response to a
   // fight going badly, and carrying one into the next room would mean arriving
   // already transformed with the threshold that bought it long since healed past.
-  p.form = null; p.formT = 0; p.formStats = null;
+  p.form = null; p.formT = 0; p.formStats = null; p.formTree = null;
   if (p.engines) { p.engines.chi = 0; p.engines.cascade = 0; p.engines.form = 0; }
 }
 
