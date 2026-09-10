@@ -831,6 +831,12 @@ function assertTrees() {
         if (q.tree !== undefined) {
           if (!q.form) problems.push(`${s.id}: persist declares "tree" with no form — a tree scopes a form's boost and there is no form here to scope`);
           else if (!(q.tree in TREES)) problems.push(`${s.id}: persist tree "${q.tree}" is not a tree — a form scoped to a name no skill carries boosts nothing, silently`);
+          // AND IT MUST BE THE TREE THE FORM LIVES IN. Moving a form between
+          // trees and leaving this field behind points its boost at the tree it
+          // came from: the new tree gets nothing and the old one is paid by a
+          // form no longer in it. Caught exactly this way when Iron Pyrite moved
+          // from Crystal to Anvil in the 2026-09-10 restructure.
+          else if (q.tree !== s.tree) problems.push(`${s.id}: persist tree "${q.tree}" but the skill lives in "${s.tree}" — a form pays the tree it sits in, or it is paying somebody else's`);
         }
         for (const k of Object.keys(q)) {
           if (!known.includes(k)) problems.push(`${s.id}: persist key "${k}" is read by nothing — ${known.join('/')} are the ones applyPersistents applies`);

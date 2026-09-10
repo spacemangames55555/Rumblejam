@@ -1,62 +1,64 @@
-// BLACKSMITH — Forge tree.
+// BLACKSMITH — Forge tree. THE TANK.
 //
-// The other half, and — like Arcana, Grace, Ensemble, Collapse, Blight, Reef,
-// Shadow, Houndmaster, Stone Garden and Bloodbound — deliberately the half that
-// does NOT read the engine. Nothing here carries `scaleWith: 'form'` and nothing
-// here is gated on a form.
+// Restructured 2026-09-10 to Casey's ruling. It was the half that read no
+// engine — Tank and DPS folded together, "the heavy end of a Blacksmith who
+// never transforms". It is now the tank tree proper: Celestial Calcite is its
+// form, and four of its ten nodes exist to make enemies attack the Blacksmith
+// instead of somebody squishier.
 //
-// §8.2's THIRD TREE IS THIS ONE, FOLDED IN. The aspiration was Tank / DPS /
-// Runes-Crystal Forms. Every one of the thirteen built classes shipped two
-// trees, and the forms are the ENGINE — a Blacksmith who took the "other" half
-// would otherwise own a third of an engine, which is not a §4.2 decision, it is
-// a broken class. So the forms are all in Crystal, and Tank and DPS are folded
-// together here: the heavy end of a Blacksmith who never transforms.
+// SURVIVING IS NOT TANKING, which is the whole reason this tree changed. The
+// class had one threat tool — Standing Order, a cone that taunts when you are
+// hit — against four wards, a shield, armour passives and a heal. In an
+// eight-player party a Blacksmith who cannot pull enemies OFF the other seven
+// is a durable damage dealer, not a tank.
 //
-// AND THAT MAKES THE DECISION ON THIS CLASS THE SHARPEST OF THE FOURTEEN. Every
-// form is on a SELF_THRESHOLD, so the Crystal tree only pays when the fight is
-// going badly. Forge pays all the time and never spikes. A Blacksmith deep in
-// Crystal is strongest at 35% health; a Blacksmith deep in Forge would rather
-// not be there at all.
+// THE STATUE TEST GOVERNS ALL THREE NEW NODES. Every one of them deals zero
+// damage, stated rather than defaulted. That is what kept Marrownaut honest and
+// it is what keeps a permanent aggro field honest here: a stationary Blacksmith
+// with the whole room walking at it clears none of it.
 //
-// THE TRAIT SITS UNDER BOTH. Crystal Infusion grants a PERMANENT crystal after
-// every fight — the same three materials the forms use, on a run-long timescale
-// rather than a seven-second one. It also makes the Blacksmith unpushable and a
-// far bigger target (hitbox ×1.4), which is why every node here is close-range
-// and none of them ask the player to reposition.
+// THE PULL RADIUS IS NOT THIS FILE'S TO CHOOSE. It reads CONFIG.TANK_PULL, the
+// same constant Marrownaut reads, because a per-class tank radius means "who
+// tanks better" gets settled by whoever authored the larger number.
 //
-// EVERY NUMBER IN THIS FILE LIVES IN TUNING.
+// EVERY OTHER NUMBER IN THIS FILE LIVES IN TUNING.
+
+import { TANK_PULL } from '../../config.js';
 
 export const TUNING = {
   // tier 1 — Tongs
   tongsDamage: 7, tongsReach: 92, tongsArc: 1.4, tongsRadius: 118, tongsCount: 1, tongsCd: 1100,
-  // tier 2 — Bellows
-  bellowsAmount: 22, bellowsDuration: 4800, bellowsCd: 5400,
-  // tier 3 — Quench
-  quenchDamage: 9, quenchAngle: 1.8, quenchRange: 185, quenchRadius: 160,
-  quenchCount: 2, quenchCd: 2700, quenchSlowMult: 0.68, quenchSlowDur: 1500,
-  // tier 4 — Sparks
-  // Casey's ruling, 2026-09-05: the five plagues that named a spread and
-  // carried none take 150, the median of the three that already worked
-  // (rot 130, rime 150, spoil 175). Refined per class later. NOT the old
-  // `range` value — that was the cast reach and is still the trigger's.
-  sparksDamage: 8, sparksRange: 235, sparksTick: 4, sparksDuration: 3400, sparksCd: 2900,
-  sparksSpread: 150,
-  // tier 5 — Deadweight (passive)
+  // tier 2 — Deadweight (passive)
   deadGrit: 7,
-  // tier 6 — Swage Block
-  swageDamage: 11, swageReach: 106, swageArc: 1.7, swageRadius: 142,
-  swageCount: 2, swageCd: 3200, swageKnock: 200,
-  // tier 7 — Draw the Heat
-  drawDamage: 11, drawRange: 215, drawHealPct: 0.45, drawCd: 3600,
+  // tier 4 — Cold Work, moved in from Anvil with its numbers unchanged
+  coldDamage: 16, coldReach: 115, coldArc: 1.9, coldCd: 2400,
+  // tier 4 — Bellows
+  bellowsAmount: 22, bellowsDuration: 4800, bellowsCd: 5400,
+  // tier 6 — Din. The sustained pull. Radius/tick/hold come from CONFIG.
+  // tier 6 — Quenching, moved in from Anvil. Renamed keys: `quench*` belonged
+  // to the old Quench cone, which left this tree, and two different skills
+  // sharing `quenchCd` is how a tuning value gets edited for the wrong one.
+  temperAmount: 34, temperDuration: 4600, temperPct: 60, temperCd: 5000,
   // tier 8 — Standing Order
   orderDamage: 10, orderAngle: 2.0, orderRange: 200, orderCd: 3800, orderTaunt: 1600,
-  // tier 9 — Cold Shut
-  shutAmount: 30, shutDuration: 5400, shutReflect: 0.32, shutCd: 8400,
-  // tier 10 — Strike While It's Hot
-  hotDamage: 16, hotReach: 126, hotArc: 2.3, hotRadius: 178,
-  hotCount: 3, hotCd: 8600, hotStun: 600,
-  // rank increments — linear, never compounding
-  rankDamage: 0.045, rankDuration: 0.035,
+  // tier 8 — Long Tongs. THE REACH TAUNT, and its length is deliberate.
+  // The spec proposed 250-300; every line in the shipped roster is 320-430, so
+  // 270 would have made the class's one long-range grab the SHORTEST line in
+  // the game by fifty pixels, which is backwards for the tool whose whole job
+  // is reaching something that walked past. 320 is the floor of the real band —
+  // hun_raking_shot, monk_snare_line and necro_wrecking_ball all sit there.
+  // Width matches those two at 60: a taunt wants to catch a file of enemies
+  // walking by, not thread one.
+  longLength: 320, longWidth: 60, longTaunt: 1800, longCd: 4400,
+  // tier 10 — Call the Room. THE EMERGENCY RE-GRAB. A line rather than a
+  // full-circle strike: the failure it answers is the party losing a lane, and
+  // a nova centred on the tank pulls hardest exactly where the tank already
+  // holds. Longer and wider than Long Tongs, on a capstone cooldown.
+  roomLength: 380, roomWidth: 66, roomTaunt: 2600, roomCd: 8200,
+  // tier 10 — Celestial Calcite, moved in from Crystal. Stats unchanged.
+  calciteRec: 40, calciteVit: 24,
+
+  rankDamage: 0.04, rankDuration: 0.03,
 };
 
 const T = TUNING;
@@ -74,8 +76,29 @@ export const SMITH_FORGE = [
     ranks: R,
   },
   {
-    id: 'smith_bellows', tree: 'smith_forge', tier: 2, name: 'Bellows',
-    type: 'active', domain: 'spiritual', prereq: 'smith_tongs',
+    id: 'smith_deadweight', tree: 'smith_forge', tier: 2, name: 'Deadweight',
+    flavor: 'Nothing moves you and nothing ever has.',
+    type: 'passive', domain: 'physical', prereq: 'smith_tongs',
+    passive: { armorGrit: T.deadGrit },
+    maxRank: 1,
+  },
+  {
+    // NOT GATED ON THE ABSENCE OF A FORM, and this is deliberate — do not add
+    // `form: 'none'` back. A Cold Iron skill fires whether or not a form is
+    // slotted; what makes it a no-form skill is that it carries no `scaleWith`,
+    // so a form pays it nothing and it is strong at baseline instead.
+    id: 'smith_cold_work', tree: 'smith_forge', tier: 4, name: 'Cold Work',
+    flavor: 'Shaping without heat. It does not care what you are wearing.',
+    type: 'active', domain: 'physical', prereq: 'smith_deadweight',
+    select: 'objective_target',
+    trigger: { kind: 'NEAREST', range: T.coldReach },
+    cooldown: T.coldCd,
+    compose: [{ kind: 'strike', damage: T.coldDamage, arc: T.coldArc, reach: T.coldReach, riders: {} }],
+    ranks: R,
+  },
+  {
+    id: 'smith_bellows', tree: 'smith_forge', tier: 4, name: 'Bellows',
+    type: 'active', domain: 'spiritual', prereq: 'smith_deadweight',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
     cooldown: T.bellowsCd,
@@ -83,67 +106,33 @@ export const SMITH_FORGE = [
     ranks: R,
   },
   {
-    id: 'smith_quench', tree: 'smith_forge', tier: 4, name: 'Quench',
-    flavor: 'Steam and shock.',
-    type: 'active', domain: 'physical', prereq: 'smith_bellows',
-    select: 'densest_cluster',
-    trigger: { kind: 'PROXIMITY', radius: T.quenchRadius, count: T.quenchCount },
-    cooldown: T.quenchCd,
-    compose: [{
-      kind: 'cone', damage: T.quenchDamage, angle: T.quenchAngle, range: T.quenchRange,
-      riders: { slow: { mult: T.quenchSlowMult, dur: T.quenchSlowDur } },
-    }],
-    ranks: R,
-  },
-  {
-    id: 'smith_sparks', tree: 'smith_forge', tier: 6, name: 'Sparks',
-    flavor: 'Catches, and keeps burning.',
-    type: 'active', domain: 'physical', prereq: 'smith_quench',
-    select: 'highest_hp',
-    trigger: { kind: 'NEAREST', range: T.sparksRange },
-    cooldown: T.sparksCd,
-    compose: [{
-      kind: 'plague', damage: T.sparksDamage, spreadRadius: T.sparksSpread,
-      tick: T.sparksTick, duration: T.sparksDuration,
-    }],
-    ranks: R,
-  },
-  {
-    // maxRank: 1 — `armorGrit` is 'other' in PASSIVE_EFFECT, an unlock rather
-    // than an investment. Same registry refusal the Savage's Old Scars hit.
-    id: 'smith_deadweight', tree: 'smith_forge', tier: 4, name: 'Deadweight',
-    flavor: 'Nothing moves you and nothing ever has.',
-    type: 'passive', domain: 'physical', prereq: 'smith_bellows',
-    passive: { armorGrit: T.deadGrit },
+    // THE SUSTAINED PULL, and it is Marrownaut's shape rather than a second
+    // answer to the same question: a persistent zero-damage aura carrying a
+    // taunt, entering through the `persist` door, resolving at position 3 in
+    // tauntTarget() — below every cast taunt and the Mirage decoy, above the
+    // relic carrier. A permanent state must never silently override another
+    // player's spent cast.
+    id: 'smith_din', tree: 'smith_forge', tier: 6, name: 'Din',
+    flavor: 'The shop is loud. Everything in it is looking at you.',
+    type: 'active', domain: 'physical', prereq: 'smith_cold_work',
+    select: 'self',
+    // ZERO DAMAGE, STATED. The pull is the whole effect.
+    persist: { aura: { radius: TANK_PULL.radius, pulseMs: TANK_PULL.pulseMs, taunt: TANK_PULL.hold } },
     maxRank: 1,
   },
   {
-    id: 'smith_swage_block', tree: 'smith_forge', tier: 6, name: 'Swage Block',
-    flavor: 'A shaping blow that sends the front rank somewhere else.',
-    type: 'active', domain: 'physical', prereq: 'smith_deadweight',
-    select: 'nearest',
-    trigger: { kind: 'PROXIMITY', radius: T.swageRadius, count: T.swageCount },
-    cooldown: T.swageCd,
-    compose: [{
-      kind: 'strike', damage: T.swageDamage, reach: T.swageReach, arc: T.swageArc,
-      riders: { knockback: T.swageKnock },
-    }],
+    id: 'smith_quenching', tree: 'smith_forge', tier: 6, name: 'Quenching',
+    flavor: 'Tempering competes with the forms for the same low-health moment: spend it becoming something, or spend it on this.',
+    type: 'active', domain: 'physical', prereq: 'smith_bellows',
+    select: 'self',
+    trigger: { kind: 'SELF_THRESHOLD', pct: T.temperPct },
+    cooldown: T.temperCd,
+    compose: [{ kind: 'shield', amount: T.temperAmount, duration: T.temperDuration, scaleWith: 'form' }],
     ranks: R,
   },
   {
-    id: 'smith_draw_the_heat', tree: 'smith_forge', tier: 8, name: 'Draw the Heat',
-    type: 'active', domain: 'physical', prereq: 'smith_swage_block',
-    select: 'nearest',
-    trigger: { kind: 'NEAREST', range: T.drawRange },
-    cooldown: T.drawCd,
-    compose: [{ kind: 'drain', damage: T.drawDamage, range: T.drawRange, healPct: T.drawHealPct }],
-    ranks: R,
-  },
-  {
-    // The trait makes this class unpushable and oversized, so pulling a crowd
-    // onto itself is the one thing a Blacksmith can do that nobody else survives.
     id: 'smith_standing_order', tree: 'smith_forge', tier: 8, name: 'Standing Order',
-    type: 'active', domain: 'spiritual', prereq: 'smith_sparks',
+    type: 'active', domain: 'spiritual', prereq: 'smith_din',
     select: 'densest_cluster',
     trigger: { kind: 'ON_HIT_TAKEN' },
     cooldown: T.orderCd,
@@ -154,27 +143,38 @@ export const SMITH_FORGE = [
     ranks: R,
   },
   {
-    id: 'smith_cold_shut', tree: 'smith_forge', tier: 10, name: 'Cold Shut',
-    type: 'active', domain: 'spiritual', prereq: 'smith_draw_the_heat',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: { kind: 'SELF_THRESHOLD', pct: 40 },
-    cooldown: T.shutCd,
-    compose: [{
-      kind: 'ward', amount: T.shutAmount, duration: T.shutDuration, reflectPct: T.shutReflect,
-    }],
-    ranks: R,
+    // THE REACH TAUNT. A line rather than a cone because the failure it fixes is
+    // one enemy walking PAST toward a named ally, and that is a direction rather
+    // than a spread. Zero damage: a threat tool that also kills is a damage
+    // skill wearing a taunt.
+    id: 'smith_long_tongs', tree: 'smith_forge', tier: 8, name: 'Long Tongs',
+    flavor: 'Whatever thought it was going somewhere else.',
+    type: 'active', domain: 'physical', prereq: 'smith_quenching',
+    select: 'farthest',
+    trigger: { kind: 'NEAREST', range: T.longLength },
+    cooldown: T.longCd,
+    compose: [{ kind: 'line', damage: 0, length: T.longLength, width: T.longWidth, riders: { taunt: T.longTaunt } }],
+    ranks: { duration: T.rankDuration },
   },
   {
-    id: 'smith_strike_while_hot', tree: 'smith_forge', tier: 10, name: "Strike While It's Hot",
-    flavor: 'The whole weight of the shop behind it.',
-    type: 'active', domain: 'physical', prereq: 'smith_standing_order',
+    // TREE-SCOPED: this form pays smith_forge and nothing else.
+    id: 'smith_celestial_calcite', tree: 'smith_forge', tier: 10, name: 'Celestial Calcite',
+    type: 'active', domain: 'spiritual', prereq: 'smith_standing_order',
+    select: 'self',
+    maxRank: 1,
+    persist: { form: 'calcite', tree: 'smith_forge', stats: { recovery: T.calciteRec, vitality: T.calciteVit } },
+  },
+  {
+    // THE EMERGENCY RE-GRAB. Same shape as Long Tongs, longer and wider, on a
+    // capstone cooldown — for the moment the party has lost a lane rather than
+    // for the steady state Din already covers. Zero damage, like the other two.
+    id: 'smith_call_the_room', tree: 'smith_forge', tier: 10, name: 'Call the Room',
+    flavor: 'CAPSTONE — every hand stops. Whatever they were doing, they are doing this now.',
+    type: 'active', domain: 'spiritual', prereq: 'smith_long_tongs',
     select: 'densest_cluster',
-    trigger: { kind: 'PROXIMITY', radius: T.hotRadius, count: T.hotCount },
-    cooldown: T.hotCd,
-    compose: [{
-      kind: 'strike', damage: T.hotDamage, reach: T.hotReach, arc: T.hotArc,
-      riders: { stun: T.hotStun },
-    }],
-    ranks: R,
+    trigger: { kind: 'NEAREST', range: T.roomLength },
+    cooldown: T.roomCd,
+    compose: [{ kind: 'line', damage: 0, length: T.roomLength, width: T.roomWidth, riders: { taunt: T.roomTaunt } }],
+    ranks: { duration: T.rankDuration },
   },
 ];

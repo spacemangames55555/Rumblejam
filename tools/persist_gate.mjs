@@ -32,7 +32,7 @@
 import { Sim } from '../js/game.js';
 import { SKILL_BY_ID, TREES, TIER_LEVELS } from '../js/skills.js';
 import { spendSkillPoint, setLoadout, applyPersistents } from '../js/skillsim.js';
-import { PERSIST_T, CONFIG as CFG } from '../js/config.js';
+import { PERSIST_T, CONFIG as CFG, TANK_PULL } from '../js/config.js';
 import { engineScale } from '../js/compose.js';
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -295,10 +295,16 @@ for (const sk of PERSISTENT) {
   } else {
     const [A, B] = pair;
     const deepest = A.tier > B.tier ? A : B;
-    const { g, p } = build(TREES[deepest.tree].classId, chainTo(deepest.id));
+    // LEARN BOTH CHAINS. The two forms used to share a tree; since the tank
+    // restructure they anchor different ones, so learning only the deeper
+    // form's chain left the other unlearned — and `setLoadout` refused it as
+    // "not a learned active", which reads as the one-form rule firing on the
+    // FIRST form rather than as a fixture that never taught it.
+    const learn = [...new Set([...chainTo(A.id), ...chainTo(B.id)])];
+    const { g, p } = build(TREES[deepest.tree].classId, learn);
     g.cleared = true;
-    const dmgId = Object.values(SKILL_BY_ID).find(x => x.tree === deepest.tree && x.type === 'active'
-      && !x.persist && p.skillRanks[x.id] > 0);
+    const dmgId = Object.values(SKILL_BY_ID).find(x => x.type === 'active' && !x.persist
+      && p.skillRanks[x.id] > 0 && (x.compose || []).some(c => c.damage > 0));
     p.loadout = new Array(8).fill(null);
     if (dmgId) setLoadout(g, p, 0, dmgId.id);
 
@@ -374,6 +380,65 @@ for (const sk of PERSISTENT) {
       console.log(`      ${outTree.length} form-scaled node(s) are at x1.00 today because all three forms sit in smith_crystal: `
         + `${[...new Set(outTree.map(x => x.sk.id))].join(', ')}`);
     }
+  }
+}
+
+// ---- THE BLACKSMITH'S THREE THREAT TOOLS ----
+//
+// A tank that cannot pull is a durable damage dealer. These three exist to make
+// enemies attack the Blacksmith instead of somebody squishier, and the thing
+// that keeps them honest is that NONE OF THEM DEALS DAMAGE — the statue test.
+// A stationary Blacksmith with the whole room walking at it must clear none of
+// it, which is exactly what kept Marrownaut's permanent aggro field legal.
+{
+  const TOOLS = ['smith_din', 'smith_long_tongs', 'smith_call_the_room'];
+  const found = TOOLS.map(id => SKILL_BY_ID[id]).filter(Boolean);
+  if (found.length !== TOOLS.length) {
+    bad(`threat tools: expected ${TOOLS.length}, found ${found.length} — ${TOOLS.filter(id => !SKILL_BY_ID[id]).join(', ')} missing`);
+  } else {
+    // 1. every one of them is a taunt and none of them is damage
+    const damaging = found.filter(s => (s.compose || []).some(c => (c.damage || 0) > 0));
+    if (!damaging.length) ok(`threat tools: all ${found.length} deal ZERO damage — the statue test holds`);
+    else bad(`threat tools: ${damaging.map(s => s.id).join(', ')} deal damage — a threat tool that kills is a damage skill wearing a taunt`);
+
+    const taunts = found.filter(s => (s.compose || []).some(c => c.riders && c.riders.taunt)
+      || (s.persist && s.persist.aura && s.persist.aura.taunt));
+    if (taunts.length === found.length) ok('threat tools: all three actually carry a taunt');
+    else bad(`threat tools: ${found.filter(s => !taunts.includes(s)).map(s => s.id).join(', ')} carry no taunt at all`);
+
+    // 2. the pull reads the SHARED constant, not a number of its own
+    const din = SKILL_BY_ID['smith_din'];
+    if (din.persist.aura.radius === TANK_PULL.radius && din.persist.aura.pulseMs === TANK_PULL.pulseMs) {
+      ok(`the pull reads CONFIG.TANK_PULL (r${TANK_PULL.radius}, ${TANK_PULL.pulseMs}ms) — the same constant Marrownaut reads, so no class picks its own tank radius`);
+    } else bad(`smith_din does not read TANK_PULL: r${din.persist.aura.radius} vs ${TANK_PULL.radius}`);
+
+    const mn = SKILL_BY_ID['necro_marrownaut'];
+    if (mn && mn.persist.aura.radius === TANK_PULL.radius) ok('and Marrownaut reads it too — one number, two tanks');
+    else bad(`Marrownaut is at r${mn && mn.persist.aura.radius}, TANK_PULL is r${TANK_PULL.radius} — the constant is not shared after all`);
+
+    // 3. the re-grab is the long-cooldown one
+    const reach = SKILL_BY_ID['smith_long_tongs'], room = SKILL_BY_ID['smith_call_the_room'];
+    if (room.cooldown > reach.cooldown) ok(`the emergency re-grab sits on a longer cooldown than the reach taunt (${room.cooldown}ms vs ${reach.cooldown}ms) — one is the steady state, the other is losing a lane`);
+    else bad(`re-grab cooldown ${room.cooldown}ms is not longer than the reach taunt's ${reach.cooldown}ms`);
+
+    // 4. AND THE PULL ACTUALLY PULLS, through tauntTarget rather than by reading
+    // the declaration back. A field that is declared and resolves to nothing is
+    // the shape this whole gate exists to catch.
+    const { g, p } = build('toh_blacksmith', chainTo('smith_din'));
+    g.cleared = true;
+    const dmg = Object.values(SKILL_BY_ID).find(x => x.tree === 'smith_forge' && x.type === 'active'
+      && !x.persist && p.skillRanks[x.id] > 0 && (x.compose || []).some(c => c.damage > 0));
+    p.loadout = new Array(8).fill(null);
+    if (dmg) setLoadout(g, p, 0, dmg.id);
+    const before = g.tauntTarget(p.x + 40, p.y);
+    setLoadout(g, p, 1, 'smith_din');
+    g.tick();
+    const z = g.zones.find(q => q.follow === p.idx && q.auraKey === 'smith_din');
+    if (z && z.dps === 0 && z.r === TANK_PULL.radius) ok(`the pull field is up at r${z.r} with dps ${z.dps} — a real zone, and an unarmed one`);
+    else bad(`the pull field is wrong or absent: ${z ? `r ${z.r} dps ${z.dps}` : 'none'}`);
+    const after = g.tauntTarget(p.x + 40, p.y);
+    if (after === p) ok('and an enemy inside it resolves onto the Blacksmith through tauntTarget()');
+    else bad(`tauntTarget did not resolve onto the Blacksmith: before ${before && before.name}, after ${after && after.name}`);
   }
 }
 

@@ -314,6 +314,13 @@ export function mechanics(skill, rank = 1) {
           `${n1(rankedDamage(s.attack.damage, skill, nx))} every ${secs(s.attackCd)}`));
       }
     }
+    // A TAUNT IS THE EFFECT MAGNITUDE OF A THREAT TOOL. The Blacksmith's three
+    // pull tools deal no damage by ruling, so without this they described
+    // themselves to the player with nothing in the box at all — a skill that
+    // says only "Pace 4.4s" reads as broken rather than as a taunt.
+    if (s.riders && s.riders.taunt) {
+      fields.push(field('taunt', 'Forces onto you', `${secs(s.riders.taunt)} of attention`));
+    }
     if (s.kind === 'shift') fields.push(field('shift', 'Shifts to', String(s.domain)));
     if (s.kind === 'form') {
       fields.push(field('form', 'Form', `${s.form} for ${secs(rankedDuration(s.duration, skill, rk))}`));
@@ -411,7 +418,10 @@ export function mechanics(skill, rank = 1) {
       // field deals nothing by design — that is what keeps a permanent aggro
       // aura on the right side of the statue test — so the text names what it
       // does to enemy attention and stays silent about damage it never deals.
-      if (a.taunt) parts.push(`pulls enemies onto you every ${secs(a.pulseMs || 400)}`);
+      if (a.taunt) {
+        parts.push(`pulls enemies onto you every ${secs(a.pulseMs || 400)}`);
+        fields.push(field('taunt', 'Forces onto you', `${secs(a.taunt)} of attention, refreshed while they stay inside`));
+      }
       if (a.damage) parts.push(`${n1(a.damage)} damage every ${secs(a.pulseMs || 400)}`);
       if (a.ampPct) parts.push(`enemies inside take ${Math.round(a.ampPct * 100)}% more damage from you and yours`);
       if (a.slow) parts.push(`slows what it catches to ${Math.round(a.slow.mult * 100)}% for ${secs(a.slow.dur)}`);

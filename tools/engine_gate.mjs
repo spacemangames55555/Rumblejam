@@ -377,7 +377,19 @@ const PROBES = {
     // hold while slotted and have no trigger at all. Staging that looked only
     // for a compose step found nothing to slot and reported the engine as never
     // filling — the fixture's fault, not the engine's.
-    fills: sk => (sk.compose || []).some(c => c.kind === 'form') || !!(sk.persist && sk.persist.form),
+    // AND IT MUST BE THE FORM THAT PAYS THE CLAIM SKILL'S TREE. Since the
+    // 2026-09-10 restructure the three crystal forms anchor three different
+    // trees and a form boosts only its own, so staging "any form" staged one
+    // that pays a tree `smith_hammer_blow` is not in — and the probe then
+    // reported the engine filled and read by nothing, which was the fixture
+    // slotting the wrong form rather than the engine failing. A form declaring
+    // no tree is class-wide and still qualifies.
+    fills: sk => {
+      const isForm = (sk.compose || []).some(c => c.kind === 'form') || !!(sk.persist && sk.persist.form);
+      if (!isForm) return false;
+      const scope = sk.persist && sk.persist.tree;
+      return !scope || scope === (SKILL_BY_ID['smith_hammer_blow'] || {}).tree;
+    },
     fillsFirst: sk => (sk.compose || []).some(c => c.kind === 'form') || !!(sk.persist && sk.persist.form),
     // A `form`-gated skill cannot be the measured claim — it does not fire in
     // the starved run BY DESIGN, so the comparison would be a skill against
@@ -1127,7 +1139,18 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
 
   // …and through the REAL fire path, not just the predicate. A Blacksmith with
   // the Cold Iron opener slotted must fire it out of form and refuse it in.
+  // THE GATE IS STAMPED ON HERE RATHER THAN READ FROM CONTENT. It used to lean
+  // on smith_cold_work declaring `form: 'none'`, and since Casey's ruling of
+  // 2026-09-10 no skill declares it at all — the Cold Iron nodes fire whether or
+  // not a form is held and are paid in raw output instead. The MECHANISM still
+  // has to work, because the next class to want the gap between forms will reach
+  // for it, so the test applies the declaration to a real node for the duration
+  // of the run and puts it back. That keeps a real trigger loop under the
+  // assertion without a content dependency that was never the subject.
   const cold = 'smith_cold_work';
+  const coldSk = SKILL_BY_ID[cold];
+  const restoreForm = coldSk.form;
+  coldSk.form = 'none';
   const runFor = (formValue) => {
     const { g, p } = stage('toh_blacksmith', [cold]);
     // UNLEARN THE PERSISTENT FORMS. `stage` learns every node in the class, and
@@ -1153,8 +1176,9 @@ if (live === rows.length && !failures) ok(`every class engine is filled by play 
     return (p.fireLog || []).filter(f => f === cold || (f && f.id === cold)).length;
   };
   const outOfForm = runFor(null), inForm = runFor('pyrite');
+  if (restoreForm === undefined) delete coldSk.form; else coldSk.form = restoreForm;
   if (outOfForm > 0 && inForm === 0) {
-    ok(`\`form: 'none'\` bites through the real trigger loop: ${cold} fired ${outOfForm}x with no form held and ${inForm}x while Iron Pyrite did — the Cold Iron branch is literally the interval`);
+    ok(`\`form: 'none'\` bites through the real trigger loop: a node carrying it fired ${outOfForm}x with no form held and ${inForm}x while Iron Pyrite did. No shipped skill declares it since the Cold Iron ruling; the mechanism is kept alive here for whoever wants the gap between forms next`);
   } else {
     fail(`\`form: 'none'\` does not gate: ${cold} fired ${outOfForm}x out of form and ${inForm}x in form (want >0 and exactly 0) — `
       + `a branch authored against this would either never stop or never start`);

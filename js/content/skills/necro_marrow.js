@@ -24,6 +24,7 @@
 //   js/compose.js. The value is published on p.engines.armor by skillsim.
 
 import { docTrigger, rankPer } from '../doc_conversion.js';
+import { TANK_PULL } from '../../config.js';
 
 export const TUNING = {
   // tier_code 0 — Bone Dart
@@ -52,9 +53,12 @@ export const TUNING = {
   // file keeps finding elsewhere.
   marrowGrit: 20, marrowVit: 40,
   marrowTempo: -3,              // 300 -> 291 u/s; one of the two negative rungs the item table uses
-  marrowAuraR: 165,             // Bone Nova's reach: the pull ends where the tank's own swing does
-  marrowAuraTick: 800,          // under the shortest shipped taunt (1400ms), so the pull does not flicker
-  marrowPull: 1000,             // how long a pulled enemy stays pulled after leaving the radius
+  // THE PULL NOW READS THE SHARED CONSTANT. These three were the Blacksmith's
+  // model when its sustained pull was written, and copying them would have made
+  // the tank radius a per-class authoring decision. One number, in CONFIG.
+  marrowAuraR: TANK_PULL.radius,
+  marrowAuraTick: TANK_PULL.pulseMs,
+  marrowPull: TANK_PULL.hold,
   marrowShield: 34,             // carried forward from the emergency shield, unretuned
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,

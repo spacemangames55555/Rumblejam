@@ -62,7 +62,11 @@ console.log(`SKILL TEXT — ${ALL.length} skills, ${ACTIVES.length} active, ${PA
   }
   if (!anyMissing) ok(`all ${damaging.length} damaging actives state damage, cooldown, range and shape`);
 
-  const silent = support.filter(s => !mechanics(s, 1).fields.some(f => ['amount', 'summon', 'shift', 'form', 'duration'].includes(f.key)));
+  // `taunt` COUNTS AS A MAGNITUDE. A threat tool deals no damage by ruling — the
+  // Blacksmith's three pull nodes are the case — so the number that tells the
+  // player what it does is how long it holds attention. Without this the rule
+  // would demand these skills state something they deliberately do not have.
+  const silent = support.filter(s => !mechanics(s, 1).fields.some(f => ['amount', 'summon', 'shift', 'form', 'duration', 'taunt'].includes(f.key)));
   if (silent.length) bad(`${silent.length} support active(s) state no effect magnitude: ${silent.map(s => s.id).slice(0, 8).join(', ')}`);
   else ok(`all ${support.length} non-damaging actives state their own magnitude (absorb, heal, summon, form or shift)`);
 }

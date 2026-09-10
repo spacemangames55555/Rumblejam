@@ -376,6 +376,22 @@ export const CONFIG = {
   TELEGRAPH_PIT_STAGGER: 70,
 };
 
+// THE TANK PULL, SHARED BY EVERY CLASS THAT FIELDS ONE.
+//
+// One number, read by every persistent taunt aura, because the alternative is
+// that "who tanks better" gets decided by whoever authored the larger radius.
+// Marrownaut set it at 165 — Bone Nova's reach, so the pull ends where the
+// tank's own longest swing ends — and the Blacksmith's sustained pull reads the
+// same constant rather than picking its own.
+//
+// The tick is under the shortest shipped taunt (1400ms) so a pulled enemy does
+// not flicker between the field and whatever else wants it.
+export const TANK_PULL = {
+  radius: 165,
+  pulseMs: 800,
+  hold: 1000,      // how long a pulled enemy stays pulled after leaving the field
+};
+
 export const PALETTE = {
   bg: '#14161f', grid: '#1b1e2b', wall: '#2b2f45', wallEdge: '#454b6e',
   floorSafe: '#181b28', doorOpen: '#5ee0a8', doorLocked: '#ff5d6c',

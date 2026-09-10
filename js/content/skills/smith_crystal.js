@@ -47,6 +47,12 @@
 // (FORM_POWER lives in js/config.js — the engine shipped and gated first.)
 
 export const TUNING = {
+  // ---- moved in 2026-09-10: Swage from Anvil, Draw the Heat and Strike While
+  // It's Hot from the old Forge, which became the tank tree. Numbers unchanged.
+  swageDamage: 25, swageArc: 1.6, swageRange: 290, swageCd: 4200,
+  drawDamage: 11, drawRange: 215, drawHealPct: 0.45, drawCd: 3600,
+  hotDamage: 16, hotReach: 126, hotArc: 2.3, hotRadius: 178,
+  hotCount: 3, hotCd: 8600, hotStun: 600,
   // tier 1 — Hammer Blow
   hammerDamage: 7, hammerReach: 100, hammerArc: 1.5, hammerRadius: 124,
   hammerCount: 1, hammerCd: 1150, hammerWeight: 0.92,
@@ -96,53 +102,9 @@ export const SMITH_CRYSTAL = [
     ranks: R,
   },
   {
-    // A CRYSTAL FORM IS A STATE YOU CHOSE, NOT AN EMERGENCY BUTTON. Casey's
-    // ruling of 2026-09-09: the forms hold permanently while slotted, exactly as
-    // Marrownaut does. It shipped as a 7000ms form on a 12000ms cooldown
-    // firing at 70% health, which is a panic cast — and a panic cast cannot
-    // be a commitment to a tree.
-    //
-    // AN ACTIVE THAT NEVER FIRES, through the same `persist` door Marrownaut
-    // uses. It occupies one of the eight slots, and spending that slot IS the
-    // specialisation; a passive would hand the form out for free. It has no
-    // trigger for the trigger loop to read and never enters the pace band.
-    //
-    // The stat delta is carried forward unchanged from the timed version.
-    id: 'smith_iron_pyrite', tree: 'smith_crystal', tier: 2, name: 'Iron Pyrite',
-    type: 'active', domain: 'physical', prereq: 'smith_hammer_blow',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    // ONE RANK. A form is a state, not an investment: the stat delta is what it
-    // is, and a second point in it would buy nothing. Same rule the rank-1
-    // passives declare, for the same reason.
-    maxRank: 1,
-    // TREE-SCOPED. Recorded as the tree this form ACTUALLY sits in today,
-    // not the one the restructure will move it to — that layout is Casey's
-    // and is not invented here.
-    persist: { form: 'pyrite', tree: 'smith_crystal', stats: { grit: T.pyriteGrit, vitality: T.pyriteVit } },
-  },
-  {
-    // A FORM-GATED SKILL, and the reason forms are more than a stat buff. This
-    // stays slotted and visible at all times; what the form changes is whether
-    // its condition can hold — the same shape as the Monk's `chi` cost and the
-    // Hunter's need for a live beast. §5.5 forbids mid-fight loadout changes, so
-    // a form that swapped slots would be §9.2's deleted trigger-swap item aimed
-    // at the player by their own class.
-    id: 'smith_anvil_strike', tree: 'smith_crystal', tier: 3, name: 'Anvil Strike',
-    flavor: 'Only in Iron Pyrite.',
-    type: 'active', domain: 'physical', prereq: 'smith_iron_pyrite',
-    select: 'densest_cluster', form: 'pyrite',
-    trigger: { kind: 'PROXIMITY', radius: T.anvilRadius, count: T.anvilCount },
-    cooldown: T.anvilCd,
-    compose: [{
-      kind: 'strike', damage: T.anvilDamage, reach: T.anvilReach, arc: T.anvilArc,
-      riders: { knockback: T.anvilKnock },
-    }],
-    ranks: R,
-  },
-  {
-    id: 'smith_slag', tree: 'smith_crystal', tier: 4, name: 'Slag',
+    id: 'smith_slag', tree: 'smith_crystal', tier: 2, name: 'Slag',
     flavor: 'A spray of hot waste.',
-    type: 'active', domain: 'physical', prereq: 'smith_anvil_strike',
+    type: 'active', domain: 'physical', prereq: 'smith_hammer_blow',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.slagRadius, count: T.slagCount },
     cooldown: T.slagCd,
@@ -165,7 +127,7 @@ export const SMITH_CRYSTAL = [
     // trigger for the trigger loop to read and never enters the pace band.
     //
     // The stat delta is carried forward unchanged from the timed version.
-    id: 'smith_prism_quartz', tree: 'smith_crystal', tier: 5, name: 'Prism Quartz',
+    id: 'smith_prism_quartz', tree: 'smith_crystal', tier: 4, name: 'Prism Quartz',
     type: 'active', domain: 'mental', prereq: 'smith_slag',
     select: 'self',   // writes the caster, picks no target (§5.3)
     // ONE RANK. A form is a state, not an investment: the stat delta is what it
@@ -178,9 +140,9 @@ export const SMITH_CRYSTAL = [
     persist: { form: 'quartz', tree: 'smith_crystal', stats: { attunement: T.quartzAtt, ferocity: T.quartzFer } },
   },
   {
-    id: 'smith_refraction', tree: 'smith_crystal', tier: 6, name: 'Refraction',
+    id: 'smith_refraction', tree: 'smith_crystal', tier: 4, name: 'Refraction',
     flavor: 'Only in Prism Quartz. A splitting bolt.',
-    type: 'active', domain: 'mental', prereq: 'smith_prism_quartz',
+    type: 'active', domain: 'mental', prereq: 'smith_slag',
     select: 'farthest', form: 'quartz',
     trigger: { kind: 'NEAREST', range: T.refractRange },
     cooldown: T.refractCd,
@@ -190,51 +152,62 @@ export const SMITH_CRYSTAL = [
     ranks: R,
   },
   {
-    id: 'smith_facet', tree: 'smith_crystal', tier: 7, name: 'Facet',
+    id: 'smith_facet', tree: 'smith_crystal', tier: 6, name: 'Facet',
     flavor: 'Being crystal is worth more.',
-    type: 'passive', domain: 'mental', prereq: 'smith_refraction',
+    type: 'passive', domain: 'mental', prereq: 'smith_prism_quartz',
     passive: { formScaleWeight: T.facetWeight },
     ranks: R,
   },
   {
-    // A CRYSTAL FORM IS A STATE YOU CHOSE, NOT AN EMERGENCY BUTTON. Casey's
-    // ruling of 2026-09-09: the forms hold permanently while slotted, exactly as
-    // Marrownaut does. It shipped as a 6000ms form on a 15000ms cooldown
-    // firing at 35% health, which is a panic cast — and a panic cast cannot
-    // be a commitment to a tree.
-    //
-    // AN ACTIVE THAT NEVER FIRES, through the same `persist` door Marrownaut
-    // uses. It occupies one of the eight slots, and spending that slot IS the
-    // specialisation; a passive would hand the form out for free. It has no
-    // trigger for the trigger loop to read and never enters the pace band.
-    //
-    // The stat delta is carried forward unchanged from the timed version.
-    id: 'smith_celestial_calcite', tree: 'smith_crystal', tier: 8, name: 'Celestial Calcite',
-    type: 'active', domain: 'spiritual', prereq: 'smith_facet',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    // ONE RANK. A form is a state, not an investment: the stat delta is what it
-    // is, and a second point in it would buy nothing. Same rule the rank-1
-    // passives declare, for the same reason.
-    maxRank: 1,
-    // TREE-SCOPED. Recorded as the tree this form ACTUALLY sits in today,
-    // not the one the restructure will move it to — that layout is Casey's
-    // and is not invented here.
-    persist: { form: 'calcite', tree: 'smith_crystal', stats: { recovery: T.calciteRec, vitality: T.calciteVit } },
+    id: 'smith_draw_the_heat', tree: 'smith_crystal', tier: 6, name: 'Draw the Heat',
+    type: 'active', domain: 'physical', prereq: 'smith_refraction',
+    select: 'nearest',
+    trigger: { kind: 'NEAREST', range: T.drawRange },
+    cooldown: T.drawCd,
+    compose: [{ kind: 'drain', damage: T.drawDamage, range: T.drawRange, healPct: T.drawHealPct }],
+    ranks: R,
   },
   {
-    id: 'smith_mend_the_seam', tree: 'smith_crystal', tier: 9, name: 'Mend the Seam',
-    flavor: 'Only in Celestial Calcite.',
-    type: 'active', domain: 'spiritual', prereq: 'smith_celestial_calcite',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
-    cooldown: T.seamCd,
-    compose: [{ kind: 'heal', amount: T.seamAmount }],
+    // NOT GATED ON THE ABSENCE OF A FORM, and this is deliberate — do not add
+    // `form: 'none'` back. Casey's ruling of 2026-09-10: a Cold Iron skill fires
+    // whether or not a form is slotted. What makes it a "no-form" skill is that
+    // it takes NO tree boost — it carries no `scaleWith`, so a form pays it
+    // nothing — and it is strong at baseline instead. It shipped gated, which
+    // meant a player who slotted a form could not fire it at all; that is the
+    // opposite of a splash node you spend a few points on from outside your
+    // tree. Older GDD text still describes the gate.
+    id: 'smith_swage', tree: 'smith_crystal', tier: 8, name: 'Swage',
+    flavor: 'A whole row of it, worked cold.',
+    type: 'active', domain: 'physical', prereq: 'smith_facet',
+    select: 'densest_cluster',
+    trigger: { kind: 'PROXIMITY', radius: T.swageRange, count: 2 },
+    cooldown: T.swageCd,
+      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
+      // `form: 'none'` skill fires only while no form is held, which forces
+      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
+      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
+      // is worse than having none — Casey's ruling of 2026-09-09 pays this
+      // branch in raw damage and area instead, set separately.
+    compose: [{ kind: 'cone', damage: T.swageDamage, arc: T.swageArc, range: T.swageRange, riders: {} }],
+    ranks: R,
+  },
+  {
+    id: 'smith_strike_while_hot', tree: 'smith_crystal', tier: 8, name: "Strike While It's Hot",
+    flavor: 'The whole weight of the shop behind it.',
+    type: 'active', domain: 'physical', prereq: 'smith_draw_the_heat',
+    select: 'densest_cluster',
+    trigger: { kind: 'PROXIMITY', radius: T.hotRadius, count: T.hotCount },
+    cooldown: T.hotCd,
+    compose: [{
+      kind: 'strike', damage: T.hotDamage, reach: T.hotReach, arc: T.hotArc,
+      riders: { stun: T.hotStun },
+    }],
     ranks: R,
   },
   {
     id: 'smith_whole_cloth', tree: 'smith_crystal', tier: 10, name: 'Whole Cloth',
     flavor: 'Whatever you are made of right now, all of it at once.',
-    type: 'active', domain: 'physical', prereq: 'smith_mend_the_seam',
+    type: 'active', domain: 'physical', prereq: 'smith_swage',
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.clothRadius, count: T.clothCount },
     cooldown: T.clothCd,
@@ -242,6 +215,16 @@ export const SMITH_CRYSTAL = [
       kind: 'strike', damage: T.clothDamage, reach: T.clothReach, arc: T.clothArc,
       scaleWith: 'form', scaleWeight: T.clothWeight, riders: { stun: T.clothStun },
     }],
+    ranks: R,
+  },
+  {
+    id: 'smith_mend_the_seam', tree: 'smith_crystal', tier: 10, name: 'Mend the Seam',
+    flavor: 'Only in Celestial Calcite.',
+    type: 'active', domain: 'spiritual', prereq: 'smith_strike_while_hot',
+    select: 'self',   // writes the caster, picks no target (§5.3)
+    trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
+    cooldown: T.seamCd,
+    compose: [{ kind: 'heal', amount: T.seamAmount }],
     ranks: R,
   },
 ];

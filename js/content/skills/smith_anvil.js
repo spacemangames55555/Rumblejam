@@ -43,6 +43,14 @@
 // capstones, symmetric.
 
 export const TUNING = {
+  // ---- moved in 2026-09-10: Iron Pyrite and Anvil Strike from Crystal (a form
+  // and the skill gated on it belong in one tree), Swage Block from the old
+  // Forge. Numbers unchanged. Pyrite's own tree is this one now.
+  pyriteGrit: 22, pyriteVit: 14,
+  anvilDamage: 12, anvilReach: 112, anvilArc: 1.9, anvilRadius: 150,
+  anvilCount: 2, anvilCd: 2400, anvilKnock: 190,
+  blockDamage: 11, blockReach: 106, blockArc: 1.7, blockRadius: 142,
+  blockCount: 2, blockCd: 3200, blockKnock: 200,
   tapDamage: 11, tapReach: 105, tapArc: 1.5, tapCd: 1100,
   patienceWeight: 0.15,
 
@@ -96,56 +104,102 @@ export const SMITH_ANVIL = [
     passive: { formScaleWeight: T.patienceWeight },
     ranks: R,
   },
-
-  // ------------------------------------------------- branch A: Cold Iron
   {
-    id: 'smith_cold_work', tree: 'smith_anvil', tier: 4, name: 'Cold Work',
-    flavor: 'Shaping without heat. Fires only while no form holds — this branch IS the gap, and it goes quiet the moment one starts.',
+    // A CRYSTAL FORM IS A STATE YOU CHOSE, NOT AN EMERGENCY BUTTON. Casey's
+    // ruling of 2026-09-09: the forms hold permanently while slotted, exactly as
+    // Marrownaut does. It shipped as a 7000ms form on a 12000ms cooldown
+    // firing at 70% health, which is a panic cast — and a panic cast cannot
+    // be a commitment to a tree.
+    //
+    // AN ACTIVE THAT NEVER FIRES, through the same `persist` door Marrownaut
+    // uses. It occupies one of the eight slots, and spending that slot IS the
+    // specialisation; a passive would hand the form out for free. It has no
+    // trigger for the trigger loop to read and never enters the pace band.
+    //
+    // The stat delta is carried forward unchanged from the timed version.
+    id: 'smith_iron_pyrite', tree: 'smith_anvil', tier: 4, name: 'Iron Pyrite',
     type: 'active', domain: 'physical', prereq: 'smith_patience',
-    select: 'objective_target',
-    form: 'none',
-    trigger: { kind: 'NEAREST', range: T.coldReach },
-    cooldown: T.coldCd,
-      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
-      // `form: 'none'` skill fires only while no form is held, which forces
-      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
-      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
-      // is worse than having none — Casey's ruling of 2026-09-09 pays this
-      // branch in raw damage and area instead, set separately.
-    compose: [{ kind: 'strike', damage: T.coldDamage, arc: T.coldArc, reach: T.coldReach, riders: {} }],
+    select: 'self',   // writes the caster, picks no target (§5.3)
+    // ONE RANK. A form is a state, not an investment: the stat delta is what it
+    // is, and a second point in it would buy nothing. Same rule the rank-1
+    // passives declare, for the same reason.
+    maxRank: 1,
+    // TREE-SCOPED. Recorded as the tree this form ACTUALLY sits in today,
+    // not the one the restructure will move it to — that layout is Casey's
+    // and is not invented here.
+    persist: { form: 'pyrite', tree: 'smith_anvil', stats: { grit: T.pyriteGrit, vitality: T.pyriteVit } },
+  },
+  {
+    id: 'smith_swage_block', tree: 'smith_anvil', tier: 4, name: 'Swage Block',
+    flavor: 'A shaping blow that sends the front rank somewhere else.',
+    type: 'active', domain: 'physical', prereq: 'smith_patience',
+    select: 'nearest',
+    trigger: { kind: 'PROXIMITY', radius: T.blockRadius, count: T.blockCount },
+    cooldown: T.blockCd,
+    compose: [{
+      kind: 'strike', damage: T.blockDamage, reach: T.blockReach, arc: T.blockArc,
+      riders: { knockback: T.blockKnock },
+    }],
+    ranks: R,
+  },
+  {
+    // A FORM-GATED SKILL, and the reason forms are more than a stat buff. This
+    // stays slotted and visible at all times; what the form changes is whether
+    // its condition can hold — the same shape as the Monk's `chi` cost and the
+    // Hunter's need for a live beast. §5.5 forbids mid-fight loadout changes, so
+    // a form that swapped slots would be §9.2's deleted trigger-swap item aimed
+    // at the player by their own class.
+    id: 'smith_anvil_strike', tree: 'smith_anvil', tier: 6, name: 'Anvil Strike',
+    flavor: 'Only in Iron Pyrite.',
+    type: 'active', domain: 'physical', prereq: 'smith_iron_pyrite',
+    select: 'densest_cluster', form: 'pyrite',
+    trigger: { kind: 'PROXIMITY', radius: T.anvilRadius, count: T.anvilCount },
+    cooldown: T.anvilCd,
+    compose: [{
+      kind: 'strike', damage: T.anvilDamage, reach: T.anvilReach, arc: T.anvilArc,
+      riders: { knockback: T.anvilKnock },
+    }],
     ranks: R,
   },
   {
     id: 'smith_hammer_hand', tree: 'smith_anvil', tier: 6, name: 'Hammer Hand',
     flavor: 'The hand knows the shape whether or not the metal is glowing.',
-    type: 'passive', domain: 'physical', prereq: 'smith_cold_work',
+    type: 'passive', domain: 'physical', prereq: 'smith_swage_block',
     trigger: null, cooldown: 0, compose: [],
     passive: { formScaleWeight: T.hammerWeight },
     ranks: R,
   },
   {
-    id: 'smith_swage', tree: 'smith_anvil', tier: 8, name: 'Swage',
-    flavor: 'A whole row of it, worked cold.',
-    type: 'active', domain: 'physical', prereq: 'smith_hammer_hand',
-    select: 'densest_cluster',
-    form: 'none',
-    trigger: { kind: 'PROXIMITY', radius: T.swageRange, count: 2 },
-    cooldown: T.swageCd,
-      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
-      // `form: 'none'` skill fires only while no form is held, which forces
-      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
-      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
-      // is worse than having none — Casey's ruling of 2026-09-09 pays this
-      // branch in raw damage and area instead, set separately.
-    compose: [{ kind: 'cone', damage: T.swageDamage, arc: T.swageArc, range: T.swageRange, riders: {} }],
+    id: 'smith_drawing_out', tree: 'smith_anvil', tier: 8, name: 'Drawing Out',
+    flavor: 'Thinner, longer, and it reaches further than it looks.',
+    type: 'active', domain: 'physical', prereq: 'smith_anvil_strike',
+    select: 'objective_target',
+    trigger: { kind: 'SELF_THRESHOLD', pct: T.drawPct },
+    cooldown: T.drawCd,
+    compose: [{ kind: 'strike', damage: T.drawDamage, arc: T.drawArc, reach: T.drawReach, ...FORM, riders: {} }],
     ranks: R,
   },
   {
+    id: 'smith_grain', tree: 'smith_anvil', tier: 8, name: 'Grain',
+    flavor: 'What the heat did to the structure stays done.',
+    type: 'passive', domain: 'physical', prereq: 'smith_hammer_hand',
+    trigger: null, cooldown: 0, compose: [],
+    passive: { formScaleWeight: T.grainWeight },
+    ranks: R,
+  },
+  {
+    // NOT GATED ON THE ABSENCE OF A FORM, and this is deliberate — do not add
+    // `form: 'none'` back. Casey's ruling of 2026-09-10: a Cold Iron skill fires
+    // whether or not a form is slotted. What makes it a "no-form" skill is that
+    // it takes NO tree boost — it carries no `scaleWith`, so a form pays it
+    // nothing — and it is strong at baseline instead. It shipped gated, which
+    // meant a player who slotted a form could not fire it at all; that is the
+    // opposite of a splash node you spend a few points on from outside your
+    // tree. Older GDD text still describes the gate.
     id: 'smith_proof', tree: 'smith_anvil', tier: 10, name: 'Proof',
     flavor: 'CAPSTONE — Cold Iron. The healthy Blacksmith, paid for being healthy. Twice, and what is left is thrown clear.',
-    type: 'active', domain: 'physical', prereq: 'smith_swage',
+    type: 'active', domain: 'physical', prereq: 'smith_drawing_out',
     select: 'objective_target',
-    form: 'none',
     trigger: { kind: 'NEAREST', range: T.proofReach },
     cooldown: T.proofCd,
     compose: [{
@@ -160,40 +214,10 @@ export const SMITH_ANVIL = [
     }],
     ranks: R,
   },
-
-  // ------------------------------------------------ branch B: Tempering
-  {
-    id: 'smith_quenching', tree: 'smith_anvil', tier: 4, name: 'Quenching',
-    flavor: 'Tempering competes with the forms for the same low-health moment: spend it becoming something, or spend it on this.',
-    type: 'active', domain: 'physical', prereq: 'smith_patience',
-    select: 'self',   // writes the caster, picks no target (§5.3)
-    trigger: { kind: 'SELF_THRESHOLD', pct: T.quenchPct },
-    cooldown: T.quenchCd,
-    compose: [{ kind: 'shield', amount: T.quenchAmount, duration: T.quenchDuration, ...FORM }],
-    ranks: R,
-  },
-  {
-    id: 'smith_grain', tree: 'smith_anvil', tier: 6, name: 'Grain',
-    flavor: 'What the heat did to the structure stays done.',
-    type: 'passive', domain: 'physical', prereq: 'smith_quenching',
-    trigger: null, cooldown: 0, compose: [],
-    passive: { formScaleWeight: T.grainWeight },
-    ranks: R,
-  },
-  {
-    id: 'smith_drawing_out', tree: 'smith_anvil', tier: 8, name: 'Drawing Out',
-    flavor: 'Thinner, longer, and it reaches further than it looks.',
-    type: 'active', domain: 'physical', prereq: 'smith_grain',
-    select: 'objective_target',
-    trigger: { kind: 'SELF_THRESHOLD', pct: T.drawPct },
-    cooldown: T.drawCd,
-    compose: [{ kind: 'strike', damage: T.drawDamage, arc: T.drawArc, reach: T.drawReach, ...FORM, riders: {} }],
-    ranks: R,
-  },
   {
     id: 'smith_forge_weld', tree: 'smith_anvil', tier: 10, name: 'Forge Weld',
     flavor: 'CAPSTONE — Tempering. Two pieces made one at the bottom of the bar, and it hits back.',
-    type: 'active', domain: 'physical', prereq: 'smith_drawing_out',
+    type: 'active', domain: 'physical', prereq: 'smith_grain',
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: T.weldPct },
     cooldown: T.weldCd,
