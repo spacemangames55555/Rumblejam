@@ -8,6 +8,19 @@
 // behaves exactly as it did before the sprite pipeline landed. See js/assets.js.
 
 import { CONFIG, PALETTE } from './config.js';
+
+// WHAT A FORM LOOKS LIKE. Drawn from PALETTE only — the tokens the rest of the
+// renderer already uses — so nothing here invents a colour.
+//   pyrite     fool's gold, and the material gold is already that colour
+//   quartz     the prism tree; elite purple is the roster's one refracting hue
+//   calcite    celestial, and rare blue is the coldest thing in the palette
+//   marrownaut bone, which is what hazardSpike already draws
+const FORM_COLOR = {
+  pyrite: PALETTE.material,
+  quartz: PALETTE.elite,
+  calcite: PALETTE.rarity.rare,
+  marrownaut: PALETTE.hazardSpike,
+};
 import { WEAPON_BY_ID } from './content/weapons.js';
 import { Assets, drawSprite, spriteScaleFor, DEFAULT_FACING } from './assets.js';
 import { PROP, FX, BEAST_SPRITE, MINION_SPRITE } from './content/sprites.js';
@@ -1304,7 +1317,11 @@ export class Renderer {
       ctx.moveTo(Math.cos(p.aimA) * r, Math.sin(p.aimA) * r);
       ctx.lineTo(Math.cos(p.aimA) * (r + 8), Math.sin(p.aimA) * (r + 8));
       ctx.stroke();
-      ctx.fillStyle = p.color;
+      // A FORM RECOLOURS THE BODY. Colour only, by ruling — no sprite swap and
+      // no particles. Every value is an existing PALETTE token rather than a new
+      // one, so a form reads against the same enemy reds and material gold the
+      // eight seat colours were chosen against.
+      ctx.fillStyle = FORM_COLOR[p.form] || p.color;
       ctx.strokeStyle = PALETTE.outline;
       ctx.lineWidth = 3;
       // The sprite stands in for the coloured disc AND the character glyph —

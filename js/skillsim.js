@@ -186,6 +186,14 @@ function enterPersistent(sim, p, sk, id, rank) {
     // expiry path checks by name.
     p.formT = PERSIST_T;
     p.formStats = q.stats || null;
+    // THE ENGINE VALUE IS SET AT THE DOOR, not left to the next tick. `tickForm`
+    // owns it during play, but `applyPersistents` runs outside that loop, so for
+    // one frame after a slot change `p.engines.form` described the PREVIOUS
+    // state — reading 0 with the form up, and 1 with it already gone. A
+    // `scaleWith: 'form'` step firing in that frame took the bonus without the
+    // form. One frame, and it is the exact silent-persistence shape the form
+    // teardown was written to avoid.
+    p.engines.form = CONFIG.FORM_POWER;
     sim._recomputeStats(p);
     sim.pushEvent({ k: 'toast', idx: p.idx, text: `${q.form.toUpperCase()}` });
   }
@@ -216,6 +224,7 @@ function exitPersistent(sim, p, sk, id) {
   let changed = false;
   if (q.form && p.form === q.form) {
     p.form = null; p.formT = 0; p.formStats = null;
+    p.engines.form = 0;      // same reason as the door above, other direction
     changed = true;
   }
   if (q.aura) {
@@ -291,6 +300,28 @@ export function setLoadout(sim, p, slot, id) {
   const anyDamage = next.some(x => x && isDamaging(SKILL_BY_ID[x]));
   const ownsDamage = Object.keys(p.skillRanks).some(x => isDamaging(SKILL_BY_ID[x]));
   if (ownsDamage && !anyDamage) return { ok: false, reason: 'at least one damaging active must stay slotted' };
+  // ONE FORM AT A TIME, ENFORCED AT THE BAR. Slotting a second form used to
+  // OVERWRITE silently: `enterPersistent` guards on `p.form !== q.form`, so the
+  // last one the loadout iteration reached won, and the loser's teardown never
+  // ran because `exitPersistent` guards on `p.form === q.form`. The player was
+  // left holding a slot that did nothing and had no way to see why.
+  //
+  // MEASURED ON DISTINCT FORM NAMES, not on slot count. Two copies of the SAME
+  // form are inert — the door reads `loadout.includes(id)`, so a second copy
+  // adds nothing and removing one leaves the form standing — and refusing them
+  // here would be a rule about duplicates, which is a separate question Casey
+  // has open. This refuses holding two DIFFERENT forms, which is the ruling.
+  //
+  // A SWAP IS NOT A REFUSAL. This function writes one slot, so exchanging form
+  // A for form B in the slot A occupies leaves exactly one form in `next` and
+  // passes. Only reaching for B while A stays somewhere else is refused, which
+  // is the case the ruling is about.
+  const formsHeld = new Set(next.map(x => x && SKILL_BY_ID[x])
+    .filter(sk => sk && sk.persist && sk.persist.form)
+    .map(sk => sk.persist.form));
+  if (formsHeld.size > 1) {
+    return { ok: false, reason: `only one form at a time — un-slot ${[...formsHeld].filter(f => f !== (sk && sk.persist && sk.persist.form)).join(' or ')} first, or swap it for this one in its own slot` };
+  }
   p.loadout = next;
   p.metaDirty = true;
   // A PERSISTENT ACTIVE ENDS WHEN IT LEAVES THE BAR, not at the next door. The

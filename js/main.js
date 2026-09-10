@@ -1431,6 +1431,13 @@ function viewFromSim(sim) {
       ts: tohState(sim, p),
       trait: p.char.trait.key,
       spriteId: p.char.spriteId,   // cosmetic; resolved from the def, never networked
+      // THE FORM REACHES THE RENDERER. It had no path there at all — nothing in
+      // render.js read `.form` and the view did not carry it — so every form in
+      // the game, Marrownaut included, was a name and a toast and nothing on
+      // screen. This is the local view; the networked snapshot is a positional
+      // array and adding to it is a wire change, so a remote client still sees
+      // the seat colour until that lands.
+      form: p.form || null,
     })),
     // Thrones of Heaven world layer
     toh: tohSnapshot(sim),

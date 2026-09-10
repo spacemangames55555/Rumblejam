@@ -57,7 +57,10 @@ export const TUNING = {
   quenchAmount: 34, quenchDuration: 4600, quenchPct: 60, quenchCd: 5000,
   grainWeight: 0.18,
   drawDamage: 20, drawReach: 125, drawArc: 2.4, drawPct: 50, drawCd: 4600,
-  weldAmount: 52, weldDuration: 5400, weldReflect: 30, weldPct: 35, weldCd: 9000,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 30 meant 30x the damage absorbed thrown back, not 30%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  weldAmount: 52, weldDuration: 5400, weldReflect: 0.30, weldPct: 35, weldCd: 9000,
 
   rankDamage: 0.04, rankDuration: 0.03,
 };
@@ -98,7 +101,13 @@ export const SMITH_ANVIL = [
     form: 'none',
     trigger: { kind: 'NEAREST', range: T.coldReach },
     cooldown: T.coldCd,
-    compose: [{ kind: 'strike', damage: T.coldDamage, arc: T.coldArc, reach: T.coldReach, ...FORM, riders: {} }],
+      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
+      // `form: 'none'` skill fires only while no form is held, which forces
+      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
+      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
+      // is worse than having none — Casey's ruling of 2026-09-09 pays this
+      // branch in raw damage and area instead, set separately.
+    compose: [{ kind: 'strike', damage: T.coldDamage, arc: T.coldArc, reach: T.coldReach, riders: {} }],
     ranks: R,
   },
   {
@@ -117,7 +126,13 @@ export const SMITH_ANVIL = [
     form: 'none',
     trigger: { kind: 'PROXIMITY', radius: T.swageRange, count: 2 },
     cooldown: T.swageCd,
-    compose: [{ kind: 'cone', damage: T.swageDamage, arc: T.swageArc, range: T.swageRange, ...FORM, riders: {} }],
+      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
+      // `form: 'none'` skill fires only while no form is held, which forces
+      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
+      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
+      // is worse than having none — Casey's ruling of 2026-09-09 pays this
+      // branch in raw damage and area instead, set separately.
+    compose: [{ kind: 'cone', damage: T.swageDamage, arc: T.swageArc, range: T.swageRange, riders: {} }],
     ranks: R,
   },
   {
@@ -129,7 +144,13 @@ export const SMITH_ANVIL = [
     trigger: { kind: 'NEAREST', range: T.proofReach },
     cooldown: T.proofCd,
     compose: [{
-      kind: 'strike', damage: T.proofDamage, arc: T.proofArc, reach: T.proofReach, ...FORM,
+      // NO `...FORM` ON THE COLD IRON NODES. It was here and it was dead: a
+      // `form: 'none'` skill fires only while no form is held, which forces
+      // `p.engines.form` to 0, which makes `engineScale` return exactly 1.
+      // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
+      // is worse than having none — Casey's ruling of 2026-09-09 pays this
+      // branch in raw damage and area instead, set separately.
+      kind: 'strike', damage: T.proofDamage, arc: T.proofArc, reach: T.proofReach,
       riders: { multiPulse: T.proofPulses, knockback: T.proofKnock },
     }],
     ranks: R,

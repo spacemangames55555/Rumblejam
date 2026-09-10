@@ -77,7 +77,10 @@ export const TUNING = {
   graniteWeight: 0.18,
   scarDamage: 20, scarRadius: 170, scarDuration: 6400, scarTickMs: 420, scarCd: 5400,
   scarSlow: { mult: 0.6, dur: 2400 },
-  bedrockWardAmount: 52, bedrockWardDuration: 7200, bedrockWardReflect: 34,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 34 meant 34x the damage absorbed thrown back, not 34%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  bedrockWardAmount: 52, bedrockWardDuration: 7200, bedrockWardReflect: 0.34,
   bedrockWardPct: 45, bedrockWardCd: 9200,
 
   rankDamage: 0.04, rankDuration: 0.03,

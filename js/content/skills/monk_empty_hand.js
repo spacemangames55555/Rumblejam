@@ -78,7 +78,10 @@ export const TUNING = {
   gatherChi: 14, gatherAmount: 26, gatherRadius: 210, gatherPct: 75, gatherCd: 3000,
   wellWeight: 0.18,
   riverChi: 20, riverAmount: 44, riverDuration: 5000, riverPct: 55, riverCd: 4800,
-  oceanChi: 30, oceanAmount: 58, oceanDuration: 5600, oceanReflect: 34, oceanPct: 40, oceanCd: 9000,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 34 meant 34x the damage absorbed thrown back, not 34%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  oceanChi: 30, oceanAmount: 58, oceanDuration: 5600, oceanReflect: 0.34, oceanPct: 40, oceanCd: 9000,
 
   rankDamage: 0.04, rankDuration: 0.03,
 };

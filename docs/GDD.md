@@ -452,15 +452,23 @@ Characters start with **no abilities at all**. The first point spent is the char
 
 ### 5.7 The composed-action schema
 
-Any active is data: an ordered list of steps from **seventeen** primitives plus riders.
+Any active is data: an ordered list of steps from **eighteen** primitives plus riders.
 
-**Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `gravity_pull` · `aura` · `channel` · `heal` · `shield` · `ward` · `drain` · `summon` · `plague` · `shift` · `trap` · `form`
+**Primitives:** `strike` · `bolt` · `cone` · `line` · `hazard` · `gravity_pull` · `aura` · `channel` · `heal` · `shield` · `ward` · `drain` · `summon` · `plague` · `shift` · `trap` · `form` · `stealth`
 
 **A ZONE HAS NO IMPACT MOMENT, so `hazard` takes only `slow`.** Every other damaging primitive accepts the full impact set — stun, root, knockback, taunt, the weakens, mark, doll, drench, sluice — because each of them has a moment where a hit LANDS on a specific enemy, and that is where a rider hangs. A `hazard` builds a zone with a damage cadence: nothing lands, there is no impact frame and no single target, so `slow` (a field the zone can hold and apply continuously) is the only rider with anywhere to attach.
 
 **This is a design property, not a defect, and it is recorded because it is invisible until you hit it.** The consequence for authoring is real: a branch built on ground control has a materially narrower rider vocabulary than a branch built on strikes, and a capstone that wanted to stun will have to want something else. `bard_requiem`'s Dirge branch met exactly this — its tier-10 node was authored with `stun` and became a slow. Plan a zone branch's payoff around denial and attrition rather than around control, or put the control on a `strike`/`cone` step in the same skill, which is legal and is the intended escape hatch.
 
 **`form: 'none'` — the gap between forms.** `formHolds` could only ask *"is this the form I need"*, so the interval between forms — cooldowns up, health high, no state — was the one condition no skill could name. Since §8.3's forms enter on `SELF_THRESHOLD`, that interval is most of a good fight, and the Blacksmith is **strongest when hurt and hollow when healthy**. `none` is a VALUE of the existing `form` field rather than a new flag, so one declaration covers both readings and one gate covers both directions; it is asserted against `FORM_NAMES` at load, so a typo'd form name still fails rather than silently reading as "the gap". Gated in `engine_gate` through the real trigger loop — fires out of form, silent in one — before `smith_anvil` was authored against it.
+
+**`stealth` — the eighteenth primitive, and the second admitted by EXPOSURE.** A concealment window: while it is open the character cannot be hit and enemies lose track of them. It deals no damage, by ruling, which is what keeps it on the right side of the statue test — a concealed character standing still clears nothing.
+
+**The source material breaks concealment on attack, and that cannot work here.** Everything auto-fires, so a twenty-second cloak would end on its first tick, every time. The ruled mechanic is a periodic window instead: on for `windowMs`, gated on an enemy inside `radius`, repeating at the skill's own cooldown. Attacking does not end it; the timer does.
+
+**Two thirds of the cycle were already in the engine and the primitive does not rebuild them.** The interval IS the cooldown and the gate IS the step's radius, so `intervalMs` is refused at load with a message naming where it lives — the same treatment `range` gets on a plague step. Only `windowMs` is genuinely new. The untargetable half was already there too: `p.vanishT`, the Assassin contract's post-kill beat, which `targetable()` and `nearestLivingPlayer()` have always excluded, carrying with it the all-players-hidden fallback that an eight-player party of concealed characters now makes reachable. Concealment joins that path through `untargetable()` rather than opening a parallel one.
+
+**Concealment blocks the floor as well as the swing, and that is the engine's shape rather than a ruling.** `hurtPlayer` cannot tell an attack from a hazard at the point the check has to sit: an enemy projectile, a beam tick and a turret boom all arrive with a null source, exactly as a zone does. Only the objective hazards are separable, through the `trueDamage` flag they already carry, and those stay lethal — a concealed player still burns in the storm. Splitting attacks from fields would mean tagging thirteen call sites.
 
 **`aura` — the seventeenth primitive, and the first admitted by EXPOSURE rather than construction.** A field bound to the caster's body instead of to a patch of floor, which is the whole difference between it and `hazard`: a hazard is placed, and the floor does not move.
 

@@ -58,7 +58,10 @@ export const TUNING = {
   annealAmount: 26, annealDuration: 4200, annealPct: 70, annealCd: 5200,
   hardnessWeight: 0.18,
   quenchDamage: 19, quenchReach: 120, quenchArc: 2.5, quenchPct: 55, quenchCd: 4800,
-  adamantAmount: 46, adamantDuration: 5200, adamantReflect: 35, adamantPct: 40, adamantCd: 9200,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 35 meant 35x the damage absorbed thrown back, not 35%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  adamantAmount: 46, adamantDuration: 5200, adamantReflect: 0.35, adamantPct: 40, adamantCd: 9200,
 
   rankDamage: 0.04, rankDuration: 0.03,
 };

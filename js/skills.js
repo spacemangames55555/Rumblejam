@@ -404,6 +404,78 @@ export const PLAGUE_SINGLE_TARGET = new Map([
 // be filed as single-target above, and an empty list is the gate's green.
 export const PLAGUE_SPREAD_PENDING = new Set([]);
 
+// A STEALTH STEP DECLARES A WINDOW AND A GATE, AND NOTHING ELSE.
+//
+// The cycle Casey ruled — a window of one length every interval, while enemies
+// are within a radius — is three numbers, and the engine already owns two of
+// them. The interval is the skill's cooldown. Writing `intervalMs` onto the
+// step would put the same number in two places, and the first person to edit
+// one of them would be right in one file and wrong in the other. So the loader
+// refuses it and says where it lives, exactly as it refuses `range` on a plague
+// step and `radius` on a heal.
+//
+// `radius` IS kept on the step and is NOT the trigger's radius, though the two
+// will usually match. The gate has to hold whatever fires the skill: a stealth
+// on SELF_THRESHOLD has no proximity trigger at all, and without a step-level
+// gate it would open a window in an empty room.
+// A REFLECT IS A FRACTION, AND THE UNIT IS WHAT GOES WRONG.
+//
+// `skillsim.js:1045` throws back `eaten * p.wardReflect`, and `skillsim.js:1043`
+// — the one place the engine does arithmetic on the field rather than storing
+// it — clamps the result to 1. `skilltext.js:287` renders it to the player as
+// `x 100`. So 0.32 is thirty-two percent and 32 is thirty-two TIMES.
+//
+// Eight wards across seven classes were authored as whole numbers and were
+// converted on 2026-09-09 by Casey's ruling: 30 became 0.30, not retuned. This
+// is now a hard rule with nothing exempted — the ratchet it replaced is gone
+// because the list it held is empty.
+//
+// A POSITIVE-NUMBER CHECK CANNOT CATCH THIS, which is the whole point: every one
+// of the eight was a perfectly good positive number. The unit is what was wrong,
+// exactly as with the summon `attackCd` that read seconds into a milliseconds
+// field. And the mistake is easy to see happening: in smith_anvil.js the line
+// that carried it sits two lines from `weldPct: 35` and `quenchPct: 60`, which
+// ARE whole-number percentages, because SELF_THRESHOLD uses that convention.
+function wardStepProblems(s, step) {
+  const out = [];
+  const r = step.reflectPct;
+  if (r === undefined) return out;
+  if (typeof r !== 'number' || !Number.isFinite(r)) {
+    out.push(`${s.id}: ward reflectPct is ${String(r)} — it must be a finite number`);
+  } else if (r < 0) {
+    out.push(`${s.id}: ward reflectPct ${r} is negative — a ward cannot reflect less than nothing`);
+  } else if (r > 1) {
+    out.push(`${s.id}: ward reflectPct ${r} is above 1 — this field is a FRACTION and that looks like a percentage. `
+      + `${r} means ${r}x the damage absorbed is thrown back at whatever hit you; write ${(r / 100).toFixed(2)} if you meant ${r}%. `
+      + `A threshold pct in the same tuning block IS a whole number, which is how this happens`);
+  }
+  return out;
+}
+
+function stealthStepProblems(s, step) {
+  const out = [];
+  if (!(step.windowMs > 0)) {
+    out.push(`${s.id}: stealth step needs a positive "windowMs" — the length of the concealment window. Without one the skill fires, spends its cooldown and conceals nobody`);
+  } else if (!Number.isFinite(step.windowMs)) {
+    out.push(`${s.id}: stealth windowMs is ${String(step.windowMs)} — a window with no end is permanent invulnerability`);
+  } else if (step.windowMs < 50) {
+    out.push(`${s.id}: stealth windowMs ${step.windowMs} is below 50 — this field is MILLISECONDS and that looks like seconds. Write ${Math.round(step.windowMs * 1000)} if you meant ${step.windowMs}s`);
+  }
+  if (!(step.radius > 0) || !Number.isFinite(step.radius)) {
+    out.push(`${s.id}: stealth step needs a positive finite "radius" — the proximity gate. Concealment with no gate opens in an empty room, which is invisibility with nothing to hide from`);
+  }
+  if (step.intervalMs !== undefined) {
+    out.push(`${s.id}: stealth step declares "intervalMs" — the primitive does not read it. The interval between windows IS the skill's cooldown (${s.cooldown ?? 'unset'}); two fields for one number drift`);
+  }
+  if (step.damage !== undefined) {
+    out.push(`${s.id}: stealth step declares damage — the primitive deals none by ruling. A concealed character standing still must clear nothing`);
+  }
+  if (step.duration !== undefined) {
+    out.push(`${s.id}: stealth step declares "duration" — the window's length is "windowMs", and a step carrying both says two different things about when it ends`);
+  }
+  return out;
+}
+
 function plagueStepProblems(s, step) {
   const out = [];
   const deliberate = PLAGUE_SINGLE_TARGET.has(s.id);
@@ -839,6 +911,8 @@ function assertTrees() {
           }
           if (step.kind === 'summon') problems.push(...summonStepProblems(s, step));
           if (step.kind === 'plague') problems.push(...plagueStepProblems(s, step));
+          if (step.kind === 'stealth') problems.push(...stealthStepProblems(s, step));
+          if (step.kind === 'ward') problems.push(...wardStepProblems(s, step));
           problems.push(...reachStepProblems(s, step));
         }
       } else if (s.type !== 'passive') {

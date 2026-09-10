@@ -388,6 +388,9 @@ export class Sim {
       x: 0, y: 0, radius: CONFIG.PLAYER_RADIUS * (char.trait.hitbox || 1),
       mx: 0, my: 0, interact: false, moving: false, aimA: 0, stillT: 0,
       hp: 1, shield: 0, downed: false, reviveP: 0, invuln: 0, pullX: 0, pullY: 0,
+      // Seconds of open concealment window. Written by the `stealth`
+      // primitive, read by untargetable() and by hurtPlayer.
+      concealT: 0,
       // `xp` is the bar and RESETS on every level-up; `xpEarned` never does, so
       // anything measuring experience over a run reads the second one. Reading
       // the bar reports a smaller number the better the player did.
@@ -950,6 +953,11 @@ export class Sim {
       p.x = sx; p.y = sy;
       p.firstHitUsed = false;
       p.pullX = p.pullY = 0;
+      // A concealment window does not survive the door. It is short enough that
+      // a leftover value would only ever be a free second of invulnerability at
+      // the moment a room's enemies spawn on top of you, which is the one place
+      // it is worth the most and was earned the least.
+      p.concealT = 0;
       p.hp = p.stats.vitality;   // every room starts at full health
       // §8.5, rows 5 and 7, and they are one moment because they are two halves
       // of the same rule: the Necromancer's summons WIPE and the Druid's pack
@@ -1897,6 +1905,7 @@ export class Sim {
 
   _tickPlayer(p, dt) {
     if (p.invuln > 0) p.invuln -= dt;
+    if (p.concealT > 0) p.concealT -= dt;
     if (p.tempoBuffT > 0) p.tempoBuffT -= dt;
     if (p.dmgBuffT > 0) p.dmgBuffT -= dt;
     p.frenzy = p.frenzy.filter(f => (f.t -= dt) > 0);
@@ -2632,9 +2641,18 @@ export class Sim {
   // were a third as far away — chaff right on top of you still wins.
   _aimWeight(e) { return e.bounty ? 0.12 : 1; }
 
+  // ONE DEFINITION OF HIDDEN, read by every path that picks a player to walk at
+  // or shoot. Two things write it and they are deliberately separate fields:
+  // `vanishT` is the Assassin contract's untargetable beat after a kill, and
+  // `concealT` is a `stealth` step's open window. They mean the same thing to
+  // an enemy's eyes and different things everywhere else, which is why this
+  // helper exists rather than a second `|| p.somethingT > 0` appended to each
+  // of the three call sites and forgotten at the fourth.
+  untargetable(p) { return p.concealT > 0 || p.vanishT > 0; }
+
   // Contract: a kill makes the Assassin untargetable for a beat. Enemies pick
   // someone else; solo, they simply have nothing to chase.
-  targetable(p) { return !p.gone && !p.downed && !(p.vanishT > 0); }
+  targetable(p) { return !p.gone && !p.downed && !this.untargetable(p); }
 
   _nearestEnemy(x, y, range) {
     let best = null, bd = range * range;
@@ -2659,12 +2677,16 @@ export class Sim {
     let best = null, bd = Infinity;
     for (const p of this.players) {
       if (p.gone || p.downed) continue;
-      if (p.vanishT > 0) continue;   // Contract: the Assassin just vanished
+      if (this.untargetable(p)) continue;   // vanished on a kill, or concealed
       const d = dist2(x, y, p.x, p.y);
       if (d < bd) { bd = d; best = p; }
     }
-    // Solo, an untargetable player must still be SOMETHING to walk toward, or
-    // the whole field stands still and the fight cannot be finished.
+    // Solo — OR WITH EVERY PLAYER IN THE PARTY CONCEALED AT ONCE, which the
+    // stealth ruling makes reachable for the first time — an untargetable
+    // player must still be SOMETHING to walk toward, or the whole field stands
+    // still and the fight cannot be finished. The enemies still arrive; they
+    // simply cannot land anything, because hurtPlayer refuses a concealed
+    // target. Concealment buys immunity and the loss of aggro, never a pause.
     if (best) return best;
     for (const p of this.players) {
       if (p.gone || p.downed) continue;
@@ -3059,6 +3081,27 @@ export class Sim {
       return;
     }
     if (p.invuln > 0) return;
+    // CONCEALED IS A 100% DODGE, and it sits here — after the trueDamage branch
+    // and before everything else — for two measured reasons.
+    //
+    // After trueDamage, because that branch is the LEVEL rather than an
+    // attacker: the storm's burn and the Breach collapse already bypass
+    // i-frames, dodge, Grit and shields, and a concealment that turned those
+    // off would let a player stand in the fire.
+    //
+    // Before everything else, because the engine has no way to tell an attack
+    // from the floor at this point. `src` is not that discriminator: an enemy
+    // PROJECTILE (:3259), a beam tick (:3354) and a turret boom (:3470) all
+    // pass null, exactly as a hazard zone does (:3591). So this blocks hazards
+    // and damage-over-time as well as swings. That is a consequence of the
+    // engine's shape, not a ruling — separating them means tagging thirteen
+    // call sites, and Casey has that question open.
+    //
+    // It reads `concealT` ALONE and deliberately not `untargetable()`. Making
+    // the Assassin's `vanishT` block damage as well as aggro would hand that
+    // trait a defensive buff it has never had, out of a spec that says not to
+    // touch it.
+    if (p.concealT > 0) return;
     p.relocT = 0; // taking a hit breaks the structure-recall channel
     raw *= this.enemyBuff; // the siege's ward pylon empowers everything
     const t = p.char.trait;
@@ -3654,7 +3697,7 @@ export class Sim {
           }
           if (!e.active) break;
         }
-        if (e.contactCd <= 0 && p.invuln <= 0 && !(p.vanishT > 0)) {
+        if (e.contactCd <= 0 && p.invuln <= 0 && !this.untargetable(p)) {
           e.contactCd = CONFIG.CONTACT_COOLDOWN;
           this.hurtPlayer(p, e.dmg, e);
         }

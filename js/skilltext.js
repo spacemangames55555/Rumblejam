@@ -318,6 +318,18 @@ export function mechanics(skill, rank = 1) {
     if (s.kind === 'form') {
       fields.push(field('form', 'Form', `${s.form} for ${secs(rankedDuration(s.duration, skill, rk))}`));
     }
+    // THE WINDOW, AND THE INTERVAL IT IS NOT. The step holds only the window;
+    // the gap between windows is the cooldown, which the description already
+    // prints as Pace. Saying "every Ns" here would restate a number the reader
+    // is about to see and would be wrong the moment a rank changed one and not
+    // the other. What the player cannot infer from anywhere else is what the
+    // window DOES, so that is what this says.
+    if (s.kind === 'stealth') {
+      fields.push(field('stealth', 'Unseen',
+        `${secs(rankedDuration(s.windowMs, skill, rk))} — untouchable, and enemies lose you`,
+        `${secs(rankedDuration(s.windowMs, skill, nx))} — untouchable, and enemies lose you`));
+      fields.push(field('stealthGate', 'Only near', `an enemy within ${Math.round(s.radius)}`));
+    }
     if ((s.count || 1) > 1 && s.kind === 'bolt') fields.push(field('count', 'Projectiles', String(s.count)));
     // an engine-scaled step is stated with its condition rather than folded in
     if (s.scaleWith) {

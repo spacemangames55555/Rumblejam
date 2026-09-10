@@ -125,7 +125,12 @@ console.log(`SKILL TEXT — ${ALL.length} skills, ${ACTIVES.length} active, ${PA
   else ok(`every active renders a different magnitude at rank 1 and rank 10 (${ACTIVES.length} checked)`);
 
   // and the next-rank preview is actually a preview
-  const noArrow = ACTIVES.filter(s => !mechanics(s, 4).fields.some(f => f.next !== undefined));
+  // A ONE-RANK NODE HAS NO NEXT RANK, and asking it for a preview is asking it
+  // to invent one. The Blacksmith's crystal forms are the case: a form is a
+  // state whose stat delta is what it is, so they declare `maxRank: 1` exactly
+  // as the rank-1 passives do, and a preview arrow would be a lie in the UI.
+  const noArrow = ACTIVES.filter(s => s.maxRank !== 1
+    && !mechanics(s, 4).fields.some(f => f.next !== undefined));
   if (noArrow.length) bad(`${noArrow.length} active(s) show no next-rank value at all: ${noArrow.slice(0, 6).map(x => x.id).join(', ')}`);
   else ok('every active previews at least one next-rank value, so the cost of a point is visible before it is spent');
 

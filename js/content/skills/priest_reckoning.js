@@ -60,7 +60,10 @@ export const TUNING = {
   solaceAmount: 22, solaceRadius: 140, solacePct: 70, solaceCd: 2500,
   matinsWeight: 0.18,
   compline: 34, complineDuration: 4600, complinePct: 55, complineCd: 4800,
-  vespersAmount: 46, vespersDuration: 5400, vespersReflect: 30, vespersPct: 40, vespersCd: 8800,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 30 meant 30x the damage absorbed thrown back, not 30%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  vespersAmount: 46, vespersDuration: 5400, vespersReflect: 0.30, vespersPct: 40, vespersCd: 8800,
 
   // ---- branch B: Reckoning (collect your own debts) ----
   tallyDamage: 17, tallyReach: 118, tallyArc: 1.9, tallyCd: 2400,

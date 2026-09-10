@@ -51,7 +51,10 @@ export const TUNING = {
   recoilDamage: 17, recoilRadius: 150, recoilDuration: 3400, recoilTickMs: 400, recoilCd: 2800,
   temperWeight: 0.18,
   bulwarkAmount: 40, bulwarkDuration: 4800, bulwarkPct: 55, bulwarkCd: 5200,
-  reversalAmount: 50, reversalDuration: 5200, reversalReflect: 32, reversalPct: 38, reversalCd: 9000,
+  // A REFLECT IS A FRACTION. This was authored as a whole number and read as
+  // one: 32 meant 32x the damage absorbed thrown back, not 32%. Converted, not
+  // retuned — the intent is unchanged and the magnitude is what it always read as.
+  reversalAmount: 50, reversalDuration: 5200, reversalReflect: 0.32, reversalPct: 38, reversalCd: 9000,
 
   rankDamage: 0.04, rankDuration: 0.03,
 };
