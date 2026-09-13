@@ -200,6 +200,34 @@ function enterPersistent(sim, p, sk, id, rank) {
     sim._recomputeStats(p);
     sim.pushEvent({ k: 'toast', idx: p.idx, text: `${q.form.toUpperCase()}` });
   }
+  // THE PERMANENT HEALING FIELD, through the door Marrownaut and the crystal
+  // forms already use. No duration, no cooldown, no trigger: it holds while
+  // slotted and the SLOT is what it costs, which is the same bargain the tank
+  // form strikes. Torn down on un-slot by `exitPersistent`, like everything
+  // else that arrives here.
+  //
+  // FOLLOW IS THE DEFAULT AND PLACED IS THE OPT-OUT, which is the opposite of
+  // the timed field. A permanent field that never expires and does not move sits
+  // in a room the party has left, so `follow: false` on a persistent field is a
+  // declaration the author has to make deliberately. What a permanent PLACED
+  // field should do at a room boundary is Casey's to rule; until then this door
+  // re-places it at the caster on every room start, because `applyPersistents`
+  // runs there and a field re-entered at the door is a field in the room you
+  // are actually in.
+  if (q.field && !sim.auraFor(p, id)) {
+    const f = q.field;
+    sim.addZone({
+      x: p.x, y: p.y, r: f.radius,
+      dps: 0,                      // a healing field damages nothing by itself
+      heals: rankedDamage(f.heal, sk, rank) / (f.tickMs / 1000),
+      every: f.tickMs / 1000,
+      dur: Infinity,
+      hurts: 'enemies',            // not hostile to the party; see the tick
+      color: p.color, auraKey: id, ownerIdx: p.idx,
+      includeSelf: f.includeSelf !== false,
+      ...(f.follow === false ? {} : { follow: p.idx }),
+    });
+  }
   if (q.aura && !sim.auraFor(p, id)) {
     sim.addAura(p, {
       key: id, domain: sk.domain,
@@ -231,7 +259,7 @@ function exitPersistent(sim, p, sk, id) {
     p.engines.form = 0;      // same reason as the door above, other direction
     changed = true;
   }
-  if (q.aura) {
+  if (q.aura || q.field) {
     const z = sim.auraFor(p, id);
     if (z) { sim.zones.splice(sim.zones.indexOf(z), 1); changed = true; }
   }

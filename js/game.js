@@ -3546,6 +3546,35 @@ export class Sim {
       // its pulses is what a player standing still cannot convert into damage.
       if (z.acc >= (z.every || 0.4)) {
         const mul = z.acc; z.acc = 0;
+        // A FIELD THAT HEALS, AND IT SITS OUTSIDE THE `hurts` BRANCH ON PURPOSE.
+        //
+        // The obvious shape was a third `hurts` value — 'allies' beside
+        // 'enemies' and 'players'. It does not survive the requirement: the
+        // Witch Doctor's Tribal Ritual heals allies and weakens enemies in the
+        // same circle, and the Priest's Beacon of Light wants damage and heal
+        // together. `hurts` is a single-valued discriminator, so a zone doing
+        // both cannot be described by any value of it. `heals` is therefore its
+        // own field and the two compose freely: a pure healing field declares
+        // `heals` with `dps: 0`, and a mixed one declares both.
+        //
+        // That also means the one-bit `hurts` flag in the render snapshot does
+        // NOT have to widen. A healing field is still `hurts: 'enemies'` — it
+        // is not hostile to the party — so it encodes as 0 and every existing
+        // reader stays correct.
+        //
+        // `_heal` is the same door every other heal in the game uses: it scales
+        // by Recovery, carries the fractional accumulator that lets a 4-per-tick
+        // field pay out honestly, refuses a downed player, and attributes to the
+        // caster so the Priest's Grace still counts it.
+        if (z.heals > 0) {
+          const by = z.ownerIdx !== undefined ? this.players[z.ownerIdx] : null;
+          for (const q of this.livePlayers()) {
+            if (q.downed) continue;
+            if (z.includeSelf === false && by && q === by) continue;
+            if (dist2(z.x, z.y, q.x, q.y) > z.r * z.r) continue;
+            this._heal(q, z.heals * mul, by ? { by } : {});
+          }
+        }
         if (z.hurts === 'enemies') {
           const owner = z.owner !== undefined ? this.players[z.owner] : null;
           // A FIELD THAT DOES NO DAMAGE MUST NOT CALL THE DAMAGE PATH AT ALL.

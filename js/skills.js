@@ -452,6 +452,61 @@ function wardStepProblems(s, step) {
   return out;
 }
 
+// A HEALING FIELD DECLARES WHAT IT PAYS, HOW OFTEN, AND OVER WHAT AREA.
+//
+// A field is the one heal shape whose cost is entirely in its placement, so the
+// numbers that decide whether it is worth placing are exactly radius, tick and
+// amount. A field missing any of them still loads, still draws, and pays
+// nothing — the silent-nothing failure this file exists to prevent.
+//
+// The `heal` field rides a `hazard` step, deliberately: one zone that heals
+// allies AND hurts enemies is a requirement (Tribal Ritual, Beacon of Light),
+// and two primitives would mean two zones stacked.
+function healFieldProblems(s, step) {
+  const out = [];
+  if (step.heal === undefined) return out;
+  const n = v => typeof v === 'number' && Number.isFinite(v);
+  if (!n(step.heal) || step.heal <= 0) {
+    out.push(`${s.id}: hazard declares "heal" ${String(step.heal)} — a healing field must pay a positive, finite amount per tick`);
+  }
+  if (!n(step.radius) || step.radius <= 0) {
+    out.push(`${s.id}: healing field needs a positive finite "radius" — a field with no area heals nobody and still draws`);
+  }
+  if (!n(step.tickMs) || step.tickMs <= 0) {
+    out.push(`${s.id}: healing field needs a positive finite "tickMs" — without a cadence the payout rate is a division by nothing`);
+  } else if (step.tickMs < 50) {
+    out.push(`${s.id}: healing field tickMs ${step.tickMs} is below 50 — this field is MILLISECONDS and that looks like seconds. Write ${Math.round(step.tickMs * 1000)} if you meant ${step.tickMs}s`);
+  }
+  // A TIMED FIELD IS A CAST AND A PERMANENT ONE IS A SLOT. A hazard step is
+  // always the timed shape — the permanent one arrives through `persist.field`
+  // — so a hazard that heals must carry both halves of being a cast.
+  if (!n(step.duration) || step.duration <= 0) {
+    out.push(`${s.id}: a timed healing field needs a positive finite "duration". A field that never ends belongs in "persist.field", where the slot is what it costs`);
+  }
+  // NO COOLDOWN CHECK HERE. The spec asks for one and the file already has it:
+  // `active with no cooldown` fires on every active before this function is
+  // reached, so a rule of my own would be unreachable code pretending to guard
+  // something. Mutation-tested — the existing message is what a cooldownless
+  // healing field gets.
+  return out;
+}
+
+// THE PERMANENT FIELD, and the mirror of the rule above: it must declare
+// neither duration nor cooldown, because the slot is the cost.
+function persistFieldProblems(s, q) {
+  const out = [];
+  const f = q.field;
+  if (!f) return out;
+  const n = v => typeof v === 'number' && Number.isFinite(v);
+  if (!n(f.heal) || f.heal <= 0) out.push(`${s.id}: persist field "heal" is ${String(f.heal)} — a permanent field must pay a positive, finite amount per tick`);
+  if (!n(f.radius) || f.radius <= 0) out.push(`${s.id}: persist field needs a positive finite "radius"`);
+  if (!n(f.tickMs) || f.tickMs <= 0) out.push(`${s.id}: persist field needs a positive finite "tickMs"`);
+  if (f.duration !== undefined) out.push(`${s.id}: persist field declares "duration" — a permanent field does not end, and a duration here says two different things about when it does`);
+  // Cooldown is not checked here either: `persistent active with a cooldown`
+  // already fires on any persist node carrying one, whatever it holds.
+  return out;
+}
+
 function stealthStepProblems(s, step) {
   const out = [];
   if (!(step.windowMs > 0)) {
@@ -796,7 +851,10 @@ function assertTrees() {
       // claim otherwise. The second half is the one that catches real damage —
       // a `self` on a strike would make `facing()` aim at nobody.
       if (s.type === 'active' && Array.isArray(s.compose)) {
-        const picks = s.compose.filter(c => stepPicksTarget(c.kind));
+        // AN `atCaster` HAZARD CONSULTS NOTHING, so it does not count as a step
+        // that picks a target and `select: 'self'` is the honest declaration for
+        // a field dropped where you stand.
+        const picks = s.compose.filter(c => stepPicksTarget(c.kind) && !c.atCaster);
         if (picks.length && s.select === 'self') {
           problems.push(`${s.id}: declares select "self" but its ${picks.map(c => c.kind).join('/')} step(s) DO consult a selector — a self selector resolves to no enemy, so those steps would aim at nothing`);
         }
@@ -821,8 +879,9 @@ function assertTrees() {
         if (s.trigger) problems.push(`${s.id}: persistent active with a trigger — it never fires, so a trigger would be evaluated forever and never used`);
         if (s.cooldown) problems.push(`${s.id}: persistent active with a cooldown — there is no cast to put on one`);
         if (s.compose && s.compose.length) problems.push(`${s.id}: persistent active with a compose — a step here would never run; put the effect in "persist"`);
-        if (!q.form && !q.aura && !q.shield) problems.push(`${s.id}: persist declares none of form/aura/shield — it holds nothing`);
-        const known = ['form', 'stats', 'aura', 'shield', 'tree'];
+        if (!q.form && !q.aura && !q.shield && !q.field) problems.push(`${s.id}: persist declares none of form/aura/shield/field — it holds nothing`);
+        const known = ['form', 'stats', 'aura', 'shield', 'tree', 'field'];
+        problems.push(...persistFieldProblems(s, q));
         // `tree` SCOPES THE FORM'S BOOST and is meaningless without one, so it
         // is checked rather than merely allowed: a tree named on a node with no
         // form scopes nothing, and a tree that is not a real tree scopes to a
@@ -928,6 +987,7 @@ function assertTrees() {
           if (step.kind === 'plague') problems.push(...plagueStepProblems(s, step));
           if (step.kind === 'stealth') problems.push(...stealthStepProblems(s, step));
           if (step.kind === 'ward') problems.push(...wardStepProblems(s, step));
+          if (step.kind === 'hazard') problems.push(...healFieldProblems(s, step));
           problems.push(...reachStepProblems(s, step));
         }
       } else if (s.type !== 'passive') {
