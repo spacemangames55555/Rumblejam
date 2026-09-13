@@ -21,6 +21,7 @@
 import { Sim } from '../js/game.js';
 import { runCompose } from '../js/compose.js';
 import { applyPersistents } from '../js/skillsim.js';
+import { HEALING_FIELDS, fieldStep } from '../js/content/skills/healing_fields.js';
 
 let checks = 0, fails = 0;
 const ok = m => { checks++; console.log('  ✓ ' + m); };
@@ -187,6 +188,90 @@ console.log('HEALING FIELD — a placed zone that heals allies over time\n');
   if (a.hp === a.stats.vitality && b.hp === b.stats.vitality) {
     ok('a full-health ally is not healed and nothing is tracked about it — the field heals whoever is standing in it');
   } else bad(`overhealed: caster ${a.hp}/${a.stats.vitality}, ally ${b.hp}/${b.stats.vitality}`);
+}
+
+// ---- THE NINE, EACH AT ITS DOCUMENT'S OWN RATE ----
+//
+// Authored but not placed: putting them into trees costs nine shipped nodes and
+// that is Casey's ruling, not this gate's. What IS checkable now is whether each
+// one's parameters produce the payout its document states, and that is measured
+// here against a control so the party's own Recovery regen cannot be mistaken
+// for the field paying out.
+//
+// The claim per skill is `heal x (duration / tickMs)` — the document's own "N
+// per friendly who stays in it". Measured over the field's full life with a
+// stationary ally inside it.
+{
+  console.log('\n  the nine, measured against their documents:');
+  console.log('    skill                  stated   measured   radius/tick/dur');
+  for (const f of HEALING_FIELDS) {
+    const ticks = Math.floor(f.field.duration / f.field.tickMs);
+    const stated = f.field.heal * ticks;
+    // COUNTED AT THE SOURCE, not read off the health bar. A 30-second field pays
+    // more than a Priest's whole health pool, so `p.hp` saturates at vitality
+    // and the reading truncates — Sage Burn measured 47 against a stated 120
+    // that way, which looks like a broken field and is a full one. Raising
+    // `stats.vitality` does not help either: any recompute puts it back.
+    // Summing what `_heal` is ASKED to pay is cap-independent.
+    //
+    // Reported PRE-RECOVERY, because the documents' totals are pre-Recovery:
+    // `_heal` multiplies by (1 + Recovery/100), so a Priest receives more than
+    // the number written down. The raw request is what the document states.
+    const run = () => {
+      const g = fixture(2); const [a, b] = g.players;
+      b.x = a.x + 20; b.y = a.y;
+      let paid = 0;
+      const orig = g._heal.bind(g);
+      g._heal = (q, amt, o) => { if (o && o.by === a && q === b) paid += amt; return orig(q, amt, o); };
+      b.hp = 10;
+      cast(g, a, fieldStep(f));
+      const secs = Math.ceil(f.field.duration / 1000) + 1;
+      for (let i = 0; i < 60 * secs; i++) g.tick(1 / 60);
+      return Math.round(paid);
+    };
+    const got = run();
+    // Within one tick either way: the field's first pulse lands a fraction of a
+    // frame after the cast, so an exact integer match is not a thing a real
+    // clock produces.
+    const okish = Math.abs(got - stated) <= f.field.heal + 1;
+    (okish ? ok : bad)(`${f.name.padEnd(22)}${String(stated).padStart(5)}${String(got).padStart(11)}    `
+      + `r${f.field.radius}/${f.field.tickMs}ms/${f.field.duration}ms`);
+  }
+}
+
+// ---- Tribal Ritual: one zone, heal AND weaken, from its real parameters ----
+{
+  const f = HEALING_FIELDS.find(x => x.id === 'wd_tribal_ritual');
+  const g = fixture(2); const [a, b] = g.players;
+  b.x = a.x + 20; b.y = a.y; a.hp = 40; b.hp = 40;
+  const e = g.spawnEnemyById('skulker', a.x + 40, a.y);
+  if (!e) bad('tribal ritual: no enemy to weaken');
+  else {
+    e.hp = 99999;
+    cast(g, a, fieldStep(f));
+    const nZones = g.zones.length;
+    for (let i = 0; i < 60 * 3; i++) { e.x = a.x + 40; e.y = a.y; g.tick(1 / 60); }
+    const healed = b.hp - 40;
+    const weakened = (e.weakenT > 0) || (e.dmgMult !== undefined && e.dmgMult < 1) || !!e.weakenDamage;
+    if (healed > 0 && nZones === 1) {
+      ok(`Tribal Ritual: ONE zone, ally healed +${healed} at 5 per 500ms — the both-effects case at its real numbers`);
+    } else bad(`Tribal Ritual: healed ${healed} from ${nZones} zone(s)`);
+    // THE WEAKEN CANNOT LAND, AND THE ZONE IS NOT WHY. `RIDERS_BY_PRIMITIVE`
+    // gives `hazard` exactly one rider — `slow` — because a zone has no impact
+    // frame for a rider to hang on. `weakenDamage` is in IMPACT_RIDERS and is
+    // legal on every primitive that lands a hit, and on no field. So the
+    // document's "weaken 20% to enemies inside" has no legal form today, and
+    // that is the roster-wide rider-availability question Casey has open —
+    // weaken-on-a-field is five classes, not just this skill.
+    //
+    // The permission is NOT widened here. Granting `hazard` a second rider to
+    // make one skill work is precisely the shape of the six silent
+    // substitutions this session has been auditing, and §2's ruling is that
+    // widening rider availability is one decision taken once, not nine taken
+    // quietly. The check therefore asserts the LIMIT rather than the wish.
+    if (!weakened) ok('Tribal Ritual: the weaken does NOT land, as expected — `hazard` permits only `slow`, so weaken-on-a-field has no legal form (§2, five classes)');
+    else bad('Tribal Ritual: the weaken landed — the hazard rider table has been widened, which is a roster-wide ruling and not this skill\'s to take');
+  }
 }
 
 console.log(`\n${checks} check(s), ${fails} failure(s)`);

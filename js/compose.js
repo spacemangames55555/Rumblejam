@@ -517,7 +517,21 @@ export const PRIMITIVES = {
   //
   // `includeSelf` defaults to TRUE here, the opposite of the ally-shield
   // default, because the ruling says a healing field heals its caster unless the
-  // skill says otherwise. `false` is the per-skill override.
+  // skill says otherwise.
+  //
+  // RULES FOR A PERMANENT FIELD, for whoever writes the first one. Nothing uses
+  // `persist.field` yet, and these are not assertions because there is nothing
+  // to measure them against — they are what Casey ruled on 2026-09-13 after the
+  // sustain measurement, and the numbers behind them are worth restating:
+  // against a 4-player party taking 2.0 HP/sec in a real room, a permanent field
+  // at the TIMED fields' own rates pays 12 to 40 HP/sec, six to twenty times
+  // incoming. So a permanent field takes a MUCH SMALLER radius and a LOWER heal
+  // rate than any of the nine: the intent is a trickle holding one or two
+  // people, not a party at full pace.
+  //
+  // TICK IS THE STRONGER LEVER THAN AMOUNT, and it is the one that gets missed:
+  // 5 per 500ms is double 5 per 1000ms for the same number written down. Halving
+  // a tick doubles the field. `false` is the per-skill override.
   hazard(sim, p, skill, step, rank, grid, out) {
     // `atCaster` DROPS IT WHERE YOU ARE, and a healing field usually needs it.
     // `hazard` has always chosen its centre by seeking an enemy, which is right
