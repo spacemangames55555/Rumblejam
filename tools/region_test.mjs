@@ -393,10 +393,15 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
       sim.spawnQueue.length = 0;
       for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
       const p = sim.players[0];
-      const e = sim.spawnEnemyById('pnw_cedar_warden', p.x + 30, p.y);
+      // The lane is what is being measured. A 7 HP cedar dies to the opening
+      // swing before it can commit, which would report "no wind-up" for a
+      // timer that never got to start.
+      p.hp = p.stats.vitality = 5000;
+      const e = sim.spawnEnemyById('pnw_cedar_warden', p.x + 40, p.y);
+      e.hp = e.maxHp = 5000;
       for (let i = 0; i < 20 * 60; i++) {
         sim.tick();
-        if (e.telState === 1 && e.telWindup > 0) return e.telWindup;
+        if (e.active && e.telState === 1 && e.telWindup > 0) return e.telWindup;
       }
       return null;
     }
