@@ -751,6 +751,8 @@ export class Sim {
     this.cleared = false;
     this.hatch = null; this.extract = null; this.afterSiege = false;
     this.boss = null;
+    this.lastSpawnAt = null;     // sim time of the latest enemy to enter the pool
+    this.straggleCullAt = null;  // sim time at which ordinary leftovers are culled
     this.holdCircle = null; this.pylonId = null; this.enemyBuff = 1;
     for (const p of this.players) {
       if (p.gone) continue;
@@ -884,6 +886,8 @@ export class Sim {
     this.spawnQueue = [];
     this.decoys.length = 0;
     this.boss = null;
+    this.lastSpawnAt = null;
+    this.straggleCullAt = null;
     this.roomEnteredT = this.time;
     this.waveRng = subRng(this.seed, 'wave', this.regionIndex, node.id);
     // D-24. `nodeType` was read in two places and assigned in none, so every
@@ -1185,6 +1189,129 @@ export class Sim {
     return { x: clamp(this.W / 2 + (rng.float() - 0.5) * this.W * 0.8, WALL + 60, this.W - WALL - 60), y: WALL + 80 };
   }
 
+  // Has this fight finished introducing enemies? Endless objectives never do
+  // (the wave timer is removed on the way in), so the straggler rules stay
+  // dark there — a Breach or a Bounty Hunt is not a horde that forgot to end.
+  // Elite Arena is the other way round: the roster lands in one scripted
+  // burst and the wave multiplier is zero, but the timer still runs, so
+  // "the wave is not done" would leave a champion walled off for the whole
+  // duration.
+  _spawningStopped() {
+    if (this.phase !== 'arena' || this.cleared || this.over) return false;
+    if (this.spawnQueue.length > 0) return false;
+    if (this.obj && objectiveEndless(this.obj.type)) return false;
+    if (this.arenaNode && this.arenaNode.kind === 'siege' && !this.bossSpawned) return false;
+    if (this.obj && this.obj.type === 'elite_arena') return !!this.obj.spawned;
+    if (this.wave && !this.wave.done) return false;
+    return true;
+  }
+
+  // Bodies the 20s cull must not delete. They still take the straight chase.
+  //
+  // Checked, not assumed. The sim has five kinds of enemy that are the
+  // fight rather than its leftovers:
+  //   boss            — the siege / region boss. Killing it here would call
+  //                     _bossDown and end the siege.
+  //   typeIdx === -2  — the ward pylon, a scripted siege mutation. It is a
+  //                     structure; removing it ends the empowerment for free.
+  //   isNest          — a Nest Purge keep. Removing it completes the
+  //                     objective without breaching the walls. (That mode is
+  //                     also endless, so the clock never arms; the flag is
+  //                     still the right exclusion.)
+  //   bounty          — a Bounty Hunt mark. _killEnemy with hp still above
+  //                     zero counts as the mark slipping away; zeroing hp
+  //                     would grant the bounty. Also endless.
+  //   arenaVariant    — an Elite Arena champion. The mode is that roster,
+  //                     authored to run minutes, and a 20s delete would hand
+  //                     the clear over.
+  // Ordinary elites, region roster enemies and wave nests (a wombden that
+  // was not stamped isNest) are leftovers and are culled.
+  _straggleExempt(e) {
+    if (e.boss) return true;
+    if (e.typeIdx === -2) return true;
+    if (e.isNest) return true;
+    if (e.bounty) return true;
+    if (e.arenaVariant) return true;
+    return false;
+  }
+
+  // Once spawning has stopped: remember how long each enemy has been outside
+  // STRAGGLER_NEAR of every living player, and at STRAGGLER_CHASE_S give up
+  // on pathing. Separately, STRAGGLER_CULL_S after the last spawn, delete
+  // whatever ordinary body is still alive.
+  //
+  // Sim time, on the host, inside the tick. Positions, deaths and pickups
+  // already ride the snapshot, so co-op needs no new message — clients do
+  // not run this. The chase itself draws no random numbers. The cull goes
+  // through _killEnemy, which draws the normal loot scatters and nothing else
+  // we added.
+  //
+  // The deadline freezes the first tick spawning is actually over. Brood and
+  // splitter children born after that are real spawns but they must not push
+  // the deadline back, or a living nest keeps the room open forever.
+  _tickStragglers(dt) {
+    if (!this._spawningStopped()) return;
+    if (this.straggleCullAt == null) {
+      this.straggleCullAt = (this.lastSpawnAt ?? this.time) + CONFIG.STRAGGLER_CULL_S;
+    }
+    const near2 = CONFIG.STRAGGLER_NEAR * CONFIG.STRAGGLER_NEAR;
+    for (const e of this.enemyPool) {
+      if (e.straggle) continue;
+      let d2 = Infinity;
+      for (const p of this.players) {
+        if (p.gone || p.downed) continue;
+        const dd = dist2(e.x, e.y, p.x, p.y);
+        if (dd < d2) d2 = dd;
+      }
+      // Nobody left standing: there is nothing to be away from, and a wipe
+      // already ends the run from _downPlayer. Don't arm a chase at a corpse.
+      if (d2 === Infinity || d2 <= near2) e.awayT = 0;
+      else {
+        e.awayT = (e.awayT || 0) + dt;
+        if (e.awayT >= CONFIG.STRAGGLER_CHASE_S) e.straggle = true;
+      }
+    }
+    // dt is 1/60 summed, so the threshold can land a hair under an integer.
+    if (this.time + 1e-6 >= this.straggleCullAt) this._cullStragglers();
+  }
+
+  // Die on the spot, loot included, kill credit not.
+  //
+  // _killEnemy(e, null) is the death path with no killer. Loot (materials,
+  // the difficulty gold accumulator, and the XP that rides the pre-multiplier
+  // amount) runs before the killer block, and so do the death behaviours that
+  // belong to the body rather than to whoever hit it: a splitter still
+  // splits, a bomber still schedules its boom, a mark detonation still pays,
+  // a soul token still drops. Everything that credits a player — onSkillKill,
+  // tohOnKill, kills++, kill-heal, crit-after-kill, kill-explode, vitality
+  // and tempo on kill — is gated on `killer` and does not run. Routing
+  // through damageEnemy with an owner would do the opposite, and a bespoke
+  // drop would duplicate the gold/XP split. Null killer is the route that
+  // already means "this body left, and nobody swung."
+  _cullStragglers() {
+    for (const e of [...this.enemyPool]) {
+      if (!e.active || this._straggleExempt(e)) continue;
+      this._killEnemy(e, null);
+    }
+  }
+
+  // Straight at the nearest living player, through walls and bodies. The
+  // room edge still holds. No steering and no random detour — the chase
+  // must not draw from sim.rng.
+  straggleStep(e, spd, dt) {
+    const p = this.nearestLivingPlayer(e.x, e.y);
+    if (!p || !(spd > 0)) return;
+    const dx = p.x - e.x, dy = p.y - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d <= 1) return;
+    const step = Math.min(d, spd * dt);
+    e.x += (dx / d) * step;
+    e.y += (dy / d) * step;
+    const m = e.radius * 0.6;
+    e.x = clamp(e.x, WALL + m, this.W - WALL - m);
+    e.y = clamp(e.y, WALL + m, this.H - WALL - m);
+  }
+
   // fight over when the budget is spent and the field is empty
   _checkFightClear() {
     if (this.phase !== 'arena' || this.cleared || this.over) return;
@@ -1201,7 +1328,14 @@ export class Sim {
   // level mechanic (storm burn, the Breach collapse, cursed artillery, death
   // puddles, zone damage, spikes, lava, telegraphed impacts).
   _sanitizeArena() {
-    for (const e of [...this.enemyPool]) { e.mats = 0; this._killEnemy(e, null); }
+    // The chase flag is fight-scoped. Clear it on the way out so a body that
+    // survives into the sweep (the cull exempts bosses and scripted anchors)
+    // does not keep phasing through walls on the next tick of a dead room.
+    this.straggleCullAt = null;
+    for (const e of [...this.enemyPool]) {
+      e.straggle = false; e.awayT = 0;
+      e.mats = 0; this._killEnemy(e, null);
+    }
     this.enemyPool.clear();
     this.projPool.clear();            // both sides' projectiles
     this.spawnQueue.length = 0;
@@ -1446,6 +1580,7 @@ export class Sim {
     });
     this.pylonId = e.id;
     this.enemyBuff = 1.3; // while the pylon stands, everything hits harder
+    this.lastSpawnAt = this.time;
     this.addTelegraph({ shape: 'circle', x, y, r: 90, dur: 1.2 });
   }
 
@@ -1473,6 +1608,7 @@ export class Sim {
       slideSide: 0,   // pooled slots must not inherit a half-rounded corner
     });
     this.boss = e;
+    this.lastSpawnAt = this.time;
     this.addTelegraph({ shape: 'circle', x, y: this.H * 0.3, r: def.radius + 60, dur: 1.5 });
     this.pushEvent({ k: 'bossSpawn', name: def.name });
   }
@@ -1790,7 +1926,13 @@ export class Sim {
       // could never end.
       isNest: false, nestShielded: false, bounty: false, arenaVariant: null,
       spawnCdMult: 1, maxBroodCap: 0, enrageRate: 0, baseSpd: 0, payloadCd: 0,
+      // Straggler clock. Wiped by the pool, set here so a fresh body starts
+      // at zero rather than inheriting a chase from the slot's previous life
+      // — the alloc wipe already guarantees that; naming it keeps the flag
+      // next to the other per-fight fields.
+      straggle: false, awayT: 0,
     });
+    this.lastSpawnAt = this.time;
     return e;
   }
 
@@ -1849,6 +1991,10 @@ export class Sim {
     this._tickWave(dt);
     this._flushSpawnQueue(dt);
     if (this.arenaNode && this.arenaNode.kind === 'siege') this._tickSiege(dt);
+    // After the spawns for this tick exist, and before anyone moves: the
+    // chase flag has to be up in time for updateEnemy, and a cull has to
+    // drop loot before pickups and the clear check run.
+    this._tickStragglers(dt);
     // players
     for (const p of this.players) { if (!p.gone) this._tickPlayer(p, dt); }
     // periodic stat recompute (auras, low-hp, frenzy expiry); also surface

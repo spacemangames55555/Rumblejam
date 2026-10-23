@@ -94,6 +94,24 @@ export function updateEnemy(sim, e, dt) {
     if (Math.abs(e.knockY) < 5) e.knockY = 0;
     sim.clampToRoom(e);
   }
+  // Straggler chase. The sim raises e.straggle once spawning has stopped and
+  // this body has been outside STRAGGLER_NEAR of every living player for
+  // STRAGGLER_CHASE_S. Pathing stops for the rest of the fight: straight at
+  // the nearest player, through the wall that trapped it. Bosses come through
+  // here too — they are not culled, but they are allowed to chase — so this
+  // sits above the boss early-out. A committed wind-up still resolves, and a
+  // fuse that has already started still blows; neither is pathing.
+  if (e.straggle) {
+    if (e.stunT > 0 || telegraphBusy(e)) return;
+    if (e.fusing && e.def && e.def.boom) {
+      e.fuseT -= dt;
+      if (e.fuseT <= 0) sim.explodeEnemy(e, e.def.boom);
+      return;
+    }
+    sim.straggleStep(e, spd, dt);
+    return;
+  }
+
   if (e.boss) {
     // The commit rule is not a mob rule. A boss winding up must not step and
     // must not reaim either — bosses reach updateBoss before the check below,

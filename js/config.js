@@ -241,6 +241,15 @@ export const CONFIG = {
   PUDDLE_CAP: 14,          // live puddles at once — oldest fades first
   SIEGE_LOOT_WINDOW_S: 8,  // sweep-the-field countdown after the siege boss dies
 
+  // Stragglers. Once a fight has stopped spawning, a body that stays this far
+  // from every living player gives up pathing and walks straight through
+  // whatever it was stuck on. Anything ordinary still alive this long after
+  // the last spawn dies where it stands and drops its loot. Bosses and
+  // scripted objectives are not culled; see Sim._straggleExempt.
+  STRAGGLER_NEAR: 300,
+  STRAGGLER_CHASE_S: 4,
+  STRAGGLER_CULL_S: 20,
+
   // Level-up airhorn (the game's first external asset — see assets/)
   AIRHORN_PATH: 'assets/airhorn.mp3',
   AIRHORN_VOL_OWN: 1.0,    // your own level-up
