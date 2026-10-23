@@ -44,7 +44,7 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  scudDamage: 3, scudRange: 245, scudSpeed: 440, scudRadius: 7, scudCd: 1150,
+  scudDamage: 5, scudRange: 245, scudSpeed: 440, scudRadius: 7, scudCd: 1150,
   scudDrench: { stacks: 2, cap: 12, dur: 9000 },
   shallowsWeight: 0.15,
 

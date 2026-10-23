@@ -40,12 +40,12 @@
 
 export const TUNING = {
   // tier 1 — Grace Note
-  graceDamage: 2, graceRange: 260, graceSpeed: 460, graceRadius: 7, graceCd: 1200,
+  graceDamage: 5, graceRange: 260, graceSpeed: 460, graceRadius: 7, graceCd: 1200,
   // tier 2 — Held Breath (passive, the branch point)
   heldWeight: 0.15,
 
   // ---- branch A: Cadenza (ON_KILL — buy the beat back) ----
-  answerDamage: 3, answerReach: 110, answerArc: 1.7, answerCd: 1800,
+  answerDamage: 5, answerReach: 110, answerArc: 1.7, answerCd: 1800,
   cadenzaWeight: 0.18,
   roundDamage: 3, roundArc: 1.5, roundRange: 300, roundCd: 3400,
   finaleDamage: 5, finaleReach: 140, finaleArc: 2.9, finaleCd: 7200,
