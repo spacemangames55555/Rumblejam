@@ -1958,7 +1958,10 @@ try {
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
         const d = g.spawnEnemyById(ENEMIES[0].id, p.x + Math.cos(a) * 70, p.y + Math.sin(a) * 70);
-        if (d) { d.maxHp = d.hp = 1e9; d.speed = 0; dummies.push(d); }
+        // The mover reads `spd`. `speed` is ignored, so these six walked onto
+        // the player and ate every bolt at contact. The pin below reads
+        // `spawnX`, which nothing was writing, so it kept the walked spot.
+        if (d) { d.maxHp = d.hp = 1e9; d.spd = 0; d.spawnX = d.x; d.spawnY = d.y; dummies.push(d); }
       }
       if (dummies.length < 6) { bad++; fail(`${c.id}: could not stage a fight at the barricade`); continue; }
       // The ceiling is measured, not guessed: against one 270hp barricade the

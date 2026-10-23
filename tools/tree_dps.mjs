@@ -51,9 +51,10 @@
 // ring caps every tree at its overkill (damage past an enemy's last hit point
 // is not counted, so it compresses the roster toward kill rate). **A tree out
 // of band under both is genuinely hot. A tree out of band under one is telling
-// you about the fixture.** Under `--mortal` all thirty-seven are in band, which
-// is why the base-damage pass those eight red rows seemed to demand was not
-// made: there was nothing under them.
+// you about the fixture.** An earlier reading said every tree was in band under
+// `--mortal`. That reading was the fixture: a dead dummy is released to the
+// pool, and writing hp onto the released object revived nothing, so the ring
+// emptied within seconds. The respawn below spawns a new body.
 //
 // AND THE STAGING ANSWERS DECLARATIONS RATHER THAN ASSUMING THEM (§13 rule 61).
 // A tree whose actives fire on ON_DODGE, SELF_THRESHOLD or MOVEMENT produces
@@ -62,7 +63,7 @@
 // fixture could not arrange is NAMED in the output, so an unstaged trigger is
 // visible as a gap rather than hiding inside a low number.
 //
-// Usage: node tools/tree_dps.mjs [--verbose]
+// Usage: node tools/tree_dps.mjs [--verbose] [--mortal]
 import { FixtureSim as Sim } from './fixture_sim.mjs';
 import { TREES, TREES_BY_CLASS, slotsAtLevel } from '../js/skills.js';
 import { CONFIG } from '../js/config.js';
@@ -81,6 +82,9 @@ const VERBOSE = process.argv.includes('--verbose');
 // only under the immortal one is telling you about the fixture.
 const MORTAL = process.argv.includes('--mortal');
 const MORTAL_HP = 900;
+// Dummy distance from the player. 95 is the gate. RING moves it for a reach
+// probe without editing the fixture.
+const RING_R = +(process.env.RING || 95);
 const LEVEL = 60;            // full point budget; every node learnable from 36
 const SECONDS = 30;          // long enough for a 9s capstone to come round thrice
 const TICKS = SECONDS * 60;
@@ -101,13 +105,45 @@ const bad = (m) => { checks++; fails++; console.log(`✗ ${m}`); };
 // declarations. Returns a plan the tick loop applies, plus whatever it could
 // not honour — a tree that wants to be both still and moving is a real finding
 // about the tree, not something to silently resolve.
-function stagingPlan(tree) {
+// The form a skill ENTERS, not the form it is gated on. persist.form and a
+// `form` step are the two doors. 'none' is the gap between forms, not a form.
+function enteredFormOf(skill) {
+  if (skill.persist && skill.persist.form && skill.persist.form !== 'none') return skill.persist.form;
+  for (const c of skill.compose || []) {
+    if (c.kind === 'form' && c.form && c.form !== 'none') return c.form;
+  }
+  return null;
+}
+
+function enteredForms(tree) {
+  const names = [];
+  for (const s of tree.skills) {
+    const f = enteredFormOf(s);
+    if (f && !names.includes(f)) names.push(f);
+  }
+  return names;
+}
+
+// One legal build of a multi-form tree: the chosen form's enter, the nodes
+// gated on that form, and everything that is not exclusive to another form.
+// Slotting every form enter at once is not a build the game allows — the last
+// form in the loadout wins every tick and the others' skills never fire.
+function inFormRun(skill, form) {
+  const enters = enteredFormOf(skill);
+  if (enters) return enters === form;
+  if (skill.form === 'none') return false;
+  if (skill.form) return skill.form === form;
+  return true;
+}
+
+function stagingPlan(tree, onlyForm) {
   const plan = { walk: false, still: false, dodge: false, hurt: false,
-                 hitTaken: false, kill: false, form: undefined, pet: false,
+                 hitTaken: false, kill: false, form: onlyForm, pet: false,
                  staged: [], unstageable: [] };
   const want = (k) => { if (!plan.staged.includes(k)) plan.staged.push(k); };
+  const skills = onlyForm ? tree.skills.filter(s => inFormRun(s, onlyForm)) : tree.skills;
 
-  for (const s of tree.skills) {
+  for (const s of skills) {
     // `form` is read as the VALUE it declares, never as "present therefore
     // enter one" — `form: 'none'` means the opposite of `form: 'pyrite'` and
     // staging it by shape inverts three skills (§13 rule 61).
@@ -157,9 +193,9 @@ function stagingPlan(tree) {
   return plan;
 }
 
-function measureTree(treeId) {
+function measureTree(treeId, onlyForm) {
   const tree = TREES[treeId];
-  const plan = stagingPlan(tree);
+  const plan = stagingPlan(tree, onlyForm);
   const sim = new Sim({ seed: 4242, allowUnplayable: true,
     party: [{ idx: 0, key: 'k', name: 'T', charId: tree.classId, color: '#fff' }] });
   sim.god = true;
@@ -183,7 +219,7 @@ function measureTree(treeId) {
   // it wholesale so the measurement is of the tree rather than of slot luck.
   const slots = slotsAtLevel(LEVEL);
   const actives = [...tree.skills].sort((a, b) => a.tier - b.tier)
-    .filter(s => s.type === 'active').map(s => s.id);
+    .filter(s => s.type === 'active' && (!onlyForm || inFormRun(s, onlyForm))).map(s => s.id);
   p.loadout = new Array(8).fill(null);
   actives.slice(0, slots).forEach((id, i) => { p.loadout[i] = id; });
 
@@ -194,7 +230,7 @@ function measureTree(treeId) {
     if (plan.form === 'none') {
       p.form = null; p.formT = 0; p.formStats = null;
       if (p.engines) p.engines.form = 0;
-    } else {
+    } else if (!onlyForm) {
       const src = Object.values(TREES).flatMap(t => t.skills)
         .find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === plan.form));
       const step = src && src.compose.find(c => c.kind === 'form');
@@ -202,6 +238,9 @@ function measureTree(treeId) {
       if (p.engines) p.engines.form = CONFIG.FORM_POWER;
       sim._recomputeStats(p);
     }
+    // A per-form run leaves the enter to the slotted persist active. Writing
+    // the name here with empty stats makes applyPersistents see the form as
+    // already held and skip the stat block the form exists to grant.
   }
   if (plan.pet) {
     const src = tree.skills.find(s => (s.compose || []).some(c => c.kind === 'summon'))
@@ -218,7 +257,7 @@ function measureTree(treeId) {
   const dummies = [];
   for (let i = 0; i < 5; i++) {
     const a = i * Math.PI * 2 / 5;
-    const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * 95, cy + Math.sin(a) * 95, { noMats: true });
+    const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * RING_R, cy + Math.sin(a) * RING_R, { noMats: true });
     if (!e) continue;
     e.spd = 0; e.dmg = 0;
     dummies.push({ e, x: e.x, y: e.y });
@@ -236,6 +275,18 @@ function measureTree(treeId) {
   // So it is measured. The engine's peak over the whole window is recorded, and
   // a peak of zero means the declaration multiplied by exactly 1 for the entire
   // fight — a scaling clause that is decoration.
+  // DIRECT HITS WERE COUNTED TWICE. `damageEnemy` adds the landed amount to
+  // `damageDealt`, and `skillDamage` adds that same hit again. DoTs, sluice
+  // bursts and trait damage go through `damageEnemy` only, so a strike tree
+  // read high against a hazard tree. Drop the second add for this reading.
+  // A real run's damage stat is still doubled; that is a separate decision.
+  const origSkillDamage = sim.skillDamage.bind(sim);
+  sim.skillDamage = (e, amount, pl, skill) => {
+    const n = origSkillDamage(e, amount, pl, skill);
+    if (pl && n > 0) pl.damageDealt -= n;
+    return n;
+  };
+
   const declared = new Set();
   for (const sk of tree.skills) for (const c of (sk.compose || [])) if (c.scaleWith) declared.add(c.scaleWith);
   const peak = {};
@@ -255,12 +306,19 @@ function measureTree(treeId) {
     for (const d of dummies) {
       d.e.x = d.x; d.e.y = d.y; d.e.knockX = d.e.knockY = 0;
       if (MORTAL) {
-        // respawn on death, statuses cleared with the body — a new enemy is
-        // not the old one carrying forty stacks of someone else's plague
-        d.e.maxHp = MORTAL_HP;
-        if (!(d.e.hp > 0) || !d.e.active) {
+        // RESPAWN ON DEATH, AS A NEW BODY. `_killEnemy` RELEASES a dead enemy to
+        // the pool, so writing hp back onto the released object revived nothing:
+        // the ring emptied within seconds and every tree read as "the HP of five
+        // slabjaws ÷ 30s". A new spawn is a new body — statuses, drench and
+        // plague cleared with the old one, which is the point of this ring.
+        if (!d.e.active || !(d.e.hp > 0)) {
+          const ne = sim.spawnEnemyById('slabjaw', d.x, d.y, { noMats: true });
+          if (ne) { ne.spd = 0; ne.dmg = 0; d.e = ne; d.fresh = true; }
+        }
+        if (d.fresh !== false) {
+          d.e.maxHp = MORTAL_HP;
           d.e.hp = plan.wounded ? MORTAL_HP * 0.2 : MORTAL_HP;
-          d.e.plagueDps = 0; d.e.plagueT = 0; d.e.slowT = 0; d.e.markT = 0;
+          d.fresh = false;
         }
       } else {
         d.e.maxHp = 2e9;
@@ -284,6 +342,23 @@ function measureTree(treeId) {
   const dps = (p.damageDealt - (p.novaDamage || 0)) / SECONDS;
   return { treeId, classId: tree.classId, dps, actives: actives.length,
            slotted: Math.min(actives.length, slots), plan, peak, declared: [...declared] };
+}
+
+// A tree that enters two or more forms is scored once per form and the best
+// run stands for the tree. Pinning every form enter into one loadout makes
+// them overwrite each other, and the reading is of that collision.
+function scoreTree(treeId) {
+  const forms = enteredForms(TREES[treeId]);
+  if (forms.length < 2) return measureTree(treeId);
+  let best = null;
+  for (const form of forms) {
+    const row = measureTree(treeId, form);
+    if (!row) continue;
+    row.formRun = form;
+    row.formRuns = forms.length;
+    if (!best || row.dps > best.dps) best = row;
+  }
+  return best;
 }
 
 // One character with EVERY tree of its class spent and a broad loadout — the
@@ -365,7 +440,7 @@ console.log(`PER-TREE DPS — level ${LEVEL}, ${slotsAtLevel(LEVEL)} slots pinne
 
 const byClass = new Map();
 for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
-  const rows = treeIds.map(measureTree).filter(Boolean);
+  const rows = treeIds.map(scoreTree).filter(Boolean);
   if (rows.length) byClass.set(classId, rows);
 }
 
@@ -376,7 +451,8 @@ for (const [classId, rows] of byClass) {
   console.log(`${classId.replace('toh_', '')}  (${rows.length} trees, class median ${med.toFixed(1)})`);
   for (const r of rows) {
     const dev = med > 0 ? (r.dps - med) / med : 0;
-    const tag = `${r.treeId} ${r.dps.toFixed(1).padStart(8)}  ${(dev >= 0 ? '+' : '') + (dev * 100).toFixed(0)}%  ${r.slotted}/${r.actives} actives slotted`;
+    const formNote = r.formRun ? `  best of ${r.formRuns} forms (${r.formRun})` : '';
+    const tag = `${r.treeId} ${r.dps.toFixed(1).padStart(8)}  ${(dev >= 0 ? '+' : '') + (dev * 100).toFixed(0)}%  ${r.slotted}/${r.actives} actives slotted${formNote}`;
     if (VERBOSE && r.plan.staged.length) console.log(`      staged: ${r.plan.staged.join(', ')}`);
     for (const u of r.plan.unstageable) { unstaged++; console.log(`      NOT STAGED — ${u}`); }
     // Engine supply is NOT judged here — see the class pass below. In isolation
