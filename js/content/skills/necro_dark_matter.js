@@ -17,7 +17,7 @@ import { docTrigger, rankPer, RANK_NONE, pctRemaining, pctToFraction } from '../
 
 export const TUNING = {
   // tier_code 0 — Dark Energy Blip
-  blipDamage: 9, blipSpeed: 520, blipRange: 480, blipCd: 750,
+  blipDamage: 9, blipSpeed: 520, blipRange: 480, blipCd: 1000,
   // tier_code 1 — Dark Matter Bomb
   bombDamage: 30, bombSpeed: 500, bombRange: 420, bombCd: 1200,
   bombSplash: 12, bombSplashRadius: 60,
