@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateTree, serializeMap } from './nodetree.js';
-import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP, ONBOARDING_DROP_SCALE } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -3002,13 +3002,21 @@ export class Sim {
     // axis and how many kills it paid for. Measuring the ratio at the pickup
     // instead makes the denominator "materials the bot happened to walk over",
     // which is a fixture property, not a game one.
-    this.payout.kills++; this.payout.gold += mats; this.payout.xp += xpMats;
+    // Map 1 fields 0.6 of the enemies and pays 1/0.6 on each of the material
+    // units those enemies already dropped. The loop still runs once per base
+    // unit, so a kill draws the same two Sim.rng floats it drew before. Fewer
+    // enemies means fewer of those kills, and fewer spawns — each spawn reads
+    // this.rng for its phase, its fire timer, and (if it telegraphs) its
+    // cooldown. The stream's order per spawn and per material is unchanged.
+    const dropScale = this._onboarding() ? ONBOARDING_DROP_SCALE : 1;
+    this.payout.kills++; this.payout.gold += mats * dropScale; this.payout.xp += xpMats * dropScale;
     // A pickup carries its own XP value. The BASE materials carry XP; the
     // extras the gold multiplier added carry NONE, so a harder setting pays
     // more gold and exactly the same XP. That is §4.1's exclusion expressed in
     // the drop rather than trusted to a load assertion.
     for (let i = 0; i < mats; i++) {
-      this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15), 1, i < xpMats ? 1 : 0);
+      const unitXp = i < xpMats ? dropScale : 0;
+      this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15), dropScale, unitXp);
     }
     // killer hooks & traits
     if (killer && killer.stats) {
