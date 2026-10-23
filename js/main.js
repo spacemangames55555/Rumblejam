@@ -1624,6 +1624,7 @@ function viewFromSim(sim) {
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
       flash: e.hitFlash > 0, fusing: e.fusing, pylon: e.typeIdx === -2,
       winding: e.telState === 1,   // TELEGRAPH_STATES.WINDUP — drives the wind-up pose
+      plagued: (e.plagueT || 0) > 0,   // tint + fx.plague_mark; flag bit 128 on the wire
       domain: e.domain,
       // sprite id from the definition table, exactly as shape/color are — the
       // client resolves the same id from the type index on the wire
@@ -1711,6 +1712,7 @@ function viewFromSnaps(dtFrame) {
     enemies.push({
       id: e[0], x: L(e[2], n[2]), y: L(e[3], n[3]), hpFrac: L(e[4], n[4]), radius,
       elite: !!(flags & 1), boss: !!(flags & 2), mini: !!(flags & 4), flash: !!(flags & 8), fusing: !!(flags & 16),
+      plagued: !!(flags & 128),
       pylon, shape, color, spriteId,
     });
   }

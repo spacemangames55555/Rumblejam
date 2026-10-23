@@ -1077,7 +1077,7 @@ export function tickSkillStatuses(sim, dt) {
         e.plagueAcc -= d;
         const owner = sim.players[e.plagueOwner];
         // routed through the triangle like every other damage source
-        sim.damageEnemy(e, d * enemyDomainMult(sim, e.plagueDomain, e.domain), { owner, silent: true, noEffects: true });
+        sim.damageEnemy(e, d * enemyDomainMult(sim, e.plagueDomain, e.domain), { owner, silent: true, noEffects: true, tick: 'plague' });
       }
       if (e.plagueT <= 0) { e.plagueDps = 0; e.plagueAcc = 0; e.plagueFrom = undefined; }
     }

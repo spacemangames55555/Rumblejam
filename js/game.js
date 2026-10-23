@@ -2912,6 +2912,10 @@ export class Sim {
     // a Regenerating elite stops healing while it is being hit (see ELITE_MODS)
     if (e.eliteMod && e.eliteMod.regenLockS) e.regenLock = e.eliteMod.regenLockS;
     if (!opts.silent) this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: opts.crit ? 1 : 0 });
+    // A silent DoT tick that asks for a number gets the small plague-green one
+    // (kind 4, js/render.js ingestFx). Presentation only: the fx buffer is
+    // rebuilt every tick, nothing here is read back by the sim, no RNG.
+    else if (opts.tick === 'plague') this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: 4 });
     const p = opts.owner;
     this._dmgLedger(e, p, amount, 'landed');
     if (p && p.stats) {
@@ -5367,7 +5371,7 @@ export class Sim {
         for (const p of live) { if (dist2(e.x, e.y, p.x, p.y) < cullR2) { seen = true; break; } }
         if (!seen) continue;
       }
-      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0)]);
+      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0) | ((e.plagueT || 0) > 0 ? 128 : 0)]);
     }
     for (const pr of this.projPool) {
       snap.projs.push([pr.id, r(pr.x), r(pr.y), r(pr.vx), r(pr.vy), pr.friendly ? 1 : 0, pr.radius, pr.color]);

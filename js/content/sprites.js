@@ -243,6 +243,9 @@ export const FX = {
   heal: 'fx.heal',
   telegraphMark: 'fx.telegraph_mark',
   bonedust: 'fx.bonedust',
+  // status mark over an enemy carrying a plague (Entropy Cascade and the other
+  // plague skills): a 4-frame loop at 6 fps, phase-offset per enemy by `seed`
+  plagueMark: 'fx.plague_mark',
 };
 
 // ---------------- UI chrome ----------------
