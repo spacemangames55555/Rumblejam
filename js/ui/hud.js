@@ -14,6 +14,10 @@ let bannerTimer = null;
 // event list; replacing in place made Trailhead last zero milliseconds.
 const bannerQueue = [];
 let bannerLive = false;
+// Callbacks that must run only once nothing is showing and nothing is waiting.
+// Level-up cards use this: opening them in the same pass as the banners put
+// the cards under the banner for its whole duration.
+const bannerIdle = [];
 
 function paintBanner(text, sub) {
   const el = $('hud-banner');
@@ -32,6 +36,8 @@ function advanceBanner() {
     bannerLive = false;
     bannerTimer = null;
     $('hud-banner').classList.add('hidden');
+    const waiting = bannerIdle.splice(0);
+    for (const fn of waiting) fn();
     return;
   }
   bannerLive = true;
@@ -42,6 +48,9 @@ function advanceBanner() {
 function clearBanners() {
   bannerQueue.length = 0;
   bannerLive = false;
+  // Leaving the run drops a deferred card open. Firing it here would pop the
+  // level-up panel on the menu.
+  bannerIdle.length = 0;
   clearTimeout(bannerTimer);
   bannerTimer = null;
   const el = $('hud-banner');
@@ -193,6 +202,13 @@ export function toast(text) {
 export function banner(text, sub = '', dur = 2200) {
   bannerQueue.push({ text, sub, dur });
   if (!bannerLive) advanceBanner();
+}
+
+// Run fn now when the queue is idle, otherwise once the last banner has
+// finished and hidden. A later clearBanners drops the callback without calling it.
+export function afterBanners(fn) {
+  if (!bannerLive && bannerQueue.length === 0) fn();
+  else bannerIdle.push(fn);
 }
 
 // ---------------- arena radar ----------------

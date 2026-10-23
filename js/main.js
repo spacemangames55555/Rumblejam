@@ -27,7 +27,7 @@ import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScre
 import { initWorldMap, showWorldMap, hideWorldMap, isWorldMapOpen } from './ui/worldmap.js';
 import { loadAll, saveAll, newCharacter, newPlayerStore, onRegionCleared, recordUnlock, validateCharacter,
   park, unpark, exportBundle, importBundle, STORAGE_WARNING } from './saves.js';
-import { showHud, updateHud, toast, banner } from './ui/hud.js';
+import { showHud, updateHud, toast, banner, afterBanners } from './ui/hud.js';
 import { DEFAULT_DIFFICULTY } from './worldmap.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening, showSkills, closeSkills, isSkillsOpen, updateSkillsMeta } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
@@ -1099,7 +1099,7 @@ function applySnapState(snap) {
   // and a lost close was a dead run, so this closes the worse of the two.
   const mine = (st.pend || []).find(r => r[0] === app.myIdx);
   if (mine) {
-    if (!mine[1]) closeLevelup();
+    if (!mine[1]) { pendingLevelup = null; closeLevelup(); }
     if (!mine[2]) closeTreasure();
     if (!mine[3]) closeBoon();
     if (!mine[4]) closeOpening(); else showOpeningFromPend();
@@ -1126,6 +1126,9 @@ function applySnapState(snap) {
 // Set for the duration of one event list, so a map-1 top-up does not also
 // toast once per granted level over the banner.
 let muteCatchupToasts = false;
+// The offer event still arrives with the banners. Hold the cards until the
+// queue drains so Trailhead and FIELD CLEAR are not painted over the picks.
+let pendingLevelup = null;
 
 // The top-up is a stack of ordinary level-ups. Nothing in the sim says "this
 // one was the guarantee" — saying so would be a new event, and the banner is
@@ -1214,8 +1217,14 @@ function handleEvent(ev) {
       levelupHorn(ev.idx === app.myIdx); // own = loud, ally = quiet, debounced
       if (ev.idx === app.myIdx && !muteCatchupToasts) toast('Level up! (pick at room clear)');
       break;
-    case 'offer': if (ev.idx === app.myIdx) showLevelup(ev); break;
-    case 'offerDone': if (ev.idx === app.myIdx) closeLevelup(); break;
+    case 'offer': if (ev.idx === app.myIdx) {
+      pendingLevelup = ev;
+      afterBanners(() => {
+        if (pendingLevelup !== ev) return;
+        showLevelup(ev);
+      });
+    } break;
+    case 'offerDone': if (ev.idx === app.myIdx) { pendingLevelup = null; closeLevelup(); } break;
     case 'treasure': if (ev.idx === app.myIdx) showTreasure(ev); break;
     case 'treasureDone': if (ev.idx === app.myIdx) closeTreasure(); break;
     case 'opening': if (ev.idx === app.myIdx) showOpening(ev); break;
