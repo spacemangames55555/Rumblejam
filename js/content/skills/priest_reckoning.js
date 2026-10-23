@@ -71,7 +71,7 @@ export const TUNING = {
   arrearsWeight: 0.18,
   distraintDamage: 21, distraintArc: 1.7, distraintRange: 280, distraintCd: 4300,
   distraintMark: { heal: 8, dur: 6500, radius: 160 },
-  forecloseDamage: 29, forecloseReach: 145, forecloseArc: 2.8, forecloseCd: 7600,
+  forecloseDamage: 20, forecloseReach: 145, forecloseArc: 2.8, forecloseCd: 7600,
   foreclosePulses: 2, forecloseMark: { heal: 11, dur: 7000, radius: 180 },
 
   rankDamage: 0.04, rankDuration: 0.03,

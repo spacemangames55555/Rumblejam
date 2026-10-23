@@ -44,7 +44,7 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  scudDamage: 12, scudRange: 245, scudSpeed: 440, scudRadius: 7, scudCd: 1150,
+  scudDamage: 3, scudRange: 245, scudSpeed: 440, scudRadius: 7, scudCd: 1150,
   scudDrench: { stacks: 2, cap: 12, dur: 9000 },
   shallowsWeight: 0.15,
 
@@ -53,12 +53,12 @@ export const TUNING = {
   // omission. The damage is on the same step as the soak, so the payout has
   // already happened by the time the target dies — which against chaff is
   // immediately.
-  dragDamage: 18, dragReach: 120, dragArc: 1.9, dragCd: 2400,
+  dragDamage: 5, dragReach: 120, dragArc: 1.9, dragCd: 2400,
   dragDrench: { stacks: 3, cap: 12, dur: 9000 },
   sluicewayWeight: 0.18,
-  sweepDamage: 22, sweepArc: 1.7, sweepRange: 285, sweepCd: 4200,
+  sweepDamage: 6, sweepArc: 1.7, sweepRange: 285, sweepCd: 4200,
   sweepDrench: { stacks: 3, cap: 12, dur: 9000 },
-  seawallDamage: 30, seawallArc: 2.8, seawallRange: 310, seawallCd: 7400,
+  seawallDamage: 9, seawallArc: 2.8, seawallRange: 310, seawallCd: 7400,
   seawallDrench: { stacks: 4, cap: 12, dur: 9000 },
   seawallSlow: { mult: 0.6, dur: 2600 },
 
@@ -67,16 +67,16 @@ export const TUNING = {
   // `sluice` in one pass, so a step declaring both soaks and then immediately
   // spends what it just put on plus whatever was already there — a small,
   // certain payout instead of a large, conditional one.
-  undertowDamage: 16, undertowReach: 116, undertowArc: 1.8, undertowCd: 2300,
+  undertowDamage: 5, undertowReach: 116, undertowArc: 1.8, undertowCd: 2300,
   undertowDrench: { stacks: 3, cap: 12, dur: 9000 },
-  undertowSluice: { per: 3, radius: 26 },
+  undertowSluice: { per: 1, radius: 26 },
   ebbWeight: 0.18,
-  raceDamage: 20, raceRange: 265, raceSpeed: 460, raceRadius: 7, raceCd: 4100,
+  raceDamage: 6, raceRange: 265, raceSpeed: 460, raceRadius: 7, raceCd: 4100,
   raceDrench: { stacks: 3, cap: 12, dur: 9000 },
-  raceSluice: { per: 4, radius: 30 },
-  maelstromDamage: 27, maelstromReach: 142, maelstromArc: 2.7, maelstromCd: 7200,
+  raceSluice: { per: 1, radius: 30 },
+  maelstromDamage: 8, maelstromReach: 142, maelstromArc: 2.7, maelstromCd: 7200,
   maelstromDrench: { stacks: 4, cap: 12, dur: 9000 },
-  maelstromSluice: { per: 6, radius: 42 }, maelstromPulses: 2,
+  maelstromSluice: { per: 2, radius: 42 }, maelstromPulses: 2,
 
   rankDamage: 0.04, rankDuration: 0.03,
 };
