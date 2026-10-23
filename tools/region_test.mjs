@@ -305,8 +305,30 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
 // multiplier cannot be derived from the tables and checked against itself.
 // Asserting 1.7 would only prove someone typed 1.7. This plays the map and
 // reads the character, so ANY change to the rate, the table or the drop path
-// that moves onboarding pacing lands here by name. The level check is EXACT.
-// `>= 6` let a level-9 exit pass, which is the overshoot this exists to catch.
+// that moves onboarding pacing lands here by name.
+//
+// THE WINDOW IS LEVELS 6 TO 7, ON BOTH MEASUREMENT SEEDS. The arenas.js note
+// names seed 777 and seed a11ce. `a11ce` is the hex literal 0xa11ce (659918),
+// the same spelling as KNOWN-DEFECTS #24's seed `cafe` (0xcafe). It is not a
+// seed code — that alphabet has no `1` — and not hashString('a11ce').
+//
+// The note's "64 materials, level 8" does not reproduce on this probe.
+// 0xa11ce banks 38 materials. At the live 1.7 multiplier that is level 4
+// (64.6 XP) and 2 slots. Seed 777 banks 71 and at 1.7 is level 6 (120.7 XP)
+// with 3 slots.
+//
+// No multiplier from 1.5 to 3.4 keeps both seeds inside 6–7. Seed 777 is in
+// the window from 1.6 through 2.5. Seed a11ce does not reach level 6 until
+// 2.9, and by then seed 777 is level 8. The lowest multiplier with both at
+// level 6 or higher is 2.9; it was not applied, because 777 would leave the
+// window. ONBOARDING_XP_MULT[0] stays 1.7, and the a11ce line below fails
+// by name until a multiplier is chosen that can hold both.
+//
+// SLOTS stay 3. SLOT_LEVELS opens slot 2 at level 3 and slot 3 at level 5,
+// so levels 6 and 7 both grant 3. Asserting 2 would reject a correct exit.
+// Asserting slotsAtLevel(level) would be true whenever the level is, and
+// would not notice a ladder edit. Level 4, where a11ce exits at 1.7, still
+// has 2, so the slot check fails with the level check on that seed.
 //
 // It nukes rather than fights, deliberately: the question is what the ROOM
 // pays, not whether a level-1 build can beat it — offence_test owns that one.
@@ -324,43 +346,41 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   if (!wrong.length) ok(`XP compensation is scoped to the ramp: ${shape.map(([n, v]) => `${n} x${v}`).join(', ')}`);
   else fail(`XP compensation is mis-scoped: ${wrong.map(([n, v]) => `${n} x${v}`).join(', ')} — it must pay back exactly where the ramp took, and nowhere else`);
 
-  const sim = new Sim({ seed: 777, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_samurai', color: '#fff' }] });
-  const p = sim.players[0];
-  if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
-  sim.god = true;
-  sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
-  let t = 0;
-  while (sim.phase === 'arena' && !sim.over && t++ < 200 * 60) {
-    sim.tick();
-    for (const e of sim.enemyPool.items) if (e.active) sim.damageEnemy(e, 900, { owner: p });
-    let g = 0;
-    while (p.pendingOffer && g++ < 60) sim.uiAction(0, { kind: 'levelup', id: p.pendingOffer[0].id });
-    if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
-    // XP is banked on PICKUP, so the probe has to walk the loot — standing
-    // still measures the drop path and reports zero progression.
-    let best = null, bd = 1e18;
-    for (const m of sim.pickups) { const d = (m.x - p.x) ** 2 + (m.y - p.y) ** 2; if (d < bd) { bd = d; best = m; } }
-    if (best) { const dx = best.x - p.x, dy = best.y - p.y, l = Math.hypot(dx, dy) || 1; sim.setInput(0, { mx: dx / l, my: dy / l }); }
-    else sim.setInput(0, { mx: 0, my: 0 });
-    if (!p.downed) p.hp = p.stats.vitality;
-  }
-  // EXACT LEVEL. Overshoot is a failure, same as undershoot.
-  //
-  // SLOTS. This used to require "2 slots". That was true when the second slot
-  // opened at level 6. SLOT_LEVELS now opens slot 2 at level 3 and slot 3 at
-  // level 5, so a level-6 exit has 3 slots — and so does a level-9 exit, which
-  // is why `slots >= 2` never saw the overshoot. Asserting 2 would reject the
-  // level this multiplier is tuned to hit. Asserting slotsAtLevel(WANT_LEVEL)
-  // would be true whenever the level is, and would not notice a ladder edit.
-  // 3 is the count level 6 grants today, written down so a ladder change fails
-  // here beside a level miss.
-  const WANT_LEVEL = 6, WANT_SLOTS = 3;
-  const slots = SK.slotsAtLevel(p.level);
-  if (p.level === WANT_LEVEL && slots === WANT_SLOTS) {
-    ok(`a character leaves map 1 at level ${p.level} with ${p.skillPoints} unspent point(s) and ${slots} slots — exactly the onboarding exit`);
-  } else {
-    fail(`a character leaves map 1 at level ${p.level} with ${slots} slot(s), want exactly level ${WANT_LEVEL} and ${WANT_SLOTS} slots — `
-      + `overshoot and undershoot both fail; map 2 must be entered on this exit and not on a build that ran past it`);
+  // Levels 6 and 7 inclusive. Overshoot past 7 fails the same way undershoot
+  // below 6 does. 3 is the slot count both of those levels grant today.
+  const WANT_LO = 6, WANT_HI = 7, WANT_SLOTS = 3;
+  const seeds = [
+    { name: '777', seed: 777 },
+    { name: 'a11ce', seed: 0xa11ce },
+  ];
+  for (const { name, seed } of seeds) {
+    const sim = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_samurai', color: '#fff' }] });
+    const p = sim.players[0];
+    if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+    sim.god = true;
+    sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+    let t = 0;
+    while (sim.phase === 'arena' && !sim.over && t++ < 200 * 60) {
+      sim.tick();
+      for (const e of sim.enemyPool.items) if (e.active) sim.damageEnemy(e, 900, { owner: p });
+      let g = 0;
+      while (p.pendingOffer && g++ < 60) sim.uiAction(0, { kind: 'levelup', id: p.pendingOffer[0].id });
+      if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
+      // XP is banked on PICKUP, so the probe has to walk the loot — standing
+      // still measures the drop path and reports zero progression.
+      let best = null, bd = 1e18;
+      for (const m of sim.pickups) { const d = (m.x - p.x) ** 2 + (m.y - p.y) ** 2; if (d < bd) { bd = d; best = m; } }
+      if (best) { const dx = best.x - p.x, dy = best.y - p.y, l = Math.hypot(dx, dy) || 1; sim.setInput(0, { mx: dx / l, my: dy / l }); }
+      else sim.setInput(0, { mx: 0, my: 0 });
+      if (!p.downed) p.hp = p.stats.vitality;
+    }
+    const slots = SK.slotsAtLevel(p.level);
+    if (p.level >= WANT_LO && p.level <= WANT_HI && slots === WANT_SLOTS) {
+      ok(`seed ${name} leaves map 1 at level ${p.level} with ${p.skillPoints} unspent point(s) and ${slots} slots — inside the level ${WANT_LO}–${WANT_HI} onboarding window`);
+    } else {
+      fail(`seed ${name} leaves map 1 at level ${p.level} with ${slots} slot(s), want level ${WANT_LO}–${WANT_HI} and ${WANT_SLOTS} slots — `
+        + `overshoot and undershoot both fail; map 2 must be entered inside this window`);
+    }
   }
 }
 

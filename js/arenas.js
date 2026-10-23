@@ -190,14 +190,23 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 // ONBOARDING_XP_MULT's 3.4x, which existed to undo this halving's effect on
 // materials. With the halving gone that 3.4 compensated for something that no
 // longer happened. Measured on the same god-mode probe `region_test` uses
-// (kill on contact, walk the loot), seed 777 left map 1 at level 9 with 71
-// materials banked (241 XP) instead of level 6.
+// (kill on contact, walk the loot), at 3.4:
 //
-// ONBOARDING_XP_MULT[0] is 1.7, half of 3.4. The exit check runs seed 777
-// only, and 1.7 leaves that seed at level 6 (120.7 XP, inside the 110–144
-// window) without a further 0.1 step. `region_test` asserts that level
-// exactly, so the next overshoot fails. Map 2's 1.35 is untouched: its 75%
-// rate is still in place.
+//   seed 777    level 9, 71 materials, 241.4 XP
+//   seed a11ce  level 6, 38 materials, 129.2 XP
+//
+// `a11ce` is the hex literal 0xa11ce. The older note on this constant said
+// that seed went level 6 → level 8 (40 → 64 materials). That count does not
+// reproduce on this probe; 0xa11ce banks 38.
+//
+// ONBOARDING_XP_MULT[0] stays 1.7. At 1.7 seed 777 is level 6 (120.7 XP, 3
+// slots) and seed a11ce is level 4 (64.6 XP, 2 slots). No step from 1.5 to
+// 3.4 puts both seeds inside levels 6–7: 777 is in that window from 1.6 to
+// 2.5, and a11ce does not reach level 6 until 2.9, which puts 777 at level 8.
+// The lowest multiplier with both at level 6 or higher is 2.9, and it was not
+// applied. `region_test` runs both seeds and accepts levels 6 through 7 with
+// 3 slots, so a11ce fails by name until a multiplier is chosen that can.
+// Map 2's 1.35 is untouched: its 75% rate is still in place.
 export const ONBOARDING_RATE = [1, 0.75, 1];
 export function onboardingMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
@@ -219,8 +228,8 @@ export function onboardingMult(regionIndex, depth) {
 // and closes the profile levers that used to inject `gyre` and `lobber` at 2
 // materials each. What is left — skulker, flit, fusehead — is a poorer table as
 // well as a smaller one. Measured under the halving, map 1 banked 37 materials
-// where it used to bank roughly 110. At full rate the same probe banks 71; the
-// XP multiplier, not the material count, is what was cut.
+// where it used to bank roughly 110. At full rate seed 777 banks 71 and seed
+// a11ce banks 38; the XP multiplier, not the material count, is what was cut.
 //
 // XP ONLY, DELIBERATELY. Gold is not compensated: fewer enemies paying less
 // money is legible, and the shop is priced against a floor's takings rather
@@ -230,11 +239,13 @@ export function onboardingMult(regionIndex, depth) {
 // produce it are not both computable — a splitter's second body is a runtime
 // quantity, not a table mean. That makes it exactly the kind of number that
 // goes stale silently, so region_test asserts the OUTCOME it exists to produce
-// (a fresh character leaves map 1 at exactly level 6) instead of trusting the
-// constant. The slot count is no longer part of that sentence: the merged
-// ladder opens the third slot at level 5, so level 6 has three slots, and the
-// old "two slots" figure was the ladder from before that merge. Change the
-// table or the rate and that gate names the reason.
+// (both measurement seeds, 777 and a11ce, leave map 1 at level 6 or 7, with 3
+// slots) instead of trusting the constant. The merged ladder opens the third
+// slot at level 5, so levels 6 and 7 have three slots, and the old "two slots"
+// figure was the ladder from before that merge. Level 4, which is where seed
+// a11ce exits at 1.7, still has two, so the slot check and the level window
+// fail together on that seed. Change the table or the rate and that gate names
+// the reason.
 //
 // [0] was 3.4 while map 1's rate was 0.5. Density was half of the debt and
 // that half is gone, so [0] is 1.7. What remains is the poorer onboarding
