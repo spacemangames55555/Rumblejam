@@ -7,8 +7,9 @@
 // level-up pick (the first card), same opening (left for the arena floor,
 // which grants that same first card).
 //
-// Usage: node tools/map1_bot.mjs [seed ...]
+// Usage: node tools/map1_bot.mjs [--chase] [seed ...]
 // Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
+// --chase walks onto the nearest enemy. Without it this is the balance_probe kite.
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
@@ -19,7 +20,8 @@ const CHAR = 'toh_samurai';
 const DEFAULT_SEEDS = [777, 0xa11ce, 424242, 20260728, 99];
 const FIGHT_CAP_S = 200;
 
-const seeds = process.argv.slice(2).map(s => Number(s)).filter(n => Number.isFinite(n));
+const chase = process.argv.includes('--chase');
+const seeds = process.argv.slice(2).filter(s => s !== '--chase').map(s => Number(s)).filter(n => Number.isFinite(n));
 const list = seeds.length ? seeds : DEFAULT_SEEDS;
 
 function runSeed(seed) {
@@ -41,18 +43,23 @@ function runSeed(seed) {
       if (d2 < nd) { nd = d2; nearest = e; }
       count++;
       const d = Math.sqrt(d2) || 1;
-      if (d < ring) {
+      if (!chase && d < ring) {
         const w = (ring - d) / ring;
         vx += (p.x - e.x) / d * w * 3;
         vy += (p.y - e.y) / d * w * 3;
       }
     }
-    for (const pr of sim.projPool) {
+    if (chase && nearest) {
+      const d = Math.sqrt(nd) || 1;
+      vx += (nearest.x - p.x) / d * 4;
+      vy += (nearest.y - p.y) / d * 4;
+    }
+    if (!chase) for (const pr of sim.projPool) {
       if (pr.friendly) continue;
       const d = Math.hypot(p.x - pr.x, p.y - pr.y) || 1;
       if (d < 110) { vx += (p.x - pr.x) / d * 2.5; vy += (p.y - pr.y) / d * 2.5; }
     }
-    if (nearest && nd > (ring + 30) * (ring + 30)) {
+    if (!chase && nearest && nd > (ring + 30) * (ring + 30)) {
       const d = Math.sqrt(nd);
       vx += (nearest.x - p.x) / d * 1.6;
       vy += (nearest.y - p.y) / d * 1.6;
