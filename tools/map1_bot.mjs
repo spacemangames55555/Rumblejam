@@ -17,19 +17,26 @@
 // A prereq the bot has not bought is skipped, so Necromancer's Dark Matter Bomb
 // waits until Blip is owned. Newly learned actives ride the engine's auto-slot.
 //
-// That rule picks one chain on the classes this probe is run for, because each
-// next node requires the previous one and the other trees' nodes require their
-// own openers:
+// With no `--opener`, step 1's tier-1 is the class's first tier-1 in that same
+// registry order. The run prints that default for every class before the seeds.
+// On the classes this probe is usually run for, the chain that falls out is:
 //   toh_necromancer  Dark Energy Blip → Dark Matter Bomb → Tainted Dark Matter
 //   toh_bard         Opening Note → Quickstep → Counterpoint
 //   toh_sundian      Spindrift → Souse → Rip Current
 //   toh_samurai      Cross Guard Cut → Set Stance (a passive, max rank 1).
 //                    Armor has no tier-3 node, so further points rank the cut.
 //
+// `--opener <skillId>` spends the level-1 point on that tier-1 skill instead.
+// Tier 2 is then the first purchasable skill that lists it as `prereq`, and
+// tier 3 is the first purchasable skill that lists that tier-2 node as
+// `prereq`. A chain with no such node falls back to the registry walk above.
+// The id has to be a tier-1 skill of the class being run. It spends a point,
+// so it is not combined with `--no-learn`.
+//
 // `--no-learn` spends nothing. The floor still grants the opening skill, and
 // the earlier chase tables stay reproducible.
 //
-// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [charId] [seed ...]
+// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [--opener <skillId>] [charId] [seed ...]
 // Default class: toh_samurai. Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
 
 import { Sim } from '../js/game.js';
@@ -37,7 +44,7 @@ import { dist2 } from '../js/util.js';
 import { WEAPON_BY_ID } from '../js/content/weapons.js';
 import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from '../js/arenas.js';
 import { CONFIG } from '../js/config.js';
-import { TREES, TREES_BY_CLASS, canLearn } from '../js/skills.js';
+import { TREES, TREES_BY_CLASS, SKILL_BY_ID, canLearn } from '../js/skills.js';
 
 const CHAR = 'toh_samurai';
 const DEFAULT_SEEDS = [777, 0xa11ce, 424242, 20260728, 99];
@@ -47,15 +54,48 @@ const argv = process.argv.slice(2);
 const chase = argv.includes('--chase');
 const learn = !argv.includes('--no-learn');
 let charId = CHAR;
+let openerId = null;
 const seeds = [];
-for (const s of argv) {
+for (let i = 0; i < argv.length; i++) {
+  const s = argv[i];
   if (s === '--chase' || s === '--no-learn') continue;
+  if (s === '--opener') {
+    openerId = argv[++i];
+    if (!openerId || openerId.startsWith('--')) {
+      console.error('--opener needs a tier-1 skill id');
+      process.exit(1);
+    }
+    continue;
+  }
+  if (s.startsWith('--opener=')) { openerId = s.slice('--opener='.length); continue; }
   if (s.startsWith('--class=')) { charId = s.slice('--class='.length); continue; }
   const n = Number(s);
   if (s !== '' && Number.isFinite(n)) seeds.push(n);
   else charId = s;
 }
 const list = seeds.length ? seeds : DEFAULT_SEEDS;
+
+// The class's registry opener: first tier-1 of the first tree.
+function defaultOpener(id) {
+  for (const tid of TREES_BY_CLASS[id] || []) {
+    const sk = TREES[tid].skills.find(s => s.tier === 1);
+    if (sk) return sk;
+  }
+  return null;
+}
+
+if (openerId && !learn) {
+  console.error('--opener spends the level-1 point, so it cannot be combined with --no-learn');
+  process.exit(1);
+}
+if (openerId) {
+  const sk = SKILL_BY_ID[openerId];
+  const trees = TREES_BY_CLASS[charId] || [];
+  if (!sk || sk.tier !== 1 || !trees.includes(sk.tree)) {
+    console.error(`--opener ${openerId} is not a tier-1 skill of ${charId}`);
+    process.exit(1);
+  }
+}
 
 function classSkills(id) {
   const out = [];
@@ -82,6 +122,49 @@ function tierOne(p) {
     || null;
 }
 
+// The tier-1 this run is building from. `--opener` wins once it is owned;
+// otherwise the tier-1 already known, which is the registry opener.
+function ownedOpener(p) {
+  if (openerId && (p.skillRanks[openerId] || 0) >= 1) return SKILL_BY_ID[openerId];
+  return classSkills(p.charId).find(s => s.tier === 1 && (p.skillRanks[s.id] || 0) >= 1) || null;
+}
+
+// First still-unlearned skill at `tier` whose prereq is `prereqId` and that
+// `canLearn` will sell. Registry order, so two children of the same node
+// resolve the same way every run.
+function firstChain(p, tier, prereqId) {
+  if (!prereqId) return null;
+  for (const sk of classSkills(p.charId)) {
+    if (sk.tier !== tier || sk.prereq !== prereqId) continue;
+    if ((p.skillRanks[sk.id] || 0) >= 1) continue;
+    if (canLearn(p, sk)) return sk;
+  }
+  return null;
+}
+
+// The chain node itself, learned or not, so tier 3 can name its prerequisite
+// before that tier-2 point is spent.
+function chainNode(p, tier, prereqId) {
+  if (!prereqId) return null;
+  for (const sk of classSkills(p.charId)) {
+    if (sk.tier === tier && sk.prereq === prereqId) return sk;
+  }
+  return null;
+}
+
+function nextSkill(p) {
+  if (openerId && (p.skillRanks[openerId] || 0) < 1) {
+    const op = SKILL_BY_ID[openerId];
+    if (canLearn(p, op)) return op;
+  }
+  const owned = ownedOpener(p);
+  const rootId = owned ? owned.id : null;
+  const t2 = firstChain(p, 2, rootId) || unlearnedAtTier(p, 2);
+  const t2node = chainNode(p, 2, rootId);
+  const t3 = firstChain(p, 3, t2node && t2node.id) || unlearnedAtTier(p, 3);
+  return t2 || t3 || tierOne(p);
+}
+
 // Spend every banked point. New nodes are recorded; rank-ups are returned so
 // the map-1 catch-up can say where its points went. A rejected spend stops the
 // loop rather than spinning.
@@ -90,7 +173,7 @@ function spendSkills(sim, p, learned) {
   let guard = 0;
   while (p.skillPoints > 0 && guard++ < 40) {
     const before = p.skillPoints;
-    const target = unlearnedAtTier(p, 2) || unlearnedAtTier(p, 3) || tierOne(p);
+    const target = nextSkill(p);
     if (!target) break;
     const rankBefore = p.skillRanks[target.id] || 0;
     sim.uiAction(p.idx, { kind: 'learnSkill', id: target.id });
@@ -285,6 +368,16 @@ function runSeed(seed) {
   };
 }
 
+console.log('OPENERS\tdefault tier-1, registry order');
+for (const id of Object.keys(TREES_BY_CLASS)) {
+  const sk = defaultOpener(id);
+  console.log(`OPENER\t${id}\t${sk ? sk.id : '?'}\t${sk ? sk.name : ''}`);
+}
+if (openerId) {
+  const sk = SKILL_BY_ID[openerId];
+  console.log(`CHOSEN\t${charId}\t${sk.id}\t${sk.name}`);
+}
+
 const rows = list.map(runSeed);
 let clears = 0, deaths = 0, stalls = 0;
 for (const r of rows) {
@@ -311,5 +404,5 @@ for (const r of rows) {
     if (r.unspent > 0) console.log(`UNSPENT\t${tag}\t${r.unspent}`);
   }
 }
-console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${charId}\t${learn ? 'learn' : 'no-learn'}`);
+console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${charId}\t${learn ? 'learn' : 'no-learn'}\t${openerId || 'default-opener'}`);
 console.log(`TOTAL\tclears ${clears}/${rows.length}\tdeaths ${deaths}\tstalls ${stalls}`);
