@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateTree, serializeMap } from './nodetree.js';
-import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -1028,12 +1028,16 @@ export class Sim {
     const w = this.wave;
     if (!w || w.done) return;
     w.t += dt;
-    if (w.t >= w.dur) { w.done = true; return; }
+    // Map 1's alive caps defer budget instead of discarding it. Ending the
+    // wave on the timer while that budget is still banked would drop the
+    // spawns the cap is required to keep.
+    const overtime = w.t >= w.dur;
+    if (overtime && !this._onboardingDeferred()) { w.done = true; return; }
     let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult
       * ((this.profile && this.profile.rateMult) || 1)
       * ((this.fightMods && this.fightMods.count) || 1)   // §2.4: an Elite node fields FEWER
       * objectiveSpawnMult(this);
-    if (this.boss) {
+    if (!overtime && this.boss) {
       // "reduced add spawns" while the boss is up — and tapering to silence,
       // so a siege is never an unwinnable DPS race against infinite inflow:
       // once the taper runs out the fight is finite (boss + standing field)
@@ -1042,12 +1046,15 @@ export class Sim {
       rate *= (this.siegeCfg ? this.siegeCfg.addRate : 0.35) * taper;
       if (taper === 0) { w.done = true; return; } // survivors rush (enemies.js)
     }
-    if (this.holdCircle && this.holdCircle.held) rate *= 0.3; // the sigil chokes the spawning
+    if (!overtime && this.holdCircle && this.holdCircle.held) rate *= 0.3; // the sigil chokes the spawning
     // the accumulator IS the bank: when the alive ceiling binds below, budget
-    // pools here (capped) and flows in as slots free — longer, never laggier
-    w.acc = Math.min(CONFIG.SPAWN_BANK_CAP, w.acc + rate * dt);
-    // elite injections (elite nodes and sieges)
-    if (w.eliteEvery > 0) {
+    // pools here (capped) and flows in as slots free — longer, never laggier.
+    // Map 1's tighter caps keep the overflow in w.held, which is NOT capped,
+    // so a long deferral cannot fall off SPAWN_BANK_CAP and vanish.
+    if (!overtime) this._accrueSpawn(w, rate * dt);
+    // elite injections (elite nodes and sieges). Not during the deferred
+    // tail: that tail is only spending budget the timer already accrued.
+    if (!overtime && w.eliteEvery > 0) {
       w.eliteT -= dt;
       if (w.eliteT <= 0) {
         if (this.enemyPool.count + this.spawnQueue.length >= Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10)) {
@@ -1065,8 +1072,14 @@ export class Sim {
     let guard = 0;
     while (w.acc >= 1 && guard++ < 20) {
       // ceiling check BEFORE spending the unit: a bound ceiling banks the
-      // budget in w.acc instead of discarding it
+      // budget in w.acc instead of discarding it. Map 1's warden and total
+      // caps sit in the same place, still before the pick, so a deferred
+      // tick draws nothing. The next spawn that does commit reads the same
+      // waveRng floats, in the same order, that it would have read if the
+      // slot had been open. waveRng is subRng(seed, 'wave', ...), not
+      // this.rng; the cap does not read or reorder this.rng.
       if (this.enemyPool.count + this.spawnQueue.length >= Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10)) break;
+      if (this._onboardingSpawnBlocked()) { w.capHeld = true; break; }
       w.acc -= 1;
       const prof = this.profile || {};
       // REGION POPULATIONS OVERRIDE THE FLOOR TABLE. `this.region` is the
@@ -1082,7 +1095,13 @@ export class Sim {
       // for running the suites rather than the parser.
       const regionPop = this._regionPick();
       const table = this._spawnTable(regionPop);
-      let id = regionPop || table[Math.floor(this.waveRng.float() * table.length)];
+      // Map 1 used to index the three ids uniformly (one waveRng float). It
+      // still spends exactly one float on the pick. The float is now read
+      // against encounter weight, with Cedar Warden forced to 1.5 in this
+      // room only. Later nodes keep the roster's 2.6 through _regionPick.
+      let id = this._onboarding()
+        ? this._onboardingPick(table)
+        : (regionPop || table[Math.floor(this.waveRng.float() * table.length)]);
       let mortar = false, puddle = false;
       // profile levers shape the roll: flankers become wave citizens,
       // artillery turns Lobbers into mortars, chaff picks up death-puddles
@@ -1125,7 +1144,67 @@ export class Sim {
       if (bx !== null) pos.x = bx;
       this.spawnQueue.push({ t: 0.7, id, x: pos.x, y: pos.y, mortar, puddle });
       this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 26, dur: 0.7, spawnMark: true });
+      this._releaseHeldSpawn(w);
     }
+    if (overtime && !this._onboardingDeferred()) w.done = true;
+  }
+
+  // Ordinary rooms cap the bank at SPAWN_BANK_CAP. Map 1 does not: a cap
+  // that deferred spawns into a capped bank would delete the overflow.
+  _accrueSpawn(w, inflow) {
+    if (!this._onboarding()) {
+      w.acc = Math.min(CONFIG.SPAWN_BANK_CAP, w.acc + inflow);
+      return;
+    }
+    w.held = (w.held || 0) + inflow;
+    this._releaseHeldSpawn(w);
+  }
+
+  _releaseHeldSpawn(w) {
+    if (!(w.held > 0)) return;
+    const space = CONFIG.SPAWN_BANK_CAP - w.acc;
+    if (space <= 0) return;
+    const take = Math.min(space, w.held);
+    w.acc += take;
+    w.held -= take;
+    if (w.held < 1e-8) w.held = 0;
+  }
+
+  // True only after the map-1 cap has actually held a spawn back, and only
+  // while that budget is still unspent. A fight the cap never touched still
+  // ends on the timer and leaves its fractional accumulator behind, which is
+  // what every other room does.
+  _onboardingDeferred() {
+    const w = this.wave;
+    if (!this._onboarding() || !w || !w.capHeld) return false;
+    return (w.held || 0) > 1e-4 || w.acc >= 1;
+  }
+
+  // Solo caps are ONBOARDING_WARDEN_CAP and ONBOARDING_ALIVE_CAP. coopSpawn
+  // already carries the solo 1.15 bite, so divide that back out and the
+  // solo numbers stay 8 and 25. A larger party scales by the same multiplier
+  // the spawn rate uses. "Warden" here is the Cedar Warden (pnw_cedar_warden).
+  // Its behavior is dasher; the Sapling's behavior is warden and is not this cap.
+  _onboardingCapScale() {
+    const solo = coopCurve(1, CONFIG.COOP_SPAWN_SCALE, CONFIG.COOP_SPAWN_SOFT) * CONFIG.SOLO_SPAWN_MULT;
+    return this.coopSpawn / solo;
+  }
+
+  _onboardingSpawnBlocked() {
+    if (!this._onboarding()) return false;
+    const scale = this._onboardingCapScale();
+    // Enemies are whole. A fractional scaled cap still means at most that many:
+    // the next spawn has to fit under the cap, not land on the far side of it.
+    const bodies = this.enemyPool.count + this.spawnQueue.length;
+    if (bodies + 1 > ONBOARDING_ALIVE_CAP * scale) return true;
+    let wardens = 0;
+    for (const e of this.enemyPool) if (e.def && e.def.id === 'pnw_cedar_warden') wardens++;
+    for (const s of this.spawnQueue) if (s.id === 'pnw_cedar_warden') wardens++;
+    // At the warden cap every spawn waits, including a thornhound. Rolling
+    // to discover the next id would consume a waveRng float and then have
+    // to put it back. Waiting spends no float. The same roll happens later,
+    // so the sequence of ids is unchanged.
+    return wardens + 1 > ONBOARDING_WARDEN_CAP * scale;
   }
 
   _aliveOfType(id) {
@@ -4286,6 +4365,29 @@ export class Sim {
       .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))
       .slice(0, ONBOARDING_TABLE.length)
       .map(e => e.id);
+  }
+
+  // One waveRng float, same as the uniform index this replaced. Cedar Warden's
+  // roster weight is not used here; ONBOARDING_CEDAR_WEIGHT is. Every other
+  // id keeps the weight on its def, which is what later maps still spawn with.
+  _onboardingPick(table) {
+    const pop = this.region && REGION_ENEMIES[this.region];
+    const byId = new Map(pop ? pop.enemies.map(e => [e.id, e]) : []);
+    let total = 0;
+    const weights = table.map(id => {
+      const def = byId.get(id);
+      const w = id === 'pnw_cedar_warden'
+        ? ONBOARDING_CEDAR_WEIGHT
+        : (def && def.w > 0 ? def.w : 1);
+      total += w;
+      return w;
+    });
+    let roll = this.waveRng.float() * total;
+    for (let i = 0; i < table.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return table[i];
+    }
+    return table[table.length - 1];
   }
 
   _regionPick() {

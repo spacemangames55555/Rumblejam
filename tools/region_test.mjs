@@ -478,5 +478,109 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   }
 }
 
+// ------------------------------------------- map 1 cedar weight and alive caps
+//
+// Cedar Warden stays at roster weight 2.6. Map 1's pick is the only reader of
+// 1.5, and it still spends one waveRng float. The alive caps are 8 cedar
+// wardens and 25 enemies for solo; a party scales by coopSpawn relative to a
+// solo coopSpawn (the rate multiplier, solo bite included). A tick that is
+// already at the cap draws nothing from waveRng. Map 2 is not capped.
+{
+  const AR = await import('../js/arenas.js');
+  const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
+  const cedar = ENEMY_BY_ID.pnw_cedar_warden;
+  if (cedar && cedar.w === 2.6 && AR.ONBOARDING_CEDAR_WEIGHT === 1.5) {
+    ok('Cedar Warden roster weight stays 2.6; map 1 overrides it to 1.5');
+  } else fail(`cedar weight drifted: roster ${cedar && cedar.w}, map 1 ${AR.ONBOARDING_CEDAR_WEIGHT}`);
+
+  const partyOf = n => Array.from({ length: n }, (_, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: 'toh_samurai', color: '#fff' }));
+  const enter = sim => {
+    const id = sim.reachableNodes()[0];
+    sim.uiAction(0, { kind: 'pickNode', nodeId: id });
+    let k = 0;
+    while (sim.phase !== 'arena' && k++ < 400) sim.tick();
+    sim.god = true;
+    for (const p of sim.players) p.loadout = (p.loadout || []).map(() => null);
+  };
+  const pressure = (sim, ticks) => {
+    let draws = 0, blockedDraws = 0, maxAlive = 0, maxWardens = 0, hitCap = 0;
+    const float = sim.waveRng.float.bind(sim.waveRng);
+    sim.waveRng.float = function () { draws++; return float(); };
+    const scale = sim._onboardingCapScale();
+    const aliveCap = AR.ONBOARDING_ALIVE_CAP * scale;
+    const wardenCap = AR.ONBOARDING_WARDEN_CAP * scale;
+    for (let t = 0; t < ticks; t++) {
+      const blocked = sim._onboardingSpawnBlocked();
+      const before = draws;
+      sim.tick();
+      if (blocked && draws !== before) blockedDraws++;
+      const nowAlive = sim.enemyPool.count + sim.spawnQueue.length;
+      let nowWardens = 0;
+      for (const e of sim.enemyPool) if (e.def && e.def.id === 'pnw_cedar_warden') nowWardens++;
+      for (const s of sim.spawnQueue) if (s.id === 'pnw_cedar_warden') nowWardens++;
+      maxAlive = Math.max(maxAlive, nowAlive);
+      maxWardens = Math.max(maxWardens, nowWardens);
+      if (nowAlive + 1 > aliveCap || nowWardens + 1 > wardenCap) hitCap++;
+    }
+    return { draws, blockedDraws, maxAlive, maxWardens, hitCap, aliveCap, wardenCap };
+  };
+
+  const solo = new Sim({ seed: 777, party: partyOf(1) });
+  enter(solo);
+  if (!solo._onboarding()) fail('cap fixture did not enter map 1');
+  else {
+    // A float of 0.60 lands on Cedar Warden under the old uniform index and
+    // under weight 2.6. Under weight 1.5 it lands on the next archetype.
+    const saved = solo.waveRng.float.bind(solo.waveRng);
+    solo.waveRng.float = () => 0.60;
+    solo.wave.acc = 1;
+    solo._tickWave(0);
+    const spawned = solo.spawnQueue.map(s => s.id);
+    solo.waveRng.float = saved;
+    if (spawned.length && spawned.every(id => id === 'pnw_sapling')) ok(`map 1 roll 0.60 spawns a sapling, not a cedar warden (${spawned.length})`);
+    else fail(`map 1 roll 0.60 spawned ${spawned.join(',') || 'nothing'} — cedar weight is not 1.5`);
+    solo.spawnQueue.length = 0;
+
+    const held = pressure(solo, 80 * 60);
+    const aliveOver = held.maxAlive > held.aliveCap + 1e-6;
+    const wardenOver = held.maxWardens > held.wardenCap + 1e-6;
+    if (!aliveOver && !wardenOver && held.hitCap > 0 && held.blockedDraws === 0) {
+      ok(`solo map 1 stayed within ${held.aliveCap} alive and ${held.wardenCap} cedar wardens (peak ${held.maxAlive} / ${held.maxWardens}); capped ticks drew no waveRng`);
+    } else {
+      fail(`solo map 1 cap: peak alive ${held.maxAlive}/${held.aliveCap}, wardens ${held.maxWardens}/${held.wardenCap}, capped ticks that drew ${held.blockedDraws}, ticks at cap ${held.hitCap}`);
+    }
+  }
+
+  const four = new Sim({ seed: 777, party: partyOf(4) });
+  enter(four);
+  const fourHeld = pressure(four, 50 * 60);
+  const fourAliveOver = fourHeld.maxAlive > fourHeld.aliveCap + 1e-6;
+  const fourWardenOver = fourHeld.maxWardens > fourHeld.wardenCap + 1e-6;
+  if (four._onboarding() && !fourAliveOver && !fourWardenOver && fourHeld.hitCap > 0 && fourHeld.blockedDraws === 0 && fourHeld.aliveCap > AR.ONBOARDING_ALIVE_CAP) {
+    ok(`4p map 1 scales the caps with coopSpawn (alive ${fourHeld.aliveCap.toFixed(2)}, wardens ${fourHeld.wardenCap.toFixed(2)}, peak ${fourHeld.maxAlive} / ${fourHeld.maxWardens})`);
+  } else {
+    fail(`4p map 1 cap: peak alive ${fourHeld.maxAlive}/${fourHeld.aliveCap}, wardens ${fourHeld.maxWardens}/${fourHeld.wardenCap}, draws while capped ${fourHeld.blockedDraws}`);
+  }
+
+  const map2 = new Sim({ seed: 777, party: partyOf(1) });
+  enter(map2);
+  map2._finishNode();
+  const next = map2.floor.nodes.find(n => !AR.isOnboardingNode(map2.regionIndex, n)
+    && (n.kind === 'combat' || n.kind === 'elite'));
+  map2._travelTo(next.id);
+  map2.god = true;
+  for (const p of map2.players) p.loadout = (p.loadout || []).map(() => null);
+  if (map2._onboarding()) fail('map 2 cap fixture is still the onboarding node');
+  else {
+    let maxAlive = 0;
+    for (let t = 0; t < 50 * 60 && map2.phase === 'arena'; t++) {
+      map2.tick();
+      maxAlive = Math.max(maxAlive, map2.enemyPool.count + map2.spawnQueue.length);
+    }
+    if (maxAlive > AR.ONBOARDING_ALIVE_CAP) ok(`map 2 is not under the map 1 alive cap (peak ${maxAlive})`);
+    else fail(`map 2 peak alive ${maxAlive} never passed ${AR.ONBOARDING_ALIVE_CAP} — the cap may have leaked`);
+  }
+}
+
 console.log(failures ? `\n${failures} REGION-SHELL FAILURE(S)` : '\nALL REGION-SHELL PATHS VERIFIED');
 process.exit(failures ? 1 : 0);

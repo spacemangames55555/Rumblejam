@@ -256,6 +256,17 @@ export const ONBOARDING_XP_MULT = [1.7, 1.35, 1];
 // on a drop table. Map 2 and later regions do not have it. The XP multiplier
 // above stays 1.7; this is what keeps a short seed inside the 6–7 exit.
 export const ONBOARDING_LEVEL_FLOOR = 6;
+
+// MAP 1'S CEDAR WARDEN. The roster weight stays 2.6 for every later node.
+// Map 1's three-archetype roll is the only place this 1.5 is read.
+export const ONBOARDING_CEDAR_WEIGHT = 1.5;
+
+// Alive caps for that same room, written for a solo player. Spawn rate is
+// already multiplied by coopSpawn, and a solo coopSpawn is not 1 — it includes
+// SOLO_SPAWN_MULT. A party therefore scales by coopSpawn / soloCoopSpawn, and
+// a solo fight stays at 8 cedar wardens and 25 enemies.
+export const ONBOARDING_WARDEN_CAP = 8;
+export const ONBOARDING_ALIVE_CAP = 25;
 export function onboardingXpMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
   return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];
