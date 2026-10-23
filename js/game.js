@@ -5221,13 +5221,18 @@ export class Sim {
       }
       case 'F2': for (const p of this.livePlayers()) this._collectMaterial(p, 200); break;
       case 'F3': {
+        if (this.cleared || this.over) break;
         for (const e of [...this.enemyPool]) this._killEnemy(e, null);
         this.spawnQueue.length = 0;
         if (this.wave) this.wave.done = true;
         // objective levels don't end on an empty field — F3 means "end this
-        // fight", so it satisfies the objective too (dev key + test harnesses)
+        // fight", so it satisfies the objective too (dev key + test harnesses).
+        // It clears now. The half-second the clear screen waits is for a
+        // fight that ended in play, so the last death can be seen; a debug
+        // key that means "the fight is over" does not sit through it.
         if (this.obj) this.obj.done = true;
-        this._checkFightClear();
+        if (this.arenaNode && this.arenaNode.kind === 'siege') this._checkFightClear();
+        else this._clearFight();
         break;
       }
       // F4 used to descend a floor. There is nowhere to descend to, so the

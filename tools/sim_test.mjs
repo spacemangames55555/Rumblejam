@@ -6159,6 +6159,9 @@ try {
     sim.tick();
     for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
     if (i % 240 === 0) clearFieldForSetup(sim, p, 'the spend-step fixture needs a cleared room, not a won fight');
+    // A clear now collects the floor. This fixture is about the points the
+    // test put in the pocket, so the room's drops must not level it first.
+    sim.pickups.length = 0;
   }
 
   if (atClear === 4) ok(`the spend step is offered at the clear, carrying the count: ${atClear} point(s)`);
@@ -6196,6 +6199,7 @@ try {
     sim2.tick();
     for (const q of sim2.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
     if (i % 240 === 0) clearFieldForSetup(sim2, p2, 'the spend-step fixture needs a cleared room, not a won fight');
+    sim2.pickups.length = 0;   // the clear would collect them and mint points
     p2.skillPoints = 0;   // held at zero: banked levels would otherwise fund it
   }
   if (!opened2) ok('no spend step with nothing to spend');
