@@ -17,7 +17,7 @@ import { docTrigger, rankPer, RANK_NONE, pctRemaining, pctToFraction } from '../
 
 export const TUNING = {
   // tier_code 0 — Dark Energy Blip
-  blipDamage: 9, blipSpeed: 520, blipRange: 480, blipCd: 1000,
+  blipDamage: 9, blipSpeed: 520, blipRange: 480, blipCd: 750,
   // tier_code 1 — Dark Matter Bomb
   bombDamage: 30, bombSpeed: 500, bombRange: 420, bombCd: 1200,
   bombSplash: 12, bombSplashRadius: 60,
@@ -41,7 +41,7 @@ export const TUNING = {
   // tier_code 8 — Dark Energy Beam
   beamDamage: 16, beamTick: 500, beamDur: 10000, beamRange: 360, beamCd: 4000,
   // tier_code 9 — Singularity
-  singDamage: 22, singRadius: 200, singRange: 200, singPulses: 8, singTick: 400,
+  singDamage: 20, singRadius: 200, singRange: 200, singPulses: 8, singTick: 400,
   singPull: 14, singCd: 25000, singCrowdRadius: 250, singCrowdCount: 8,
 };
 
