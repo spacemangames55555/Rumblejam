@@ -1,6 +1,6 @@
-// Player-facing counts. The sim keeps the exact material total and spends that.
-// Map 1 drops are worth 1/0.6, so a few of them print as a long repeating
-// decimal. Whole numbers stay whole. A fraction shows one decimal.
+// Player-facing counts. Pickups pay whole numbers; the unpaid fraction stays
+// on the player and never reaches this. Whole numbers stay whole. If a
+// fraction does arrive, it shows one decimal instead of a repeating 1/0.6.
 
 export function fmtCount(n) {
   const x = Number(n);

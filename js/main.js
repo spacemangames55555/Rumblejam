@@ -1154,8 +1154,9 @@ function presentEvents(list) {
   muteCatchupToasts = false;
 }
 
-// Display only. `lost` is already a rounded sim total; `collected` is the
-// exact sum of the pickups, which on map 1 is a repeating 1/0.6 fraction.
+// Display only. Both numbers are whole: `collected` is what the pickups paid
+// after each player's remainder, and `lost` is the rounded fizzle total.
+// fmtCount is the net under them, so a fraction still cannot print long.
 function lootLine(collected, lost, idle) {
   const line = `◆ ${fmtCount(collected || 0)} collected`;
   if (lost) return `${line} · ◆ ${fmtCount(lost)} lost to the dark`;
