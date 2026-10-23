@@ -236,7 +236,7 @@ function buildSpec(skill) {
     accent,
     color: accent,
     boltColor,
-    spriteId: `fx.${short}_${shape}`,
+    spriteId: fxSpriteId(short, shape),
     reach: ((skill.compose || [])[0] || {}).reach
       || ((skill.compose || [])[0] || {}).range
       || ((skill.compose || [])[0] || {}).length
@@ -250,14 +250,33 @@ function buildSpec(skill) {
   });
 }
 
-// Sprite ids we actually author files for. Missing files fall back to the
-// canvas drawing — same contract as every other sprite. Built from the live
-// catalog so a new class×shape cannot be forgotten.
+// The sprite id for a class×shape. Shape VALUES are camelCase (`wardShell`,
+// `healPulse`, `summonBurst`) and stay that way — they are compared all over
+// the renderer — but a sprite id is `<ns>.[a-z0-9_]+` (js/assets.js NS_RE),
+// and the loader drops anything else with a warning. Interpolating the shape
+// raw produced 27 ids such as `fx.asn_wardShell` that the generator happily
+// manifested and the loader could never load, 21 of them with art on disk. So
+// the shape is snake_cased HERE, at the one place a shape becomes an id.
+export function fxSpriteId(short, shape) {
+  return `fx.${short}_${shape.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`)}`;
+}
+
+// Every sprite id the renderer can resolve from a skill: exactly the set
+// fxSpec() can return over the live catalog, so a new class×shape cannot be
+// forgotten — and, the other way round, nothing is listed that no skill can
+// ask for. Missing files fall back to the canvas drawing, same contract as
+// every other sprite.
+//
+// This list used to also hardcode six ids. Two (`fx.impact`, `fx.muzzle`) are
+// drawn by name from js/render.js and now live in the FX table in
+// js/content/sprites.js with the other by-name world effects. The other four
+// (`fx.sam_thrust`, `fx.sam_smite`, `fx.sam_shockwave`, `fx.wiz_smite`) are
+// class×shapes no skill in the catalog classifies as (KNOWN-DEFECTS #29), so
+// nothing could ever draw them. Their PNGs stay on disk under
+// assets/sprites/fx/ — the art is not lost — and the id reappears here on its
+// own the day a skill classifies as that shape.
 export const SKILL_FX_SPRITE_IDS = (() => {
-  const ids = new Set([
-    'fx.impact', 'fx.muzzle',
-    'fx.sam_thrust', 'fx.sam_smite', 'fx.sam_shockwave', 'fx.wiz_smite',
-  ]);
+  const ids = new Set();
   for (const sk of Object.values(SKILL_BY_ID)) {
     const spec = fxSpec(sk);
     if (spec && spec.spriteId) ids.add(spec.spriteId);
