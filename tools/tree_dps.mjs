@@ -63,7 +63,14 @@
 // fixture could not arrange is NAMED in the output, so an unstaged trigger is
 // visible as a gap rather than hiding inside a low number.
 //
-// Usage: node tools/tree_dps.mjs [--verbose] [--mortal]
+// Usage: node tools/tree_dps.mjs [--verbose] [--mortal] [--map1]
+//
+// THE ROOM IS MAP 1, AND THE BAND IS NOT. This fixture travels to the first
+// combat node, which is the onboarding room, so live damage there is ×1 from
+// every type. The bands are meant for the rest of the game, where the triangle
+// is on. The default reading sets `domainNeutral` to 0 after the room is
+// entered and leaves every other fact about the room alone. `--map1` reports
+// the onboarding rule instead.
 import { FixtureSim as Sim } from './fixture_sim.mjs';
 import { TREES, TREES_BY_CLASS, slotsAtLevel } from '../js/skills.js';
 import { CONFIG } from '../js/config.js';
@@ -81,6 +88,9 @@ const VERBOSE = process.argv.includes('--verbose');
 // A tree out of band under BOTH readings is genuinely hot; a tree out of band
 // only under the immortal one is telling you about the fixture.
 const MORTAL = process.argv.includes('--mortal');
+// Map 1's live rule is neutral. The band is the triangle. `--map1` opts into
+// the neutral reading; the default forces the triangle without leaving the room.
+const MAP1 = process.argv.includes('--map1');
 const MORTAL_HP = 900;
 // Dummy distance from the player. 95 is the gate. RING moves it for a reach
 // probe without editing the fixture.
@@ -193,6 +203,13 @@ function stagingPlan(tree, onlyForm) {
   return plan;
 }
 
+// Same room either way. The override is read by the damage path and copied
+// onto the arena snapshot so a dump of the fixture agrees with the hits.
+function judgeDomain(sim) {
+  sim.domainNeutral = MAP1 ? 1 : 0;
+  if (sim._arena) sim._arena.domainNeutral = sim.domainNeutral;
+}
+
 function measureTree(treeId, onlyForm) {
   const tree = TREES[treeId];
   const plan = stagingPlan(tree, onlyForm);
@@ -202,6 +219,7 @@ function measureTree(treeId, onlyForm) {
   const fight = sim.floor.nodes.find(n => n.kind === 'combat');
   fight.template = 'open_expanse';
   sim._travelTo(fight.id);
+  judgeDomain(sim);
   sim.wave.done = true; sim.spawnQueue.length = 0;
   for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
 
@@ -373,6 +391,7 @@ function supplyRun(classId, keys, w) {
   const fight = sim.floor.nodes.find(n => n.kind === 'combat');
   fight.template = 'open_expanse';
   sim._travelTo(fight.id);
+  judgeDomain(sim);
   sim.wave.done = true; sim.spawnQueue.length = 0;
   for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
   const p = sim.players[0];
@@ -436,7 +455,8 @@ function supplyRun(classId, keys, w) {
 
 // ---------------------------------------------------------------- run
 console.log(`PER-TREE DPS — level ${LEVEL}, ${slotsAtLevel(LEVEL)} slots pinned to the tree, ${SECONDS}s window` +
-  `${MORTAL ? `, MORTAL dummies (${MORTAL_HP} HP, respawning)` : ', immortal dummies'}\n`);
+  `${MORTAL ? `, MORTAL dummies (${MORTAL_HP} HP, respawning)` : ', immortal dummies'}` +
+  `${MAP1 ? ', map 1 neutral (×1)' : ', triangle on (domainNeutral 0)'}\n`);
 
 const byClass = new Map();
 for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {

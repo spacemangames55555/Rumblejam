@@ -1,11 +1,18 @@
 // Five solo Standard map-1 fights. No god mode.
 //
 // The default bot is the balance_probe kite (tools/balance_probe.mjs): same
-// ring, same telegraph dodge, same level-up pick (the first card), same
+// telegraph dodge, same level-up pick (the first card), same
 // opening (left for the arena floor, which grants that same first card).
 // `--chase` walks onto the nearest enemy instead of holding the ring, with a
 // small sidestep so a reach strike and a movement strike both connect. It
 // does not dodge shots; the kite does. The kite run is the reference.
+//
+// THE KITE RING FOLLOWS THE OPENER. With no weapon the ring used to be a flat
+// 200, which is outside Rip (proximity 122) and Headbutt (116), so those
+// openers never connected. The ring is now min(200, opener range × 0.85).
+// The opener range is the trigger's range or radius — the distance at which
+// the skill can fire. Dodge, the step-in past ring+30, and the chase path
+// are unchanged. A weapon still uses the weapon ring.
 //
 // SKILL POINTS. By default the bot spends them, including points that arrive
 // mid-fight, with `{kind:'learnSkill'}` — the action a player sends. It draws
@@ -75,6 +82,14 @@ for (let i = 0; i < argv.length; i++) {
 }
 const list = seeds.length ? seeds : DEFAULT_SEEDS;
 
+// Distance at which the opener can fire. Proximity skills declare `radius`;
+// bolts and nearest-target skills declare `range`.
+function openerReach(skill) {
+  const t = skill && skill.trigger;
+  if (!t) return 0;
+  return t.range || t.radius || 0;
+}
+
 // The class's registry opener: first tier-1 of the first tree.
 function defaultOpener(id) {
   for (const tid of TREES_BY_CLASS[id] || []) {
@@ -96,6 +111,12 @@ if (openerId) {
     process.exit(1);
   }
 }
+
+// No weapon: hold inside the opener's reach. 0.85 of that reach, and never
+// past the old 200. A ranged opener whose reach is past 200/0.85 stays at 200.
+const OPENER_SKILL = openerId ? SKILL_BY_ID[openerId] : defaultOpener(charId);
+const OPENER_REACH = openerReach(OPENER_SKILL);
+const KITE_RING = OPENER_REACH > 0 ? Math.min(200, OPENER_REACH * 0.85) : 200;
 
 function classSkills(id) {
   const out = [];
@@ -213,7 +234,7 @@ function runSeed(seed) {
     const mopUp = sim.wave && sim.wave.done && sim.enemyPool.count <= 12;
     const wdef = p.weapons[0] ? WEAPON_BY_ID[p.weapons[0].id] : null;
     const melee = wdef && (wdef.cls === 'swing' || wdef.cls === 'thrust');
-    const ring = wdef ? (melee ? Math.max(70, wdef.range * 0.75) : (mopUp ? 110 : 230)) : 200;
+    const ring = wdef ? (melee ? Math.max(70, wdef.range * 0.75) : (mopUp ? 110 : 230)) : KITE_RING;
     let vx = 0, vy = 0;
     let nearest = null, nd = Infinity, count = 0;
     for (const e of sim.enemyPool) {
@@ -404,5 +425,5 @@ for (const r of rows) {
     if (r.unspent > 0) console.log(`UNSPENT\t${tag}\t${r.unspent}`);
   }
 }
-console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${charId}\t${learn ? 'learn' : 'no-learn'}\t${openerId || 'default-opener'}`);
+console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${charId}\t${learn ? 'learn' : 'no-learn'}\t${openerId || 'default-opener'}\tring ${KITE_RING.toFixed(1)}`);
 console.log(`TOTAL\tclears ${clears}/${rows.length}\tdeaths ${deaths}\tstalls ${stalls}`);

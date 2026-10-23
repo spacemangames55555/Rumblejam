@@ -806,13 +806,21 @@ export function detonateTraps(sim, p) {
 // shift or an item domain-add, starts on map 2. `bestDomainMult` stays the
 // later-map answer; this is the only place that turns it off, and it reads
 // the node rather than rolling anything.
+//
+// A fixture may set `sim.domainNeutral` to 0 or 1 to judge the other rule
+// without leaving the room. Live play never sets it, so the node still decides.
+export function enemyDomainIsNeutral(sim) {
+  if (sim && (sim.domainNeutral === 0 || sim.domainNeutral === 1)) return sim.domainNeutral === 1;
+  return !!(sim && isOnboardingNode(sim.regionIndex, sim.arenaNode));
+}
+
 export function enemyDomainMult(sim, atk, def) {
-  if (sim && isOnboardingNode(sim.regionIndex, sim.arenaNode)) return 1;
+  if (enemyDomainIsNeutral(sim)) return 1;
   return domainMult(atk, def);
 }
 
 export function skillDamage(sim, e, amount, p, skill) {
-  const dom = (sim && isOnboardingNode(sim.regionIndex, sim.arenaNode))
+  const dom = enemyDomainIsNeutral(sim)
     ? 1
     : bestDomainMult(p, skill.domain, e.domain);
   let amt = amount * dom * ferocityMult(p);
@@ -1032,6 +1040,12 @@ export function applyPlague(sim, e, damage, dur, p, skill) {
   e.plagueDps = (e.plagueDps || 0) + amt / Math.max(0.1, dur);
   e.plagueOwner = p.idx;
   e.plagueDomain = skill.domain;
+  // Which skills are still in the stack. A retarget that means "not already
+  // affected by this cast" has to tell Cascade from every other plague, and
+  // the mark is a function of the cast, so it adds no roll. Cleared with the
+  // stack when the timer ends. The pool wipes the slot on the next spawn.
+  if (!e.plagueFrom) e.plagueFrom = {};
+  e.plagueFrom[skill.id] = 1;
 }
 
 export function tickSkillStatuses(sim, dt) {
@@ -1065,7 +1079,7 @@ export function tickSkillStatuses(sim, dt) {
         // routed through the triangle like every other damage source
         sim.damageEnemy(e, d * enemyDomainMult(sim, e.plagueDomain, e.domain), { owner, silent: true, noEffects: true });
       }
-      if (e.plagueT <= 0) { e.plagueDps = 0; e.plagueAcc = 0; }
+      if (e.plagueT <= 0) { e.plagueDps = 0; e.plagueAcc = 0; e.plagueFrom = undefined; }
     }
   }
 }

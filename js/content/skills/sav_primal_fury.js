@@ -59,9 +59,7 @@ export const TUNING = {
   // tier 8 — Second Wind
   windAmount: 24, windCd: 6800,
   // tier 9 — Hooked
-  // 6 → 2 pays the Rip raise. Nothing Left is the 9th active and is not
-  // in the tree_dps loadout, so cutting it does not move the reading.
-  hookedDamage: 2, hookedRange: 235, hookedHealPct: 0.4, hookedCd: 4200, hookedWeight: 1.15,
+  hookedDamage: 6, hookedRange: 235, hookedHealPct: 0.4, hookedCd: 4200, hookedWeight: 1.15,
   // tier 10 — Nothing Left
   nothingDamage: 9, nothingAngle: 2.6, nothingRange: 230, nothingRadius: 200,
   nothingCount: 4, nothingCd: 8600, nothingWeight: 1.3, nothingStun: 600,

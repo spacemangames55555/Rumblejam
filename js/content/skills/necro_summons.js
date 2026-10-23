@@ -27,9 +27,7 @@ export const TUNING = {
   skelTokenRange: 320, skelSeedSpeed: 620, skelSeedRadius: 6,
   // tier_code 1 — Unleash the Monster
   monsterHp: 220, monsterRadius: 22, monsterSpawnRadius: 54, monsterCd: 8000,
-  // 26 → 23 pays the rest of the Entropy Cascade raise on the mortal
-  // tree_dps reading. Army never fires there (crowd 10, five dummies).
-  monsterDamage: 23, monsterArc: 1.6, monsterReach: 70, monsterAtkCd: 1100,   // ms
+  monsterDamage: 26, monsterArc: 1.6, monsterReach: 70, monsterAtkCd: 1100,   // ms
   monsterTaunt: 3000,                 // the widest on the ladder — MAGNET aggro r300
   // tier_code 2 — Unyielding Beast (passive)
   beastHp: 50,
@@ -42,13 +40,9 @@ export const TUNING = {
   // tier_code 6 — Tentacles of Dark Matter (passive)
   tentacleReach: 24,
   // tier_code 7 — Death Channel
-  // 14 → 3 pays what it can of the Cascade raise. 3 is the load floor:
-  // rankPer(2, base) refuses a base of 2 or less.
-  channelDamage: 3, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
+  channelDamage: 14, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
   // tier_code 8 — Entropy Cascade
-  // Smallest rank-1 application that kills a Cedar Warden before this
-  // cooldown is ready. The plague pays the whole application, not cascadeTick.
-  cascadeDamage: 76, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 600,
+  cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 600,
   // tier_code 9 — Army of the Dead
   armyHp: 45, armyRadius: 13, armySpawnRadius: 66, armyCount: 6,
   armyDuration: 20000, armyCd: 25000, armyCrowdRadius: 400, armyCrowdCount: 10,
@@ -219,13 +213,18 @@ export const NECRO_SUMMONS = [
     flavor: 'It does not spread. It simply keeps arriving.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'nearest',
-    trigger: docTrigger('TARGET_UNAFFECTED', { range: T.cascadeRange }),
+    // NEAREST, not the document's TARGET_UNAFFECTED. That name compiles to a
+    // 95% HP check, so a cast that is the only damage in the loadout never
+    // fires. The WHEN is "someone is in range". The WHO is the nearest enemy
+    // that does not already carry this plague (`preferClean`), and the nearest
+    // of any of them once every body in range already does. Distance only, no roll.
+    trigger: { kind: 'NEAREST', range: T.cascadeRange },
     cooldown: T.cascadeCd,
     // `plague` with NO spread radius, per the classification. "Stacks to 6" is
-    // not expressible — `applyPlague` refreshes rather than stacking — so this
-    // is a refreshing DoT and the stack count is reported, not faked.
+    // not expressible — `applyPlague` adds into one stack rather than keeping
+    // six — so this is one DoT, and the crowd is covered by retargeting.
     compose: [{ kind: 'plague', damage: T.cascadeDamage, duration: T.cascadeDur,
-      tick: T.cascadeTick, spreadRadius: 0 }],
+      tick: T.cascadeTick, spreadRadius: 0, preferClean: true }],
     ranks: rankPer(2, T.cascadeDamage),
   },
   {

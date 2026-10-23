@@ -774,7 +774,7 @@ That is not a flaw in `measureDps`: it answers "is this CLASS in band", and a cl
 
 1. **Level 60, not 12.** Every node is learnable from 36 now that the ladder tops out there; 60 is kept because the question is what a tree does at full investment, and once level stops being an unlock gate it is the rank budget.
 2. **Slots pinned to the tree** — eight at level 60, filled with that tree's own actives in tier order and nothing else.
-3. **The band is within-class.** A summon tree and a strike tree are not comparable; a roster median would be §13 rule 28 again, an anchor derived from the population it measures. A player picks among exactly three trees, so the class's own median is the only thing "in band" can honestly mean.
+3. **The band is within-class.** A summon tree and a strike tree are not comparable; a roster median would be §13 rule 28 again, an anchor derived from the population it measures. A player picks among exactly three trees, so the class's own median is the only thing "in band" can honestly mean. The fixture stands in the onboarding room, where live damage is neutral. The band is the rest of the game, so the reading sets `domainNeutral` to 0 after that room is entered and changes nothing else about it. `--map1` reports the neutral rule instead.
 
 And the staging answers declarations rather than assuming them (§13 rule 61): a tree firing on `ON_DODGE`, `SELF_THRESHOLD` or `MOVEMENT` produces zero unstaged, and **a zero meaning "never triggered" reads identically to a zero meaning "deals no damage"**. Every condition the fixture cannot arrange is named in the output, so an unstaged trigger is visible as a gap rather than hiding inside a low number.
 

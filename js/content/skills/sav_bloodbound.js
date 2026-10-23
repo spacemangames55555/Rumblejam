@@ -47,9 +47,7 @@ export const TUNING = {
   dragDamage: 5, dragReach: 100, dragArc: 1.6, dragRadius: 140,
   dragCount: 2, dragCd: 3100, dragSlowMult: 0.7, dragSlowDur: 1500,
   // tier 7 — Answer It
-  // 6 → 3 pays the Headbutt raise. Everything At Once is unslotted in
-  // tree_dps, and Blood Price barely moves that reading.
-  answerDamage: 3, answerAngle: 1.9, answerRange: 195, answerCd: 3500, answerTaunt: 1400,
+  answerDamage: 6, answerAngle: 1.9, answerRange: 195, answerCd: 3500, answerTaunt: 1400,
   // tier 8 — Blood Price
   priceDamage: 6, priceRange: 220, priceHealPct: 0.55, priceCd: 3900,
   // tier 9 — Won't Go Down

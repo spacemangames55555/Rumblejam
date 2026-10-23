@@ -9,18 +9,16 @@
 // BURST. Two hits must kill every map-1 body. The packet is what
 // `damageEnemy` subtracts: rank 1, then round, minimum 1.
 //
-// DOT. A plague opener has no impact packet. One cast must kill a Cedar
-// Warden before that opener's cooldown is ready again. The window is the
-// plague ticks that land while the cooldown is still up, including the tick
-// on the cast frame and excluding the tick that lands after the cooldown has
-// already hit zero (statuses run after the fire check). Rank 1 cooldown is
-// the base. Plague damage is the whole application, paid as ticks the way
-// `tickSkillStatuses` pays them. Attunement scales it. Ferocity does not.
+// DOT. A plague opener has no impact packet. One cast's total damage over
+// its full duration must be at least a Cedar Warden's map-1 HP. Kill speed
+// does not matter: the check is the application (`rankedDamage` at rank 1,
+// times Attunement), not the ticks that land before the cooldown is ready.
+// Ferocity does not scale a plague. Map 1 multiplies by 1.
 //
 //   node tools/opener_gate.mjs
 
-import { TREES, TREES_BY_CLASS, rankCooldown } from '../js/skills.js';
-import { stepDamage, rankedDamage, rankedDuration } from '../js/compose.js';
+import { TREES, TREES_BY_CLASS } from '../js/skills.js';
+import { stepDamage, rankedDamage } from '../js/compose.js';
 import { ferocityMult } from '../js/skillsim.js';
 import { STAT_BASE } from '../js/config.js';
 import { TOH_BY_ID } from '../js/content/characters-toh.js';
@@ -33,7 +31,6 @@ const BODIES = [
 const WARDEN = BODIES[2];
 
 const IMPACT = new Set(['bolt', 'strike', 'cone', 'line', 'drain', 'channel']);
-const DT = 1 / 60;
 const HIT_CAP = 2;
 
 function sheet(classId) {
@@ -64,31 +61,12 @@ function hitsOf(hp, packet) {
   return n;
 }
 
-// How many plague ticks land before the cooldown is ready again.
-function dotTicksBeforeReady(cooldownMs) {
-  const cd = rankCooldown(cooldownMs, 1) / 1000;
-  let remain = cd, ticks = 1;
-  while (remain - DT > 1e-9) { remain -= DT; ticks++; }
-  return ticks;
-}
-
-// One cast. Returns ticks paid and whether `hp` reached 0 inside the window.
-function plagueCast(skill, step, attunement, hp) {
-  const total = rankedDamage(step.damage, skill, 1) * (1 + attunement / 100);
-  const dur = rankedDuration(step.duration, skill, 1) / 1000;
-  const dps = total / Math.max(0.1, dur);
-  const ticks = dotTicksBeforeReady(skill.cooldown || 0);
-  let left = hp, acc = 0, paid = 0;
-  for (let i = 0; i < ticks && left > 0; i++) {
-    acc += dps * DT;
-    if (acc >= 1) {
-      const d = Math.floor(acc);
-      acc -= d;
-      left -= Math.max(1, Math.round(d * map1Mult(skill.domain, 'spiritual')));
-      paid++;
-    }
-  }
-  return { dead: left <= 0, left, paid, ticks, total };
+// The whole application, at rank 1. This is what `applyPlague` stores and
+// then pays out across the duration. Attunement scales it. The map-1
+// multiplier is 1, so a disadvantage matchup does not shrink the total.
+function plagueTotal(skill, step, attunement) {
+  const raw = rankedDamage(step.damage, skill, 1) * (1 + attunement / 100);
+  return raw * map1Mult(skill.domain, WARDEN.domain);
 }
 
 function score(skill, classId) {
@@ -103,10 +81,11 @@ function score(skill, classId) {
   }
   const plague = (skill.compose || []).find(s => s.kind === 'plague' && Number.isFinite(s.damage));
   if (plague) {
-    const rows = BODIES.map(b => {
-      const r = plagueCast(skill, plague, attunement, b.hp);
-      return { body: b, packet: null, hits: r.dead ? r.paid : Infinity, kind: 'dot', dead: r.dead, ticks: r.ticks };
-    });
+    const total = plagueTotal(skill, plague, attunement);
+    const rows = BODIES.map(b => ({
+      body: b, packet: null, total, kind: 'dot',
+      dead: total + 1e-9 >= b.hp,
+    }));
     return { rows, ferocity, attunement, rule: 'dot' };
   }
   const rows = BODIES.map(b => ({ body: b, packet: null, hits: Infinity, kind: 'none' }));
@@ -116,7 +95,7 @@ function score(skill, classId) {
 const flags = [];
 console.log('OPENER GATE — map 1, rank 1, ×1 from every damage type, no crit, no engine stacks');
 console.log('bodies: Thornhound 8, Sapling 9, Cedar Warden 9');
-console.log('burst: 2 hits. dot: one cast kills a Cedar Warden before the cooldown is ready\n');
+console.log('burst: 2 hits. dot: one cast\'s full-duration total is at least a Cedar Warden\'s 9 HP\n');
 
 let openers = 0;
 for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
@@ -136,8 +115,8 @@ for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
       let mark = '';
       if (rule === 'dot') {
         if (r.body.id === WARDEN.id && !r.dead) mark = '\tFLAG';
-        const word = r.dead ? `dead in ${r.hits} payments` : 'alive at cooldown';
-        console.log(`  ${r.body.name}\t${r.body.hp}hp\t${pkt}\t${word}${mark}`);
+        const word = r.dead ? 'covers' : 'short';
+        console.log(`  ${r.body.name}\t${r.body.hp}hp\ttotal ${r.total.toFixed(1)}\t${word}${mark}`);
       } else {
         if (r.hits > HIT_CAP) mark = '\tFLAG';
         console.log(`  ${r.body.name}\t${r.body.hp}hp\t${pkt}\thits ${r.hits === Infinity ? 'never' : r.hits}${mark}`);
@@ -145,7 +124,7 @@ for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
     }
     if (rule === 'dot') {
       const w = rows.find(r => r.body.id === WARDEN.id);
-      if (!w.dead) flags.push(`${sk.name} (${sk.id}) Cedar Warden still up when the cooldown is ready`);
+      if (!w.dead) flags.push(`${sk.name} (${sk.id}) full-duration total ${w.total.toFixed(1)} is under a Cedar Warden's ${WARDEN.hp}`);
     } else {
       const over = rows.filter(r => r.hits > HIT_CAP);
       if (over.length) flags.push(`${sk.name} (${sk.id}) ${over.map(r => `${r.body.name} ${r.hits === Infinity ? 'never' : r.hits}`).join(', ')}`);
