@@ -6104,7 +6104,10 @@ try {
   const sim = new Sim({ seed: 606, party: [{ idx: 0, key: 'k', name: 'SP', charId: T1_REFERENCE, color: '#fff' }] });
   const p = sim.players[0];
   SKILLSIM.answerOpening(sim, p);
-  const fight = sim.floor.nodes.find(n => n.kind === 'combat');
+  // Not map 1. Clearing that room grants levels up to 6, which would fund
+  // this pocket and make both of the counts below measure the guarantee
+  // instead of the spend step.
+  const fight = representativeNode(sim);
   sim._travelTo(fight.id);
 
   // ORDER, NOT JUST PRESENCE. Both offers are opened in the same frame by
@@ -6169,7 +6172,7 @@ try {
   const sim2 = new Sim({ seed: 607, party: [{ idx: 0, key: 'k', name: 'SP', charId: T1_REFERENCE, color: '#fff' }] });
   const p2 = sim2.players[0];
   SKILLSIM.answerOpening(sim2, p2);
-  sim2._travelTo(sim2.floor.nodes.find(n => n.kind === 'combat').id);
+  sim2._travelTo(representativeNode(sim2).id);
   let opened2 = false;
   const realSpend2 = sim2._offerSpend.bind(sim2);
   sim2._offerSpend = (q) => { const r = realSpend2(q); if (q.idx === 0 && q.spendOffer) opened2 = true; return r; };
