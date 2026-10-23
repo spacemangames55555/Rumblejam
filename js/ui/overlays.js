@@ -6,6 +6,7 @@ import { WEAPON_BY_ID, WEAPON_CLASS_NAMES, estimateDps } from '../content/weapon
 import { CHAR_BY_ID } from '../content/characters.js';
 import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_NAMES, weaponBasePrice, sellValue } from '../config.js';
 import { escapeHtml } from './screens.js';
+import { fmtCount } from './format.js';
 import { glossName, glossShort, glossDetail, glossify } from './gloss.js';
 import { SLOT_LEVELS, TIER_LEVELS, tierLevel } from '../skills.js';
 import { mechanics, passiveText } from '../skilltext.js';
@@ -273,7 +274,7 @@ function renderShop(meta) {
       <div class="row spread">
         <div>
           <div class="ov-title">${ev.black ? 'BLACK MARKET' : 'TRADER'}</div>
-          <div class="ov-sub">${ev.black ? '6 slots · cheaper rerolls · richer stock · ' : ''}your stock — others shop their own · you have <b style="color:var(--gold)">◆ ${mats}</b></div>
+          <div class="ov-sub">${ev.black ? '6 slots · cheaper rerolls · richer stock · ' : ''}your stock — others shop their own · you have <b style="color:var(--gold)">◆ ${fmtCount(mats)}</b></div>
         </div>
         <button id="shop-close">Close (walk away)</button>
       </div>
@@ -355,7 +356,7 @@ function renderSwapPicker(el, meta, s) {
       <div class="row spread">
         <div>
           <div class="ov-title">MAKE ROOM</div>
-          <div class="ov-sub">buying <b>${buyDef.sym} ${escapeHtml(buyDef.name)} ${TIER_NAMES[s.tier - 1]}</b> for ◆ ${s.price} — choose the weapon to sell · you have <b style="color:var(--gold)">◆ ${meta.materials}</b></div>
+          <div class="ov-sub">buying <b>${buyDef.sym} ${escapeHtml(buyDef.name)} ${TIER_NAMES[s.tier - 1]}</b> for ◆ ${s.price} — choose the weapon to sell · you have <b style="color:var(--gold)">◆ ${fmtCount(meta.materials)}</b></div>
         </div>
         <button id="swap-cancel">Cancel</button>
       </div>
@@ -862,7 +863,7 @@ function renderSheet(meta) {
       <div class="row spread">
         <div>
           <div class="ov-title">${chr ? escapeHtml(chr.name).toUpperCase() : 'CHARACTER'}</div>
-          <div class="ov-sub">level ${meta.level} · ◆ ${meta.materials} · ${chr ? glossify(chr.desc) : ''}</div>
+          <div class="ov-sub">level ${meta.level} · ◆ ${fmtCount(meta.materials)} · ${chr ? glossify(chr.desc) : ''}</div>
         </div>
         <button id="sheet-close">Close</button>
       </div>

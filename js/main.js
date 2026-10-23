@@ -21,6 +21,7 @@ import { initInput, sampleInput, takeDebugKey, pressInteract, pressStance } from
 import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx, preloadAirhorn, levelupHorn, audioStats, getCtxState, getMasterGainValue, setVolume, getVolume } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
+import { fmtCount } from './ui/format.js';
 import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { initWorldMap, showWorldMap, hideWorldMap, isWorldMapOpen } from './ui/worldmap.js';
@@ -1153,6 +1154,14 @@ function presentEvents(list) {
   muteCatchupToasts = false;
 }
 
+// Display only. `lost` is already a rounded sim total; `collected` is the
+// exact sum of the pickups, which on map 1 is a repeating 1/0.6 fraction.
+function lootLine(collected, lost, idle) {
+  const line = `◆ ${fmtCount(collected || 0)} collected`;
+  if (lost) return `${line} · ◆ ${fmtCount(lost)} lost to the dark`;
+  return `${line}${idle}`;
+}
+
 // event → UI/audio. Runs on host (own events) and on clients (broadcast).
 function handleEvent(ev) {
   switch (ev.k) {
@@ -1193,10 +1202,12 @@ function handleEvent(ev) {
       sfx.roar();
       break;
     case 'roomClear':
-      banner('FIELD CLEAR', `◆ ${ev.collected || 0} collected${ev.lost ? ` · <b style="color:var(--danger)">◆ ${ev.lost} lost to the dark</b>` : ' · nothing wasted'}`, 2200);
+      // Plain text, like every other banner. The old <b> tag was escaped and
+      // drawn as letters. The count is formatted here; the sim total is exact.
+      banner('FIELD CLEAR', lootLine(ev.collected, ev.lost, ' · nothing wasted'), 2200);
       break;
     case 'lootOver':
-      banner('THE SPOILS SETTLE', `◆ ${ev.collected || 0} collected${ev.lost ? ` · ◆ ${ev.lost} lost` : ''} — shop, then descend`, 2400);
+      banner('THE SPOILS SETTLE', `${lootLine(ev.collected, ev.lost, '')} — shop, then descend`, 2400);
       break;
     case 'levelUp':
       levelupHorn(ev.idx === app.myIdx); // own = loud, ally = quiet, debounced

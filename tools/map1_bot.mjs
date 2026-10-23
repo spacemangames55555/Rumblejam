@@ -3,25 +3,57 @@
 // The default bot is the balance_probe kite (tools/balance_probe.mjs): same
 // ring, same telegraph dodge, same level-up pick (the first card), same
 // opening (left for the arena floor, which grants that same first card).
-// `--chase` closes on the nearest enemy instead of holding the ring. That is
-// the samurai check. The kite run is the reference.
+// `--chase` closes on the nearest enemy instead of holding the ring.
+// `--class` picks who walks in. The default is the samurai. The kite run is the reference.
 //
-// Usage: node tools/map1_bot.mjs [--chase] [seed ...]
-// Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
+// Usage: node tools/map1_bot.mjs [--chase] [--class <id>] [seed ...]
+// Default class: toh_samurai. Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
 import { WEAPON_BY_ID } from '../js/content/weapons.js';
+import { CHAR_BY_ID } from '../js/content/characters.js';
 import { isOnboardingNode } from '../js/arenas.js';
 import { CONFIG } from '../js/config.js';
 
-const CHAR = 'toh_samurai';
 const DEFAULT_SEEDS = [777, 0xa11ce, 424242, 20260728, 99];
 const FIGHT_CAP_S = 200;
 
-const chase = process.argv.includes('--chase');
-const seeds = process.argv.slice(2).filter(s => s !== '--chase').map(s => Number(s)).filter(n => Number.isFinite(n));
-const list = seeds.length ? seeds : DEFAULT_SEEDS;
+function parseArgs(argv) {
+  let chase = false;
+  let charId = 'toh_samurai';
+  const seeds = [];
+  for (let i = 2; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--chase') { chase = true; continue; }
+    if (a === '--class') {
+      const id = argv[++i];
+      if (!id) {
+        console.error('map1_bot: --class needs a character id');
+        process.exit(1);
+      }
+      charId = id;
+      continue;
+    }
+    if (a.startsWith('--')) {
+      console.error(`map1_bot: unknown option ${a}`);
+      process.exit(1);
+    }
+    const n = Number(a);
+    if (!Number.isFinite(n)) {
+      console.error(`map1_bot: not a seed: ${a}`);
+      process.exit(1);
+    }
+    seeds.push(n);
+  }
+  if (!CHAR_BY_ID[charId]) {
+    console.error(`map1_bot: unknown class ${charId}`);
+    process.exit(1);
+  }
+  return { chase, charId, seeds: seeds.length ? seeds : DEFAULT_SEEDS };
+}
+
+const { chase, charId, seeds: list } = parseArgs(process.argv);
 
 function waveTotal(sim) {
   const w = sim.wave;
@@ -35,7 +67,7 @@ function waveTotal(sim) {
 function runSeed(seed) {
   const sim = new Sim({
     seed, difficulty: 'standard', regionIndex: 1,
-    party: [{ idx: 0, key: 'k', name: 'BOT', charId: CHAR, color: '#fff' }],
+    party: [{ idx: 0, key: 'k', name: 'BOT', charId, color: '#fff' }],
   });
   const p = sim.players[0];
 
@@ -187,5 +219,5 @@ for (const r of rows) {
   const tag = r.seed === 0xa11ce ? '0xa11ce' : String(r.seed);
   console.log(`${tag}\t${r.outcome}\t${r.secs}s\tkills ${r.kills}/${r.total}\tpeak ${r.peak}\thp ${r.hp}/${r.maxHp}\tlvl ${r.level}\talive ${r.alive} waveDone ${r.waveDone} ${r.node || ''} ${r.left ? JSON.stringify(r.left) : r.detail || ''}`);
 }
-console.log(`MODE\t${chase ? 'chase' : 'kite'}`);
+console.log(`MODE\t${chase ? 'chase' : 'kite'}\tclass ${charId}`);
 console.log(`TOTAL\tclears ${clears}/${rows.length}\tdeaths ${deaths}\tstalls ${stalls}`);

@@ -114,7 +114,7 @@ input[type=text]:focus{outline:none; border-color:var(--accent);}
 #hud-toasts{position:absolute; right:12px; top:170px; display:flex; flex-direction:column; gap:4px; align-items:flex-end;}
 .toast{background:#101220dd; border:1px solid var(--line); border-left:3px solid var(--gold); border-radius:5px; padding:5px 10px; font-size:13px; animation:toastin .2s; max-width:300px;}
 @keyframes toastin{from{transform:translateX(30px); opacity:0;}}
-#hud-banner{position:absolute; top:34%; left:0; right:0; text-align:center; font-size:44px; font-weight:bold; letter-spacing:6px; color:var(--gold); text-shadow:0 4px 0 #7a5100,0 10px 40px #000; animation:bannerin .3s;}
+#hud-banner{position:absolute; top:34%; left:0; right:0; text-align:center; font-size:44px; font-weight:bold; letter-spacing:6px; color:var(--gold); text-shadow:0 4px 0 #7a5100,0 10px 40px #000; animation:bannerin .3s; z-index:32;}
 #hud-banner .sub{font-size:18px; color:var(--ink); letter-spacing:2px; margin-top:6px;}
 @keyframes bannerin{from{transform:scale(1.4); opacity:0;}}
 
