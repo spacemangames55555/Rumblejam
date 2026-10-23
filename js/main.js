@@ -280,9 +280,17 @@ initOverlays({
   pickBoon: id => sendUi({ kind: 'boon', id }),
   pickOpening: id => sendUi({ kind: 'opening', id }),
   learnSkill: id => sendUi({ kind: 'learnSkill', id }),
-  // The map-end spend step's only exit (§5.5). Sent on every close of the tree
-  // screen, not just the prompted one — the host drops it when no step is open.
-  spendDone: () => sendUi({ kind: 'spendDone' }),
+  // The map-end spend step's exit (§5.5). A close while the clear banners or
+  // the level-up cards are still up only hides the panel: sending spendDone
+  // would clear the step, and the automatic open after the cards would never
+  // run. The host still hears the close that happens once those are done.
+  spendDone: () => {
+    if (spendCloseHeld()) return;
+    // Only a live step can be dismissed. A mid-fight close has nothing pending
+    // and must not stick, or the next clear's automatic open would never run.
+    if (spendOffered()) app.spendDismissed = true;
+    sendUi({ kind: 'spendDone' });
+  },
   setSlot: (slot, id) => sendUi({ kind: 'setSlot', slot, id }),
   combine: (a, b, id, tier) => sendUi({ kind: 'combine', a, b, id, tier }),
   sellWeapon: (slot, id, tier) => sendUi({ kind: 'sellWeapon', slot, id, tier }),
@@ -379,16 +387,72 @@ function spendOffered() {
   return !!app.clientSpend;
 }
 
-// The map-end spend step shares the clear with the banners. Open it once the
-// queue has drained, the same way the level-up cards wait. `spendSeen` is
-// still the edge, so a snapshot cannot reopen it every tick.
+// Level-up cards still owed to this player: an offer waiting to show, the
+// overlay itself, or the sim's pending offer. Levels banked during a fight
+// are not cards yet — the offer is raised at the clear — so a mid-fight close
+// is not held. `clientOffer` is the snapshot's pending row for a guest.
+function cardsOutstanding() {
+  if (pendingLevelup) return true;
+  const el = document.getElementById('overlay-levelup');
+  if (el && !el.classList.contains('hidden')) return true;
+  if (app.sim) {
+    const me = app.sim.players[app.myIdx];
+    return !!(me && !me.gone && me.pendingOffer);
+  }
+  return !!app.clientOffer;
+}
+
+// True while a Close must only hide the panel. The spend step stays pending
+// on the host, so the automatic open can still run.
+function spendCloseHeld() {
+  return bannersActive() || cardsOutstanding();
+}
+
+// Open the spend panel once the banners are gone and the level-up cards have
+// been picked. Safe to call often: an open panel is left alone, and a close
+// that already told the host (`spendDismissed`) is not undone. `spendSeen`
+// stays the edge that stops a snapshot from treating the same offer as new.
+function releaseSpendPanel() {
+  if (app.spendDismissed || !spendOffered() || isSkillsOpen()) return;
+  if (spendCloseHeld()) {
+    if (bannersActive() && !app.spendBannerArm) {
+      app.spendBannerArm = true;
+      afterBanners(() => {
+        app.spendBannerArm = false;
+        pokeSkillsAnnounce();
+      });
+    }
+    return;
+  }
+  toggleSkills(true, true);
+}
+
 function scheduleSpendPanel() {
-  if (app.spendSeen) return;
+  if (!spendOffered()) return;
   app.spendSeen = true;
-  afterBanners(() => {
-    if (!spendOffered() || isSkillsOpen()) return;
-    toggleSkills(true, true);
-  });
+  pokeSkillsAnnounce();
+}
+
+// Banners and level-up cards share the clear. Anything that was waiting on
+// them — a panel parked under a banner, and the spend step — runs once both
+// are finished, and not on the snapshot cadence while they are still up.
+function pokeSkillsAnnounce() {
+  if (spendCloseHeld()) {
+    if (bannersActive() && !app.spendBannerArm) {
+      app.spendBannerArm = true;
+      afterBanners(() => {
+        app.spendBannerArm = false;
+        pokeSkillsAnnounce();
+      });
+    }
+    return;
+  }
+  const el = document.getElementById('overlay-skills');
+  if (el && el.dataset.heldBanner === '1') {
+    delete el.dataset.heldBanner;
+    if (!isSkillsOpen()) toggleSkills(true, true);
+  }
+  releaseSpendPanel();
 }
 
 function toggleSkills(forceOpen = false, auto = false) {
@@ -411,20 +475,16 @@ function toggleSkills(forceOpen = false, auto = false) {
 }
 
 // A panel already on screen when the banner paints would sit under it. Park
-// it and put it back when the queue is empty. A manual open (above-banners)
-// is the player choosing to read skills now, so that one stays.
+// it. pokeSkillsAnnounce puts it back once the banners and any level-up cards
+// are finished. A manual open (above-banners) is the player choosing to read
+// skills now, so that one stays.
 onBannerShown(() => {
   const el = document.getElementById('overlay-skills');
   if (!el || el.classList.contains('hidden') || el.classList.contains('above-banners')) return;
   if (el.dataset.heldBanner === '1') return;
   el.dataset.heldBanner = '1';
   el.classList.add('hidden');
-  afterBanners(() => {
-    if (el.dataset.heldBanner !== '1') return;
-    delete el.dataset.heldBanner;
-    if (isSkillsOpen()) return;
-    toggleSkills(true, true);
-  });
+  pokeSkillsAnnounce();
 });
 
 function soloSheetPaused() {
@@ -815,6 +875,12 @@ function startRunCommon() {
   app.metas = {};
   app.snaps = [];
   app.lastSnapAt = performance.now(); // grace window before the no-snapshot watchdog may fire
+  pendingLevelup = null;
+  app.spendSeen = false;
+  app.spendDismissed = false;
+  app.spendBannerArm = false;
+  app.clientSpend = false;
+  app.clientOffer = false;
   banner('THE UNDERVAULT', app.regionName || `Region ${app.regionIndex}`, 2000);
 }
 
@@ -1146,7 +1212,8 @@ function applySnapState(snap) {
   // and a lost close was a dead run, so this closes the worse of the two.
   const mine = (st.pend || []).find(r => r[0] === app.myIdx);
   if (mine) {
-    if (!mine[1]) { pendingLevelup = null; closeLevelup(); }
+    if (!mine[1]) { pendingLevelup = null; app.clientOffer = false; closeLevelup(); }
+    else app.clientOffer = true;
     if (!mine[2]) closeTreasure();
     if (!mine[3]) closeBoon();
     if (!mine[4]) closeOpening(); else showOpeningFromPend();
@@ -1155,7 +1222,7 @@ function applySnapState(snap) {
     // screen is interactive (slot picker, node clicks) and re-rendering it at
     // 15 Hz would eat every click. `spendSeen` is the edge; the pend row is
     // still what closes it, so a lost close costs nothing.
-    if (!mine[5]) { app.spendSeen = false; app.clientSpend = false; }
+    if (!mine[5]) { app.spendSeen = false; app.clientSpend = false; app.spendDismissed = false; }
     else { app.clientSpend = true; scheduleSpendPanel(); }
   }
 
@@ -1202,6 +1269,9 @@ function presentEvents(list) {
   maybeTrailheadBanner(list);
   for (const ev of list) handleEvent(ev);
   muteCatchupToasts = false;
+  // The spend panel waits out this list's cards. Opening it inside offerDone
+  // would land it in the gap before the next banked card in the same list.
+  pokeSkillsAnnounce();
 }
 
 // Display only. Both numbers are whole: `collected` is what the pickups paid
@@ -1266,12 +1336,13 @@ function handleEvent(ev) {
       break;
     case 'offer': if (ev.idx === app.myIdx) {
       pendingLevelup = ev;
+      app.clientOffer = true;
       afterBanners(() => {
         if (pendingLevelup !== ev) return;
         showLevelup(ev);
       });
     } break;
-    case 'offerDone': if (ev.idx === app.myIdx) { pendingLevelup = null; closeLevelup(); } break;
+    case 'offerDone': if (ev.idx === app.myIdx) { pendingLevelup = null; app.clientOffer = false; closeLevelup(); } break;
     case 'treasure': if (ev.idx === app.myIdx) showTreasure(ev); break;
     case 'treasureDone': if (ev.idx === app.myIdx) closeTreasure(); break;
     case 'opening': if (ev.idx === app.myIdx) showOpening(ev); break;
@@ -1428,7 +1499,7 @@ function drainSimOutputs(initial = false) {
       // why "a thing the player must see needs a browser check" is a rule and
       // not a preference (§13 rule 54).
       if (me.spendOffer) scheduleSpendPanel();
-      else app.spendSeen = false;
+      else { app.spendSeen = false; app.spendDismissed = false; }
     }
   }
 }

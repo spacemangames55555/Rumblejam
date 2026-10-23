@@ -786,10 +786,11 @@ export function updateSkillsMeta(meta, trees) {
 }
 
 export function isSkillsOpen() { return !$('overlay-skills').classList.contains('hidden'); }
-// Closing the tree screen is also the map-end spend step's exit (§5.5). Told to
-// the host unconditionally: if no step is open the host drops it, and making
-// the close path conditional would mean the one panel with two ways to open it
-// had two ways to close it, only one of which the host hears.
+// Closing the tree screen is the map-end spend step's exit (§5.5) once the
+// clear announcement is over. The action decides: a close while banners or
+// level-up cards are still up only hides this panel and leaves the step
+// pending, and the close after the cards is the one the host hears. Both the
+// button and the K toggle come through here, so there is still one close.
 export function closeSkills() {
   const el = $('overlay-skills');
   el.classList.add('hidden');
