@@ -791,7 +791,10 @@ export function isSkillsOpen() { return !$('overlay-skills').classList.contains(
 // the close path conditional would mean the one panel with two ways to open it
 // had two ways to close it, only one of which the host hears.
 export function closeSkills() {
-  $('overlay-skills').classList.add('hidden');
+  const el = $('overlay-skills');
+  el.classList.add('hidden');
+  el.classList.remove('above-banners');
+  delete el.dataset.heldBanner;
   SKILLS_STATE.pickSlot = null;
   if (A && A.spendDone) A.spendDone();
 }

@@ -276,6 +276,10 @@ body.touch-on .overlay.overlay-boon{padding-bottom:calc(20vh + 8px);}
    The opening card sits ABOVE everything, because it is the one choice a
    character cannot start without. */
 #overlay-boon{z-index:28;} #overlay-skills{z-index:26;} #overlay-opening{z-index:35;}
+/* A manual open while a banner is up. The auto spend step does not use this:
+   it waits out the queue and stays under the level-up cards (30) and under
+   the opening card (35). 34 is above the banner (32). */
+#overlay-skills.above-banners{z-index:34;}
 .overlay .panel{min-width:min(92vw,900px);}
 .ov-title{font-size:24px; color:var(--gold); letter-spacing:3px; margin-bottom:2px;}
 .ov-sub{color:var(--dim); margin-bottom:14px; font-size:14px;}

@@ -19,6 +19,8 @@ let bannerLive = false;
 // the cards under the banner for its whole duration.
 const bannerIdle = [];
 
+let bannerShownHook = null;
+
 function paintBanner(text, sub) {
   const el = $('hud-banner');
   // Both strings are escaped. A subtitle is plain text, same as every other
@@ -28,6 +30,7 @@ function paintBanner(text, sub) {
   el.style.animation = 'none';
   void el.offsetWidth;
   el.style.animation = '';
+  if (bannerShownHook) bannerShownHook();
 }
 
 function advanceBanner() {
@@ -55,6 +58,13 @@ function clearBanners() {
   bannerTimer = null;
   const el = $('hud-banner');
   if (el) el.classList.add('hidden');
+  // A panel raised over a banner, or parked until the queue drained, must not
+  // keep that flag into the next run.
+  const skills = $('overlay-skills');
+  if (skills) {
+    skills.classList.remove('above-banners');
+    delete skills.dataset.heldBanner;
+  }
 }
 
 export function showHud(on) {
@@ -209,6 +219,15 @@ export function banner(text, sub = '', dur = 2200) {
 export function afterBanners(fn) {
   if (!bannerLive && bannerQueue.length === 0) fn();
   else bannerIdle.push(fn);
+}
+
+export function bannersActive() {
+  return bannerLive || bannerQueue.length > 0;
+}
+
+// Fires each time a banner actually paints, including one that was waiting.
+export function onBannerShown(fn) {
+  bannerShownHook = fn;
 }
 
 // ---------------- arena radar ----------------

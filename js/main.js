@@ -27,7 +27,7 @@ import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScre
 import { initWorldMap, showWorldMap, hideWorldMap, isWorldMapOpen } from './ui/worldmap.js';
 import { loadAll, saveAll, newCharacter, newPlayerStore, onRegionCleared, recordUnlock, validateCharacter,
   park, unpark, exportBundle, importBundle, STORAGE_WARNING } from './saves.js';
-import { showHud, updateHud, toast, banner, afterBanners } from './ui/hud.js';
+import { showHud, updateHud, toast, banner, afterBanners, bannersActive, onBannerShown } from './ui/hud.js';
 import { DEFAULT_DIFFICULTY } from './worldmap.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening, showSkills, closeSkills, isSkillsOpen, updateSkillsMeta } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
@@ -371,14 +371,61 @@ function showOpeningFromPend() {
   if (picks.length) showOpening({ picks });
 }
 
-function toggleSkills(forceOpen = false) {
+function spendOffered() {
+  if (app.sim) {
+    const me = app.sim.players[app.myIdx];
+    return !!(me && !me.gone && me.spendOffer);
+  }
+  return !!app.clientSpend;
+}
+
+// The map-end spend step shares the clear with the banners. Open it once the
+// queue has drained, the same way the level-up cards wait. `spendSeen` is
+// still the edge, so a snapshot cannot reopen it every tick.
+function scheduleSpendPanel() {
+  if (app.spendSeen) return;
+  app.spendSeen = true;
+  afterBanners(() => {
+    if (!spendOffered() || isSkillsOpen()) return;
+    toggleSkills(true, true);
+  });
+}
+
+function toggleSkills(forceOpen = false, auto = false) {
   if (isSkillsOpen() && !forceOpen) { closeSkills(); return; }
   if (app.mode !== 'run' || !app.meta) return;
   const trees = skillTrees();
   if (!trees) return;
   const me = app.party && app.party.find(m => m.idx === app.myIdx);
   showSkills(app.meta, me ? me.charId : null, trees);
+  const el = document.getElementById('overlay-skills');
+  // The player asked for the panel while a banner is up. Raise it over the
+  // banner instead of cancelling the announcement. The class comes off when
+  // the queue drains, so the level-up cards can sit above it again.
+  if (!auto && bannersActive()) {
+    el.classList.add('above-banners');
+    afterBanners(() => el.classList.remove('above-banners'));
+  } else if (!bannersActive()) {
+    el.classList.remove('above-banners');
+  }
 }
+
+// A panel already on screen when the banner paints would sit under it. Park
+// it and put it back when the queue is empty. A manual open (above-banners)
+// is the player choosing to read skills now, so that one stays.
+onBannerShown(() => {
+  const el = document.getElementById('overlay-skills');
+  if (!el || el.classList.contains('hidden') || el.classList.contains('above-banners')) return;
+  if (el.dataset.heldBanner === '1') return;
+  el.dataset.heldBanner = '1';
+  el.classList.add('hidden');
+  afterBanners(() => {
+    if (el.dataset.heldBanner !== '1') return;
+    delete el.dataset.heldBanner;
+    if (isSkillsOpen()) return;
+    toggleSkills(true, true);
+  });
+});
 
 function soloSheetPaused() {
   return isSheetOpen() && (!app.hostT || app.hostT.conns.size === 0);
@@ -1108,8 +1155,8 @@ function applySnapState(snap) {
     // screen is interactive (slot picker, node clicks) and re-rendering it at
     // 15 Hz would eat every click. `spendSeen` is the edge; the pend row is
     // still what closes it, so a lost close costs nothing.
-    if (!mine[5]) { app.spendSeen = false; }
-    else if (!app.spendSeen) { app.spendSeen = true; toggleSkills(true); }
+    if (!mine[5]) { app.spendSeen = false; app.clientSpend = false; }
+    else { app.clientSpend = true; scheduleSpendPanel(); }
   }
 
   // ---- the run being over ----
@@ -1380,7 +1427,7 @@ function drainSimOutputs(initial = false) {
       // new panel, three paragraphs under a comment describing it — which is
       // why "a thing the player must see needs a browser check" is a rule and
       // not a preference (§13 rule 54).
-      if (me.spendOffer) { if (!app.spendSeen) { app.spendSeen = true; toggleSkills(true); } }
+      if (me.spendOffer) scheduleSpendPanel();
       else app.spendSeen = false;
     }
   }

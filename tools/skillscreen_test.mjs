@@ -376,7 +376,11 @@ try {
     for (const e of [...s.enemyPool]) s.enemyPool.release(e);
     s.players[0].skillPoints = 5;
     return 1;`);
-  await sleep(1400);
+  // Trailhead plus FIELD CLEAR keep the spend panel hidden. Wait them out,
+  // then answer a level-up card if one is on top so the hit test sees skills.
+  await P.waitFor(`return document.getElementById('overlay-skills').classList.contains('hidden') ? 0 : 1`, 12000, 'spend panel after banners');
+  await P.exec(`const c=document.querySelector('#overlay-levelup .offer-card'); if(c) c.click(); return 1;`);
+  await sleep(400);
   const step = await P.exec(`
     const sk = document.getElementById('overlay-skills'), sh = document.getElementById('overlay-shop');
     const open = !sk.classList.contains('hidden');
