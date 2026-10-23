@@ -226,10 +226,10 @@ offered the player the choice.
 
 Measured on the pinned seed `424242`, standing still, card answered, both
 players, every one of the 196 pairs: both `damageDealt` counters are above 0
-inside 22s and `openingFloored` is 0. The same two classes over a real PeerJS
-session (samurai hosting, necromancer joining, each clicking their own opening
-card) both deal damage, the party is hurt, and the client's decoded snapshot
-shows the damaged enemy's HP fraction in step with the host.
+inside 22s and `openingFloored` is 0. The recorded browser pair is blacksmith
+hosting and wizard joining on that same seed, each clicking their own opening
+card: both deal damage, the party is hurt, and the client's decoded snapshot
+shows an enemy below full HP.
 
 A three-second read right after the arena opens is still 0,0. That is the
 onboarding walk, not an unarmed party — the first spawn is still crossing the
@@ -269,7 +269,7 @@ requires the zero, so a counter that moves without a slotted skill cannot pass.
 | the wire | same file | a decoded snapshot shows an enemy below full HP |
 | negative control | same file | samurai + monk with loadouts cleared at the door stay at 0 |
 | the recorded tally | same file | blacksmith + wizard on that seed deal damage and are hurt |
-| a real session | same file | two browsers, local relay, each clicks the opening card, `startRun` enters region 1, both tallies move, the client's snapshot HP matches the host |
+| a real session | same file | two browsers, local relay, blacksmith hosting and wizard joining, seed 424242, each clicks the opening card, `startRun` enters region 1, both tallies move, the party is hurt, and the client snapshot shows a wounded enemy or a hit |
 
 `node tools/offence_test.mjs` still holds the solo half: every selectable class,
 the card rather than the floor, and a retired id throws.
