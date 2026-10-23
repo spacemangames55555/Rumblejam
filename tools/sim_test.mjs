@@ -4003,8 +4003,13 @@ try {
     //    padding and nobody finds out. The loader warns at runtime; this is the
     //    same rule where it can be enforced. --
     const withArt = [], noContent = [];
+    // The loader's path rule (assetUrl in js/assets.js): a file rooted at
+    // 'assets/' is taken as written — the floor tiles — and everything else
+    // sits under basePath. This read only assets/sprites/, so all 45 tiles
+    // passed here while the runtime warned that they had no content.
     for (const [id, spec] of Object.entries(man)) {
-      if (!existsSync(new URL(`../assets/sprites/${spec.file}`, import.meta.url))) continue;
+      const rel = spec.file.startsWith('assets/') ? spec.file : `${manifest.basePath}${spec.file}`;
+      if (!existsSync(new URL(`../${rel}`, import.meta.url))) continue;
       withArt.push(id);
       if (!Array.isArray(spec.content)) noContent.push(id);
     }
