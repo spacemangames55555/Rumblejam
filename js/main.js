@@ -444,17 +444,6 @@ function revealShop() {
   showShop(ev, app.meta, me ? me.charId : null);
 }
 
-function noteShop(ev) {
-  if (isShopOpen()) {
-    heldShop = null;
-    const me = app.party && app.party.find(m => m.idx === app.myIdx);
-    showShop(ev, app.meta, me ? me.charId : null);
-    return;
-  }
-  heldShop = ev;
-  revealShop();
-}
-
 // Open the spend panel once the banners are gone and the level-up cards have
 // been picked. Safe to call often: an open panel is left alone, and a close
 // that already told the host (`spendDismissed`) is not undone. `spendSeen`
@@ -1415,7 +1404,16 @@ function handleEvent(ev) {
     case 'skillLearned': if (ev.idx === app.myIdx) closeOpening(); break;
     case 'boon': if (ev.idx === app.myIdx) showBoon(ev); break;
     case 'boonDone': if (ev.idx === app.myIdx) closeBoon(); break;
-    case 'shop': if (ev.idx === app.myIdx) noteShop(ev); break;
+    case 'shop': if (ev.idx === app.myIdx) {
+      // A buy or a reroll updates the open shop. A first open during the clear
+      // waits out the banners, the level-up cards, and the skills spend step.
+      // showShop stays in this case: the shop event is still what opens it.
+      if (isShopOpen() || !shopBlocked()) {
+        heldShop = null;
+        const me = app.party && app.party.find(m => m.idx === app.myIdx);
+        showShop(ev, app.meta, me ? me.charId : null);
+      } else heldShop = ev;
+    } break;
     case 'buyResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't buy: ${ev.reason}`); break;
     case 'mgmtResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't do that: ${ev.reason}`); break;
     case 'toast': if (ev.idx === app.myIdx || ev.idx === -1) toast(ev.text); break;
