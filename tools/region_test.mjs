@@ -375,6 +375,40 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     }
   }
 
+  // MAP 1'S CEDAR LANE WARNS FOR 1.5×. The authored wind-up is 420 ms. Map 2
+  // keeps it. A sapling on the same room does not inherit it. A live commit,
+  // not only the function: the timer the enemy actually starts is the number.
+  {
+    const room = (col, kind = 'combat') => ({ col, kind });
+    const fnOk = AR.onboardingCedarWindupMs(1, room(0), 'pnw_cedar_warden', 420) === 630
+      && AR.onboardingCedarWindupMs(1, room(1), 'pnw_cedar_warden', 420) === 420
+      && AR.onboardingCedarWindupMs(2, room(0), 'pnw_cedar_warden', 420) === 420
+      && AR.onboardingCedarWindupMs(1, room(0), 'pnw_sapling', 380) === 380
+      && AR.onboardingCedarWindupMs(1, room(0, 'siege'), 'pnw_cedar_warden', 420) === 420;
+    function liveWindup(onboarding) {
+      const sim = new Sim({ seed: 11, difficulty: 'standard', regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_bard', color: '#fff' }] });
+      const node = sim.floor.nodes.find(n => n.kind === 'combat' && AR.isOnboardingNode(sim.regionIndex, n) === onboarding);
+      sim._travelTo(node.id);
+      sim.wave.done = true;
+      sim.spawnQueue.length = 0;
+      for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
+      const p = sim.players[0];
+      const e = sim.spawnEnemyById('pnw_cedar_warden', p.x + 30, p.y);
+      for (let i = 0; i < 20 * 60; i++) {
+        sim.tick();
+        if (e.telState === 1 && e.telWindup > 0) return e.telWindup;
+      }
+      return null;
+    }
+    const map1 = liveWindup(true);
+    const map2 = liveWindup(false);
+    if (fnOk && Math.abs(map1 - 0.63) < 1e-9 && Math.abs(map2 - 0.42) < 1e-9) {
+      ok('map 1 Cedar Warden lane warning is 630 ms; map 2 keeps the authored 420 ms');
+    } else {
+      fail(`cedar wind-up drifted: map1 ${map1}s, map2 ${map2}s (function ${fnOk}) — map 1 is 0.63, map 2 is 0.42`);
+    }
+  }
+
   // Levels 6 and 7 inclusive. Overshoot past 7 fails the same way undershoot
   // below 6 does. 3 is the slot count both of those levels grant today.
   const WANT_LO = 6, WANT_HI = 7, WANT_SLOTS = 3;

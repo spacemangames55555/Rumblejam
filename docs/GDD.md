@@ -56,6 +56,8 @@ A ramp rather than a one-map discount, because the cliff matters more than the d
 
 **Map 1 damage is neutral.** Enemies on that map take ×1.0 from every damage type. The triangle's resistances and weaknesses (×0.80 and ×1.25) start on map 2, including a Wizard shift and an item domain-add. The rule sits beside the map-1 XP bonus (`onboardingDomainNeutral` in `js/arenas.js`), is derived from the node, and adds no RNG draw. The arena snapshot carries `domainNeutral` so the fact survives a dropped event. `region_test` checks a live hit on map 1 and on map 2.
 
+**Map 1's Cedar Warden lane warns for longer.** The dash lane is the committed line (260×70). On that same room its wind-up lasts 1.5× the authored 420 ms (`onboardingCedarWindupMs`, beside `onboardingDomainNeutral`). Length, width and damage stay as authored. Map 2 uses 420 ms. The multiplier is the node, not a roll. `region_test` checks a live commit on map 1 and on map 2.
+
 Map 1 also draws from a restricted table (`ONBOARDING_TABLE`) rather than the floor's: **skulker, flit, fusehead** — trash, a mover, and the floor's telegraphed threat. Three chosen so the composition teaches rather than merely thins, and drawn from **floor 1's own roster**: a three-id table is uniform, so importing one enemy from a later floor makes it a third of the tutorial. `gemmite` is excluded because it splits on death and so fights the density reduction directly.
 
 Both are arithmetic inside `waveConfig`'s existing `depth` parameter, not a new channel. Every lever that names an enemy id instead of drawing from the table — the profile's `flankers` and `artillery` injections — must be closed here too, or the archetype cut leaks.

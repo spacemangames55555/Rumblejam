@@ -29,7 +29,7 @@
 export const TUNING = {
   // tier 1 — Headbutt
   // 3 → 4 is the smallest base whose rank-1 packet 2-hits every map-1 body.
-  headDamage: 4, headReach: 88, headArc: 1.3, headRadius: 116, headCount: 1, headCd: 1150,
+  headDamage: 4, headReach: 100, headArc: 1.3, headRadius: 116, headCount: 1, headCd: 1150,
   // tier 2 — Bleed Them
   // Casey's ruling, 2026-09-05: the five plagues that named a spread and
   // carried none take 150, the median of the three that already worked

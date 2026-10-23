@@ -311,6 +311,21 @@ export function onboardingDomainNeutral(regionIndex, node) {
   return isOnboardingNode(regionIndex, node);
 }
 
+// MAP 1'S CEDAR WARDEN LANE. The dash lane is the committed line telegraph
+// (260×70). On the tutorial room its warning lasts 1.5× the authored
+// windupMs, so the promise sits on the ground long enough to leave. The
+// lane's length, width and damage are unchanged, and map 2 uses the authored
+// wind-up. Derived from the node the party is standing in. No roll.
+export const ONBOARDING_CEDAR_WINDUP_MULT = 1.5;
+const CEDAR_WARDEN_ID = 'pnw_cedar_warden';
+
+export function onboardingCedarWindupMs(regionIndex, node, enemyId, windupMs) {
+  if (enemyId === CEDAR_WARDEN_ID && isOnboardingNode(regionIndex, node)) {
+    return windupMs * ONBOARDING_CEDAR_WINDUP_MULT;
+  }
+  return windupMs;
+}
+
 // `regionIndex` is the world axis (1..8) and `depth` is the ZERO-BASED map
 // index inside the region (0..4) — the same two numbers this took as
 // `floorNum` and `node.col`, re-keyed. The caller does the −1, so map 1 sits on

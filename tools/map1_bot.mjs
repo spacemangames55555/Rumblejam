@@ -14,9 +14,10 @@
 // The hit is the compose step's reach (the same number the card prints as
 // Range). A proximity trigger can be wider than the swing — Headbutt fires
 // at 116 and the swing connects at its reach — and standing on the fire gate
-// whiffs. A step with no reach of its own falls back to the trigger. Dodge,
-// the step-in past ring+30, and the chase path are unchanged. A weapon still
-// uses the weapon ring.
+// whiffs. A step with no reach of its own falls back to the trigger. Dodge
+// steps out of the telegraph's real shape: a lane is an oriented rectangle,
+// a cone is a cone, a circle is its own radius. The step-in past ring+30
+// and the chase path are unchanged. A weapon still uses the weapon ring.
 //
 // SKILL POINTS. By default the bot spends them, including points that arrive
 // mid-fight, with `{kind:'learnSkill'}` — the action a player sends. It draws
@@ -52,6 +53,7 @@
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
+import { angleDelta } from '../js/compose.js';
 import { WEAPON_BY_ID } from '../js/content/weapons.js';
 import { CHAR_BY_ID } from '../js/content/characters.js';
 import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from '../js/arenas.js';
@@ -113,6 +115,87 @@ const { chase, learn, charId, openerId, seeds: list } = parseArgs(process.argv);
 // helper. The trigger's radius is only the fire gate, and on Headbutt it is
 // wider than the swing, so the ring uses the shorter of the two. A step with
 // no reach of its own (a plague) keeps the trigger.
+// How far outside the painted zone the body starts stepping. The hit test
+// includes the player's radius; this is the extra margin so the step begins
+// before the edge clips.
+const DODGE_MARGIN = 36;
+
+// A push out of a committed zone. Lanes leave sideways, off the long axis.
+// Cones leave sideways, off the bisector. Circles leave away from the origin.
+// Returns null when the body is clear of the shape.
+function dodgePush(px, py, radius, z) {
+  if (!z) return null;
+  const pad = (radius || 0) + DODGE_MARGIN;
+  const kind = z.kind || z.shape;
+  if (kind === 'line' || kind === 'beam') {
+    const ang = z.angle0 ?? z.angle ?? 0;
+    const length = z.length ?? z.len ?? 0;
+    const width = z.width ?? z.w ?? 0;
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const dx = px - z.x, dy = py - z.y;
+    const along = dx * ca + dy * sa;
+    const across = -dx * sa + dy * ca;
+    const half = width / 2 + pad;
+    if (along < -pad || along > length + pad || Math.abs(across) > half) return null;
+    const side = across >= 0 ? 1 : -1;
+    return { x: -sa * side, y: ca * side, w: 5 };
+  }
+  if (kind === 'cone') {
+    const dx = px - z.x, dy = py - z.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const range = z.range || 0;
+    if (d > range + pad) return null;
+    const delta = angleDelta(Math.atan2(dy, dx), z.angle0 || 0);
+    if (d >= 1 && Math.abs(delta) > (z.angle || 0) / 2) return null;
+    const side = delta >= 0 ? 1 : -1;
+    return { x: -Math.sin(z.angle0 || 0) * side, y: Math.cos(z.angle0 || 0) * side, w: 5 };
+  }
+  if (kind === 'circle' || kind === 'c') {
+    const r = (z.radius ?? z.r ?? 0) + pad;
+    const dx = px - z.x, dy = py - z.y;
+    const d = Math.hypot(dx, dy) || 1;
+    if (d > r) return null;
+    return { x: dx / d, y: dy / d, w: 4 };
+  }
+  return null;
+}
+
+// HP actually lost, split by what landed it. Contact is a body touch.
+// Lanes and cones are the committed telegraph. A hostile projectile in
+// reach at the moment of the hit is a shot; anything else with no attacker
+// (a ground hazard, a beam) is other.
+function attachDamageLedger(sim, p) {
+  const dmg = { contact: 0, lanes: 0, cones: 0, projectiles: 0, other: 0 };
+  const orig = sim.hurtPlayer.bind(sim);
+  sim.hurtPlayer = (target, raw, from, opts = {}) => {
+    const before = target.hp;
+    const wasDown = !!target.downed;
+    orig(target, raw, from, opts);
+    if (target !== p || wasDown) return;
+    const lost = Math.max(0, before - Math.max(0, target.hp));
+    if (lost <= 0) return;
+    let bucket = 'other';
+    if (opts.telegraph && from && from.telZone) {
+      const k = from.telZone.kind;
+      bucket = k === 'line' ? 'lanes' : k === 'cone' ? 'cones' : 'other';
+    } else if (from && from.def) {
+      bucket = 'contact';
+    } else if (!from) {
+      let shot = false;
+      for (const pr of sim.projPool) {
+        if (pr.friendly) continue;
+        if (Math.hypot(pr.x - target.x, pr.y - target.y) < (pr.radius || 8) + (target.radius || 0) + 12) {
+          shot = true;
+          break;
+        }
+      }
+      bucket = shot ? 'projectiles' : 'other';
+    }
+    dmg[bucket] += lost;
+  };
+  return dmg;
+}
+
 function openerReach(skill) {
   if (!skill) return 0;
   let hit = 0;
@@ -265,6 +348,7 @@ function runSeed(seed) {
     party: [{ idx: 0, key: 'k', name: 'BOT', charId, color: '#fff' }],
   });
   const p = sim.players[0];
+  const dmg = attachDamageLedger(sim, p);
 
   function botInput() {
     const mopUp = sim.wave && sim.wave.done && sim.enemyPool.count <= 12;
@@ -317,11 +401,17 @@ function runSeed(seed) {
       const d = Math.hypot(p.x - ox, p.y - oy) || 1;
       if (d < Math.max(o.w, o.h) / 2 + 60) { vx += (p.x - ox) / d * 1.8; vy += (p.y - oy) / d * 1.8; }
     }
+    const shove = (z) => {
+      const s = dodgePush(p.x, p.y, p.radius, z);
+      if (!s) return;
+      vx += s.x * s.w;
+      vy += s.y * s.w;
+    };
     for (const tg of sim.telegraphs) {
       if (tg.spawnMark) continue;
-      const d = Math.hypot(p.x - tg.x, p.y - tg.y) || 1;
-      if (d < (tg.r || 120) + 40) { vx += (p.x - tg.x) / d * 4; vy += (p.y - tg.y) / d * 4; }
+      shove(tg);
     }
+    for (const tz of sim.telegraphZones()) shove(tz.z);
     for (const hz of sim.hazards || []) {
       if (hz.type === 'lava') {
         const d = Math.hypot(p.x - hz.x, p.y - hz.y) || 1;
@@ -419,6 +509,7 @@ function runSeed(seed) {
     node: `${node.kind}/${node.template}`,
     learned,
     casts,
+    dmg,
     topUp,
     unspent: p.skillPoints,
     loadout: (p.loadout || []).filter(Boolean),
@@ -443,6 +534,10 @@ for (const r of rows) {
   else stalls++;
   const tag = r.seed === 0xa11ce ? '0xa11ce' : String(r.seed);
   console.log(`${tag}\t${r.outcome}\t${r.secs}s\tkills ${r.kills}/${r.total}\tpeak ${r.peak}\thp ${r.hp}/${r.maxHp}\tlvl ${r.level}\talive ${r.alive} waveDone ${r.waveDone} ${r.node || ''} ${r.left ? JSON.stringify(r.left) : r.detail || ''}`);
+  if (r.dmg) {
+    const d = r.dmg;
+    console.log(`DMG\t${tag}\tcontact ${d.contact}\tlanes ${d.lanes}\tcones ${d.cones}\tprojectiles ${d.projectiles}\tother ${d.other}`);
+  }
   if (learn && r.learned) {
     for (const L of r.learned) {
       const slotted = L.active ? ((r.loadout || []).includes(L.id) ? 'slotted' : 'NOT SLOTTED') : 'passive';

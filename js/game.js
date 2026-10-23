@@ -1554,7 +1554,7 @@ export class Sim {
       maxHp: Math.round(def.hp * this.coopHp * this.greedHp * CONFIG.enemyHpMult),
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       domain: def.domain || null,
-      telState: 0, telT: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
+      telState: 0, telT: 0, telWindup: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
@@ -1868,7 +1868,7 @@ export class Sim {
       // WINDUP forever — until a stun rider calls cancelTelegraph on it, which
       // reads e.def.telegraph.recoverMs and throws. Found by Unsheathed's stun
       // landing on a recycled skulker.
-      telState: 0, telT: 0, telZone: null, telCaught: null,
+      telState: 0, telT: 0, telWindup: 0, telZone: null, telCaught: null,
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       // pressure-profile variants (patch 9)
       mortar: !!opts.mortar,   // Lobber artillery: telegraphed shells on your position
