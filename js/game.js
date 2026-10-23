@@ -897,7 +897,8 @@ export class Sim {
     // MAP INDEX, ZERO-BASED — the same parameter the floor map passed as
     // `node.col`. A tree node's `depth` is 1..5 where a floor column was 0..5,
     // so the −1 is what keeps map 1 sitting on exactly the numbers column 0
-    // sat on: the onboarding ramp's 50%, and `waveConfig`'s shortest duration.
+    // sat on: ONBOARDING_RATE[0], which is full rate (the 0.5 halving was
+    // reverted), and `waveConfig`'s shortest duration.
     // Passing `depth` raw would silently move every wave in the game by one
     // column's worth of rate and duration.
     this.regionColumn = node.depth || 1;
