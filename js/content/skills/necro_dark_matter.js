@@ -41,7 +41,7 @@ export const TUNING = {
   // tier_code 8 — Dark Energy Beam
   beamDamage: 16, beamTick: 500, beamDur: 10000, beamRange: 360, beamCd: 4000,
   // tier_code 9 — Singularity
-  singDamage: 20, singRadius: 200, singRange: 200, singPulses: 8, singTick: 400,
+  singDamage: 22, singRadius: 200, singRange: 200, singPulses: 8, singTick: 400,
   singPull: 14, singCd: 25000, singCrowdRadius: 250, singCrowdCount: 8,
 };
 
