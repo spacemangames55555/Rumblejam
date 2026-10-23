@@ -163,7 +163,7 @@ if (!peerjsB64) {
   try {
     if (!relay) fail('relay never came up');
     else {
-      const url = `http://localhost:${PORT}/index.html?peerhost=localhost&peerport=${relay.port}&peersecure=0`;
+      const url = `http://localhost:${PORT}/index.html?peerhost=localhost&peerport=${relay.port}&peersecure=0&seed=${SEED}`;
       H = await new Page('host', 9900 + (process.pid % 180), peerjsB64).open();
       C = await new Page('client', 9901 + (process.pid % 180), peerjsB64).open();
       await H.goto(url);
@@ -175,11 +175,11 @@ if (!peerjsB64) {
       await C.exec(`document.getElementById('name-input').value='FRIEND'; document.getElementById('join-code').value=${JSON.stringify(code)}; document.getElementById('btn-join').click(); return 1;`);
       await C.waitFor(`return window.uv.mode==='lobby' ? 1 : 0`, 15000, 'client lobby');
       await H.waitFor(`return window.uv.lobby.players.length===2 ? 1 : 0`, 8000, 'host sees client');
-      await H.exec(`document.querySelector('.char-card[data-char="toh_samurai"]').click(); return 1;`);
-      await C.exec(`document.querySelector('.char-card[data-char="toh_necromancer"]').click(); return 1;`);
+      await H.exec(`document.querySelector('.char-card[data-char="toh_blacksmith"]').click(); return 1;`);
+      await C.exec(`document.querySelector('.char-card[data-char="toh_wizard"]').click(); return 1;`);
       await sleep(300);
       await C.exec(`document.getElementById('btn-ready').click(); return 1;`);
-      await H.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready && window.uv.lobby.players[1].charId==='toh_necromancer' ? 1 : 0`, 8000, 'client ready');
+      await H.waitFor(`return window.uv.lobby.players[1] && window.uv.lobby.players[1].ready && window.uv.lobby.players[1].charId==='toh_wizard' ? 1 : 0`, 8000, 'client ready');
       await startRun(H, 1);
       await C.waitFor(`return window.uv.mode==='run' ? 1 : 0`, 8000, 'client run');
       // Answer the card the way a pointer does, on each page, before travel.
@@ -199,34 +199,46 @@ if (!peerjsB64) {
       else ok(`both players armed from the card they clicked (${armed.load.map(l => l[0]).join(' / ')}), floor stayed 0`);
       await H.exec(`const b=document.querySelector('.map-node.reachable'); if(!b) throw new Error('no reachable node'); b.click(); return 1;`);
       await H.waitFor(`return window.uv.sim.phase==='arena' ? 1 : 0`, 12000, 'arena');
+      const pinned = await H.exec(`return window.uv.sim.seed`);
+      if (pinned !== SEED) fail(`run seed is ${pinned}, want ${SEED} — the layout this gate measured is the one the query pins`);
+      else ok(`run seed is ${SEED}`);
+      // Sampled inside the page. A 400ms poll from here misses a one-shot kill:
+      // the enemy is full, then gone, and no sample ever sees the wound.
+      await H.exec(`window.__coop = { minFrac: 1 };
+        window.__coopIv = setInterval(() => {
+          const s = window.uv.sim; if (!s) return;
+          for (const e of s.enemyPool) {
+            if (!e.active || !(e.maxHp > 0)) continue;
+            const f = e.hp / e.maxHp;
+            if (f < window.__coop.minFrac) window.__coop.minFrac = f;
+          }
+        }, 40); return 1;`);
+      await C.exec(`window.__coop = { minFrac: 1, hits: 0 };
+        window.__coopIv = setInterval(() => {
+          const snaps = window.uv.snaps || []; const last = snaps[snaps.length - 1];
+          if (!last || !last.s) return;
+          for (const e of last.s.enemies || []) if (e[4] < window.__coop.minFrac) window.__coop.minFrac = e[4];
+          const fx = last.s.fx || {};
+          window.__coop.hits += (fx.hits || []).length + (fx.deaths || []).length;
+        }, 40); return 1;`);
       const t0 = Date.now();
       let last = null;
-      let clientSaw = null;
       while (Date.now() - t0 < 30000) {
         last = JSON.parse(await H.exec(`const s=window.uv.sim; return JSON.stringify({
           d0: Math.round(s.players[0].damageDealt), d1: Math.round(s.players[1].damageDealt),
           hurt: s.players.some(p => p.hp < p.stats.vitality - 0.5),
-          ens: [...s.enemyPool].filter(e => e.active && e.hp < e.maxHp).slice(0, 4).map(e => ({ id: e.id, frac: +(e.hp / e.maxHp).toFixed(2) }))
+          minFrac: window.__coop ? window.__coop.minFrac : 1
         })`));
-        if (last.ens.length) {
-          const seen = JSON.parse(await C.exec(`const snaps=window.uv.snaps||[]; const last=snaps[snaps.length-1];
-            if (!last || !last.s.enemies) return '[]';
-            return JSON.stringify(last.s.enemies.slice(0, 12).map(e => ({ id: e[0], frac: +e[4].toFixed(2) })));`));
-          const hit = last.ens.find(e => {
-            const c = seen.find(x => x.id === e.id);
-            return c && c.frac < 0.98 && Math.abs(c.frac - e.frac) <= 0.08;
-          });
-          if (hit) clientSaw = hit;
-        }
-        if (last.d0 > 0 && last.d1 > 0 && clientSaw) break;
+        if (last.d0 > 0 && last.d1 > 0 && last.hurt && last.minFrac < 1) break;
         await sleep(400);
       }
+      const client = JSON.parse(await C.exec(`return JSON.stringify(window.__coop || { minFrac: 1, hits: 0 })`));
       if (last && last.d0 > 0 && last.d1 > 0) ok(`both players deal damage (host ${last.d0}, client ${last.d1})`);
       else fail(`damage tallies: ${JSON.stringify(last)}`);
       if (last && last.hurt) ok('players take damage from enemies');
       else fail(`nobody was hurt during the co-op window: ${JSON.stringify(last)}`);
-      if (clientSaw) ok(`client snapshot shows enemy ${clientSaw.id} at ${clientSaw.frac} HP, matching the host`);
-      else fail(`client never saw a damaged enemy the host had already hurt: ${JSON.stringify(last && last.ens)}`);
+      if (client.minFrac < 0.98 || client.hits > 0) ok(`client snapshot shows the damage (lowest HP fraction ${client.minFrac.toFixed(2)}, hit/death samples ${client.hits})`);
+      else fail(`client never saw a wounded enemy or a hit: ${JSON.stringify(client)}`);
     }
   } catch (e) {
     fail(e.message || String(e));
