@@ -291,20 +291,22 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
 
 // ------------------------------------------- the onboarding ramp's XP debt
 //
-// WHAT THIS DEFENDS. Region 1's ramp halves map 1's spawns and cuts its table
-// to three archetypes. Materials fell with them and XP rides materials, so the
-// ramp also halved PROGRESSION — measured either side of the change on one
-// harness, a character left map 1 at level 3 with 1 slot where it had left at
-// level 6 with 2. `ONBOARDING_XP_MULT` pays that back.
+// WHAT THIS DEFENDS. Region 1's ramp used to halve map 1's spawns and still
+// cuts its table to three archetypes. Materials fell with them and XP rides
+// materials, so the ramp also halved PROGRESSION — measured either side of
+// the original change on one harness, a character left map 1 at level 3 with
+// 1 slot where it had left at level 6. `ONBOARDING_XP_MULT` paid that back.
+// Map 1's rate multiplier is 1 again (map 2 stays at 0.75), and the map-1 XP
+// multiplier is 1.7 rather than 3.4 so the removed density cut is not paid
+// twice. The poorer table is what 1.7 is still for.
 //
-// THE CONSTANT IS MEASURED, SO THE OUTCOME IS WHAT GETS ASSERTED. Density
-// explains a factor of two; the rest is composition — a splitter that paid
-// twice and two injected 2-material archetypes, all now absent — and a
+// THE CONSTANT IS MEASURED, SO THE OUTCOME IS WHAT GETS ASSERTED. A
 // splitter's second body is a runtime quantity, not a table mean, so the
 // multiplier cannot be derived from the tables and checked against itself.
-// Asserting 3.4 would only prove someone typed 3.4. This plays the map and
+// Asserting 1.7 would only prove someone typed 1.7. This plays the map and
 // reads the character, so ANY change to the rate, the table or the drop path
-// that moves onboarding pacing lands here by name.
+// that moves onboarding pacing lands here by name. The level check is EXACT.
+// `>= 6` let a level-9 exit pass, which is the overshoot this exists to catch.
 //
 // It nukes rather than fights, deliberately: the question is what the ROOM
 // pays, not whether a level-1 build can beat it — offence_test owns that one.
@@ -342,13 +344,23 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     else sim.setInput(0, { mx: 0, my: 0 });
     if (!p.downed) p.hp = p.stats.vitality;
   }
-  const WANT_LEVEL = 6, WANT_SLOTS = 2;
+  // EXACT LEVEL. Overshoot is a failure, same as undershoot.
+  //
+  // SLOTS. This used to require "2 slots". That was true when the second slot
+  // opened at level 6. SLOT_LEVELS now opens slot 2 at level 3 and slot 3 at
+  // level 5, so a level-6 exit has 3 slots — and so does a level-9 exit, which
+  // is why `slots >= 2` never saw the overshoot. Asserting 2 would reject the
+  // level this multiplier is tuned to hit. Asserting slotsAtLevel(WANT_LEVEL)
+  // would be true whenever the level is, and would not notice a ladder edit.
+  // 3 is the count level 6 grants today, written down so a ladder change fails
+  // here beside a level miss.
+  const WANT_LEVEL = 6, WANT_SLOTS = 3;
   const slots = SK.slotsAtLevel(p.level);
-  if (p.level >= WANT_LEVEL && slots >= WANT_SLOTS) {
-    ok(`a character leaves map 1 at level ${p.level} with ${p.skillPoints} unspent point(s) and ${slots} slots — the ramp costs density, not levels`);
+  if (p.level === WANT_LEVEL && slots === WANT_SLOTS) {
+    ok(`a character leaves map 1 at level ${p.level} with ${p.skillPoints} unspent point(s) and ${slots} slots — exactly the onboarding exit`);
   } else {
-    fail(`a character leaves map 1 at level ${p.level} with ${slots} slot(s), want level ${WANT_LEVEL} and ${WANT_SLOTS} — `
-      + `the onboarding ramp is charging the player PROGRESSION for a density cut, and map 2 is entered on a build that has not grown`);
+    fail(`a character leaves map 1 at level ${p.level} with ${slots} slot(s), want exactly level ${WANT_LEVEL} and ${WANT_SLOTS} slots — `
+      + `overshoot and undershoot both fail; map 2 must be entered on this exit and not on a build that ran past it`);
   }
 }
 

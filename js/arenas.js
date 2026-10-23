@@ -185,27 +185,19 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 // not being onboarded, they are being idled. Map 2 keeps its 75% precisely
 // because the measurement did not indict it.
 //
-// THE THREE LEVELS RETURN BY DESIGN — AND THEY NOW RETURN TWICE. Mind this
-// before touching either number again. The three levels the halving cost had
-// ALREADY been paid back once, by ONBOARDING_XP_MULT's 3.4x below, which exists
-// only to undo this halving's effect on materials. With the halving gone that
-// multiplier compensates for something that no longer happens, and map 1 pays
-// out roughly twice what it is meant to.
+// THE THREE LEVELS RETURNED TWICE, AND THE MULTIPLIER WAS THEN CUT IN HALF.
+// The three levels the halving cost had already been paid back once, by
+// ONBOARDING_XP_MULT's 3.4x, which existed to undo this halving's effect on
+// materials. With the halving gone that 3.4 compensated for something that no
+// longer happened. Measured on the same god-mode probe `region_test` uses
+// (kill on contact, walk the loot), seed 777 left map 1 at level 9 with 71
+// materials banked (241 XP) instead of level 6.
 //
-// Measured on the same god-mode probe `region_test` uses (kill on contact, walk
-// the loot, so survivability cannot confound it), a character leaving map 1:
-//
-//   seed 777    level 6 -> level 9   (41 -> 71 materials banked)
-//   seed a11ce  level 6 -> level 8   (40 -> 64 materials banked)
-//
-// AND NO GATE CATCHES THAT. `region_test`'s check is `p.level >= WANT_LEVEL` —
-// a FLOOR, not a band — so an overshoot to level 9 passes as silently as level
-// 6 does. The comment on ONBOARDING_XP_MULT says any change to the rate "lands
-// here by name"; that is true only for a change that makes the room pay LESS.
-// This one makes it pay more and the gate stays green.
-//
-// Retuning ONBOARDING_XP_MULT[0], and widening that assertion into a band, are
-// both separate calls and are deliberately NOT made here.
+// ONBOARDING_XP_MULT[0] is 1.7, half of 3.4. The exit check runs seed 777
+// only, and 1.7 leaves that seed at level 6 (120.7 XP, inside the 110–144
+// window) without a further 0.1 step. `region_test` asserts that level
+// exactly, so the next overshoot fails. Map 2's 1.35 is untouched: its 75%
+// rate is still in place.
 export const ONBOARDING_RATE = [1, 0.75, 1];
 export function onboardingMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
@@ -226,8 +218,9 @@ export function onboardingMult(regionIndex, depth) {
 // restricted table drops `gemmite`, which SPLITS on death and so paid twice,
 // and closes the profile levers that used to inject `gyre` and `lobber` at 2
 // materials each. What is left — skulker, flit, fusehead — is a poorer table as
-// well as a smaller one. Measured, map 1 banks 37 materials where it used to
-// bank roughly 110.
+// well as a smaller one. Measured under the halving, map 1 banked 37 materials
+// where it used to bank roughly 110. At full rate the same probe banks 71; the
+// XP multiplier, not the material count, is what was cut.
 //
 // XP ONLY, DELIBERATELY. Gold is not compensated: fewer enemies paying less
 // money is legible, and the shop is priced against a floor's takings rather
@@ -237,9 +230,16 @@ export function onboardingMult(regionIndex, depth) {
 // produce it are not both computable — a splitter's second body is a runtime
 // quantity, not a table mean. That makes it exactly the kind of number that
 // goes stale silently, so region_test asserts the OUTCOME it exists to produce
-// (a fresh character leaves map 1 at level 6 with 2 slots) instead of trusting
-// the constant. Change the table or the rate and that gate names the reason.
-export const ONBOARDING_XP_MULT = [3.4, 1.35, 1];
+// (a fresh character leaves map 1 at exactly level 6) instead of trusting the
+// constant. The slot count is no longer part of that sentence: the merged
+// ladder opens the third slot at level 5, so level 6 has three slots, and the
+// old "two slots" figure was the ladder from before that merge. Change the
+// table or the rate and that gate names the reason.
+//
+// [0] was 3.4 while map 1's rate was 0.5. Density was half of the debt and
+// that half is gone, so [0] is 1.7. What remains is the poorer onboarding
+// table (no splitter, no injected 2-material archetypes).
+export const ONBOARDING_XP_MULT = [1.7, 1.35, 1];
 export function onboardingXpMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
   return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];
@@ -253,11 +253,13 @@ export function onboardingXpMult(regionIndex, depth) {
 // difficulty_gate is the reason this is exported rather than private to the
 // sim. It fights "the first non-shop node" and measures how much enemy each
 // setting puts in front of the player — and that node is floor 1 column 0, the
-// one room in the game now built to field half the enemies and three of the
-// archetypes. It did not fail because difficulty stopped working; it failed
-// because its sample moved into the tutorial. A gate that cannot ask whether it
-// is standing in the exception will silently measure the exception, and this is
-// the second caller that makes the question a function instead of a comment.
+// one room in the game built on the three-archetype onboarding table. Its
+// spawn rate is full again (ONBOARDING_RATE[0] is 1); what is still
+// unrepresentative is the table, not the density. It did not fail because
+// difficulty stopped working; it failed because its sample moved into the
+// tutorial. A gate that cannot ask whether it is standing in the exception
+// will silently measure the exception, and this is the second caller that
+// makes the question a function instead of a comment.
 export function isOnboardingNode(regionIndex, node) {
   return regionIndex === 1 && !!node && node.col === 0 && node.kind !== 'siege';
 }
