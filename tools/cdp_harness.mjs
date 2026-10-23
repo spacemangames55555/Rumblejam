@@ -134,10 +134,24 @@ export class Page {
 //
 // `regionIndex` defaults to 1 because that is the only region a fresh
 // character may enter, and every browser suite starts from a fresh profile.
+//
+// The atlas replaced the card grid. A pin's first click only arms it
+// (js/ui/worldmap.js); the Enter button on the dossier is what starts the
+// run. The card selector stays as a fallback for the old grid.
 export async function startRun(P, regionIndex = 1) {
   await P.exec(`document.getElementById('btn-start').click(); return 1;`);
   await P.waitFor(`return document.getElementById('screen-world') && !document.getElementById('screen-world').classList.contains('hidden') ? 1 : 0`, 8000, 'world map');
-  await P.exec(`const c=document.querySelector('.world-card[data-region="${regionIndex}"]'); if(!c) throw new Error('no region ${regionIndex} card'); c.click(); return 1;`);
+  await P.exec(`
+    const card = document.querySelector('.world-card[data-region="${regionIndex}"]');
+    if (card) { card.click(); return 1; }
+    const pin = document.querySelector('.world-pin[data-region="${regionIndex}"]');
+    if (!pin) throw new Error('no region ${regionIndex} on the world map');
+    pin.click();
+    const enter = document.getElementById('world-enter');
+    if (!enter) throw new Error('region ${regionIndex} is not enterable');
+    enter.click();
+    return 1;
+  `);
   return P.waitFor(`return window.uv.mode==='run' ? 1 : 0`, 12000, `region ${regionIndex} run started`);
 }
 
