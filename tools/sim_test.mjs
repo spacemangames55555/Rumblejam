@@ -1191,13 +1191,17 @@ try {
     else fail(`profiles seen: ${[...seen]}`);
   }
 
-  // the Statue Test, symmetric — a never-moving probe must DIE in every
-  // non-Bastion profile (all templates) on floor 1, and SURVIVE Bastion
-  // ARMED. The "statue" is a player who stands still — not one who cannot
-  // fight. It never spent its skill point, so with weapons removed it had no
-  // attack at all and died in every Bastion template: the Bastion sanction was
-  // untested and read as broken. Standing still is the variable; having nothing
-  // to hit back with is not.
+  // the Statue Test, symmetric — a never-moving probe on MAP 2 ONWARD must
+  // DIE in every non-Bastion profile. Map 1 is the exception, named below:
+  // standing still there has to HURT, and a death is no longer the only pass.
+  // The "statue" is a player who stands still — not one who cannot fight.
+  // Standing still is the variable; having nothing to hit back with is not.
+  //
+  // Map 1 should hurt a player who stands still without killing them. Half of
+  // max HP is that hurt. A motionless Necromancer passes a non-Bastion map 1
+  // room by falling to this share of max HP or by dying. Map 2 onward keeps
+  // the death requirement.
+  const MAP1_STATUE_HP_THRESHOLD = 0.5;
   const statueRun = (charId, profileKey, template, maxS = 240, representative = false) => {
     // allowUnplayable: the CAMPER is an archetype, not a class you can start
     // as today. Its trait is fully implemented; only its tree is missing.
@@ -1211,41 +1215,60 @@ try {
       : s.floor.nodes.find(n => n.kind === 'combat');
     node.profile = profileKey; node.template = template;
     s._travelTo(node.id);
+    // Captured at entry. A clear sends the party back to the map and drops
+    // arenaNode, so reading it after the loop would call a won map 1 room
+    // something else.
+    const onboarding = isOnboardingNode(s.regionIndex, s.arenaNode);
+    const q = s.players[0];
     let t = 0;
+    let minFrac = 1;
     while (!s.over && s.phase === 'arena' && t < maxS * 60) {
       s.tick(); t++;
-      const q = s.players[0];
+      const maxHp = Math.max(1, q.stats.vitality);
+      const frac = (q.downed || s.over) ? 0 : q.hp / maxHp;
+      if (frac < minFrac) minFrac = frac;
       let g = 0;
       while (q.pendingOffer && g++ < 30) s.uiAction(0, { kind: 'levelup', id: q.pendingOffer[0].id });
       if (q.boonOffer) s.uiAction(0, { kind: 'boon', id: q.boonOffer[0].id });
     }
-    return { died: s.over, secs: t / 60, cleared: s.cleared || s.phase === 'map' };
+    return {
+      died: s.over, secs: t / 60, cleared: s.cleared || s.phase === 'map',
+      minFrac, onboarding,
+    };
   };
   {
-    // THE REFERENCE IS THE NECROMANCER AGAIN. Defect #22 shipped an exception
-    // because a motionless Necromancer survived statue rooms and cleared some
-    // of them, so this check — which demands a death — could not use it and
-    // pointed at the Priest. Dark Energy Blip is 9 damage on a 1000ms cooldown,
-    // and the same 25 rooms now kill the Necromancer in every one. The watch
-    // block that reported the survival count is retired with the defect; a
-    // survival here fails, which is the check the exception was standing in
-    // front of. See docs/KNOWN-DEFECTS.md #22.
+    // THE REFERENCE IS THE NECROMANCER. This loop stands on map 1 (the first
+    // combat node). A non-Bastion room passes when the statue dies or its HP
+    // falls to MAP1_STATUE_HP_THRESHOLD. The representative runs further down
+    // are map 2 onward, and those still fail unless the camper dies.
     const STATUE_REF = 'toh_necromancer';
     let bad = 0;
-    const deaths = [];
+    let belowHalf = 0;
+    const rooms = COMBAT_PROFILE_KEYS.length * TK9.length;
     for (const prof of COMBAT_PROFILE_KEYS) {
       for (const tmpl of TK9) {
         const r = statueRun(STATUE_REF, prof, tmpl);
-        if (!r.died) { bad++; fail(`statue SURVIVED ${prof}/${tmpl} (median char must die outside Bastion)`); }
-        else deaths.push(r.secs);
+        if (!r.onboarding) {
+          bad++;
+          fail(`statue fixture for ${prof}/${tmpl} was not map 1`);
+          continue;
+        }
+        if (r.minFrac <= MAP1_STATUE_HP_THRESHOLD) belowHalf++;
+        const passes = r.died || r.minFrac <= MAP1_STATUE_HP_THRESHOLD;
+        if (!passes) {
+          bad++;
+          fail(`statue stayed above ${Math.round(MAP1_STATUE_HP_THRESHOLD * 100)}% HP in ${prof}/${tmpl} (${Math.round(r.minFrac * 100)}% left) — map 1 must hurt a player who stands still`);
+        }
       }
     }
-    if (!bad) ok(`the Statue Test: a median statue (${STATUE_REF}) dies in every non-Bastion profile × template (median death ${deaths.sort((a, b) => a - b)[Math.floor(deaths.length / 2)].toFixed(0)}s)`);
+    const statueLine = `map 1 statue: ${belowHalf}/${rooms} non-Bastion rooms put the Necromancer at or below ${Math.round(MAP1_STATUE_HP_THRESHOLD * 100)}% HP`;
+    if (!bad) ok(`the Statue Test: on map 1 a motionless ${STATUE_REF} falls to ${Math.round(MAP1_STATUE_HP_THRESHOLD * 100)}% HP or dies in every non-Bastion room (${belowHalf}/${rooms} at or below half)`);
+    else console.log(statueLine);
     // survive side: the CAMPER archetype (Bulwark — melee hold + contact tank).
     // A spread-pellet caster is not a hold-your-ground build and its fan
     // geometrically whiffs single approaching targets at range; the sanction
-    // is for players built for the fight, and the median still dies here too
-    // outside Bastion (asserted above).
+    // is for players built for the fight. Map 1's Necromancer check above is
+    // the half-HP hurt, not this ratio. Map 2 onward still requires a death.
     // THE CAMPER IS A CONTACT TANK, and that archetype is toh_blacksmith —
     // hitbox x1.4, damage to anything that touches it. It ran as T1, which is
     // whichever class happens to be selectable, and a caster standing still in
