@@ -96,7 +96,7 @@ export class Renderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.particles = [];
-    this.dissolves = [];
+    this.puffs = [];
     this.floaters = [];
     this.arcs = [];
     this.flashBeams = [];
@@ -211,15 +211,10 @@ export class Renderer {
         this.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, dur: 0.4 + Math.random() * 0.3, color: d.c, size: 2 + Math.random() * 3 });
       }
     }
-    // Cull dissolve. The id is CONFIG.STRAGGLER_DISSOLVE_FX. Art & Assets
-    // drops a 4–6 frame sheet on that id; until then this is a 0.3s fade.
-    for (const d of fx.dissolves || []) {
-      this.dissolves.push({
-        x: d.x, y: d.y, r: d.r || 16,
-        id: d.id || CONFIG.STRAGGLER_DISSOLVE_FX,
-        t: 0, dur: 0.3,
-      });
-      if (this.dissolves.length > 24) this.dissolves.splice(0, this.dissolves.length - 24);
+    // Cull puff. FX.cullPuff is a 6-frame one-shot; the draw advances `t`.
+    for (const c of fx.culls || []) {
+      this.puffs.push({ x: c.x, y: c.y, r: c.r || 16, t: 0 });
+      if (this.puffs.length > 24) this.puffs.splice(0, this.puffs.length - 24);
     }
     for (const b of fx.booms || []) {
       this.rings.push({ x: b.x, y: b.y, r: b.r, t: 0, dur: 0.35, color: '#ffab4f' });
@@ -1243,32 +1238,28 @@ export class Renderer {
     // `facing` picks a row on a directional sheet and is ignored on a
     // single-direction one — an enemy is never rotated either way.
     const opt = { scale: sc, facing: this._faceAngle(`e${e.id}`, e.x, e.y, null), seed: e.id };
+    // Chase tint is paint. Bit 64 on the snapshot is what tells a guest
+    // this body is chasing; nothing here reads the sim. Xibalba uses 0.20.
+    // Every other biome uses 0.25. In a wall the body flickers 0.8 then
+    // 0.5 at 4 Hz, and the phase comes from the enemy id.
+    if (e.straggle) {
+      opt.tint = '#8E4432';
+      opt.tintStrength = view && view.biome === 'xibalba' ? 0.20 : 0.25;
+      const inWall = !!(view && this._straggleInWall(e, view));
+      opt.alpha = inWall ? (((Math.floor(this.t * 8) + e.id) & 1) ? 0.8 : 0.5) : 1;
+    }
     const drew = drawSprite(ctx, e.spriteId, 0, 0, opt);
     if (!drew) {
+      if (opt.alpha != null && opt.alpha !== 1) ctx.globalAlpha = opt.alpha;
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
       ctx.stroke();
-    }
-    // Faint chase tint. STRAGGLER_TINT is the single colour Art & Assets
-    // replaces. The shimmer is only while the body overlaps a wall, and it
-    // is computed here from the obstacles already on the view.
-    if (e.straggle) {
-      const tint = CONFIG.STRAGGLER_TINT;
-      ctx.globalAlpha = tint.strength;
-      ctx.fillStyle = tint.color;
-      circle(ctx, 0, 0, r); ctx.fill();
-      ctx.globalAlpha = 1;
-      if (view && this._straggleInWall(e, view)) {
-        const pulse = 0.45 + 0.55 * Math.sin(this.t * 16 + (e.id || 0));
-        ctx.globalAlpha = tint.strength * (0.55 + 0.45 * pulse);
-        ctx.strokeStyle = tint.color;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([3, 4]);
-        ctx.lineDashOffset = -this.t * 22;
-        circle(ctx, 0, 0, r + 4); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
+      if (e.straggle) {
+        ctx.globalAlpha = opt.alpha * opt.tintStrength;
+        ctx.fillStyle = '#8E4432';
+        circle(ctx, 0, 0, r); ctx.fill();
       }
+      ctx.globalAlpha = 1;
     }
     // THE DAMAGE TRIANGLE, always visible. A 4px ring in the enemy's domain
     // colour: the triangle is only a decision a player can act on if they can
@@ -1598,27 +1589,27 @@ export class Renderer {
   }
 
   _drawFx(ctx, dt) {
-    for (let i = this.dissolves.length - 1; i >= 0; i--) {
-      const d = this.dissolves[i];
-      d.t += dt;
-      if (d.t >= d.dur) { this.dissolves.splice(i, 1); continue; }
-      const u = d.t / d.dur;
-      const sheet = Assets.get(d.id);
-      // Art's sheet plays itself. The placeholder is five frames over 0.3s,
-      // inside the 4–6 frame ask, drawn only when the sheet is missing.
-      const frames = sheet && sheet.frames > 1 ? sheet.frames : 5;
-      const frame = Math.min(frames - 1, Math.floor(u * frames));
-      const alpha = 1 - u;
-      const drew = drawSprite(ctx, d.id, d.x, d.y, {
-        scale: spriteScaleFor(d.id, (d.r || 16) * 2.2),
-        frame, alpha,
+    for (let i = this.puffs.length - 1; i >= 0; i--) {
+      const p = this.puffs[i];
+      p.t += dt;
+      // 6 frames at 20 fps is 0.30 s. Dropping at the end is what keeps the
+      // strip from wrapping: drawSprite mods a past-the-end frame back to 0.
+      if (p.t >= 0.3) { this.puffs.splice(i, 1); continue; }
+      const frame = Math.min(5, Math.floor(p.t / 0.05));
+      const drew = drawSprite(ctx, FX.cullPuff, p.x, p.y, {
+        frame,
+        scale: spriteScaleFor(FX.cullPuff, (p.r || 16) * 2.6),
       });
-      if (!drew) {
-        ctx.globalAlpha = alpha * 0.85;
-        ctx.fillStyle = CONFIG.STRAGGLER_TINT.color;
-        circle(ctx, d.x, d.y, (d.r || 16) * (1.15 - 0.75 * u));
-        ctx.fill();
-        ctx.globalAlpha = 1;
+      if (!drew && !p.fell) {
+        p.fell = true;
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const s = 70 + (k % 3) * 40;
+          this.particles.push({
+            x: p.x, y: p.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+            t: 0, dur: 0.35, color: '#746D63', size: 3,
+          });
+        }
       }
     }
     for (let i = this.particles.length - 1; i >= 0; i--) {

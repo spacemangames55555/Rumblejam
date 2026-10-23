@@ -14,6 +14,7 @@
 
 const { FixtureSim: Sim } = await import('./fixture_sim.mjs');
 const { CONFIG } = await import('../js/config.js');
+const { encodeSnap, decodeSnap } = await import('../js/netcodec.js');
 
 let failures = 0;
 const ok = m => console.log(`✓ ${m}`);
@@ -110,9 +111,9 @@ else {
   const diedAt = g.time - spawnedAt;
   if (diedAt <= CONFIG.STRAGGLER_CULL_S + dt) ok(`culled at ${diedAt.toFixed(3)}s after the last spawn (the rule is ${CONFIG.STRAGGLER_CULL_S}s)`);
   else fail(`culled late, at ${diedAt.toFixed(3)}s`);
-  const puff = (g.fx.dissolves || []).find(d => d.id === CONFIG.STRAGGLER_DISSOLVE_FX);
-  if (puff) ok(`cull emits ${CONFIG.STRAGGLER_DISSOLVE_FX}`);
-  else fail(`cull did not emit ${CONFIG.STRAGGLER_DISSOLVE_FX}`);
+  const puff = (g.fx.culls || []).find(d => d.x != null && d.y != null);
+  if (puff) ok('cull emits an fx.culls puff');
+  else fail('cull did not emit an fx.culls puff');
 }
 
 if (boss.active) ok('the boss is still standing — bosses are chased, not culled');
@@ -214,9 +215,14 @@ else fail(`after clear: straggle=${pylon.straggle} cullAt=${g.straggleCullAt}`);
   const ordinaryLeft = bodies.slice(1).filter(e => e.active).length;
   if (ordinaryLeft === 0 && boss.active) ok('dropping to 8 alive culls the ordinary bodies and leaves the boss');
   else fail(`after the gate: ordinary left ${ordinaryLeft}, boss ${boss.active}`);
-  const puff = (s.fx.dissolves || []).filter(d => d.id === CONFIG.STRAGGLER_DISSOLVE_FX);
+  const puff = s.fx.culls || [];
   if (puff.length === 7) ok(`dissolve puff on each culled body (${puff.length})`);
-  else fail(`expected 7 ${CONFIG.STRAGGLER_DISSOLVE_FX} puffs, got ${puff.length}`);
+  else fail(`expected 7 fx.culls puffs, got ${puff.length}`);
+  s.tick();
+  const back = decodeSnap(encodeSnap(s.getSnapshot()));
+  const wired = back.fx.culls || [];
+  if (wired.length === 7 && wired.every(c => c.x > 0 && c.r > 0)) ok('the seven puffs pack onto the wire the same way deaths do');
+  else fail(`wire carried ${wired.length} puffs`);
 }
 
 // ---- a normal clear collects the floor, after a half-second, nearest player ----

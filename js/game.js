@@ -267,7 +267,7 @@ export class Sim {
     for (const p of this.players) this._initStartingGear(p);
   }
 
-  _emptyFx() { return { hits: [], deaths: [], booms: [], beams: [], swings: [], blocks: [], skillFires: [], telResolve: [] }; }
+  _emptyFx() { return { hits: [], deaths: [], booms: [], beams: [], swings: [], blocks: [], skillFires: [], telResolve: [], culls: [] }; }
   pushEvent(ev) { this.events.push(ev); }
   livePlayers() { return this.players.filter(p => !p.gone); }
 
@@ -1322,15 +1322,15 @@ export class Sim {
   _cullStragglers() {
     for (const e of [...this.enemyPool]) {
       if (!e.active || this._straggleExempt(e)) continue;
-      // Named puff so Art & Assets can drop a sheet on this id later.
-      // The normal death burst from _killEnemy still plays; this is the
-      // dissolve on top of it, and it is absent from fights that never cull.
-      if (!this.fx.dissolves) this.fx.dissolves = [];
-      this.fx.dissolves.push({
-        id: CONFIG.STRAGGLER_DISSOLVE_FX,
-        x: Math.round(e.x), y: Math.round(e.y), r: Math.round(e.radius),
-      });
+      // The puff is the death the player sees. _killEnemy also pushes the
+      // generic coloured burst; that would paint over the sheet, so it comes
+      // off again. Loot, XP and the null-killer rule are unchanged.
+      const rx = Math.round(e.x), ry = Math.round(e.y);
+      this.fx.culls.push({ x: rx, y: ry, r: e.radius });
       this._killEnemy(e, null);
+      const deaths = this.fx.deaths;
+      const last = deaths[deaths.length - 1];
+      if (last && last.x === rx && last.y === ry) deaths.pop();
     }
   }
 
@@ -2037,11 +2037,9 @@ export class Sim {
     // batch this tick's fx for the next 15 Hz snapshot so clients see every
     // hit number/death burst, not just the snapshot-tick's slice
     if (!this.fxBatch) this.fxBatch = this._emptyFx();
-    const CAPS = { hits: 70, deaths: 40, booms: 24, beams: 24, swings: 30, blocks: 12 };
+    const CAPS = { hits: 70, deaths: 40, booms: 24, beams: 24, swings: 30, blocks: 12, culls: 24 };
     for (const k in this.fx) {
       const src = this.fx[k];
-      // A list that is only present when something happened (the cull puff)
-      // must not be created empty, or every snapshot grows a new key.
       if (!src || !src.length) continue;
       let dst = this.fxBatch[k];
       if (!dst) dst = this.fxBatch[k] = [];
@@ -5428,8 +5426,9 @@ export class Sim {
         for (const p of live) { if (dist2(e.x, e.y, p.x, p.y) < cullR2) { seen = true; break; } }
         if (!seen) continue;
       }
-      // Bit 64 is the straggler chase. It stays clear on every fight that
-      // never arms one, so those snapshots do not move.
+      // Bits 1 elite, 2 boss, 4 mini, 8 hitFlash, 16 fusing, 32 pylon.
+      // 64 is the straggler chase, and it was free. It stays clear on every
+      // fight that never arms one, so those enemy rows do not move.
       snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0) | (e.straggle ? 64 : 0)]);
     }
     for (const pr of this.projPool) {
