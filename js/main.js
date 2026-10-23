@@ -290,6 +290,9 @@ initOverlays({
     // and must not stick, or the next clear's automatic open would never run.
     if (spendOffered()) app.spendDismissed = true;
     sendUi({ kind: 'spendDone' });
+    // The close that actually ends the spend step is what the trader was
+    // waiting on. A hide-only close returned above and left the shop stashed.
+    revealShop();
   },
   setSlot: (slot, id) => sendUi({ kind: 'setSlot', slot, id }),
   combine: (a, b, id, tier) => sendUi({ kind: 'combine', a, b, id, tier }),
@@ -408,6 +411,50 @@ function spendCloseHeld() {
   return bannersActive() || cardsOutstanding();
 }
 
+// The level-up overlay is a full-screen dim at z-index 30, above the skills
+// panel's resting 26, so an open panel was painted over and its text was
+// covered. While that panel is open and a card is still owed, raise it. The
+// cards stay in the DOM; closing the panel is what makes them clickable again.
+function syncSkillsLayer() {
+  const el = document.getElementById('overlay-skills');
+  if (!el) return;
+  if (el.classList.contains('hidden')) {
+    el.classList.remove('above-cards');
+    return;
+  }
+  if (cardsOutstanding()) el.classList.add('above-cards');
+  else el.classList.remove('above-cards');
+}
+
+// Clear shop stock is rolled on the host at the clear. This only decides when
+// the overlay is shown. Banners, then every level-up card, then the skills
+// spend step. A shop that is already on screen (a buy or a reroll) keeps
+// updating. Hiding is not closeShop — that would dismiss the stock.
+function shopBlocked() {
+  if (bannersActive() || cardsOutstanding() || isSkillsOpen()) return true;
+  if (spendOffered() && !app.spendDismissed) return true;
+  return false;
+}
+
+function revealShop() {
+  if (!heldShop || app.mode !== 'run' || shopBlocked()) return;
+  const ev = heldShop;
+  heldShop = null;
+  const me = app.party && app.party.find(m => m.idx === app.myIdx);
+  showShop(ev, app.meta, me ? me.charId : null);
+}
+
+function noteShop(ev) {
+  if (isShopOpen()) {
+    heldShop = null;
+    const me = app.party && app.party.find(m => m.idx === app.myIdx);
+    showShop(ev, app.meta, me ? me.charId : null);
+    return;
+  }
+  heldShop = ev;
+  revealShop();
+}
+
 // Open the spend panel once the banners are gone and the level-up cards have
 // been picked. Safe to call often: an open panel is left alone, and a close
 // that already told the host (`spendDismissed`) is not undone. `spendSeen`
@@ -437,6 +484,7 @@ function scheduleSpendPanel() {
 // them — a panel parked under a banner, and the spend step — runs once both
 // are finished, and not on the snapshot cadence while they are still up.
 function pokeSkillsAnnounce() {
+  syncSkillsLayer();
   if (spendCloseHeld()) {
     if (bannersActive() && !app.spendBannerArm) {
       app.spendBannerArm = true;
@@ -453,6 +501,7 @@ function pokeSkillsAnnounce() {
     if (!isSkillsOpen()) toggleSkills(true, true);
   }
   releaseSpendPanel();
+  revealShop();
 }
 
 function toggleSkills(forceOpen = false, auto = false) {
@@ -464,14 +513,18 @@ function toggleSkills(forceOpen = false, auto = false) {
   showSkills(app.meta, me ? me.charId : null, trees);
   const el = document.getElementById('overlay-skills');
   // The player asked for the panel while a banner is up. Raise it over the
-  // banner instead of cancelling the announcement. The class comes off when
-  // the queue drains, so the level-up cards can sit above it again.
+  // banner instead of cancelling the announcement. When the queue drains, a
+  // card that is still owed keeps the panel above the cards.
   if (!auto && bannersActive()) {
     el.classList.add('above-banners');
-    afterBanners(() => el.classList.remove('above-banners'));
+    afterBanners(() => {
+      el.classList.remove('above-banners');
+      syncSkillsLayer();
+    });
   } else if (!bannersActive()) {
     el.classList.remove('above-banners');
   }
+  syncSkillsLayer();
 }
 
 // A panel already on screen when the banner paints would sit under it. Park
@@ -876,6 +929,7 @@ function startRunCommon() {
   app.snaps = [];
   app.lastSnapAt = performance.now(); // grace window before the no-snapshot watchdog may fire
   pendingLevelup = null;
+  heldShop = null;
   app.spendSeen = false;
   app.spendDismissed = false;
   app.spendBannerArm = false;
@@ -1168,6 +1222,7 @@ function leaveToTitle() {
   app.party = null;
   showHud(false);
   closeAllOverlays();
+  heldShop = null;
   hideMapScreen();
   setNetStatus('');
   showTitle();
@@ -1224,6 +1279,7 @@ function applySnapState(snap) {
     // still what closes it, so a lost close costs nothing.
     if (!mine[5]) { app.spendSeen = false; app.clientSpend = false; app.spendDismissed = false; }
     else { app.clientSpend = true; scheduleSpendPanel(); }
+    revealShop();
   }
 
   // ---- the run being over ----
@@ -1243,6 +1299,9 @@ let muteCatchupToasts = false;
 // The offer event still arrives with the banners. Hold the cards until the
 // queue drains so Trailhead and FIELD CLEAR are not painted over the picks.
 let pendingLevelup = null;
+// The latest shop event for this player, held until the clear's cards and the
+// skills spend step are both finished. Null once the overlay is shown.
+let heldShop = null;
 
 // The top-up is a stack of ordinary level-ups. Nothing in the sim says "this
 // one was the guarantee" — saying so would be a new event, and the banner is
@@ -1297,6 +1356,7 @@ function handleEvent(ev) {
         app.regionIndex = ev.regionIndex;
         app.regionName = ev.regionName || '';
         closeAllOverlays();
+        heldShop = null;
       }
       if (app.mode === 'run') showMapScreen(mapScreenState());
       break;
@@ -1340,19 +1400,22 @@ function handleEvent(ev) {
       afterBanners(() => {
         if (pendingLevelup !== ev) return;
         showLevelup(ev);
+        syncSkillsLayer();
       });
     } break;
-    case 'offerDone': if (ev.idx === app.myIdx) { pendingLevelup = null; app.clientOffer = false; closeLevelup(); } break;
+    case 'offerDone': if (ev.idx === app.myIdx) {
+      pendingLevelup = null;
+      app.clientOffer = false;
+      closeLevelup();
+      syncSkillsLayer();
+    } break;
     case 'treasure': if (ev.idx === app.myIdx) showTreasure(ev); break;
     case 'treasureDone': if (ev.idx === app.myIdx) closeTreasure(); break;
     case 'opening': if (ev.idx === app.myIdx) showOpening(ev); break;
     case 'skillLearned': if (ev.idx === app.myIdx) closeOpening(); break;
     case 'boon': if (ev.idx === app.myIdx) showBoon(ev); break;
     case 'boonDone': if (ev.idx === app.myIdx) closeBoon(); break;
-    case 'shop': if (ev.idx === app.myIdx) {
-      const me = app.party && app.party.find(m => m.idx === app.myIdx);
-      showShop(ev, app.meta, me ? me.charId : null);
-    } break;
+    case 'shop': if (ev.idx === app.myIdx) noteShop(ev); break;
     case 'buyResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't buy: ${ev.reason}`); break;
     case 'mgmtResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't do that: ${ev.reason}`); break;
     case 'toast': if (ev.idx === app.myIdx || ev.idx === -1) toast(ev.text); break;
@@ -1376,6 +1439,7 @@ function handleEvent(ev) {
       if (app.sim && app.role !== 'client') app.carry = app.sim.carryState();
       app.mode = 'results';
       showHud(false);
+      heldShop = null;
       closeAllOverlays();
       hideMapScreen();
       // §11.2 — THE FRONTIER MOVES ON A BOSS KILL, and this is where. The rule
@@ -1499,7 +1563,11 @@ function drainSimOutputs(initial = false) {
       // why "a thing the player must see needs a browser check" is a rule and
       // not a preference (§13 rule 54).
       if (me.spendOffer) scheduleSpendPanel();
-      else { app.spendSeen = false; app.spendDismissed = false; }
+      else {
+        app.spendSeen = false;
+        app.spendDismissed = false;
+        revealShop();
+      }
     }
   }
 }
