@@ -313,22 +313,18 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
 // seed code — that alphabet has no `1` — and not hashString('a11ce').
 //
 // The note's "64 materials, level 8" does not reproduce on this probe.
-// 0xa11ce banks 38 materials. At the live 1.7 multiplier that is level 4
-// (64.6 XP) and 2 slots. Seed 777 banks 71 and at 1.7 is level 6 (120.7 XP)
-// with 3 slots.
-//
-// No multiplier from 1.5 to 3.4 keeps both seeds inside 6–7. Seed 777 is in
-// the window from 1.6 through 2.5. Seed a11ce does not reach level 6 until
-// 2.9, and by then seed 777 is level 8. The lowest multiplier with both at
-// level 6 or higher is 2.9; it was not applied, because 777 would leave the
-// window. ONBOARDING_XP_MULT[0] stays 1.7, and the a11ce line below fails
-// by name until a multiplier is chosen that can hold both.
+// 0xa11ce banks 38 materials. At the live 1.7 multiplier the drops alone leave
+// it at level 4 (64.6 XP, 2 slots). Seed 777 banks 71 and the drops leave it
+// at level 6 (120.7 XP, 3 slots). No multiplier from 1.5 to 3.4 puts both
+// seeds inside 6–7, so ONBOARDING_XP_MULT[0] stays 1.7. Clearing the room
+// grants the missing levels: anyone under ONBOARDING_LEVEL_FLOOR lands on it,
+// and both seeds below are inside the window because of that grant.
 //
 // SLOTS stay 3. SLOT_LEVELS opens slot 2 at level 3 and slot 3 at level 5,
 // so levels 6 and 7 both grant 3. Asserting 2 would reject a correct exit.
 // Asserting slotsAtLevel(level) would be true whenever the level is, and
-// would not notice a ladder edit. Level 4, where a11ce exits at 1.7, still
-// has 2, so the slot check fails with the level check on that seed.
+// would not notice a ladder edit. The grant crosses level 5, so the short
+// seed picks up the third slot with the level.
 //
 // It nukes rather than fights, deliberately: the question is what the ROOM
 // pays, not whether a level-1 build can beat it — offence_test owns that one.
@@ -381,6 +377,104 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
       fail(`seed ${name} leaves map 1 at level ${p.level} with ${slots} slot(s), want level ${WANT_LO}–${WANT_HI} and ${WANT_SLOTS} slots — `
         + `overshoot and undershoot both fail; map 2 must be entered inside this window`);
     }
+  }
+
+  // THE GUARANTEE, APART FROM THE DROP ROLL. Four players in one room: two
+  // short of the floor (one of them downed), one sitting on it with a partial
+  // bar, one past it. The clear path is the one _clearFight uses, so a downed
+  // ally is revived and then granted with everyone else. The card, the
+  // levelUp event and the skill points are what a pickup's level-up produces.
+  // Materials and xpEarned stay, and none of the three RNG streams move.
+  {
+    const party = [0, 1, 2, 3].map(idx => ({ idx, key: 'k' + idx, name: 'P' + idx, charId: 'toh_samurai', color: '#fff' }));
+    const sim = new Sim({ seed: 777, party });
+    for (const p of sim.players) if (p.openingOffer) sim.uiAction(p.idx, { kind: 'opening', id: p.openingOffer[0].id });
+    sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+    // Co-op does not travel on the tap. The 4s consent countdown does, which
+    // is the path a real party takes into map 1.
+    let wait = 0;
+    while (sim.phase !== 'arena' && wait++ < 300) sim.tick();
+    const floor = AR.ONBOARDING_LEVEL_FLOOR;
+    const specs = [
+      { level: 2, xp: 4 },
+      { level: 5, xp: 9, downed: true },
+      { level: 6, xp: 11 },
+      { level: 9, xp: 3 },
+    ];
+    if (!AR.isOnboardingNode(sim.regionIndex, sim.arenaNode)) fail('the catch-up fixture did not enter map 1');
+    for (let i = 0; i < specs.length; i++) {
+      const p = sim.players[i];
+      p.level = specs[i].level;
+      p.xp = specs[i].xp;
+      p.xpEarned = 40 + i;
+      p.materials = 17 + i;
+      p.banked = 0;
+      p.pendingOffer = null;
+      if (specs[i].downed) { p.downed = true; p.hp = 0; }
+    }
+    const pointsBefore = sim.players.map(p => p.skillPoints);
+    let draws = 0;
+    for (const rng of [sim.rng, sim.critRng, sim.econRng]) {
+      for (const name of ['float', 'range', 'int', 'pick', 'chance', 'shuffle', 'weighted']) {
+        const orig = rng[name].bind(rng);
+        rng[name] = (...args) => { draws++; return orig(...args); };
+      }
+    }
+    const evAt = sim.events.length;
+    for (const p of sim.livePlayers()) sim._clearRewards(p);
+    const problems = [];
+    if (draws) problems.push(`${draws} rng draw(s)`);
+    for (let i = 0; i < specs.length; i++) {
+      const p = sim.players[i];
+      const spec = specs[i];
+      const granted = Math.max(0, floor - spec.level);
+      const ups = sim.events.slice(evAt).filter(e => e.k === 'levelUp' && e.idx === i);
+      const offers = sim.events.slice(evAt).filter(e => e.k === 'offer' && e.idx === i);
+      if (p.materials !== 17 + i) problems.push(`p${i} materials ${p.materials}`);
+      if (p.xpEarned !== 40 + i) problems.push(`p${i} xpEarned ${p.xpEarned}`);
+      if (spec.level < floor) {
+        if (p.level !== floor || p.xp !== 0) problems.push(`p${i} landed at level ${p.level} xp ${p.xp}`);
+        if (p.skillPoints !== pointsBefore[i] + granted) problems.push(`p${i} points ${p.skillPoints}, want ${pointsBefore[i] + granted}`);
+        if (p.banked !== granted) problems.push(`p${i} banked ${p.banked}, want ${granted}`);
+        if (!p.pendingOffer || !offers.length) problems.push(`p${i} has no level-up card`);
+        if (ups.length !== granted) problems.push(`p${i} levelUp events ${ups.length}, want ${granted}`);
+        if (SK.slotsAtLevel(p.level) !== WANT_SLOTS) problems.push(`p${i} slots ${SK.slotsAtLevel(p.level)}`);
+        if (spec.downed && p.downed) problems.push(`p${i} is still downed`);
+      } else {
+        if (p.level !== spec.level || p.xp !== spec.xp) problems.push(`p${i} was moved to level ${p.level} xp ${p.xp}`);
+        if (p.skillPoints !== pointsBefore[i] || p.banked !== 0 || p.pendingOffer) problems.push(`p${i} was granted a level it already had`);
+        if (ups.length) problems.push(`p${i} got a levelUp event at level ${spec.level}`);
+      }
+    }
+    if (!problems.length) ok(`map 1 catch-up raises every short player to level ${floor} with points, slots and a level-up card, and leaves level ${floor}+ alone`);
+    else fail(`map 1 catch-up: ${problems.join('; ')}`);
+
+    // The next fight is map 2. The same shortfall is not topped up there.
+    sim._finishNode();
+    sim._travelTo(sim.reachableNodes()[0]);
+    const map2 = sim.players[0];
+    if (AR.isOnboardingNode(sim.regionIndex, sim.arenaNode)) fail('map 2 fixture is still the onboarding node');
+    else {
+      map2.level = 3; map2.xp = 8; map2.banked = 0; map2.pendingOffer = null;
+      const pts = map2.skillPoints;
+      sim._onboardingCatchUp(map2);
+      if (map2.level === 3 && map2.xp === 8 && map2.skillPoints === pts && map2.banked === 0) ok('map 2 does not catch a character up to the map 1 floor');
+      else fail(`map 2 catch-up moved a level-3 character to level ${map2.level} xp ${map2.xp}`);
+    }
+  }
+
+  // Region 2's first fight is a different room. The floor does not travel with it.
+  {
+    const sim = new Sim({ seed: 777, regionIndex: 2, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_samurai', color: '#fff' }] });
+    const p = sim.players[0];
+    if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+    sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+    if (AR.isOnboardingNode(sim.regionIndex, sim.arenaNode)) fail('region 2 map 1 was treated as the onboarding node');
+    p.level = 2; p.xp = 5; p.banked = 0;
+    const pts = p.skillPoints;
+    sim._onboardingCatchUp(p);
+    if (p.level === 2 && p.xp === 5 && p.skillPoints === pts) ok('region 2 does not catch a character up to the map 1 floor');
+    else fail(`region 2 catch-up moved a level-2 character to level ${p.level}`);
   }
 }
 

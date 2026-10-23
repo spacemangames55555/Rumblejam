@@ -200,13 +200,12 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 // reproduce on this probe; 0xa11ce banks 38.
 //
 // ONBOARDING_XP_MULT[0] stays 1.7. At 1.7 seed 777 is level 6 (120.7 XP, 3
-// slots) and seed a11ce is level 4 (64.6 XP, 2 slots). No step from 1.5 to
-// 3.4 puts both seeds inside levels 6–7: 777 is in that window from 1.6 to
-// 2.5, and a11ce does not reach level 6 until 2.9, which puts 777 at level 8.
-// The lowest multiplier with both at level 6 or higher is 2.9, and it was not
-// applied. `region_test` runs both seeds and accepts levels 6 through 7 with
-// 3 slots, so a11ce fails by name until a multiplier is chosen that can.
-// Map 2's 1.35 is untouched: its 75% rate is still in place.
+// slots) from drops, and seed a11ce is level 4 (64.6 XP, 2 slots). No step
+// from 1.5 to 3.4 puts both seeds inside levels 6–7 from the multiplier: 777
+// is in that window from 1.6 to 2.5, and a11ce does not reach level 6 until
+// 2.9, which puts 777 at level 8. The multiplier was not raised. Clearing map
+// 1 grants the missing levels instead — see ONBOARDING_LEVEL_FLOOR. Map 2's
+// 1.35 is untouched: its 75% rate is still in place.
 export const ONBOARDING_RATE = [1, 0.75, 1];
 export function onboardingMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
@@ -242,15 +241,21 @@ export function onboardingMult(regionIndex, depth) {
 // (both measurement seeds, 777 and a11ce, leave map 1 at level 6 or 7, with 3
 // slots) instead of trusting the constant. The merged ladder opens the third
 // slot at level 5, so levels 6 and 7 have three slots, and the old "two slots"
-// figure was the ladder from before that merge. Level 4, which is where seed
-// a11ce exits at 1.7, still has two, so the slot check and the level window
-// fail together on that seed. Change the table or the rate and that gate names
-// the reason.
+// figure was the ladder from before that merge. Level 4, where seed a11ce's
+// drops leave it, still has two; the clear-time grant crosses level 5 and
+// opens the third. Change the table or the rate and that gate names the reason.
 //
 // [0] was 3.4 while map 1's rate was 0.5. Density was half of the debt and
 // that half is gone, so [0] is 1.7. What remains is the poorer onboarding
 // table (no splitter, no injected 2-material archetypes).
 export const ONBOARDING_XP_MULT = [1.7, 1.35, 1];
+
+// MAP 1'S LEVEL FLOOR. Applied once, when that room is cleared, to every
+// character still below it. It is a level grant through the ordinary level-up
+// — points, slots, the level-up card — and it does not pay materials or draw
+// on a drop table. Map 2 and later regions do not have it. The XP multiplier
+// above stays 1.7; this is what keeps a short seed inside the 6–7 exit.
+export const ONBOARDING_LEVEL_FLOOR = 6;
 export function onboardingXpMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
   return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];

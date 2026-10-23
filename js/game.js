@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateTree, serializeMap } from './nodetree.js';
-import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -3801,14 +3801,7 @@ export class Sim {
     p.xpEarned += xpGain;
     while (p.xp >= p.xpNext) {
       p.xp -= p.xpNext;
-      p.level++;
-      p.banked++;
-      SK.grantSkillPoint(this, p);
-      p.xpNext = CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * p.level;
-      for (const ls of p.hookAgg.levelStats) this._applyPerm(p, ls.stats);
-      // the level-up sound is idx-aware and debounced client-side (airhorn) —
-      // the levelUp event is its sole trigger, no generic sfx broadcast
-      this.pushEvent({ k: 'levelUp', idx: p.idx });
+      this._grantLevel(p);
     }
     const t = p.char.trait;
     // Powderkeg: pickups detonate — 4 + 40% of Greed attuned, radius 40 + 50% of Reach
@@ -3912,8 +3905,40 @@ export class Sim {
     // Rampart: the fortress keeps growing
     const t = p.char.trait;
     if (t.key === 'living_fortress') this._applyPerm(p, { grit: t.perRoom });
+    // The guarantee sits after the fight's own payout and before the card, so
+    // a short character picks the levels the room just granted.
+    this._onboardingCatchUp(p);
     // banked level-ups resolve now
     this._maybeOffer(p);
+  }
+
+  // One level, the way a filled XP bar crosses it. The caller owns the bar: a
+  // pickup subtracts `xpNext` first, and the map-1 guarantee does not, because
+  // that grant is a level and not XP income. Points, the banked stat card, the
+  // per-level item stats and the levelUp event are the ones a pickup produces.
+  // Slots are read from the level, so they move with it.
+  _grantLevel(p) {
+    p.level++;
+    p.banked++;
+    SK.grantSkillPoint(this, p);
+    p.xpNext = CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * p.level;
+    for (const ls of p.hookAgg.levelStats) this._applyPerm(p, ls.stats);
+    // the level-up sound is idx-aware and debounced client-side (airhorn) —
+    // the levelUp event is its sole trigger, no generic sfx broadcast
+    this.pushEvent({ k: 'levelUp', idx: p.idx });
+  }
+
+  // MAP 1 CATCH-UP. Region 1's first combat map, and nowhere else. The 1.7
+  // multiplier leaves some seeds under level 6, and no single multiplier holds
+  // every seed inside 6–7, so the clear grants the missing levels instead of
+  // the drop table being asked to. Anyone already at the floor is left alone,
+  // bar included. Anyone under it lands exactly on it: the partial bar is not
+  // carried into level 7. Materials, xpEarned and every RNG stream stay put.
+  _onboardingCatchUp(p) {
+    if (!isOnboardingNode(this.regionIndex, this.arenaNode)) return;
+    if (p.level >= ONBOARDING_LEVEL_FLOOR) return;
+    while (p.level < ONBOARDING_LEVEL_FLOOR) this._grantLevel(p);
+    p.xp = 0;
   }
 
   // Boss death ends the siege: sweep, full payout, post-boss shop, and the
