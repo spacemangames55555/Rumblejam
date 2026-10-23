@@ -349,12 +349,26 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     { name: '777', seed: 777 },
     { name: 'a11ce', seed: 0xa11ce },
   ];
+  const m1 = AR.waveConfig(1, 0, 'combat');
+  const m2 = AR.waveConfig(1, 1, 'combat');
+  const later = AR.waveConfig(2, 0, 'combat');
+  if (m1.dur === 65 && Math.abs(m1.r0 - 0.3) < 1e-9 && Math.abs(m1.r1 - 0.72) < 1e-9
+      && Math.abs(m2.r0 - 0.375) < 1e-9 && Math.abs(later.r0 - 0.75) < 1e-9
+      && AR.ONBOARDING_WAVE_SCALE === 0.6 && Math.abs(AR.ONBOARDING_DROP_SCALE - (1 / 0.6)) < 1e-12) {
+    ok('map 1 rolls a 0.6 wave inside the same 65s window; map 2 and region 2 are not scaled, and each map 1 drop is worth 1/0.6');
+  } else {
+    fail(`map 1 wave scale drifted: r0 ${m1.r0} r1 ${m1.r1} dur ${m1.dur}, map2 r0 ${m2.r0}, region2 r0 ${later.r0}, drop ${AR.ONBOARDING_DROP_SCALE}`);
+  }
+
   for (const { name, seed } of seeds) {
     const sim = new Sim({ seed, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_samurai', color: '#fff' }] });
     const p = sim.players[0];
     if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
     sim.god = true;
     sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+    let spawned = 0;
+    const origSpawn = sim.spawnEnemyById.bind(sim);
+    sim.spawnEnemyById = (...args) => { const e = origSpawn(...args); if (e) spawned++; return e; };
     let t = 0;
     while (sim.phase === 'arena' && !sim.over && t++ < 200 * 60) {
       sim.tick();
@@ -376,6 +390,25 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     } else {
       fail(`seed ${name} leaves map 1 at level ${p.level} with ${slots} slot(s), want level ${WANT_LO}–${WANT_HI} and ${WANT_SLOTS} slots — `
         + `overshoot and undershoot both fail; map 2 must be entered inside this window`);
+    }
+    // 0.6 of the old ~79-enemy solo wave, rolled by the time the 65s window
+    // ends. A swarm profile can sit a body or two higher; these two seeds
+    // are not swarm.
+    const rolled = sim.wave && sim.wave.done && sim.wave.t <= 66 && (sim.wave.held || 0) === 0 && sim.wave.acc < 1;
+    if (spawned >= 47 && spawned <= 55 && rolled) {
+      ok(`seed ${name} rolls the smaller map 1 wave inside 65s (${spawned} enemies, wave t ${sim.wave.t.toFixed(1)})`);
+    } else {
+      fail(`seed ${name} map 1 wave: spawned ${spawned}, done ${sim.wave && sim.wave.done}, t ${sim.wave && sim.wave.t}, held ${sim.wave && sim.wave.held}, acc ${sim.wave && sim.wave.acc}`);
+    }
+    // The old full wave paid 95 materials on 777 and 90 on a11ce. 0.6 of the
+    // bodies at 1/0.6 the value lands on that number, give or take the mix of
+    // the shorter sample (one cedar is 3.33 materials).
+    const wantGold = name === '777' ? 95 : 90;
+    const paid = sim.payout.gold;
+    if (Math.abs(paid - wantGold) <= 4 && Math.abs(sim.payout.xp - paid) < 1e-6) {
+      ok(`seed ${name} map 1 still pays about ${wantGold} materials and the same XP base (gold ${paid.toFixed(2)})`);
+    } else {
+      fail(`seed ${name} map 1 payout gold ${paid} xp ${sim.payout.xp}, want about ${wantGold}`);
     }
   }
 

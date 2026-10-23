@@ -267,6 +267,16 @@ export const ONBOARDING_CEDAR_WEIGHT = 1.5;
 // a solo fight stays at 8 cedar wardens and 25 enemies.
 export const ONBOARDING_WARDEN_CAP = 8;
 export const ONBOARDING_ALIVE_CAP = 25;
+
+// MAP 1'S WAVE SIZE. The fight is still the 65s ramp: r0→r1 over that window,
+// and the window ends with the whole budget accrued. This 0.6 multiplies the
+// ramp, so the room fields about 0.6 of the enemies it used to (a solo
+// Standard mixed room was ~79, and 0.6 of that is ~47). It does not change
+// the Cedar Warden weight, the alive caps, or any later map. Each enemy's
+// drop is worth 1/0.6 so the smaller wave pays the same materials, gold and
+// XP — see ONBOARDING_DROP_SCALE, applied on the kill, not on the roster.
+export const ONBOARDING_WAVE_SCALE = 0.6;
+export const ONBOARDING_DROP_SCALE = 1 / ONBOARDING_WAVE_SCALE;
 export function onboardingXpMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
   return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];
@@ -309,8 +319,11 @@ export function waveConfig(regionIndex, depth, kind) {
   // it arrives through nodeModifiers(); leaving this bump in place would have
   // multiplied against it rather than agreeing with it.
   const onb = onboardingMult(regionIndex, depth);
-  const r0 = (0.5 + 0.25 * (regionIndex - 1)) * onb;
-  const r1 = (1.2 + 0.55 * (regionIndex - 1) + 0.18 * depth) * onb;
+  // Region 1's first combat map only. Duration stays 65s; the smaller budget
+  // is what the window rolls, not a window that closes early.
+  const count = (regionIndex === 1 && depth === 0 && kind === 'combat') ? ONBOARDING_WAVE_SCALE : 1;
+  const r0 = (0.5 + 0.25 * (regionIndex - 1)) * onb * count;
+  const r1 = (1.2 + 0.55 * (regionIndex - 1) + 0.18 * depth) * onb * count;
   return {
     t: 0, acc: 0, dur, r0, r1,
     rampT: siege ? 150 : dur,          // sieges plateau at 150s and hold

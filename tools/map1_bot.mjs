@@ -1,20 +1,20 @@
-// Five solo Standard map-1 fights with the balance_probe kiting bot.
+// Five solo Standard map-1 fights. No god mode.
 //
-// Playtester runs use tools/balance_probe.mjs (a mediocre-human kite, no god
-// mode). That probe walks a whole region. This one stops at region 1's first
-// combat node — the onboarding map — and reports clear, death, or stall.
-// The bot itself is the probe's: same ring, same telegraph dodge, same
-// level-up pick (the first card), same opening (left for the arena floor,
-// which grants that same first card).
+// The default bot is the balance_probe kite (tools/balance_probe.mjs): same
+// ring, same telegraph dodge, same level-up pick (the first card), same
+// opening (left for the arena floor, which grants that same first card).
+// `--chase` walks onto the nearest enemy instead of holding the ring, with a
+// small sidestep so a reach strike and a movement strike both connect. It
+// does not dodge shots; the kite does. The kite run is the reference.
 //
 // Usage: node tools/map1_bot.mjs [--chase] [seed ...]
 // Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
-// --chase walks onto the nearest enemy. Without it this is the balance_probe kite.
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
 import { WEAPON_BY_ID } from '../js/content/weapons.js';
 import { isOnboardingNode } from '../js/arenas.js';
+import { CONFIG } from '../js/config.js';
 
 const CHAR = 'toh_samurai';
 const DEFAULT_SEEDS = [777, 0xa11ce, 424242, 20260728, 99];
@@ -23,6 +23,15 @@ const FIGHT_CAP_S = 200;
 const chase = process.argv.includes('--chase');
 const seeds = process.argv.slice(2).filter(s => s !== '--chase').map(s => Number(s)).filter(n => Number.isFinite(n));
 const list = seeds.length ? seeds : DEFAULT_SEEDS;
+
+function waveTotal(sim) {
+  const w = sim.wave;
+  if (!w || !Number.isFinite(w.dur)) return 0;
+  const rateMult = (sim.profile && sim.profile.rateMult) || 1;
+  const countMult = (sim.fightMods && sim.fightMods.count) || 1;
+  const expected = ((w.r0 + w.r1) / 2) * w.dur * sim.coopSpawn * CONFIG.spawnBudgetMult * rateMult * countMult;
+  return Math.floor(expected + 1e-6);
+}
 
 function runSeed(seed) {
   const sim = new Sim({
@@ -42,8 +51,9 @@ function runSeed(seed) {
       const d2 = dist2(p.x, p.y, e.x, e.y);
       if (d2 < nd) { nd = d2; nearest = e; }
       count++;
+      if (chase) continue;
       const d = Math.sqrt(d2) || 1;
-      if (!chase && d < ring) {
+      if (d < ring) {
         const w = (ring - d) / ring;
         vx += (p.x - e.x) / d * w * 3;
         vy += (p.y - e.y) / d * w * 3;
@@ -53,6 +63,10 @@ function runSeed(seed) {
       const d = Math.sqrt(nd) || 1;
       vx += (nearest.x - p.x) / d * 4;
       vy += (nearest.y - p.y) / d * 4;
+      // Stay on the body and keep moving, so a reach strike and a
+      // movement strike both connect. The sidestep is smaller than the chase.
+      vx += (-(nearest.y - p.y)) / d * 0.7;
+      vy += ((nearest.x - p.x)) / d * 0.7;
     }
     if (!chase) for (const pr of sim.projPool) {
       if (pr.friendly) continue;
@@ -125,6 +139,10 @@ function runSeed(seed) {
     return { seed, outcome: 'error', detail: `did not enter map 1 (phase ${sim.phase}, node ${node && node.kind})` };
   }
 
+  let spawned = 0;
+  const origSpawn = sim.spawnEnemyById.bind(sim);
+  sim.spawnEnemyById = (...args) => { const e = origSpawn(...args); if (e) spawned++; return e; };
+
   const cap = FIGHT_CAP_S * 60;
   let ticks = 0, peak = 0;
   while (sim.phase === 'arena' && !sim.over && !sim.cleared && ticks++ < cap) {
@@ -147,6 +165,9 @@ function runSeed(seed) {
     outcome,
     secs: +(ticks / 60).toFixed(1),
     peak,
+    kills: sim.payout.kills,
+    total: (sim.wave && sim.wave.done && sim.spawnQueue.length === 0 && (sim.wave.held || 0) === 0 && sim.wave.acc < 1)
+      ? spawned : waveTotal(sim),
     alive: sim.enemyPool.count,
     queue: sim.spawnQueue.length,
     waveDone: !!(sim.wave && sim.wave.done),
@@ -165,6 +186,7 @@ for (const r of rows) {
   else if (r.outcome === 'death') deaths++;
   else stalls++;
   const tag = r.seed === 0xa11ce ? '0xa11ce' : String(r.seed);
-  console.log(`${tag}\t${r.outcome}\t${r.secs}s\talive ${r.alive} peak ${r.peak} queue ${r.queue} waveDone ${r.waveDone} hp ${r.hp}/${r.maxHp} lvl ${r.level} ${r.node || ''} ${r.left ? JSON.stringify(r.left) : r.detail || ''}`);
+  console.log(`${tag}\t${r.outcome}\t${r.secs}s\tkills ${r.kills}/${r.total}\tpeak ${r.peak}\thp ${r.hp}/${r.maxHp}\tlvl ${r.level}\talive ${r.alive} waveDone ${r.waveDone} ${r.node || ''} ${r.left ? JSON.stringify(r.left) : r.detail || ''}`);
 }
+console.log(`MODE\t${chase ? 'chase' : 'kite'}`);
 console.log(`TOTAL\tclears ${clears}/${rows.length}\tdeaths ${deaths}\tstalls ${stalls}`);
