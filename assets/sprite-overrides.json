@@ -199,6 +199,14 @@
     ],
     "scale": 0.875
   },
+  "fx.cull_puff": {
+    "frames": 6,
+    "fps": 20,
+    "content": [
+      32,
+      28
+    ]
+  },
   "fx.dru_slash": {
     "content": [
       25,
