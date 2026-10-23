@@ -96,6 +96,7 @@ export class Renderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.particles = [];
+    this.dissolves = [];
     this.floaters = [];
     this.arcs = [];
     this.flashBeams = [];
@@ -209,6 +210,16 @@ export class Renderer {
         const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 160;
         this.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, dur: 0.4 + Math.random() * 0.3, color: d.c, size: 2 + Math.random() * 3 });
       }
+    }
+    // Cull dissolve. The id is CONFIG.STRAGGLER_DISSOLVE_FX. Art & Assets
+    // drops a 4–6 frame sheet on that id; until then this is a 0.3s fade.
+    for (const d of fx.dissolves || []) {
+      this.dissolves.push({
+        x: d.x, y: d.y, r: d.r || 16,
+        id: d.id || CONFIG.STRAGGLER_DISSOLVE_FX,
+        t: 0, dur: 0.3,
+      });
+      if (this.dissolves.length > 24) this.dissolves.splice(0, this.dissolves.length - 24);
     }
     for (const b of fx.booms || []) {
       this.rings.push({ x: b.x, y: b.y, r: b.r, t: 0, dur: 0.35, color: '#ffab4f' });
@@ -413,7 +424,7 @@ export class Renderer {
     for (const s of view.summons || []) { if (inView(s.x, s.y)) this._drawSummon(ctx, s, view); }
     for (const tk of view.tokens || []) { if (inView(tk.x, tk.y)) this._drawSoulToken(ctx, tk); }
     (view.minions || []).forEach((m, i) => { if (inView(m.x, m.y)) this._drawMinion(ctx, m, view, i); });
-    for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e); }
+    for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e, view); }
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
     // projectiles
     for (const pr of view.projs || []) {
@@ -1203,7 +1214,19 @@ export class Renderer {
     }
   }
 
-  _drawEnemy(ctx, e) {
+  // Circle vs an obstacle rect. The view stores obstacles as [x, y, w, h, flag].
+  _straggleInWall(e, view) {
+    const r = e.radius || 14;
+    for (const o of view.obstacles || []) {
+      const nx = Math.max(o[0], Math.min(e.x, o[0] + o[2]));
+      const ny = Math.max(o[1], Math.min(e.y, o[1] + o[3]));
+      const dx = e.x - nx, dy = e.y - ny;
+      if (dx * dx + dy * dy <= r * r) return true;
+    }
+    return false;
+  }
+
+  _drawEnemy(ctx, e, view) {
     ctx.save();
     ctx.translate(e.x, e.y);
     const r = e.radius;
@@ -1225,6 +1248,27 @@ export class Renderer {
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
       ctx.stroke();
+    }
+    // Faint chase tint. STRAGGLER_TINT is the single colour Art & Assets
+    // replaces. The shimmer is only while the body overlaps a wall, and it
+    // is computed here from the obstacles already on the view.
+    if (e.straggle) {
+      const tint = CONFIG.STRAGGLER_TINT;
+      ctx.globalAlpha = tint.strength;
+      ctx.fillStyle = tint.color;
+      circle(ctx, 0, 0, r); ctx.fill();
+      ctx.globalAlpha = 1;
+      if (view && this._straggleInWall(e, view)) {
+        const pulse = 0.45 + 0.55 * Math.sin(this.t * 16 + (e.id || 0));
+        ctx.globalAlpha = tint.strength * (0.55 + 0.45 * pulse);
+        ctx.strokeStyle = tint.color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 4]);
+        ctx.lineDashOffset = -this.t * 22;
+        circle(ctx, 0, 0, r + 4); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
     }
     // THE DAMAGE TRIANGLE, always visible. A 4px ring in the enemy's domain
     // colour: the triangle is only a decision a player can act on if they can
@@ -1554,6 +1598,29 @@ export class Renderer {
   }
 
   _drawFx(ctx, dt) {
+    for (let i = this.dissolves.length - 1; i >= 0; i--) {
+      const d = this.dissolves[i];
+      d.t += dt;
+      if (d.t >= d.dur) { this.dissolves.splice(i, 1); continue; }
+      const u = d.t / d.dur;
+      const sheet = Assets.get(d.id);
+      // Art's sheet plays itself. The placeholder is five frames over 0.3s,
+      // inside the 4–6 frame ask, drawn only when the sheet is missing.
+      const frames = sheet && sheet.frames > 1 ? sheet.frames : 5;
+      const frame = Math.min(frames - 1, Math.floor(u * frames));
+      const alpha = 1 - u;
+      const drew = drawSprite(ctx, d.id, d.x, d.y, {
+        scale: spriteScaleFor(d.id, (d.r || 16) * 2.2),
+        frame, alpha,
+      });
+      if (!drew) {
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.fillStyle = CONFIG.STRAGGLER_TINT.color;
+        circle(ctx, d.x, d.y, (d.r || 16) * (1.15 - 0.75 * u));
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const pt = this.particles[i];
       pt.t += dt;

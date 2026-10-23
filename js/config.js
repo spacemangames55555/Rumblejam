@@ -244,11 +244,24 @@ export const CONFIG = {
   // Stragglers. Once a fight has stopped spawning, a body that stays this far
   // from every living player gives up pathing and walks straight through
   // whatever it was stuck on. Anything ordinary still alive this long after
-  // the last spawn dies where it stands and drops its loot. Bosses and
-  // scripted objectives are not culled; see Sim._straggleExempt.
+  // the last spawn dies where it stands and drops its loot — but only once
+  // the field is down to STRAGGLER_CULL_ALIVE or fewer. Bosses and scripted
+  // objectives are not culled; see Sim._straggleExempt.
   STRAGGLER_NEAR: 300,
   STRAGGLER_CHASE_S: 4,
   STRAGGLER_CULL_S: 20,
+  // How many may phase through walls at once, and how often the next batch
+  // is allowed to start. Flat on purpose: coopSpawn is ×1.15 solo, and a
+  // cap has to be a count. Farthest from any living player goes first.
+  STRAGGLER_CHASE_CAP: 6,
+  STRAGGLER_PROMOTE_S: 1,
+  STRAGGLER_CULL_ALIVE: 8,
+  // The clear screen waits this long after the win, so the last death reads.
+  STRAGGLER_CLEAR_HOLD_S: 0.5,
+  // Art & Assets owns this colour. Placeholder muted red, mixed at 25%.
+  STRAGGLER_TINT: { color: '#9a3d3d', strength: 0.25 },
+  // Art & Assets owns the puff sheet. A missing sprite falls back to a fade.
+  STRAGGLER_DISSOLVE_FX: 'fx.straggler_dissolve',
 
   // Level-up airhorn (the game's first external asset — see assets/)
   AIRHORN_PATH: 'assets/airhorn.mp3',

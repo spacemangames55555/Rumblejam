@@ -752,7 +752,9 @@ export class Sim {
     this.hatch = null; this.extract = null; this.afterSiege = false;
     this.boss = null;
     this.lastSpawnAt = null;     // sim time of the latest enemy to enter the pool
-    this.straggleCullAt = null;  // sim time at which ordinary leftovers are culled
+    this.straggleCullAt = null;  // sim time at which ordinary leftovers may be culled
+    this.straggleBatchAt = null; // sim time of the next chase promotion
+    this.clearHoldUntil = null;  // sim time the clear screen is allowed to open
     this.holdCircle = null; this.pylonId = null; this.enemyBuff = 1;
     for (const p of this.players) {
       if (p.gone) continue;
@@ -888,6 +890,8 @@ export class Sim {
     this.boss = null;
     this.lastSpawnAt = null;
     this.straggleCullAt = null;
+    this.straggleBatchAt = null;
+    this.clearHoldUntil = null;
     this.roomEnteredT = this.time;
     this.waveRng = subRng(this.seed, 'wave', this.regionIndex, node.id);
     // D-24. `nodeType` was read in two places and assigned in none, so every
@@ -1236,27 +1240,37 @@ export class Sim {
   }
 
   // Once spawning has stopped: remember how long each enemy has been outside
-  // STRAGGLER_NEAR of every living player, and at STRAGGLER_CHASE_S give up
-  // on pathing. Separately, STRAGGLER_CULL_S after the last spawn, delete
-  // whatever ordinary body is still alive.
+  // STRAGGLER_NEAR of every living player. At STRAGGLER_CHASE_S it is eligible
+  // to give up pathing. At most STRAGGLER_CHASE_CAP chase at once. Once a
+  // second, the free slots fill with the eligible bodies farthest from any
+  // living player (ties: lower id). No random draw, and the cap is not scaled
+  // by party size — coopSpawn is not an integer.
+  //
+  // Separately, STRAGGLER_CULL_S after the last spawn, delete whatever
+  // ordinary body is still alive, but only while the field is down to
+  // STRAGGLER_CULL_ALIVE or fewer. A denser pack keeps chasing.
   //
   // Sim time, on the host, inside the tick. Positions, deaths and pickups
   // already ride the snapshot, so co-op needs no new message — clients do
   // not run this. The chase itself draws no random numbers. The cull goes
   // through _killEnemy, which draws the normal loot scatters and nothing else
-  // we added.
+  // we added. The chase flag rides an existing bit on the enemy snapshot.
   //
   // The deadline freezes the first tick spawning is actually over. Brood and
   // splitter children born after that are real spawns but they must not push
   // the deadline back, or a living nest keeps the room open forever.
   _tickStragglers(dt) {
+    if (this.clearHoldUntil != null || this.cleared) return;
     if (!this._spawningStopped()) return;
     if (this.straggleCullAt == null) {
       this.straggleCullAt = (this.lastSpawnAt ?? this.time) + CONFIG.STRAGGLER_CULL_S;
     }
     const near2 = CONFIG.STRAGGLER_NEAR * CONFIG.STRAGGLER_NEAR;
+    const eligible = [];
+    let chasing = 0;
     for (const e of this.enemyPool) {
-      if (e.straggle) continue;
+      if (!e.active) continue;
+      if (e.straggle) { chasing++; continue; }
       let d2 = Infinity;
       for (const p of this.players) {
         if (p.gone || p.downed) continue;
@@ -1268,11 +1282,28 @@ export class Sim {
       if (d2 === Infinity || d2 <= near2) e.awayT = 0;
       else {
         e.awayT = (e.awayT || 0) + dt;
-        if (e.awayT >= CONFIG.STRAGGLER_CHASE_S) e.straggle = true;
+        if (e.awayT >= CONFIG.STRAGGLER_CHASE_S) eligible.push({ e, d2 });
       }
     }
+    // The first batch starts the tick someone becomes eligible, so the 4s
+    // rule does not slip by another second. After that, one batch a second,
+    // even when every slot is full — a death mid-second waits for the clock.
+    const due = this.straggleBatchAt == null
+      ? eligible.length > 0
+      : this.time + 1e-6 >= this.straggleBatchAt;
+    if (due) {
+      const room = CONFIG.STRAGGLER_CHASE_CAP - chasing;
+      if (room > 0 && eligible.length) {
+        eligible.sort((a, b) => (b.d2 - a.d2) || (a.e.id - b.e.id));
+        const n = Math.min(room, eligible.length);
+        for (let i = 0; i < n; i++) eligible[i].e.straggle = true;
+      }
+      this.straggleBatchAt = (this.straggleBatchAt == null ? this.time : this.straggleBatchAt) + CONFIG.STRAGGLER_PROMOTE_S;
+    }
     // dt is 1/60 summed, so the threshold can land a hair under an integer.
-    if (this.time + 1e-6 >= this.straggleCullAt) this._cullStragglers();
+    if (this.time + 1e-6 >= this.straggleCullAt && this.enemyPool.count <= CONFIG.STRAGGLER_CULL_ALIVE) {
+      this._cullStragglers();
+    }
   }
 
   // Die on the spot, loot included, kill credit not.
@@ -1291,6 +1322,14 @@ export class Sim {
   _cullStragglers() {
     for (const e of [...this.enemyPool]) {
       if (!e.active || this._straggleExempt(e)) continue;
+      // Named puff so Art & Assets can drop a sheet on this id later.
+      // The normal death burst from _killEnemy still plays; this is the
+      // dissolve on top of it, and it is absent from fights that never cull.
+      if (!this.fx.dissolves) this.fx.dissolves = [];
+      this.fx.dissolves.push({
+        id: CONFIG.STRAGGLER_DISSOLVE_FX,
+        x: Math.round(e.x), y: Math.round(e.y), r: Math.round(e.radius),
+      });
       this._killEnemy(e, null);
     }
   }
@@ -1316,10 +1355,19 @@ export class Sim {
   _checkFightClear() {
     if (this.phase !== 'arena' || this.cleared || this.over) return;
     if (this.arenaNode.kind === 'siege') return; // sieges end on the boss, not on empty
+    if (this.clearHoldUntil != null) {
+      if (this.time + 1e-6 >= this.clearHoldUntil) this._clearFight();
+      return;
+    }
     // objective levels clear on their own win condition, not on an empty field
-    if (this.obj) { if (this.obj.done) this._clearFight(); return; }
-    if (!this.wave.done || this.spawnQueue.length > 0 || this.enemyPool.count > 0) return;
-    this._clearFight();
+    const won = this.obj
+      ? !!this.obj.done
+      : (this.wave.done && this.spawnQueue.length === 0 && this.enemyPool.count === 0);
+    if (!won) return;
+    // The room goes quiet now. The clear screen waits, so the last death
+    // (and a cull's dissolve) can be seen before the shop covers it.
+    this.clearHoldUntil = this.time + CONFIG.STRAGGLER_CLEAR_HOLD_S;
+    this._sanitizeArena();
   }
 
   // The instant a fight's win condition is met — before ANY popup appears —
@@ -1332,6 +1380,7 @@ export class Sim {
     // survives into the sweep (the cull exempts bosses and scripted anchors)
     // does not keep phasing through walls on the next tick of a dead room.
     this.straggleCullAt = null;
+    this.straggleBatchAt = null;
     for (const e of [...this.enemyPool]) {
       e.straggle = false; e.awayT = 0;
       e.mats = 0; this._killEnemy(e, null);
@@ -1355,11 +1404,14 @@ export class Sim {
 
   _clearFight() {
     this.cleared = true;
+    this.clearHoldUntil = null;
     this._sanitizeArena();   // safety first, popups second
-    // money doesn't wait: no end-of-fight vacuum — whatever wasn't collected
-    // during the fight fizzles the moment the last enemy dies, and the banner
-    // reports both numbers so the rule teaches itself
-    const lost = this._fizzleLoot();
+    // Anything still on the floor is collected, not deleted. A clear used to
+    // fizzle the pile on the same tick — a cull that emptied the room, and an
+    // ordinary last kill, both posted "lost to the dark" for drops the player
+    // had not walked over yet. The banner still reports a lost count; a clear
+    // pays it as zero. The siege keeps its own timed sweep (_tickLoot).
+    const lost = this._vacuumLoot();
     this.pushEvent({ k: 'roomClear', collected: this.fightLoot, lost });
     this.pushEvent({ k: 'sfx', s: 'door' });
     for (const p of this.livePlayers()) this._clearRewards(p);
@@ -1397,7 +1449,32 @@ export class Sim {
     return { x, y };
   }
 
-  // uncollected materials vanish — visibly (little pops where they sat)
+  // Pull every pickup still on the floor to the nearest living player and
+  // credit it through the normal pickup path (XP, onboarding, fight tally,
+  // pickup procs). Whole value, one player — the same rule a magnet uses.
+  // Ties go to the lower player index. Order is the pile's own order.
+  // Nobody standing: there is no one to pay, so the pile fizzles as before.
+  _vacuumLoot() {
+    const living = [];
+    for (const p of this.players) if (!p.gone && !p.downed) living.push(p);
+    if (!living.length) return this._fizzleLoot();
+    const pile = this.pickups.slice();
+    this.pickups.length = 0;
+    for (const m of pile) {
+      let best = living[0], bestD = dist2(m.x, m.y, best.x, best.y);
+      for (let i = 1; i < living.length; i++) {
+        const p = living[i];
+        const d = dist2(m.x, m.y, p.x, p.y);
+        if (d < bestD) { best = p; bestD = d; }
+      }
+      this.fightLoot += m.v;
+      this._collectMaterial(best, m.v, m.xp);
+    }
+    return 0;
+  }
+
+  // uncollected materials vanish — visibly (little pops where they sat).
+  // The siege's loot window still ends here. A fight clear does not.
   _fizzleLoot() {
     let lost = 0;
     for (let i = 0; i < this.pickups.length; i++) {
@@ -1962,7 +2039,13 @@ export class Sim {
     if (!this.fxBatch) this.fxBatch = this._emptyFx();
     const CAPS = { hits: 70, deaths: 40, booms: 24, beams: 24, swings: 30, blocks: 12 };
     for (const k in this.fx) {
-      const dst = this.fxBatch[k], src = this.fx[k], cap = CAPS[k] || 30;
+      const src = this.fx[k];
+      // A list that is only present when something happened (the cull puff)
+      // must not be created empty, or every snapshot grows a new key.
+      if (!src || !src.length) continue;
+      let dst = this.fxBatch[k];
+      if (!dst) dst = this.fxBatch[k] = [];
+      const cap = CAPS[k] || 30;
       for (const e of src) { if (dst.length >= cap) break; dst.push(e); }
     }
     this.fx = this._emptyFx();
@@ -5340,7 +5423,9 @@ export class Sim {
         for (const p of live) { if (dist2(e.x, e.y, p.x, p.y) < cullR2) { seen = true; break; } }
         if (!seen) continue;
       }
-      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0)]);
+      // Bit 64 is the straggler chase. It stays clear on every fight that
+      // never arms one, so those snapshots do not move.
+      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0) | (e.straggle ? 64 : 0)]);
     }
     for (const pr of this.projPool) {
       snap.projs.push([pr.id, r(pr.x), r(pr.y), r(pr.vx), r(pr.vy), pr.friendly ? 1 : 0, pr.radius, pr.color]);

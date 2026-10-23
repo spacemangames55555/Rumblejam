@@ -529,8 +529,8 @@ function clearArena(sim, buyStuff) {
     // the harness stands still at center (no kiting), so keep it alive — flow
     // tests verify structure/triggers; survivability is the balance probe's job
     for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
-    // money doesn't wait (patch 9): sweep pickups DURING the fight the way a
-    // player does — the end-of-fight vacuum is gone and uncollected fizzles
+    // Sweep pickups during the fight the way a player does. A clear also
+    // collects whatever is still on the floor; this walk is the mid-fight path.
     if (!sim.cleared && sim.pickups.length && ticks % 3 === 0) {
       const m = sim.pickups[0];
       p.x = m.x; p.y = m.y;
@@ -662,7 +662,7 @@ try {
   const matsBefore = gs.players[0].materials;
   gs.wave.done = true; gs.spawnQueue.length = 0;
   for (const e of [...gs.enemyPool]) gs.enemyPool.release(e);
-  for (let i = 0; i < 30 && !gs.cleared; i++) gs.tick();
+  for (let i = 0; i < 45 && !gs.cleared; i++) gs.tick();
   if (gs.players[0].materials - matsBefore >= 15) ok(`Greed pays floor(G/2) at fight clear (+${gs.players[0].materials - matsBefore})`);
   else fail(`Greed tithe: +${gs.players[0].materials - matsBefore} (want ≥15)`);
 
@@ -675,7 +675,7 @@ try {
   else fail(`banking: banked=${lp.banked} pending=${!!lp.pendingOffer}`);
   ls.wave.done = true; ls.spawnQueue.length = 0;
   for (const e of [...ls.enemyPool]) ls.enemyPool.release(e);
-  for (let i = 0; i < 30 && !lp.pendingOffer; i++) ls.tick();
+  for (let i = 0; i < 45 && !lp.pendingOffer; i++) ls.tick();
   if (lp.pendingOffer) ok('banked level-ups resolve at the fight clear');
   else fail('no offer surfaced at clear');
 } catch (err) { fail('per-fight trigger tests crashed', err); }
@@ -707,7 +707,7 @@ try {
   const p = sim.players[0];
   sim.wave.done = true; sim.spawnQueue.length = 0;
   for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
-  for (let i = 0; i < 30 && !sim.cleared; i++) sim.tick();
+  for (let i = 0; i < 45 && !sim.cleared; i++) sim.tick();
   drain(sim, p, false);
   p.x = sim.hatch.x; p.y = sim.hatch.y;
   for (let i = 0; i < 30; i++) sim.tick();
@@ -1418,19 +1418,19 @@ try {
     const snapMid = s.getSnapshot();
     if (snapMid.inc === 0 && snapMid.enemies.length > 0) ok(`counter: spawn-stop switches to the exact alive count (${snapMid.enemies.length})`);
     else fail(`counter state: inc=${snapMid.inc} n=${snapMid.enemies.length}`);
-    // leave drops on the ground, kill everything → they fizzle with a report
+    // leave drops on the ground, kill everything → the clear collects them
     for (const e of [...s.enemyPool]) s._killEnemy(e, null);
     for (const e of [...s.enemyPool]) s._killEnemy(e, null);
     for (const e of [...s.enemyPool]) s._killEnemy(e, null);
     const ground = s.pickups.reduce((a, m) => a + m.v, 0);
     const fl0 = s.fightLoot;
-    for (let i = 0; i < 30 && !s.cleared; i++) s.tick();
+    const mats0 = s.players[0].materials;
+    for (let i = 0; i < 45 && !s.cleared; i++) s.tick();
     const rc = s.events.filter(e => e.k === 'roomClear').pop();
-    // in-flight magnet pickups still land before the fizzle — the ledger must balance
     const scooped = s.fightLoot - fl0;
-    if (rc && ground > 0 && rc.lost === Math.round(ground - scooped) && s.pickups.length === 0)
-      ok(`uncollected materials fizzle at the last kill, loss reported (lost ${rc.lost}, scooped in flight ${scooped})`);
-    else fail(`fizzle: ground=${ground} scooped=${scooped} event=${JSON.stringify(rc)}`);
+    if (rc && ground > 0 && rc.lost === 0 && s.pickups.length === 0 && scooped >= ground && s.players[0].materials > mats0)
+      ok(`a clear collects the floor (ground ${ground}, credited ${scooped}, lost ${rc.lost})`);
+    else fail(`vacuum: ground=${ground} scooped=${scooped} mats=${s.players[0].materials - mats0} event=${JSON.stringify(rc)}`);
 
     // siege looting window: boss death → countdown → THEN fizzle + hatch + shop
     const g = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: T1, color: '#fff' }] });

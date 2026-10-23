@@ -96,11 +96,12 @@ export function updateEnemy(sim, e, dt) {
   }
   // Straggler chase. The sim raises e.straggle once spawning has stopped and
   // this body has been outside STRAGGLER_NEAR of every living player for
-  // STRAGGLER_CHASE_S. Pathing stops for the rest of the fight: straight at
-  // the nearest player, through the wall that trapped it. Bosses come through
-  // here too — they are not culled, but they are allowed to chase — so this
-  // sits above the boss early-out. A committed wind-up still resolves, and a
-  // fuse that has already started still blows; neither is pathing.
+  // STRAGGLER_CHASE_S — at most STRAGGLER_CHASE_CAP of them at once, farthest
+  // first. Pathing stops for the rest of the fight: straight at the nearest
+  // player, through the wall that trapped it. Bosses come through here too —
+  // they are not culled, but they are allowed to chase — so this sits above
+  // the boss early-out. A committed wind-up still resolves, and a fuse that
+  // has already started still blows; neither is pathing.
   if (e.straggle) {
     if (e.stunT > 0 || telegraphBusy(e)) return;
     if (e.fusing && e.def && e.def.boom) {
