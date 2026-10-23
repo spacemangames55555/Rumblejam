@@ -10,6 +10,7 @@ const myCharId = p => (p && p.char ? p.char.id : null);
 import { BIOMES, tileVariant } from './biomes.js';
 import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
+import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from './arenas.js';
 import { BEAST, hurtBeast } from './entities/beast.js';
 import { HostTransport, ClientTransport } from './net.js';
 import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
@@ -937,7 +938,7 @@ function clientOnMessage(msg) {
       applySnapState(snap);   // state first: the screens no longer trust edges
       break;
     }
-    case 'ev': for (const ev of msg.list) handleEvent(ev); break;
+    case 'ev': presentEvents(msg.list); break;
     case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); updateSheetMeta(app.meta); updateSkillsMeta(app.meta, skillTrees()); } break;
     case 'abandon': // host ended the run for everyone — back to the lobby together
       app.lobby = sanitizeLobby(msg.lobby);
@@ -1121,6 +1122,37 @@ function applySnapState(snap) {
   }
 }
 
+// Set for the duration of one event list, so a map-1 top-up does not also
+// toast once per granted level over the banner.
+let muteCatchupToasts = false;
+
+// The top-up is a stack of ordinary level-ups. Nothing in the sim says "this
+// one was the guarantee" — saying so would be a new event, and the banner is
+// client-only. The shape is: this list both levels me and opens my card, the
+// room is region 1's first combat map, and the level I land on is the floor.
+// app.meta is still the pre-list level; the host writes it after the events,
+// and a client receives `meta` after `ev`.
+function maybeTrailheadBanner(list) {
+  muteCatchupToasts = false;
+  if (!list || !list.length || !app.meta || !app.meta.level) return;
+  if ((app.regionIndex | 0) !== 1 || !app.arena || !app.map || !app.map.layout) return;
+  const node = (app.map.layout.nodes || []).find(n => n.id === app.arena.nodeId);
+  if (!isOnboardingNode(1, node)) return;
+  const ups = list.filter(ev => ev.k === 'levelUp' && ev.idx === app.myIdx).length;
+  const offer = list.some(ev => ev.k === 'offer' && ev.idx === app.myIdx);
+  if (!ups || !offer) return;
+  const level = app.meta.level + ups;
+  if (level !== ONBOARDING_LEVEL_FLOOR) return;
+  muteCatchupToasts = true;
+  banner(`Trailhead bonus: you've reached level ${level}`, '', 3200);
+}
+
+function presentEvents(list) {
+  maybeTrailheadBanner(list);
+  for (const ev of list) handleEvent(ev);
+  muteCatchupToasts = false;
+}
+
 // event → UI/audio. Runs on host (own events) and on clients (broadcast).
 function handleEvent(ev) {
   switch (ev.k) {
@@ -1168,7 +1200,7 @@ function handleEvent(ev) {
       break;
     case 'levelUp':
       levelupHorn(ev.idx === app.myIdx); // own = loud, ally = quiet, debounced
-      if (ev.idx === app.myIdx) toast('Level up! (pick at room clear)');
+      if (ev.idx === app.myIdx && !muteCatchupToasts) toast('Level up! (pick at room clear)');
       break;
     case 'offer': if (ev.idx === app.myIdx) showLevelup(ev); break;
     case 'offerDone': if (ev.idx === app.myIdx) closeLevelup(); break;
@@ -1291,7 +1323,7 @@ function drainSimOutputs(initial = false) {
   if (sim.events.length) {
     const list = sim.events.splice(0);
     if (app.hostT) app.hostT.broadcast({ t: 'ev', list });
-    for (const ev of list) handleEvent(ev);
+    presentEvents(list);
   }
   // metas
   for (const p of sim.players) {
