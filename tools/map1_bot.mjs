@@ -7,12 +7,15 @@
 // small sidestep so a reach strike and a movement strike both connect. It
 // does not dodge shots; the kite does. The kite run is the reference.
 //
-// THE KITE RING FOLLOWS THE OPENER. With no weapon the ring used to be a flat
-// 200, which is outside Rip (proximity 122) and Headbutt (116), so those
-// openers never connected. The ring is now min(200, opener range × 0.85).
-// The opener range is the trigger's range or radius — the distance at which
-// the skill can fire. Dodge, the step-in past ring+30, and the chase path
-// are unchanged. A weapon still uses the weapon ring.
+// THE KITE RING FOLLOWS THE OPENER'S HIT, not the distance that merely lets
+// it fire. With no weapon the ring used to be a flat 200, outside both Rip
+// and Headbutt, so those openers never connected. It is min(200, hit × 0.85).
+// The hit is the compose step's reach (the same number the card prints as
+// Range). A proximity trigger can be wider than the swing — Headbutt fires
+// at 116 and connects at 88 — and standing on the fire gate whiffs. A step
+// with no reach of its own falls back to the trigger. Dodge, the step-in
+// past ring+30, and the chase path are unchanged. A weapon still uses the
+// weapon ring.
 //
 // SKILL POINTS. By default the bot spends them, including points that arrive
 // mid-fight, with `{kind:'learnSkill'}` — the action a player sends. It draws
@@ -52,6 +55,7 @@ import { WEAPON_BY_ID } from '../js/content/weapons.js';
 import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from '../js/arenas.js';
 import { CONFIG } from '../js/config.js';
 import { TREES, TREES_BY_CLASS, SKILL_BY_ID, canLearn } from '../js/skills.js';
+import { rangeOfStep } from '../js/skilltext.js';
 
 const CHAR = 'toh_samurai';
 const DEFAULT_SEEDS = [777, 0xa11ce, 424242, 20260728, 99];
@@ -82,12 +86,22 @@ for (let i = 0; i < argv.length; i++) {
 }
 const list = seeds.length ? seeds : DEFAULT_SEEDS;
 
-// Distance at which the opener can fire. Proximity skills declare `radius`;
-// bolts and nearest-target skills declare `range`.
+// Distance at which the opener's hit connects. A strike's `reach` and a
+// bolt's `range` are that distance — the card's Range field reads the same
+// helper. The trigger's radius is only the fire gate, and on Headbutt it is
+// wider than the swing, so the ring uses the shorter of the two. A step with
+// no reach of its own (a plague) keeps the trigger.
 function openerReach(skill) {
-  const t = skill && skill.trigger;
-  if (!t) return 0;
-  return t.range || t.radius || 0;
+  if (!skill) return 0;
+  let hit = 0;
+  for (const step of skill.compose || []) {
+    const r = rangeOfStep(step);
+    if (r > hit) hit = r;
+  }
+  const t = skill.trigger || {};
+  const gate = t.range || t.radius || 0;
+  if (hit > 0 && gate > 0) return Math.min(hit, gate);
+  return hit || gate || 0;
 }
 
 // The class's registry opener: first tier-1 of the first tree.
@@ -112,8 +126,8 @@ if (openerId) {
   }
 }
 
-// No weapon: hold inside the opener's reach. 0.85 of that reach, and never
-// past the old 200. A ranged opener whose reach is past 200/0.85 stays at 200.
+// No weapon: hold inside the opener's hit. 0.85 of that reach, and never
+// past the old 200. A ranged opener whose hit is past 200/0.85 stays at 200.
 const OPENER_SKILL = openerId ? SKILL_BY_ID[openerId] : defaultOpener(charId);
 const OPENER_REACH = openerReach(OPENER_SKILL);
 const KITE_RING = OPENER_REACH > 0 ? Math.min(200, OPENER_REACH * 0.85) : 200;
