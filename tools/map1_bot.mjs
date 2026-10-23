@@ -6,16 +6,17 @@
 // `--chase` walks onto the nearest enemy instead of holding the ring, with a
 // small sidestep so a reach strike and a movement strike both connect. It
 // does not dodge shots; the kite does. The kite run is the reference.
+// `--class` picks who walks in. The default is the samurai.
 //
 // THE KITE RING FOLLOWS THE OPENER'S HIT, not the distance that merely lets
 // it fire. With no weapon the ring used to be a flat 200, outside both Rip
 // and Headbutt, so those openers never connected. It is min(200, hit × 0.85).
 // The hit is the compose step's reach (the same number the card prints as
 // Range). A proximity trigger can be wider than the swing — Headbutt fires
-// at 116 and connects at 88 — and standing on the fire gate whiffs. A step
-// with no reach of its own falls back to the trigger. Dodge, the step-in
-// past ring+30, and the chase path are unchanged. A weapon still uses the
-// weapon ring.
+// at 116 and the swing connects at its reach — and standing on the fire gate
+// whiffs. A step with no reach of its own falls back to the trigger. Dodge,
+// the step-in past ring+30, and the chase path are unchanged. A weapon still
+// uses the weapon ring.
 //
 // SKILL POINTS. By default the bot spends them, including points that arrive
 // mid-fight, with `{kind:'learnSkill'}` — the action a player sends. It draws
@@ -46,45 +47,66 @@
 // `--no-learn` spends nothing. The floor still grants the opening skill, and
 // the earlier chase tables stay reproducible.
 //
-// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [--opener <skillId>] [charId] [seed ...]
+// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [--opener <skillId>] [--class <id>] [charId] [seed ...]
 // Default class: toh_samurai. Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
 import { WEAPON_BY_ID } from '../js/content/weapons.js';
+import { CHAR_BY_ID } from '../js/content/characters.js';
 import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from '../js/arenas.js';
 import { CONFIG } from '../js/config.js';
 import { TREES, TREES_BY_CLASS, SKILL_BY_ID, canLearn } from '../js/skills.js';
 import { rangeOfStep } from '../js/skilltext.js';
 
-const CHAR = 'toh_samurai';
 const DEFAULT_SEEDS = [777, 0xa11ce, 424242, 20260728, 99];
 const FIGHT_CAP_S = 200;
 
-const argv = process.argv.slice(2);
-const chase = argv.includes('--chase');
-const learn = !argv.includes('--no-learn');
-let charId = CHAR;
-let openerId = null;
-const seeds = [];
-for (let i = 0; i < argv.length; i++) {
-  const s = argv[i];
-  if (s === '--chase' || s === '--no-learn') continue;
-  if (s === '--opener') {
-    openerId = argv[++i];
-    if (!openerId || openerId.startsWith('--')) {
-      console.error('--opener needs a tier-1 skill id');
+function parseArgs(argv) {
+  let chase = false;
+  let learn = true;
+  let charId = 'toh_samurai';
+  let openerId = null;
+  const seeds = [];
+  for (let i = 2; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--chase') { chase = true; continue; }
+    if (a === '--no-learn') { learn = false; continue; }
+    if (a === '--opener') {
+      openerId = argv[++i];
+      if (!openerId || openerId.startsWith('--')) {
+        console.error('map1_bot: --opener needs a tier-1 skill id');
+        process.exit(1);
+      }
+      continue;
+    }
+    if (a.startsWith('--opener=')) { openerId = a.slice('--opener='.length); continue; }
+    if (a === '--class') {
+      const id = argv[++i];
+      if (!id) {
+        console.error('map1_bot: --class needs a character id');
+        process.exit(1);
+      }
+      charId = id;
+      continue;
+    }
+    if (a.startsWith('--class=')) { charId = a.slice('--class='.length); continue; }
+    if (a.startsWith('--')) {
+      console.error(`map1_bot: unknown option ${a}`);
       process.exit(1);
     }
-    continue;
+    const n = Number(a);
+    if (Number.isFinite(n) && a !== '') seeds.push(n);
+    else charId = a;
   }
-  if (s.startsWith('--opener=')) { openerId = s.slice('--opener='.length); continue; }
-  if (s.startsWith('--class=')) { charId = s.slice('--class='.length); continue; }
-  const n = Number(s);
-  if (s !== '' && Number.isFinite(n)) seeds.push(n);
-  else charId = s;
+  if (!CHAR_BY_ID[charId]) {
+    console.error(`map1_bot: unknown class ${charId}`);
+    process.exit(1);
+  }
+  return { chase, learn, charId, openerId, seeds: seeds.length ? seeds : DEFAULT_SEEDS };
 }
-const list = seeds.length ? seeds : DEFAULT_SEEDS;
+
+const { chase, learn, charId, openerId, seeds: list } = parseArgs(process.argv);
 
 // Distance at which the opener's hit connects. A strike's `reach` and a
 // bolt's `range` are that distance — the card's Range field reads the same

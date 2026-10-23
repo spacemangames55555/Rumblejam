@@ -10,6 +10,7 @@ import { glossify, glossName } from './gloss.js';
 import { getVolume, setVolume, sfx } from '../audio.js';
 import { getTouchMode, setTouchMode } from '../touch.js';
 import { DIFFICULTIES, DEFAULT_DIFFICULTY } from '../worldmap.js';
+import { fmtCount } from './format.js';
 
 const $ = id => document.getElementById(id);
 let A = null; // actions
@@ -212,7 +213,7 @@ export function showResults(result, myIdx, canLobby = true, opts = {}) {
           <div class="stat"><span>Damage dealt</span><b>${p.damage.toLocaleString()}</b></div>
           <div class="stat"><span>Kills</span><b>${p.kills}</b></div>
           <div class="stat"><span>Level</span><b>${p.level}</b></div>
-          <div class="stat"><span>Materials gathered</span><b>${p.mats}</b></div>
+          <div class="stat"><span>Materials gathered</span><b>${fmtCount(p.mats)}</b></div>
           <div class="items-mini"><b>Build:</b> ${p.weapons.map(w => `${WEAPON_BY_ID[w.id].name} ${TIER_NAMES[w.tier - 1]}`).join(', ') || '(no weapons)'}<br>
           <b>Items (${p.items.length}):</b> ${summarizeItems(p.items)}</div>
         </div>`).join('')}

@@ -5,11 +5,70 @@ import { CHAR_BY_ID } from '../content/characters.js';
 import { WEAPON_BY_ID } from '../content/weapons.js';
 import { TIER_NAMES, PALETTE } from '../config.js';
 import { escapeHtml } from './screens.js';
+import { fmtCount } from './format.js';
 
 const $ = id => document.getElementById(id);
 let bannerTimer = null;
+// A banner that is up keeps the screen for its whole duration. The next one
+// waits. Map 1's clear fires the Trailhead line and FIELD CLEAR in the same
+// event list; replacing in place made Trailhead last zero milliseconds.
+const bannerQueue = [];
+let bannerLive = false;
+// Callbacks that must run only once nothing is showing and nothing is waiting.
+// Level-up cards use this: opening them in the same pass as the banners put
+// the cards under the banner for its whole duration.
+const bannerIdle = [];
+
+let bannerShownHook = null;
+
+function paintBanner(text, sub) {
+  const el = $('hud-banner');
+  // Both strings are escaped. A subtitle is plain text, same as every other
+  // banner, so a tag in the copy cannot render and cannot run.
+  el.innerHTML = `${escapeHtml(text)}${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}`;
+  el.classList.remove('hidden');
+  el.style.animation = 'none';
+  void el.offsetWidth;
+  el.style.animation = '';
+  if (bannerShownHook) bannerShownHook();
+}
+
+function advanceBanner() {
+  const next = bannerQueue.shift();
+  if (!next) {
+    bannerLive = false;
+    bannerTimer = null;
+    $('hud-banner').classList.add('hidden');
+    const waiting = bannerIdle.splice(0);
+    for (const fn of waiting) fn();
+    return;
+  }
+  bannerLive = true;
+  paintBanner(next.text, next.sub);
+  bannerTimer = setTimeout(advanceBanner, next.dur);
+}
+
+function clearBanners() {
+  bannerQueue.length = 0;
+  bannerLive = false;
+  // Leaving the run drops a deferred card open. Firing it here would pop the
+  // level-up panel on the menu.
+  bannerIdle.length = 0;
+  clearTimeout(bannerTimer);
+  bannerTimer = null;
+  const el = $('hud-banner');
+  if (el) el.classList.add('hidden');
+  // A panel raised over a banner, or parked until the queue drained, must not
+  // keep that flag into the next run.
+  const skills = $('overlay-skills');
+  if (skills) {
+    skills.classList.remove('above-banners');
+    delete skills.dataset.heldBanner;
+  }
+}
 
 export function showHud(on) {
+  clearBanners();
   $('hud').classList.toggle('hidden', !on);
   $('leave-btn').classList.toggle('hidden', !on);
   $('sheet-btn').classList.toggle('hidden', !on);
@@ -78,7 +137,7 @@ export function updateHud(meta, view, hctx) {
   ptsEl.classList.toggle('hidden', !(pts > 0));
   if (pts > 0) ptsEl.textContent = String(pts);
   $('skills-btn').classList.toggle('has-points', pts > 0);
-  $('hud-materials').innerHTML = meta ? `◆ ${meta.materials} <span class="dim" style="font-size:13px">· lvl ${meta.level}${meta.banked > 0 ? ` · <b style="color:var(--xp)">+${meta.banked} level-up${meta.banked > 1 ? 's' : ''} banked</b>` : ''}</span>` : '';
+  $('hud-materials').innerHTML = meta ? `◆ ${fmtCount(meta.materials)} <span class="dim" style="font-size:13px">· lvl ${meta.level}${meta.banked > 0 ? ` · <b style="color:var(--xp)">+${meta.banked} level-up${meta.banked > 1 ? 's' : ''} banked</b>` : ''}</span>` : '';
   // the enemy counter: "incoming" while the spawn budget flows, then the exact
   // number alive — the switch is the sweep signal (leave stragglers, run for money)
   const ec = $('enemy-counter');
@@ -151,11 +210,24 @@ export function toast(text) {
 }
 
 export function banner(text, sub = '', dur = 2200) {
-  const el = $('hud-banner');
-  el.innerHTML = `${escapeHtml(text)}${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}`;
-  el.classList.remove('hidden');
-  clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(() => el.classList.add('hidden'), dur);
+  bannerQueue.push({ text, sub, dur });
+  if (!bannerLive) advanceBanner();
+}
+
+// Run fn now when the queue is idle, otherwise once the last banner has
+// finished and hidden. A later clearBanners drops the callback without calling it.
+export function afterBanners(fn) {
+  if (!bannerLive && bannerQueue.length === 0) fn();
+  else bannerIdle.push(fn);
+}
+
+export function bannersActive() {
+  return bannerLive || bannerQueue.length > 0;
+}
+
+// Fires each time a banner actually paints, including one that was waiting.
+export function onBannerShown(fn) {
+  bannerShownHook = fn;
 }
 
 // ---------------- arena radar ----------------

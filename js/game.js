@@ -85,6 +85,9 @@ const TIER_WEIGHTS = [
 const CARRY_FIELDS = [
   // js/game.js `_makePlayer`
   'level', 'xp', 'xpEarned', 'xpNext', 'materials', 'matsCollected', 'banked',
+  // The unpaid fraction of a scaled drop. Per player, and it has to cross a
+  // region boundary with the purse or the next map pays a unit short.
+  'matRem', 'xpRem',
   'items', 'itemState', 'weapons', 'boosts', 'permStats', 'respecs',
   // js/skillsim.js `initSkillPlayer`
   'skillRanks', 'skillPoints', 'loadout',
@@ -252,7 +255,7 @@ export class Sim {
     this.afterSiege = false;  // portal descends instead of returning to the map
     this.mutations = null; this.mutIdx = 0; this.siegeT = 0; this.bossAt = Infinity;
     this.bossSpawned = false; this.bossT = 0; this.siegeCfg = null;
-    this.profile = null; this.fronts = [0, 2]; this.fightLoot = 0; this.lootT = null;
+    this.profile = null; this.fronts = [0, 2]; this.fightLoot = 0; this.fightPaid = 0; this.lootT = null;
     // What this fight PAID, separated by axis, because gold and XP no longer
     // move together (§4.1). `gold` is materials dropped after every multiplier;
     // `xp` is the experience-bearing subset of them.
@@ -398,6 +401,10 @@ export class Sim {
       // the bar reports a smaller number the better the player did.
       level: 1, xp: 0, xpEarned: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
       materials: 0, matsCollected: 0, banked: 0,
+      // Unpaid fraction of materials (the gold purse) and of XP. A new run
+      // starts at 0. A continued run copies these through CARRY_FIELDS; a
+      // return to the lobby drops the Sim, so the fraction ends with the run.
+      matRem: 0, xpRem: 0,
       // PER-INSTANCE ITEM STATE, beside `items` rather than inside it, because
       // `items` is a flat id array on the meta packet and every reader expects
       // that shape. id -> { pen, lvl }: `pen` is the stat §9.2's penalty rolled
@@ -918,7 +925,8 @@ export class Sim {
     // Bastion streams from ONE arena edge (0=n 1=e 2=s 3=w) — a single front
     // is a queue, and holding ground against a queue is the sanctioned play
     this.fronts = [this.waveRng.int(0, 3)];
-    this.fightLoot = 0;  // materials actually picked up this fight
+    this.fightLoot = 0;  // exact value scooped this fight — the fizzle ledger
+    this.fightPaid = 0;  // whole materials those pickups actually paid
     this.payout = { kills: 0, gold: 0, xp: 0 };  // and what the fight paid out
     this._goldAcc = 0;   // the difficulty multiplier's carried fraction, per fight
     this.lootT = null;   // the siege's post-boss looting countdown
@@ -1309,7 +1317,7 @@ export class Sim {
     // during the fight fizzles the moment the last enemy dies, and the banner
     // reports both numbers so the rule teaches itself
     const lost = this._fizzleLoot();
-    this.pushEvent({ k: 'roomClear', collected: this.fightLoot, lost });
+    this.pushEvent({ k: 'roomClear', collected: this.fightPaid, lost });
     this.pushEvent({ k: 'sfx', s: 'door' });
     for (const p of this.livePlayers()) this._clearRewards(p);
     if (this.arenaNode.kind === 'elite' || this.arenaNode.kind === 'elite_arena' || this.arenaNode.kind === 'bounty') {
@@ -1365,7 +1373,7 @@ export class Sim {
     if (this.lootT > 0) return;
     this.lootT = null;
     const lost = this._fizzleLoot();
-    this.pushEvent({ k: 'lootOver', collected: this.fightLoot, lost });
+    this.pushEvent({ k: 'lootOver', collected: this.fightPaid, lost });
     // THE REGION BOSS ENDS THE REGION, NOT THE RUN. It used to end the run —
     // there was no floor 2 to descend to and nothing above a region to return
     // to — and a party that cleared region 1 could only reach region 2 by
@@ -3865,28 +3873,48 @@ export class Sim {
         m.y += Math.sin(a) * m.spd * dt;
         if (dist2(m.x, m.y, p.x, p.y) < (p.radius + 8) * (p.radius + 8)) {
           this.pickups.splice(i, 1);
-          this.fightLoot += m.v; // the fight's "collected" tally for the clear banner
-          this._collectMaterial(p, m.v, m.xp);
+          this.fightLoot += m.v; // exact scooped value; the banner reads fightPaid
+          this.fightPaid += this._collectMaterial(p, m.v, m.xp);
         }
       }
     }
   }
 
+  // Bank the whole number and keep the fraction on the player. Map 1's drop is
+  // worth 1/0.6, and gold and XP both ride that scale, so both purses do this.
+  // An already-whole credit pays itself and leaves the fraction where it was.
+  // No RNG call lives here. The pickup-bonus roll and the heal roll stay the
+  // only draws in `_collectMaterial`, and they stay in that order. The
+  // difficulty gold fraction is a different accumulator (`_goldAcc`, sim-wide,
+  // reset each fight) and is not this.
+  _takeWhole(p, field, exact) {
+    if (!(exact > 0)) return 0;
+    const sum = (p[field] || 0) + exact;
+    const whole = Math.floor(sum + 1e-9);
+    let rem = sum - whole;
+    if (rem < 1e-9) rem = 0;
+    p[field] = rem;
+    return whole;
+  }
+
+  // Returns the whole materials actually added to the purse. Callers that
+  // grant an integer (tithe, interest, the debug key) can ignore it.
   _collectMaterial(p, v, xpV) {
     this.pushEvent({ k: 'sfx', s: 'pickup' });
     if (p.hookAgg.pickupBonusChance > 0 && this.rng.float() < p.hookAgg.pickupBonusChance) v += 1;
-    p.materials += v;
-    p.matsCollected += v;
+    const paid = this._takeWhole(p, 'matRem', v);
+    p.materials += paid;
+    p.matsCollected += paid;
     // XP rides the pickup's OWN xp value where it has one — a difficulty's gold
     // multiplier adds materials that are worth money and no experience (§4.1).
     // Every other caller (tithe, interest, debug) passes nothing and keeps the
-    // old behaviour of one XP per material.
+    // old behaviour of one XP per material. The +1 pickup bonus is already in
+    // `v`, and it still does not grant XP when the pickup named its own.
     // …and the onboarding ramp's XP compensation rides here, at the single
-    // point XP is credited, so it touches experience and nothing else. `mats`
-    // above is already banked — the ramp costs the player money and does not
-    // cost them levels.
+    // point XP is credited, so it touches experience and nothing else.
     const onbXp = this.arenaNode ? onboardingXpMult(this.regionIndex, (this.arenaNode.depth || 1) - 1) : 1;
-    const xpGain = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100) * onbXp;
+    const xpExact = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100) * onbXp;
+    const xpGain = this._takeWhole(p, 'xpRem', xpExact);
     p.xp += xpGain;
     p.xpEarned += xpGain;
     while (p.xp >= p.xpNext) {
@@ -3910,6 +3938,7 @@ export class Sim {
     }
     for (const mh of p.hookAgg.materialHeal) if (this.rng.float() < mh.chance) this._heal(p, mh.amount);
     p.metaDirty = true;
+    return paid;
   }
 
   _applyPerm(p, stats) {
@@ -5282,6 +5311,11 @@ export class Sim {
         // The run being over is the most load-bearing edge there is: a client
         // that missed `end` sits in a dead run with no results and no way out.
         over: this.over ? 1 : 0,
+        // The unpaid fraction of a scaled drop, per player. Gold (materials)
+        // and XP each keep their own. Hidden: it is not on the meta packet the
+        // HUD reads. A snapshot that omitted it would pay the next drop short
+        // after a restore, and a guest's fraction is not the host's.
+        rem: this.players.map(p => [p.idx, p.matRem || 0, p.xpRem || 0]),
         // `ld`/`ldk` LIVED HERE AS A STUB and are deleted. The comment was
         // right that the loadout was on no channel; the placeholder was never
         // filled, so it was a third declared-with-no-writer field in a codebase

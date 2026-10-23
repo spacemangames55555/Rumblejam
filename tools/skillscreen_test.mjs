@@ -374,9 +374,40 @@ try {
     const s = window.uv.sim;
     s.wave.done = true; s.spawnQueue.length = 0;
     for (const e of [...s.enemyPool]) s.enemyPool.release(e);
-    s.players[0].skillPoints = 5;
+    const p = s.players[0];
+    p.skillPoints = 5;
+    // Off the hatch. Standing on it extracts in 4s and clears the spend step
+    // before the banners and the level-up cards have finished.
+    p.x = 220; p.y = 220; p.mx = 0; p.my = 0;
+    s.extract = null;
     return 1;`);
-  await sleep(1400);
+  // Banners first, then every banked level-up card, then the spend panel.
+  // The panel stays hidden until those cards are answered.
+  const opened = await P.exec(`
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const deadline = Date.now() + 20000;
+    while (Date.now() < deadline) {
+      const s = window.uv.sim, p = s.players[0];
+      p.x = 220; p.y = 220; p.mx = 0; p.my = 0; s.extract = null;
+      const sk = document.getElementById('overlay-skills');
+      if (sk && !sk.classList.contains('hidden')) return 1;
+      const lv = document.getElementById('overlay-levelup');
+      const card = lv && !lv.classList.contains('hidden') && lv.querySelector('.offer-card');
+      if (card) {
+        const id = card.dataset.id;
+        card.click();
+        const t0 = Date.now();
+        while (Date.now() - t0 < 1500) {
+          const lv2 = document.getElementById('overlay-levelup');
+          const c2 = lv2 && !lv2.classList.contains('hidden') && lv2.querySelector('.offer-card');
+          if (!c2 || c2.dataset.id !== id) break;
+          await sleep(40);
+        }
+      } else await sleep(80);
+    }
+    return 0;
+  `);
+  if (!opened) no('the spend panel did not open after the banners and the level-up cards');
   const step = await P.exec(`
     const sk = document.getElementById('overlay-skills'), sh = document.getElementById('overlay-shop');
     const open = !sk.classList.contains('hidden');
