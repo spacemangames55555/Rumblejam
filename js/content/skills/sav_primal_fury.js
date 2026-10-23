@@ -39,7 +39,9 @@ export const TUNING = {
   // tier 1 — Rip
   // 3 → 4 is the smallest base whose rank-1 packet 2-hits every map-1 body.
   ripDamage: 4, ripReach: 100, ripArc: 1.5, ripRadius: 122,
-  ripCount: 1, ripCd: 1050, ripWeight: 0.72,
+  // 1200, not 1100. Triggers are checked every 100ms, so 1050 already
+  // fired on the 1100ms tick. 1200 is the first cooldown a whole tick slower.
+  ripCount: 1, ripCd: 1200, ripWeight: 0.72,
   // tier 2 — Run Down
   runDamage: 4, runRange: 250, runCd: 2200, runWeight: 0.79,
   // tier 3 — Wide Swing
