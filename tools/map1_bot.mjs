@@ -7,22 +7,108 @@
 // small sidestep so a reach strike and a movement strike both connect. It
 // does not dodge shots; the kite does. The kite run is the reference.
 //
-// Usage: node tools/map1_bot.mjs [--chase] [seed ...]
-// Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
+// SKILL POINTS. By default the bot spends them, including points that arrive
+// mid-fight, with `{kind:'learnSkill'}` — the action a player sends. It draws
+// no RNG. The choice walks the class's trees in registry order and each tree's
+// skills in authored order:
+//   1. the first still-unlearned tier-2 skill `canLearn` accepts (opens at level 3)
+//   2. the first still-unlearned tier-3 skill `canLearn` accepts (opens at level 5)
+//   3. otherwise a rank on the tier-1 skill already known
+// A prereq the bot has not bought is skipped, so Necromancer's Dark Matter Bomb
+// waits until Blip is owned. Newly learned actives ride the engine's auto-slot.
+//
+// That rule picks one chain on the classes this probe is run for, because each
+// next node requires the previous one and the other trees' nodes require their
+// own openers:
+//   toh_necromancer  Dark Energy Blip → Dark Matter Bomb → Tainted Dark Matter
+//   toh_bard         Opening Note → Quickstep → Counterpoint
+//   toh_sundian      Spindrift → Souse → Rip Current
+//   toh_samurai      Cross Guard Cut → Set Stance (a passive, max rank 1).
+//                    Armor has no tier-3 node, so further points rank the cut.
+//
+// `--no-learn` spends nothing. The floor still grants the opening skill, and
+// the earlier chase tables stay reproducible.
+//
+// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [charId] [seed ...]
+// Default class: toh_samurai. Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
 import { WEAPON_BY_ID } from '../js/content/weapons.js';
-import { isOnboardingNode } from '../js/arenas.js';
+import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from '../js/arenas.js';
 import { CONFIG } from '../js/config.js';
+import { TREES, TREES_BY_CLASS, canLearn } from '../js/skills.js';
 
 const CHAR = 'toh_samurai';
 const DEFAULT_SEEDS = [777, 0xa11ce, 424242, 20260728, 99];
 const FIGHT_CAP_S = 200;
 
-const chase = process.argv.includes('--chase');
-const seeds = process.argv.slice(2).filter(s => s !== '--chase').map(s => Number(s)).filter(n => Number.isFinite(n));
+const argv = process.argv.slice(2);
+const chase = argv.includes('--chase');
+const learn = !argv.includes('--no-learn');
+let charId = CHAR;
+const seeds = [];
+for (const s of argv) {
+  if (s === '--chase' || s === '--no-learn') continue;
+  if (s.startsWith('--class=')) { charId = s.slice('--class='.length); continue; }
+  const n = Number(s);
+  if (s !== '' && Number.isFinite(n)) seeds.push(n);
+  else charId = s;
+}
 const list = seeds.length ? seeds : DEFAULT_SEEDS;
+
+function classSkills(id) {
+  const out = [];
+  for (const tid of TREES_BY_CLASS[id] || []) {
+    for (const sk of TREES[tid].skills) out.push(sk);
+  }
+  return out;
+}
+
+// First skill at `tier` the engine will sell right now and the bot does not own.
+function unlearnedAtTier(p, tier) {
+  for (const sk of classSkills(p.charId)) {
+    if (sk.tier !== tier) continue;
+    if ((p.skillRanks[sk.id] || 0) >= 1) continue;
+    if (canLearn(p, sk)) return sk;
+  }
+  return null;
+}
+
+function tierOne(p) {
+  const skills = classSkills(p.charId);
+  return skills.find(s => s.tier === 1 && (p.skillRanks[s.id] || 0) >= 1)
+    || skills.find(s => s.tier === 1 && canLearn(p, s))
+    || null;
+}
+
+// Spend every banked point. New nodes are recorded; rank-ups are returned so
+// the map-1 catch-up can say where its points went. A rejected spend stops the
+// loop rather than spinning.
+function spendSkills(sim, p, learned) {
+  const spent = [];
+  let guard = 0;
+  while (p.skillPoints > 0 && guard++ < 40) {
+    const before = p.skillPoints;
+    const target = unlearnedAtTier(p, 2) || unlearnedAtTier(p, 3) || tierOne(p);
+    if (!target) break;
+    const rankBefore = p.skillRanks[target.id] || 0;
+    sim.uiAction(p.idx, { kind: 'learnSkill', id: target.id });
+    if ((p.skillPoints | 0) >= before) break;
+    const fresh = rankBefore < 1;
+    if (fresh) {
+      learned.push({
+        id: target.id,
+        level: p.level,
+        t: sim.time,
+        active: target.type === 'active',
+        slotted: target.type !== 'active' || (p.loadout || []).includes(target.id),
+      });
+    }
+    spent.push({ id: target.id, rank: p.skillRanks[target.id], fresh, level: p.level, t: sim.time });
+  }
+  return spent;
+}
 
 function waveTotal(sim) {
   const w = sim.wave;
@@ -36,7 +122,7 @@ function waveTotal(sim) {
 function runSeed(seed) {
   const sim = new Sim({
     seed, difficulty: 'standard', regionIndex: 1,
-    party: [{ idx: 0, key: 'k', name: 'BOT', charId: CHAR, color: '#fff' }],
+    party: [{ idx: 0, key: 'k', name: 'BOT', charId, color: '#fff' }],
   });
   const p = sim.players[0];
 
@@ -131,6 +217,9 @@ function runSeed(seed) {
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
   }
 
+  const learned = [];
+  if (learn) spendSkills(sim, p, learned);
+
   const starts = sim.reachableNodes();
   const nodeId = starts.find(id => isOnboardingNode(sim.regionIndex, sim.floor.nodes[id])) ?? starts[0];
   const node = sim.floor.nodes[nodeId];
@@ -145,9 +234,21 @@ function runSeed(seed) {
 
   const cap = FIGHT_CAP_S * 60;
   let ticks = 0, peak = 0;
+  const casts = {};
+  let topUp = null;
   while (sim.phase === 'arena' && !sim.over && !sim.cleared && ticks++ < cap) {
     botInput();
+    const lvl0 = p.level;
     sim.tick();
+    for (const f of sim.fx.skillFires) {
+      if (f.idx !== 0) continue;
+      casts[f.id] = (casts[f.id] || 0) + 1;
+    }
+    const spent = learn ? spendSkills(sim, p, learned) : [];
+    if (topUp === null && sim.cleared && lvl0 < ONBOARDING_LEVEL_FLOOR
+        && p.level >= ONBOARDING_LEVEL_FLOOR && p.xp === 0) {
+      topUp = { from: lvl0, to: p.level, spends: spent };
+    }
     peak = Math.max(peak, sim.enemyPool.count);
     if (ticks % 30 === 0) resolveUi();
   }
@@ -176,6 +277,11 @@ function runSeed(seed) {
     level: p.level,
     left,
     node: `${node.kind}/${node.template}`,
+    learned,
+    casts,
+    topUp,
+    unspent: p.skillPoints,
+    loadout: (p.loadout || []).filter(Boolean),
   };
 }
 
@@ -187,6 +293,23 @@ for (const r of rows) {
   else stalls++;
   const tag = r.seed === 0xa11ce ? '0xa11ce' : String(r.seed);
   console.log(`${tag}\t${r.outcome}\t${r.secs}s\tkills ${r.kills}/${r.total}\tpeak ${r.peak}\thp ${r.hp}/${r.maxHp}\tlvl ${r.level}\talive ${r.alive} waveDone ${r.waveDone} ${r.node || ''} ${r.left ? JSON.stringify(r.left) : r.detail || ''}`);
+  if (learn && r.learned) {
+    for (const L of r.learned) {
+      const slotted = L.active ? ((r.loadout || []).includes(L.id) ? 'slotted' : 'NOT SLOTTED') : 'passive';
+      const n = (r.casts && r.casts[L.id]) || 0;
+      const cast = L.active ? (n > 0 ? `casts ${n}` : 'NO CAST') : 'no cast';
+      console.log(`LEARN\t${tag}\t${L.id}\tlvl ${L.level}\tt ${L.t.toFixed(2)}s\t${slotted}\t${cast}`);
+    }
+    const castLine = Object.entries(r.casts || {}).map(([id, n]) => `${id} ${n}`).join('  ');
+    console.log(`CASTS\t${tag}\t${castLine || '(none)'}`);
+    if (r.topUp) {
+      const use = r.topUp.spends.map(s => `${s.id} r${s.rank}`).join(', ') || 'unspent';
+      console.log(`TOPUP\t${tag}\tfrom ${r.topUp.from} to ${r.topUp.to}\t${use}`);
+    } else {
+      console.log(`TOPUP\t${tag}\tnone`);
+    }
+    if (r.unspent > 0) console.log(`UNSPENT\t${tag}\t${r.unspent}`);
+  }
 }
-console.log(`MODE\t${chase ? 'chase' : 'kite'}`);
+console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${charId}\t${learn ? 'learn' : 'no-learn'}`);
 console.log(`TOTAL\tclears ${clears}/${rows.length}\tdeaths ${deaths}\tstalls ${stalls}`);
