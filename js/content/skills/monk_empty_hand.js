@@ -136,7 +136,7 @@ export const MONK_EMPTY_HAND = [
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.cascadeRange, count: 2 },
     cooldown: T.cascadeCd,
-    compose: [{ kind: 'cone', damage: T.cascadeDamage, arc: T.cascadeArc, range: T.cascadeRange, ...CHI, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.cascadeDamage, angle: T.cascadeArc, range: T.cascadeRange, ...CHI, riders: {} }],
     ranks: R,
   },
   {

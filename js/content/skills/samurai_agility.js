@@ -161,7 +161,7 @@ export const SAMURAI_AGILITY = [
     select: 'objective_target',
     trigger: { kind: 'MOVEMENT', mode: 'moving', seconds: T.hundredMove },
     cooldown: T.hundredCd,
-    compose: [{ kind: 'cone', damage: T.hundredDamage, arc: T.hundredArc, range: T.hundredRange, ...FOOT, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.hundredDamage, angle: T.hundredArc, range: T.hundredRange, ...FOOT, riders: {} }],
     ranks: R,
   },
   {

@@ -120,7 +120,7 @@ export const WIZARD_DISSONANCE = [
     trigger: { kind: 'PROXIMITY', radius: T.chorusRange, count: 2 },
     cooldown: T.chorusCd,
     compose: [{
-      kind: 'cone', damage: T.chorusDamage, arc: T.chorusArc, range: T.chorusRange, ...SHIFT,
+      kind: 'cone', damage: T.chorusDamage, angle: T.chorusArc, range: T.chorusRange, ...SHIFT,
       riders: { weakenDamage: T.chorusWeaken },
     }],
     ranks: R,

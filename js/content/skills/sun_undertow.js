@@ -138,7 +138,7 @@ export const SUN_UNDERTOW = [
     trigger: { kind: 'PROXIMITY', radius: T.sweepRange, count: 2 },
     cooldown: T.sweepCd,
     compose: [{
-      kind: 'cone', damage: T.sweepDamage, arc: T.sweepArc, range: T.sweepRange,
+      kind: 'cone', damage: T.sweepDamage, angle: T.sweepArc, range: T.sweepRange,
       ...DRENCH, riders: { drench: T.sweepDrench },
     }],
     ranks: R,
@@ -151,7 +151,7 @@ export const SUN_UNDERTOW = [
     trigger: { kind: 'PROXIMITY', radius: T.seawallRange, count: 3 },
     cooldown: T.seawallCd,
     compose: [{
-      kind: 'cone', damage: T.seawallDamage, arc: T.seawallArc, range: T.seawallRange, ...DRENCH,
+      kind: 'cone', damage: T.seawallDamage, angle: T.seawallArc, range: T.seawallRange, ...DRENCH,
       riders: { drench: T.seawallDrench, slow: T.seawallSlow },
     }],
     ranks: R,

@@ -511,7 +511,7 @@ export const PRIMITIVES = {
       dps: stepDamage(step, skill, rank, p) / (step.tickMs / MS),
       dur: rankedDuration(step.duration, skill, rank) / MS,
       hurts: 'enemies', color: p.color,
-      skillDomain: skill.domain, ownerIdx: p.idx,
+      skillDomain: skill.domain, ownerIdx: p.idx, owner: p.idx,   // owner: the zone loop reads z.owner, not ownerIdx — without it hazard damage landed uncredited
       slowMult: r.slow ? r.slow.mult : 0, slowDur: r.slow ? r.slow.dur / MS : 0,
     });
     out.states++;

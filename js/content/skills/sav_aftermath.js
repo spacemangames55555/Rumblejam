@@ -120,7 +120,7 @@ export const SAV_AFTERMATH = [
     trigger: { kind: 'PROXIMITY', radius: T.backdraftRange, count: 2 },
     cooldown: T.backdraftCd,
     compose: [{
-      kind: 'cone', damage: T.backdraftDamage, arc: T.backdraftArc, range: T.backdraftRange,
+      kind: 'cone', damage: T.backdraftDamage, angle: T.backdraftArc, range: T.backdraftRange,
       ...CASC, scaleWeight: T.backdraftWeight, riders: {},
     }],
     ranks: R,

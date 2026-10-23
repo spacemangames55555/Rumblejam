@@ -123,7 +123,7 @@ export const HUN_PINCER = [
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.crossRange, count: 2 },
     cooldown: T.crossCd,
-    compose: [{ kind: 'cone', damage: T.crossDamage, arc: T.crossArc, range: T.crossRange, ...SPREAD, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.crossDamage, angle: T.crossArc, range: T.crossRange, ...SPREAD, riders: {} }],
     ranks: R,
   },
   {
@@ -152,7 +152,7 @@ export const HUN_PINCER = [
     trigger: { kind: 'PROXIMITY', radius: T.closeRange, count: 3 },
     cooldown: T.closeCd,
     compose: [{
-      kind: 'cone', damage: T.closeDamage, arc: T.closeArc, range: T.closeRange, ...SPREAD,
+      kind: 'cone', damage: T.closeDamage, angle: T.closeArc, range: T.closeRange, ...SPREAD,
       riders: { weakenDamage: T.closeWeaken },
     }],
     ranks: R,

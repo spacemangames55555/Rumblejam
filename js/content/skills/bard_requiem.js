@@ -113,7 +113,7 @@ export const BARD_REQUIEM = [
     select: 'objective_target',
     trigger: { kind: 'ON_KILL' },
     cooldown: T.roundCd,
-    compose: [{ kind: 'cone', damage: T.roundDamage, arc: T.roundArc, range: T.roundRange, ...RHY, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.roundDamage, angle: T.roundArc, range: T.roundRange, ...RHY, riders: {} }],
     ranks: R,
   },
   {

@@ -182,7 +182,7 @@ export const PRIEST_RECKONING = [
     trigger: { kind: 'PROXIMITY', radius: T.distraintRange, count: 2 },
     cooldown: T.distraintCd,
     compose: [{
-      kind: 'cone', damage: T.distraintDamage, arc: T.distraintArc, range: T.distraintRange,
+      kind: 'cone', damage: T.distraintDamage, angle: T.distraintArc, range: T.distraintRange,
       ...MARKS, riders: { mark: T.distraintMark },
     }],
     ranks: R,
