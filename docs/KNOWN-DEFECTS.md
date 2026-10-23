@@ -1411,7 +1411,11 @@ selections-of-target and names `DELIVERY` when the gap is wide.
 
 ## #22 — the converted Dark Matter tree makes standing still a winning strategy
 
-**Shipped deliberately, open, and the thing Casey is playtesting.**
+**Retired.** Dark Energy Blip is 9 damage every 1000ms (was 18 every 600ms, about 30 DPS down to about 9). A motionless Necromancer now dies in all 25 statue rooms. `STATUE_REF` in `tools/sim_test.mjs` points at `toh_necromancer` again, and the block that reported the survival count is gone. A survival fails the Statue Test.
+
+The record below is the state that shipped the exception.
+
+**Shipped deliberately, and was the thing Casey was playtesting.**
 
 The Necromancer's Dark Matter tree is converted from
 `docs/design/classes/necromancer.md`. Converted, a **never-moving** Necromancer
@@ -1440,11 +1444,13 @@ individually reasonable, remove the cost of not playing. **Marrow is the
 control** — melee, converted, and it passes. The difference is reach.
 
 **What was done about it: nothing, on purpose.** The tree ships as authored so
-the problem can be felt rather than read about. The statue check still runs for
+the problem can be felt rather than read about. The statue check still ran for
 the whole roster — its reference character moved to the Samurai, which is melee
-and unconverted — and the Necromancer still runs beside it, reporting the room
-count against this defect. The day that line reports zero clears, the exception
-can be retired and `STATUE_REF` pointed back at the Necromancer.
+and unconverted — and the Necromancer still ran beside it, reporting the room
+count against this defect. The day that line reported zero clears, the exception
+was to be retired and `STATUE_REF` pointed back at the Necromancer. That day
+arrived with the opener retune above: zero of 25 rooms survived, and the
+exception is retired.
 
 **AND THE TREE IS NOT UNIQUE — the test is already false of six classes.**
 Measured across all fourteen as motionless statues, 15 rooms each:
@@ -1474,8 +1480,8 @@ whether this check can tell you is now answered — it cannot, for six classes.
 
 **Shipped with #22, same reason, and the cause is a field the document never mentions.**
 
-`toh_necromancer cannot break a barricade: 27/135 damage in 150s`. Not a
-softlock — it chips — but a barricade that took seconds now takes minutes.
+`toh_necromancer cannot break a barricade: 18/135 damage in 150s` (was 27/135 before Dark Energy Blip went to 9 damage / 1000ms). Not a
+softlock — it chips — but a barricade that took seconds now takes minutes. The opener nerf moved the chip; it did not give the class a barricade selector.
 
 **The built tier-1 node declared `select: 'objective_target'` and the
 conversion changed it to `nearest`.** That selector was the class's
