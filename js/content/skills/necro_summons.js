@@ -27,7 +27,9 @@ export const TUNING = {
   skelTokenRange: 320, skelSeedSpeed: 620, skelSeedRadius: 6,
   // tier_code 1 — Unleash the Monster
   monsterHp: 220, monsterRadius: 22, monsterSpawnRadius: 54, monsterCd: 8000,
-  monsterDamage: 26, monsterArc: 1.6, monsterReach: 70, monsterAtkCd: 1100,   // ms
+  // 26 → 23 pays the rest of the Entropy Cascade raise on the mortal
+  // tree_dps reading. Army never fires there (crowd 10, five dummies).
+  monsterDamage: 23, monsterArc: 1.6, monsterReach: 70, monsterAtkCd: 1100,   // ms
   monsterTaunt: 3000,                 // the widest on the ladder — MAGNET aggro r300
   // tier_code 2 — Unyielding Beast (passive)
   beastHp: 50,
@@ -40,9 +42,13 @@ export const TUNING = {
   // tier_code 6 — Tentacles of Dark Matter (passive)
   tentacleReach: 24,
   // tier_code 7 — Death Channel
-  channelDamage: 14, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
+  // 14 → 3 pays what it can of the Cascade raise. 3 is the load floor:
+  // rankPer(2, base) refuses a base of 2 or less.
+  channelDamage: 3, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
   // tier_code 8 — Entropy Cascade
-  cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 600,
+  // Smallest rank-1 application that kills a Cedar Warden before this
+  // cooldown is ready. The plague pays the whole application, not cascadeTick.
+  cascadeDamage: 76, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 600,
   // tier_code 9 — Army of the Dead
   armyHp: 45, armyRadius: 13, armySpawnRadius: 66, armyCount: 6,
   armyDuration: 20000, armyCd: 25000, armyCrowdRadius: 400, armyCrowdCount: 10,

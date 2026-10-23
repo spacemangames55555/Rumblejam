@@ -1004,6 +1004,9 @@ export class Sim {
       nodeId: node.id, kind: node.kind, template: node.template,
       name: arena.name, w: arena.w, h: arena.h,
       hazards: this._serializeHazardDefs(),
+      // 1 on map 1, 0 from map 2 on. Same predicate the damage path reads.
+      // Rides `st.arena` on every snapshot. No roll.
+      domainNeutral: isOnboardingNode(this.regionIndex, node) ? 1 : 0,
     };
     this.pushEvent({ k: 'arena', ...this._arena, biome: this.biome, obstacles: this._snapObstacles() });
   }

@@ -342,6 +342,39 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   if (!wrong.length) ok(`XP compensation is scoped to the ramp: ${shape.map(([n, v]) => `${n} x${v}`).join(', ')}`);
   else fail(`XP compensation is mis-scoped: ${wrong.map(([n, v]) => `${n} x${v}`).join(', ')} — it must pay back exactly where the ramp took, and nowhere else`);
 
+  // MAP 1 DAMAGE IS NEUTRAL. The triangle comes back on map 2. A live hit,
+  // not only the flag: spiritual into a physical body is ×0.80 later and ×1
+  // here, and mental into that body is ×1.25 later and ×1 here. Bard has no
+  // Ferocity, so the packet is the amount itself.
+  {
+    const probe = { id: 'probe', domain: 'spiritual', ranks: {} };
+    const mental = { id: 'probe', domain: 'mental', ranks: {} };
+    function hit(regionIndex, onboarding, skill, amount) {
+      const sim = new Sim({ seed: 7, difficulty: 'standard', regionIndex, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_bard', color: '#fff' }] });
+      const node = sim.floor.nodes.find(n => n.kind === 'combat' && AR.isOnboardingNode(sim.regionIndex, n) === onboarding);
+      // Map 2 is not reachable from the opening card, and a pick of an
+      // unreachable node is ignored. The probe is the room's damage rule,
+      // so it travels straight there.
+      sim._travelTo(node.id);
+      const e = sim.spawnEnemyById('pnw_thornhound', sim.players[0].x + 30, sim.players[0].y);
+      const before = e.hp;
+      sim.skillDamage(e, amount, sim.players[0], skill);
+      const snap = sim.getSnapshot();
+      const flag = snap.st.arena ? snap.st.arena.domainNeutral : null;
+      return { dealt: before - e.hp, neutral: flag };
+    }
+    const disadvantage = hit(1, true, probe, 10);
+    const advantage = hit(1, true, mental, 10);
+    const laterDis = hit(1, false, probe, 10);
+    const laterAdv = hit(1, false, mental, 10);
+    if (disadvantage.dealt === 10 && advantage.dealt === 10 && disadvantage.neutral === 1 && advantage.neutral === 1
+        && laterDis.dealt === 8 && laterAdv.dealt === 13 && laterDis.neutral === 0 && laterAdv.neutral === 0) {
+      ok('map 1 enemies take ×1 from every damage type; map 2 keeps ×0.80 and ×1.25, and the snapshot carries domainNeutral');
+    } else {
+      fail(`map 1 domain rule drifted: map1 spiritual ${disadvantage.dealt} (flag ${disadvantage.neutral}), map1 mental ${advantage.dealt} (flag ${advantage.neutral}), map2 spiritual ${laterDis.dealt} (flag ${laterDis.neutral}), map2 mental ${laterAdv.dealt} (flag ${laterAdv.neutral})`);
+    }
+  }
+
   // Levels 6 and 7 inclusive. Overshoot past 7 fails the same way undershoot
   // below 6 does. 3 is the slot count both of those levels grant today.
   const WANT_LO = 6, WANT_HI = 7, WANT_SLOTS = 3;

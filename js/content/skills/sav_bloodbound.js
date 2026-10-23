@@ -28,7 +28,8 @@
 
 export const TUNING = {
   // tier 1 — Headbutt
-  headDamage: 3, headReach: 88, headArc: 1.3, headRadius: 116, headCount: 1, headCd: 1150,
+  // 3 → 4 is the smallest base whose rank-1 packet 2-hits every map-1 body.
+  headDamage: 4, headReach: 88, headArc: 1.3, headRadius: 116, headCount: 1, headCd: 1150,
   // tier 2 — Bleed Them
   // Casey's ruling, 2026-09-05: the five plagues that named a spread and
   // carried none take 150, the median of the three that already worked
@@ -46,7 +47,9 @@ export const TUNING = {
   dragDamage: 5, dragReach: 100, dragArc: 1.6, dragRadius: 140,
   dragCount: 2, dragCd: 3100, dragSlowMult: 0.7, dragSlowDur: 1500,
   // tier 7 — Answer It
-  answerDamage: 6, answerAngle: 1.9, answerRange: 195, answerCd: 3500, answerTaunt: 1400,
+  // 6 → 3 pays the Headbutt raise. Everything At Once is unslotted in
+  // tree_dps, and Blood Price barely moves that reading.
+  answerDamage: 3, answerAngle: 1.9, answerRange: 195, answerCd: 3500, answerTaunt: 1400,
   // tier 8 — Blood Price
   priceDamage: 6, priceRange: 220, priceHealPct: 0.55, priceCd: 3900,
   // tier 9 — Won't Go Down

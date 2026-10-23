@@ -301,6 +301,16 @@ export function isOnboardingNode(regionIndex, node) {
   return regionIndex === 1 && !!node && node.col === 0 && node.kind !== 'siege';
 }
 
+// MAP 1 TAKES NEUTRAL DAMAGE. Resistances and weaknesses — the triangle's
+// ×0.80 and ×1.25 — start on map 2. This is the same room as the first step
+// of ONBOARDING_XP_MULT: region 1, column 0, and not a siege. It is derived
+// from the node the party is already standing in, so it adds no RNG draw.
+// The arena snapshot carries `domainNeutral` (1 or 0) so a client that only
+// has the snapshot still knows which rule the room is using.
+export function onboardingDomainNeutral(regionIndex, node) {
+  return isOnboardingNode(regionIndex, node);
+}
+
 // `regionIndex` is the world axis (1..8) and `depth` is the ZERO-BASED map
 // index inside the region (0..4) — the same two numbers this took as
 // `floorNum` and `node.col`, re-keyed. The caller does the −1, so map 1 sits on
