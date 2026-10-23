@@ -44,7 +44,7 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  scudDamage: 5, scudRange: 245, scudSpeed: 440, scudRadius: 7, scudCd: 900,
+  scudDamage: 5, scudRange: 245, scudSpeed: 440, scudRadius: 7, scudCd: 1000,
   scudDrench: { stacks: 2, cap: 12, dur: 9000 },
   shallowsWeight: 0.15,
 
@@ -74,7 +74,7 @@ export const TUNING = {
   raceDamage: 6, raceRange: 265, raceSpeed: 460, raceRadius: 7, raceCd: 4100,
   raceDrench: { stacks: 3, cap: 12, dur: 9000 },
   raceSluice: { per: 1, radius: 30 },
-  maelstromDamage: 6, maelstromReach: 142, maelstromArc: 2.7, maelstromCd: 7200,
+  maelstromDamage: 7, maelstromReach: 142, maelstromArc: 2.7, maelstromCd: 7200,
   maelstromDrench: { stacks: 4, cap: 12, dur: 9000 },
   maelstromSluice: { per: 2, radius: 42 }, maelstromPulses: 2,
 
