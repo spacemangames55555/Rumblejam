@@ -18,10 +18,10 @@
 // telegraph is dodged only when the body — grown by its radius and by the
 // distance this input would walk before the strike lands — is inside the
 // real shape, or the segment between those two points crosses it. Inside,
-// the step is the shortest way out. Already clear, the into-shape part of
-// the path is dropped and the bot holds if that was the whole path. The
-// step-in past ring+30 and the chase path are unchanged. A weapon still
-// uses the weapon ring.
+// the step is the shortest way out. Already outside, only the part of the
+// kite vector that would enter the shape is removed, and the rest is kept.
+// A warning does not make the bot stand still. The step-in past ring+30
+// and the chase path are unchanged. A weapon still uses the weapon ring.
 //
 // SKILL POINTS. By default the bot spends them, including points that arrive
 // mid-fight, with `{kind:'learnSkill'}` — the action a player sends. It draws
@@ -469,18 +469,18 @@ function runSeed(seed) {
         vx += (mx - p.x) / d * 0.8; vy += (my - p.y) / d * 0.8;
       }
     }
-    // The kite decides the path. A telegraph changes it only when the body,
-    // or that path out to where the strike will land, is inside the shape.
-    // Inside, the input becomes the shortest step out. Already outside, the
-    // into-shape part of the path is dropped and the bot holds if that was
-    // the whole path — it does not keep running the exit.
+    // Inside a live shape, step out the short way. Outside, keep kiting away
+    // from melee. A path that would enter loses only its into-shape part;
+    // whatever is left is still walked. If that part is nothing, the nearest
+    // heading to the kite that stays out is used. The input is never zeroed
+    // by a warning.
     const ilen = Math.hypot(vx, vy);
     const imx = ilen > 0 ? vx / ilen : 0;
     const imy = ilen > 0 ? vy / ilen : 0;
     const speed = moveSpeed(p);
     const radius = p.radius || 0;
     let step = null;
-    const clips = [];
+    const threats = [];
     const consider = (z, timeLeft) => {
       if (!z || !(timeLeft > 0)) return;
       if (inZone(z, p.x, p.y, radius)) {
@@ -491,30 +491,60 @@ function runSeed(seed) {
         }
         return;
       }
-      const hit = pathInside(z, p.x, p.y, imx, imy, speed * timeLeft, radius);
-      if (!hit) return;
-      const exit = shortestExit(z, hit.x, hit.y, radius);
-      if (!exit) return;
-      clips.push({ x: exit.x, y: exit.y, timeLeft });
+      if (ilen > 0 && pathInside(z, p.x, p.y, imx, imy, speed * timeLeft, radius)) {
+        threats.push({ z, timeLeft });
+      }
     };
     for (const tg of sim.telegraphs) {
       if (tg.spawnMark) continue;
       consider(asZone(tg), (tg.dur || 0) - (tg.t || 0));
     }
     for (const tz of sim.telegraphZones()) consider(tz.z, (tz.msLeft || 0) / 1000);
+    const staysOut = (mx, my) => {
+      for (const t of threats) {
+        if (pathInside(t.z, p.x, p.y, mx, my, speed * t.timeLeft, radius)) return false;
+      }
+      return true;
+    };
     if (step) {
       sim.setInput(0, { mx: step.x, my: step.y });
       dodgeTicks++;
-    } else if (clips.length) {
-      clips.sort((a, b) => a.timeLeft - b.timeLeft);
+    } else if (threats.length) {
+      const ordered = threats.slice().sort((a, b) => a.timeLeft - b.timeLeft);
       let mx = imx, my = imy;
-      for (const c of clips) {
-        const inward = -(mx * c.x + my * c.y);
-        if (inward > 0) { mx += inward * c.x; my += inward * c.y; }
+      for (const t of ordered) {
+        const hit = pathInside(t.z, p.x, p.y, mx, my, speed * t.timeLeft, radius);
+        if (!hit) continue;
+        const exit = shortestExit(t.z, hit.x, hit.y, radius);
+        if (!exit) continue;
+        const inward = -(mx * exit.x + my * exit.y);
+        if (inward > 0) { mx += inward * exit.x; my += inward * exit.y; }
       }
       const keep = Math.hypot(mx, my);
-      if (keep < 0.35) sim.setInput(0, { mx: 0, my: 0 });
-      else sim.setInput(0, { mx: mx / keep, my: my / keep });
+      let chosen = null;
+      if (keep > 1e-3 && staysOut(mx / keep, my / keep)) chosen = { mx: mx / keep, my: my / keep };
+      if (!chosen) {
+        const base = Math.atan2(imy, imx);
+        for (let deg = 0; deg <= 180 && !chosen; deg += 8) {
+          const signs = deg === 0 || deg === 180 ? [1] : [1, -1];
+          for (const sign of signs) {
+            const a = base + sign * deg * Math.PI / 180;
+            const cx = Math.cos(a), cy = Math.sin(a);
+            if (staysOut(cx, cy)) { chosen = { mx: cx, my: cy }; break; }
+          }
+        }
+      }
+      if (!chosen) {
+        const soon = ordered[0];
+        const hit = pathInside(soon.z, p.x, p.y, imx, imy, speed * soon.timeLeft, radius);
+        const exit = hit && shortestExit(soon.z, hit.x, hit.y, radius);
+        if (exit) {
+          const tx = -exit.y, ty = exit.x;
+          const s = (imx * tx + imy * ty) >= 0 ? 1 : -1;
+          chosen = { mx: tx * s, my: ty * s };
+        } else chosen = { mx: imx || 1, my: imy };
+      }
+      sim.setInput(0, { mx: chosen.mx, my: chosen.my });
       dodgeTicks++;
     } else {
       const len = ilen || 1;

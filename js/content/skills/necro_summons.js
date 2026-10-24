@@ -42,7 +42,8 @@ export const TUNING = {
   // tier_code 7 — Death Channel
   channelDamage: 14, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
   // tier_code 8 — Entropy Cascade
-  cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 1700,
+  // 1600 is 16 trigger ticks. Damage stays 8.
+  cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 1600,
   // tier_code 9 — Army of the Dead
   armyHp: 45, armyRadius: 13, armySpawnRadius: 66, armyCount: 6,
   armyDuration: 20000, armyCd: 25000, armyCrowdRadius: 400, armyCrowdCount: 10,
