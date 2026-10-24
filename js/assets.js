@@ -208,15 +208,13 @@ export function dirIndex(angle, directions) {
   return ((Math.round(angle / step) % directions) + directions) % directions;
 }
 
-// Spread animation phase across entities so a wave does not share one frame.
-// Offset only, no state. The low bits are the only ones a short loop reads,
-// and a golden-ratio multiply of spawn ids 1..20 left those bits identical,
-// so every plague mark in an opening wave pulsed together. The id itself is
-// the offset: neighbours sit one frame apart, and a 4-frame loop repeats
-// only every fourth enemy.
-export function phaseOf(seed) {
+// Spread animation phase across entities so forty grunts do not breathe in
+// lockstep. A stable integer hash of the entity id — offset only, no state.
+function phaseOf(seed) {
   if (!seed) return 0;
-  return seed >>> 0;
+  let h = Math.imul(seed | 0, 2654435761) >>> 0;
+  h ^= h >>> 15;
+  return h >>> 0;
 }
 
 // registry: id -> { img, w, h, frames, fps, anchor, scale, file }

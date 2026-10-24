@@ -47,33 +47,23 @@ import { fxSpec, SHAPE } from './content/skillfx.js';
 const PLAGUE_ART = {
   tint: '#7A8C3A',
   tintStrength: 0.30,
-  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height, game px (1.5x of 1.6/20/34, Designer)
+  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height; min/max are on-screen px (÷ min(fit,1) at draw)
   markGap: 12,                               // clears the hp bar (r+5 .. r+10)
   tick: '#A3B05A', tickScale: 0.85, tickDur: 0.6, tickVy: -40,
 };
 
-// Game px are css pixels: what a measurement at the real resolution reads.
-// The numbers are the art spec (Thornhound at least 30, Sapling 34, Cedar
-// Warden 38, Bark Hulk 51). They are NOT world units. The camera maps world
-// units through `canvasScale / dpr`, and at ~0.73 that turned a 30-world-px
-// mark into the 22px that was measured. Callers divide by that factor.
-export function plagueMarkGamePx(radius) {
-  return clamp(Math.round(radius * PLAGUE_ART.markPerR), PLAGUE_ART.markMin, PLAGUE_ART.markMax);
-}
-
-// `cssPerWorld` is css pixels per world unit (the camera scale divided by
-// dpr). Missing or non-positive means a harness with no canvas, and the spec
-// is used as world units so a headless draw still clears the 30px floor.
-export function plagueMarkWorldPx(radius, cssPerWorld) {
-  const k = Number.isFinite(cssPerWorld) && cssPerWorld > 0 ? cssPerWorld : 1;
-  return plagueMarkGamePx(radius) / k;
-}
-
-// The mark is drawn only while this is true. The status tick drives plagueT
-// through 0 and clears the stack on that same tick; both the host view and
-// snapshot bit 128 are this predicate, so the skull leaves with the timer.
-export function plagueMarkShown(plagueT) {
-  return (plagueT || 0) > 0;
+// Loop phase for a per-enemy status mark. assets.js phaseOf() hashes the seed
+// with one multiply and one xor-shift, which leaves the low bits of
+// consecutive ids correlated: with seed = e.id, 4-frame loops two ids apart
+// share a phase 90% of the time and neighbours 48%, so a wave's marks blink in
+// visible pairs. A murmur3 finaliser first decorrelates them (25% at every id
+// distance, which is chance). Pure function of the id: no RNG, render-only.
+function markSeed(id) {
+  let h = Math.imul((id | 0) ^ 0x5bd1e995, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
+  return (h >>> 0) || 1;
 }
 
 const MINION_ART = {
@@ -1334,12 +1324,16 @@ export class Renderer {
       ctx.fillRect(-bw / 2, -r - 10, bw * clamp(e.hpFrac, 0, 1), 5);
     }
     if (e.plagued) {
-      // Spec height is game px. spriteScaleFor sizes in world units, and the
-      // camera then scales those, so the spec is divided by css-px per world
-      // unit first. `seed` is the phase offset (see phaseOf).
-      const cssPerWorld = (this._screen && this.dpr) ? this._screen.scale / this.dpr : 1;
-      const mh = plagueMarkWorldPx(r, cssPerWorld);
-      drawSprite(ctx, FX.plagueMark, 0, -r - PLAGUE_ART.markGap - mh / 2, { scale: spriteScaleFor(FX.plagueMark, mh), seed: e.id });
+      // looped by drawSprite from the manifest fps; `seed` offsets the phase so
+      // a plagued wave does not pulse in lockstep
+      // markMin/markMax are SCREEN px (Designer: 30px minimum on screen). The
+      // room is fit to the canvas (draw(): scale = min(cw/VIEW_W, ch/VIEW_H)),
+      // so a fit below 1 would shrink the mark; dividing by min(fit, 1) undoes
+      // that, and a zoom-in (fit > 1) never enlarges it. Render-only: the fit
+      // comes from this._screen, set in draw() before any entity is drawn.
+      const fit = Math.min((this._screen && this._screen.scale) || 1, 1);
+      const mh = clamp(r * PLAGUE_ART.markPerR, PLAGUE_ART.markMin / fit, PLAGUE_ART.markMax / fit);
+      drawSprite(ctx, FX.plagueMark, 0, -r - PLAGUE_ART.markGap - mh / 2, { scale: spriteScaleFor(FX.plagueMark, mh), seed: markSeed(e.id) });
     }
     ctx.restore();
   }

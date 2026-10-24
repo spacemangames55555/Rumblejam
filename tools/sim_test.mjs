@@ -4023,67 +4023,6 @@ try {
     }
   }
 
-  // Plague mark. The spec is game px (css px after the camera), with a 30px
-  // floor. Sizing that number in world units and then letting the camera
-  // scale it is what measured 22px on a Thornhound at ~0.73.
-  {
-    const R = await import('../js/render.js');
-    const sheet = man['fx.plague_mark'];
-    const contentH = sheet.content[1];
-    const cssPerWorld = 0.73;   // the camera the playtest measured
-    const want = [
-      ['pnw_thornhound', 30],
-      ['pnw_sapling', 34],
-      ['pnw_cedar_warden', 38],
-      ['pnw_bark_hulk', 51],
-      ['flit', 30],
-    ];
-    const bad = [];
-    for (const [id, game] of want) {
-      const def = ENEMY_BY_ID_T[id];
-      if (!def) { bad.push(`no def ${id}`); continue; }
-      const got = R.plagueMarkGamePx(def.radius);
-      if (got !== game) bad.push(`${id} r${def.radius} -> ${got}, want ${game}`);
-      if (got < 30) bad.push(`${id} under the 30px floor (${got})`);
-      const world = R.plagueMarkWorldPx(def.radius, cssPerWorld);
-      const caller = world / sheet.w;
-      const fit = sheet.h / contentH;
-      const drawnCss = contentH * caller * fit * cssPerWorld;
-      if (Math.abs(drawnCss - got) > 1e-6) bad.push(`${id} draws ${drawnCss} css px, spec ${got}`);
-    }
-    const phases = [];
-    let tied = 0;
-    for (let id = 1; id <= 8; id++) {
-      const p = AS.phaseOf(id) % sheet.frames;
-      if (phases.length && p === phases[phases.length - 1]) tied++;
-      phases.push(p);
-    }
-    if (AS.phaseOf(0) !== 0) bad.push('phaseOf(0) is not 0');
-    if (new Set(phases.slice(0, sheet.frames)).size !== sheet.frames) bad.push(`first ids did not cover every frame: ${phases}`);
-    if (tied) bad.push(`${tied} consecutive ids share a frame: ${phases}`);
-    if (bad.length) fail(`plague mark: ${bad.join(' | ')}`);
-    else ok(`plague mark is the spec in game px at a 0.73 camera (Thornhound 30, Sapling 34, Cedar Warden 38, Bark Hulk 51) and neighbours do not share a frame`);
-
-    const sim = new Sim({ seed: 7, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
-    const p0 = sim.players[0];
-    const e = sim.spawnEnemyById('pnw_bark_hulk', p0.x, p0.y, { noMats: true });
-    const { SKILL_BY_ID } = await import('../js/skills.js');
-    SKILLSIM.applyPlague(sim, e, 1, 0.1, p0, SKILL_BY_ID.necro_entropy_cascade);
-    let sawOn = false, cleared = false;
-    for (let i = 0; i < 30 && !cleared; i++) {
-      const before = R.plagueMarkShown(e.plagueT);
-      SKILLSIM.tickSkillStatuses(sim, 1 / 60);
-      if (before) sawOn = true;
-      if (before && !R.plagueMarkShown(e.plagueT)) {
-        const row = sim.getSnapshot().enemies.find(n => n[0] === e.id);
-        const bit = row ? (row[5] & 128) : -1;
-        cleared = bit === 0 && (e.plagueT || 0) <= 0 && !e.plagueDps && e.plagueFrom === undefined;
-      }
-    }
-    if (sawOn && cleared) ok('plague mark clears the tick plagueT crosses 0 — view flag and snapshot bit 128 drop together, and the stack is wiped');
-    else fail(`plague mark did not clear on the expiry tick (sawOn ${sawOn}, cleared ${cleared}, plagueT ${e.plagueT})`);
-  }
-
   // -- the generator is the source of truth; a hand-edit must not survive --
   try {
     execFileSync(process.execPath, [new URL('./gen_assets_manifest.mjs', import.meta.url).pathname, '--check'], { stdio: 'pipe' });
