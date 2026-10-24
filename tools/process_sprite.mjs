@@ -99,7 +99,12 @@ if (flags['record-content']) {
   const man = JSON.parse(readFileSync(MANIFEST, 'utf8'));
   const sp = man.sprites[id];
   if (!sp) die(`"${id}" is not in assets/assets.json`);
-  const file = join(ROOT, man.basePath, sp.file);
+  // Same path rule as the loader's assetUrl() (js/assets.js): an entry whose
+  // file is already rooted at 'assets/' — the floor tiles, at
+  // assets/tiles/<biome>/ — is taken as written, everything else sits under
+  // basePath. Without it every tile read as "not on disk" here while the
+  // loader found it and warned that it had no content.
+  const file = sp.file.startsWith('assets/') ? join(ROOT, sp.file) : join(ROOT, man.basePath, sp.file);
   if (!existsSync(file)) die(`${sp.file} is not on disk — nothing to measure`);
   const img = decodePng(readFileSync(file));
   const fr = sp.frames > 0 ? sp.frames : 1, dr = sp.directions > 1 ? sp.directions : 1;

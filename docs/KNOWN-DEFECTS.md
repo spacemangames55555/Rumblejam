@@ -1735,6 +1735,15 @@ error. That is a pipeline decision, not a patch.
 art pipeline's contract, and this file's job is to stop the next person
 counting to 64 by hand.
 
+**Partly addressed by the manifest cleanup (art/manifest-cleanup).** The
+declared set is now exactly what `fxSpec()` can return over the live catalog:
+`fx.impact` and `fx.muzzle` moved to the `FX` table, and the four class×shapes
+no skill classifies as (`fx.sam_thrust`, `fx.sam_smite`, `fx.sam_shockwave`,
+`fx.wiz_smite`) left the manifest — their PNGs stay on disk for the day a skill
+uses the shape. Sprite ids now snake_case the shape (`fx.asn_ward_shell`, not
+`fx.asn_wardShell`), which the loader had been rejecting. The declared-vs-
+commissioned split above is still open.
+
 ## #30 — DPS summons taunt, and now fight the tank they stand beside
 
 **Ruled, scheduled, deliberately not implemented here.** Recorded because the

@@ -3709,6 +3709,8 @@ try {
   // asking the manifest proves only that the generator ran.
   const { REGIONS } = await import('../js/regions.js');
   const { REGION_ENEMIES } = await import('../js/content/regions-enemies.js');
+  const SFX = await import('../js/content/skillfx.js');
+  const { SKILL_BY_ID: SFX_SKILLS } = await import('../js/skills.js');
   {
     const populated = REGIONS.filter(r => REGION_ENEMIES[r.id]?.enemies?.length);
     const untagged = [];
@@ -3736,6 +3738,12 @@ try {
     // same way the generator derives them, so a biome added in one place and
     // not the other reads as an orphan here rather than as silent flat floor
     ...Object.values(BIOMES).flatMap(b => tileSpriteIds(b)),
+    // skill-fire overlays: every id the renderer's own fxSpec() resolves over
+    // the live skill catalog. Asked of the function js/render.js calls, not of
+    // the generator's SKILL_FX_SPRITE_IDS — reading the generator's list here
+    // would prove only that the generator ran. Its absence is why all 118
+    // class×shape ids read as orphans while the renderer was asking for 112.
+    ...Object.values(SFX_SKILLS).map(sk => SFX.fxSpec(sk)?.spriteId).filter(Boolean),
   ]);
   const unlisted = [...askable].filter(id => !man[id]);
   if (unlisted.length) fail(`${unlisted.length} id(s) the game can ask for are not in the manifest: ${unlisted.slice(0, 6).join(', ')}`);
@@ -3956,8 +3964,13 @@ try {
     //    padding and nobody finds out. The loader warns at runtime; this is the
     //    same rule where it can be enforced. --
     const withArt = [], noContent = [];
+    // The loader's path rule (assetUrl in js/assets.js): a file rooted at
+    // 'assets/' is taken as written — the floor tiles — and everything else
+    // sits under basePath. This read only assets/sprites/, so all 45 tiles
+    // passed here while the runtime warned that they had no content.
     for (const [id, spec] of Object.entries(man)) {
-      if (!existsSync(new URL(`../assets/sprites/${spec.file}`, import.meta.url))) continue;
+      const rel = spec.file.startsWith('assets/') ? spec.file : `${manifest.basePath}${spec.file}`;
+      if (!existsSync(new URL(`../${rel}`, import.meta.url))) continue;
       withArt.push(id);
       if (!Array.isArray(spec.content)) noContent.push(id);
     }
