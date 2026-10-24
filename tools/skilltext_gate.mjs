@@ -20,6 +20,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { TREES } from '../js/skills.js';
 import { mechanics, mechanicalLine, passiveText, SHAPES, SHAPE_ADDED, RIDER_KINDS } from '../js/skilltext.js';
+import { scalePerFor } from '../js/enginescale.js';
 
 const VERBOSE = process.argv.includes('--verbose');
 let fails = 0, checks = 0;
@@ -172,6 +173,47 @@ console.log(`SKILL TEXT — ${ALL.length} skills, ${ACTIVES.length} active, ${PA
   const silent = PASSIVES.filter(s => !passiveText(s).text && !s.flavor);
   if (silent.length) bad(`${silent.length} passive(s) state neither an effect nor flavour: ${silent.map(s => s.id).slice(0, 8).join(', ')}`);
   else ok(`all ${PASSIVES.length} passives state an effect or carry flavour`);
+}
+
+// ---- 8. a scaling line names that step's engine, per stack -----------------
+//
+// "Per point" is a skill point, and the rank arrow already prices one. The
+// percent on Scales with is one stack of the engine the step declares.
+// Recomputed here from scalePerFor so a hardcoded engine or a stale percent
+// fails even when the generator and the card agree with each other.
+{
+  const scalingNow = (step) => `${step.scaleWith}, +${(scalePerFor(step) * 100).toFixed(1)}% per stack`;
+  const SCALE_WEIGHT = /^(.+)ScaleWeight$/;
+  const mismatches = [];
+  for (const s of ACTIVES) {
+    const fields = mechanics(s, 1).fields.filter(f => f.key === 'scaling');
+    const expected = [];
+    for (const step of s.compose || []) if (step.scaleWith) expected.push(scalingNow(step));
+    if (s.persist && s.persist.shield && s.persist.shield.scaleWith) expected.push(scalingNow(s.persist.shield));
+    if (fields.length !== expected.length) {
+      mismatches.push(`${s.id}: ${fields.length} scaling line(s) for ${expected.length} scaled step(s)`);
+      continue;
+    }
+    for (let i = 0; i < expected.length; i++) {
+      if (fields[i].now !== expected[i] || /per point/.test(String(fields[i].now))) {
+        mismatches.push(`${s.id}: ${JSON.stringify(fields[i].now)}`);
+      }
+    }
+  }
+  for (const s of PASSIVES) {
+    const text = passiveText(s).text;
+    if (/per point/.test(text)) mismatches.push(`${s.id}: ${JSON.stringify(text)}`);
+    for (const [k, v] of Object.entries(s.passive || {})) {
+      const m = SCALE_WEIGHT.exec(k);
+      if (!m) continue;
+      const clause = `every ${m[1]} stack is worth ${(scalePerFor({ scaleWith: m[1], scaleWeight: v }) * 100).toFixed(1)}% more`;
+      if (!text.includes(clause)) mismatches.push(`${s.id}: missing ${JSON.stringify(clause)}`);
+    }
+  }
+  if (mismatches.length) {
+    bad(`${mismatches.length} scaling line(s) do not match the step's engine and per-stack rate:`);
+    mismatches.slice(0, 8).forEach(m => console.log(`    ${m}`));
+  } else ok('every scaling line names its step\'s engine and the per-stack rate, and none says "per point"');
 }
 
 if (VERBOSE) {

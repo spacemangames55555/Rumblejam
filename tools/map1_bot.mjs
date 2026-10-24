@@ -14,10 +14,14 @@
 // The hit is the compose step's reach (the same number the card prints as
 // Range). A proximity trigger can be wider than the swing — Headbutt fires
 // at 116 and the swing connects at its reach — and standing on the fire gate
-// whiffs. A step with no reach of its own falls back to the trigger. Dodge
-// steps out of the telegraph's real shape: a lane is an oriented rectangle,
-// a cone is a cone, a circle is its own radius. The step-in past ring+30
-// and the chase path are unchanged. A weapon still uses the weapon ring.
+// whiffs. A step with no reach of its own falls back to the trigger. A
+// telegraph is dodged only when the body — grown by its radius and by the
+// distance this input would walk before the strike lands — is inside the
+// real shape, or the segment between those two points crosses it. Inside,
+// the step is the shortest way out. Already clear, the into-shape part of
+// the path is dropped and the bot holds if that was the whole path. The
+// step-in past ring+30 and the chase path are unchanged. A weapon still
+// uses the weapon ring.
 //
 // SKILL POINTS. By default the bot spends them, including points that arrive
 // mid-fight, with `{kind:'learnSkill'}` — the action a player sends. It draws
@@ -53,7 +57,7 @@
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
-import { angleDelta } from '../js/compose.js';
+import { angleDelta, inZone } from '../js/compose.js';
 import { WEAPON_BY_ID } from '../js/content/weapons.js';
 import { CHAR_BY_ID } from '../js/content/characters.js';
 import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from '../js/arenas.js';
@@ -115,47 +119,84 @@ const { chase, learn, charId, openerId, seeds: list } = parseArgs(process.argv);
 // helper. The trigger's radius is only the fire gate, and on Headbutt it is
 // wider than the swing, so the ring uses the shorter of the two. A step with
 // no reach of its own (a plague) keeps the trigger.
-// How far outside the painted zone the body starts stepping. The hit test
-// includes the player's radius; this is the extra margin so the step begins
-// before the edge clips.
-const DODGE_MARGIN = 36;
 
-// A push out of a committed zone. Lanes leave sideways, off the long axis.
-// Cones leave sideways, off the bisector. Circles leave away from the origin.
-// Returns null when the body is clear of the shape.
-function dodgePush(px, py, radius, z) {
-  if (!z) return null;
-  const pad = (radius || 0) + DODGE_MARGIN;
-  const kind = z.kind || z.shape;
-  if (kind === 'line' || kind === 'beam') {
-    const ang = z.angle0 ?? z.angle ?? 0;
-    const length = z.length ?? z.len ?? 0;
-    const width = z.width ?? z.w ?? 0;
-    const ca = Math.cos(ang), sa = Math.sin(ang);
-    const dx = px - z.x, dy = py - z.y;
-    const along = dx * ca + dy * sa;
-    const across = -dx * sa + dy * ca;
-    const half = width / 2 + pad;
-    if (along < -pad || along > length + pad || Math.abs(across) > half) return null;
-    const side = across >= 0 ? 1 : -1;
-    return { x: -sa * side, y: ca * side, w: 5 };
+// Move speed the sim will apply to a full input, Tempo included. The dodge
+// predicts with this rather than with a pad around the paint.
+function moveSpeed(p) {
+  return Math.max(60, CONFIG.BASE_SPEED * (1 + ((p.stats && p.stats.tempo) || 0) / 100));
+}
+
+// A player telegraph and an enemy zone do not share field names. `inZone`
+// wants the enemy-zone shape, which is also what the hit test uses.
+function asZone(tg) {
+  if (!tg) return null;
+  if (tg.kind === 'line' || tg.kind === 'circle' || tg.kind === 'cone') return tg;
+  const kind = tg.shape;
+  if (kind === 'circle' || kind === 'c') return { kind: 'circle', x: tg.x, y: tg.y, radius: tg.radius ?? tg.r ?? 0 };
+  if (kind === 'beam' || kind === 'line') {
+    return {
+      kind: 'line', x: tg.x, y: tg.y, angle0: tg.angle0 ?? tg.angle ?? 0,
+      length: tg.length ?? tg.len ?? 0, width: tg.width ?? tg.w ?? 0,
+    };
   }
   if (kind === 'cone') {
-    const dx = px - z.x, dy = py - z.y;
-    const d = Math.hypot(dx, dy) || 1;
-    const range = z.range || 0;
-    if (d > range + pad) return null;
-    const delta = angleDelta(Math.atan2(dy, dx), z.angle0 || 0);
-    if (d >= 1 && Math.abs(delta) > (z.angle || 0) / 2) return null;
-    const side = delta >= 0 ? 1 : -1;
-    return { x: -Math.sin(z.angle0 || 0) * side, y: Math.cos(z.angle0 || 0) * side, w: 5 };
+    return { kind: 'cone', x: tg.x, y: tg.y, angle0: tg.angle0 ?? 0, angle: tg.angle || 0, range: tg.range || 0 };
   }
-  if (kind === 'circle' || kind === 'c') {
-    const r = (z.radius ?? z.r ?? 0) + pad;
-    const dx = px - z.x, dy = py - z.y;
+  return null;
+}
+
+// Shortest step that puts the body centre outside the shape. Null when it
+// is already outside. Lanes may leave off either side or either end; the
+// near edge wins, so a body at the mouth of a lane backs out instead of
+// running the length.
+function shortestExit(z, x, y, radius) {
+  if (!inZone(z, x, y, radius)) return null;
+  if (z.kind === 'line') {
+    const ang = z.angle0 || 0;
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const dx = x - z.x, dy = y - z.y;
+    const along = dx * ca + dy * sa;
+    const across = -dx * sa + dy * ca;
+    const side = across >= 0 ? 1 : -1;
+    const dSide = (z.width || 0) / 2 + radius - Math.abs(across);
+    const dBack = along + radius;
+    const dFwd = (z.length || 0) + radius - along;
+    let best = dSide, bx = -sa * side, by = ca * side;
+    if (dBack < best) { best = dBack; bx = -ca; by = -sa; }
+    if (dFwd < best) { best = dFwd; bx = ca; by = sa; }
+    const n = Math.hypot(bx, by) || 1;
+    return { x: bx / n, y: by / n, dist: Math.max(0, best) };
+  }
+  if (z.kind === 'circle') {
+    const dx = x - z.x, dy = y - z.y;
     const d = Math.hypot(dx, dy) || 1;
-    if (d > r) return null;
-    return { x: dx / d, y: dy / d, w: 4 };
+    return { x: dx / d, y: dy / d, dist: Math.max(0, (z.radius || 0) + radius - d) };
+  }
+  if (z.kind === 'cone') {
+    const dx = x - z.x, dy = y - z.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const delta = angleDelta(Math.atan2(dy, dx), z.angle0 || 0);
+    const half = (z.angle || 0) / 2;
+    const side = delta >= 0 ? 1 : -1;
+    const dSide = d * Math.sin(Math.max(0, half - Math.abs(delta)));
+    const sx = side >= 0 ? -dy / d : dy / d;
+    const sy = side >= 0 ? dx / d : -dx / d;
+    const dOut = Math.max(0, (z.range || 0) + radius - d);
+    if (d < 1 || dOut <= dSide) return { x: dx / d, y: dy / d, dist: d < 1 ? (z.range || 0) + radius : dOut };
+    return { x: sx, y: sy, dist: dSide };
+  }
+  return null;
+}
+
+// The body now, the body where this input will have carried it when the
+// strike lands, and the segment between them. A strike hits at resolve, so
+// a shape the bot is walking past without entering is not a dodge.
+function pathInside(z, x, y, mx, my, travel, radius) {
+  const n = 12;
+  for (let i = 0; i <= n; i++) {
+    const t = travel * (i / n);
+    const px = x + mx * t, py = y + my * t;
+    if (inZone(z, px, py, radius)) return { x: px, y: py };
   }
   return null;
 }
@@ -350,6 +391,8 @@ function runSeed(seed) {
   const p = sim.players[0];
   const dmg = attachDamageLedger(sim, p);
 
+  let dodgeTicks = 0;
+
   function botInput() {
     const mopUp = sim.wave && sim.wave.done && sim.enemyPool.count <= 12;
     const wdef = p.weapons[0] ? WEAPON_BY_ID[p.weapons[0].id] : null;
@@ -401,17 +444,6 @@ function runSeed(seed) {
       const d = Math.hypot(p.x - ox, p.y - oy) || 1;
       if (d < Math.max(o.w, o.h) / 2 + 60) { vx += (p.x - ox) / d * 1.8; vy += (p.y - oy) / d * 1.8; }
     }
-    const shove = (z) => {
-      const s = dodgePush(p.x, p.y, p.radius, z);
-      if (!s) return;
-      vx += s.x * s.w;
-      vy += s.y * s.w;
-    };
-    for (const tg of sim.telegraphs) {
-      if (tg.spawnMark) continue;
-      shove(tg);
-    }
-    for (const tz of sim.telegraphZones()) shove(tz.z);
     for (const hz of sim.hazards || []) {
       if (hz.type === 'lava') {
         const d = Math.hypot(p.x - hz.x, p.y - hz.y) || 1;
@@ -437,8 +469,57 @@ function runSeed(seed) {
         vx += (mx - p.x) / d * 0.8; vy += (my - p.y) / d * 0.8;
       }
     }
-    const len = Math.hypot(vx, vy) || 1;
-    sim.setInput(0, { mx: vx / len, my: vy / len });
+    // The kite decides the path. A telegraph changes it only when the body,
+    // or that path out to where the strike will land, is inside the shape.
+    // Inside, the input becomes the shortest step out. Already outside, the
+    // into-shape part of the path is dropped and the bot holds if that was
+    // the whole path — it does not keep running the exit.
+    const ilen = Math.hypot(vx, vy);
+    const imx = ilen > 0 ? vx / ilen : 0;
+    const imy = ilen > 0 ? vy / ilen : 0;
+    const speed = moveSpeed(p);
+    const radius = p.radius || 0;
+    let step = null;
+    const clips = [];
+    const consider = (z, timeLeft) => {
+      if (!z || !(timeLeft > 0)) return;
+      if (inZone(z, p.x, p.y, radius)) {
+        const exit = shortestExit(z, p.x, p.y, radius);
+        if (!exit) return;
+        if (!step || timeLeft < step.timeLeft || (timeLeft === step.timeLeft && exit.dist < step.dist)) {
+          step = { x: exit.x, y: exit.y, timeLeft, dist: exit.dist };
+        }
+        return;
+      }
+      const hit = pathInside(z, p.x, p.y, imx, imy, speed * timeLeft, radius);
+      if (!hit) return;
+      const exit = shortestExit(z, hit.x, hit.y, radius);
+      if (!exit) return;
+      clips.push({ x: exit.x, y: exit.y, timeLeft });
+    };
+    for (const tg of sim.telegraphs) {
+      if (tg.spawnMark) continue;
+      consider(asZone(tg), (tg.dur || 0) - (tg.t || 0));
+    }
+    for (const tz of sim.telegraphZones()) consider(tz.z, (tz.msLeft || 0) / 1000);
+    if (step) {
+      sim.setInput(0, { mx: step.x, my: step.y });
+      dodgeTicks++;
+    } else if (clips.length) {
+      clips.sort((a, b) => a.timeLeft - b.timeLeft);
+      let mx = imx, my = imy;
+      for (const c of clips) {
+        const inward = -(mx * c.x + my * c.y);
+        if (inward > 0) { mx += inward * c.x; my += inward * c.y; }
+      }
+      const keep = Math.hypot(mx, my);
+      if (keep < 0.35) sim.setInput(0, { mx: 0, my: 0 });
+      else sim.setInput(0, { mx: mx / keep, my: my / keep });
+      dodgeTicks++;
+    } else {
+      const len = ilen || 1;
+      sim.setInput(0, { mx: vx / len, my: vy / len });
+    }
   }
 
   function resolveUi() {
@@ -455,7 +536,7 @@ function runSeed(seed) {
   const node = sim.floor.nodes[nodeId];
   sim.uiAction(0, { kind: 'pickNode', nodeId });
   if (sim.phase !== 'arena' || !isOnboardingNode(sim.regionIndex, sim.arenaNode)) {
-    return { seed, outcome: 'error', detail: `did not enter map 1 (phase ${sim.phase}, node ${node && node.kind})` };
+    return { seed, outcome: 'error', dodgeTicks: 0, detail: `did not enter map 1 (phase ${sim.phase}, node ${node && node.kind})` };
   }
 
   let spawned = 0;
@@ -510,6 +591,7 @@ function runSeed(seed) {
     learned,
     casts,
     dmg,
+    dodgeTicks,
     topUp,
     unspent: p.skillPoints,
     loadout: (p.loadout || []).filter(Boolean),
@@ -538,6 +620,7 @@ for (const r of rows) {
     const d = r.dmg;
     console.log(`DMG\t${tag}\tcontact ${d.contact}\tlanes ${d.lanes}\tcones ${d.cones}\tprojectiles ${d.projectiles}\tother ${d.other}`);
   }
+  console.log(`DODGE\t${tag}\t${((r.dodgeTicks || 0) / 60).toFixed(1)}s`);
   if (learn && r.learned) {
     for (const L of r.learned) {
       const slotted = L.active ? ((r.loadout || []).includes(L.id) ? 'slotted' : 'NOT SLOTTED') : 'passive';
