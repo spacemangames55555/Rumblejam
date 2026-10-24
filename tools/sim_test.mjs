@@ -4149,6 +4149,7 @@ try {
       SKILLSIM.fireSkill(sim2, caster, cascade);
     };
     const pulseBad = [];
+    const dt = 1 / 60;
     cast();
     const step = cascade.compose[0];
     if (step.spreadRadius !== 0 || step.slowRadius !== 80 || step.slowDur !== 1500 || step.slow !== 0.75) {
