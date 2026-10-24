@@ -1778,8 +1778,8 @@ export class Renderer {
     const kit = spec.kit;
     const ca = Math.cos(m.a), sa = Math.sin(m.a);
     const x = m.x + ca * 14, y = m.y + sa * 14;
-    if (drawSprite(ctx, 'fx.muzzle', x, y, {
-      scale: spriteScaleFor('fx.muzzle', 16 + 10 * fade),
+    if (drawSprite(ctx, FX.muzzle, x, y, {
+      scale: spriteScaleFor(FX.muzzle, 16 + 10 * fade),
       rot: m.a, alpha: fade,
     })) return;
     ctx.save();
@@ -1806,8 +1806,8 @@ export class Renderer {
     const pr = im.t / im.dur;
     const fade = 1 - pr;
     const r = 4 + 10 * pr;
-    if (drawSprite(ctx, 'fx.impact', im.x, im.y, {
-      scale: spriteScaleFor('fx.impact', 12 + 10 * fade),
+    if (drawSprite(ctx, FX.impact, im.x, im.y, {
+      scale: spriteScaleFor(FX.impact, 12 + 10 * fade),
       alpha: fade,
     })) return;
     ctx.save();
