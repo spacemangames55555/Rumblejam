@@ -361,13 +361,15 @@ try {
   // so the stock roll does not move and a missed event can be replayed from
   // the latest shop payload. The overlay stays hidden through the banners, the
   // level-up cards, and the spend panel. Closing that panel is what shows the
-  // trader. `elementFromPoint` at the panel's own centre is the check that
-  // catches something else painting over it.
+  // trader. The panel opens whenever a point is still unspent, card or not.
+  // A clear that arrives at 0 points skips it. This check banks a card so the
+  // cards-then-panel order is what it watches. `elementFromPoint` at the
+  // panel's own centre is the check that catches something else painting over it.
   await P.exec(`
     const s = window.uv.sim, p = s.players[0];
     const fight = s.floor.nodes.find(n => n.kind === 'combat' && !s.visited.has(n.id));
     s._travelTo(fight.id);
-    p.skillPoints = 5; p.metaDirty = true;
+    p.skillPoints = 5; p.banked = Math.max(1, p.banked || 0); p.metaDirty = true;
     return 1;`);
   await sleep(400);
   await P.exec(`
@@ -375,7 +377,7 @@ try {
     s.wave.done = true; s.spawnQueue.length = 0;
     for (const e of [...s.enemyPool]) s.enemyPool.release(e);
     const p = s.players[0];
-    p.skillPoints = 5;
+    p.skillPoints = 5; p.banked = Math.max(1, p.banked || 0); p.metaDirty = true;
     // Off the hatch. Standing on it extracts in 4s and clears the spend step
     // before the banners and the level-up cards have finished.
     p.x = 220; p.y = 220; p.mx = 0; p.my = 0;

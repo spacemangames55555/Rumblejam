@@ -428,12 +428,36 @@ function syncSkillsLayer() {
 
 // Clear shop stock is rolled on the host at the clear. This only decides when
 // the overlay is shown. Banners, then every level-up card, then the skills
-// spend step. A shop that is already on screen (a buy or a reroll) keeps
-// updating. Hiding is not closeShop — that would dismiss the stock.
+// spend step while a point is still unspent. A shop that is already on screen
+// (a buy or a reroll) keeps updating. Hiding is not closeShop — that would
+// dismiss the stock.
 function shopBlocked() {
   if (bannersActive() || cardsOutstanding() || isSkillsOpen()) return true;
   if (spendOffered() && !app.spendDismissed) return true;
   return false;
+}
+
+function unspentPoints() {
+  if (app.sim) {
+    const me = app.sim.players[app.myIdx];
+    if (me && !me.gone) return me.skillPoints || 0;
+  }
+  return (app.meta && app.meta.skillPoints) || 0;
+}
+
+// The automatic panel is the post-clear spend. It opens whenever a point is
+// still unspent, whether or not this clear offered a card. Zero points is the
+// only skip: the trader opens on its own. This does not spend a point.
+function spendAutoSkipped() {
+  return unspentPoints() <= 0;
+}
+
+// Same exit a real Close sends once the cards are done. spendDone only clears
+// the step. It does not spend a point.
+function dismissSpendStep() {
+  if (app.spendDismissed || !spendOffered()) return;
+  app.spendDismissed = true;
+  sendUi({ kind: 'spendDone' });
 }
 
 function revealShop() {
@@ -487,7 +511,15 @@ function pokeSkillsAnnounce() {
   const el = document.getElementById('overlay-skills');
   if (el && el.dataset.heldBanner === '1') {
     delete el.dataset.heldBanner;
-    if (!isSkillsOpen()) toggleSkills(true, true);
+    // Putting a parked panel back at 0 points would make the player close an
+    // empty tree to reach the trader. A point still unspent restores it, and a
+    // manual open that is already on screen is left alone below.
+    if (!isSkillsOpen() && !spendAutoSkipped()) toggleSkills(true, true);
+  }
+  if (!isSkillsOpen() && spendAutoSkipped()) {
+    dismissSpendStep();
+    revealShop();
+    return;
   }
   releaseSpendPanel();
   revealShop();
@@ -1383,6 +1415,11 @@ function handleEvent(ev) {
       levelupHorn(ev.idx === app.myIdx); // own = loud, ally = quiet, debounced
       if (ev.idx === app.myIdx && !muteCatchupToasts) toast('Level up! (pick at room clear)');
       break;
+    case 'skillPoint':
+      // The grant rides this list, ahead of the meta packet. The host reads the
+      // sim; a guest's skip decision has to see the new total before poke.
+      if (ev.idx === app.myIdx && app.meta) app.meta.skillPoints = ev.points || 0;
+      break;
     case 'offer': if (ev.idx === app.myIdx) {
       pendingLevelup = ev;
       app.clientOffer = true;
@@ -1406,8 +1443,8 @@ function handleEvent(ev) {
     case 'boonDone': if (ev.idx === app.myIdx) closeBoon(); break;
     case 'shop': if (ev.idx === app.myIdx) {
       // A buy or a reroll updates the open shop. A first open during the clear
-      // waits out the banners, the level-up cards, and the skills spend step.
-      // showShop stays in this case: the shop event is still what opens it.
+      // waits out the banners, the level-up cards, and a spend that still has
+      // points. showShop stays in this case: the shop event is still what opens it.
       if (isShopOpen() || !shopBlocked()) {
         heldShop = null;
         const me = app.party && app.party.find(m => m.idx === app.myIdx);
@@ -1426,7 +1463,9 @@ function handleEvent(ev) {
     case 'left': toast(`${ev.name} left the run`); break;
     case 'bossSpawn': app.bossInfo = { name: ev.name }; banner(ev.name, 'FLOOR BOSS', 2600); sfx.roar(); break;
     case 'bossPhase': banner('ENRAGED', '', 1200); sfx.roar(); break;
-    case 'bossDown': banner('BOSS DEFEATED', 'sweep the field — the spoils fizzle when the count hits zero', 2600); break;
+    case 'bossDown':
+      banner('BOSS DEFEATED', 'sweep the field — the spoils fizzle when the count hits zero', 2600);
+      break;
     case 'end': {
       // CAPTURED HERE BECAUSE BOTH EXITS PASS THROUGH IT. Continue-to-world-map
       // drops the Sim and retry builds a new one over it; taking the snapshot
