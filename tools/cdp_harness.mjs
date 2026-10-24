@@ -139,6 +139,13 @@ export class Page {
 // them ever reached a fight. `browser_test.mjs` has its own copy of this
 // helper and it has to move with this one.
 //
+// A pin's first click only arms it (js/ui/worldmap.js). The frontier pin is
+// already selected, and the dossier is already painted, so clicking it again
+// would enter on its own. Only an unselected pin is clicked. `#world-enter`
+// starts the run; a disabled button is a region this character cannot enter.
+// `.world-card` stays as a fallback for the old grid, where one click on the
+// card was the whole enter. The live atlas has no cards.
+//
 // `regionIndex` defaults to 1 because that is the only region a fresh
 // character may enter, and every browser suite starts from a fresh profile.
 export async function startRun(P, regionIndex = 1) {
@@ -146,6 +153,8 @@ export async function startRun(P, regionIndex = 1) {
   await P.waitFor(`return document.getElementById('screen-world') && !document.getElementById('screen-world').classList.contains('hidden') ? 1 : 0`, 8000, 'world map');
   await P.exec(`
     const idx = ${regionIndex | 0};
+    const card = document.querySelector('.world-card[data-region="' + idx + '"]');
+    if (card) { card.click(); return 1; }
     const pin = document.querySelector('.world-pin[data-region="' + idx + '"]');
     if (!pin) throw new Error('no region ' + idx + ' pin');
     if (!pin.classList.contains('selected')) pin.click();

@@ -32,7 +32,7 @@ import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
 import { tohSnapshot, tohMarks, tohState, TOH_STANCE_NAMES } from './traits-toh.js';
 import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
-import { ENEMIES } from './content/enemies.js';
+import { ENEMIES, ALL_ENEMY_DEFS } from './content/enemies.js';
 import { ALL_BOSS_DEFS } from './content/bosses.js';
 import { bossForRegion, TOTAL_REGIONS, REGION_BY_INDEX } from './regions.js';
 import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
@@ -301,6 +301,10 @@ window.uvBeast = { BEAST, hurtBeast };   // beast constants + knockdown, for tes
 // biome/floor introspection: the tiled floor is a pixel claim, so the browser
 // suite needs the one number the grid and the atlas must agree on
 window.uvBiome = { FLOOR_TILE: CONFIG.FLOOR_TILE, BIOMES, tileVariant };
+// the last view handed to the renderer, so a co-op test can compare what a
+// guest DRAWS against what the host simulates (tools/coop_guest_view_test.mjs)
+let lastView = null;
+window.uvLastView = () => lastView;
 preloadAirhorn(); // fire-and-forget: a missing asset falls back to the synth blip
 initLeaveButton();
 document.getElementById('interact-btn').onclick = () => { sfx.click(); pressInteract(); };
@@ -1097,7 +1101,15 @@ function applySnapState(snap) {
     if (newRegion) { app.regionIndex = st.map.regionIndex; app.regionName = st.map.regionName || ''; app.bossInfo = null; }
   } else if (st.arena) {
     // ---- the room, including walls that moved mid-siege ----
-    app.arena = st.arena;
+    // `biome` is NOT in the state block — it rides the one-shot 'arena' event
+    // by design (see Sim._enterArena). Replacing app.arena wholesale here threw
+    // it away on the first snapshot after the event, so every guest drew the
+    // flat floor in every room. Carry it across while it is the same room; a
+    // new room takes whatever its own event brings.
+    const prev = app.arena;
+    const biome = st.arena.biome !== undefined ? st.arena.biome
+      : (prev && prev.nodeId === st.arena.nodeId ? prev.biome : undefined);
+    app.arena = biome !== undefined ? { ...st.arena, biome } : st.arena;
     app.runMode = 'arena';
   }
 
@@ -1545,7 +1557,12 @@ function viewFromSnaps(dtFrame) {
     if (flags & 2) { const bd = bossForRegion(app.regionIndex); shape = bd.shape; color = bd.color; radius = bd.radius; spriteId = bd.spriteId; }
     else if (pylon) { shape = 'square'; color = '#c05eff'; radius = 26; spriteId = PYLON_SPRITE; }
     else {
-      const def = ENEMIES[n[1]];
+      // ALL_ENEMY_DEFS, the table the host's typeIdx indexes (ENEMY_INDEX in
+      // js/content/enemies.js). This read ENEMIES, the base twelve, so every
+      // region unit (typeIdx 12+) resolved to undefined on a client and drew
+      // as the red-circle default with no sprite — the whole region-1 roster,
+      // on every guest screen, while the host drew the right thing.
+      const def = ALL_ENEMY_DEFS[n[1]];
       shape = def ? def.shape : 'circle'; color = def ? def.color : '#e2504c';
       spriteId = def ? def.spriteId : null;   // same derivation as shape/color
       // radius derived, not sent: base × elite/mini scaling
@@ -1709,6 +1726,7 @@ function frame(now) {
     telZones: app.sim.telegraphZones(),
     dodges: app.sim.telDodgeLog,
   } : null;
+  lastView = view;
   renderer.draw(view, dtFrame);
 
   // node-map screen follows the run mode (host and client alike)
