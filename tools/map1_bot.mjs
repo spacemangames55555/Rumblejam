@@ -52,8 +52,20 @@
 // `--no-learn` spends nothing. The floor still grants the opening skill, and
 // the earlier chase tables stay reproducible.
 //
-// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [--opener <skillId>] [--class <id>] [charId] [seed ...]
+// `--clumsy` is a weak human, off unless asked. It does three things and
+// nothing else: new warnings and new threats are ignored for `--react`
+// seconds (default 2.5), the input is snapped to the nearest of 8 directions,
+// and no skill point is spent after the opener. `--opener` still buys that
+// one level-1 skill, because that is the build being measured. `--react`
+// without `--clumsy` is refused. The kite, the dodge and the learner are
+// unchanged when the flag is absent.
+//
+// `--difficulty <id>` picks the party's difficulty. The default is standard,
+// which is what every earlier table used. Gentle is the half-HP floor.
+//
+// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [--clumsy] [--react <seconds>] [--difficulty <id>] [--opener <skillId>] [--class <id>] [charId] [seed ...]
 // Default class: toh_samurai. Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
+// Default difficulty: standard.
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
@@ -64,6 +76,7 @@ import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from '../js/arenas.js';
 import { CONFIG } from '../js/config.js';
 import { TREES, TREES_BY_CLASS, SKILL_BY_ID, canLearn } from '../js/skills.js';
 import { rangeOfStep } from '../js/skilltext.js';
+import { DIFFICULTY_BY_ID } from '../js/worldmap.js';
 
 const DEFAULT_SEEDS = [777, 0xa11ce, 424242, 20260728, 99];
 const FIGHT_CAP_S = 200;
@@ -71,6 +84,10 @@ const FIGHT_CAP_S = 200;
 function parseArgs(argv) {
   let chase = false;
   let learn = true;
+  let clumsy = false;
+  let reactS = 2.5;
+  let reactSet = false;
+  let difficulty = 'standard';
   let charId = 'toh_samurai';
   let openerId = null;
   const seeds = [];
@@ -78,6 +95,28 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--chase') { chase = true; continue; }
     if (a === '--no-learn') { learn = false; continue; }
+    if (a === '--clumsy') { clumsy = true; continue; }
+    if (a === '--react' || a.startsWith('--react=')) {
+      const raw = a === '--react' ? argv[++i] : a.slice('--react='.length);
+      const v = Number(raw);
+      if (!Number.isFinite(v) || v < 0) {
+        console.error('map1_bot: --react needs a non-negative number of seconds');
+        process.exit(1);
+      }
+      reactS = v;
+      reactSet = true;
+      continue;
+    }
+    if (a === '--difficulty' || a.startsWith('--difficulty=')) {
+      const raw = a === '--difficulty' ? argv[++i] : a.slice('--difficulty='.length);
+      if (!raw || raw.startsWith('--') || !DIFFICULTY_BY_ID[raw]) {
+        const known = Object.keys(DIFFICULTY_BY_ID).join(', ');
+        console.error(`map1_bot: --difficulty needs one of: ${known}`);
+        process.exit(1);
+      }
+      difficulty = raw;
+      continue;
+    }
     if (a === '--opener') {
       openerId = argv[++i];
       if (!openerId || openerId.startsWith('--')) {
@@ -109,10 +148,14 @@ function parseArgs(argv) {
     console.error(`map1_bot: unknown class ${charId}`);
     process.exit(1);
   }
-  return { chase, learn, charId, openerId, seeds: seeds.length ? seeds : DEFAULT_SEEDS };
+  return { chase, learn, clumsy, reactS, reactSet, difficulty, charId, openerId, seeds: seeds.length ? seeds : DEFAULT_SEEDS };
 }
 
-const { chase, learn, charId, openerId, seeds: list } = parseArgs(process.argv);
+const { chase, learn, clumsy, reactS, reactSet, difficulty, charId, openerId, seeds: list } = parseArgs(process.argv);
+if (reactSet && !clumsy) {
+  console.error('map1_bot: --react sets the clumsy-mode delay, so it needs --clumsy');
+  process.exit(1);
+}
 
 // Distance at which the opener's hit connects. A strike's `reach` and a
 // bolt's `range` are that distance — the card's Range field reads the same
@@ -259,7 +302,7 @@ function defaultOpener(id) {
   return null;
 }
 
-if (openerId && !learn) {
+if (openerId && !learn && !clumsy) {
   console.error('--opener spends the level-1 point, so it cannot be combined with --no-learn');
   process.exit(1);
 }
@@ -383,15 +426,44 @@ function waveTotal(sim) {
   return Math.floor(expected + 1e-6);
 }
 
+// Eight compass directions, unit length, so a diagonal is not slower than a
+// cardinal. Zero stays zero: a clumsy player who has no heading does not
+// invent one.
+function snap8(mx, my) {
+  if (Math.hypot(mx, my) < 1e-6) return { mx: 0, my: 0 };
+  const i = Math.round(Math.atan2(my, mx) / (Math.PI / 4));
+  const a = (((i % 8) + 8) % 8) * (Math.PI / 4);
+  return { mx: Math.cos(a), my: Math.sin(a) };
+}
+
 function runSeed(seed) {
   const sim = new Sim({
-    seed, difficulty: 'standard', regionIndex: 1,
+    seed, difficulty, regionIndex: 1,
     party: [{ idx: 0, key: 'k', name: 'BOT', charId, color: '#fff' }],
   });
   const p = sim.players[0];
   const dmg = attachDamageLedger(sim, p);
 
   let dodgeTicks = 0;
+  // First moment a warning or a threat was seen. A clumsy player does not
+  // react until `reactS` later. Absent when the flag is off, so the default
+  // kite never consults it.
+  const seenAt = clumsy ? new Map() : null;
+  const reactReady = (key) => {
+    let t0 = seenAt.get(key);
+    if (t0 === undefined) { seenAt.set(key, sim.time); t0 = sim.time; }
+    return sim.time - t0 >= reactS;
+  };
+
+  function steer(mx, my, dodging) {
+    if (clumsy) {
+      const s = snap8(mx, my);
+      mx = s.mx;
+      my = s.my;
+    }
+    sim.setInput(0, { mx, my });
+    if (dodging) dodgeTicks++;
+  }
 
   function botInput() {
     const mopUp = sim.wave && sim.wave.done && sim.enemyPool.count <= 12;
@@ -401,6 +473,7 @@ function runSeed(seed) {
     let vx = 0, vy = 0;
     let nearest = null, nd = Infinity, count = 0;
     for (const e of sim.enemyPool) {
+      if (clumsy && !reactReady('e' + e.id)) continue;
       const d2 = dist2(p.x, p.y, e.x, e.y);
       if (d2 < nd) { nd = d2; nearest = e; }
       count++;
@@ -423,6 +496,7 @@ function runSeed(seed) {
     }
     if (!chase) for (const pr of sim.projPool) {
       if (pr.friendly) continue;
+      if (clumsy && !reactReady('p' + pr.id)) continue;
       const d = Math.hypot(p.x - pr.x, p.y - pr.y) || 1;
       if (d < 110) { vx += (p.x - pr.x) / d * 2.5; vy += (p.y - pr.y) / d * 2.5; }
     }
@@ -495,11 +569,30 @@ function runSeed(seed) {
         threats.push({ z, timeLeft });
       }
     };
+    const liveTg = clumsy ? new Set() : null;
     for (const tg of sim.telegraphs) {
       if (tg.spawnMark) continue;
+      if (clumsy) {
+        liveTg.add(tg);
+        if (!reactReady(tg)) continue;
+      }
       consider(asZone(tg), (tg.dur || 0) - (tg.t || 0));
     }
-    for (const tz of sim.telegraphZones()) consider(tz.z, (tz.msLeft || 0) / 1000);
+    const liveZones = clumsy ? new Set() : null;
+    for (const tz of sim.telegraphZones()) {
+      if (clumsy) {
+        const key = 'z' + tz.id;
+        liveZones.add(key);
+        if (!reactReady(key)) continue;
+      }
+      consider(tz.z, (tz.msLeft || 0) / 1000);
+    }
+    if (clumsy) {
+      for (const key of seenAt.keys()) {
+        if (typeof key === 'object' && !liveTg.has(key)) seenAt.delete(key);
+        else if (typeof key === 'string' && key.startsWith('z') && !liveZones.has(key)) seenAt.delete(key);
+      }
+    }
     const staysOut = (mx, my) => {
       for (const t of threats) {
         if (pathInside(t.z, p.x, p.y, mx, my, speed * t.timeLeft, radius)) return false;
@@ -507,8 +600,7 @@ function runSeed(seed) {
       return true;
     };
     if (step) {
-      sim.setInput(0, { mx: step.x, my: step.y });
-      dodgeTicks++;
+      steer(step.x, step.y, true);
     } else if (threats.length) {
       const ordered = threats.slice().sort((a, b) => a.timeLeft - b.timeLeft);
       let mx = imx, my = imy;
@@ -544,11 +636,10 @@ function runSeed(seed) {
           chosen = { mx: tx * s, my: ty * s };
         } else chosen = { mx: imx || 1, my: imy };
       }
-      sim.setInput(0, { mx: chosen.mx, my: chosen.my });
-      dodgeTicks++;
+      steer(chosen.mx, chosen.my, true);
     } else {
       const len = ilen || 1;
-      sim.setInput(0, { mx: vx / len, my: vy / len });
+      steer(vx / len, vy / len, false);
     }
   }
 
@@ -559,7 +650,12 @@ function runSeed(seed) {
   }
 
   const learned = [];
-  if (learn) spendSkills(sim, p, learned);
+  // Clumsy buys the named opener and then stops. Further points stay unspent.
+  const learnFight = learn && !clumsy;
+  if (learnFight) spendSkills(sim, p, learned);
+  else if (clumsy && openerId && (p.skillRanks[openerId] || 0) < 1 && canLearn(p, SKILL_BY_ID[openerId])) {
+    sim.uiAction(p.idx, { kind: 'learnSkill', id: openerId });
+  }
 
   const starts = sim.reachableNodes();
   const nodeId = starts.find(id => isOnboardingNode(sim.regionIndex, sim.floor.nodes[id])) ?? starts[0];
@@ -585,7 +681,7 @@ function runSeed(seed) {
       if (f.idx !== 0) continue;
       casts[f.id] = (casts[f.id] || 0) + 1;
     }
-    const spent = learn ? spendSkills(sim, p, learned) : [];
+    const spent = learnFight ? spendSkills(sim, p, learned) : [];
     if (topUp === null && sim.cleared && lvl0 < ONBOARDING_LEVEL_FLOOR
         && p.level >= ONBOARDING_LEVEL_FLOOR && p.xp === 0) {
       topUp = { from: lvl0, to: p.level, spends: spent };
@@ -625,6 +721,7 @@ function runSeed(seed) {
     topUp,
     unspent: p.skillPoints,
     loadout: (p.loadout || []).filter(Boolean),
+    openerRank: openerId ? (p.skillRanks[openerId] || 0) : null,
   };
 }
 
@@ -651,7 +748,8 @@ for (const r of rows) {
     console.log(`DMG\t${tag}\tcontact ${d.contact}\tlanes ${d.lanes}\tcones ${d.cones}\tprojectiles ${d.projectiles}\tother ${d.other}`);
   }
   console.log(`DODGE\t${tag}\t${((r.dodgeTicks || 0) / 60).toFixed(1)}s`);
-  if (learn && r.learned) {
+  if (openerId) console.log(`OPENER_RANK\t${tag}\t${r.openerRank}`);
+  if (learn && !clumsy && r.learned) {
     for (const L of r.learned) {
       const slotted = L.active ? ((r.loadout || []).includes(L.id) ? 'slotted' : 'NOT SLOTTED') : 'passive';
       const n = (r.casts && r.casts[L.id]) || 0;
@@ -669,5 +767,5 @@ for (const r of rows) {
     if (r.unspent > 0) console.log(`UNSPENT\t${tag}\t${r.unspent}`);
   }
 }
-console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${charId}\t${learn ? 'learn' : 'no-learn'}\t${openerId || 'default-opener'}\tring ${KITE_RING.toFixed(1)}`);
+console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${difficulty}\t${charId}\t${clumsy ? `clumsy react ${reactS}s 8-dir no-learn` : (learn ? 'learn' : 'no-learn')}\t${openerId || 'default-opener'}\tring ${KITE_RING.toFixed(1)}`);
 console.log(`TOTAL\tclears ${clears}/${rows.length}\tdeaths ${deaths}\tstalls ${stalls}`);
