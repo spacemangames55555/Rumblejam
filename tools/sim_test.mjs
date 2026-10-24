@@ -36,8 +36,6 @@ import { TEMPLATE_KEYS, SIEGES } from '../js/arenas.js';
 import { BIOMES, REGION_BIOMES, biomeFor, tileSpriteIds, tileVariant } from '../js/biomes.js';
 import { TOTAL_REGIONS } from '../js/regions.js';
 import * as SKILLSIM from '../js/skillsim.js';
-import { updateEnemy } from '../js/entities/enemies.js';
-import { mechanics } from '../js/skilltext.js';
 import { levelForSlots, slotsAtLevel } from '../js/skills.js';
 import { ENEMY_BY_ID as ENEMY_BY_ID_T } from '../js/content/enemies.js';
 // Art fixtures below build sheets that must match the manifest exactly. They
@@ -4083,35 +4081,7 @@ try {
     const p0 = sim.players[0];
     const e = sim.spawnEnemyById('pnw_bark_hulk', p0.x, p0.y, { noMats: true });
     const { SKILL_BY_ID } = await import('../js/skills.js');
-    const cascade = SKILL_BY_ID.necro_entropy_cascade;
-    SKILLSIM.applyPlague(sim, e, 1, 0.1, p0, cascade);
-    const slowBad = [];
-    if (e.plagueSlow !== 0.75) slowBad.push(`applied ${e.plagueSlow}`);
-    SKILLSIM.applyPlague(sim, e, 1, 0.1, p0, cascade);
-    if (e.plagueSlow !== 0.75) slowBad.push(`recast changed it to ${e.plagueSlow}`);
-    const card = mechanics(cascade, 1).fields.find(f => f.key === 'slow');
-    if (!card || card.now !== 'to 75% speed while it lasts' || card.next !== undefined) {
-      slowBad.push(`card ${card ? JSON.stringify(card) : 'missing'}`);
-    }
-    // One step toward the player, in the open. Brute walks with no roll.
-    p0.x = sim.W / 2; p0.y = sim.H / 2;
-    const dt = 1 / 60;
-    const stepToward = () => {
-      e.x = p0.x + 240; e.y = p0.y;
-      const x0 = e.x;
-      updateEnemy(sim, e, dt);
-      return x0 - e.x;
-    };
-    const base = e.spd * dt;
-    const near = (got, want, label) => {
-      if (Math.abs(got - want) > 0.02) slowBad.push(`${label} moved ${got}, want ${want}`);
-    };
-    near(stepToward(), base * 0.75, 'plague');
-    e.slowT = 2; e.slowMult = 0.9;
-    near(stepToward(), base * 0.75, 'weaker chill');
-    e.slowT = 2; e.slowMult = 0.5;
-    near(stepToward(), base * 0.5, 'stronger chill');
-    e.slowT = 2; e.slowMult = 0.5;
+    SKILLSIM.applyPlague(sim, e, 1, 0.1, p0, SKILL_BY_ID.necro_entropy_cascade);
     let sawOn = false, cleared = false;
     for (let i = 0; i < 30 && !cleared; i++) {
       const before = R.plagueMarkShown(e.plagueT);
@@ -4120,13 +4090,11 @@ try {
       if (before && !R.plagueMarkShown(e.plagueT)) {
         const row = sim.getSnapshot().enemies.find(n => n[0] === e.id);
         const bit = row ? (row[5] & 128) : -1;
-        cleared = bit === 0 && (e.plagueT || 0) <= 0 && !e.plagueDps && e.plagueFrom === undefined && !e.plagueSlow
-          && e.slowT === 2 && e.slowMult === 0.5;
+        cleared = bit === 0 && (e.plagueT || 0) <= 0 && !e.plagueDps && e.plagueFrom === undefined;
       }
     }
-    if (slowBad.length) fail(`cascade slow: ${slowBad.join(' | ')}`);
-    else if (sawOn && cleared) ok('plague mark clears the tick plagueT crosses 0 — view flag and snapshot bit 128 drop together, the stack is wiped, and Cascade\'s 25% slow clears with it');
-    else fail(`plague mark did not clear on the expiry tick (sawOn ${sawOn}, cleared ${cleared}, plagueT ${e.plagueT}, plagueSlow ${e.plagueSlow})`);
+    if (sawOn && cleared) ok('plague mark clears the tick plagueT crosses 0 — view flag and snapshot bit 128 drop together, and the stack is wiped');
+    else fail(`plague mark did not clear on the expiry tick (sawOn ${sawOn}, cleared ${cleared}, plagueT ${e.plagueT})`);
   }
 
   // -- the generator is the source of truth; a hand-edit must not survive --

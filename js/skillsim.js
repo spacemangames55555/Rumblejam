@@ -1046,12 +1046,6 @@ export function applyPlague(sim, e, damage, dur, p, skill) {
   // stack when the timer ends. The pool wipes the slot on the next spawn.
   if (!e.plagueFrom) e.plagueFrom = {};
   e.plagueFrom[skill.id] = 1;
-  // A move slow that belongs to the plague, not to the chill clock. Assigned
-  // rather than multiplied, so a second Cascade stays 25% rather than 44%.
-  // Left off slowT on purpose: Attunement would deepen it, a boss would shrug
-  // half of it, and the longer-clock rule would let it outlive plagueT.
-  const plagueStep = (skill.compose || []).find(s => s.kind === 'plague');
-  if (plagueStep && plagueStep.slow) e.plagueSlow = plagueStep.slow;
 }
 
 export function tickSkillStatuses(sim, dt) {
@@ -1085,7 +1079,7 @@ export function tickSkillStatuses(sim, dt) {
         // routed through the triangle like every other damage source
         sim.damageEnemy(e, d * enemyDomainMult(sim, e.plagueDomain, e.domain), { owner, silent: true, noEffects: true, tick: 'plague' });
       }
-      if (e.plagueT <= 0) { e.plagueDps = 0; e.plagueAcc = 0; e.plagueFrom = undefined; e.plagueSlow = undefined; }
+      if (e.plagueT <= 0) { e.plagueDps = 0; e.plagueAcc = 0; e.plagueFrom = undefined; }
     }
   }
 }

@@ -287,8 +287,6 @@ export function mechanics(skill, rank = 1) {
         `${n1(rankedDamage(s.damage, skill, rk))} over ${secs(dur)}`,
         `${n1(rankedDamage(s.damage, skill, nx))} over ${secs(durN)}`));
       if (s.spreadRadius) fields.push(field('spread', 'Spreads', `radius ${s.spreadRadius}`));
-      // The fraction does not move with rank, so there is no next-rank arrow.
-      if (s.slow) fields.push(field('slow', 'Slows', `to ${Math.round(s.slow * 100)}% speed while it lasts`));
     } else if ((s.kind === 'shield' || s.kind === 'ward') && s.duration) {
       const dur = rankedDuration(s.duration, skill, rk), durN = rankedDuration(s.duration, skill, nx);
       fields.push(field('duration', 'Lasts', secs(dur), secs(durN)));
