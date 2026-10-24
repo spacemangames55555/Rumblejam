@@ -1911,6 +1911,10 @@ selector. The world map draws `.world-pin` (`js/ui/worldmap.js`). The helper
 throws `no region card` and never reaches the spend step. `.world-card` is
 still styled in `css/style.css`. It is not what the map emits.
 
+**Under plain Node 20.** The test crashes with `WebSocket is not defined`
+before it reaches the selector. It needs `node --experimental-websocket` or a
+polyfill.
+
 **What a fix would have to do.** Point the shared helper at `.world-pin`. The
 skill screen's own assertions are behind that click, so they do not run.
 

@@ -42,8 +42,10 @@ export const TUNING = {
   // tier_code 7 — Death Channel
   channelDamage: 14, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
   // tier_code 8 — Entropy Cascade
-  // 1600 is 16 trigger ticks. Damage stays 8.
+  // 1600 is 16 trigger ticks. Damage stays 8. The hand-off is how far a dying
+  // host can pass the SAME plague; it is not a spread and it is not a slow.
   cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 1600,
+  cascadeHandoff: 120,
   // tier_code 9 — Army of the Dead
   armyHp: 45, armyRadius: 13, armySpawnRadius: 66, armyCount: 6,
   armyDuration: 20000, armyCd: 25000, armyCrowdRadius: 400, armyCrowdCount: 10,
@@ -223,9 +225,10 @@ export const NECRO_SUMMONS = [
     cooldown: T.cascadeCd,
     // `plague` with NO spread radius, per the classification. "Stacks to 6" is
     // not expressible — `applyPlague` adds into one stack rather than keeping
-    // six — so this is one DoT, and the crowd is covered by retargeting.
+    // six — so this is one DoT. The next cast retargets a clean body, and
+    // `handoff` moves this same plague when the host dies. It does not copy.
     compose: [{ kind: 'plague', damage: T.cascadeDamage, duration: T.cascadeDur,
-      tick: T.cascadeTick, spreadRadius: 0, preferClean: true }],
+      tick: T.cascadeTick, spreadRadius: 0, preferClean: true, handoff: T.cascadeHandoff }],
     ranks: rankPer(2, T.cascadeDamage),
   },
   {
