@@ -42,12 +42,12 @@ export const TUNING = {
   // carried none take 150, the median of the three that already worked
   // (rot 130, rime 150, spoil 175). Refined per class later. NOT the old
   // `range` value — that was the cast reach and is still the trigger's.
-  contagionDamage: 13, contagionDuration: 3400, contagionRange: 250, contagionCd: 2600,
+  contagionDamage: 3, contagionDuration: 3400, contagionRange: 250, contagionCd: 2600,
   contagionSpread: 150,
   virulenceWeight: 0.18,
-  miasmaDamage: 16, miasmaRadius: 165, miasmaDuration: 3800, miasmaTickMs: 400, miasmaCd: 4400,
+  miasmaDamage: 2, miasmaRadius: 165, miasmaDuration: 3800, miasmaTickMs: 400, miasmaCd: 4400,
   miasmaSlowMult: 0.55, miasmaSlowDur: 2200,
-  pandemicDamage: 26, pandemicDuration: 5200, pandemicRange: 300, pandemicCd: 7800,
+  pandemicDamage: 13, pandemicDuration: 5200, pandemicRange: 300, pandemicCd: 7800,
   pandemicSpread: 150,
 
   // ---- branch B: Fetish (stop being outnumbered) ----

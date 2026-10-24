@@ -142,5 +142,13 @@
       105,
       123
     ]
+  },
+  "fx.plague_mark": {
+    "frames": 4,
+    "fps": 6,
+    "content": [
+      23,
+      29
+    ]
   }
 }

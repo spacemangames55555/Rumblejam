@@ -1012,6 +1012,9 @@ export class Sim {
       nodeId: node.id, kind: node.kind, template: node.template,
       name: arena.name, w: arena.w, h: arena.h,
       hazards: this._serializeHazardDefs(),
+      // 1 on map 1, 0 from map 2 on. Same predicate the damage path reads.
+      // Rides `st.arena` on every snapshot. No roll.
+      domainNeutral: isOnboardingNode(this.regionIndex, node) ? 1 : 0,
     };
     this.pushEvent({ k: 'arena', ...this._arena, biome: this.biome, obstacles: this._snapObstacles() });
   }
@@ -1551,7 +1554,7 @@ export class Sim {
       maxHp: Math.round(def.hp * this.coopHp * this.greedHp * CONFIG.enemyHpMult),
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       domain: def.domain || null,
-      telState: 0, telT: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
+      telState: 0, telT: 0, telWindup: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
@@ -1865,7 +1868,7 @@ export class Sim {
       // WINDUP forever — until a stun rider calls cancelTelegraph on it, which
       // reads e.def.telegraph.recoverMs and throws. Found by Unsheathed's stun
       // landing on a recycled skulker.
-      telState: 0, telT: 0, telZone: null, telCaught: null,
+      telState: 0, telT: 0, telWindup: 0, telZone: null, telCaught: null,
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       // pressure-profile variants (patch 9)
       mortar: !!opts.mortar,   // Lobber artillery: telegraphed shells on your position
@@ -2909,6 +2912,10 @@ export class Sim {
     // a Regenerating elite stops healing while it is being hit (see ELITE_MODS)
     if (e.eliteMod && e.eliteMod.regenLockS) e.regenLock = e.eliteMod.regenLockS;
     if (!opts.silent) this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: opts.crit ? 1 : 0 });
+    // A silent DoT tick that asks for a number gets the small plague-green one
+    // (kind 4, js/render.js ingestFx). Presentation only: the fx buffer is
+    // rebuilt every tick, nothing here is read back by the sim, no RNG.
+    else if (opts.tick === 'plague') this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: 4 });
     const p = opts.owner;
     this._dmgLedger(e, p, amount, 'landed');
     if (p && p.stats) {
@@ -5364,7 +5371,7 @@ export class Sim {
         for (const p of live) { if (dist2(e.x, e.y, p.x, p.y) < cullR2) { seen = true; break; } }
         if (!seen) continue;
       }
-      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0)]);
+      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0) | ((e.plagueT || 0) > 0 ? 128 : 0)]);
     }
     for (const pr of this.projPool) {
       snap.projs.push([pr.id, r(pr.x), r(pr.y), r(pr.vx), r(pr.vy), pr.friendly ? 1 : 0, pr.radius, pr.color]);

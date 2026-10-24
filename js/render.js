@@ -34,6 +34,55 @@ import { fxSpec, SHAPE } from './content/skillfx.js';
 // Radii are per-archetype so a bear does not read as a wolf; a family missing
 // from the table falls back rather than throwing, because a new archetype is
 // supposed to be a data change and must not need this file edited to appear.
+// An enemy carrying a plague (Entropy Cascade and every other `plague` step).
+// Three reads, one green family, measured in
+// /workspace/rumblejam-art/plague_status/preview.png:
+//  - body tint: a desaturated sickly yellow-green. dE2000-far from the chase
+//    tint #8E4432, the telegraph red #ff5d6c and the elite purple, and green is
+//    the one hue no warning in the game uses.
+//  - fx.plague_mark: a small skull shedding spores, looped over the head, sized
+//    off the body so a Bark Hulk's mark is not a Thornhound's.
+//  - tick numbers: the silent plague ticks get a small number in the light end
+//    of the same family, smaller and shorter-lived than a hit number.
+const PLAGUE_ART = {
+  tint: '#7A8C3A',
+  tintStrength: 0.30,
+  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height; min/max are on-screen CSS px (÷ min(scale/dpr,1) at draw)
+  markGap: 12,                               // clears the hp bar (r+5 .. r+10)
+  tick: '#A3B05A', tickScale: 0.85, tickDur: 0.6, tickVy: -40,
+};
+
+// Loop phase for a per-enemy status mark. assets.js phaseOf() hashes the seed
+// with one multiply and one xor-shift, which leaves the low bits of
+// consecutive ids correlated: with seed = e.id, 4-frame loops two ids apart
+// share a phase 90% of the time and neighbours 48%, so a wave's marks blink in
+// visible pairs. A murmur3 finaliser first decorrelates them (25% at every id
+// distance, which is chance). Pure function of the id: no RNG, render-only.
+function markSeed(id) {
+  let h = Math.imul((id | 0) ^ 0x5bd1e995, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
+  return (h >>> 0) || 1;
+}
+
+// The mark is drawn only while this is true. The status tick drives plagueT
+// through 0 and clears the stack on that same tick; the host view and
+// snapshot bit 128 are this predicate, so the skull leaves with the timer.
+export function plagueMarkShown(plagueT) {
+  return (plagueT || 0) > 0;
+}
+
+// World-unit content height for the mark. markMin and markMax are CSS px.
+// `scale` is device px per world unit, the fit draw() stores on _screen.
+// CSS px per world unit is scale/dpr; a fit below 1 lifts the floor so the
+// mark stays 30 CSS px, and a fit above 1 does not enlarge it.
+export function plagueMarkWorldHeight(radius, scale, dpr) {
+  const d = dpr > 0 ? dpr : 1;
+  const fit = Math.min((scale || d) / d, 1);
+  return clamp(radius * PLAGUE_ART.markPerR, PLAGUE_ART.markMin / fit, PLAGUE_ART.markMax / fit);
+}
+
 const MINION_ART = {
   radius: { skeleton: 9, golem: 15, risen: 10, wisp: 7, wolf: 11, bear: 15, hawk: 8 },
   // How hard the owner's colour is pushed into a minion's sprite. THE NUMBER IS
@@ -195,6 +244,11 @@ export class Renderer {
     for (const h of fx.hits || []) {
       const kind = h.c;
       const text = kind === 2 ? 'DODGE' : String(h.a);
+      if (kind === 4) {   // plague tick: small, green, no impact spark
+        this.floaters.push({ x: h.x + (Math.random() * 12 - 6), y: h.y, vy: PLAGUE_ART.tickVy, t: 0, dur: PLAGUE_ART.tickDur, text, color: PLAGUE_ART.tick, scale: PLAGUE_ART.tickScale });
+        if (this.floaters.length > 90) this.floaters.splice(0, this.floaters.length - 90);
+        continue;
+      }
       const color = kind === 1 ? PALETTE.crit : kind === 2 ? '#9aa0bd' : kind === 3 ? '#ff5d6c' : '#ffffff';
       this.floaters.push({ x: h.x + (Math.random() * 16 - 8), y: h.y, vy: -60, t: 0, dur: 0.8, text, color, scale: kind === 1 ? 1.4 : 1 });
       if (this.floaters.length > 90) this.floaters.splice(0, this.floaters.length - 90);
@@ -1220,11 +1274,21 @@ export class Renderer {
     // `facing` picks a row on a directional sheet and is ignored on a
     // single-direction one — an enemy is never rotated either way.
     const opt = { scale: sc, facing: this._faceAngle(`e${e.id}`, e.x, e.y, null), seed: e.id };
+    // This branch has no chase tint (that lands in #139). When an enemy is both
+    // chased and plagued, the chase tint wins this body colour and the shape
+    // wash below; the plague mark and the tick numbers still show.
+    if (e.plagued) { opt.tint = PLAGUE_ART.tint; opt.tintStrength = PLAGUE_ART.tintStrength; }
     const drew = drawSprite(ctx, e.spriteId, 0, 0, opt);
     if (!drew) {
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
       ctx.stroke();
+      if (e.plagued) {   // same wash on the shape fallback, over the fill and under the outline's weight
+        ctx.globalAlpha = PLAGUE_ART.tintStrength;
+        ctx.fillStyle = PLAGUE_ART.tint;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
     }
     // THE DAMAGE TRIANGLE, always visible. A 4px ring in the enemy's domain
     // colour: the triangle is only a decision a player can act on if they can
@@ -1275,6 +1339,19 @@ export class Renderer {
       ctx.fillRect(-bw / 2, -r - 10, bw, 5);
       ctx.fillStyle = e.boss ? PALETTE.boss : '#e2504c';
       ctx.fillRect(-bw / 2, -r - 10, bw * clamp(e.hpFrac, 0, 1), 5);
+    }
+    if (e.plagued) {
+      // looped by drawSprite from the manifest fps; `seed` offsets the phase so
+      // a plagued wave does not pulse in lockstep
+      // markMin/markMax are CSS px on screen (Designer: 30px minimum). The room
+      // is fit to the canvas (draw(): scale = min(cw/VIEW_W, ch/VIEW_H)) and
+      // the canvas is sized in DEVICE px (window × this.dpr, _resize), so CSS
+      // px per world unit is scale / dpr. Below 1 that would shrink the mark;
+      // dividing by min(fit, 1) undoes it, and a zoom-in (fit > 1) never
+      // enlarges it. Render-only: the fit comes from this._screen, set in
+      // draw() before any entity is drawn; a missing dpr counts as 1.
+      const mh = plagueMarkWorldHeight(r, this._screen && this._screen.scale, this.dpr);
+      drawSprite(ctx, FX.plagueMark, 0, -r - PLAGUE_ART.markGap - mh / 2, { scale: spriteScaleFor(FX.plagueMark, mh), seed: markSeed(e.id) });
     }
     ctx.restore();
   }

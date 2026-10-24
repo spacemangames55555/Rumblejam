@@ -342,6 +342,78 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   if (!wrong.length) ok(`XP compensation is scoped to the ramp: ${shape.map(([n, v]) => `${n} x${v}`).join(', ')}`);
   else fail(`XP compensation is mis-scoped: ${wrong.map(([n, v]) => `${n} x${v}`).join(', ')} — it must pay back exactly where the ramp took, and nowhere else`);
 
+  // MAP 1 DAMAGE IS NEUTRAL. The triangle comes back on map 2. A live hit,
+  // not only the flag: spiritual into a physical body is ×0.80 later and ×1
+  // here, and mental into that body is ×1.25 later and ×1 here. Bard has no
+  // Ferocity, so the packet is the amount itself.
+  {
+    const probe = { id: 'probe', domain: 'spiritual', ranks: {} };
+    const mental = { id: 'probe', domain: 'mental', ranks: {} };
+    function hit(regionIndex, onboarding, skill, amount) {
+      const sim = new Sim({ seed: 7, difficulty: 'standard', regionIndex, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_bard', color: '#fff' }] });
+      const node = sim.floor.nodes.find(n => n.kind === 'combat' && AR.isOnboardingNode(sim.regionIndex, n) === onboarding);
+      // Map 2 is not reachable from the opening card, and a pick of an
+      // unreachable node is ignored. The probe is the room's damage rule,
+      // so it travels straight there.
+      sim._travelTo(node.id);
+      const e = sim.spawnEnemyById('pnw_thornhound', sim.players[0].x + 30, sim.players[0].y);
+      const before = e.hp;
+      sim.skillDamage(e, amount, sim.players[0], skill);
+      const snap = sim.getSnapshot();
+      const flag = snap.st.arena ? snap.st.arena.domainNeutral : null;
+      return { dealt: before - e.hp, neutral: flag };
+    }
+    const disadvantage = hit(1, true, probe, 10);
+    const advantage = hit(1, true, mental, 10);
+    const laterDis = hit(1, false, probe, 10);
+    const laterAdv = hit(1, false, mental, 10);
+    if (disadvantage.dealt === 10 && advantage.dealt === 10 && disadvantage.neutral === 1 && advantage.neutral === 1
+        && laterDis.dealt === 8 && laterAdv.dealt === 13 && laterDis.neutral === 0 && laterAdv.neutral === 0) {
+      ok('map 1 enemies take ×1 from every damage type; map 2 keeps ×0.80 and ×1.25, and the snapshot carries domainNeutral');
+    } else {
+      fail(`map 1 domain rule drifted: map1 spiritual ${disadvantage.dealt} (flag ${disadvantage.neutral}), map1 mental ${advantage.dealt} (flag ${advantage.neutral}), map2 spiritual ${laterDis.dealt} (flag ${laterDis.neutral}), map2 mental ${laterAdv.dealt} (flag ${laterAdv.neutral})`);
+    }
+  }
+
+  // MAP 1'S CEDAR LANE WARNS FOR 1.5×. The authored wind-up is 420 ms. Map 2
+  // keeps it. A sapling on the same room does not inherit it. A live commit,
+  // not only the function: the timer the enemy actually starts is the number.
+  {
+    const room = (col, kind = 'combat') => ({ col, kind });
+    const fnOk = AR.onboardingCedarWindupMs(1, room(0), 'pnw_cedar_warden', 420) === 630
+      && AR.onboardingCedarWindupMs(1, room(1), 'pnw_cedar_warden', 420) === 420
+      && AR.onboardingCedarWindupMs(2, room(0), 'pnw_cedar_warden', 420) === 420
+      && AR.onboardingCedarWindupMs(1, room(0), 'pnw_sapling', 380) === 380
+      && AR.onboardingCedarWindupMs(1, room(0, 'siege'), 'pnw_cedar_warden', 420) === 420;
+    function liveWindup(onboarding) {
+      const sim = new Sim({ seed: 11, difficulty: 'standard', regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_bard', color: '#fff' }] });
+      const node = sim.floor.nodes.find(n => n.kind === 'combat' && AR.isOnboardingNode(sim.regionIndex, n) === onboarding);
+      sim._travelTo(node.id);
+      sim.wave.done = true;
+      sim.spawnQueue.length = 0;
+      for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
+      const p = sim.players[0];
+      // The lane is what is being measured. A 7 HP cedar dies to the opening
+      // swing before it can commit, which would report "no wind-up" for a
+      // timer that never got to start.
+      p.hp = p.stats.vitality = 5000;
+      const e = sim.spawnEnemyById('pnw_cedar_warden', p.x + 40, p.y);
+      e.hp = e.maxHp = 5000;
+      for (let i = 0; i < 20 * 60; i++) {
+        sim.tick();
+        if (e.active && e.telState === 1 && e.telWindup > 0) return e.telWindup;
+      }
+      return null;
+    }
+    const map1 = liveWindup(true);
+    const map2 = liveWindup(false);
+    if (fnOk && Math.abs(map1 - 0.63) < 1e-9 && Math.abs(map2 - 0.42) < 1e-9) {
+      ok('map 1 Cedar Warden lane warning is 630 ms; map 2 keeps the authored 420 ms');
+    } else {
+      fail(`cedar wind-up drifted: map1 ${map1}s, map2 ${map2}s (function ${fnOk}) — map 1 is 0.63, map 2 is 0.42`);
+    }
+  }
+
   // Levels 6 and 7 inclusive. Overshoot past 7 fails the same way undershoot
   // below 6 does. 3 is the slot count both of those levels grant today.
   const WANT_LO = 6, WANT_HI = 7, WANT_SLOTS = 3;

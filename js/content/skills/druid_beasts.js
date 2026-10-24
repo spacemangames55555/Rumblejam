@@ -22,7 +22,7 @@
 
 export const TUNING = {
   // tier 1 — Thorn Lash
-  lashDamage: 8, lashReach: 92, lashArc: 1.5, lashCd: 1000,
+  lashDamage: 8, lashReach: 100, lashArc: 1.5, lashCd: 1000,
   // HP IS THE RANK'S DURATION TERM (§9.5), so these are BASE values that a rank
   // raises. They were briefly inflated as a flat balance patch when a rank-11
   // wolf was dying as fast as a rank-1 one; that moved the number (0.53 to 0.84

@@ -14,6 +14,7 @@ import { SKILL_BY_ID, TREES, TREES_BY_CLASS, isDamaging, slotsAtLevel, skillRank
 import { mechanicalLine } from './skilltext.js';
 import { initMinionPlayer, summonSlotsFor, tickMinions, resetMinionsForRoom, spawnMinions } from './minions.js';
 import { domainMult } from './domains.js';
+import { isOnboardingNode } from './arenas.js';
 import { CONFIG, PERSIST_T } from './config.js';
 import { tohHitDamage, tohOnHit } from './traits-toh.js';
 import { passiveBonusPer } from './enginescale.js';
@@ -801,8 +802,28 @@ export function detonateTraps(sim, p) {
   return fired;
 }
 
+// Map 1 is neutral to every damage type. The triangle, including a domain
+// shift or an item domain-add, starts on map 2. `bestDomainMult` stays the
+// later-map answer; this is the only place that turns it off, and it reads
+// the node rather than rolling anything.
+//
+// A fixture may set `sim.domainNeutral` to 0 or 1 to judge the other rule
+// without leaving the room. Live play never sets it, so the node still decides.
+export function enemyDomainIsNeutral(sim) {
+  if (sim && (sim.domainNeutral === 0 || sim.domainNeutral === 1)) return sim.domainNeutral === 1;
+  return !!(sim && isOnboardingNode(sim.regionIndex, sim.arenaNode));
+}
+
+export function enemyDomainMult(sim, atk, def) {
+  if (enemyDomainIsNeutral(sim)) return 1;
+  return domainMult(atk, def);
+}
+
 export function skillDamage(sim, e, amount, p, skill) {
-  let amt = amount * bestDomainMult(p, skill.domain, e.domain) * ferocityMult(p);
+  const dom = enemyDomainIsNeutral(sim)
+    ? 1
+    : bestDomainMult(p, skill.domain, e.domain);
+  let amt = amount * dom * ferocityMult(p);
   if (e.defDownT > 0) amt /= e.defDownMult;         // defense down = takes more
   // THE AURA AMP, and the one line in this chain that asks WHO is hitting.
   // Every other term here is a property of the attacker or of the target;
@@ -1019,6 +1040,12 @@ export function applyPlague(sim, e, damage, dur, p, skill) {
   e.plagueDps = (e.plagueDps || 0) + amt / Math.max(0.1, dur);
   e.plagueOwner = p.idx;
   e.plagueDomain = skill.domain;
+  // Which skills are still in the stack. A retarget that means "not already
+  // affected by this cast" has to tell Cascade from every other plague, and
+  // the mark is a function of the cast, so it adds no roll. Cleared with the
+  // stack when the timer ends. The pool wipes the slot on the next spawn.
+  if (!e.plagueFrom) e.plagueFrom = {};
+  e.plagueFrom[skill.id] = 1;
 }
 
 export function tickSkillStatuses(sim, dt) {
@@ -1050,9 +1077,9 @@ export function tickSkillStatuses(sim, dt) {
         e.plagueAcc -= d;
         const owner = sim.players[e.plagueOwner];
         // routed through the triangle like every other damage source
-        sim.damageEnemy(e, d * domainMult(e.plagueDomain, e.domain), { owner, silent: true, noEffects: true });
+        sim.damageEnemy(e, d * enemyDomainMult(sim, e.plagueDomain, e.domain), { owner, silent: true, noEffects: true, tick: 'plague' });
       }
-      if (e.plagueT <= 0) { e.plagueDps = 0; e.plagueAcc = 0; }
+      if (e.plagueT <= 0) { e.plagueDps = 0; e.plagueAcc = 0; e.plagueFrom = undefined; }
     }
   }
 }
@@ -1077,7 +1104,7 @@ export function wardAbsorb(sim, p, amount, source) {
   const quill = passiveSum(p, 'reflectPerGrit') * Math.max(0, p.stats.grit);
   if (quill > 0) p.wardReflect = Math.min(1, (p.wardReflect || 0) + quill);
   if (p.wardReflect > 0 && source && source.active) {
-    sim.damageEnemy(source, eaten * p.wardReflect * domainMult(p.wardDomain, source.domain), { owner: p });
+    sim.damageEnemy(source, eaten * p.wardReflect * enemyDomainMult(sim, p.wardDomain, source.domain), { owner: p });
   }
   return amount - eaten;
 }

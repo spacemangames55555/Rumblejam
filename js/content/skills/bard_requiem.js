@@ -40,22 +40,22 @@
 
 export const TUNING = {
   // tier 1 — Grace Note
-  graceDamage: 10, graceRange: 260, graceSpeed: 460, graceRadius: 7, graceCd: 1200,
+  graceDamage: 5, graceRange: 260, graceSpeed: 460, graceRadius: 7, graceCd: 1000,
   // tier 2 — Held Breath (passive, the branch point)
   heldWeight: 0.15,
 
   // ---- branch A: Cadenza (ON_KILL — buy the beat back) ----
-  answerDamage: 14, answerReach: 110, answerArc: 1.7, answerCd: 1800,
+  answerDamage: 5, answerReach: 110, answerArc: 1.7, answerCd: 1800,
   cadenzaWeight: 0.18,
-  roundDamage: 16, roundArc: 1.5, roundRange: 300, roundCd: 3400,
-  finaleDamage: 26, finaleReach: 140, finaleArc: 2.9, finaleCd: 7200,
+  roundDamage: 3, roundArc: 1.5, roundRange: 300, roundCd: 3400,
+  finaleDamage: 4, finaleReach: 140, finaleArc: 2.9, finaleCd: 7200,
   finalePulses: 2, finaleSlowMult: 0.6, finaleSlowDur: 2200,
 
   // ---- branch B: Dirge (ON_HIT_TAKEN — be paid for the interruption) ----
-  struckDamage: 15, struckRadius: 150, struckDuration: 3200, struckTickMs: 400, struckCd: 2600,
+  struckDamage: 2, struckRadius: 150, struckDuration: 3200, struckTickMs: 400, struckCd: 2600,
   undertowWeight: 0.18,
-  threnodyDamage: 18, threnodyReach: 125, threnodyArc: 2.4, threnodyCd: 4400,
-  requiemDamage: 28, requiemRadius: 175, requiemDuration: 4200, requiemTickMs: 400, requiemCd: 7600,
+  threnodyDamage: 4, threnodyReach: 125, threnodyArc: 2.4, threnodyCd: 4400,
+  requiemDamage: 2, requiemRadius: 175, requiemDuration: 4200, requiemTickMs: 400, requiemCd: 7600,
   requiemSlowMult: 0.45, requiemSlowDur: 2600,
 
   rankDamage: 0.04, rankDuration: 0.03,
@@ -113,7 +113,7 @@ export const BARD_REQUIEM = [
     select: 'objective_target',
     trigger: { kind: 'ON_KILL' },
     cooldown: T.roundCd,
-    compose: [{ kind: 'cone', damage: T.roundDamage, arc: T.roundArc, range: T.roundRange, ...RHY, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.roundDamage, angle: T.roundArc, range: T.roundRange, ...RHY, riders: {} }],
     ranks: R,
   },
   {

@@ -1981,7 +1981,10 @@ try {
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
         const d = g.spawnEnemyById(ENEMIES[0].id, p.x + Math.cos(a) * 70, p.y + Math.sin(a) * 70);
-        if (d) { d.maxHp = d.hp = 1e9; d.speed = 0; dummies.push(d); }
+        // The mover reads `spd`. `speed` is ignored, so these six walked onto
+        // the player and ate every bolt at contact. The pin below reads
+        // `spawnX`, which nothing was writing, so it kept the walked spot.
+        if (d) { d.maxHp = d.hp = 1e9; d.spd = 0; d.spawnX = d.x; d.spawnY = d.y; dummies.push(d); }
       }
       if (dummies.length < 6) { bad++; fail(`${c.id}: could not stage a fight at the barricade`); continue; }
       // The ceiling is measured, not guessed: against one 270hp barricade the
@@ -4018,6 +4021,80 @@ try {
         ok(`the Druid's fit x scale is ${eff.toFixed(6)} against the ${SHIPPED} he was tuned at — ${driftPx.toFixed(3)} device px of drift, so content normalisation did not resize him`);
       } else fail(`content normalisation moved the Druid: fit x scale ${eff.toFixed(6)} vs ${SHIPPED}, ${driftPx.toFixed(2)} device px`);
     }
+  }
+
+  // Plague mark. 0004: the floor is 30 CSS px (scale/dpr), and only a fit
+  // below 1 lifts it. A zoom-in still grows the mark. phaseOf is untouched.
+  {
+    const R = await import('../js/render.js');
+    const sheet = man['fx.plague_mark'];
+    const contentH = sheet.content[1];
+    const cssOf = (radius, cssPerWorld, dpr) => {
+      const world = R.plagueMarkWorldHeight(radius, cssPerWorld * dpr, dpr);
+      const caller = world / sheet.w;
+      const contentFit = sheet.h / contentH;
+      return contentH * caller * contentFit * cssPerWorld;
+    };
+    const bad = [];
+    const radii = [
+      ['pnw_thornhound', 12],
+      ['pnw_sapling', 14],
+      ['pnw_cedar_warden', 16],
+      ['pnw_bark_hulk', 25],
+    ];
+    for (const [id, radius] of radii) {
+      const def = ENEMY_BY_ID_T[id];
+      if (!def || def.radius !== radius) bad.push(`${id} radius ${def && def.radius}, want ${radius}`);
+    }
+    // The playtest camera, ~0.73 CSS px per world unit. dpr 2 must not halve it.
+    const tight = 934 / 1280;
+    for (const dpr of [1, 2]) {
+      for (const [id, radius] of radii) {
+        const css = cssOf(radius, tight, dpr);
+        if (css + 1e-6 < 30) bad.push(`${id} at dpr ${dpr} is ${css} CSS px, under 30`);
+      }
+      if (Math.abs(cssOf(12, tight, dpr) - 30) > 1e-6) bad.push(`Thornhound floor at dpr ${dpr}`);
+      const hulk = 25 * 2.4 * tight;
+      if (Math.abs(cssOf(25, tight, dpr) - hulk) > 1e-6) bad.push(`Bark Hulk at dpr ${dpr} is body-scaled to ${hulk}, got ${cssOf(25, tight, dpr)}`);
+    }
+    if (Math.abs(cssOf(12, tight, 1) - cssOf(12, tight, 2)) > 1e-9) bad.push('dpr changed the CSS height');
+    // 1440×900 is a fit above 1 (1.125). The floor stays 30 world px and the
+    // mark grows with the camera. Same CSS height at both dprs.
+    const wide = 1440 / 1280;
+    const grown = [
+      [12, 30 * wide],
+      [14, 14 * 2.4 * wide],
+      [16, 16 * 2.4 * wide],
+      [25, 51 * wide],
+    ];
+    for (const dpr of [1, 2]) {
+      for (const [radius, want] of grown) {
+        const css = cssOf(radius, wide, dpr);
+        if (Math.abs(css - want) > 1e-6) bad.push(`r${radius} at fit ${wide} dpr ${dpr}: ${css}, want ${want}`);
+      }
+    }
+    if (cssOf(16, wide, 1) <= cssOf(16, tight, 1)) bad.push('a zoom-in did not grow the Cedar Warden mark');
+    if (bad.length) fail(`plague mark: ${bad.join(' | ')}`);
+    else ok('plague mark stays at least 30 CSS px below a fit of 1, matches at dpr 1 and 2, and still grows when the camera zooms in');
+
+    const sim = new Sim({ seed: 7, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const p0 = sim.players[0];
+    const e = sim.spawnEnemyById('pnw_bark_hulk', p0.x, p0.y, { noMats: true });
+    const { SKILL_BY_ID } = await import('../js/skills.js');
+    SKILLSIM.applyPlague(sim, e, 1, 0.1, p0, SKILL_BY_ID.necro_entropy_cascade);
+    let sawOn = false, cleared = false;
+    for (let i = 0; i < 30 && !cleared; i++) {
+      const before = R.plagueMarkShown(e.plagueT);
+      SKILLSIM.tickSkillStatuses(sim, 1 / 60);
+      if (before) sawOn = true;
+      if (before && !R.plagueMarkShown(e.plagueT)) {
+        const row = sim.getSnapshot().enemies.find(n => n[0] === e.id);
+        const bit = row ? (row[5] & 128) : -1;
+        cleared = bit === 0 && (e.plagueT || 0) <= 0 && !e.plagueDps && e.plagueFrom === undefined;
+      }
+    }
+    if (sawOn && cleared) ok('plague mark clears the tick plagueT crosses 0 — view flag and snapshot bit 128 drop together, and the stack is wiped');
+    else fail(`plague mark did not clear on the expiry tick (sawOn ${sawOn}, cleared ${cleared}, plagueT ${e.plagueT})`);
   }
 
   // -- the generator is the source of truth; a hand-edit must not survive --

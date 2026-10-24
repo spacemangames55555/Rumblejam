@@ -137,7 +137,7 @@ export const SMITH_ANVIL = [
       // Measured at x1.00 on all three. Advertising a payoff that cannot arrive
       // is worse than having none — Casey's ruling of 2026-09-09 pays this
       // branch in raw damage and area instead, set separately.
-    compose: [{ kind: 'cone', damage: T.swageDamage, arc: T.swageArc, range: T.swageRange, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.swageDamage, angle: T.swageArc, range: T.swageRange, riders: {} }],
     ranks: R,
   },
   {
