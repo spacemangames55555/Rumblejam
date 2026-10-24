@@ -17,7 +17,7 @@ import { docTrigger, rankPer, RANK_NONE, pctRemaining, pctToFraction } from '../
 
 export const TUNING = {
   // tier_code 0 — Dark Energy Blip
-  blipDamage: 18, blipSpeed: 520, blipRange: 480, blipCd: 600,
+  blipDamage: 9, blipSpeed: 520, blipRange: 480, blipCd: 1000,
   // tier_code 1 — Dark Matter Bomb
   bombDamage: 30, bombSpeed: 500, bombRange: 420, bombCd: 1200,
   bombSplash: 12, bombSplashRadius: 60,
@@ -46,6 +46,12 @@ export const TUNING = {
 };
 
 const T = TUNING;
+// Rank 1 deals base * (1 + add/base), which is base + add. The card reads that
+// same rank-1 number, so the compose base sits `add` below blipDamage and both
+// follow the tuning value. Rank 2 is blipDamage + add, and so on. The add is
+// the tree's rank step, not a second copy of the damage.
+const BLIP_RANK_ADD = 3;
+const BLIP_BASE = T.blipDamage - BLIP_RANK_ADD;
 // The field's lifetime is its pulse count times its cadence — 8 x 400ms of
 // hazard beside 8 pulses of pull, so the two steps end together.
 const SING_DUR = T.singPulses * T.singTick;
@@ -58,8 +64,8 @@ export const NECRO_DARK_MATTER = [
     select: 'nearest',
     trigger: docTrigger('NEAREST_IN_RANGE', { range: T.blipRange }),
     cooldown: T.blipCd,
-    compose: [{ kind: 'bolt', damage: T.blipDamage, speed: T.blipSpeed, range: T.blipRange, riders: {} }],
-    ranks: rankPer(3, T.blipDamage),
+    compose: [{ kind: 'bolt', damage: BLIP_BASE, speed: T.blipSpeed, range: T.blipRange, riders: {} }],
+    ranks: rankPer(BLIP_RANK_ADD, BLIP_BASE),
   },
   {
     id: 'necro_dark_matter_bomb', tree: 'necro_dark_matter', tier: 2, name: 'Dark Matter Bomb',

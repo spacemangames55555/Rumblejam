@@ -229,7 +229,7 @@ Channels do not break on movement. They tick at **60%** while the caster is movi
 - **Wizard** — Fireball (26/360), Icicle (24/380), Ethereal Bolt (26/360) are all single-target projectiles at near-identical numbers. The file says so outright: "it is Fireball. Genuinely."
 - **Witch Doctor** — Voodoo Doll and Blow Dart are both single target at 340px.
 - **Mage** — Quantum Blast (360) and Arcane Orb (340) are both single-target projectiles.
-- **Necromancer** — Bone Dart (26/460) and Dark Energy Blip (18/480) are both single-target projectiles at long range on near-identical geometry. Only Summon Skeleton announces its tree.
+- **Necromancer** — Bone Dart (26/460) and Dark Energy Blip (9/480) are both single-target projectiles at long range on near-identical geometry. Only Summon Skeleton announces its tree.
 
 The other ten classes differentiate their three openers properly, so this is a fix, not a pattern.
 

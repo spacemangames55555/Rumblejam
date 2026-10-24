@@ -357,26 +357,62 @@ try {
   // The spend step reaches the client by the same route, so it earns the same
   // check rather than inheriting confidence from the one next to it.
   //
-  // ABOVE THE SHOP is half the ruling. "Points first, then items" is not a
-  // host-side gate — the host opens both, deliberately, so a client that misses
-  // this panel still gets the shop — which means the ORDER the player
-  // experiences is entirely the stacking. `elementFromPoint` at the panel's own
-  // centre is the check that catches a panel something else paints over; it is
-  // what caught the §5.6 card behind the map screen's z-index.
+  // POINTS, THEN ITEMS, ON THE CLIENT. The host still opens both at the clear,
+  // so the stock roll does not move and a missed event can be replayed from
+  // the latest shop payload. The overlay stays hidden through the banners, the
+  // level-up cards, and the spend panel. Closing that panel is what shows the
+  // trader. The panel opens whenever a point is still unspent, card or not.
+  // A clear that arrives at 0 points skips it. This check banks a card so the
+  // cards-then-panel order is what it watches. `elementFromPoint` at the
+  // panel's own centre is the check that catches something else painting over it.
   await P.exec(`
     const s = window.uv.sim, p = s.players[0];
     const fight = s.floor.nodes.find(n => n.kind === 'combat' && !s.visited.has(n.id));
     s._travelTo(fight.id);
-    p.skillPoints = 5; p.metaDirty = true;
+    p.skillPoints = 5; p.banked = Math.max(1, p.banked || 0); p.metaDirty = true;
     return 1;`);
   await sleep(400);
   await P.exec(`
     const s = window.uv.sim;
     s.wave.done = true; s.spawnQueue.length = 0;
     for (const e of [...s.enemyPool]) s.enemyPool.release(e);
-    s.players[0].skillPoints = 5;
+    const p = s.players[0];
+    p.skillPoints = 5; p.banked = Math.max(1, p.banked || 0); p.metaDirty = true;
+    // Off the hatch. Standing on it extracts in 4s and clears the spend step
+    // before the banners and the level-up cards have finished.
+    p.x = 220; p.y = 220; p.mx = 0; p.my = 0;
+    s.extract = null;
     return 1;`);
-  await sleep(1400);
+  // Banners first, then every banked level-up card, then the spend panel.
+  // The panel stays hidden until those cards are answered.
+  const opened = await P.exec(`
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const deadline = Date.now() + 20000;
+    while (Date.now() < deadline) {
+      const s = window.uv.sim, p = s.players[0];
+      p.x = 220; p.y = 220; p.mx = 0; p.my = 0; s.extract = null;
+      const sh = document.getElementById('overlay-shop');
+      if (sh && !sh.classList.contains('hidden')) return -1;
+      const sk = document.getElementById('overlay-skills');
+      if (sk && !sk.classList.contains('hidden')) return 1;
+      const lv = document.getElementById('overlay-levelup');
+      const card = lv && !lv.classList.contains('hidden') && lv.querySelector('.offer-card');
+      if (card) {
+        const id = card.dataset.id;
+        card.click();
+        const t0 = Date.now();
+        while (Date.now() - t0 < 1500) {
+          const lv2 = document.getElementById('overlay-levelup');
+          const c2 = lv2 && !lv2.classList.contains('hidden') && lv2.querySelector('.offer-card');
+          if (!c2 || c2.dataset.id !== id) break;
+          await sleep(40);
+        }
+      } else await sleep(80);
+    }
+    return 0;
+  `);
+  if (opened === -1) no('the trader opened before the level-up cards were picked and the spend panel was closed');
+  else if (!opened) no('the spend panel did not open after the banners and the level-up cards');
   const step = await P.exec(`
     const sk = document.getElementById('overlay-skills'), sh = document.getElementById('overlay-shop');
     const open = !sk.classList.contains('hidden');
@@ -385,6 +421,7 @@ try {
     return {
       cleared: window.uv.sim.cleared ? 1 : 0,
       offer: window.uv.sim.players[0].spendOffer || 0,
+      points: window.uv.sim.players[0].skillPoints || 0,
       skillsOpen: open ? 1 : 0,
       shopOpen: sh.classList.contains('hidden') ? 0 : 1,
       // both offered, and the one the player must answer first is on top
@@ -398,19 +435,23 @@ try {
   if (step.cleared && step.offer === 5 && step.skillsOpen) {
     ok(`the spend step OPENS ITSELF at the map end — ${step.offer} points, panel on screen without the player knowing the tree screen exists`);
   } else no(`the spend step did not appear at the clear: ${JSON.stringify(step)}`);
-  if (step.shopOpen && step.zSkills > step.zShop && step.onTop) {
-    ok(`points before items: the shop is open behind it (z ${step.zShop}) and the spend panel is on top (z ${step.zSkills}), unobstructed — elementFromPoint lands inside it`);
+  if (!step.shopOpen && step.skillsOpen && step.onTop && step.points > 0) {
+    ok(`points before items: the trader stays closed while the spend panel is up (${step.points} points still unspent), and elementFromPoint lands inside the panel`);
   } else no(`the ordering the player experiences is wrong: skills z${step.zSkills} shop z${step.zShop}, shopOpen ${step.shopOpen}, onTop ${step.onTop} (hit "${step.hit}")`);
 
   await P.exec(`document.getElementById('skills-close').click(); return 1;`);
   await sleep(600);
   const after2 = await P.exec(`
+    const sh = document.getElementById('overlay-shop');
+    const title = sh.querySelector('.ov-title');
     return {offer: window.uv.sim.players[0].spendOffer || 0,
+            points: window.uv.sim.players[0].skillPoints || 0,
             skills: document.getElementById('overlay-skills').classList.contains('hidden')?0:1,
-            shop: document.getElementById('overlay-shop').classList.contains('hidden')?0:1,
+            shop: sh.classList.contains('hidden')?0:1,
+            title: title ? title.textContent : '',
             badge: document.getElementById('skills-pts').classList.contains('hidden')?0:1};`);
-  if (!after2.offer && !after2.skills && after2.shop) {
-    ok('closing it answers the step and reveals the shop underneath — one panel dismissed, not two');
+  if (!after2.offer && !after2.skills && after2.shop && after2.title === 'TRADER' && after2.points === step.points) {
+    ok('closing the spend step is what opens the trader, and the unspent points are still there');
   } else no(`closing the spend step left the run in a bad state: ${JSON.stringify(after2)}`);
   if (after2.badge) ok('and the ◆ badge still says points are waiting — the moment can be dismissed, the state cannot');
   else no('the badge vanished when the step was dismissed, which is the original defect with extra steps');

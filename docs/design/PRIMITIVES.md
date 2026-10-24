@@ -75,7 +75,7 @@ rather than passing through.
 
 Riders: the full impact set, plus `pierce`, `splash`, `impactDot` and
 `defenseDown`, which need a projectile to make sense.
-Example: `necro_dark_energy_blip` — 18 damage, 480px, the fastest cycle in its class.
+Example: `necro_dark_energy_blip` — 9 damage, 480px, 1000ms cycle.
 
 ### `cone` — a widening wedge
 55 skills. Like `strike` but aimed outward at a longer range and stated as an

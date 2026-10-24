@@ -10,6 +10,7 @@ const myCharId = p => (p && p.char ? p.char.id : null);
 import { BIOMES, tileVariant } from './biomes.js';
 import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
+import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from './arenas.js';
 import { BEAST, hurtBeast } from './entities/beast.js';
 import { HostTransport, ClientTransport } from './net.js';
 import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
@@ -20,12 +21,13 @@ import { initInput, sampleInput, takeDebugKey, pressInteract, pressStance } from
 import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx, preloadAirhorn, levelupHorn, audioStats, getCtxState, getMasterGainValue, setVolume, getVolume } from './audio.js';
 import { initScreens, showTitle, showLobby, showResults, hideScreens, currentName, setTitleError, setNetStatus, isShakeEnabled } from './ui/screens.js';
+import { fmtCount } from './ui/format.js';
 import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { initWorldMap, showWorldMap, hideWorldMap, isWorldMapOpen } from './ui/worldmap.js';
 import { loadAll, saveAll, newCharacter, newPlayerStore, onRegionCleared, recordUnlock, validateCharacter,
   park, unpark, exportBundle, importBundle, STORAGE_WARNING } from './saves.js';
-import { showHud, updateHud, toast, banner } from './ui/hud.js';
+import { showHud, updateHud, toast, banner, afterBanners, bannersActive, onBannerShown } from './ui/hud.js';
 import { DEFAULT_DIFFICULTY } from './worldmap.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening, showSkills, closeSkills, isSkillsOpen, updateSkillsMeta } from './ui/overlays.js';
 import { CHARACTERS, CHAR_BY_ID, isSelectable } from './content/characters.js';
@@ -278,9 +280,20 @@ initOverlays({
   pickBoon: id => sendUi({ kind: 'boon', id }),
   pickOpening: id => sendUi({ kind: 'opening', id }),
   learnSkill: id => sendUi({ kind: 'learnSkill', id }),
-  // The map-end spend step's only exit (§5.5). Sent on every close of the tree
-  // screen, not just the prompted one — the host drops it when no step is open.
-  spendDone: () => sendUi({ kind: 'spendDone' }),
+  // The map-end spend step's exit (§5.5). A close while the clear banners or
+  // the level-up cards are still up only hides the panel: sending spendDone
+  // would clear the step, and the automatic open after the cards would never
+  // run. The host still hears the close that happens once those are done.
+  spendDone: () => {
+    if (spendCloseHeld()) return;
+    // Only a live step can be dismissed. A mid-fight close has nothing pending
+    // and must not stick, or the next clear's automatic open would never run.
+    if (spendOffered()) app.spendDismissed = true;
+    sendUi({ kind: 'spendDone' });
+    // The close that actually ends the spend step is what the trader was
+    // waiting on. A hide-only close returned above and left the shop stashed.
+    revealShop();
+  },
   setSlot: (slot, id) => sendUi({ kind: 'setSlot', slot, id }),
   combine: (a, b, id, tier) => sendUi({ kind: 'combine', a, b, id, tier }),
   sellWeapon: (slot, id, tier) => sendUi({ kind: 'sellWeapon', slot, id, tier }),
@@ -369,14 +382,184 @@ function showOpeningFromPend() {
   if (picks.length) showOpening({ picks });
 }
 
-function toggleSkills(forceOpen = false) {
+function spendOffered() {
+  if (app.sim) {
+    const me = app.sim.players[app.myIdx];
+    return !!(me && !me.gone && me.spendOffer);
+  }
+  return !!app.clientSpend;
+}
+
+// Level-up cards still owed to this player: an offer waiting to show, the
+// overlay itself, or the sim's pending offer. Levels banked during a fight
+// are not cards yet — the offer is raised at the clear — so a mid-fight close
+// is not held. `clientOffer` is the snapshot's pending row for a guest.
+function cardsOutstanding() {
+  if (pendingLevelup) return true;
+  const el = document.getElementById('overlay-levelup');
+  if (el && !el.classList.contains('hidden')) return true;
+  if (app.sim) {
+    const me = app.sim.players[app.myIdx];
+    return !!(me && !me.gone && me.pendingOffer);
+  }
+  return !!app.clientOffer;
+}
+
+// True while a Close must only hide the panel. The spend step stays pending
+// on the host, so the automatic open can still run.
+function spendCloseHeld() {
+  return bannersActive() || cardsOutstanding();
+}
+
+// The level-up overlay is a full-screen dim at z-index 30, above the skills
+// panel's resting 26, so an open panel was painted over and its text was
+// covered. While that panel is open and a card is still owed, raise it. The
+// cards stay in the DOM; closing the panel is what makes them clickable again.
+function syncSkillsLayer() {
+  const el = document.getElementById('overlay-skills');
+  if (!el) return;
+  if (el.classList.contains('hidden')) {
+    el.classList.remove('above-cards');
+    return;
+  }
+  if (cardsOutstanding()) el.classList.add('above-cards');
+  else el.classList.remove('above-cards');
+}
+
+// Clear shop stock is rolled on the host at the clear. This only decides when
+// the overlay is shown. Banners, then every level-up card, then the skills
+// spend step while a point is still unspent. A shop that is already on screen
+// (a buy or a reroll) keeps updating. Hiding is not closeShop — that would
+// dismiss the stock.
+function shopBlocked() {
+  if (bannersActive() || cardsOutstanding() || isSkillsOpen()) return true;
+  if (spendOffered() && !app.spendDismissed) return true;
+  return false;
+}
+
+function unspentPoints() {
+  if (app.sim) {
+    const me = app.sim.players[app.myIdx];
+    if (me && !me.gone) return me.skillPoints || 0;
+  }
+  return (app.meta && app.meta.skillPoints) || 0;
+}
+
+// The automatic panel is the post-clear spend. It opens whenever a point is
+// still unspent, whether or not this clear offered a card. Zero points is the
+// only skip: the trader opens on its own. This does not spend a point.
+function spendAutoSkipped() {
+  return unspentPoints() <= 0;
+}
+
+// Same exit a real Close sends once the cards are done. spendDone only clears
+// the step. It does not spend a point.
+function dismissSpendStep() {
+  if (app.spendDismissed || !spendOffered()) return;
+  app.spendDismissed = true;
+  sendUi({ kind: 'spendDone' });
+}
+
+function revealShop() {
+  if (!heldShop || app.mode !== 'run' || shopBlocked()) return;
+  const ev = heldShop;
+  heldShop = null;
+  const me = app.party && app.party.find(m => m.idx === app.myIdx);
+  showShop(ev, app.meta, me ? me.charId : null);
+}
+
+// Open the spend panel once the banners are gone and the level-up cards have
+// been picked. Safe to call often: an open panel is left alone, and a close
+// that already told the host (`spendDismissed`) is not undone. `spendSeen`
+// stays the edge that stops a snapshot from treating the same offer as new.
+function releaseSpendPanel() {
+  if (app.spendDismissed || !spendOffered() || isSkillsOpen()) return;
+  if (spendCloseHeld()) {
+    if (bannersActive() && !app.spendBannerArm) {
+      app.spendBannerArm = true;
+      afterBanners(() => {
+        app.spendBannerArm = false;
+        pokeSkillsAnnounce();
+      });
+    }
+    return;
+  }
+  toggleSkills(true, true);
+}
+
+function scheduleSpendPanel() {
+  if (!spendOffered()) return;
+  app.spendSeen = true;
+  pokeSkillsAnnounce();
+}
+
+// Banners and level-up cards share the clear. Anything that was waiting on
+// them — a panel parked under a banner, and the spend step — runs once both
+// are finished, and not on the snapshot cadence while they are still up.
+function pokeSkillsAnnounce() {
+  syncSkillsLayer();
+  if (spendCloseHeld()) {
+    if (bannersActive() && !app.spendBannerArm) {
+      app.spendBannerArm = true;
+      afterBanners(() => {
+        app.spendBannerArm = false;
+        pokeSkillsAnnounce();
+      });
+    }
+    return;
+  }
+  const el = document.getElementById('overlay-skills');
+  if (el && el.dataset.heldBanner === '1') {
+    delete el.dataset.heldBanner;
+    // Putting a parked panel back at 0 points would make the player close an
+    // empty tree to reach the trader. A point still unspent restores it, and a
+    // manual open that is already on screen is left alone below.
+    if (!isSkillsOpen() && !spendAutoSkipped()) toggleSkills(true, true);
+  }
+  if (!isSkillsOpen() && spendAutoSkipped()) {
+    dismissSpendStep();
+    revealShop();
+    return;
+  }
+  releaseSpendPanel();
+  revealShop();
+}
+
+function toggleSkills(forceOpen = false, auto = false) {
   if (isSkillsOpen() && !forceOpen) { closeSkills(); return; }
   if (app.mode !== 'run' || !app.meta) return;
   const trees = skillTrees();
   if (!trees) return;
   const me = app.party && app.party.find(m => m.idx === app.myIdx);
   showSkills(app.meta, me ? me.charId : null, trees);
+  const el = document.getElementById('overlay-skills');
+  // The player asked for the panel while a banner is up. Raise it over the
+  // banner instead of cancelling the announcement. When the queue drains, a
+  // card that is still owed keeps the panel above the cards.
+  if (!auto && bannersActive()) {
+    el.classList.add('above-banners');
+    afterBanners(() => {
+      el.classList.remove('above-banners');
+      syncSkillsLayer();
+    });
+  } else if (!bannersActive()) {
+    el.classList.remove('above-banners');
+  }
+  syncSkillsLayer();
 }
+
+// A panel already on screen when the banner paints would sit under it. Park
+// it. pokeSkillsAnnounce puts it back once the banners and any level-up cards
+// are finished. A manual open (above-banners) is the player choosing to read
+// skills now, so that one stays.
+onBannerShown(() => {
+  const el = document.getElementById('overlay-skills');
+  if (!el || el.classList.contains('hidden') || el.classList.contains('above-banners')) return;
+  if (el.dataset.heldBanner === '1') return;
+  el.dataset.heldBanner = '1';
+  el.classList.add('hidden');
+  pokeSkillsAnnounce();
+});
 
 function soloSheetPaused() {
   return isSheetOpen() && (!app.hostT || app.hostT.conns.size === 0);
@@ -766,6 +949,13 @@ function startRunCommon() {
   app.metas = {};
   app.snaps = [];
   app.lastSnapAt = performance.now(); // grace window before the no-snapshot watchdog may fire
+  pendingLevelup = null;
+  heldShop = null;
+  app.spendSeen = false;
+  app.spendDismissed = false;
+  app.spendBannerArm = false;
+  app.clientSpend = false;
+  app.clientOffer = false;
   banner('THE UNDERVAULT', app.regionName || `Region ${app.regionIndex}`, 2000);
 }
 
@@ -937,7 +1127,7 @@ function clientOnMessage(msg) {
       applySnapState(snap);   // state first: the screens no longer trust edges
       break;
     }
-    case 'ev': for (const ev of msg.list) handleEvent(ev); break;
+    case 'ev': presentEvents(msg.list); break;
     case 'meta': if (msg.idx === app.myIdx) { app.meta = msg; updateShopMeta(app.meta); updateSheetMeta(app.meta); updateSkillsMeta(app.meta, skillTrees()); } break;
     case 'abandon': // host ended the run for everyone — back to the lobby together
       app.lobby = sanitizeLobby(msg.lobby);
@@ -1053,6 +1243,7 @@ function leaveToTitle() {
   app.party = null;
   showHud(false);
   closeAllOverlays();
+  heldShop = null;
   hideMapScreen();
   setNetStatus('');
   showTitle();
@@ -1097,7 +1288,8 @@ function applySnapState(snap) {
   // and a lost close was a dead run, so this closes the worse of the two.
   const mine = (st.pend || []).find(r => r[0] === app.myIdx);
   if (mine) {
-    if (!mine[1]) closeLevelup();
+    if (!mine[1]) { pendingLevelup = null; app.clientOffer = false; closeLevelup(); }
+    else app.clientOffer = true;
     if (!mine[2]) closeTreasure();
     if (!mine[3]) closeBoon();
     if (!mine[4]) closeOpening(); else showOpeningFromPend();
@@ -1106,8 +1298,9 @@ function applySnapState(snap) {
     // screen is interactive (slot picker, node clicks) and re-rendering it at
     // 15 Hz would eat every click. `spendSeen` is the edge; the pend row is
     // still what closes it, so a lost close costs nothing.
-    if (!mine[5]) { app.spendSeen = false; }
-    else if (!app.spendSeen) { app.spendSeen = true; toggleSkills(true); }
+    if (!mine[5]) { app.spendSeen = false; app.clientSpend = false; app.spendDismissed = false; }
+    else { app.clientSpend = true; scheduleSpendPanel(); }
+    revealShop();
   }
 
   // ---- the run being over ----
@@ -1119,6 +1312,55 @@ function applySnapState(snap) {
     closeAllOverlays();
     hideMapScreen();
   }
+}
+
+// Set for the duration of one event list, so a map-1 top-up does not also
+// toast once per granted level over the banner.
+let muteCatchupToasts = false;
+// The offer event still arrives with the banners. Hold the cards until the
+// queue drains so Trailhead and FIELD CLEAR are not painted over the picks.
+let pendingLevelup = null;
+// The latest shop event for this player, held until the clear's cards and the
+// skills spend step are both finished. Null once the overlay is shown.
+let heldShop = null;
+
+// The top-up is a stack of ordinary level-ups. Nothing in the sim says "this
+// one was the guarantee" — saying so would be a new event, and the banner is
+// client-only. The shape is: this list both levels me and opens my card, the
+// room is region 1's first combat map, and the level I land on is the floor.
+// app.meta is still the pre-list level; the host writes it after the events,
+// and a client receives `meta` after `ev`.
+function maybeTrailheadBanner(list) {
+  muteCatchupToasts = false;
+  if (!list || !list.length || !app.meta || !app.meta.level) return;
+  if ((app.regionIndex | 0) !== 1 || !app.arena || !app.map || !app.map.layout) return;
+  const node = (app.map.layout.nodes || []).find(n => n.id === app.arena.nodeId);
+  if (!isOnboardingNode(1, node)) return;
+  const ups = list.filter(ev => ev.k === 'levelUp' && ev.idx === app.myIdx).length;
+  const offer = list.some(ev => ev.k === 'offer' && ev.idx === app.myIdx);
+  if (!ups || !offer) return;
+  const level = app.meta.level + ups;
+  if (level !== ONBOARDING_LEVEL_FLOOR) return;
+  muteCatchupToasts = true;
+  banner(`Trailhead bonus: you've reached level ${level}`, '', 3200);
+}
+
+function presentEvents(list) {
+  maybeTrailheadBanner(list);
+  for (const ev of list) handleEvent(ev);
+  muteCatchupToasts = false;
+  // The spend panel waits out this list's cards. Opening it inside offerDone
+  // would land it in the gap before the next banked card in the same list.
+  pokeSkillsAnnounce();
+}
+
+// Display only. Both numbers are whole: `collected` is what the pickups paid
+// after each player's remainder, and `lost` is the rounded fizzle total.
+// fmtCount is the net under them, so a fraction still cannot print long.
+function lootLine(collected, lost, idle) {
+  const line = `◆ ${fmtCount(collected || 0)} collected`;
+  if (lost) return `${line} · ◆ ${fmtCount(lost)} lost to the dark`;
+  return `${line}${idle}`;
 }
 
 // event → UI/audio. Runs on host (own events) and on clients (broadcast).
@@ -1135,6 +1377,7 @@ function handleEvent(ev) {
         app.regionIndex = ev.regionIndex;
         app.regionName = ev.regionName || '';
         closeAllOverlays();
+        heldShop = null;
       }
       if (app.mode === 'run') showMapScreen(mapScreenState());
       break;
@@ -1161,17 +1404,37 @@ function handleEvent(ev) {
       sfx.roar();
       break;
     case 'roomClear':
-      banner('FIELD CLEAR', `◆ ${ev.collected || 0} collected${ev.lost ? ` · <b style="color:var(--danger)">◆ ${ev.lost} lost to the dark</b>` : ' · nothing wasted'}`, 2200);
+      // Plain text, like every other banner. The old <b> tag was escaped and
+      // drawn as letters. The count is formatted here; the sim total is exact.
+      banner('FIELD CLEAR', lootLine(ev.collected, ev.lost, ' · nothing wasted'), 2200);
       break;
     case 'lootOver':
-      banner('THE SPOILS SETTLE', `◆ ${ev.collected || 0} collected${ev.lost ? ` · ◆ ${ev.lost} lost` : ''} — shop, then descend`, 2400);
+      banner('THE SPOILS SETTLE', `${lootLine(ev.collected, ev.lost, '')} — shop, then descend`, 2400);
       break;
     case 'levelUp':
       levelupHorn(ev.idx === app.myIdx); // own = loud, ally = quiet, debounced
-      if (ev.idx === app.myIdx) toast('Level up! (pick at room clear)');
+      if (ev.idx === app.myIdx && !muteCatchupToasts) toast('Level up! (pick at room clear)');
       break;
-    case 'offer': if (ev.idx === app.myIdx) showLevelup(ev); break;
-    case 'offerDone': if (ev.idx === app.myIdx) closeLevelup(); break;
+    case 'skillPoint':
+      // The grant rides this list, ahead of the meta packet. The host reads the
+      // sim; a guest's skip decision has to see the new total before poke.
+      if (ev.idx === app.myIdx && app.meta) app.meta.skillPoints = ev.points || 0;
+      break;
+    case 'offer': if (ev.idx === app.myIdx) {
+      pendingLevelup = ev;
+      app.clientOffer = true;
+      afterBanners(() => {
+        if (pendingLevelup !== ev) return;
+        showLevelup(ev);
+        syncSkillsLayer();
+      });
+    } break;
+    case 'offerDone': if (ev.idx === app.myIdx) {
+      pendingLevelup = null;
+      app.clientOffer = false;
+      closeLevelup();
+      syncSkillsLayer();
+    } break;
     case 'treasure': if (ev.idx === app.myIdx) showTreasure(ev); break;
     case 'treasureDone': if (ev.idx === app.myIdx) closeTreasure(); break;
     case 'opening': if (ev.idx === app.myIdx) showOpening(ev); break;
@@ -1179,8 +1442,14 @@ function handleEvent(ev) {
     case 'boon': if (ev.idx === app.myIdx) showBoon(ev); break;
     case 'boonDone': if (ev.idx === app.myIdx) closeBoon(); break;
     case 'shop': if (ev.idx === app.myIdx) {
-      const me = app.party && app.party.find(m => m.idx === app.myIdx);
-      showShop(ev, app.meta, me ? me.charId : null);
+      // A buy or a reroll updates the open shop. A first open during the clear
+      // waits out the banners, the level-up cards, and a spend that still has
+      // points. showShop stays in this case: the shop event is still what opens it.
+      if (isShopOpen() || !shopBlocked()) {
+        heldShop = null;
+        const me = app.party && app.party.find(m => m.idx === app.myIdx);
+        showShop(ev, app.meta, me ? me.charId : null);
+      } else heldShop = ev;
     } break;
     case 'buyResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't buy: ${ev.reason}`); break;
     case 'mgmtResult': if (ev.idx === app.myIdx && !ev.ok && ev.reason) toast(`Can't do that: ${ev.reason}`); break;
@@ -1194,7 +1463,9 @@ function handleEvent(ev) {
     case 'left': toast(`${ev.name} left the run`); break;
     case 'bossSpawn': app.bossInfo = { name: ev.name }; banner(ev.name, 'FLOOR BOSS', 2600); sfx.roar(); break;
     case 'bossPhase': banner('ENRAGED', '', 1200); sfx.roar(); break;
-    case 'bossDown': banner('BOSS DEFEATED', 'sweep the field — the spoils fizzle when the count hits zero', 2600); break;
+    case 'bossDown':
+      banner('BOSS DEFEATED', 'sweep the field — the spoils fizzle when the count hits zero', 2600);
+      break;
     case 'end': {
       // CAPTURED HERE BECAUSE BOTH EXITS PASS THROUGH IT. Continue-to-world-map
       // drops the Sim and retry builds a new one over it; taking the snapshot
@@ -1205,6 +1476,7 @@ function handleEvent(ev) {
       if (app.sim && app.role !== 'client') app.carry = app.sim.carryState();
       app.mode = 'results';
       showHud(false);
+      heldShop = null;
       closeAllOverlays();
       hideMapScreen();
       // §11.2 — THE FRONTIER MOVES ON A BOSS KILL, and this is where. The rule
@@ -1291,7 +1563,7 @@ function drainSimOutputs(initial = false) {
   if (sim.events.length) {
     const list = sim.events.splice(0);
     if (app.hostT) app.hostT.broadcast({ t: 'ev', list });
-    for (const ev of list) handleEvent(ev);
+    presentEvents(list);
   }
   // metas
   for (const p of sim.players) {
@@ -1327,8 +1599,12 @@ function drainSimOutputs(initial = false) {
       // new panel, three paragraphs under a comment describing it — which is
       // why "a thing the player must see needs a browser check" is a rule and
       // not a preference (§13 rule 54).
-      if (me.spendOffer) { if (!app.spendSeen) { app.spendSeen = true; toggleSkills(true); } }
-      else app.spendSeen = false;
+      if (me.spendOffer) scheduleSpendPanel();
+      else {
+        app.spendSeen = false;
+        app.spendDismissed = false;
+        revealShop();
+      }
     }
   }
 }

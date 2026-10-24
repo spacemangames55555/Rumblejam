@@ -1191,79 +1191,84 @@ try {
     else fail(`profiles seen: ${[...seen]}`);
   }
 
-  // the Statue Test, symmetric — a never-moving probe must DIE in every
-  // non-Bastion profile (all templates) on floor 1, and SURVIVE Bastion
-  // ARMED. The "statue" is a player who stands still — not one who cannot
-  // fight. It never spent its skill point, so with weapons removed it had no
-  // attack at all and died in every Bastion template: the Bastion sanction was
-  // untested and read as broken. Standing still is the variable; having nothing
-  // to hit back with is not.
+  // the Statue Test, symmetric — a never-moving probe on MAP 2 ONWARD must
+  // DIE in every non-Bastion profile. Map 1 is the exception, named below:
+  // standing still there has to HURT, and a death is no longer the only pass.
+  // The "statue" is a player who stands still — not one who cannot fight.
+  // Standing still is the variable; having nothing to hit back with is not.
+  //
+  // Map 1 should hurt a player who stands still without killing them. Half of
+  // max HP is that hurt. A motionless Necromancer passes a non-Bastion map 1
+  // room by falling to this share of max HP or by dying. Map 2 onward keeps
+  // the death requirement.
+  const MAP1_STATUE_HP_THRESHOLD = 0.5;
   const statueRun = (charId, profileKey, template, maxS = 240, representative = false) => {
     // allowUnplayable: the CAMPER is an archetype, not a class you can start
     // as today. Its trait is fully implemented; only its tree is missing.
     const s = new Sim({ seed: 4242, allowUnplayable: true, party: [{ idx: 0, key: 'k', name: 'ST', charId, color: '#fff' }] });
     armBot(s, s.players[0]);
     // `representative`: §13 rule 58. `find(kind === 'combat')` is map 1, the
-    // tutorial — half density, three archetypes — where a camper outlives every
-    // profile and a duration ratio has nothing to measure.
+    // tutorial — the three-archetype onboarding table, at full spawn rate —
+    // where a duration ratio has nothing to measure.
     const node = representative
       ? s.floor.nodes.find(n => n.depth > 1 && n.template && n.kind !== 'shrine')
       : s.floor.nodes.find(n => n.kind === 'combat');
     node.profile = profileKey; node.template = template;
     s._travelTo(node.id);
+    // Captured at entry. A clear sends the party back to the map and drops
+    // arenaNode, so reading it after the loop would call a won map 1 room
+    // something else.
+    const onboarding = isOnboardingNode(s.regionIndex, s.arenaNode);
+    const q = s.players[0];
     let t = 0;
+    let minFrac = 1;
     while (!s.over && s.phase === 'arena' && t < maxS * 60) {
       s.tick(); t++;
-      const q = s.players[0];
+      const maxHp = Math.max(1, q.stats.vitality);
+      const frac = (q.downed || s.over) ? 0 : q.hp / maxHp;
+      if (frac < minFrac) minFrac = frac;
       let g = 0;
       while (q.pendingOffer && g++ < 30) s.uiAction(0, { kind: 'levelup', id: q.pendingOffer[0].id });
       if (q.boonOffer) s.uiAction(0, { kind: 'boon', id: q.boonOffer[0].id });
     }
-    return { died: s.over, secs: t / 60, cleared: s.cleared || s.phase === 'map' };
+    return {
+      died: s.over, secs: t / 60, cleared: s.cleared || s.phase === 'map',
+      minFrac, onboarding,
+    };
   };
   {
-    // THE MEDIAN CHARACTER IS NO LONGER THE NECROMANCER, and that is a
-    // deliberate exception rather than a broken check. Its Dark Matter tree is
-    // converted from the class document and is SHIPPED FAILING this test for
-    // playtest — nine ranged actives make standing still a winning strategy,
-    // and no single node or number is responsible. See defect #22 in
-    // docs/KNOWN-DEFECTS.md.
-    //
-    // AND THE NECROMANCER IS NOT ALONE, which is the larger half of the finding.
-    // Measured across all fourteen as motionless statues, SIX never die and
-    // clear rooms — blacksmith, wizard, necromancer, samurai, monk, savage —
-    // and the Samurai is never touched at all, ending every room at 100%
-    // health. Seven die in every room; the assassin dies in most. So this check
-    // asserts something already false of six classes, and the converted tree
-    // joined a group rather than creating one.
-    //
-    // The reference is therefore a class that actually dies. The Samurai was
-    // the first choice here and was the worst possible one.
-    const STATUE_REF = 'toh_priest';
+    // THE REFERENCE IS THE NECROMANCER. This loop stands on map 1 (the first
+    // combat node). A non-Bastion room passes when the statue dies or its HP
+    // falls to MAP1_STATUE_HP_THRESHOLD. The representative runs further down
+    // are map 2 onward, and those still fail unless the camper dies.
+    const STATUE_REF = 'toh_necromancer';
     let bad = 0;
-    const deaths = [];
+    let belowHalf = 0;
+    const rooms = COMBAT_PROFILE_KEYS.length * TK9.length;
     for (const prof of COMBAT_PROFILE_KEYS) {
       for (const tmpl of TK9) {
         const r = statueRun(STATUE_REF, prof, tmpl);
-        if (!r.died) { bad++; fail(`statue SURVIVED ${prof}/${tmpl} (median char must die outside Bastion)`); }
-        else deaths.push(r.secs);
+        if (!r.onboarding) {
+          bad++;
+          fail(`statue fixture for ${prof}/${tmpl} was not map 1`);
+          continue;
+        }
+        if (r.minFrac <= MAP1_STATUE_HP_THRESHOLD) belowHalf++;
+        const passes = r.died || r.minFrac <= MAP1_STATUE_HP_THRESHOLD;
+        if (!passes) {
+          bad++;
+          fail(`statue stayed above ${Math.round(MAP1_STATUE_HP_THRESHOLD * 100)}% HP in ${prof}/${tmpl} (${Math.round(r.minFrac * 100)}% left) — map 1 must hurt a player who stands still`);
+        }
       }
     }
-    if (!bad) ok(`the Statue Test: a median statue (${STATUE_REF}) dies in every non-Bastion profile × template (median death ${deaths.sort((a, b) => a - b)[Math.floor(deaths.length / 2)].toFixed(0)}s)`);
-    {
-      let lived = 0, cleared = 0, n = 0;
-      for (const prof of COMBAT_PROFILE_KEYS) for (const tmpl of TK9) {
-        n++; const r = statueRun(T1, prof, tmpl);
-        if (!r.died) { lived++; if (r.cleared) cleared++; }
-      }
-      if (lived) ok(`KNOWN DEFECT #22, shipped on purpose: a motionless ${T1} survives ${lived}/${n} rooms and CLEARS ${cleared} of them. Its converted Dark Matter tree is what Casey is playtesting; the number to watch is ${cleared}, and this line going quiet means the exception can be retired`);
-      else fail(`defect #22 reads as fixed — the ${T1} statue now dies in all ${n}. Retire the exception: point STATUE_REF back at ${T1} and delete this block`);
-    }
+    const statueLine = `map 1 statue: ${belowHalf}/${rooms} non-Bastion rooms put the Necromancer at or below ${Math.round(MAP1_STATUE_HP_THRESHOLD * 100)}% HP`;
+    if (!bad) ok(`the Statue Test: on map 1 a motionless ${STATUE_REF} falls to ${Math.round(MAP1_STATUE_HP_THRESHOLD * 100)}% HP or dies in every non-Bastion room (${belowHalf}/${rooms} at or below half)`);
+    else console.log(statueLine);
     // survive side: the CAMPER archetype (Bulwark — melee hold + contact tank).
     // A spread-pellet caster is not a hold-your-ground build and its fan
     // geometrically whiffs single approaching targets at range; the sanction
-    // is for players built for the fight, and the median still dies here too
-    // outside Bastion (asserted above).
+    // is for players built for the fight. Map 1's Necromancer check above is
+    // the half-HP hurt, not this ratio. Map 2 onward still requires a death.
     // THE CAMPER IS A CONTACT TANK, and that archetype is toh_blacksmith —
     // hitbox x1.4, damage to anything that touches it. It ran as T1, which is
     // whichever class happens to be selectable, and a caster standing still in
@@ -6122,7 +6127,10 @@ try {
   const sim = new Sim({ seed: 606, party: [{ idx: 0, key: 'k', name: 'SP', charId: T1_REFERENCE, color: '#fff' }] });
   const p = sim.players[0];
   SKILLSIM.answerOpening(sim, p);
-  const fight = sim.floor.nodes.find(n => n.kind === 'combat');
+  // Not map 1. Clearing that room grants levels up to 6, which would fund
+  // this pocket and make both of the counts below measure the guarantee
+  // instead of the spend step.
+  const fight = representativeNode(sim);
   sim._travelTo(fight.id);
 
   // ORDER, NOT JUST PRESENCE. Both offers are opened in the same frame by
@@ -6187,7 +6195,7 @@ try {
   const sim2 = new Sim({ seed: 607, party: [{ idx: 0, key: 'k', name: 'SP', charId: T1_REFERENCE, color: '#fff' }] });
   const p2 = sim2.players[0];
   SKILLSIM.answerOpening(sim2, p2);
-  sim2._travelTo(sim2.floor.nodes.find(n => n.kind === 'combat').id);
+  sim2._travelTo(representativeNode(sim2).id);
   let opened2 = false;
   const realSpend2 = sim2._offerSpend.bind(sim2);
   sim2._offerSpend = (q) => { const r = realSpend2(q); if (q.idx === 0 && q.spendOffer) opened2 = true; return r; };
