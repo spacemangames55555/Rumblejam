@@ -428,9 +428,9 @@ function syncSkillsLayer() {
 
 // Clear shop stock is rolled on the host at the clear. This only decides when
 // the overlay is shown. Banners, then every level-up card, then the skills
-// spend step when this clear still has a point to spend. A shop that is
-// already on screen (a buy or a reroll) keeps updating. Hiding is not
-// closeShop — that would dismiss the stock.
+// spend step while a point is still unspent. A shop that is already on screen
+// (a buy or a reroll) keeps updating. Hiding is not closeShop — that would
+// dismiss the stock.
 function shopBlocked() {
   if (bannersActive() || cardsOutstanding() || isSkillsOpen()) return true;
   if (spendOffered() && !app.spendDismissed) return true;
@@ -445,13 +445,11 @@ function unspentPoints() {
   return (app.meta && app.meta.skillPoints) || 0;
 }
 
-// The automatic panel is the level-up's spend. No card this clear, or nothing
-// left once the last card is picked, and forcing the tree up would be an
-// empty Close between the player and the trader. Leftover points stay on the
-// badge; this does not spend them.
+// The automatic panel is the post-clear spend. It opens whenever a point is
+// still unspent, whether or not this clear offered a card. Zero points is the
+// only skip: the trader opens on its own. This does not spend a point.
 function spendAutoSkipped() {
-  if (clearHadLevelup && unspentPoints() > 0) return false;
-  return true;
+  return unspentPoints() <= 0;
 }
 
 // Same exit a real Close sends once the cards are done. spendDone only clears
@@ -513,9 +511,9 @@ function pokeSkillsAnnounce() {
   const el = document.getElementById('overlay-skills');
   if (el && el.dataset.heldBanner === '1') {
     delete el.dataset.heldBanner;
-    // Putting a parked panel back when this clear has nothing to spend would
-    // make the player close it to reach the trader. A real spend still restores
-    // it, and a manual open that is already on screen is left alone below.
+    // Putting a parked panel back at 0 points would make the player close an
+    // empty tree to reach the trader. A point still unspent restores it, and a
+    // manual open that is already on screen is left alone below.
     if (!isSkillsOpen() && !spendAutoSkipped()) toggleSkills(true, true);
   }
   if (!isSkillsOpen() && spendAutoSkipped()) {
@@ -953,7 +951,6 @@ function startRunCommon() {
   app.lastSnapAt = performance.now(); // grace window before the no-snapshot watchdog may fire
   pendingLevelup = null;
   heldShop = null;
-  clearHadLevelup = false;
   app.spendSeen = false;
   app.spendDismissed = false;
   app.spendBannerArm = false;
@@ -1247,7 +1244,6 @@ function leaveToTitle() {
   showHud(false);
   closeAllOverlays();
   heldShop = null;
-  clearHadLevelup = false;
   hideMapScreen();
   setNetStatus('');
   showTitle();
@@ -1327,11 +1323,6 @@ let pendingLevelup = null;
 // The latest shop event for this player, held until the clear's cards and the
 // skills spend step are both finished. Null once the overlay is shown.
 let heldShop = null;
-// Set for the clear whose cards are on screen. Reset at the room's own clear
-// event, which is processed before that clear's offers, so a previous room
-// cannot keep the spend step alive and a card banked during the fight still
-// counts. No offer means there was no level-up to spend after.
-let clearHadLevelup = false;
 
 // The top-up is a stack of ordinary level-ups. Nothing in the sim says "this
 // one was the guarantee" — saying so would be a new event, and the banner is
@@ -1415,7 +1406,6 @@ function handleEvent(ev) {
     case 'roomClear':
       // Plain text, like every other banner. The old <b> tag was escaped and
       // drawn as letters. The count is formatted here; the sim total is exact.
-      clearHadLevelup = false;
       banner('FIELD CLEAR', lootLine(ev.collected, ev.lost, ' · nothing wasted'), 2200);
       break;
     case 'lootOver':
@@ -1431,7 +1421,6 @@ function handleEvent(ev) {
       if (ev.idx === app.myIdx && app.meta) app.meta.skillPoints = ev.points || 0;
       break;
     case 'offer': if (ev.idx === app.myIdx) {
-      clearHadLevelup = true;
       pendingLevelup = ev;
       app.clientOffer = true;
       afterBanners(() => {
@@ -1475,7 +1464,6 @@ function handleEvent(ev) {
     case 'bossSpawn': app.bossInfo = { name: ev.name }; banner(ev.name, 'FLOOR BOSS', 2600); sfx.roar(); break;
     case 'bossPhase': banner('ENRAGED', '', 1200); sfx.roar(); break;
     case 'bossDown':
-      clearHadLevelup = false;
       banner('BOSS DEFEATED', 'sweep the field — the spoils fizzle when the count hits zero', 2600);
       break;
     case 'end': {
