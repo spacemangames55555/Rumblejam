@@ -47,7 +47,7 @@ import { fxSpec, SHAPE } from './content/skillfx.js';
 const PLAGUE_ART = {
   tint: '#7A8C3A',
   tintStrength: 0.30,
-  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height; min/max are on-screen px (÷ min(fit,1) at draw)
+  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height; min/max are on-screen CSS px (÷ min(scale/dpr,1) at draw)
   markGap: 12,                               // clears the hp bar (r+5 .. r+10)
   tick: '#A3B05A', tickScale: 0.85, tickDur: 0.6, tickVy: -40,
 };
@@ -64,6 +64,23 @@ function markSeed(id) {
   h = Math.imul(h, 0xc2b2ae35) >>> 0;
   h ^= h >>> 16;
   return (h >>> 0) || 1;
+}
+
+// The mark is drawn only while this is true. The status tick drives plagueT
+// through 0 and clears the stack on that same tick; the host view and
+// snapshot bit 128 are this predicate, so the skull leaves with the timer.
+export function plagueMarkShown(plagueT) {
+  return (plagueT || 0) > 0;
+}
+
+// World-unit content height for the mark. markMin and markMax are CSS px.
+// `scale` is device px per world unit, the fit draw() stores on _screen.
+// CSS px per world unit is scale/dpr; a fit below 1 lifts the floor so the
+// mark stays 30 CSS px, and a fit above 1 does not enlarge it.
+export function plagueMarkWorldHeight(radius, scale, dpr) {
+  const d = dpr > 0 ? dpr : 1;
+  const fit = Math.min((scale || d) / d, 1);
+  return clamp(radius * PLAGUE_ART.markPerR, PLAGUE_ART.markMin / fit, PLAGUE_ART.markMax / fit);
 }
 
 const MINION_ART = {
@@ -1326,13 +1343,14 @@ export class Renderer {
     if (e.plagued) {
       // looped by drawSprite from the manifest fps; `seed` offsets the phase so
       // a plagued wave does not pulse in lockstep
-      // markMin/markMax are SCREEN px (Designer: 30px minimum on screen). The
-      // room is fit to the canvas (draw(): scale = min(cw/VIEW_W, ch/VIEW_H)),
-      // so a fit below 1 would shrink the mark; dividing by min(fit, 1) undoes
-      // that, and a zoom-in (fit > 1) never enlarges it. Render-only: the fit
-      // comes from this._screen, set in draw() before any entity is drawn.
-      const fit = Math.min((this._screen && this._screen.scale) || 1, 1);
-      const mh = clamp(r * PLAGUE_ART.markPerR, PLAGUE_ART.markMin / fit, PLAGUE_ART.markMax / fit);
+      // markMin/markMax are CSS px on screen (Designer: 30px minimum). The room
+      // is fit to the canvas (draw(): scale = min(cw/VIEW_W, ch/VIEW_H)) and
+      // the canvas is sized in DEVICE px (window × this.dpr, _resize), so CSS
+      // px per world unit is scale / dpr. Below 1 that would shrink the mark;
+      // dividing by min(fit, 1) undoes it, and a zoom-in (fit > 1) never
+      // enlarges it. Render-only: the fit comes from this._screen, set in
+      // draw() before any entity is drawn; a missing dpr counts as 1.
+      const mh = plagueMarkWorldHeight(r, this._screen && this._screen.scale, this.dpr);
       drawSprite(ctx, FX.plagueMark, 0, -r - PLAGUE_ART.markGap - mh / 2, { scale: spriteScaleFor(FX.plagueMark, mh), seed: markSeed(e.id) });
     }
     ctx.restore();

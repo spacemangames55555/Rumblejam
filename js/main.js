@@ -16,7 +16,7 @@ import { HostTransport, ClientTransport } from './net.js';
 import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
 import { serializeObjective } from './objectives.js';
 import { OBJECTIVE_META } from './objectives.js';
-import { Renderer } from './render.js';
+import { Renderer, plagueMarkShown } from './render.js';
 import { initInput, sampleInput, takeDebugKey, pressInteract, pressStance } from './input.js';
 import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx, preloadAirhorn, levelupHorn, audioStats, getCtxState, getMasterGainValue, setVolume, getVolume } from './audio.js';
@@ -1690,7 +1690,7 @@ function viewFromSim(sim) {
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
       flash: e.hitFlash > 0, fusing: e.fusing, pylon: e.typeIdx === -2,
       winding: e.telState === 1,   // TELEGRAPH_STATES.WINDUP — drives the wind-up pose
-      plagued: (e.plagueT || 0) > 0,   // tint + fx.plague_mark; flag bit 128 on the wire
+      plagued: plagueMarkShown(e.plagueT),   // tint + fx.plague_mark; flag bit 128 on the wire
       domain: e.domain,
       // sprite id from the definition table, exactly as shape/color are — the
       // client resolves the same id from the type index on the wire
