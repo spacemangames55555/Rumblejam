@@ -132,12 +132,28 @@ export class Page {
 // One helper rather than twenty edits: the sequence is a property of the shell,
 // not of any one test.
 //
+// THE SECOND CLICK IS `#world-enter`, NOT `.world-card`. The card was the
+// dossier's old shape. The live control is a `.world-pin` plus the enter
+// button `paintDossier` writes for the selected region. Clicking the removed
+// card threw "no region N card" on every suite that starts a run, so none of
+// them ever reached a fight. `browser_test.mjs` has its own copy of this
+// helper and it has to move with this one.
+//
 // `regionIndex` defaults to 1 because that is the only region a fresh
 // character may enter, and every browser suite starts from a fresh profile.
 export async function startRun(P, regionIndex = 1) {
   await P.exec(`document.getElementById('btn-start').click(); return 1;`);
   await P.waitFor(`return document.getElementById('screen-world') && !document.getElementById('screen-world').classList.contains('hidden') ? 1 : 0`, 8000, 'world map');
-  await P.exec(`const c=document.querySelector('.world-card[data-region="${regionIndex}"]'); if(!c) throw new Error('no region ${regionIndex} card'); c.click(); return 1;`);
+  await P.exec(`
+    const idx = ${regionIndex | 0};
+    const pin = document.querySelector('.world-pin[data-region="' + idx + '"]');
+    if (!pin) throw new Error('no region ' + idx + ' pin');
+    if (!pin.classList.contains('selected')) pin.click();
+    const enter = document.getElementById('world-enter');
+    if (!enter || enter.disabled) throw new Error('region ' + idx + ' is not enterable');
+    enter.click();
+    return 1;
+  `);
   return P.waitFor(`return window.uv.mode==='run' ? 1 : 0`, 12000, `region ${regionIndex} run started`);
 }
 

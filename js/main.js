@@ -704,7 +704,21 @@ function hostStartRun(seedOverride = null) {
     // learnable — so the seed is generated when a region is ENTERED and reused
     // for every attempt at it. `hostStartRun(seed)` passes it back on retry;
     // entering any region from the world map passes nothing and rolls a new one.
-    const seed = seedOverride ?? randomRunSeed();
+    //
+    // `?seed=` pins that roll. It is how a co-op reproduction names the layout
+    // it measured — the sim stream underneath is unchanged, and a normal visit
+    // with no parameter still draws from `randomRunSeed`. A retry passes
+    // `seedOverride` and wins over the query, so a pinned page does not roll a
+    // second layout when the party wipes.
+    const fromUrl = (() => {
+      try {
+        const raw = new URLSearchParams(location.search).get('seed');
+        if (raw == null || raw === '') return null;
+        const n = Number(raw);
+        return Number.isFinite(n) ? (n >>> 0) : null;
+      } catch { return null; }
+    })();
+    const seed = seedOverride ?? fromUrl ?? randomRunSeed();
     app.regionSeed = seed;
     // `carry` rides the party member because that is the only thing `_makePlayer`
     // is handed. Absent on the first region of a run, which is exactly when a
