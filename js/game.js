@@ -3474,7 +3474,6 @@ export class Sim {
   // imported into compose.js, which minions.js already depends on.
   healMinions(p, amount) { return MIN.healMinions(p, amount); }
   applyPlague(e, dmg, dur, p, skill) { return SK.applyPlague(this, e, dmg, dur, p, skill); }
-  applyCastSlow(e, mult, dur) { return SK.applyCastSlow(e, mult, dur); }
   applySlow(e, mult, dur, owner = null) { return SK.applySlow(this, e, mult, dur, owner); }
   queueSkillStep(p, skill, step, rank, delay) { return SK.queueSkillStep(this, p, skill, step, rank, delay); }
   // ---- summon surface (js/compose.js's `summon` primitive and ON_TOKEN) ----
