@@ -35,9 +35,9 @@ export const ALL_CHAR_BY_ID = CHAR_BY_ID;
 // code change at all; a hand-maintained list would need editing once per class
 // and would be wrong the first time someone forgot.
 //
-// Twelve of the fourteen are unselectable today. They stay VISIBLE, greyed,
-// with the reason on the card — a roster that silently shrinks to two looks
-// broken, and a player who cannot see what is coming cannot look forward to it.
+// A class with no tree stays VISIBLE and greyed, with the reason on the card.
+// A roster that silently dropped an unfinished class would look broken. When
+// a tree lands, the class becomes selectable with no edit here.
 export function classTrees(charId) { return TREES_BY_CLASS[charId] || []; }
 export function isSelectable(charId) { return classTrees(charId).length > 0; }
 export function unselectableReason(charId) {

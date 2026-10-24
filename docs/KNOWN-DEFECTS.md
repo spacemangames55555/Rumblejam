@@ -168,6 +168,114 @@ enough 4p runs to catch a second occurrence is the method.
 Fixed, and gated. Here because the failure shape is one that recurs, so a
 regression should be findable by these steps rather than diagnosed from scratch.
 
+## 11. Players deal no damage in the co-op run, and take it normally
+
+**Fixed 2026-10-23.** Weapons are gone, so a character with nothing slotted
+deals nothing, and the co-op run was full of those characters. Both players'
+`damageDealt` stayed at 0 while enemies hurt them. The fight could not be won,
+so every later wait — host run, extraction shop, fight clear — timed out under
+its own name.
+
+### What a player saw
+
+A two-player run. Enemies shoot and connect. Neither character's damage tally
+moves, on the host, for the whole fight:
+
+```
+✗ no organic damage dealt on touch within 15s
+✗ damage tallies: {"d0":0,"d1":0,"hurt":true}
+```
+
+`hurt: true` is the enemies working. `d0` and `d1` are `players[0]` and
+`players[1]` `damageDealt` on the host sim. The client draws whatever that sim
+puts on the snapshot, so a zero there is a zero on both screens.
+
+### Root cause
+
+Skills are the only damage source. `CONFIG.WEAPONS_ENABLED` is false,
+`weaponSlots` is 0, and `_tickWeapons` is never called. Skills come from trees,
+and `treesFor(p)` keys off `charId`.
+
+The classic roster was the default, and none of its 33 characters had a tree.
+A party of them walks into the arena, gets shot, and has nothing that can fire.
+Where a tree existed the engine already worked — learn, auto-slot, kill — which
+is why the fix does not live in the trigger core. `offence_test` measured that
+on `toh_necromancer` (necro_blip, 80 damage, 4 kills) and `toh_samurai`
+(sam_cross_guard, 162, 4 kills) while the other 45 characters scored 0.
+
+Two things kept a patch from seeing it:
+
+- `sim_test` cleared every fight with `nuke()` (`damageEnemy(e, 900, {owner: p})`
+  on a timer). A harness that kills the enemies cannot tell whether the player
+  can. That is now `clearFieldForSetup`, and `assertPlayerCleared` refuses a
+  combat claim off a sim it has touched.
+- `CHAR_BY_ID[id] || CHAR_BY_ID.bulwark` turned an id from the other roster into
+  bulwark with bulwark's stats and the original `charId`. The trees, keyed off
+  `charId`, did not follow, and nothing threw.
+
+The roster retirement (one ToH roster, unknown id throws, selectability derived
+from `TREES_BY_CLASS`, a load assertion that every selectable class has a
+damaging tier-1 active) removed the silent fallback and the 33. It was written
+into this entry and left here, because at that commit only `toh_samurai` and
+`toh_necromancer` had trees and the other twelve could not be chosen. Those
+twelve trees are in the tree data now. All 14 classes are selectable, each
+tier-1 active deals damage, and `_offerOpening` / the opening card is what puts
+that active on the bar. The anti-softlock floor still exists and still has to
+stay at 0 on this path: a run that only fights because the floor fired has not
+offered the player the choice.
+
+Measured on the pinned seed `424242`, standing still, card answered, both
+players, every one of the 196 pairs: both `damageDealt` counters are above 0
+inside 22s and `openingFloored` is 0. The recorded browser pair is blacksmith
+hosting and wizard joining on that same seed, each clicking their own opening
+card: both deal damage, the party is hurt, and the client's decoded snapshot
+shows an enemy below full HP.
+
+A three-second read right after the arena opens is still 0,0. That is the
+onboarding walk, not an unarmed party — the first spawn is still crossing the
+ring. The entry's own caution stands: a window that short accused working
+classes once already. The gate waits for the damage or for 30s, and it says
+when the arena never presented an enemy.
+
+### Why the suites missed the co-op half
+
+`offence_test` is one player and never ticks the consent vote. A 2-player
+`pickNode` only starts the vote; a harness that does not tick it never enters
+the arena and reports a different failure. The browser co-op tally slept 3
+seconds and still named retired ids (`banneret`, `lodestone`, `facet`), and
+`startRun` in both `tools/browser_test.mjs` and `tools/cdp_harness.mjs` clicked
+`.world-card`, which the world map no longer renders. The helper threw
+`no region N card` before a fight existed, so the tally could not go green or
+red. The card is `#world-enter` on the selected `.world-pin`.
+
+### Reproduce (pre-fix)
+
+Start a 2-player run with a character whose `charId` has no tree (any archived
+classic id, before the throw), or empty both loadouts after the door and before
+the fight. Tick 20 seconds.
+
+```
+✗ damage tallies: {"d0":0,"d1":0,"hurt":true}
+```
+
+The negative control in the gate does the second of those on samurai + monk and
+requires the zero, so a counter that moves without a slotted skill cannot pass.
+
+### What holds it now
+
+| gate | where | asserts |
+|---|---|---|
+| co-op offence, every pair | `tools/coop_offence_test.mjs` | all 196 selectable pairs, seed 424242, card answered, vote ticked, both `damageDealt` > 0 inside 22s, `openingFloored` === 0 |
+| the wire | same file | a decoded snapshot shows an enemy below full HP |
+| negative control | same file | samurai + monk with loadouts cleared at the door stay at 0 |
+| the recorded tally | same file | blacksmith + wizard on that seed deal damage and are hurt |
+| a real session | same file | two browsers, local relay, blacksmith hosting and wizard joining, seed 424242, each clicks the opening card, `startRun` enters region 1, both tallies move, the party is hurt, and the client snapshot shows a wounded enemy or a hit |
+
+`node tools/offence_test.mjs` still holds the solo half: every selectable class,
+the card rather than the floor, and a retired id throws.
+
+---
+
 ## 4. The boon panel could open with no exit, softlocking a solo touch run
 
 **Fixed 2026-08-05.** Three separate defects stacked into one unrecoverable
@@ -815,134 +923,6 @@ out of scope. Recorded so the failures are attributed rather than re-diagnosed.
 partly because of this: it pairs two real pages directly and never touches a
 shop, so it can verify client input delivery without depending on a suite that
 cannot reliably get there.
-
----
-
-## 11. Players deal no damage in the co-op run, and take it normally
-
-**Where:** unknown. Surfaced by every full co-op run once §10 stopped ending the
-phase early.
-
-**What is wrong.** Two checks fail together in run after run:
-
-```
-✗ no organic damage dealt on touch within 15s
-✗ damage tallies: {"d0":0,"d1":0,"hurt":true}
-```
-
-`hurt: true` means enemies are damaging players. `d0: 0, d1: 0` means neither
-player has dealt a single point in return.
-
-**Why it is recorded separately.** It is almost certainly why the phase then
-dies in three different places across three runs — `timeout waiting for host
-run`, `timeout waiting for host extraction shop`, `timeout waiting for a fight
-to clear` — because a fight that cannot be won never clears, and everything
-downstream waits on a clear. Those three timeouts read as three flaky checks;
-they are one defect wearing three names, which is the conflation this file
-exists to stop.
-
-### Diagnosed: 2 of 47 characters have a skill tree, and neither is selectable by default
-
-`tools/offence_test.mjs` puts each character in an arena, spends its opening
-skill point, ticks 20 real seconds and reads what the **player** dealt. It never
-calls `damageEnemy` on the player's behalf.
-
-| roster | characters | have any tree | can learn an active | deal aimed damage |
-|---|---|---|---|---|
-| `classic` (the default) | 33 | **0** | **0** | **0** |
-| `toh` | 14 | 2 | 2 | 2 |
-
-Weapons are removed — `CONFIG.WEAPONS_ENABLED` is false, `weaponSlots` is 0, and
-`_tickWeapons` is never called — so **skills are the only damage source.** Skills
-come from trees. `TREES_BY_CLASS` has exactly two entries, `toh_samurai` and
-`toh_necromancer`. Every other character in the game has no way to learn
-anything, and therefore no attack.
-
-The game boots on `classic`. **Not one of its 33 characters can deal a point of
-aimed damage.** That is the whole of the symptom: fights cannot be won, so they
-never clear, so everything waiting on a clear times out under a different name.
-
-**The engine is not broken, and that distinction decides where the fix goes.**
-Where a tree exists it works end to end — the character learns, `spendSkillPoint`
-auto-slots the active, and it kills:
-
-```
-toh_necromancer: learned necro_blip,      dealt 80,  4 kills
-toh_samurai:     learned sam_cross_guard, dealt 162, 4 kills
-```
-
-What is missing is content: 45 characters' worth of skill trees. That is GDD §14
-phase 5 work, not a bug fix.
-
-### Why nothing caught it
-
-- **`sim_test` clears every fight with `nuke()`** — `damageEnemy(e, 900, {owner: p})`
-  on every enemy every 240 ticks. A harness that kills the enemies for you cannot
-  answer whether the player can, so the suite stayed green against a party with
-  no offence at all. `tools/offence_test.mjs` exists because that gap did.
-- **A charId from the other roster resolved silently to `bulwark`.** Right stats,
-  right trait, wrong `charId` — and `treesFor(p)` keys off `charId`, so the
-  player got a character with no trees and nothing said so. Fixed: the fallback
-  still happens (a bad id must not crash a run) but it now names the id, the
-  active roster, and the fact that the trees do not follow.
-
-### Resolved by retiring the classic roster
-
-The 33 were never waiting for trees — they are pre-overhaul content the GDD's
-14-class design replaces. Building trees for them would have been authoring
-content the design had already removed. So:
-
-- **One roster.** The ToH 14 are the roster. The classic 33 are preserved,
-  unimported, in `archive/classic-roster/` with a README on what to mine from
-  them. `js/roster.js`, `setRoster()`, `ROSTERS`, `rosterOf()`,
-  `applyHostRoster()` and the lobby roster picker are gone — with one roster
-  there is nothing to resolve, guard or switch.
-- **The silent fallback is gone.** `CHAR_BY_ID[id] || CHAR_BY_ID.bulwark` threw
-  away the distinction between "this character" and "some character", which is
-  most of why this defect survived a patch. An unknown id now throws.
-- **Selection is gated on having a tree, derived from the tree data.** Today
-  that is `toh_samurai` and `toh_necromancer`. The other twelve are *visible*
-  and greyed with the reason on the card — a roster that silently shrinks to
-  two reads as broken rather than unfinished. As phase 5 lands trees they
-  become selectable with **no code change**.
-- **A load assertion** refuses any selectable class without a damaging tier-1
-  active. Tier 1 is all a level-1 character can reach, and "has a tree" is not
-  enough — a tree of passives arms nobody.
-- **`tools/offence_test.mjs` walks every selectable class**, never a sample, so
-  a class that becomes selectable without offence fails the moment it does.
-
-Twelve of fourteen classes still need trees. That is phase-5 content and is not
-attempted here; what changed is that it is now a *stated, gated, asserted* gap
-rather than a game that boots into a roster that cannot fight.
-
-### And `nuke()` is gone
-
-It was `damageEnemy(e, 900, {owner: p})` on every enemy every 240 ticks. It is
-now `clearFieldForSetup(sim, p, reason)`: it demands a reason, stamps the sim,
-and `assertPlayerCleared()` refuses to let any sim it has touched carry a combat
-result. Every run prints how many fights the harness ended and why.
-
-**The suite went from 30 failures to 58, and that is the deliverable.** The
-previous green was measured through the nuke. Classified:
-
-| class | count | what it is |
-|---|---|---|
-| offence, newly visible | 14 | objectives never clearing, `UNKILLABLE` regenerating marks, camper statues dying, per-class first fights |
-| retired-character trait tests | 20 | Rampart/Vesper/Facet/Broker/Pulsar/Gilded One/Quartermaster/Bulwark/Soulbond/aura/drip/toll — testing characters that no longer exist. **Delete next.** |
-| weapon leftovers | 10 | pre-existing, §15 defect #10 territory |
-| crashes | 5 | same two causes as the above two rows |
-| other | 9 | ToH trait gaps (Bard rhythm, infusion, hitbox), sprite/grid plumbing |
-
-The 20 retired-trait tests are noise that should be deleted rather than fixed —
-they assert on traits of archived characters. The 14 in the first row are the
-signal this whole change was for.
-
-**One caution recorded against the instrument itself.** Its first default was 12
-seconds, at which the two characters that *can* fight scored zero, and it
-declared an engine failure. A threshold short enough to make a working thing
-look broken is the same defect as a missing counter — it nearly sent the fix at
-the trigger core. The default is 20s and the reason is written at the top of the
-file.
 
 ---
 
