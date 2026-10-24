@@ -1036,18 +1036,8 @@ export function applyPlague(sim, e, damage, dur, p, skill) {
   // carries it and the tick loop stays a plain subtraction. Ferocity does not:
   // a dot is a status, and §9.5 gives status potency to Attunement.
   const amt = damage * statusMult(p);
-  // THE FIRST POINT, ON THE CAST. A plague otherwise banks damage until the
-  // accumulator crosses 1, so the opening half-second of a cast deals nothing.
-  // `tickOnCast` moves that first point into the cast: it is seeded into the
-  // same accumulator, and the next status tick — the same frame, because
-  // statuses run after skills — pays it. The seeded point is subtracted from
-  // the drip, so one cast's integral over the full duration does not change.
-  // The point is 1 because that is the size the accumulator pays. No roll.
-  const onCast = !!(skill && (skill.compose || []).some(s => s.kind === 'plague' && s.tickOnCast));
-  const upFront = onCast && amt >= 1 ? 1 : 0;
   e.plagueT = Math.max(e.plagueT || 0, dur);
-  e.plagueDps = (e.plagueDps || 0) + (amt - upFront) / Math.max(0.1, dur);
-  if (upFront > 0) e.plagueAcc = (e.plagueAcc || 0) + upFront;
+  e.plagueDps = (e.plagueDps || 0) + amt / Math.max(0.1, dur);
   e.plagueOwner = p.idx;
   e.plagueDomain = skill.domain;
   // Which skills are still in the stack. A retarget that means "not already

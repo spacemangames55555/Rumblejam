@@ -224,11 +224,8 @@ export const NECRO_SUMMONS = [
     // `plague` with NO spread radius, per the classification. "Stacks to 6" is
     // not expressible — `applyPlague` adds into one stack rather than keeping
     // six — so this is one DoT, and the crowd is covered by retargeting.
-    // `tickOnCast` pays the first point in the cast. The rest of the same
-    // total still drips for the whole duration. Damage stays 8, so a rank-1
-    // cast is still 10 over the duration. Cooldown stays 1600. Spread stays 0.
     compose: [{ kind: 'plague', damage: T.cascadeDamage, duration: T.cascadeDur,
-      tick: T.cascadeTick, spreadRadius: 0, preferClean: true, tickOnCast: true }],
+      tick: T.cascadeTick, spreadRadius: 0, preferClean: true }],
     ranks: rankPer(2, T.cascadeDamage),
   },
   {
