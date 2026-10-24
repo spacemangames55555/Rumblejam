@@ -58,15 +58,21 @@ export function updateEnemy(sim, e, dt) {
     e.enrage = Math.min(1.6, (e.enrage || 0) + e.enrageRate * dt);
     spd = e.spd * (1 + e.enrage);
   }
-  // The chill still bites on the frame its clock crosses 0. Cascade's plague
-  // slow is a separate fraction, cleared with plagueT on the status tick that
-  // follows this movement. Where both are up, the stronger multiplier wins —
-  // Math.min, the same rule `_applySlow` and `applySlow` use when two chills
-  // meet — and each keeps its own clock, so they are not multiplied.
+  // The chill still bites on the frame its clock crosses 0. Cascade adds two
+  // more fractions, each with its own clock: `castSlowT` is the on-cast pulse,
+  // and `plagueSlow` lasts until the status tick clears plagueT. Where more
+  // than one is up, the stronger multiplier wins — Math.min, the same rule
+  // `_applySlow` and `applySlow` use when two chills meet. They are not multiplied.
   let chill = 1;
   if (e.slowT > 0) { e.slowT -= dt; chill = e.slowMult; }
+  let pulse = 1;
+  if (e.castSlowT > 0) {
+    e.castSlowT -= dt;
+    pulse = e.castSlow || 1;
+    if (e.castSlowT <= 0) { e.castSlowT = 0; e.castSlow = undefined; }
+  }
   const plagued = e.plagueSlow || 1;
-  const slowed = plagued < chill ? plagued : chill;
+  const slowed = Math.min(chill, pulse, plagued);
   if (slowed !== 1) spd *= slowed;
   if (e.hitFlash > 0) e.hitFlash -= dt;
   // elite mod ticks

@@ -44,7 +44,7 @@ export const TUNING = {
   // tier_code 8 — Entropy Cascade
   // 1600 is 16 trigger ticks. Damage stays 8.
   cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 1600,
-  cascadeSlow: 0.75,
+  cascadeSlow: 0.75, cascadeSlowRadius: 80, cascadeSlowDur: 1500,
   // tier_code 9 — Army of the Dead
   armyHp: 45, armyRadius: 13, armySpawnRadius: 66, armyCount: 6,
   armyDuration: 20000, armyCd: 25000, armyCrowdRadius: 400, armyCrowdCount: 10,
@@ -224,12 +224,15 @@ export const NECRO_SUMMONS = [
     cooldown: T.cascadeCd,
     // `plague` with NO spread radius, per the classification. "Stacks to 6" is
     // not expressible — `applyPlague` adds into one stack rather than keeping
-    // six — so this is one DoT, and the crowd is covered by retargeting.
-    // `slow` is the move fraction while this plague lasts. A recast assigns
-    // it again, so it does not deepen. Damage stays 8, so a rank-1 cast is
-    // still 10 over the duration. Cooldown stays 1600. Spread stays 0.
+    // six — so the damage is one DoT, and that crowd is covered by retargeting.
+    // `slow` stays on the plagued body for the whole plague. `slowRadius` is a
+    // separate on-cast pulse around that body: 80px, 1.5s, the same fraction,
+    // and it does not carry the damage. A recast assigns the fraction again.
+    // Damage stays 8, so a rank-1 cast is still 10 over the duration. Cooldown
+    // stays 1600. Spread stays 0.
     compose: [{ kind: 'plague', damage: T.cascadeDamage, duration: T.cascadeDur,
-      tick: T.cascadeTick, spreadRadius: 0, preferClean: true, slow: T.cascadeSlow }],
+      tick: T.cascadeTick, spreadRadius: 0, preferClean: true, slow: T.cascadeSlow,
+      slowRadius: T.cascadeSlowRadius, slowDur: T.cascadeSlowDur }],
     ranks: rankPer(2, T.cascadeDamage),
   },
   {

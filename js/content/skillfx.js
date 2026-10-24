@@ -243,6 +243,9 @@ function buildSpec(skill) {
       || ((skill.trigger || {}).range)
       || ((skill.trigger || {}).radius)
       || 80,
+    // Cascade's cast circle. World px, drawn as given. 0 means the shape's
+    // own animated reach, which is every other blight.
+    castR: ((skill.compose || [])[0] || {}).slowRadius || 0,
     arc: ((skill.compose || [])[0] || {}).arc
       || ((skill.compose || [])[0] || {}).angle
       || 1.5,

@@ -4090,7 +4090,7 @@ try {
     SKILLSIM.applyPlague(sim, e, 1, 0.1, p0, cascade);
     if (e.plagueSlow !== 0.75) slowBad.push(`recast changed it to ${e.plagueSlow}`);
     const card = mechanics(cascade, 1).fields.find(f => f.key === 'slow');
-    if (!card || card.now !== 'to 75% speed while it lasts' || card.next !== undefined) {
+    if (!card || card.label !== 'Slows' || card.now !== 'nearby enemies to 75% speed on cast.' || card.next !== undefined) {
       slowBad.push(`card ${card ? JSON.stringify(card) : 'missing'}`);
     }
     // One step toward the player, in the open. Brute walks with no roll.
@@ -4127,6 +4127,76 @@ try {
     if (slowBad.length) fail(`cascade slow: ${slowBad.join(' | ')}`);
     else if (sawOn && cleared) ok('plague mark clears the tick plagueT crosses 0 — view flag and snapshot bit 128 drop together, the stack is wiped, and Cascade\'s 25% slow clears with it');
     else fail(`plague mark did not clear on the expiry tick (sawOn ${sawOn}, cleared ${cleared}, plagueT ${e.plagueT}, plagueSlow ${e.plagueSlow})`);
+
+    // On cast, the pulse is 80px around the plague target and lasts 1.5s.
+    // The two neighbours sit outside Cascade's 300px acquire range, so a
+    // recast still resolves the same target and the radius is what decides
+    // who is slowed. No roll on this path.
+    const { fxSpec } = await import('../js/content/skillfx.js');
+    const sim2 = new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const caster = sim2.players[0];
+    caster.x = 200; caster.y = 360;
+    caster.skillRanks[cascade.id] = 1;
+    const target = sim2.spawnEnemyById('skulker', 450, 360, { noMats: true });
+    const edge = sim2.spawnEnemyById('skulker', 530, 360, { noMats: true });
+    const far = sim2.spawnEnemyById('skulker', 531, 360, { noMats: true });
+    target.x = 450; target.y = 360;
+    edge.x = 530; edge.y = 360;
+    far.x = 531; far.y = 360;
+    const cast = () => {
+      sim2.trigGrid.rebuild(sim2.enemyPool);
+      sim2.fx.skillFires.length = 0;
+      SKILLSIM.fireSkill(sim2, caster, cascade);
+    };
+    const pulseBad = [];
+    const dt = 1 / 60;
+    cast();
+    const step = cascade.compose[0];
+    if (step.spreadRadius !== 0 || step.slowRadius !== 80 || step.slowDur !== 1500 || step.slow !== 0.75) {
+      pulseBad.push(`def spread ${step.spreadRadius} radius ${step.slowRadius} dur ${step.slowDur} slow ${step.slow}`);
+    }
+    const spec = fxSpec(cascade.id);
+    if (!spec || R.castCircleRadius(spec, 0) !== 80 || R.castCircleRadius(spec, 1) !== 80) {
+      pulseBad.push(`circle ${spec ? R.castCircleRadius(spec, 0) : 'none'}`);
+    }
+    const fire = sim2.fx.skillFires[0];
+    if (!fire || fire.tx !== target.x || fire.ty !== target.y) pulseBad.push(`centre ${fire && fire.tx},${fire && fire.ty}`);
+    if (edge.castSlow !== 0.75 || edge.castSlowT !== 1.5) pulseBad.push(`at 80px ${edge.castSlow} for ${edge.castSlowT}`);
+    if (edge.plagueT || edge.plagueSlow) pulseBad.push('80px neighbour took the plague');
+    if (far.castSlow || (far.castSlowT || 0) > 0 || far.plagueT) pulseBad.push('outside 80px was slowed');
+    if (target.castSlow !== 0.75 || target.plagueSlow !== 0.75 || !(target.plagueT > 0)) pulseBad.push('target lost the plague slow or the pulse');
+    const measure = (body) => {
+      const homeX = body.x, homeY = body.y;
+      body.x = caster.x + 240; body.y = caster.y;
+      const x0 = body.x;
+      updateEnemy(sim2, body, dt);
+      const moved = x0 - body.x;
+      body.x = homeX; body.y = homeY;
+      return moved;
+    };
+    if (Math.abs(measure(edge) - edge.spd * dt * 0.75) > 0.02) pulseBad.push(`at 80px moved ${measure(edge)}`);
+    if (Math.abs(measure(far) - far.spd * dt) > 0.02) pulseBad.push('outside 80px was slowed in motion');
+    edge.slowT = 2; edge.slowMult = 0.5;
+    const chilled = measure(edge);
+    if (Math.abs(chilled - edge.spd * dt * 0.5) > 0.02) pulseBad.push(`stronger chill moved ${chilled}`);
+    if (!(edge.slowT > 1)) pulseBad.push('chill clock was replaced');
+    edge.slowT = 0; edge.slowMult = 1;
+    cast();
+    if (edge.castSlow !== 0.75 || edge.castSlowT !== 1.5) pulseBad.push(`recast stacked to ${edge.castSlow} for ${edge.castSlowT}`);
+    if (far.castSlow || far.plagueT) pulseBad.push('recast reached outside 80px');
+    edge.stunT = 30;
+    for (let i = 0; i < 30; i++) updateEnemy(sim2, edge, dt);
+    cast();
+    if (edge.castSlow !== 0.75 || Math.abs(edge.castSlowT - 1.5) > 1e-9) pulseBad.push(`half-duration recast ${edge.castSlow} for ${edge.castSlowT}`);
+    let frames = 0;
+    while ((edge.castSlowT || 0) > 0 && frames < 120) { updateEnemy(sim2, edge, dt); frames++; }
+    if (edge.castSlow || (edge.castSlowT || 0) > 0) pulseBad.push('pulse did not end');
+    if (Math.abs(frames * dt - 1.5) > dt + 1e-6) pulseBad.push(`pulse lasted ${frames * dt}s`);
+    while ((target.castSlowT || 0) > 0) updateEnemy(sim2, target, dt);
+    if (target.castSlow || target.plagueSlow !== 0.75 || !(target.plagueT > 0)) pulseBad.push('plague slow did not outlive the pulse');
+    if (far.castSlow || far.plagueT) pulseBad.push('outside gained a slow while the pulse ran');
+    if (pulseBad.length) fail(`cascade cast slow: ${pulseBad.join(' | ')}`);
+    else ok('Cascade slows enemies within 80px to 75% for 1.5s on cast, leaves anyone further out alone, and a recast does not stack it');
   }
 
   // -- the generator is the source of truth; a hand-edit must not survive --

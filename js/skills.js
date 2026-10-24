@@ -388,13 +388,15 @@ export const HEAL_RADIUS_PENDING = new Set([
 //
 // AND ONE IS CORRECT AND MUST NOT BE "FIXED". `necro_entropy_cascade` declares
 // `spreadRadius: 0` deliberately: its flavour is "It does not spread. It simply
-// keeps arriving", and it covers a crowd by retargeting the nearest enemy that
-// does not already carry it, rather than by contagion. A blanket rule against
-// a zero radius would break the one node that is right. So a deliberate
-// single-target plague is NAMED here, which is the point — the whole defect
-// is that "meant it" and "forgot" were indistinguishable.
+// keeps arriving", and the plague still covers a crowd by retargeting the
+// nearest enemy that does not already carry it. The on-cast slow is a separate
+// pulse around that target (`slowRadius`), not contagion — the damage still
+// hits only the one body. A blanket rule against a zero radius would break
+// the one node that is right. So a deliberate single-target plague is NAMED
+// here, which is the point — the whole defect is that "meant it" and "forgot"
+// were indistinguishable.
 export const PLAGUE_SINGLE_TARGET = new Map([
-  ['necro_entropy_cascade', 'flavour is "It does not spread. It simply keeps arriving" — it covers a crowd by retargeting, not by contagion'],
+  ['necro_entropy_cascade', 'flavour is "It does not spread. It simply keeps arriving" — the plague covers a crowd by retargeting; the on-cast slow is a pulse around that target, not contagion'],
 ]);
 // A RATCHET, exactly like HEAL_RADIUS_PENDING, AND IT IS EMPTY. Five plagues
 // were named as spreading and carried no radius; Casey ruled all five to 150 on

@@ -928,6 +928,21 @@ export const PRIMITIVES = {
     if (!seed) return;
     sim.applyPlague(seed, rankedDamage(step.damage, skill, rank), rankedDuration(step.duration, skill, rank) / MS, p, skill);
     out.statuses++;
+    // ON-CAST PULSE, measured from the body the plague landed on. Damage stays
+    // on that body (`spreadRadius` is a different field and Cascade leaves it
+    // at 0). Distance is centre to centre, and the edge is inside. No roll.
+    if (step.slowRadius > 0 && step.slow && step.slowDur > 0) {
+      const r = step.slowRadius;
+      const r2 = r * r;
+      const dur = step.slowDur / MS;
+      for (const e of grid.near(seed.x, seed.y, r)) {
+        const dx = e.x - seed.x, dy = e.y - seed.y;
+        if (dx * dx + dy * dy > r2) continue;
+        sim.applyCastSlow(e, step.slow, dur);
+        out.statuses++;
+      }
+      out.fxAt = seed;
+    }
     for (const e of grid.near(seed.x, seed.y, step.spreadRadius)) {
       if (e === seed) continue;
       const dx = e.x - seed.x, dy = e.y - seed.y;

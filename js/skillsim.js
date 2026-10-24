@@ -628,7 +628,7 @@ function runTriggerTick(sim) {
 }
 
 // ONE FIRE PER TICK PER SKILL, regardless of how many enemies satisfied it.
-function fireSkill(sim, p, sk) {
+export function fireSkill(sim, p, sk) {
   const rank = skillRank(p, sk.id);
   // THE CASCADE ADVANCES BEFORE THE COOLDOWN IS WRITTEN, so the cast that
   // extends the chain is itself shortened by the extension. See engines.js for
@@ -663,8 +663,12 @@ function fireSkill(sim, p, sk) {
   // a stack, the Mage's every-Nth singularity never counted, and the Sundian
   // never planted coral: the hook was orphaned, not broken. It needs only a
   // target position, so it takes the one this skill's own selector chose.
+  // A primitive that measured an area from a different body (Cascade's slow
+  // is centred on the plague target, which preferClean may have moved off the
+  // nearest) names that body on `out.fxAt`. The circle is drawn there.
   const range = sk.trigger.range || sk.trigger.radius || 0;
   const tgt = range ? selectTarget(sk.select, sim.trigGrid, p.x, p.y, range) : null;
+  const aim = out.fxAt || tgt;
   // Only computed when the ledger is on — this is a diagnostic scan, and a
   // per-fire grid walk has no business in a normal run.
   let markInRange = null;
@@ -696,8 +700,10 @@ function fireSkill(sim, p, sk) {
   // Broadcast: clients render the fire, they never originate it.
   sim.fx.skillFires.push({
     idx: p.idx, x: Math.round(p.x), y: Math.round(p.y), id: sk.id, d: sk.domain,
-    a: tgt ? Math.atan2(tgt.y - p.y, tgt.x - p.x) : (p.aimA || 0),
-    tx: Math.round(tgt ? tgt.x : p.x), ty: Math.round(tgt ? tgt.y : p.y),
+    a: aim ? Math.atan2(aim.y - p.y, aim.x - p.x) : (p.aimA || 0),
+    // The measured origin is exact. Other fires stay rounded, as they were.
+    tx: out.fxAt ? aim.x : Math.round(aim ? aim.x : p.x),
+    ty: out.fxAt ? aim.y : Math.round(aim ? aim.y : p.y),
   });
   return out;
 }
@@ -1052,6 +1058,17 @@ export function applyPlague(sim, e, damage, dur, p, skill) {
   // half of it, and the longer-clock rule would let it outlive plagueT.
   const plagueStep = (skill.compose || []).find(s => s.kind === 'plague');
   if (plagueStep && plagueStep.slow) e.plagueSlow = plagueStep.slow;
+}
+
+// An on-cast move pulse with its own clock. The fraction is assigned, so a
+// second cast stays 0.75 rather than 0.5625. While one is already running the
+// stronger fraction wins and the longer remaining time wins — Math.min and
+// Math.max, the same pair `_applySlow` uses — but the result stays on this
+// clock. It does not touch slowT, and Attunement does not deepen it.
+export function applyCastSlow(e, mult, dur) {
+  const active = (e.castSlowT || 0) > 0;
+  e.castSlow = Math.min(active ? (e.castSlow ?? 1) : 1, mult);
+  e.castSlowT = Math.max(e.castSlowT || 0, dur);
 }
 
 export function tickSkillStatuses(sim, dt) {

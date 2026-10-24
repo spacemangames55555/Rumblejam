@@ -140,6 +140,14 @@ const { ROOM_W: VIEW_W, ROOM_H: VIEW_H, WALL } = CONFIG;
 const FACE_MOVE_EPS2 = 0.25;
 const FACE_AIM_HOLD_S = 0.6;
 
+// The blight circle. A skill that declares `castR` (Cascade's slow radius) is
+// drawn at that radius for the whole flash. Every other blight keeps the
+// reach-scaled pulse it had. `pr` is 0 at the start of the flash and 1 at the end.
+export function castCircleRadius(spec, pr) {
+  if (spec && spec.castR) return spec.castR;
+  return ((spec && spec.reach) || 50) * (0.4 + 0.35 * pr);
+}
+
 export class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -2022,17 +2030,21 @@ export class Renderer {
         break;
       }
       case SHAPE.blight: {
-        const R = (c.reach || 50) * (0.4 + 0.35 * pr);
+        const R = castCircleRadius(spec, pr);
         ctx.globalAlpha = 0.3 * fade;
         ctx.fillStyle = spec.color;
         circle(ctx, tx, ty, R); ctx.fill();
         ctx.globalAlpha = fade;
         ctx.strokeStyle = kit.edge; ctx.lineWidth = 2;
         circle(ctx, tx, ty, R); ctx.stroke();
-        ctx.strokeStyle = spec.color;
-        ctx.setLineDash([5, 4]);
-        circle(ctx, tx, ty, R * (0.55 + 0.2 * Math.sin(this.t * 8))); ctx.stroke();
-        ctx.setLineDash([]);
+        // A declared cast radius is the slow's radius, so it does not breathe
+        // to a different size. Other blights keep the inner dash.
+        if (!spec.castR) {
+          ctx.strokeStyle = spec.color;
+          ctx.setLineDash([5, 4]);
+          circle(ctx, tx, ty, R * (0.55 + 0.2 * Math.sin(this.t * 8))); ctx.stroke();
+          ctx.setLineDash([]);
+        }
         break;
       }
       case SHAPE.summonBurst: {
