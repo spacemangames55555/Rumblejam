@@ -4,8 +4,6 @@
 import { CHARACTERS, CHAR_BY_ID, isSelectable, unselectableReason } from '../content/characters.js';
 import { PALETTE, STAT_IS_PCT } from '../config.js';
 import { ITEM_BY_ID } from '../content/items.js';
-import { WEAPON_BY_ID } from '../content/weapons.js';
-import { TIER_NAMES } from '../config.js';
 import { glossify, glossName } from './gloss.js';
 import { getVolume, setVolume, sfx } from '../audio.js';
 import { getTouchMode, setTouchMode } from '../touch.js';
@@ -53,7 +51,7 @@ export function showTitle(err = '') {
           <h3>Goal</h3>
           Pick a route through a region's ten maps — you fight five of them, plus a reliquary and a trader every route passes — then face the region boss. Clearing it unlocks the next region. If the whole party goes down, the region resets.
           <h3>Controls</h3>
-          <b>WASD / arrows</b> move · weapons attack on their own · <b>E</b> opens the shop when you're in a shop room · mouse for menus.
+          <b>WASD / arrows</b> move · class skills fire on their own · <b>E</b> opens the shop when you're in a shop room · mouse for menus.
           <h3>Materials</h3>
           Enemies drop materials: they are both money and XP. Level-ups are banked during combat and picked when the room is clear.
           <h3>Co-op</h3>
@@ -213,8 +211,7 @@ export function showResults(result, myIdx, canLobby = true, opts = {}) {
           <div class="stat"><span>Kills</span><b>${p.kills}</b></div>
           <div class="stat"><span>Level</span><b>${p.level}</b></div>
           <div class="stat"><span>Materials gathered</span><b>${p.mats}</b></div>
-          <div class="items-mini"><b>Build:</b> ${p.weapons.map(w => `${WEAPON_BY_ID[w.id].name} ${TIER_NAMES[w.tier - 1]}`).join(', ') || '(no weapons)'}<br>
-          <b>Items (${p.items.length}):</b> ${summarizeItems(p.items)}</div>
+          <div class="items-mini"><b>Items (${p.items.length}):</b> ${summarizeItems(p.items)}</div>
         </div>`).join('')}
       </div>
       <div class="row spread">

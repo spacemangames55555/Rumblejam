@@ -29,7 +29,7 @@ import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
 import { BEAST, initBeast, updateBeast, beastUp, beastBlocks, beastAbsorbs, hurtBeast } from './entities/beast.js';
 import {
-  tohInitPlayer, tohStartingGear, tohStartFight, tohStats, tohTick, tohOnFire,
+  tohInitPlayer, tohStartFight, tohStats, tohTick, tohOnFire,
   tohHitDamage, tohOnHit, tohOnWallHit, tohOnHurt, tohOnDodge, tohOnHeal, tohOnKill, tohEnemyDied,
   tohClearFight, tohTakeBoon, tohBoonPermanent, tohSnapshot, tohMarks, tohMeter,
   tohState, tohSwapStance, coralBlocks,
@@ -457,27 +457,15 @@ export class Sim {
   }
 
   _initStartingGear(p) {
-    // No starting weapon: the character's first skill point IS their opening
-    // ability, chosen from the tier-1 nodes. Trait summons still spawn — they
-    // are not weapons and are out of this patch's scope.
+    // No starting weapon. The character's first skill point is the opening
+    // ability, chosen from the tier-1 nodes. The block that used to follow
+    // this — tohStartingGear's bolt turret, the Overseer's mount, and
+    // p.char.weapon — was unreachable behind `return` and granted weapons
+    // nobody can hold. Trait summons that are not weapons still spawn.
     const t = p.char.trait;
-    if (true) {
-      if (t.key === 'mirror_drone') this._spawnSummon(p, null, 1, 'mirror');
-      if (t.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
-      if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1, 'beast');
-      return;
-    }
-    if (tohStartingGear(this, p)) { /* Necromancer: mounts, no weapons */ }
-    else if (t.key === 'overseer') {
-      // turrets ARE weapons for the Overseer: combinable, sellable, four mounts.
-      // One to start — full inheritance makes each mount count.
-      this._addWeapon(p, 'bolt_turret', 1);
-    } else if (p.char.weapon) {
-      this._addWeapon(p, p.char.weapon, 1);
-    }
     if (t.key === 'mirror_drone') this._spawnSummon(p, null, 1, 'mirror');
     if (t.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
-    if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1, 'beast');   // the first beast
+    if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1, 'beast');
   }
 
   _recomputeItems(p) {
