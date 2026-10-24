@@ -3,7 +3,7 @@
 //  1. content counts + dead-stat gate + glossary completeness
 //  2. node-map generation gates across seeds (guarantees, avoidable elite)
 //  3. consent selection: solo instant; contested vote redirects once, locks
-//  4. all 33 characters clear their first fight node
+//  4. every selectable character clears their first fight node
 //  5. full solo runs to victory for the six per-fight-trigger/DoD characters
 //  6. per-fight trigger mapping (Rampart, Vesper, Facet, Greed, level banking)
 //  7. all five arena templates spawn, fight, clear; extraction consent works
@@ -607,7 +607,9 @@ try {
   else fail(`vote expiry: phase ${duo.phase} node ${duo.currentNode}`);
 } catch (err) { fail('consent selection crashed', err); }
 
-// ---- 4. all 33 characters clear their first fight node ----
+// ---- 4. every selectable character clears their first fight node ----
+// The classic roster was 33. The live roster is the ToH set (SELECTABLE), and
+// the boot assert in main.js counts that set, not the archived 33.
 {
   let smokeFail = 0;
   for (const c of SELECTABLE) {
@@ -622,7 +624,7 @@ try {
       sim.getMeta(sim.players[0]);
     } catch (err) { smokeFail++; fail(`character ${c.id} first fight`, err); }
   }
-  if (!smokeFail) ok('all 33 characters clear their first fight node and extract');
+  if (!smokeFail) ok(`all ${SELECTABLE.length} selectable characters clear their first fight node and extract`);
 }
 
 // ---- 5. full-run victories (per-fight-trigger chars + DoD staples) ----
@@ -864,34 +866,29 @@ try {
 } catch (err) { fail('coop run crashed', err); }
 
 // ---- 9b. build management (host-validated) ----
+// RETIRED: combine-a-pair and sell-weapon. Both asserted a weapon slot
+// economy. CONFIG.WEAPONS_ENABLED is false and weaponSlots is 0, so _addWeapon
+// refuses and there is no pair to merge and nothing to refund. What is still
+// a shop action is selling an item, at the same 30% sellValue the weapon
+// refund used.
 try {
-  const { sellValue, weaponBasePrice } = await import('../js/config.js');
-  const { WEAPON_BY_ID } = await import('../js/content/weapons.js');
+  const { sellValue } = await import('../js/config.js');
+  const { ITEM_BY_ID } = await import('../js/content/items.js');
   const sim = new Sim({ seed: 31337, party: [{ idx: 0, key: 'k', name: 'MGMT', charId: T2, color: '#fff' }] });
   const p = sim.players[0];
-  sim._addWeapon(p, 'coilgun', 1);
-  sim._addWeapon(p, 'coilgun', 1);
-  const slots0 = p.weapons.length;
-  sim.uiAction(0, { kind: 'combine', a: 1, b: 2, id: 'coilgun', tier: 1 });
-  const cg = p.weapons.filter(w => w.id === 'coilgun');
-  if (cg.length === 1 && cg[0].tier === 2 && p.weapons.length === slots0 - 1) ok('combine merges pair → tier II and frees a slot');
-  else fail(`combine result wrong: ${JSON.stringify(p.weapons)}`);
+  const refused = sim._addWeapon(p, 'coilgun', 1) === false && sim._addWeapon(p, 'coilgun', 1) === false && p.weapons.length === 0;
+  if (p.weaponSlots === 0 && refused) ok('a weapon grant is refused when the roster has no weapon slots');
+  else fail(`weapon grant was not refused: slots ${p.weaponSlots} weapons ${JSON.stringify(p.weapons)}`);
+  const item = ITEM_BY_ID.hardtack_ration;
+  sim._grantItem(p, item.id);
   const mats0 = p.materials;
-  const slot = p.weapons.findIndex(w => w.id === 'coilgun');
-  const expect = sellValue(weaponBasePrice(WEAPON_BY_ID.coilgun, 2), sim.regionIndex);
-  sim.uiAction(0, { kind: 'sellWeapon', slot, id: 'coilgun', tier: 2 });
-  if (p.materials === mats0 + expect && !p.weapons.some(w => w.id === 'coilgun')) ok(`sell weapon refunds 30% (+${expect})`);
-  else fail(`sell weapon: mats ${mats0}→${p.materials}`);
-  // Quartermaster invested lineage
-  const qsim = new Sim({ seed: 555, party: [{ idx: 0, key: 'k', name: 'QM', charId: T1, color: '#fff' }] });
-  const qp = qsim.players[0];
-  qsim._addWeapon(qp, 'pebbleshot', 1, 30);
-  qsim._addWeapon(qp, 'pebbleshot', 1, 40);
-  const pi = qp.weapons.map((w, i) => w.id === 'pebbleshot' ? i : -1).filter(i => i >= 0);
-  qsim.uiAction(0, { kind: 'combine', a: pi[0], b: pi[1], id: 'pebbleshot', tier: 1 });
-  const merged = qp.weapons.find(w => w.id === 'pebbleshot');
-  // DELETED: Quartermaster's sell-for-exact-invested trait — a retired classic
-  // character, and a weapon operation besides.
+  const expect = sellValue(item.price, sim.regionIndex);
+  sim.uiAction(0, { kind: 'sellItem', id: item.id });
+  if (p.materials === mats0 + expect && !p.items.includes(item.id)) ok(`sell item refunds 30% (+${expect})`);
+  else fail(`sell item: mats ${mats0}→${p.materials} still owned=${p.items.includes(item.id)}`);
+  // DELETED: Quartermaster's sell-for-exact-invested trait, and the pebbleshot
+  // combine that fed it — a retired classic character, and a weapon operation
+  // besides. With slots at 0 that combine had no subject.
 } catch (err) { fail('build management crashed', err); }
 
 // ---- 9c. rebalance mechanics still hold ----
@@ -929,11 +926,19 @@ try {
   else fail(`extraction shop: cleared=${es.cleared} shops=${es.players.map(q => q.shop && q.shop.key)}`);
   const ep = es.players[0];
   ep.materials = 500;
-  const w0 = ep.shop.stock.findIndex(s => s.kind === 'weapon' && !s.sold);
-  es.uiAction(0, { kind: 'buy', slot: w0 });
-  if (ep.weapons.length === 2) ok('buying at the extraction shop works'); else fail('extraction shop buy failed');
-  es.uiAction(0, { kind: 'lock', slot: (w0 + 1) % ep.shop.stock.length });
-  const lockedId = ep.shop.stock[(w0 + 1) % ep.shop.stock.length].id;
+  // The old check bought the first weapon and expected weapons.length === 2
+  // (starting gear plus the purchase). Stock is items only, so the purchase
+  // that has to work is the first unsold item, and the lock lands on another.
+  const i0 = ep.shop.stock.findIndex(s => s.kind === 'item' && !s.sold);
+  const offer = i0 >= 0 ? ep.shop.stock[i0] : null;
+  const items0 = ep.items.length;
+  if (offer) es.uiAction(0, { kind: 'buy', slot: i0 });
+  if (offer && ep.items.includes(offer.id) && ep.items.length === items0 + 1 && ep.shop.stock[i0].sold && ep.materials === 500 - offer.price)
+    ok(`buying an item at the extraction shop works (${offer.id})`);
+  else fail(`extraction shop buy failed: slot ${i0} items ${items0}→${ep.items.length} mats ${ep.materials}`);
+  const lockAt = ep.shop.stock.findIndex((s, i) => i !== i0 && !s.sold);
+  es.uiAction(0, { kind: 'lock', slot: lockAt });
+  const lockedId = lockAt >= 0 ? ep.shop.stock[lockAt].id : null;
   es.uiAction(0, { kind: 'reroll' });
   if (ep.shop.stock.some(s => s.locked && s.id === lockedId)) ok('lock + reroll work at the extraction shop');
   else fail('lock did not survive extraction-shop reroll');
@@ -977,7 +982,7 @@ try {
       s1.phase = 'map';
     }
   }
-  if (!rollBad) ok('100 seeded shop rolls × rerolls: standard ≥1 weapon (≥2 floor 1); Black Market 6 slots, ≥2 weapons, ≥1 rare+');
+  if (!rollBad) ok('100 seeded shop rolls × rerolls: standard stock is full and buyable; Black Market 6 slots, no unbuyable cards, ≥1 rare+');
   // BM reroll discount: fresh sims, same reroll count
   {
     const a = new Sim({ seed: 3, party: [{ idx: 0, key: 'k', name: 'X', charId: T1, color: '#fff' }] });
@@ -990,46 +995,25 @@ try {
     else fail(`BM reroll cost ${bm} vs standard ${std}`);
   }
 
-  // full-slot duplicate purchase auto-combines — at 6/6, Broker's 7/7, Tinker's 4/4
-  for (const [charId, wantCap] of [[T1, 6], [T2, 6]]) {   // was per-character weapon-slot caps; weapons are gone
+  // RETIRED: per-character weapon caps (necromancer and samurai "want 6"),
+  // auto-combine at that cap, the tier-IV refusal, a below-max duplicate
+  // purchase, and manual combine. Those five described an arsenal. Slots are
+  // 0, so a forged weapon in the stock is refused: unsold, uncharged, arsenal
+  // stays empty. There is no pair to combine and no second copy to add.
+  for (const charId of [T1, T2]) {
     const cs = new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'C', charId, color: '#fff' }] });
     const cp = cs.players[0];
-    if (cp.weaponSlots !== wantCap) { fail(`${charId} weapon cap ${cp.weaponSlots} (want ${wantCap})`); continue; }
+    if (cp.weaponSlots !== 0) { fail(`${charId} weapon slots ${cp.weaponSlots} (weapons are removed; want 0)`); continue; }
     cp.materials = 500;
     cs.currentNode = 0; cs._openShop(cp, 'clear');
-    armBot(cs, cp);
-    cs._addWeapon(cp, 'coilgun', 2);
-    cp.shop.stock[0] = { kind: 'weapon', id: 'coilgun', tier: 2, price: 40, sold: false, locked: false };
+    cp.shop.stock[0] = { kind: 'weapon', id: 'coilgun', tier: 1, price: 40, sold: false, locked: false };
     const m0 = cp.materials;
-    cs.uiAction(0, { kind: 'buy', slot: 0 });
-    const cg = cp.weapons.find(w => w.id === 'coilgun');
-    if (cp.weapons.length === wantCap && cg && cg.tier === 3 && cp.materials === m0 - 40 && cp.shop.stock[0].sold)
-      ok(`auto-combine at ${wantCap}/${wantCap} (${charId}): copy bought → tier III in place, charged once`);
-    else fail(`${charId} auto-combine: n=${cp.weapons.length} tier=${cg && cg.tier} mats ${m0}→${cp.materials}`);
-    // tier-IV match is refused with a reason, not silently
-    cg.tier = 4;
-    cp.shop.stock[1] = { kind: 'weapon', id: 'coilgun', tier: 4, price: 40, sold: false, locked: false };
     cs.events.length = 0;
-    cs.uiAction(0, { kind: 'buy', slot: 1 });
+    cs.uiAction(0, { kind: 'buy', slot: 0 });
     const br = cs.events.find(e => e.k === 'buyResult');
-    if (br && !br.ok && /tier IV/.test(br.reason)) { if (charId === T1) ok('tier-IV match refuses with a shown reason'); }
-    else fail(`${charId} T4 refusal: ${JSON.stringify(br)}`);
-  }
-  // below max slots a duplicate still adds a copy (manual combine stays a choice)
-  {
-    const ds = new Sim({ seed: 12, party: [{ idx: 0, key: 'k', name: 'D', charId: T1, color: '#fff' }] });
-    const dp = ds.players[0];
-    dp.materials = 500;
-    ds.currentNode = 0; ds._openShop(dp, 'clear');
-    ds._addWeapon(dp, 'coilgun', 1);
-    dp.shop.stock[0] = { kind: 'weapon', id: 'coilgun', tier: 1, price: 30, sold: false, locked: false };
-    ds.uiAction(0, { kind: 'buy', slot: 0 });
-    const pair = dp.weapons.filter(w => w.id === 'coilgun');
-    if (pair.length === 2 && pair.every(w => w.tier === 1)) ok('below max slots a duplicate purchase still adds a copy');
-    else fail(`below-max duplicate: ${JSON.stringify(dp.weapons)}`);
-    ds.uiAction(0, { kind: 'combine', a: dp.weapons.indexOf(pair[0]), b: dp.weapons.indexOf(pair[1]), id: 'coilgun', tier: 1 });
-    if (dp.weapons.filter(w => w.id === 'coilgun').length === 1) ok('manual combine still works below max');
-    else fail('manual combine broke');
+    if (cp.weapons.length === 0 && !cp.shop.stock[0].sold && cp.materials === m0 && br && !br.ok && /no weapon slots/.test(br.reason))
+      ok(`${charId} refuses a weapon offer (0 slots, unsold, uncharged)`);
+    else fail(`${charId} weapon offer: n=${cp.weapons.length} sold=${cp.shop.stock[0].sold} mats ${m0}→${cp.materials} ${JSON.stringify(br)}`);
   }
 
   // Quartermaster: all-weapon stock everywhere, invested-cost sell unchanged
@@ -1332,6 +1316,17 @@ try {
       if (!worstRun.died) {
         fail(`the sanction ratio has no denominator in ${tmpl}: the camper survived every unsanctioned profile too `
           + `(worst ${worstRun.secs.toFixed(0)}s, not a death) — the room cannot price the sanction, so this is a fixture that could not measure`);
+        continue;
+      }
+      // A CLEAR IS NOT A SHORT SURVIVAL. When the camper lives through Bastion
+      // and the worst unsanctioned profile dies, the numerator is the length
+      // of a fight the camper won, not how long they could have lasted. Dividing
+      // those two is how cramped_crypt read ×1.42 while the camper was still
+      // standing. The ×1.5 floor applies only when the camper also dies there;
+      // a win against a death elsewhere is the sanction holding.
+      if (!b.died) {
+        bok++;
+        sanction.push(`${tmpl} held (cleared ${b.secs.toFixed(0)}s, worst died ${worstRun.secs.toFixed(0)}s)`);
         continue;
       }
       const ratio = b.secs / Math.max(1e-9, worstRun.secs);
@@ -1976,7 +1971,17 @@ try {
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
         const d = g.spawnEnemyById(ENEMIES[0].id, p.x + Math.cos(a) * 70, p.y + Math.sin(a) * 70);
-        if (d) { d.maxHp = d.hp = 1e9; d.speed = 0; dummies.push(d); }
+        if (d) {
+          d.maxHp = d.hp = 1e9;
+          // Movement reads `spd`. `speed` is not a field, and `spawnX` is never
+          // set, so `d.speed = 0` plus `d.spawnX ?? d.x` left the dummies
+          // walking at full speed into the bolts. A bolt kit (the necromancer's
+          // opening loadout) aims at the nearest body, so a dummy that closes
+          // eats the shot and the wall stops after one splash.
+          d.spd = 0;
+          d._pinX = d.x; d._pinY = d.y;
+          dummies.push(d);
+        }
       }
       if (dummies.length < 6) { bad++; fail(`${c.id}: could not stage a fight at the barricade`); continue; }
       // The ceiling is measured, not guessed: against one 270hp barricade the
@@ -1989,7 +1994,7 @@ try {
       let t = 0, broke = false;
       for (; t < CEILING && !g.over; t++) {
         g.setInput(0, { mx: 0, my: 0 });
-        for (const d of dummies) { d.hp = d.maxHp; d.x = d.spawnX ?? d.x; d.y = d.spawnY ?? d.y; }
+        for (const d of dummies) { d.hp = d.maxHp; d.x = d._pinX; d.y = d._pinY; }
         g.tick();
         if (!p.downed) p.hp = p.stats.vitality;
         if (w.hp <= 0 || !g.walls.includes(w)) { broke = true; break; }
@@ -2270,68 +2275,24 @@ try {
     else fail(`curse did not expire: enemyHp ${g.curseEnemyHp}, tempo ${b.stats.tempo}`);
   }
 
-  // --- structures: node-transition teleport + the stand-still recall ---
+  // --- structures: the weapon turret this recall was written for is gone ---
+  //
+  // RETIRED: on-screen stay, the 3s stand-still recall, move-cancel, hit-cancel,
+  // and the node-transition teleport. Those five needed a structure in
+  // sim.summons. The Necromancer's bonelord used to grant a bolt turret through
+  // tohStartingGear → _addWeapon, into a slot of 0, so the turret never
+  // appeared and the channel had no subject. Skill summons live on p.minions
+  // and are covered by summon_gate. This check now states the live fact: after
+  // travel the necromancer holds no weapon structure.
   {
-    // A SUMMONER, by name. This is the structure-recall rule, so it needs a
-    // class that HAS a structure — the retired Cogsmith's overseer mounts. The
-    // ToH equivalent is the Necromancer's bonelord, which reuses that same
-    // mounts/inheritance/carry logic. A bulk rename had left it on whichever
-    // class happened to be first, which summons nothing.
     const g = new Sim({ seed: 909, party: mk(['toh_necromancer']) });
     const p = g.players[0];
     const node = g.floor.nodes.find(x => !['shop', 'treasure', 'siege'].includes(x.kind));
     node.kind = 'combat';
     g._travelTo(node.id);
-    g.god = true; // the recall rules are under test, not turret survivability
-    const s = g.summons[0];
-    // the room keeps spawning: a dead turret isn't an off-screen turret, so
-    // each sub-check starts from a live one
-    const revive = () => { s.dead = false; s.hp = s.maxHp; s.carried = false; s.deployT = 0; };
-    const park = () => { revive(); s.x = Math.min(g.W - 40, p.x + CONFIG.STRUCT_OFFSCREEN_W); s.y = p.y; };
-    if (!s) fail('the summoner class has no structure to recall');
-    else {
-      // 1) a structure ON SCREEN never auto-relocates, however long you stand
-      revive();
-      s.x = p.x + 120; s.y = p.y + 60;
-      const keepX = s.x;
-      for (let i = 0; i < 60 * 5; i++) { revive(); g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
-      if (s.x === keepX && p.relocT === 0) ok('a structure on your screen never packs itself up');
-      else fail(`visible structure moved: ${keepX} → ${s.x}`);
-      // 2) off-screen + 3s still → recalled near the owner, briefly inert
-      park();
-      const farX = s.x;
-      let recalled = false;
-      for (let i = 0; i < 60 * 4 && !recalled; i++) {
-        revive(); g.setInput(0, { mx: 0, my: 0 }); g.tick();
-        if (!s.dead && Math.hypot(s.x - p.x, s.y - p.y) < 200) recalled = true;
-      }
-      if (recalled) ok(`standing still 3s recalls an off-screen structure (${Math.round(farX)} → beside the owner)`);
-      else fail('off-screen structure never recalled');
-      // 3) moving cancels the channel
-      park();
-      const keepFar = s.x;
-      for (let i = 0; i < 60 * 4; i++) { revive(); s.x = keepFar; s.y = p.y; g.setInput(0, { mx: -1, my: 0 }); g.tick(); }
-      if (p.relocT === 0 && Math.hypot(s.x - p.x, s.y - p.y) > 400) ok('moving cancels the recall channel');
-      else fail(`recall fired while moving (relocT ${p.relocT})`);
-      // 4) taking a hit cancels it too
-      park();
-      for (let i = 0; i < 100; i++) { revive(); g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
-      const mid = p.relocT;
-      p.invuln = 0; p.stats.reflex = 0;
-      g.god = false;               // god mode short-circuits hurtPlayer
-      g.hurtPlayer(p, 1, null);
-      g.god = true;
-      if (mid > 0 && p.relocT === 0) ok('taking damage breaks the recall channel');
-      else fail(`damage did not cancel the channel (${mid} → ${p.relocT})`);
-      // 5) a node transition teleports everything instantly, no channel
-      revive();
-      s.x = 200; s.y = 200;
-      const n2 = g.floor.nodes.find(x => x.id !== node.id && !['shop', 'treasure', 'siege'].includes(x.kind));
-      n2.kind = 'combat';
-      g._travelTo(n2.id);
-      if (Math.hypot(s.x - p.x, s.y - p.y) < 200) ok('every structure teleports to its owner on a node transition');
-      else fail(`structure left behind on transition: ${Math.round(Math.hypot(s.x - p.x, s.y - p.y))}u away`);
-    }
+    if (p.weaponSlots !== 0) fail(`necromancer weapon slots ${p.weaponSlots} (want 0)`);
+    else if (g.summons.length !== 0) fail(`a weapon structure spawned anyway: ${g.summons.map(s => s.weaponId).join(',')}`);
+    else ok('the necromancer starts with no weapon structure to recall (skill summons are minions, checked by summon_gate)');
   }
 } catch (err) { fail('objectives-patch gates crashed', err); }
 

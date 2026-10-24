@@ -46,7 +46,7 @@ const { WALL } = CONFIG;
 
 console.log(`%cUNDERVAULT%c content loaded — characters: ${CHARACTERS.length}, items: ${ITEMS.length}, weapons: ${WEAPONS.length}, enemy types: ${ENEMIES.length}, bosses: ${ALL_BOSS_DEFS.length}, sprites: ${SPRITE_MODE}`,
   'color:#ffd45e;font-weight:bold;font-size:16px', 'color:inherit');
-console.assert(CHARACTERS.length === 33, 'need exactly 33 characters');
+console.assert(CHARACTERS.length === 14, 'need exactly 14 characters (the ToH roster; the classic 33 are archived)');
 console.assert(ITEMS.length >= 100, 'need ≥100 items');
 console.assert(WEAPONS.length === 26, 'need exactly 26 weapons');
 console.assert(ENEMIES.length === 12 && ALL_BOSS_DEFS.length === 6, 'need 12 base enemy types + 6 bosses (4 legacy + 2 region)');
