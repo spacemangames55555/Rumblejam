@@ -47,10 +47,34 @@ import { fxSpec, SHAPE } from './content/skillfx.js';
 const PLAGUE_ART = {
   tint: '#7A8C3A',
   tintStrength: 0.30,
-  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height, world px (1.5x of 1.6/20/34, Designer)
+  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height, game px (1.5x of 1.6/20/34, Designer)
   markGap: 12,                               // clears the hp bar (r+5 .. r+10)
   tick: '#A3B05A', tickScale: 0.85, tickDur: 0.6, tickVy: -40,
 };
+
+// Game px are css pixels: what a measurement at the real resolution reads.
+// The numbers are the art spec (Thornhound at least 30, Sapling 34, Cedar
+// Warden 38, Bark Hulk 51). They are NOT world units. The camera maps world
+// units through `canvasScale / dpr`, and at ~0.73 that turned a 30-world-px
+// mark into the 22px that was measured. Callers divide by that factor.
+export function plagueMarkGamePx(radius) {
+  return clamp(Math.round(radius * PLAGUE_ART.markPerR), PLAGUE_ART.markMin, PLAGUE_ART.markMax);
+}
+
+// `cssPerWorld` is css pixels per world unit (the camera scale divided by
+// dpr). Missing or non-positive means a harness with no canvas, and the spec
+// is used as world units so a headless draw still clears the 30px floor.
+export function plagueMarkWorldPx(radius, cssPerWorld) {
+  const k = Number.isFinite(cssPerWorld) && cssPerWorld > 0 ? cssPerWorld : 1;
+  return plagueMarkGamePx(radius) / k;
+}
+
+// The mark is drawn only while this is true. The status tick drives plagueT
+// through 0 and clears the stack on that same tick; both the host view and
+// snapshot bit 128 are this predicate, so the skull leaves with the timer.
+export function plagueMarkShown(plagueT) {
+  return (plagueT || 0) > 0;
+}
 
 const MINION_ART = {
   radius: { skeleton: 9, golem: 15, risen: 10, wisp: 7, wolf: 11, bear: 15, hawk: 8 },
@@ -1310,9 +1334,11 @@ export class Renderer {
       ctx.fillRect(-bw / 2, -r - 10, bw * clamp(e.hpFrac, 0, 1), 5);
     }
     if (e.plagued) {
-      // looped by drawSprite from the manifest fps; `seed` offsets the phase so
-      // a plagued wave does not pulse in lockstep
-      const mh = clamp(r * PLAGUE_ART.markPerR, PLAGUE_ART.markMin, PLAGUE_ART.markMax);
+      // Spec height is game px. spriteScaleFor sizes in world units, and the
+      // camera then scales those, so the spec is divided by css-px per world
+      // unit first. `seed` is the phase offset (see phaseOf).
+      const cssPerWorld = (this._screen && this.dpr) ? this._screen.scale / this.dpr : 1;
+      const mh = plagueMarkWorldPx(r, cssPerWorld);
       drawSprite(ctx, FX.plagueMark, 0, -r - PLAGUE_ART.markGap - mh / 2, { scale: spriteScaleFor(FX.plagueMark, mh), seed: e.id });
     }
     ctx.restore();
