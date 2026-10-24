@@ -276,9 +276,12 @@ body.touch-on .overlay.overlay-boon{padding-bottom:calc(20vh + 8px);}
    The opening card sits ABOVE everything, because it is the one choice a
    character cannot start without. */
 #overlay-boon{z-index:28;} #overlay-skills{z-index:26;} #overlay-opening{z-index:35;}
-/* A manual open while a banner is up. The auto spend step does not use this:
-   it waits out the queue and stays under the level-up cards (30) and under
-   the opening card (35). 34 is above the banner (32). */
+/* An open skills panel covers the level-up cards. The cards stay mounted, so
+   closing the panel does not skip the pick and the panel receives the hit.
+   31 is above the cards (30) and below a banner (32). A manual open during a
+   banner also sets above-banners; that rule is later so 34 wins while both
+   are set. The opening card stays at 35. */
+#overlay-skills.above-cards{z-index:31;}
 #overlay-skills.above-banners{z-index:34;}
 .overlay .panel{min-width:min(92vw,900px);}
 .ov-title{font-size:24px; color:var(--gold); letter-spacing:3px; margin-bottom:2px;}

@@ -63,6 +63,7 @@ function clearBanners() {
   const skills = $('overlay-skills');
   if (skills) {
     skills.classList.remove('above-banners');
+    skills.classList.remove('above-cards');
     delete skills.dataset.heldBanner;
   }
 }

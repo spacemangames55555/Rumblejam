@@ -795,6 +795,7 @@ export function closeSkills() {
   const el = $('overlay-skills');
   el.classList.add('hidden');
   el.classList.remove('above-banners');
+  el.classList.remove('above-cards');
   delete el.dataset.heldBanner;
   SKILLS_STATE.pickSlot = null;
   if (A && A.spendDone) A.spendDone();
