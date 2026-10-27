@@ -12,7 +12,7 @@
 // render scale, and the arenas cap out around 4000 u.
 
 // ---- per-record byte layouts (DataView, little-endian) ----
-const EN_STRIDE = 9;    // u16 id | i8 typeIdx | u8 flags | u16 x | u16 y | u8 hp%
+const EN_STRIDE = 10;   // u16 id | i8 typeIdx | u8 flags | u16 x | u16 y | u8 hp% | u8 flags2
 const PR_STRIDE = 13;   // u16 id | u16 x | u16 y | i16 vx | i16 vy | u8 flags | u8 radius | u8 col
 const PK_STRIDE = 4;    // u16 x | u16 y
 const ZN_STRIDE = 8;    // u16 x | u16 y | u16 r | u8 col | u8 hostile
@@ -55,6 +55,7 @@ export function encodeSnap(snap) {
       dv.setUint16(o + 4, cU16(e[2]), true);
       dv.setUint16(o + 6, cU16(e[3]), true);
       dv.setUint8(o + 8, cU8(e[4] * 255));
+      dv.setUint8(o + 9, (e[6] || 0) & 0xff);
     }
     out.eb = buf; delete out.enemies;
   }
@@ -189,7 +190,7 @@ export function decodeSnap(wire) {
     const enemies = new Array(n);
     for (let i = 0, o = 0; i < n; i++, o += EN_STRIDE) {
       enemies[i] = [dv.getUint16(o, true), dv.getInt8(o + 2), dv.getUint16(o + 4, true),
-        dv.getUint16(o + 6, true), dv.getUint8(o + 8) / 255, dv.getUint8(o + 3)];
+        dv.getUint16(o + 6, true), dv.getUint8(o + 8) / 255, dv.getUint8(o + 3), dv.getUint8(o + 9)];
     }
     out.enemies = enemies;
   }
