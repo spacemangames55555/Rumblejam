@@ -34,22 +34,31 @@ import { fxSpec, SHAPE } from './content/skillfx.js';
 // Radii are per-archetype so a bear does not read as a wolf; a family missing
 // from the table falls back rather than throwing, because a new archetype is
 // supposed to be a data change and must not need this file edited to appear.
-// Chill / slow status read: #8FC8E8 body tint at 0.30 + fx.chill_frost at the
-// feet. Precedence when multiple body tints apply: chase > plague > chill; the
-// feet frost strip and overhead plague mark always show independently.
-export const CHILL_ART = {
-  tint: '#8FC8E8',
+// An enemy carrying a plague (Entropy Cascade and every other `plague` step).
+// Three reads, one green family, measured in
+// /workspace/rumblejam-art/plague_status/preview.png:
+//  - body tint: a desaturated sickly yellow-green. dE2000-far from the chase
+//    tint #8E4432, the telegraph red #ff5d6c and the elite purple, and green is
+//    the one hue no warning in the game uses.
+//  - fx.plague_mark: a small skull shedding spores, looped over the head, sized
+//    off the body so a Bark Hulk's mark is not a Thornhound's.
+//  - tick numbers: the silent plague ticks get a small number in the light end
+//    of the same family, smaller and shorter-lived than a hit number.
+const PLAGUE_ART = {
+  tint: '#7A8C3A',
   tintStrength: 0.30,
-  frostPerR: 2.0, frostMin: 36, frostMax: 64,   // strip content width; min/max are on-screen CSS px (÷ min(scale/dpr, 1))
-  frostContentW: 29, frostContentH: 13,         // fx.chill_frost content box in assets.json
-  frostGap: 3, frostRise: 0.4,                  // crust bottom r+3 below centre; strip top never above 0.4r
-  fps: 6, frames: 4,
+  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height; min/max are on-screen CSS px (÷ min(scale/dpr,1) at draw)
+  markGap: 12,                               // clears the hp bar (r+5 .. r+10)
+  tick: '#A3B05A', tickScale: 0.85, tickDur: 0.6, tickVy: -40,
 };
 
-// Loop phase for a per-enemy status mark. Decorrelates consecutive enemy ids
-// with a murmur3 finaliser so a slowed or plagued wave does not glint in sync.
-// Pure function of the id: 0 Sim.rng draws, render-only.
-export function markSeed(id) {
+// Loop phase for a per-enemy status mark. assets.js phaseOf() hashes the seed
+// with one multiply and one xor-shift, which leaves the low bits of
+// consecutive ids correlated: with seed = e.id, 4-frame loops two ids apart
+// share a phase 90% of the time and neighbours 48%, so a wave's marks blink in
+// visible pairs. A murmur3 finaliser first decorrelates them (25% at every id
+// distance, which is chance). Pure function of the id: no RNG, render-only.
+function markSeed(id) {
   let h = Math.imul((id | 0) ^ 0x5bd1e995, 0x85ebca6b) >>> 0;
   h ^= h >>> 13;
   h = Math.imul(h, 0xc2b2ae35) >>> 0;
@@ -57,33 +66,21 @@ export function markSeed(id) {
   return (h >>> 0) || 1;
 }
 
-export function chillFrostShown(eOrSlowT) {
-  if (typeof eOrSlowT === 'number') return eOrSlowT > 0;
-  if (!eOrSlowT) return false;
-  return (eOrSlowT.slowT || 0) > 0 || (eOrSlowT.castSlowT || 0) > 0 || !!eOrSlowT.chill || !!eOrSlowT.castSlow;
+// The mark is drawn only while this is true. The status tick drives plagueT
+// through 0 and clears the stack on that same tick; the host view and
+// snapshot bit 128 are this predicate, so the skull leaves with the timer.
+export function plagueMarkShown(plagueT) {
+  return (plagueT || 0) > 0;
 }
 
-export function chillFrostMetrics(radius, scale, dpr) {
+// World-unit content height for the mark. markMin and markMax are CSS px.
+// `scale` is device px per world unit, the fit draw() stores on _screen.
+// CSS px per world unit is scale/dpr; a fit below 1 lifts the floor so the
+// mark stays 30 CSS px, and a fit above 1 does not enlarge it.
+export function plagueMarkWorldHeight(radius, scale, dpr) {
   const d = dpr > 0 ? dpr : 1;
   const fit = Math.min((scale || d) / d, 1);
-  const w = clamp(radius * CHILL_ART.frostPerR, CHILL_ART.frostMin / fit, CHILL_ART.frostMax / fit);
-  const h = w * CHILL_ART.frostContentH / CHILL_ART.frostContentW;
-  const bottom = Math.max(radius + CHILL_ART.frostGap, CHILL_ART.frostRise * radius + h);
-  return { w, h, bottom, cy: bottom - h / 2, fit };
-}
-
-export function enemyBodyTint(e, view) {
-  if (!e) return null;
-  if (e.straggle) {
-    return { tint: '#8E4432', tintStrength: view && view.biome === 'xibalba' ? 0.20 : 0.25 };
-  }
-  if (e.plagued) {
-    return { tint: '#7A8C3A', tintStrength: 0.30 };
-  }
-  if (e.slowed) {
-    return { tint: CHILL_ART.tint, tintStrength: CHILL_ART.tintStrength };
-  }
-  return null;
+  return clamp(radius * PLAGUE_ART.markPerR, PLAGUE_ART.markMin / fit, PLAGUE_ART.markMax / fit);
 }
 
 const MINION_ART = {
@@ -247,6 +244,11 @@ export class Renderer {
     for (const h of fx.hits || []) {
       const kind = h.c;
       const text = kind === 2 ? 'DODGE' : String(h.a);
+      if (kind === 4) {   // plague tick: small, green, no impact spark
+        this.floaters.push({ x: h.x + (Math.random() * 12 - 6), y: h.y, vy: PLAGUE_ART.tickVy, t: 0, dur: PLAGUE_ART.tickDur, text, color: PLAGUE_ART.tick, scale: PLAGUE_ART.tickScale });
+        if (this.floaters.length > 90) this.floaters.splice(0, this.floaters.length - 90);
+        continue;
+      }
       const color = kind === 1 ? PALETTE.crit : kind === 2 ? '#9aa0bd' : kind === 3 ? '#ff5d6c' : '#ffffff';
       this.floaters.push({ x: h.x + (Math.random() * 16 - 8), y: h.y, vy: -60, t: 0, dur: 0.8, text, color, scale: kind === 1 ? 1.4 : 1 });
       if (this.floaters.length > 90) this.floaters.splice(0, this.floaters.length - 90);
@@ -465,7 +467,7 @@ export class Renderer {
     for (const s of view.summons || []) { if (inView(s.x, s.y)) this._drawSummon(ctx, s, view); }
     for (const tk of view.tokens || []) { if (inView(tk.x, tk.y)) this._drawSoulToken(ctx, tk); }
     (view.minions || []).forEach((m, i) => { if (inView(m.x, m.y)) this._drawMinion(ctx, m, view, i); });
-    for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e, view); }
+    for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e); }
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
     // projectiles
     for (const pr of view.projs || []) {
@@ -1255,7 +1257,7 @@ export class Renderer {
     }
   }
 
-  _drawEnemy(ctx, e, view) {
+  _drawEnemy(ctx, e) {
     ctx.save();
     ctx.translate(e.x, e.y);
     const r = e.radius;
@@ -1272,31 +1274,20 @@ export class Renderer {
     // `facing` picks a row on a directional sheet and is ignored on a
     // single-direction one — an enemy is never rotated either way.
     const opt = { scale: sc, facing: this._faceAngle(`e${e.id}`, e.x, e.y, null), seed: e.id };
-    const bodyTint = enemyBodyTint(e, view);
-    if (bodyTint) {
-      opt.tint = bodyTint.tint;
-      opt.tintStrength = bodyTint.tintStrength;
-    }
+    // This branch has no chase tint (that lands in #139). When an enemy is both
+    // chased and plagued, the chase tint wins this body colour and the shape
+    // wash below; the plague mark and the tick numbers still show.
+    if (e.plagued) { opt.tint = PLAGUE_ART.tint; opt.tintStrength = PLAGUE_ART.tintStrength; }
     const drew = drawSprite(ctx, e.spriteId, 0, 0, opt);
     if (!drew) {
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
       ctx.stroke();
-      if (bodyTint) {
-        ctx.globalAlpha = (opt.alpha != null ? opt.alpha : 1) * bodyTint.tintStrength;
-        ctx.fillStyle = bodyTint.tint;
+      if (e.plagued) {   // same wash on the shape fallback, over the fill and under the outline's weight
+        ctx.globalAlpha = PLAGUE_ART.tintStrength;
+        ctx.fillStyle = PLAGUE_ART.tint;
         ctx.fill();
         ctx.globalAlpha = 1;
-      }
-    }
-    if (e.slowed) {
-      const m = chillFrostMetrics(r, this._screen && this._screen.scale, this.dpr);
-      const drewFrost = drawSprite(ctx, FX.chillFrost, 0, m.cy, {
-        scale: spriteScaleFor(FX.chillFrost, m.h),
-        seed: markSeed(e.id),
-      });
-      if (!drewFrost) {
-        this._drawChillFrostFallback(ctx, m.w, m.h, m.bottom, e.id);
       }
     }
     // THE DAMAGE TRIANGLE, always visible. A 4px ring in the enemy's domain
@@ -1349,37 +1340,19 @@ export class Renderer {
       ctx.fillStyle = e.boss ? PALETTE.boss : '#e2504c';
       ctx.fillRect(-bw / 2, -r - 10, bw * clamp(e.hpFrac, 0, 1), 5);
     }
-    ctx.restore();
-  }
-
-  _drawChillFrostFallback(ctx, w, h, bottom, id) {
-    const frame = (Math.floor(this.t * CHILL_ART.fps) + markSeed(id)) % CHILL_ART.frames;
-    const baseY = bottom - 2;
-    const hw = w * 0.5;
-    ctx.save();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#000000';
-    ctx.fillStyle = '#3D6680';
-    const spikes = [-0.78, -0.42, 0, 0.42, 0.78];
-    const heights = [0.62, 0.88, 1.0, 0.85, 0.60];
-    ctx.beginPath();
-    ctx.moveTo(-hw, baseY);
-    for (let i = 0; i < spikes.length; i++) {
-      const sx = spikes[i] * hw;
-      const sh = h * heights[i];
-      ctx.lineTo(sx - w * 0.08, baseY - sh * 0.35);
-      ctx.lineTo(sx, baseY - sh);
-      ctx.lineTo(sx + w * 0.08, baseY - sh * 0.35);
+    if (e.plagued) {
+      // looped by drawSprite from the manifest fps; `seed` offsets the phase so
+      // a plagued wave does not pulse in lockstep
+      // markMin/markMax are CSS px on screen (Designer: 30px minimum). The room
+      // is fit to the canvas (draw(): scale = min(cw/VIEW_W, ch/VIEW_H)) and
+      // the canvas is sized in DEVICE px (window × this.dpr, _resize), so CSS
+      // px per world unit is scale / dpr. Below 1 that would shrink the mark;
+      // dividing by min(fit, 1) undoes it, and a zoom-in (fit > 1) never
+      // enlarges it. Render-only: the fit comes from this._screen, set in
+      // draw() before any entity is drawn; a missing dpr counts as 1.
+      const mh = plagueMarkWorldHeight(r, this._screen && this._screen.scale, this.dpr);
+      drawSprite(ctx, FX.plagueMark, 0, -r - PLAGUE_ART.markGap - mh / 2, { scale: spriteScaleFor(FX.plagueMark, mh), seed: markSeed(e.id) });
     }
-    ctx.lineTo(hw, baseY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    const glintIdx = frame % spikes.length;
-    const gx = spikes[glintIdx] * hw;
-    const gh = h * heights[glintIdx] * 0.65;
-    ctx.fillStyle = '#BFE3F2';
-    ctx.fillRect(gx - 1, baseY - gh, 2, 2);
     ctx.restore();
   }
 
