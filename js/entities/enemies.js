@@ -92,6 +92,7 @@ export function updateEnemy(sim, e, dt) {
     e.knockX *= Math.pow(0.0001, dt); e.knockY *= Math.pow(0.0001, dt);
     if (Math.abs(e.knockX) < 5) e.knockX = 0;
     if (Math.abs(e.knockY) < 5) e.knockY = 0;
+    sim.resolveEntityWalls(e);
     sim.clampToRoom(e);
   }
   // Straggler chase. The sim raises e.straggle once spawning has stopped and

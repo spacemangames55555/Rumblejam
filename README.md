@@ -23,10 +23,11 @@ back to synthesis if a file is missing. The only external dependency is the
 PeerJS client, loaded from a CDN `<script>` tag, used for the peer-to-peer
 co-op networking.
 
-- **Content**: 33 characters · 146 items (10 of them cursed) · 26 weapons across 6 classes ·
-  12 enemy types · 4 two-phase bosses · elites with 4 modifiers · 5 arena
-  templates with spike & lava hazards · 4 bespoke siege arenas · Trader /
-  Reliquary stops and eight objective level types on every floor's map.
+- **Content**: 14 playable Thrones of Heaven classes (3 skill trees × 10 nodes each = 420 skills; classic 33-character roster retired to `archive/classic-roster/`) ·
+  173 items (10 of them cursed; weapons retired in favour of autonomous class skills) ·
+  24 enemy types (12 base + 6 Pacific Northwest + 6 Central America/Xibalba) · 6 bosses ·
+  elites with 4 modifiers · 5 arena templates with spike & lava hazards · 4 bespoke siege arenas ·
+  Trader / Reliquary stops and eight objective level types across regions.
 - **Co-op**: host-authoritative P2P via PeerJS room codes, up to **8 players**.
   The host runs the whole simulation; clients send inputs (~30/s) and
   interpolate binary-packed snapshots (15/s, 12/s at 6+ players) with local
@@ -59,24 +60,22 @@ co-op networking.
   60–90 s (rate grows with floor and map depth), then stops — survivors rush
   you to contact — and the fight ends when the field is empty. Level-ups
   **bank** during the fight and resolve at the clear.
-- **Money doesn't wait.** Materials must be walked over *during* the fight —
-  there is no end-of-fight vacuum. Whatever is still on the ground when the
-  last enemy dies fizzles where it sat, and the clear banner reports both
-  numbers (`◆ N collected · M lost`). The **enemy counter** at the top of the
-  HUD is the sweep signal: it reads *incoming* while the spawn budget is
-  still flowing, then flips to the exact live count the moment spawning
-  stops — when that number is small, leave the stragglers and run for the
-  money. Sieges get an **8-second looting window** after the boss falls
-  (a visible countdown) before the spoils fizzle and the descent opens.
+- **Clear vacuum & siege sweep.** Ordinary room clears wait 0.5 s so the final
+  kill and cull dissolve read, then vacuum remaining floor pickups to the
+  nearest living player (`0` lost). Once spawning ends, enemies outside 300 u of
+  every living player for 4 s phase through walls to chase (up to 6 at once,
+  farthest-first), and ordinary stragglers still alive 20 s after the last spawn
+  when `<= 8` remain are culled into `fx.cull_puff` while dropping their normal
+  loot. Sieges keep an **8-second looting window** after the boss falls before
+  uncollected spoils fizzle and the descent opens.
 - **Every fight rolls a pressure profile** (see the next section). Roughly
   one combat node in four rolls **Bastion** — marked with a ⛊ shield on the
   node map — where holding your ground is the sanctioned play.
-- **Every extraction is a shop.** Clearing a Combat or Champion node opens
-  each player's own 4-slot shop right at the portal (reroll, lock, browse at
-  your own pace — even after the countdown travels the party). Standard
-  shops always stock at least 1 weapon (2 on floor 1). Trader nodes are the
-  **Black Market**: 6 slots, rerolls −25%, at least 2 weapons and 1
-  rare-or-better item — a destination, not the only shop.
+- **Every extraction is a shop (points before items).** Clearing a Combat or
+  Champion node resolves banked level-ups and offers the skill-point spend step
+  ahead of each player's 4-slot item shop right at the portal (reroll, lock,
+  browse at your own pace). Trader nodes are the **Black Market**: 6 item slots,
+  rerolls −25%, and at least 1 rare-or-better item.
 - **The Siege** ends every floor: 2.5–4 minutes of continuous spawning in a
   bespoke handcrafted arena, punctuated by 2–3 scripted **mutations** ~45–60 s
   apart — walls collapse, a lava field migrates across the floor, a ward
@@ -810,8 +809,15 @@ never loads them:
   throughout because it *toggles* — an idempotent action would pass with or
   without the dedupe and prove nothing about the hard part.
 - `tools/cdp_harness.mjs` — the shared Chromium/CDP driver, local relay boot and
-  static server used by the two tools above. `browser_test.mjs` keeps its own,
-  larger `Browser`; these want a fraction of it and want to start in a second.
+  static server used by the browser-backed gates (`uiack_test.mjs`, `room_reg_test.mjs`,
+  `coop_offence_test.mjs`, `coop_guest_view_test.mjs`, `skillscreen_test.mjs`). Under
+  Node 20, pass `node --experimental-websocket` when running CDP/WebSocket browser tools.
+- `node tools/opener_gate.mjs` & `node tools/map1_bot.mjs` — map-1 opener gate (all 42
+  tier-1 openers verified against map-1 Thornhound/Sapling/Cedar Warden HP) and
+  autonomous map-1 kite/clumsy bot harness.
+- `node tools/straggler_test.mjs` — verifies the 4 s straggler wall-phase chase, 6-chaser
+  farthest-first cap, 20 s / `<= 8` alive cull with `fx.culls` wire round-trip, 0.5 s clear
+  hold, and floor-loot vacuum.
 - `node tools/offence_test.mjs [seconds]` — **can a player kill anything?**
   Walks every *selectable* class (never a sample), spends its opening skill
   point, ticks real seconds and reads what the *player* dealt. It never calls `damageEnemy` on the
@@ -864,11 +870,12 @@ never loads them:
 [`docs/KNOWN-DEFECTS.md`](docs/KNOWN-DEFECTS.md).** Read the file before
 re-diagnosing any of them — several have been diagnosed twice.
 
-Two are **open and player-facing, and both touch co-op**: client→host input has
-no delivery guarantee (#8), and room registration fails before any peer exists
-(#9). They are separate entries on purpose — three distinct failures wore
-"co-op is flaky" as a single description for most of a patch, which is why none
-of them got fixed.
+Both historical co-op entries (#8 client→host input delivery and #9 room
+registration against the local relay) are now closed and gated by
+`node --experimental-websocket tools/uiack_test.mjs`,
+`node --experimental-websocket tools/room_reg_test.mjs`,
+`node --experimental-websocket tools/coop_offence_test.mjs`, and
+`node --experimental-websocket tools/coop_guest_view_test.mjs`.
 
 This section used to restate the list. It went stale twice: once claiming a
 resolved defect was open, once omitting both co-op entries entirely.

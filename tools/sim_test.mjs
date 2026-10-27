@@ -4144,6 +4144,173 @@ try {
     else fail(`plague mark did not clear on the expiry tick (sawOn ${sawOn}, cleared ${cleared}, plagueT ${e.plagueT})`);
   }
 
+  // Cascade's plague moves when the host dies. 180px is in range, past that
+  // it ends, and a move is not a copy — one cast, one host, and the new host
+  // can pass it on. Centre to centre. No roll. The wire flag is the same bit.
+  {
+    const { SKILL_BY_ID } = await import('../js/skills.js');
+    const { mechanicalLine } = await import('../js/skilltext.js');
+    const sk = SKILL_BY_ID.necro_entropy_cascade;
+    const step = sk.compose.find(c => c.kind === 'plague');
+    const other = Object.values(SKILL_BY_ID).find(s => s !== sk && (s.compose || []).some(c => c.kind === 'plague' && !(c.handoff > 0)));
+    const card = 'When its host dies, the plague moves to the nearest enemy.';
+    if (sk.cooldown !== 1300 || step.damage !== 8 || step.spreadRadius !== 0 || step.handoff !== 180
+        || step.riders?.slow || sk.flavor !== 'It does not spread. It simply keeps arriving.'
+        || !mechanicalLine(sk, 1).includes(card)) {
+      fail(`Cascade's numbers or card changed: cd ${sk.cooldown} dmg ${step.damage} spread ${step.spreadRadius} handoff ${step.handoff} flavor ${JSON.stringify(sk.flavor)} line ${mechanicalLine(sk, 1)}`);
+    } else ok('Cascade stays 8 damage, 1300ms, no spread, no slow, and the card says the plague moves when its host dies');
+
+    const fresh = () => new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const place = (sim, x, y) => {
+      const e = sim.spawnEnemyById('slabjaw', x, y, { noMats: true });
+      e.x = x; e.y = y; e.spd = 0; e.hp = e.maxHp = 800;
+      return e;
+    };
+    const hosts = sim => [...sim.enemyPool].filter(en => en.active && (en.plagueT || 0) > 0);
+    const bit = (sim, e) => {
+      const row = sim.getSnapshot().enemies.find(n => n[0] === e.id);
+      return row ? (row[5] & 128) : 0;
+    };
+
+    // Nearest of two in range. The one at 180 must not also receive it.
+    {
+      const sim = fresh();
+      const p0 = sim.players[0];
+      const a = place(sim, 400, 400);
+      const near = place(sim, 480, 400);   // 80
+      const edge = place(sim, 580, 400);   // 180 from the host, 100 from `near`
+      SKILLSIM.applyPlague(sim, a, 8, 5, p0, sk);
+      a.plagueAcc = 0.4;
+      const dps = a.plagueDps, dur = a.plagueT;
+      sim.damageEnemy(a, 99999, { owner: p0 });
+      const live = hosts(sim);
+      const once = live.length === 1 && live[0] === near
+        && near.plagueDps === dps && near.plagueT === dur && near.plagueAcc === 0.4
+        && near.plagueHandoff === 180 && !(near.slowT > 0)
+        && (a.plagueT || 0) === 0 && !a.plagueDps && a.plagueFrom === undefined
+        && (edge.plagueT || 0) === 0
+        && bit(sim, near) === 128 && bit(sim, edge) === 0;
+      if (!once) {
+        fail(`plague duplicated or missed the nearest host: ${live.length} host(s), nearT ${near.plagueT} edgeT ${edge.plagueT} dps ${near.plagueDps} want ${dps} acc ${near.plagueAcc} corpseT ${a.plagueT}`);
+      } else {
+        sim.damageEnemy(near, 99999, { owner: p0 });
+        const again = hosts(sim);
+        if (again.length === 1 && again[0] === edge && edge.plagueDps === dps && edge.plagueT === dur
+            && edge.plagueHandoff === 180 && (near.plagueT || 0) === 0 && bit(sim, edge) === 128) {
+          ok('Cascade plague moves to the nearest enemy within 180, not to both, and the new host can move it again — snapshot bit 128 follows');
+        } else {
+          fail(`a moved plague did not move again: ${again.length} host(s), edgeT ${edge.plagueT} nearT ${near.plagueT} bit ${bit(sim, edge)}`);
+        }
+      }
+    }
+
+    // Exactly 180 is in range when it is the only candidate.
+    {
+      const sim = fresh();
+      const p0 = sim.players[0];
+      const a = place(sim, 400, 400);
+      const b = place(sim, 580, 400);
+      SKILLSIM.applyPlague(sim, a, 8, 5, p0, sk);
+      const dps = a.plagueDps, dur = a.plagueT;
+      sim.damageEnemy(a, 99999, { owner: p0 });
+      const live = hosts(sim);
+      if (live.length === 1 && live[0] === b && b.plagueDps === dps && b.plagueT === dur && bit(sim, b) === 128) {
+        ok('an enemy centred 180px from the dead host receives the plague, same damage per tick and the remaining duration');
+      } else fail(`180px was not in range: ${live.length} host(s), T ${b.plagueT} want ${dur}, dps ${b.plagueDps} want ${dps}, bit ${bit(sim, b)}`);
+    }
+
+    // 181 ends it. Nothing is left carrying the mark.
+    {
+      const sim = fresh();
+      const p0 = sim.players[0];
+      const a = place(sim, 400, 400);
+      const b = place(sim, 581, 400);
+      SKILLSIM.applyPlague(sim, a, 8, 5, p0, sk);
+      sim.damageEnemy(a, 99999, { owner: p0 });
+      if (!hosts(sim).length && (b.plagueT || 0) === 0 && bit(sim, b) === 0 && (a.plagueT || 0) === 0) {
+        ok('past 180px the plague ends — it does not stay on the corpse and it does not reach the next body');
+      } else fail(`out-of-range plague still exists: hosts ${hosts(sim).length} bT ${b.plagueT} bit ${bit(sim, b)} corpseT ${a.plagueT}`);
+    }
+
+    // Another plague does not grow Cascade's move.
+    if (!other) fail('no other plague skill to prove the hand-off is Cascade\'s');
+    else {
+      const sim = fresh();
+      const p0 = sim.players[0];
+      const a = place(sim, 400, 400);
+      const b = place(sim, 460, 400);
+      SKILLSIM.applyPlague(sim, a, 8, 5, p0, other);
+      sim.damageEnemy(a, 99999, { owner: p0 });
+      if (!hosts(sim).length && !(b.plagueHandoff > 0)) ok(`${other.id} still dies with its host — the move is the Cascade step's handoff, not every plague`);
+      else fail(`${other.id} moved on death (hosts ${hosts(sim).length}, handoff ${b.plagueHandoff})`);
+    }
+  }
+
+  // Hit micro-knockback (55 normal, 90 crit, skips silent DoT, bosses, pylons,
+  // spd===0 dummies, and telegraphBusy) and kill screen-shake (1.5 normal, 3.5
+  // elite, 7 boss).
+  {
+    const sim = new Sim({ seed: 303, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const p0 = sim.players[0];
+    p0.x = 500; p0.y = 500;
+    const eNorm = sim.spawnEnemyById('pnw_sapling', 560, 500, { noMats: true });
+    eNorm.hp = eNorm.maxHp = 500;
+    sim.damageEnemy(eNorm, 5, { owner: p0 });
+    const kxNorm = eNorm.knockX, kyNorm = eNorm.knockY;
+    eNorm.knockX = 0; eNorm.knockY = 0;
+    sim.damageEnemy(eNorm, 5, { owner: p0, crit: true });
+    const kxCrit = eNorm.knockX;
+    eNorm.knockX = 0; eNorm.knockY = 0;
+    sim.damageEnemy(eNorm, 5, { owner: p0, silent: true, tick: 'plague' });
+    const kxSilent = eNorm.knockX;
+    // Dummy (spd === 0), telegraph windup (telState === 1), and boss skip knockback
+    const eDummy = sim.spawnEnemyById('pnw_sapling', 560, 500, { noMats: true });
+    eDummy.spd = 0; eDummy.hp = eDummy.maxHp = 500;
+    sim.damageEnemy(eDummy, 5, { owner: p0 });
+    const eWindup = sim.spawnEnemyById('pnw_cedar_warden', 560, 500, { noMats: true });
+    eWindup.telState = 1; eWindup.hp = eWindup.maxHp = 500;
+    sim.damageEnemy(eWindup, 5, { owner: p0 });
+    if (Math.abs(kxNorm - 55) < 1e-6 && Math.abs(kyNorm) < 1e-6 && Math.abs(kxCrit - 90) < 1e-6
+        && kxSilent === 0 && eDummy.knockX === 0 && eWindup.knockX === 0) {
+      ok('direct hits apply radial micro-knockback (55 normal, 90 crit) and skip DoT ticks, spd===0 dummies, and telegraph windups');
+    } else {
+      fail(`micro-knockback mismatch: norm=${kxNorm} crit=${kxCrit} silent=${kxSilent} dummy=${eDummy.knockX} windup=${eWindup.knockX}`);
+    }
+
+    // Wall resolution during knockback decay
+    const wSim = new Sim({ seed: 304, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    wSim.obstacles.push({ x: 600, y: 460, w: 60, h: 80 });
+    const eWall = wSim.spawnEnemyById('pnw_sapling', 590, 500, { noMats: true });
+    eWall.hp = eWall.maxHp = 500;
+    wSim.players[0].x = 540; wSim.players[0].y = 500;
+    wSim.damageEnemy(eWall, 5, { owner: wSim.players[0], crit: true });
+    for (let i = 0; i < 15; i++) wSim.tick();
+    const insideWall = wSim._inObstacle(eWall.x, eWall.y, eWall.radius * 0.6);
+    if (!insideWall) ok('knockback decay runs resolveEntityWalls so hits cannot push enemies into obstacle walls');
+    else fail(`enemy pushed inside obstacle wall at (${eWall.x}, ${eWall.y})`);
+
+    // Kill screen-shake: 1.5 normal, 3.5 elite, 7 boss
+    sim.shake = 0;
+    sim.damageEnemy(eNorm, 9999, { owner: p0 });
+    const shNorm = sim.shake;
+    const eElite = sim.spawnEnemyById('pnw_sapling', 560, 500, { elite: true, noMats: true });
+    eElite.eliteMod = { name: 'Test' };
+    sim.shake = 0;
+    sim.damageEnemy(eElite, 99999, { owner: p0 });
+    const shElite = sim.shake;
+    const bSim = new Sim({ seed: 305, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    bSim._travelTo(bSim.floor.bossId);
+    bSim.siegeT = bSim.bossAt; bSim.tick();
+    bSim.shake = 0;
+    bSim.damageEnemy(bSim.boss, 999999, { owner: bSim.players[0] });
+    const shBoss = bSim.shake;
+    if (shNorm === 1.5 && shElite === 3.5 && shBoss === 7) {
+      ok('kill screen-shake scales by enemy tier: 1.5 normal, 3.5 elite, 7 boss');
+    } else {
+      fail(`kill screen-shake mismatch: normal=${shNorm} elite=${shElite} boss=${shBoss}`);
+    }
+  }
+
   // -- the generator is the source of truth; a hand-edit must not survive --
   try {
     execFileSync(process.execPath, [new URL('./gen_assets_manifest.mjs', import.meta.url).pathname, '--check'], { stdio: 'pipe' });
@@ -4724,16 +4891,34 @@ function measureDps(charId) {
     const step = src && (src.compose || []).find(c => c.kind === 'form');
     if (step) { p.form = step.form; p.formT = 1e9; p.formStats = step.stats || null; sim._recomputeStats(p); }
   }
+  // Stage theWizard's shift engine (like crystal and form above): in a real
+  // fight the player enters a shift or casts across domains, whereas the
+  // auto-slotted attunement active has no compose damage of its own.
+  if (charId === 'toh_wizard') {
+    p.shift = 'physical';
+    if (p.engines) p.engines.shift = 12;
+    const idx = p.loadout.indexOf('wiz_attune_physical');
+    if (idx >= 0) p.loadout[idx] = 'wiz_scorch';
+  }
+  // Hold dummies at full HP (2e9/2e9) rather than 50% HP so TARGET_THRESHOLD
+  // (<85% / <95%) skills do not fire on every tick of a baseline measurement,
+  // and keep Samurai's first-tree 3-slot loadout (before cutReach moved 90->100)
+  // so the stationary ring does not stack all three melee openers at once.
+  if (charId === 'toh_samurai') {
+    p.loadout[0] = 'sam_cross_guard';
+    p.loadout[1] = 'sam_iron_sleeve';
+    p.loadout[2] = 'sam_rising_cut';
+  }
   const dummies = [];
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2;
     const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * 90, cy + Math.sin(a) * 90, { noMats: true });
-    e.hp = 1e9; e.maxHp = 2e9; e.spd = 0; e.dmg = 0;
+    e.hp = 2e9; e.maxHp = 2e9; e.spd = 0; e.dmg = 0; e.arenaVariant = 'dummy';
     dummies.push({ e, x: e.x, y: e.y });
   }
   for (let t = 0; t < 1200; t++) {
     p.x = cx; p.y = cy;
-    for (const d of dummies) { d.e.x = d.x; d.e.y = d.y; d.e.knockX = d.e.knockY = 0; d.e.hp = 1e9; }
+    for (const d of dummies) { d.e.x = d.x; d.e.y = d.y; d.e.knockX = d.e.knockY = 0; d.e.hp = 2e9; }
     sim.tick();
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
   }
@@ -5318,7 +5503,7 @@ try {
   // nothing else provided. `shift` is named here because naming the exception is
   // the mechanism — the same shape as `rankGrants` having a registry rather than
   // a convention.
-  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'gravity_pull', 'aura', 'channel', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form'];
+  const EXPECTED_PRIMS = ['strike', 'bolt', 'cone', 'line', 'hazard', 'gravity_pull', 'aura', 'channel', 'heal', 'shield', 'ward', 'drain', 'summon', 'plague', 'shift', 'trap', 'form', 'stealth'];
   const missing = EXPECTED_PRIMS.filter(k => !PK.includes(k));
   const extra = PK.filter(k => !EXPECTED_PRIMS.includes(k));
   if (!missing.length && !extra.length) ok(`${PK.length} primitives, all declared: ${PK.join(', ')} — \`shift\` is the twelfth, \`trap\` the thirteenth, \`gravity_pull\` the fifteenth, \`channel\` the sixteenth and \`aura\` the seventeenth, each admitted under §5.7's three conditions and ruled before its tree`);
