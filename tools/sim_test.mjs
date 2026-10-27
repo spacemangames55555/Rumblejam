@@ -1541,7 +1541,7 @@ try {
     for (let i = 0; i < snap.enemies.length && rt; i++) {
       const a = snap.enemies[i], b = back.enemies[i];
       rt = (a[0] & 0xffff) === b[0] && a[1] === b[1] && Math.abs(a[2] - b[2]) <= 1 && Math.abs(a[3] - b[3]) <= 1
-        && Math.abs(a[4] - b[4]) <= 0.01 && a[5] === b[5];
+        && Math.abs(a[4] - b[4]) <= 0.01 && a[5] === b[5] && (a[6] || 0) === (b[6] || 0);
     }
     for (let i = 0; i < snap.projs.length && rt; i++) {
       const a = snap.projs[i], b = back.projs[i];
@@ -3991,6 +3991,82 @@ try {
       if (Math.abs(driftPx) < 0.5) {
         ok(`the Druid's fit x scale is ${eff.toFixed(6)} against the ${SHIPPED} he was tuned at — ${driftPx.toFixed(3)} device px of drift, so content normalisation did not resize him`);
       } else fail(`content normalisation moved the Druid: fit x scale ${eff.toFixed(6)} vs ${SHIPPED}, ${driftPx.toFixed(2)} device px`);
+    }
+  }
+
+  // Chill / slow status: applySlow expired-reset fix, second enemy flag byte
+  // (flags2 & 1) wire round-trip, chillFrostMetrics sizing, and tint precedence.
+  {
+    const R = await import('../js/render.js');
+    const { encodeSnap, decodeSnap } = await import('../js/netcodec.js');
+    const sheet = man['fx.chill_frost'];
+    if (!sheet || sheet.frames !== 4 || sheet.fps !== 6 || sheet.content[0] !== 29 || sheet.content[1] !== 13) {
+      fail(`fx.chill_frost manifest mismatch: ${JSON.stringify(sheet)}`);
+    } else {
+      ok('fx.chill_frost is in assets/assets.json with frames 4, fps 6, content [29, 13]');
+    }
+
+    // 1. applySlow in js/skillsim.js resets expired slowMult before Math.min
+    const sim = new Sim({ seed: 101, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const p0 = sim.players[0];
+    p0.stats.attunement = 0;
+    p0.hookAgg.statusBoost = 0;
+    const e = sim.spawnEnemyById('pnw_cedar_warden', p0.x + 80, p0.y, { noMats: true });
+    SKILLSIM.applySlow(sim, e, 0.35, 0.5, p0);
+    const deepMult = e.slowMult;
+    // While the deep slow is still active, a weaker slow (0.80) keeps the deeper 0.35 multiplier
+    SKILLSIM.applySlow(sim, e, 0.80, 0.5, p0);
+    const keptWhileActive = Math.abs(e.slowMult - deepMult) < 1e-9;
+    // Expire the slow via enemy update, then apply a weak slow (0.80)
+    e.slowT = 0;
+    SKILLSIM.applySlow(sim, e, 0.80, 1.0, p0);
+    const resetAfterExpiry = Math.abs(e.slowMult - 0.80) < 1e-9 && Math.abs(e.slowT - 1.0) < 1e-9;
+    if (keptWhileActive && resetAfterExpiry) {
+      ok('skillsim.applySlow keeps the stronger active slow via Math.min and resets an expired slowMult to 1 before applying a new slow');
+    } else {
+      fail(`applySlow expired-reset failed: deepMult=${deepMult}, keptWhileActive=${keptWhileActive}, afterExpiry slowMult=${e.slowMult} slowT=${e.slowT}`);
+    }
+
+    // 2. Second enemy flag byte (flags2 & 1) round-trips through encodeSnap/decodeSnap
+    const snapActive = sim.getSnapshot();
+    const rowActive = snapActive.enemies.find(n => n[0] === e.id);
+    const decActive = decodeSnap(encodeSnap(snapActive)).enemies.find(n => n[0] === e.id);
+    e.slowT = 0;
+    e.castSlowT = 0.4;
+    const decCastSlow = decodeSnap(encodeSnap(sim.getSnapshot())).enemies.find(n => n[0] === e.id);
+    e.castSlowT = 0;
+    const decCleared = decodeSnap(encodeSnap(sim.getSnapshot())).enemies.find(n => n[0] === e.id);
+    if (
+      rowActive && (rowActive[6] & 1) === 1 &&
+      decActive && (decActive[6] & 1) === 1 &&
+      decCastSlow && (decCastSlow[6] & 1) === 1 &&
+      decCleared && (decCleared[6] & 1) === 0
+    ) {
+      ok('second enemy flag byte (flags2 & 1) round-trips active slow / castSlow across encodeSnap/decodeSnap and clears on expiry');
+    } else {
+      fail(`slow wire flag round-trip failed: active=${rowActive && rowActive[6]} decActive=${decActive && decActive[6]} castSlow=${decCastSlow && decCastSlow[6]} cleared=${decCleared && decCleared[6]}`);
+    }
+
+    // 3. Tint precedence (chase > plague > chill) and frost strip geometry
+    const tChill = R.enemyBodyTint({ slowed: true }, { biome: 'pnw' });
+    const tPlagueChill = R.enemyBodyTint({ slowed: true, plagued: true }, { biome: 'pnw' });
+    const tChasePlagueChill = R.enemyBodyTint({ slowed: true, plagued: true, straggle: true }, { biome: 'pnw' });
+    const tChaseXib = R.enemyBodyTint({ slowed: true, straggle: true }, { biome: 'xibalba' });
+    const mSmallTight = R.chillFrostMetrics(12, 0.73, 1);
+    const mLargeFit1 = R.chillFrostMetrics(25, 1.0, 1);
+    if (
+      tChill && tChill.tint === '#8FC8E8' && tChill.tintStrength === 0.30 &&
+      tPlagueChill && tPlagueChill.tint === '#7A8C3A' && tPlagueChill.tintStrength === 0.30 &&
+      tChasePlagueChill && tChasePlagueChill.tint === '#8E4432' && tChasePlagueChill.tintStrength === 0.25 &&
+      tChaseXib && tChaseXib.tint === '#8E4432' && tChaseXib.tintStrength === 0.20 &&
+      Math.abs(mSmallTight.w * 0.73 - 36) < 1e-6 &&
+      Math.abs(mLargeFit1.w - 50) < 1e-6 &&
+      Math.abs(mLargeFit1.h - 50 * 13 / 29) < 1e-6 &&
+      mSmallTight.bottom - mSmallTight.h >= 12 * 0.4 - 1e-6
+    ) {
+      ok('chill tint (#8FC8E8 @ 0.30), precedence (chase > plague > chill), and fx.chill_frost feet geometry match spec');
+    } else {
+      fail('chill tint precedence or fx.chill_frost geometry mismatch');
     }
   }
 
