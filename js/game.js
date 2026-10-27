@@ -5182,7 +5182,11 @@ export class Sim {
         for (const p of live) { if (dist2(e.x, e.y, p.x, p.y) < cullR2) { seen = true; break; } }
         if (!seen) continue;
       }
-      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0)]);
+      // Second enemy flag byte (flags2): bit 1 carries active slow/chill so
+      // guests render the #8FC8E8 tint and fx.chill_frost strip without colliding
+      // with bits 64 (chase) and 128 (plague) on the first flag byte.
+      const flags2 = ((e.slowT || 0) > 0 || (e.castSlowT || 0) > 0 || e.chill || e.castSlow) ? 1 : 0;
+      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0), flags2]);
     }
     for (const pr of this.projPool) {
       snap.projs.push([pr.id, r(pr.x), r(pr.y), r(pr.vx), r(pr.vy), pr.friendly ? 1 : 0, pr.radius, pr.color]);

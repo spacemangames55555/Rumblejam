@@ -15,7 +15,7 @@ import { HostTransport, ClientTransport } from './net.js';
 import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
 import { serializeObjective } from './objectives.js';
 import { OBJECTIVE_META } from './objectives.js';
-import { Renderer } from './render.js';
+import { Renderer, chillFrostShown } from './render.js';
 import { initInput, sampleInput, takeDebugKey, pressInteract, pressStance } from './input.js';
 import { initTouch, joy, touchEnabled } from './touch.js';
 import { ensureAudio, sfx, preloadAirhorn, levelupHorn, audioStats, getCtxState, getMasterGainValue, setVolume, getVolume } from './audio.js';
@@ -1479,6 +1479,7 @@ function viewFromSim(sim) {
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
       flash: e.hitFlash > 0, fusing: e.fusing, pylon: e.typeIdx === -2,
       winding: e.telState === 1,   // TELEGRAPH_STATES.WINDUP — drives the wind-up pose
+      slowed: chillFrostShown(e),  // tint + fx.chill_frost; flags2 bit 1 on the wire
       domain: e.domain,
       // sprite id from the definition table, exactly as shape/color are — the
       // client resolves the same id from the type index on the wire
@@ -1548,6 +1549,7 @@ function viewFromSnaps(dtFrame) {
   for (const e of s0.enemies) {
     const n = emap.get(e[0]) || e;
     const flags = n[5];
+    const flags2 = n[6] || 0;
     const pylon = !!(flags & 32);
     let shape, color, radius, spriteId;
     // The boss's silhouette on a CLIENT, which has no Sim to ask. Keyed by
@@ -1571,6 +1573,7 @@ function viewFromSnaps(dtFrame) {
     enemies.push({
       id: e[0], x: L(e[2], n[2]), y: L(e[3], n[3]), hpFrac: L(e[4], n[4]), radius,
       elite: !!(flags & 1), boss: !!(flags & 2), mini: !!(flags & 4), flash: !!(flags & 8), fusing: !!(flags & 16),
+      slowed: !!(flags2 & 1),
       pylon, shape, color, spriteId,
     });
   }
