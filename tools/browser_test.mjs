@@ -398,18 +398,29 @@ async function extractToMap(br, what) {
   throw new Error(`extraction never completed (${what})`);
 }
 
-// STARTING A RUN IS TWO CLICKS NOW. `#btn-start` opens the WORLD MAP, and the
-// region card is what constructs the Sim — a run has to be a run of somewhere.
-// Seventeen call sites in this file clicked the button and waited for
-// `window.uv.sim`; the sequence lives in one place instead.
+// STARTING A RUN IS TWO CLICKS NOW. `#btn-start` opens the WORLD MAP, and
+// `#world-enter` is what constructs the Sim — a run has to be a run of
+// somewhere. Seventeen call sites in this file clicked the button and waited
+// for `window.uv.sim`; the sequence lives in one place instead.
 //
 // A local copy rather than the one in cdp_harness.mjs because this suite has
 // its own `Browser`, not that module's `Page`. The two share `exec`/`waitFor`
-// and nothing else.
+// and nothing else, and they have to click the same control: `.world-card`
+// was removed with the dossier rewrite, and a helper that still queried it
+// threw before any fight existed.
 async function startRun(P, regionIndex = 1) {
   await P.exec(`document.getElementById('btn-start').click(); return 1;`);
   await P.waitFor(`return document.getElementById('screen-world') && !document.getElementById('screen-world').classList.contains('hidden') ? 1 : 0`, 8000, 'world map');
-  await P.exec(`const c=document.querySelector('.world-card[data-region="${regionIndex}"]'); if(!c) throw new Error('no region ${regionIndex} card'); c.click(); return 1;`);
+  await P.exec(`
+    const idx = ${regionIndex | 0};
+    const pin = document.querySelector('.world-pin[data-region="' + idx + '"]');
+    if (!pin) throw new Error('no region ' + idx + ' pin');
+    if (!pin.classList.contains('selected')) pin.click();
+    const enter = document.getElementById('world-enter');
+    if (!enter || enter.disabled) throw new Error('region ' + idx + ' is not enterable');
+    enter.click();
+    return 1;
+  `);
   return P.waitFor(`return window.uv.mode==='run' ? 1 : 0`, 12000, `region ${regionIndex} run started`);
 }
 
