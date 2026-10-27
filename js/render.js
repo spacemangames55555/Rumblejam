@@ -186,6 +186,7 @@ export class Renderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.particles = [];
+    this.puffs = [];
     this.floaters = [];
     this.arcs = [];
     this.flashBeams = [];
@@ -304,6 +305,11 @@ export class Renderer {
         const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 160;
         this.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, dur: 0.4 + Math.random() * 0.3, color: d.c, size: 2 + Math.random() * 3 });
       }
+    }
+    // Cull puff. FX.cullPuff is a 6-frame one-shot; the draw advances `t`.
+    for (const c of fx.culls || []) {
+      this.puffs.push({ x: c.x, y: c.y, r: c.r || 16, t: 0 });
+      if (this.puffs.length > 24) this.puffs.splice(0, this.puffs.length - 24);
     }
     for (const b of fx.booms || []) {
       this.rings.push({ x: b.x, y: b.y, r: b.r, t: 0, dur: 0.35, color: '#ffab4f' });
@@ -1298,6 +1304,18 @@ export class Renderer {
     }
   }
 
+  // Circle vs an obstacle rect. The view stores obstacles as [x, y, w, h, flag].
+  _straggleInWall(e, view) {
+    const r = e.radius || 14;
+    for (const o of view.obstacles || []) {
+      const nx = Math.max(o[0], Math.min(e.x, o[0] + o[2]));
+      const ny = Math.max(o[1], Math.min(e.y, o[1] + o[3]));
+      const dx = e.x - nx, dy = e.y - ny;
+      if (dx * dx + dy * dy <= r * r) return true;
+    }
+    return false;
+  }
+
   _drawEnemy(ctx, e, view) {
     ctx.save();
     ctx.translate(e.x, e.y);
@@ -1317,13 +1335,19 @@ export class Renderer {
     const opt = { scale: sc, facing: this._faceAngle(`e${e.id}`, e.x, e.y, null), seed: e.id };
     // Precedence when multiple status tints apply: chase > plague > chill;
     // the feet frost strip and overhead plague mark always show independently.
+    // In a wall a chaser flickers 0.8 then 0.5 at 4 Hz (phase from e.id).
     const bodyTint = enemyBodyTint(e, view);
     if (bodyTint) {
       opt.tint = bodyTint.tint;
       opt.tintStrength = bodyTint.tintStrength;
     }
+    if (e.straggle) {
+      const inWall = !!(view && this._straggleInWall(e, view));
+      opt.alpha = inWall ? (((Math.floor(this.t * 8) + e.id) & 1) ? 0.8 : 0.5) : 1;
+    }
     const drew = drawSprite(ctx, e.spriteId, 0, 0, opt);
     if (!drew) {
+      if (opt.alpha != null && opt.alpha !== 1) ctx.globalAlpha = opt.alpha;
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
       ctx.stroke();
@@ -1331,8 +1355,8 @@ export class Renderer {
         ctx.globalAlpha = (opt.alpha != null ? opt.alpha : 1) * bodyTint.tintStrength;
         ctx.fillStyle = bodyTint.tint;
         ctx.fill();
-        ctx.globalAlpha = 1;
       }
+      ctx.globalAlpha = 1;
     }
     if (e.slowed) {
       const m = chillFrostMetrics(r, this._screen && this._screen.scale, this.dpr);
@@ -1716,6 +1740,29 @@ export class Renderer {
   }
 
   _drawFx(ctx, dt) {
+    for (let i = this.puffs.length - 1; i >= 0; i--) {
+      const p = this.puffs[i];
+      p.t += dt;
+      // 6 frames at 20 fps is 0.30 s. Dropping at the end is what keeps the
+      // strip from wrapping: drawSprite mods a past-the-end frame back to 0.
+      if (p.t >= 0.3) { this.puffs.splice(i, 1); continue; }
+      const frame = Math.min(5, Math.floor(p.t / 0.05));
+      const drew = drawSprite(ctx, FX.cullPuff, p.x, p.y, {
+        frame,
+        scale: spriteScaleFor(FX.cullPuff, (p.r || 16) * 2.6),
+      });
+      if (!drew && !p.fell) {
+        p.fell = true;
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const s = 70 + (k % 3) * 40;
+          this.particles.push({
+            x: p.x, y: p.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+            t: 0, dur: 0.35, color: '#746D63', size: 3,
+          });
+        }
+      }
+    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const pt = this.particles[i];
       pt.t += dt;

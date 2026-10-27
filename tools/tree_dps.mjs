@@ -277,7 +277,7 @@ function measureTree(treeId, onlyForm) {
     const a = i * Math.PI * 2 / 5;
     const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * RING_R, cy + Math.sin(a) * RING_R, { noMats: true });
     if (!e) continue;
-    e.spd = 0; e.dmg = 0;
+    e.spd = 0; e.dmg = 0; e.arenaVariant = 'dummy';
     dummies.push({ e, x: e.x, y: e.y });
   }
   if (!dummies.length) { bad(`${treeId}: no dummies spawned — nothing was measured`); return null; }
@@ -331,7 +331,7 @@ function measureTree(treeId, onlyForm) {
         // plague cleared with the old one, which is the point of this ring.
         if (!d.e.active || !(d.e.hp > 0)) {
           const ne = sim.spawnEnemyById('slabjaw', d.x, d.y, { noMats: true });
-          if (ne) { ne.spd = 0; ne.dmg = 0; d.e = ne; d.fresh = true; }
+          if (ne) { ne.spd = 0; ne.dmg = 0; ne.arenaVariant = 'dummy'; d.e = ne; d.fresh = true; }
         }
         if (d.fresh !== false) {
           d.e.maxHp = MORTAL_HP;
@@ -418,7 +418,7 @@ function supplyRun(classId, keys, w) {
   for (let i = 0; i < 6; i++) {
     const a = i * Math.PI * 2 / 6;
     const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * 110, cy + Math.sin(a) * 110, { noMats: true });
-    if (e) { e.spd = 0; e.dmg = 0; dummies.push({ e, x: e.x, y: e.y }); }
+    if (e) { e.spd = 0; e.dmg = 0; e.arenaVariant = 'dummy'; dummies.push({ e, x: e.x, y: e.y }); }
   }
   const peak = {}; for (const k of keys) peak[k] = 0;
   for (let i = 0; i < TICKS; i++) {

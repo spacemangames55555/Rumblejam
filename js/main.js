@@ -1754,6 +1754,7 @@ function viewFromSim(sim) {
       id: e.id, x: e.x, y: e.y, radius: e.radius, shape: e.shape, color: e.color,
       hpFrac: e.hp / e.maxHp, elite: e.elite, boss: e.boss, mini: e.mini,
       flash: e.hitFlash > 0, fusing: e.fusing, pylon: e.typeIdx === -2,
+      straggle: !!e.straggle,
       winding: e.telState === 1,   // TELEGRAPH_STATES.WINDUP — drives the wind-up pose
       plagued: plagueMarkShown(e.plagueT),   // tint + fx.plague_mark; flag bit 128 on the wire
       slowed: chillFrostShown(e),            // tint + fx.chill_frost; flags2 bit 1 on the wire
@@ -1850,6 +1851,7 @@ function viewFromSnaps(dtFrame) {
     enemies.push({
       id: e[0], x: L(e[2], n[2]), y: L(e[3], n[3]), hpFrac: L(e[4], n[4]), radius,
       elite: !!(flags & 1), boss: !!(flags & 2), mini: !!(flags & 4), flash: !!(flags & 8), fusing: !!(flags & 16),
+      straggle: !!(flags & 64),
       plagued: !!(flags & 128),
       slowed: !!(flags2 & 1),
       pylon, shape, color, spriteId,

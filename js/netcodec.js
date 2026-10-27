@@ -23,6 +23,7 @@ const FX_BOOM = 5;      // u16 x | u16 y | u8 r
 const FX_BLOCK = 4;     // u16 x | u16 y
 const FX_SWING = 10;    // u16 x | u16 y | i16 a×1000 | u16 r | u8 arc×100 | u8 col
 const FX_BEAM = 10;     // u16 x1 | u16 y1 | u16 x2 | u16 y2 | u8 col | u8 w
+const FX_CULL = 5;      // u16 x | u16 y | u8 r   — straggler cull puff, packed like a death
 
 const cU16 = v => Math.max(0, Math.min(65535, Math.round(v)));
 const cI16 = v => Math.max(-32768, Math.min(32767, Math.round(v)));
@@ -164,6 +165,11 @@ export function encodeSnap(snap) {
         dv.setUint16(o + 4, cU16(e.x2), true); dv.setUint16(o + 6, cU16(e.y2), true);
         dv.setUint8(o + 8, lut.idx(e.color)); dv.setUint8(o + 9, cU8(e.w || 0));
       }),
+      // Same shape as a death: always present, empty when the tick culled nobody.
+      c: pack(fx.culls, FX_CULL, (dv, o, e) => {
+        dv.setUint16(o, cU16(e.x), true); dv.setUint16(o + 2, cU16(e.y), true);
+        dv.setUint8(o + 4, cU8(e.r));
+      }),
     };
     delete out.fx;
   }
@@ -253,6 +259,9 @@ export function decodeSnap(wire) {
       blocks: un(fb.k, FX_BLOCK, (dv, o) => ({ x: dv.getUint16(o, true), y: dv.getUint16(o + 2, true) })),
       swings: un(fb.s, FX_SWING, (dv, o) => ({ x: dv.getUint16(o, true), y: dv.getUint16(o + 2, true), a: dv.getInt16(o + 4, true) / 1000, r: dv.getUint16(o + 6, true), arc: dv.getUint8(o + 8) / 100, color: col(dv.getUint8(o + 9)) })),
       beams: un(fb.b, FX_BEAM, (dv, o) => ({ x1: dv.getUint16(o, true), y1: dv.getUint16(o + 2, true), x2: dv.getUint16(o + 4, true), y2: dv.getUint16(o + 6, true), color: col(dv.getUint8(o + 8)), w: dv.getUint8(o + 9) })),
+      culls: un(fb.c, FX_CULL, (dv, o) => ({
+        x: dv.getUint16(o, true), y: dv.getUint16(o + 2, true), r: dv.getUint8(o + 4),
+      })),
     };
   }
   return out;
