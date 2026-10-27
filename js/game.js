@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateTree, serializeMap } from './nodetree.js';
-import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP, ONBOARDING_DROP_SCALE } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -29,7 +29,7 @@ import { STAT_BOOSTS } from './content/statboosts.js';
 import { updateEnemy } from './entities/enemies.js';
 import { BEAST, initBeast, updateBeast, beastUp, beastBlocks, beastAbsorbs, hurtBeast } from './entities/beast.js';
 import {
-  tohInitPlayer, tohStartingGear, tohStartFight, tohStats, tohTick, tohOnFire,
+  tohInitPlayer, tohStartFight, tohStats, tohTick, tohOnFire,
   tohHitDamage, tohOnHit, tohOnWallHit, tohOnHurt, tohOnDodge, tohOnHeal, tohOnKill, tohEnemyDied,
   tohClearFight, tohTakeBoon, tohBoonPermanent, tohSnapshot, tohMarks, tohMeter,
   tohState, tohSwapStance, coralBlocks,
@@ -85,6 +85,9 @@ const TIER_WEIGHTS = [
 const CARRY_FIELDS = [
   // js/game.js `_makePlayer`
   'level', 'xp', 'xpEarned', 'xpNext', 'materials', 'matsCollected', 'banked',
+  // The unpaid fraction of a scaled drop. Per player, and it has to cross a
+  // region boundary with the purse or the next map pays a unit short.
+  'matRem', 'xpRem',
   'items', 'itemState', 'weapons', 'boosts', 'permStats', 'respecs',
   // js/skillsim.js `initSkillPlayer`
   'skillRanks', 'skillPoints', 'loadout',
@@ -252,7 +255,7 @@ export class Sim {
     this.afterSiege = false;  // portal descends instead of returning to the map
     this.mutations = null; this.mutIdx = 0; this.siegeT = 0; this.bossAt = Infinity;
     this.bossSpawned = false; this.bossT = 0; this.siegeCfg = null;
-    this.profile = null; this.fronts = [0, 2]; this.fightLoot = 0; this.lootT = null;
+    this.profile = null; this.fronts = [0, 2]; this.fightLoot = 0; this.fightPaid = 0; this.lootT = null;
     // What this fight PAID, separated by axis, because gold and XP no longer
     // move together (§4.1). `gold` is materials dropped after every multiplier;
     // `xp` is the experience-bearing subset of them.
@@ -267,7 +270,7 @@ export class Sim {
     for (const p of this.players) this._initStartingGear(p);
   }
 
-  _emptyFx() { return { hits: [], deaths: [], booms: [], beams: [], swings: [], blocks: [], skillFires: [], telResolve: [], culls: [] }; }
+  _emptyFx() { return { hits: [], deaths: [], booms: [], beams: [], swings: [], blocks: [], skillFires: [], telResolve: [] }; }
   pushEvent(ev) { this.events.push(ev); }
   livePlayers() { return this.players.filter(p => !p.gone); }
 
@@ -398,6 +401,10 @@ export class Sim {
       // the bar reports a smaller number the better the player did.
       level: 1, xp: 0, xpEarned: 0, xpNext: CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * 1,
       materials: 0, matsCollected: 0, banked: 0,
+      // Unpaid fraction of materials (the gold purse) and of XP. A new run
+      // starts at 0. A continued run copies these through CARRY_FIELDS; a
+      // return to the lobby drops the Sim, so the fraction ends with the run.
+      matRem: 0, xpRem: 0,
       // PER-INSTANCE ITEM STATE, beside `items` rather than inside it, because
       // `items` is a flat id array on the meta packet and every reader expects
       // that shape. id -> { pen, lvl }: `pen` is the stat §9.2's penalty rolled
@@ -457,27 +464,15 @@ export class Sim {
   }
 
   _initStartingGear(p) {
-    // No starting weapon: the character's first skill point IS their opening
-    // ability, chosen from the tier-1 nodes. Trait summons still spawn — they
-    // are not weapons and are out of this patch's scope.
+    // No starting weapon. The character's first skill point is the opening
+    // ability, chosen from the tier-1 nodes. The block that used to follow
+    // this — tohStartingGear's bolt turret, the Overseer's mount, and
+    // p.char.weapon — was unreachable behind `return` and granted weapons
+    // nobody can hold. Trait summons that are not weapons still spawn.
     const t = p.char.trait;
-    if (true) {
-      if (t.key === 'mirror_drone') this._spawnSummon(p, null, 1, 'mirror');
-      if (t.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
-      if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1, 'beast');
-      return;
-    }
-    if (tohStartingGear(this, p)) { /* Necromancer: mounts, no weapons */ }
-    else if (t.key === 'overseer') {
-      // turrets ARE weapons for the Overseer: combinable, sellable, four mounts.
-      // One to start — full inheritance makes each mount count.
-      this._addWeapon(p, 'bolt_turret', 1);
-    } else if (p.char.weapon) {
-      this._addWeapon(p, p.char.weapon, 1);
-    }
     if (t.key === 'mirror_drone') this._spawnSummon(p, null, 1, 'mirror');
     if (t.key === 'free_drone_floor') this._spawnSummon(p, 'guard_drone', 1);
-    if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1, 'beast');   // the first beast
+    if (t.key === 'pack_tactics') this._spawnSummon(p, 'guard_drone', 1, 'beast');
   }
 
   _recomputeItems(p) {
@@ -751,10 +746,6 @@ export class Sim {
     this.cleared = false;
     this.hatch = null; this.extract = null; this.afterSiege = false;
     this.boss = null;
-    this.lastSpawnAt = null;     // sim time of the latest enemy to enter the pool
-    this.straggleCullAt = null;  // sim time at which ordinary leftovers may be culled
-    this.straggleBatchAt = null; // sim time of the next chase promotion
-    this.clearHoldUntil = null;  // sim time the clear screen is allowed to open
     this.holdCircle = null; this.pylonId = null; this.enemyBuff = 1;
     for (const p of this.players) {
       if (p.gone) continue;
@@ -888,10 +879,6 @@ export class Sim {
     this.spawnQueue = [];
     this.decoys.length = 0;
     this.boss = null;
-    this.lastSpawnAt = null;
-    this.straggleCullAt = null;
-    this.straggleBatchAt = null;
-    this.clearHoldUntil = null;
     this.roomEnteredT = this.time;
     this.waveRng = subRng(this.seed, 'wave', this.regionIndex, node.id);
     // D-24. `nodeType` was read in two places and assigned in none, so every
@@ -905,7 +892,8 @@ export class Sim {
     // MAP INDEX, ZERO-BASED — the same parameter the floor map passed as
     // `node.col`. A tree node's `depth` is 1..5 where a floor column was 0..5,
     // so the −1 is what keeps map 1 sitting on exactly the numbers column 0
-    // sat on: the onboarding ramp's 50%, and `waveConfig`'s shortest duration.
+    // sat on: ONBOARDING_RATE[0], which is full rate (the 0.5 halving was
+    // reverted), and `waveConfig`'s shortest duration.
     // Passing `depth` raw would silently move every wave in the game by one
     // column's worth of rate and duration.
     this.regionColumn = node.depth || 1;
@@ -925,7 +913,8 @@ export class Sim {
     // Bastion streams from ONE arena edge (0=n 1=e 2=s 3=w) — a single front
     // is a queue, and holding ground against a queue is the sanctioned play
     this.fronts = [this.waveRng.int(0, 3)];
-    this.fightLoot = 0;  // materials actually picked up this fight
+    this.fightLoot = 0;  // exact value scooped this fight — the fizzle ledger
+    this.fightPaid = 0;  // whole materials those pickups actually paid
     this.payout = { kills: 0, gold: 0, xp: 0 };  // and what the fight paid out
     this._goldAcc = 0;   // the difficulty multiplier's carried fraction, per fight
     this.lootT = null;   // the siege's post-boss looting countdown
@@ -1011,6 +1000,9 @@ export class Sim {
       nodeId: node.id, kind: node.kind, template: node.template,
       name: arena.name, w: arena.w, h: arena.h,
       hazards: this._serializeHazardDefs(),
+      // 1 on map 1, 0 from map 2 on. Same predicate the damage path reads.
+      // Rides `st.arena` on every snapshot. No roll.
+      domainNeutral: isOnboardingNode(this.regionIndex, node) ? 1 : 0,
     };
     this.pushEvent({ k: 'arena', ...this._arena, biome: this.biome, obstacles: this._snapObstacles() });
   }
@@ -1035,12 +1027,16 @@ export class Sim {
     const w = this.wave;
     if (!w || w.done) return;
     w.t += dt;
-    if (w.t >= w.dur) { w.done = true; return; }
+    // Map 1's alive caps defer budget instead of discarding it. Ending the
+    // wave on the timer while that budget is still banked would drop the
+    // spawns the cap is required to keep.
+    const overtime = w.t >= w.dur;
+    if (overtime && !this._onboardingDeferred()) { w.done = true; return; }
     let rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult
       * ((this.profile && this.profile.rateMult) || 1)
       * ((this.fightMods && this.fightMods.count) || 1)   // §2.4: an Elite node fields FEWER
       * objectiveSpawnMult(this);
-    if (this.boss) {
+    if (!overtime && this.boss) {
       // "reduced add spawns" while the boss is up — and tapering to silence,
       // so a siege is never an unwinnable DPS race against infinite inflow:
       // once the taper runs out the fight is finite (boss + standing field)
@@ -1049,12 +1045,15 @@ export class Sim {
       rate *= (this.siegeCfg ? this.siegeCfg.addRate : 0.35) * taper;
       if (taper === 0) { w.done = true; return; } // survivors rush (enemies.js)
     }
-    if (this.holdCircle && this.holdCircle.held) rate *= 0.3; // the sigil chokes the spawning
+    if (!overtime && this.holdCircle && this.holdCircle.held) rate *= 0.3; // the sigil chokes the spawning
     // the accumulator IS the bank: when the alive ceiling binds below, budget
-    // pools here (capped) and flows in as slots free — longer, never laggier
-    w.acc = Math.min(CONFIG.SPAWN_BANK_CAP, w.acc + rate * dt);
-    // elite injections (elite nodes and sieges)
-    if (w.eliteEvery > 0) {
+    // pools here (capped) and flows in as slots free — longer, never laggier.
+    // Map 1's tighter caps keep the overflow in w.held, which is NOT capped,
+    // so a long deferral cannot fall off SPAWN_BANK_CAP and vanish.
+    if (!overtime) this._accrueSpawn(w, rate * dt);
+    // elite injections (elite nodes and sieges). Not during the deferred
+    // tail: that tail is only spending budget the timer already accrued.
+    if (!overtime && w.eliteEvery > 0) {
       w.eliteT -= dt;
       if (w.eliteT <= 0) {
         if (this.enemyPool.count + this.spawnQueue.length >= Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10)) {
@@ -1072,8 +1071,14 @@ export class Sim {
     let guard = 0;
     while (w.acc >= 1 && guard++ < 20) {
       // ceiling check BEFORE spending the unit: a bound ceiling banks the
-      // budget in w.acc instead of discarding it
+      // budget in w.acc instead of discarding it. Map 1's warden and total
+      // caps sit in the same place, still before the pick, so a deferred
+      // tick draws nothing. The next spawn that does commit reads the same
+      // waveRng floats, in the same order, that it would have read if the
+      // slot had been open. waveRng is subRng(seed, 'wave', ...), not
+      // this.rng; the cap does not read or reorder this.rng.
       if (this.enemyPool.count + this.spawnQueue.length >= Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10)) break;
+      if (this._onboardingSpawnBlocked()) { w.capHeld = true; break; }
       w.acc -= 1;
       const prof = this.profile || {};
       // REGION POPULATIONS OVERRIDE THE FLOOR TABLE. `this.region` is the
@@ -1089,7 +1094,13 @@ export class Sim {
       // for running the suites rather than the parser.
       const regionPop = this._regionPick();
       const table = this._spawnTable(regionPop);
-      let id = regionPop || table[Math.floor(this.waveRng.float() * table.length)];
+      // Map 1 used to index the three ids uniformly (one waveRng float). It
+      // still spends exactly one float on the pick. The float is now read
+      // against encounter weight, with Cedar Warden forced to 1.5 in this
+      // room only. Later nodes keep the roster's 2.6 through _regionPick.
+      let id = this._onboarding()
+        ? this._onboardingPick(table)
+        : (regionPop || table[Math.floor(this.waveRng.float() * table.length)]);
       let mortar = false, puddle = false;
       // profile levers shape the roll: flankers become wave citizens,
       // artillery turns Lobbers into mortars, chaff picks up death-puddles
@@ -1132,7 +1143,67 @@ export class Sim {
       if (bx !== null) pos.x = bx;
       this.spawnQueue.push({ t: 0.7, id, x: pos.x, y: pos.y, mortar, puddle });
       this.addTelegraph({ shape: 'circle', x: pos.x, y: pos.y, r: 26, dur: 0.7, spawnMark: true });
+      this._releaseHeldSpawn(w);
     }
+    if (overtime && !this._onboardingDeferred()) w.done = true;
+  }
+
+  // Ordinary rooms cap the bank at SPAWN_BANK_CAP. Map 1 does not: a cap
+  // that deferred spawns into a capped bank would delete the overflow.
+  _accrueSpawn(w, inflow) {
+    if (!this._onboarding()) {
+      w.acc = Math.min(CONFIG.SPAWN_BANK_CAP, w.acc + inflow);
+      return;
+    }
+    w.held = (w.held || 0) + inflow;
+    this._releaseHeldSpawn(w);
+  }
+
+  _releaseHeldSpawn(w) {
+    if (!(w.held > 0)) return;
+    const space = CONFIG.SPAWN_BANK_CAP - w.acc;
+    if (space <= 0) return;
+    const take = Math.min(space, w.held);
+    w.acc += take;
+    w.held -= take;
+    if (w.held < 1e-8) w.held = 0;
+  }
+
+  // True only after the map-1 cap has actually held a spawn back, and only
+  // while that budget is still unspent. A fight the cap never touched still
+  // ends on the timer and leaves its fractional accumulator behind, which is
+  // what every other room does.
+  _onboardingDeferred() {
+    const w = this.wave;
+    if (!this._onboarding() || !w || !w.capHeld) return false;
+    return (w.held || 0) > 1e-4 || w.acc >= 1;
+  }
+
+  // Solo caps are ONBOARDING_WARDEN_CAP and ONBOARDING_ALIVE_CAP. coopSpawn
+  // already carries the solo 1.15 bite, so divide that back out and the
+  // solo numbers stay 8 and 25. A larger party scales by the same multiplier
+  // the spawn rate uses. "Warden" here is the Cedar Warden (pnw_cedar_warden).
+  // Its behavior is dasher; the Sapling's behavior is warden and is not this cap.
+  _onboardingCapScale() {
+    const solo = coopCurve(1, CONFIG.COOP_SPAWN_SCALE, CONFIG.COOP_SPAWN_SOFT) * CONFIG.SOLO_SPAWN_MULT;
+    return this.coopSpawn / solo;
+  }
+
+  _onboardingSpawnBlocked() {
+    if (!this._onboarding()) return false;
+    const scale = this._onboardingCapScale();
+    // Enemies are whole. A fractional scaled cap still means at most that many:
+    // the next spawn has to fit under the cap, not land on the far side of it.
+    const bodies = this.enemyPool.count + this.spawnQueue.length;
+    if (bodies + 1 > ONBOARDING_ALIVE_CAP * scale) return true;
+    let wardens = 0;
+    for (const e of this.enemyPool) if (e.def && e.def.id === 'pnw_cedar_warden') wardens++;
+    for (const s of this.spawnQueue) if (s.id === 'pnw_cedar_warden') wardens++;
+    // At the warden cap every spawn waits, including a thornhound. Rolling
+    // to discover the next id would consume a waveRng float and then have
+    // to put it back. Waiting spends no float. The same roll happens later,
+    // so the sequence of ids is unchanged.
+    return wardens + 1 > ONBOARDING_WARDEN_CAP * scale;
   }
 
   _aliveOfType(id) {
@@ -1193,181 +1264,14 @@ export class Sim {
     return { x: clamp(this.W / 2 + (rng.float() - 0.5) * this.W * 0.8, WALL + 60, this.W - WALL - 60), y: WALL + 80 };
   }
 
-  // Has this fight finished introducing enemies? Endless objectives never do
-  // (the wave timer is removed on the way in), so the straggler rules stay
-  // dark there — a Breach or a Bounty Hunt is not a horde that forgot to end.
-  // Elite Arena is the other way round: the roster lands in one scripted
-  // burst and the wave multiplier is zero, but the timer still runs, so
-  // "the wave is not done" would leave a champion walled off for the whole
-  // duration.
-  _spawningStopped() {
-    if (this.phase !== 'arena' || this.cleared || this.over) return false;
-    if (this.spawnQueue.length > 0) return false;
-    if (this.obj && objectiveEndless(this.obj.type)) return false;
-    if (this.arenaNode && this.arenaNode.kind === 'siege' && !this.bossSpawned) return false;
-    if (this.obj && this.obj.type === 'elite_arena') return !!this.obj.spawned;
-    if (this.wave && !this.wave.done) return false;
-    return true;
-  }
-
-  // Bodies the 20s cull must not delete. They still take the straight chase.
-  //
-  // Checked, not assumed. The sim has five kinds of enemy that are the
-  // fight rather than its leftovers:
-  //   boss            — the siege / region boss. Killing it here would call
-  //                     _bossDown and end the siege.
-  //   typeIdx === -2  — the ward pylon, a scripted siege mutation. It is a
-  //                     structure; removing it ends the empowerment for free.
-  //   isNest          — a Nest Purge keep. Removing it completes the
-  //                     objective without breaching the walls. (That mode is
-  //                     also endless, so the clock never arms; the flag is
-  //                     still the right exclusion.)
-  //   bounty          — a Bounty Hunt mark. _killEnemy with hp still above
-  //                     zero counts as the mark slipping away; zeroing hp
-  //                     would grant the bounty. Also endless.
-  //   arenaVariant    — an Elite Arena champion. The mode is that roster,
-  //                     authored to run minutes, and a 20s delete would hand
-  //                     the clear over.
-  // Ordinary elites, region roster enemies and wave nests (a wombden that
-  // was not stamped isNest) are leftovers and are culled.
-  _straggleExempt(e) {
-    if (e.boss) return true;
-    if (e.typeIdx === -2) return true;
-    if (e.isNest) return true;
-    if (e.bounty) return true;
-    if (e.arenaVariant) return true;
-    return false;
-  }
-
-  // Once spawning has stopped: remember how long each enemy has been outside
-  // STRAGGLER_NEAR of every living player. At STRAGGLER_CHASE_S it is eligible
-  // to give up pathing. At most STRAGGLER_CHASE_CAP chase at once. Once a
-  // second, the free slots fill with the eligible bodies farthest from any
-  // living player (ties: lower id). No random draw, and the cap is not scaled
-  // by party size — coopSpawn is not an integer.
-  //
-  // Separately, STRAGGLER_CULL_S after the last spawn, delete whatever
-  // ordinary body is still alive, but only while the field is down to
-  // STRAGGLER_CULL_ALIVE or fewer. A denser pack keeps chasing.
-  //
-  // Sim time, on the host, inside the tick. Positions, deaths and pickups
-  // already ride the snapshot, so co-op needs no new message — clients do
-  // not run this. The chase itself draws no random numbers. The cull goes
-  // through _killEnemy, which draws the normal loot scatters and nothing else
-  // we added. The chase flag rides an existing bit on the enemy snapshot.
-  //
-  // The deadline freezes the first tick spawning is actually over. Brood and
-  // splitter children born after that are real spawns but they must not push
-  // the deadline back, or a living nest keeps the room open forever.
-  _tickStragglers(dt) {
-    if (this.clearHoldUntil != null || this.cleared) return;
-    if (!this._spawningStopped()) return;
-    if (this.straggleCullAt == null) {
-      this.straggleCullAt = (this.lastSpawnAt ?? this.time) + CONFIG.STRAGGLER_CULL_S;
-    }
-    const near2 = CONFIG.STRAGGLER_NEAR * CONFIG.STRAGGLER_NEAR;
-    const eligible = [];
-    let chasing = 0;
-    for (const e of this.enemyPool) {
-      if (!e.active) continue;
-      if (e.straggle) { chasing++; continue; }
-      let d2 = Infinity;
-      for (const p of this.players) {
-        if (p.gone || p.downed) continue;
-        const dd = dist2(e.x, e.y, p.x, p.y);
-        if (dd < d2) d2 = dd;
-      }
-      // Nobody left standing: there is nothing to be away from, and a wipe
-      // already ends the run from _downPlayer. Don't arm a chase at a corpse.
-      if (d2 === Infinity || d2 <= near2) e.awayT = 0;
-      else {
-        e.awayT = (e.awayT || 0) + dt;
-        if (e.awayT >= CONFIG.STRAGGLER_CHASE_S) eligible.push({ e, d2 });
-      }
-    }
-    // The first batch starts the tick someone becomes eligible, so the 4s
-    // rule does not slip by another second. After that, one batch a second,
-    // even when every slot is full — a death mid-second waits for the clock.
-    const due = this.straggleBatchAt == null
-      ? eligible.length > 0
-      : this.time + 1e-6 >= this.straggleBatchAt;
-    if (due) {
-      const room = CONFIG.STRAGGLER_CHASE_CAP - chasing;
-      if (room > 0 && eligible.length) {
-        eligible.sort((a, b) => (b.d2 - a.d2) || (a.e.id - b.e.id));
-        const n = Math.min(room, eligible.length);
-        for (let i = 0; i < n; i++) eligible[i].e.straggle = true;
-      }
-      this.straggleBatchAt = (this.straggleBatchAt == null ? this.time : this.straggleBatchAt) + CONFIG.STRAGGLER_PROMOTE_S;
-    }
-    // dt is 1/60 summed, so the threshold can land a hair under an integer.
-    if (this.time + 1e-6 >= this.straggleCullAt && this.enemyPool.count <= CONFIG.STRAGGLER_CULL_ALIVE) {
-      this._cullStragglers();
-    }
-  }
-
-  // Die on the spot, loot included, kill credit not.
-  //
-  // _killEnemy(e, null) is the death path with no killer. Loot (materials,
-  // the difficulty gold accumulator, and the XP that rides the pre-multiplier
-  // amount) runs before the killer block, and so do the death behaviours that
-  // belong to the body rather than to whoever hit it: a splitter still
-  // splits, a bomber still schedules its boom, a mark detonation still pays,
-  // a soul token still drops. Everything that credits a player — onSkillKill,
-  // tohOnKill, kills++, kill-heal, crit-after-kill, kill-explode, vitality
-  // and tempo on kill — is gated on `killer` and does not run. Routing
-  // through damageEnemy with an owner would do the opposite, and a bespoke
-  // drop would duplicate the gold/XP split. Null killer is the route that
-  // already means "this body left, and nobody swung."
-  _cullStragglers() {
-    for (const e of [...this.enemyPool]) {
-      if (!e.active || this._straggleExempt(e)) continue;
-      // The puff is the death the player sees. _killEnemy also pushes the
-      // generic coloured burst; that would paint over the sheet, so it comes
-      // off again. Loot, XP and the null-killer rule are unchanged.
-      const rx = Math.round(e.x), ry = Math.round(e.y);
-      this.fx.culls.push({ x: rx, y: ry, r: e.radius });
-      this._killEnemy(e, null);
-      const deaths = this.fx.deaths;
-      const last = deaths[deaths.length - 1];
-      if (last && last.x === rx && last.y === ry) deaths.pop();
-    }
-  }
-
-  // Straight at the nearest living player, through walls and bodies. The
-  // room edge still holds. No steering and no random detour — the chase
-  // must not draw from sim.rng.
-  straggleStep(e, spd, dt) {
-    const p = this.nearestLivingPlayer(e.x, e.y);
-    if (!p || !(spd > 0)) return;
-    const dx = p.x - e.x, dy = p.y - e.y;
-    const d = Math.hypot(dx, dy);
-    if (d <= 1) return;
-    const step = Math.min(d, spd * dt);
-    e.x += (dx / d) * step;
-    e.y += (dy / d) * step;
-    const m = e.radius * 0.6;
-    e.x = clamp(e.x, WALL + m, this.W - WALL - m);
-    e.y = clamp(e.y, WALL + m, this.H - WALL - m);
-  }
-
   // fight over when the budget is spent and the field is empty
   _checkFightClear() {
     if (this.phase !== 'arena' || this.cleared || this.over) return;
     if (this.arenaNode.kind === 'siege') return; // sieges end on the boss, not on empty
-    if (this.clearHoldUntil != null) {
-      if (this.time + 1e-6 >= this.clearHoldUntil) this._clearFight();
-      return;
-    }
     // objective levels clear on their own win condition, not on an empty field
-    const won = this.obj
-      ? !!this.obj.done
-      : (this.wave.done && this.spawnQueue.length === 0 && this.enemyPool.count === 0);
-    if (!won) return;
-    // The room goes quiet now. The clear screen waits, so the last death
-    // (and a cull's dissolve) can be seen before the shop covers it.
-    this.clearHoldUntil = this.time + CONFIG.STRAGGLER_CLEAR_HOLD_S;
-    this._sanitizeArena();
+    if (this.obj) { if (this.obj.done) this._clearFight(); return; }
+    if (!this.wave.done || this.spawnQueue.length > 0 || this.enemyPool.count > 0) return;
+    this._clearFight();
   }
 
   // The instant a fight's win condition is met — before ANY popup appears —
@@ -1376,15 +1280,7 @@ export class Sim {
   // level mechanic (storm burn, the Breach collapse, cursed artillery, death
   // puddles, zone damage, spikes, lava, telegraphed impacts).
   _sanitizeArena() {
-    // The chase flag is fight-scoped. Clear it on the way out so a body that
-    // survives into the sweep (the cull exempts bosses and scripted anchors)
-    // does not keep phasing through walls on the next tick of a dead room.
-    this.straggleCullAt = null;
-    this.straggleBatchAt = null;
-    for (const e of [...this.enemyPool]) {
-      e.straggle = false; e.awayT = 0;
-      e.mats = 0; this._killEnemy(e, null);
-    }
+    for (const e of [...this.enemyPool]) { e.mats = 0; this._killEnemy(e, null); }
     this.enemyPool.clear();
     this.projPool.clear();            // both sides' projectiles
     this.spawnQueue.length = 0;
@@ -1404,15 +1300,12 @@ export class Sim {
 
   _clearFight() {
     this.cleared = true;
-    this.clearHoldUntil = null;
     this._sanitizeArena();   // safety first, popups second
-    // Anything still on the floor is collected, not deleted. A clear used to
-    // fizzle the pile on the same tick — a cull that emptied the room, and an
-    // ordinary last kill, both posted "lost to the dark" for drops the player
-    // had not walked over yet. The banner still reports a lost count; a clear
-    // pays it as zero. The siege keeps its own timed sweep (_tickLoot).
-    const lost = this._vacuumLoot();
-    this.pushEvent({ k: 'roomClear', collected: this.fightLoot, lost });
+    // money doesn't wait: no end-of-fight vacuum — whatever wasn't collected
+    // during the fight fizzles the moment the last enemy dies, and the banner
+    // reports both numbers so the rule teaches itself
+    const lost = this._fizzleLoot();
+    this.pushEvent({ k: 'roomClear', collected: this.fightPaid, lost });
     this.pushEvent({ k: 'sfx', s: 'door' });
     for (const p of this.livePlayers()) this._clearRewards(p);
     if (this.arenaNode.kind === 'elite' || this.arenaNode.kind === 'elite_arena' || this.arenaNode.kind === 'bounty') {
@@ -1449,32 +1342,7 @@ export class Sim {
     return { x, y };
   }
 
-  // Pull every pickup still on the floor to the nearest living player and
-  // credit it through the normal pickup path (XP, onboarding, fight tally,
-  // pickup procs). Whole value, one player — the same rule a magnet uses.
-  // Ties go to the lower player index. Order is the pile's own order.
-  // Nobody standing: there is no one to pay, so the pile fizzles as before.
-  _vacuumLoot() {
-    const living = [];
-    for (const p of this.players) if (!p.gone && !p.downed) living.push(p);
-    if (!living.length) return this._fizzleLoot();
-    const pile = this.pickups.slice();
-    this.pickups.length = 0;
-    for (const m of pile) {
-      let best = living[0], bestD = dist2(m.x, m.y, best.x, best.y);
-      for (let i = 1; i < living.length; i++) {
-        const p = living[i];
-        const d = dist2(m.x, m.y, p.x, p.y);
-        if (d < bestD) { best = p; bestD = d; }
-      }
-      this.fightLoot += m.v;
-      this._collectMaterial(best, m.v, m.xp);
-    }
-    return 0;
-  }
-
-  // uncollected materials vanish — visibly (little pops where they sat).
-  // The siege's loot window still ends here. A fight clear does not.
+  // uncollected materials vanish — visibly (little pops where they sat)
   _fizzleLoot() {
     let lost = 0;
     for (let i = 0; i < this.pickups.length; i++) {
@@ -1493,7 +1361,7 @@ export class Sim {
     if (this.lootT > 0) return;
     this.lootT = null;
     const lost = this._fizzleLoot();
-    this.pushEvent({ k: 'lootOver', collected: this.fightLoot, lost });
+    this.pushEvent({ k: 'lootOver', collected: this.fightPaid, lost });
     // THE REGION BOSS ENDS THE REGION, NOT THE RUN. It used to end the run —
     // there was no floor 2 to descend to and nothing above a region to return
     // to — and a party that cleared region 1 could only reach region 2 by
@@ -1657,7 +1525,6 @@ export class Sim {
     });
     this.pylonId = e.id;
     this.enemyBuff = 1.3; // while the pylon stands, everything hits harder
-    this.lastSpawnAt = this.time;
     this.addTelegraph({ shape: 'circle', x, y, r: 90, dur: 1.2 });
   }
 
@@ -1675,7 +1542,7 @@ export class Sim {
       maxHp: Math.round(def.hp * this.coopHp * this.greedHp * CONFIG.enemyHpMult),
       radius: def.radius, spd: def.spd, dmg: def.dmg, dmgScale: 1, mats: def.mats,
       domain: def.domain || null,
-      telState: 0, telT: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
+      telState: 0, telT: 0, telWindup: 0, telZone: null, telCaught: null,   // pooled slots must not inherit a wind-up
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       elite: false, eliteMod: null, t: 0, phase: 0, slowT: 0, slowMult: 1,
       markT: 0, markBy: -1, markHeal: 0, markRadius: 0,
@@ -1685,7 +1552,6 @@ export class Sim {
       slideSide: 0,   // pooled slots must not inherit a half-rounded corner
     });
     this.boss = e;
-    this.lastSpawnAt = this.time;
     this.addTelegraph({ shape: 'circle', x, y: this.H * 0.3, r: def.radius + 60, dur: 1.5 });
     this.pushEvent({ k: 'bossSpawn', name: def.name });
   }
@@ -1990,7 +1856,7 @@ export class Sim {
       // WINDUP forever — until a stun rider calls cancelTelegraph on it, which
       // reads e.def.telegraph.recoverMs and throws. Found by Unsheathed's stun
       // landing on a recycled skulker.
-      telState: 0, telT: 0, telZone: null, telCaught: null,
+      telState: 0, telT: 0, telWindup: 0, telZone: null, telCaught: null,
       telCd: def.telegraph ? def.telegraph.cooldownMs / 1000 * this.rng.float() : 0,
       // pressure-profile variants (patch 9)
       mortar: !!opts.mortar,   // Lobber artillery: telegraphed shells on your position
@@ -2003,13 +1869,7 @@ export class Sim {
       // could never end.
       isNest: false, nestShielded: false, bounty: false, arenaVariant: null,
       spawnCdMult: 1, maxBroodCap: 0, enrageRate: 0, baseSpd: 0, payloadCd: 0,
-      // Straggler clock. Wiped by the pool, set here so a fresh body starts
-      // at zero rather than inheriting a chase from the slot's previous life
-      // — the alloc wipe already guarantees that; naming it keeps the flag
-      // next to the other per-fight fields.
-      straggle: false, awayT: 0,
     });
-    this.lastSpawnAt = this.time;
     return e;
   }
 
@@ -2037,13 +1897,9 @@ export class Sim {
     // batch this tick's fx for the next 15 Hz snapshot so clients see every
     // hit number/death burst, not just the snapshot-tick's slice
     if (!this.fxBatch) this.fxBatch = this._emptyFx();
-    const CAPS = { hits: 70, deaths: 40, booms: 24, beams: 24, swings: 30, blocks: 12, culls: 24 };
+    const CAPS = { hits: 70, deaths: 40, booms: 24, beams: 24, swings: 30, blocks: 12 };
     for (const k in this.fx) {
-      const src = this.fx[k];
-      if (!src || !src.length) continue;
-      let dst = this.fxBatch[k];
-      if (!dst) dst = this.fxBatch[k] = [];
-      const cap = CAPS[k] || 30;
+      const dst = this.fxBatch[k], src = this.fx[k], cap = CAPS[k] || 30;
       for (const e of src) { if (dst.length >= cap) break; dst.push(e); }
     }
     this.fx = this._emptyFx();
@@ -2072,10 +1928,6 @@ export class Sim {
     this._tickWave(dt);
     this._flushSpawnQueue(dt);
     if (this.arenaNode && this.arenaNode.kind === 'siege') this._tickSiege(dt);
-    // After the spawns for this tick exist, and before anyone moves: the
-    // chase flag has to be up in time for updateEnemy, and a cull has to
-    // drop loot before pickups and the clear check run.
-    this._tickStragglers(dt);
     // players
     for (const p of this.players) { if (!p.gone) this._tickPlayer(p, dt); }
     // periodic stat recompute (auras, low-hp, frenzy expiry); also surface
@@ -3048,6 +2900,10 @@ export class Sim {
     // a Regenerating elite stops healing while it is being hit (see ELITE_MODS)
     if (e.eliteMod && e.eliteMod.regenLockS) e.regenLock = e.eliteMod.regenLockS;
     if (!opts.silent) this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: opts.crit ? 1 : 0 });
+    // A silent DoT tick that asks for a number gets the small plague-green one
+    // (kind 4, js/render.js ingestFx). Presentation only: the fx buffer is
+    // rebuilt every tick, nothing here is read back by the sim, no RNG.
+    else if (opts.tick === 'plague') this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: 4 });
     const p = opts.owner;
     this._dmgLedger(e, p, amount, 'landed');
     if (p && p.stats) {
@@ -3149,13 +3005,21 @@ export class Sim {
     // axis and how many kills it paid for. Measuring the ratio at the pickup
     // instead makes the denominator "materials the bot happened to walk over",
     // which is a fixture property, not a game one.
-    this.payout.kills++; this.payout.gold += mats; this.payout.xp += xpMats;
+    // Map 1 fields 0.6 of the enemies and pays 1/0.6 on each of the material
+    // units those enemies already dropped. The loop still runs once per base
+    // unit, so a kill draws the same two Sim.rng floats it drew before. Fewer
+    // enemies means fewer of those kills, and fewer spawns — each spawn reads
+    // this.rng for its phase, its fire timer, and (if it telegraphs) its
+    // cooldown. The stream's order per spawn and per material is unchanged.
+    const dropScale = this._onboarding() ? ONBOARDING_DROP_SCALE : 1;
+    this.payout.kills++; this.payout.gold += mats * dropScale; this.payout.xp += xpMats * dropScale;
     // A pickup carries its own XP value. The BASE materials carry XP; the
     // extras the gold multiplier added carry NONE, so a harder setting pays
     // more gold and exactly the same XP. That is §4.1's exclusion expressed in
     // the drop rather than trusted to a load assertion.
     for (let i = 0; i < mats; i++) {
-      this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15), 1, i < xpMats ? 1 : 0);
+      const unitXp = i < xpMats ? dropScale : 0;
+      this._dropMaterial(x + (this.rng.float() * 30 - 15), y + (this.rng.float() * 30 - 15), dropScale, unitXp);
     }
     // killer hooks & traits
     if (killer && killer.stats) {
@@ -4001,40 +3865,53 @@ export class Sim {
         m.y += Math.sin(a) * m.spd * dt;
         if (dist2(m.x, m.y, p.x, p.y) < (p.radius + 8) * (p.radius + 8)) {
           this.pickups.splice(i, 1);
-          this.fightLoot += m.v; // the fight's "collected" tally for the clear banner
-          this._collectMaterial(p, m.v, m.xp);
+          this.fightLoot += m.v; // exact scooped value; the banner reads fightPaid
+          this.fightPaid += this._collectMaterial(p, m.v, m.xp);
         }
       }
     }
   }
 
+  // Bank the whole number and keep the fraction on the player. Map 1's drop is
+  // worth 1/0.6, and gold and XP both ride that scale, so both purses do this.
+  // An already-whole credit pays itself and leaves the fraction where it was.
+  // No RNG call lives here. The pickup-bonus roll and the heal roll stay the
+  // only draws in `_collectMaterial`, and they stay in that order. The
+  // difficulty gold fraction is a different accumulator (`_goldAcc`, sim-wide,
+  // reset each fight) and is not this.
+  _takeWhole(p, field, exact) {
+    if (!(exact > 0)) return 0;
+    const sum = (p[field] || 0) + exact;
+    const whole = Math.floor(sum + 1e-9);
+    let rem = sum - whole;
+    if (rem < 1e-9) rem = 0;
+    p[field] = rem;
+    return whole;
+  }
+
+  // Returns the whole materials actually added to the purse. Callers that
+  // grant an integer (tithe, interest, the debug key) can ignore it.
   _collectMaterial(p, v, xpV) {
     this.pushEvent({ k: 'sfx', s: 'pickup' });
     if (p.hookAgg.pickupBonusChance > 0 && this.rng.float() < p.hookAgg.pickupBonusChance) v += 1;
-    p.materials += v;
-    p.matsCollected += v;
+    const paid = this._takeWhole(p, 'matRem', v);
+    p.materials += paid;
+    p.matsCollected += paid;
     // XP rides the pickup's OWN xp value where it has one — a difficulty's gold
     // multiplier adds materials that are worth money and no experience (§4.1).
     // Every other caller (tithe, interest, debug) passes nothing and keeps the
-    // old behaviour of one XP per material.
+    // old behaviour of one XP per material. The +1 pickup bonus is already in
+    // `v`, and it still does not grant XP when the pickup named its own.
     // …and the onboarding ramp's XP compensation rides here, at the single
-    // point XP is credited, so it touches experience and nothing else. `mats`
-    // above is already banked — the ramp costs the player money and does not
-    // cost them levels.
+    // point XP is credited, so it touches experience and nothing else.
     const onbXp = this.arenaNode ? onboardingXpMult(this.regionIndex, (this.arenaNode.depth || 1) - 1) : 1;
-    const xpGain = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100) * onbXp;
+    const xpExact = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100) * onbXp;
+    const xpGain = this._takeWhole(p, 'xpRem', xpExact);
     p.xp += xpGain;
     p.xpEarned += xpGain;
     while (p.xp >= p.xpNext) {
       p.xp -= p.xpNext;
-      p.level++;
-      p.banked++;
-      SK.grantSkillPoint(this, p);
-      p.xpNext = CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * p.level;
-      for (const ls of p.hookAgg.levelStats) this._applyPerm(p, ls.stats);
-      // the level-up sound is idx-aware and debounced client-side (airhorn) —
-      // the levelUp event is its sole trigger, no generic sfx broadcast
-      this.pushEvent({ k: 'levelUp', idx: p.idx });
+      this._grantLevel(p);
     }
     const t = p.char.trait;
     // Powderkeg: pickups detonate — 4 + 40% of Greed attuned, radius 40 + 50% of Reach
@@ -4053,6 +3930,7 @@ export class Sim {
     }
     for (const mh of p.hookAgg.materialHeal) if (this.rng.float() < mh.chance) this._heal(p, mh.amount);
     p.metaDirty = true;
+    return paid;
   }
 
   _applyPerm(p, stats) {
@@ -4138,8 +4016,40 @@ export class Sim {
     // Rampart: the fortress keeps growing
     const t = p.char.trait;
     if (t.key === 'living_fortress') this._applyPerm(p, { grit: t.perRoom });
+    // The guarantee sits after the fight's own payout and before the card, so
+    // a short character picks the levels the room just granted.
+    this._onboardingCatchUp(p);
     // banked level-ups resolve now
     this._maybeOffer(p);
+  }
+
+  // One level, the way a filled XP bar crosses it. The caller owns the bar: a
+  // pickup subtracts `xpNext` first, and the map-1 guarantee does not, because
+  // that grant is a level and not XP income. Points, the banked stat card, the
+  // per-level item stats and the levelUp event are the ones a pickup produces.
+  // Slots are read from the level, so they move with it.
+  _grantLevel(p) {
+    p.level++;
+    p.banked++;
+    SK.grantSkillPoint(this, p);
+    p.xpNext = CONFIG.XP_BASE + CONFIG.XP_PER_LEVEL * p.level;
+    for (const ls of p.hookAgg.levelStats) this._applyPerm(p, ls.stats);
+    // the level-up sound is idx-aware and debounced client-side (airhorn) —
+    // the levelUp event is its sole trigger, no generic sfx broadcast
+    this.pushEvent({ k: 'levelUp', idx: p.idx });
+  }
+
+  // MAP 1 CATCH-UP. Region 1's first combat map, and nowhere else. The 1.7
+  // multiplier leaves some seeds under level 6, and no single multiplier holds
+  // every seed inside 6–7, so the clear grants the missing levels instead of
+  // the drop table being asked to. Anyone already at the floor is left alone,
+  // bar included. Anyone under it lands exactly on it: the partial bar is not
+  // carried into level 7. Materials, xpEarned and every RNG stream stay put.
+  _onboardingCatchUp(p) {
+    if (!isOnboardingNode(this.regionIndex, this.arenaNode)) return;
+    if (p.level >= ONBOARDING_LEVEL_FLOOR) return;
+    while (p.level < ONBOARDING_LEVEL_FLOOR) this._grantLevel(p);
+    p.xp = 0;
   }
 
   // Boss death ends the siege: sweep, full payout, post-boss shop, and the
@@ -4487,6 +4397,29 @@ export class Sim {
       .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))
       .slice(0, ONBOARDING_TABLE.length)
       .map(e => e.id);
+  }
+
+  // One waveRng float, same as the uniform index this replaced. Cedar Warden's
+  // roster weight is not used here; ONBOARDING_CEDAR_WEIGHT is. Every other
+  // id keeps the weight on its def, which is what later maps still spawn with.
+  _onboardingPick(table) {
+    const pop = this.region && REGION_ENEMIES[this.region];
+    const byId = new Map(pop ? pop.enemies.map(e => [e.id, e]) : []);
+    let total = 0;
+    const weights = table.map(id => {
+      const def = byId.get(id);
+      const w = id === 'pnw_cedar_warden'
+        ? ONBOARDING_CEDAR_WEIGHT
+        : (def && def.w > 0 ? def.w : 1);
+      total += w;
+      return w;
+    });
+    let roll = this.waveRng.float() * total;
+    for (let i = 0; i < table.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return table[i];
+    }
+    return table[table.length - 1];
   }
 
   _regionPick() {
@@ -5219,18 +5152,13 @@ export class Sim {
       }
       case 'F2': for (const p of this.livePlayers()) this._collectMaterial(p, 200); break;
       case 'F3': {
-        if (this.cleared || this.over) break;
         for (const e of [...this.enemyPool]) this._killEnemy(e, null);
         this.spawnQueue.length = 0;
         if (this.wave) this.wave.done = true;
         // objective levels don't end on an empty field — F3 means "end this
-        // fight", so it satisfies the objective too (dev key + test harnesses).
-        // It clears now. The half-second the clear screen waits is for a
-        // fight that ended in play, so the last death can be seen; a debug
-        // key that means "the fight is over" does not sit through it.
+        // fight", so it satisfies the objective too (dev key + test harnesses)
         if (this.obj) this.obj.done = true;
-        if (this.arenaNode && this.arenaNode.kind === 'siege') this._checkFightClear();
-        else this._clearFight();
+        this._checkFightClear();
         break;
       }
       // F4 used to descend a floor. There is nowhere to descend to, so the
@@ -5375,6 +5303,11 @@ export class Sim {
         // The run being over is the most load-bearing edge there is: a client
         // that missed `end` sits in a dead run with no results and no way out.
         over: this.over ? 1 : 0,
+        // The unpaid fraction of a scaled drop, per player. Gold (materials)
+        // and XP each keep their own. Hidden: it is not on the meta packet the
+        // HUD reads. A snapshot that omitted it would pay the next drop short
+        // after a restore, and a guest's fraction is not the host's.
+        rem: this.players.map(p => [p.idx, p.matRem || 0, p.xpRem || 0]),
         // `ld`/`ldk` LIVED HERE AS A STUB and are deleted. The comment was
         // right that the loadout was on no channel; the placeholder was never
         // filled, so it was a third declared-with-no-writer field in a codebase
@@ -5426,10 +5359,11 @@ export class Sim {
         for (const p of live) { if (dist2(e.x, e.y, p.x, p.y) < cullR2) { seen = true; break; } }
         if (!seen) continue;
       }
-      // Bits 1 elite, 2 boss, 4 mini, 8 hitFlash, 16 fusing, 32 pylon.
-      // 64 is the straggler chase, and it was free. It stays clear on every
-      // fight that never arms one, so those enemy rows do not move.
-      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0) | (e.straggle ? 64 : 0)]);
+      // Second enemy flag byte (flags2): bit 1 carries active slow/chill so
+      // guests render the #8FC8E8 tint and fx.chill_frost strip without colliding
+      // with bits 64 (chase) and 128 (plague) on the first flag byte.
+      const flags2 = ((e.slowT || 0) > 0 || (e.castSlowT || 0) > 0 || e.chill || e.castSlow) ? 1 : 0;
+      snap.enemies.push([e.id, e.boss ? -1 : e.typeIdx, r(e.x), r(e.y), +(e.hp / e.maxHp).toFixed(2), (e.elite ? 1 : 0) | (e.boss ? 2 : 0) | (e.mini ? 4 : 0) | (e.hitFlash > 0 ? 8 : 0) | (e.fusing ? 16 : 0) | (e.typeIdx === -2 ? 32 : 0) | ((e.plagueT || 0) > 0 ? 128 : 0), flags2]);
     }
     for (const pr of this.projPool) {
       snap.projs.push([pr.id, r(pr.x), r(pr.y), r(pr.vx), r(pr.vy), pr.friendly ? 1 : 0, pr.radius, pr.color]);

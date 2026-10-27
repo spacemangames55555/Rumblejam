@@ -34,6 +34,96 @@ import { fxSpec, SHAPE } from './content/skillfx.js';
 // Radii are per-archetype so a bear does not read as a wolf; a family missing
 // from the table falls back rather than throwing, because a new archetype is
 // supposed to be a data change and must not need this file edited to appear.
+// An enemy carrying a plague (Entropy Cascade and every other `plague` step).
+// Three reads, one green family, measured in
+// /workspace/rumblejam-art/plague_status/preview.png:
+//  - body tint: a desaturated sickly yellow-green. dE2000-far from the chase
+//    tint #8E4432, the telegraph red #ff5d6c and the elite purple, and green is
+//    the one hue no warning in the game uses.
+//  - fx.plague_mark: a small skull shedding spores, looped over the head, sized
+//    off the body so a Bark Hulk's mark is not a Thornhound's.
+//  - tick numbers: the silent plague ticks get a small number in the light end
+//    of the same family, smaller and shorter-lived than a hit number.
+const PLAGUE_ART = {
+  tint: '#7A8C3A',
+  tintStrength: 0.30,
+  markPerR: 2.4, markMin: 30, markMax: 51,   // drawn content height; min/max are on-screen CSS px (÷ min(scale/dpr,1) at draw)
+  markGap: 12,                               // clears the hp bar (r+5 .. r+10)
+  tick: '#A3B05A', tickScale: 0.85, tickDur: 0.6, tickVy: -40,
+};
+
+// Chill / slow status read: #8FC8E8 body tint at 0.30 + fx.chill_frost at the
+// feet. Precedence when multiple body tints apply: chase > plague > chill; the
+// feet frost strip and overhead plague mark always show independently.
+export const CHILL_ART = {
+  tint: '#8FC8E8',
+  tintStrength: 0.30,
+  frostPerR: 2.0, frostMin: 36, frostMax: 64,   // strip content width; min/max are on-screen CSS px (÷ min(scale/dpr, 1))
+  frostContentW: 29, frostContentH: 13,         // fx.chill_frost content box in assets.json
+  frostGap: 3, frostRise: 0.4,                  // crust bottom r+3 below centre; strip top never above 0.4r
+  fps: 6, frames: 4,
+};
+
+// Loop phase for a per-enemy status mark. assets.js phaseOf() hashes the seed
+// with one multiply and one xor-shift, which leaves the low bits of
+// consecutive ids correlated: with seed = e.id, 4-frame loops two ids apart
+// share a phase 90% of the time and neighbours 48%, so a wave's marks blink in
+// visible pairs. A murmur3 finaliser first decorrelates them (25% at every id
+// distance, which is chance). Pure function of the id: no RNG, render-only.
+export function markSeed(id) {
+  let h = Math.imul((id | 0) ^ 0x5bd1e995, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
+  return (h >>> 0) || 1;
+}
+
+// The mark is drawn only while this is true. The status tick drives plagueT
+// through 0 and clears the stack on that same tick; the host view and
+// snapshot bit 128 are this predicate, so the skull leaves with the timer.
+export function plagueMarkShown(plagueT) {
+  return (plagueT || 0) > 0;
+}
+
+// World-unit content height for the mark. markMin and markMax are CSS px.
+// `scale` is device px per world unit, the fit draw() stores on _screen.
+// CSS px per world unit is scale/dpr; a fit below 1 lifts the floor so the
+// mark stays 30 CSS px, and a fit above 1 does not enlarge it.
+export function plagueMarkWorldHeight(radius, scale, dpr) {
+  const d = dpr > 0 ? dpr : 1;
+  const fit = Math.min((scale || d) / d, 1);
+  return clamp(radius * PLAGUE_ART.markPerR, PLAGUE_ART.markMin / fit, PLAGUE_ART.markMax / fit);
+}
+
+export function chillFrostShown(eOrSlowT) {
+  if (typeof eOrSlowT === 'number') return eOrSlowT > 0;
+  if (!eOrSlowT) return false;
+  return (eOrSlowT.slowT || 0) > 0 || (eOrSlowT.castSlowT || 0) > 0 || !!eOrSlowT.chill || !!eOrSlowT.castSlow;
+}
+
+export function chillFrostMetrics(radius, scale, dpr) {
+  const d = dpr > 0 ? dpr : 1;
+  const fit = Math.min((scale || d) / d, 1);
+  const w = clamp(radius * CHILL_ART.frostPerR, CHILL_ART.frostMin / fit, CHILL_ART.frostMax / fit);
+  const h = w * CHILL_ART.frostContentH / CHILL_ART.frostContentW;
+  const bottom = Math.max(radius + CHILL_ART.frostGap, CHILL_ART.frostRise * radius + h);
+  return { w, h, bottom, cy: bottom - h / 2, fit };
+}
+
+export function enemyBodyTint(e, view) {
+  if (!e) return null;
+  if (e.straggle) {
+    return { tint: '#8E4432', tintStrength: view && view.biome === 'xibalba' ? 0.20 : 0.25 };
+  }
+  if (e.plagued) {
+    return { tint: PLAGUE_ART.tint, tintStrength: PLAGUE_ART.tintStrength };
+  }
+  if (e.slowed) {
+    return { tint: CHILL_ART.tint, tintStrength: CHILL_ART.tintStrength };
+  }
+  return null;
+}
+
 const MINION_ART = {
   radius: { skeleton: 9, golem: 15, risen: 10, wisp: 7, wolf: 11, bear: 15, hawk: 8 },
   // How hard the owner's colour is pushed into a minion's sprite. THE NUMBER IS
@@ -96,7 +186,6 @@ export class Renderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.particles = [];
-    this.puffs = [];
     this.floaters = [];
     this.arcs = [];
     this.flashBeams = [];
@@ -196,6 +285,11 @@ export class Renderer {
     for (const h of fx.hits || []) {
       const kind = h.c;
       const text = kind === 2 ? 'DODGE' : String(h.a);
+      if (kind === 4) {   // plague tick: small, green, no impact spark
+        this.floaters.push({ x: h.x + (Math.random() * 12 - 6), y: h.y, vy: PLAGUE_ART.tickVy, t: 0, dur: PLAGUE_ART.tickDur, text, color: PLAGUE_ART.tick, scale: PLAGUE_ART.tickScale });
+        if (this.floaters.length > 90) this.floaters.splice(0, this.floaters.length - 90);
+        continue;
+      }
       const color = kind === 1 ? PALETTE.crit : kind === 2 ? '#9aa0bd' : kind === 3 ? '#ff5d6c' : '#ffffff';
       this.floaters.push({ x: h.x + (Math.random() * 16 - 8), y: h.y, vy: -60, t: 0, dur: 0.8, text, color, scale: kind === 1 ? 1.4 : 1 });
       if (this.floaters.length > 90) this.floaters.splice(0, this.floaters.length - 90);
@@ -210,11 +304,6 @@ export class Renderer {
         const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 160;
         this.particles.push({ x: d.x, y: d.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, dur: 0.4 + Math.random() * 0.3, color: d.c, size: 2 + Math.random() * 3 });
       }
-    }
-    // Cull puff. FX.cullPuff is a 6-frame one-shot; the draw advances `t`.
-    for (const c of fx.culls || []) {
-      this.puffs.push({ x: c.x, y: c.y, r: c.r || 16, t: 0 });
-      if (this.puffs.length > 24) this.puffs.splice(0, this.puffs.length - 24);
     }
     for (const b of fx.booms || []) {
       this.rings.push({ x: b.x, y: b.y, r: b.r, t: 0, dur: 0.35, color: '#ffab4f' });
@@ -1209,18 +1298,6 @@ export class Renderer {
     }
   }
 
-  // Circle vs an obstacle rect. The view stores obstacles as [x, y, w, h, flag].
-  _straggleInWall(e, view) {
-    const r = e.radius || 14;
-    for (const o of view.obstacles || []) {
-      const nx = Math.max(o[0], Math.min(e.x, o[0] + o[2]));
-      const ny = Math.max(o[1], Math.min(e.y, o[1] + o[3]));
-      const dx = e.x - nx, dy = e.y - ny;
-      if (dx * dx + dy * dy <= r * r) return true;
-    }
-    return false;
-  }
-
   _drawEnemy(ctx, e, view) {
     ctx.save();
     ctx.translate(e.x, e.y);
@@ -1238,28 +1315,34 @@ export class Renderer {
     // `facing` picks a row on a directional sheet and is ignored on a
     // single-direction one — an enemy is never rotated either way.
     const opt = { scale: sc, facing: this._faceAngle(`e${e.id}`, e.x, e.y, null), seed: e.id };
-    // Chase tint is paint. Bit 64 on the snapshot is what tells a guest
-    // this body is chasing; nothing here reads the sim. Xibalba uses 0.20.
-    // Every other biome uses 0.25. In a wall the body flickers 0.8 then
-    // 0.5 at 4 Hz, and the phase comes from the enemy id.
-    if (e.straggle) {
-      opt.tint = '#8E4432';
-      opt.tintStrength = view && view.biome === 'xibalba' ? 0.20 : 0.25;
-      const inWall = !!(view && this._straggleInWall(e, view));
-      opt.alpha = inWall ? (((Math.floor(this.t * 8) + e.id) & 1) ? 0.8 : 0.5) : 1;
+    // Precedence when multiple status tints apply: chase > plague > chill;
+    // the feet frost strip and overhead plague mark always show independently.
+    const bodyTint = enemyBodyTint(e, view);
+    if (bodyTint) {
+      opt.tint = bodyTint.tint;
+      opt.tintStrength = bodyTint.tintStrength;
     }
     const drew = drawSprite(ctx, e.spriteId, 0, 0, opt);
     if (!drew) {
-      if (opt.alpha != null && opt.alpha !== 1) ctx.globalAlpha = opt.alpha;
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
       ctx.stroke();
-      if (e.straggle) {
-        ctx.globalAlpha = opt.alpha * opt.tintStrength;
-        ctx.fillStyle = '#8E4432';
-        circle(ctx, 0, 0, r); ctx.fill();
+      if (bodyTint) {
+        ctx.globalAlpha = (opt.alpha != null ? opt.alpha : 1) * bodyTint.tintStrength;
+        ctx.fillStyle = bodyTint.tint;
+        ctx.fill();
+        ctx.globalAlpha = 1;
       }
-      ctx.globalAlpha = 1;
+    }
+    if (e.slowed) {
+      const m = chillFrostMetrics(r, this._screen && this._screen.scale, this.dpr);
+      const drewFrost = drawSprite(ctx, FX.chillFrost, 0, m.cy, {
+        scale: spriteScaleFor(FX.chillFrost, m.h),
+        seed: markSeed(e.id),
+      });
+      if (!drewFrost) {
+        this._drawChillFrostFallback(ctx, m.w, m.h, m.bottom, e.id);
+      }
     }
     // THE DAMAGE TRIANGLE, always visible. A 4px ring in the enemy's domain
     // colour: the triangle is only a decision a player can act on if they can
@@ -1311,6 +1394,50 @@ export class Renderer {
       ctx.fillStyle = e.boss ? PALETTE.boss : '#e2504c';
       ctx.fillRect(-bw / 2, -r - 10, bw * clamp(e.hpFrac, 0, 1), 5);
     }
+    if (e.plagued) {
+      // looped by drawSprite from the manifest fps; `seed` offsets the phase so
+      // a plagued wave does not pulse in lockstep
+      // markMin/markMax are CSS px on screen (Designer: 30px minimum). The room
+      // is fit to the canvas (draw(): scale = min(cw/VIEW_W, ch/VIEW_H)) and
+      // the canvas is sized in DEVICE px (window × this.dpr, _resize), so CSS
+      // px per world unit is scale / dpr. Below 1 that would shrink the mark;
+      // dividing by min(fit, 1) undoes it, and a zoom-in (fit > 1) never
+      // enlarges it. Render-only: the fit comes from this._screen, set in
+      // draw() before any entity is drawn; a missing dpr counts as 1.
+      const mh = plagueMarkWorldHeight(r, this._screen && this._screen.scale, this.dpr);
+      drawSprite(ctx, FX.plagueMark, 0, -r - PLAGUE_ART.markGap - mh / 2, { scale: spriteScaleFor(FX.plagueMark, mh), seed: markSeed(e.id) });
+    }
+    ctx.restore();
+  }
+
+  _drawChillFrostFallback(ctx, w, h, bottom, id) {
+    const frame = (Math.floor(this.t * CHILL_ART.fps) + markSeed(id)) % CHILL_ART.frames;
+    const baseY = bottom - 2;
+    const hw = w * 0.5;
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#000000';
+    ctx.fillStyle = '#3D6680';
+    const spikes = [-0.78, -0.42, 0, 0.42, 0.78];
+    const heights = [0.62, 0.88, 1.0, 0.85, 0.60];
+    ctx.beginPath();
+    ctx.moveTo(-hw, baseY);
+    for (let i = 0; i < spikes.length; i++) {
+      const sx = spikes[i] * hw;
+      const sh = h * heights[i];
+      ctx.lineTo(sx - w * 0.08, baseY - sh * 0.35);
+      ctx.lineTo(sx, baseY - sh);
+      ctx.lineTo(sx + w * 0.08, baseY - sh * 0.35);
+    }
+    ctx.lineTo(hw, baseY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    const glintIdx = frame % spikes.length;
+    const gx = spikes[glintIdx] * hw;
+    const gh = h * heights[glintIdx] * 0.65;
+    ctx.fillStyle = '#BFE3F2';
+    ctx.fillRect(gx - 1, baseY - gh, 2, 2);
     ctx.restore();
   }
 
@@ -1589,29 +1716,6 @@ export class Renderer {
   }
 
   _drawFx(ctx, dt) {
-    for (let i = this.puffs.length - 1; i >= 0; i--) {
-      const p = this.puffs[i];
-      p.t += dt;
-      // 6 frames at 20 fps is 0.30 s. Dropping at the end is what keeps the
-      // strip from wrapping: drawSprite mods a past-the-end frame back to 0.
-      if (p.t >= 0.3) { this.puffs.splice(i, 1); continue; }
-      const frame = Math.min(5, Math.floor(p.t / 0.05));
-      const drew = drawSprite(ctx, FX.cullPuff, p.x, p.y, {
-        frame,
-        scale: spriteScaleFor(FX.cullPuff, (p.r || 16) * 2.6),
-      });
-      if (!drew && !p.fell) {
-        p.fell = true;
-        for (let k = 0; k < 8; k++) {
-          const a = (k / 8) * Math.PI * 2;
-          const s = 70 + (k % 3) * 40;
-          this.particles.push({
-            x: p.x, y: p.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-            t: 0, dur: 0.35, color: '#746D63', size: 3,
-          });
-        }
-      }
-    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const pt = this.particles[i];
       pt.t += dt;
