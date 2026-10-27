@@ -4068,7 +4068,7 @@ try {
     else fail(`plague mark did not clear on the expiry tick (sawOn ${sawOn}, cleared ${cleared}, plagueT ${e.plagueT})`);
   }
 
-  // Cascade's plague moves when the host dies. 120px is in range, past that
+  // Cascade's plague moves when the host dies. 180px is in range, past that
   // it ends, and a move is not a copy — one cast, one host, and the new host
   // can pass it on. Centre to centre. No roll. The wire flag is the same bit.
   {
@@ -4078,11 +4078,11 @@ try {
     const step = sk.compose.find(c => c.kind === 'plague');
     const other = Object.values(SKILL_BY_ID).find(s => s !== sk && (s.compose || []).some(c => c.kind === 'plague' && !(c.handoff > 0)));
     const card = 'When its host dies, the plague moves to the nearest enemy.';
-    if (sk.cooldown !== 1600 || step.damage !== 8 || step.spreadRadius !== 0 || step.handoff !== 120
+    if (sk.cooldown !== 1300 || step.damage !== 8 || step.spreadRadius !== 0 || step.handoff !== 180
         || step.riders?.slow || sk.flavor !== 'It does not spread. It simply keeps arriving.'
         || !mechanicalLine(sk, 1).includes(card)) {
       fail(`Cascade's numbers or card changed: cd ${sk.cooldown} dmg ${step.damage} spread ${step.spreadRadius} handoff ${step.handoff} flavor ${JSON.stringify(sk.flavor)} line ${mechanicalLine(sk, 1)}`);
-    } else ok('Cascade stays 8 damage, 1600ms, no spread, no slow, and the card says the plague moves when its host dies');
+    } else ok('Cascade stays 8 damage, 1300ms, no spread, no slow, and the card says the plague moves when its host dies');
 
     const fresh = () => new Sim({ seed: 11, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
     const place = (sim, x, y) => {
@@ -4096,13 +4096,13 @@ try {
       return row ? (row[5] & 128) : 0;
     };
 
-    // Nearest of two in range. The one at 120 must not also receive it.
+    // Nearest of two in range. The one at 180 must not also receive it.
     {
       const sim = fresh();
       const p0 = sim.players[0];
       const a = place(sim, 400, 400);
       const near = place(sim, 480, 400);   // 80
-      const edge = place(sim, 520, 400);   // 120 from the host, 40 from `near`
+      const edge = place(sim, 580, 400);   // 180 from the host, 100 from `near`
       SKILLSIM.applyPlague(sim, a, 8, 5, p0, sk);
       a.plagueAcc = 0.4;
       const dps = a.plagueDps, dur = a.plagueT;
@@ -4110,7 +4110,7 @@ try {
       const live = hosts(sim);
       const once = live.length === 1 && live[0] === near
         && near.plagueDps === dps && near.plagueT === dur && near.plagueAcc === 0.4
-        && near.plagueHandoff === 120 && !(near.slowT > 0)
+        && near.plagueHandoff === 180 && !(near.slowT > 0)
         && (a.plagueT || 0) === 0 && !a.plagueDps && a.plagueFrom === undefined
         && (edge.plagueT || 0) === 0
         && bit(sim, near) === 128 && bit(sim, edge) === 0;
@@ -4120,39 +4120,39 @@ try {
         sim.damageEnemy(near, 99999, { owner: p0 });
         const again = hosts(sim);
         if (again.length === 1 && again[0] === edge && edge.plagueDps === dps && edge.plagueT === dur
-            && edge.plagueHandoff === 120 && (near.plagueT || 0) === 0 && bit(sim, edge) === 128) {
-          ok('Cascade plague moves to the nearest enemy within 120, not to both, and the new host can move it again — snapshot bit 128 follows');
+            && edge.plagueHandoff === 180 && (near.plagueT || 0) === 0 && bit(sim, edge) === 128) {
+          ok('Cascade plague moves to the nearest enemy within 180, not to both, and the new host can move it again — snapshot bit 128 follows');
         } else {
           fail(`a moved plague did not move again: ${again.length} host(s), edgeT ${edge.plagueT} nearT ${near.plagueT} bit ${bit(sim, edge)}`);
         }
       }
     }
 
-    // Exactly 120 is in range when it is the only candidate.
+    // Exactly 180 is in range when it is the only candidate.
     {
       const sim = fresh();
       const p0 = sim.players[0];
       const a = place(sim, 400, 400);
-      const b = place(sim, 520, 400);
+      const b = place(sim, 580, 400);
       SKILLSIM.applyPlague(sim, a, 8, 5, p0, sk);
       const dps = a.plagueDps, dur = a.plagueT;
       sim.damageEnemy(a, 99999, { owner: p0 });
       const live = hosts(sim);
       if (live.length === 1 && live[0] === b && b.plagueDps === dps && b.plagueT === dur && bit(sim, b) === 128) {
-        ok('an enemy centred 120px from the dead host receives the plague, same damage per tick and the remaining duration');
-      } else fail(`120px was not in range: ${live.length} host(s), T ${b.plagueT} want ${dur}, dps ${b.plagueDps} want ${dps}, bit ${bit(sim, b)}`);
+        ok('an enemy centred 180px from the dead host receives the plague, same damage per tick and the remaining duration');
+      } else fail(`180px was not in range: ${live.length} host(s), T ${b.plagueT} want ${dur}, dps ${b.plagueDps} want ${dps}, bit ${bit(sim, b)}`);
     }
 
-    // 121 ends it. Nothing is left carrying the mark.
+    // 181 ends it. Nothing is left carrying the mark.
     {
       const sim = fresh();
       const p0 = sim.players[0];
       const a = place(sim, 400, 400);
-      const b = place(sim, 521, 400);
+      const b = place(sim, 581, 400);
       SKILLSIM.applyPlague(sim, a, 8, 5, p0, sk);
       sim.damageEnemy(a, 99999, { owner: p0 });
       if (!hosts(sim).length && (b.plagueT || 0) === 0 && bit(sim, b) === 0 && (a.plagueT || 0) === 0) {
-        ok('past 120px the plague ends — it does not stay on the corpse and it does not reach the next body');
+        ok('past 180px the plague ends — it does not stay on the corpse and it does not reach the next body');
       } else fail(`out-of-range plague still exists: hosts ${hosts(sim).length} bT ${b.plagueT} bit ${bit(sim, b)} corpseT ${a.plagueT}`);
     }
 
