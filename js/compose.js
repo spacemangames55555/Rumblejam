@@ -511,7 +511,7 @@ export const PRIMITIVES = {
       dps: stepDamage(step, skill, rank, p) / (step.tickMs / MS),
       dur: rankedDuration(step.duration, skill, rank) / MS,
       hurts: 'enemies', color: p.color,
-      skillDomain: skill.domain, ownerIdx: p.idx,
+      skillDomain: skill.domain, ownerIdx: p.idx, owner: p.idx,   // owner: the zone loop reads z.owner, not ownerIdx — without it hazard damage landed uncredited
       slowMult: r.slow ? r.slow.mult : 0, slowDur: r.slow ? r.slow.dur / MS : 0,
     });
     out.states++;
@@ -906,7 +906,25 @@ export const PRIMITIVES = {
   },
 
   plague(sim, p, skill, step, rank, grid, out) {
-    const seed = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.range || skill.trigger.radius || step.spreadRadius);
+    const range = skill.trigger.range || skill.trigger.radius || step.spreadRadius;
+    // `preferClean` retargets onto the nearest enemy that does not already
+    // carry THIS skill's plague, so a single-target DoT walks the wave
+    // instead of refreshing the body it just marked. Distance, then the
+    // grid's own order — the same tie the nearest query uses. No roll.
+    // When every body in range already carries it, fall through to `select`
+    // and refresh, so the cast still has a target.
+    let seed = null;
+    if (step.preferClean && range > 0) {
+      const r2 = range * range;
+      let bd = Infinity;
+      for (const e of grid.near(p.x, p.y, range)) {
+        if (e.plagueFrom && e.plagueFrom[skill.id]) continue;
+        const dx = e.x - p.x, dy = e.y - p.y;
+        const d = dx * dx + dy * dy;
+        if (d <= r2 && d < bd) { bd = d; seed = e; }
+      }
+    }
+    if (!seed) seed = selectTarget(skill.select, grid, p.x, p.y, range);
     if (!seed) return;
     sim.applyPlague(seed, rankedDamage(step.damage, skill, rank), rankedDuration(step.duration, skill, rank) / MS, p, skill);
     out.statuses++;

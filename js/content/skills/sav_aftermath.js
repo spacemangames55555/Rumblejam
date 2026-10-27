@@ -51,7 +51,7 @@ import { STAT_NAME } from '../../config.js';
 // capstones, symmetric.
 
 export const TUNING = {
-  emberDamage: 12, emberReach: 116, emberArc: 1.8, emberCd: 1150,
+  emberDamage: 4, emberReach: 116, emberArc: 1.8, emberCd: 1150,
   sawtoothWeight: 0.15,
 
   // ---- branch A: Backdraft (cash the peak; it is about to be gone) ----
@@ -60,12 +60,12 @@ export const TUNING = {
   // does; a long cooldown means it comes round rarely enough that when it does,
   // the chain has had time to be deep. Together they are a skill that is worth
   // most at the crest — which is also the moment the crest is likeliest to end.
-  backdraftDamage: 26, backdraftArc: 1.8, backdraftRange: 290, backdraftCd: 5200,
+  backdraftDamage: 10, backdraftArc: 1.8, backdraftRange: 290, backdraftCd: 5200,
   backdraftWeight: 1.25,
   emberfallWeight: 0.18,
-  detonateDamage: 34, detonateReach: 150, detonateArc: 2.6, detonateCd: 7400,
+  detonateDamage: 13, detonateReach: 150, detonateArc: 2.6, detonateCd: 7400,
   detonateKnock: 240, detonateWeight: 1.25,
-  flashoverDamage: 44, flashoverArc: 2.9, flashoverReach: 155, flashoverCd: 9600,
+  flashoverDamage: 16, flashoverArc: 2.9, flashoverReach: 155, flashoverCd: 9600,
   flashoverPulses: 2, flashoverWeight: 1.3,
 
   // ---- branch B: Bedrock (what is still there afterwards) ----
@@ -75,7 +75,7 @@ export const TUNING = {
   // the crest should outlive the fall that follows it.
   bedrockAmount: 38, bedrockDuration: 6000, bedrockPct: 65, bedrockCd: 4600,
   graniteWeight: 0.18,
-  scarDamage: 20, scarRadius: 170, scarDuration: 6400, scarTickMs: 420, scarCd: 5400,
+  scarDamage: 2, scarRadius: 170, scarDuration: 6400, scarTickMs: 420, scarCd: 5400,
   scarSlow: { mult: 0.6, dur: 2400 },
   // A REFLECT IS A FRACTION. This was authored as a whole number and read as
   // one: 34 meant 34x the damage absorbed thrown back, not 34%. Converted, not
@@ -120,7 +120,7 @@ export const SAV_AFTERMATH = [
     trigger: { kind: 'PROXIMITY', radius: T.backdraftRange, count: 2 },
     cooldown: T.backdraftCd,
     compose: [{
-      kind: 'cone', damage: T.backdraftDamage, arc: T.backdraftArc, range: T.backdraftRange,
+      kind: 'cone', damage: T.backdraftDamage, angle: T.backdraftArc, range: T.backdraftRange,
       ...CASC, scaleWeight: T.backdraftWeight, riders: {},
     }],
     ranks: R,

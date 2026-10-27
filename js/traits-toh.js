@@ -86,9 +86,13 @@ export function tohInitPlayer(sim, p) {
   if (t.key === 'crystal_infusion') p.radius = CONFIG.PLAYER_RADIUS * t.hitbox;
 }
 
-// The Necromancer's starting kit is the Overseer's: one mount, no weapons.
-export function tohStartingGear(sim, p) {
-  if (has(p, 'bonelord')) { sim._addWeapon(p, 'bolt_turret', 1); return true; }
+// Bonelord's four mounts were weapon slots, granted here as a bolt turret.
+// Weapons are removed, so this grants nothing: a turret in a slot of 0 never
+// appeared, and the structure-recall channel was left with no subject. Skill-era
+// summons come from the Summons tree and live on p.minions, not sim.summons.
+// Returning false keeps a caller from treating this as "starting gear handled"
+// and skipping the shared trait summons.
+export function tohStartingGear() {
   return false;
 }
 

@@ -21,6 +21,7 @@ import { domainMult } from './domains.js';
 // table and must be covered by the same assertions. Reading the base twelve
 // here would have let a region enemy ship with a 200ms wind-up unchecked.
 import { ALL_ENEMY_DEFS } from './content/enemies.js';
+import { onboardingCedarWindupMs } from './arenas.js';
 
 // Below this a wind-up is not something a person can react to on a phone, with
 // a thumb, on a small screen. Asserted at load rather than trusted.
@@ -138,6 +139,7 @@ export function initTelegraph(sim, e) {
   const t = telegraphOf(e);
   e.telState = TELEGRAPH_STATES.IDLE;
   e.telT = 0;
+  e.telWindup = 0;
   e.telZone = null;
   e.telCd = (t ? t.cooldownMs / 1000 : 0) * sim.rng.float();
   e.telCaught = null;
@@ -220,7 +222,12 @@ export function tickTelegraphs(sim, dt) {
         // dodge/hit distinction is meaningless.
         if (!caught.size) { e.telCd = t.cooldownMs / 1000 * t.retryFrac; break; }
         e.telState = TELEGRAPH_STATES.WINDUP;
-        e.telT = t.windupMs / 1000;
+        // The authored wind-up, unless this is map 1's Cedar Warden, whose
+        // lane warning is 1.5×. Stored on the commit so the fill bar and the
+        // timer agree, and so a pooled slot cannot keep a previous room's number.
+        const windupMs = onboardingCedarWindupMs(sim.regionIndex, sim.arenaNode, e.def && e.def.id, t.windupMs);
+        e.telWindup = windupMs / 1000;
+        e.telT = e.telWindup;
         e.telZone = zone;
         e.telCaught = caught;
         // The NUMBER is fixed at commit for the same reason the zone is. A
@@ -307,7 +314,8 @@ export function liveZones(sim) {
     // The state machine resets it on spawn now; this is the second line.
     const t = telegraphOf(e);
     if (!e.active || e.telState !== TELEGRAPH_STATES.WINDUP || !e.telZone || !t) continue;
-    out.push({ z: e.telZone, fill: 1 - e.telT / (t.windupMs / 1000), msLeft: Math.round(e.telT * 1000), id: e.id });
+    const windup = e.telWindup || t.windupMs / 1000;
+    out.push({ z: e.telZone, fill: 1 - e.telT / windup, msLeft: Math.round(e.telT * 1000), id: e.id });
   }
   return out;
 }

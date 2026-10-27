@@ -189,6 +189,12 @@ export const RIDER_KINDS = Object.keys(RIDERS);
 // Returned as structured entries rather than a finished string so the gate can
 // assert on `key` and the UI can style `now`/`next` separately. A field carries
 // `next` only when rank actually moves it.
+// One stack of the named engine, at this step's weight. Not a skill point:
+// the rank arrow is the point, and this percent is what one more stack adds.
+function scalingClause(step) {
+  return `${step.scaleWith}, +${(scalePerFor(step) * 100).toFixed(1)}% per stack`;
+}
+
 function field(key, label, now, next) {
   return next !== undefined && next !== null && next !== now
     ? { key, label, now, next }
@@ -331,10 +337,12 @@ export function mechanics(skill, rank = 1) {
       fields.push(field('stealthGate', 'Only near', `an enemy within ${Math.round(s.radius)}`));
     }
     if ((s.count || 1) > 1 && s.kind === 'bolt') fields.push(field('count', 'Projectiles', String(s.count)));
-    // an engine-scaled step is stated with its condition rather than folded in
+    // an engine-scaled step is stated with its condition rather than folded in.
+    // The unit is one stack of that engine. A skill point is the rank arrow
+    // on Damage; "per point" here made Rip read as +2.0% for the point the
+    // player was about to spend.
     if (s.scaleWith) {
-      fields.push(field('scaling', 'Scales with',
-        `${s.scaleWith}, +${(scalePerFor(s) * 100).toFixed(1)}% per point`));
+      fields.push(field('scaling', 'Scales with', scalingClause(s)));
     }
   }
 
@@ -421,8 +429,7 @@ export function mechanics(skill, rank = 1) {
       fields.push(field('aura', 'Field', parts.join(', '), next));
     }
     if (q.shield && q.shield.scaleWith) {
-      fields.push(field('scaling', 'Scales with',
-        `${q.shield.scaleWith}, +${(scalePerFor(q.shield) * 100).toFixed(1)}% per point`));
+      fields.push(field('scaling', 'Scales with', scalingClause(q.shield)));
     }
     fields.push(field('holds', 'Holds', 'while slotted — no cooldown, no trigger, no duration'));
   }
@@ -484,7 +491,7 @@ export function passiveText(skill) {
   for (const [k, v] of Object.entries(skill.passive || {})) {
     const m = SCALE_WEIGHT.exec(k);
     if (m) {
-      out.push(`every ${m[1]} point is worth ${(scalePerFor({ scaleWith: m[1], scaleWeight: v }) * 100).toFixed(1)}% more to skills that read it`);
+      out.push(`every ${m[1]} stack is worth ${(scalePerFor({ scaleWith: m[1], scaleWeight: v }) * 100).toFixed(1)}% more to skills that read it`);
     } else if (PASSIVE_TEXT[k]) {
       out.push(PASSIVE_TEXT[k](v));
     } else {

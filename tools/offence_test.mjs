@@ -304,7 +304,7 @@ console.log('\n--- where a tree exists, does the engine deliver ---');
     fail('NOT ONE character anywhere learns a skill and deals damage — this is an engine failure, not missing content');
   } else {
     for (const r of armed) console.log(`  ${r.charId}: learned ${r.learned}, armed with ${r.armed}, dealt ${r.dealt}, ${r.kills} kill(s)`);
-    ok(`${armed.length} character(s) learn an active, auto-slot it and kill with it — the skill engine works, the trees are missing`);
+    ok(`${armed.length} character(s) learn an active, auto-slot it and kill with it — the skill engine works`);
   }
 }
 

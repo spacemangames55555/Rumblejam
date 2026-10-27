@@ -168,6 +168,114 @@ enough 4p runs to catch a second occurrence is the method.
 Fixed, and gated. Here because the failure shape is one that recurs, so a
 regression should be findable by these steps rather than diagnosed from scratch.
 
+## 11. Players deal no damage in the co-op run, and take it normally
+
+**Fixed 2026-10-23.** Weapons are gone, so a character with nothing slotted
+deals nothing, and the co-op run was full of those characters. Both players'
+`damageDealt` stayed at 0 while enemies hurt them. The fight could not be won,
+so every later wait — host run, extraction shop, fight clear — timed out under
+its own name.
+
+### What a player saw
+
+A two-player run. Enemies shoot and connect. Neither character's damage tally
+moves, on the host, for the whole fight:
+
+```
+✗ no organic damage dealt on touch within 15s
+✗ damage tallies: {"d0":0,"d1":0,"hurt":true}
+```
+
+`hurt: true` is the enemies working. `d0` and `d1` are `players[0]` and
+`players[1]` `damageDealt` on the host sim. The client draws whatever that sim
+puts on the snapshot, so a zero there is a zero on both screens.
+
+### Root cause
+
+Skills are the only damage source. `CONFIG.WEAPONS_ENABLED` is false,
+`weaponSlots` is 0, and `_tickWeapons` is never called. Skills come from trees,
+and `treesFor(p)` keys off `charId`.
+
+The classic roster was the default, and none of its 33 characters had a tree.
+A party of them walks into the arena, gets shot, and has nothing that can fire.
+Where a tree existed the engine already worked — learn, auto-slot, kill — which
+is why the fix does not live in the trigger core. `offence_test` measured that
+on `toh_necromancer` (necro_blip, 80 damage, 4 kills) and `toh_samurai`
+(sam_cross_guard, 162, 4 kills) while the other 45 characters scored 0.
+
+Two things kept a patch from seeing it:
+
+- `sim_test` cleared every fight with `nuke()` (`damageEnemy(e, 900, {owner: p})`
+  on a timer). A harness that kills the enemies cannot tell whether the player
+  can. That is now `clearFieldForSetup`, and `assertPlayerCleared` refuses a
+  combat claim off a sim it has touched.
+- `CHAR_BY_ID[id] || CHAR_BY_ID.bulwark` turned an id from the other roster into
+  bulwark with bulwark's stats and the original `charId`. The trees, keyed off
+  `charId`, did not follow, and nothing threw.
+
+The roster retirement (one ToH roster, unknown id throws, selectability derived
+from `TREES_BY_CLASS`, a load assertion that every selectable class has a
+damaging tier-1 active) removed the silent fallback and the 33. It was written
+into this entry and left here, because at that commit only `toh_samurai` and
+`toh_necromancer` had trees and the other twelve could not be chosen. Those
+twelve trees are in the tree data now. All 14 classes are selectable, each
+tier-1 active deals damage, and `_offerOpening` / the opening card is what puts
+that active on the bar. The anti-softlock floor still exists and still has to
+stay at 0 on this path: a run that only fights because the floor fired has not
+offered the player the choice.
+
+Measured on the pinned seed `424242`, standing still, card answered, both
+players, every one of the 196 pairs: both `damageDealt` counters are above 0
+inside 22s and `openingFloored` is 0. The recorded browser pair is blacksmith
+hosting and wizard joining on that same seed, each clicking their own opening
+card: both deal damage, the party is hurt, and the client's decoded snapshot
+shows an enemy below full HP.
+
+A three-second read right after the arena opens is still 0,0. That is the
+onboarding walk, not an unarmed party — the first spawn is still crossing the
+ring. The entry's own caution stands: a window that short accused working
+classes once already. The gate waits for the damage or for 30s, and it says
+when the arena never presented an enemy.
+
+### Why the suites missed the co-op half
+
+`offence_test` is one player and never ticks the consent vote. A 2-player
+`pickNode` only starts the vote; a harness that does not tick it never enters
+the arena and reports a different failure. The browser co-op tally slept 3
+seconds and still named retired ids (`banneret`, `lodestone`, `facet`), and
+`startRun` in both `tools/browser_test.mjs` and `tools/cdp_harness.mjs` clicked
+`.world-card`, which the world map no longer renders. The helper threw
+`no region N card` before a fight existed, so the tally could not go green or
+red. The card is `#world-enter` on the selected `.world-pin`.
+
+### Reproduce (pre-fix)
+
+Start a 2-player run with a character whose `charId` has no tree (any archived
+classic id, before the throw), or empty both loadouts after the door and before
+the fight. Tick 20 seconds.
+
+```
+✗ damage tallies: {"d0":0,"d1":0,"hurt":true}
+```
+
+The negative control in the gate does the second of those on samurai + monk and
+requires the zero, so a counter that moves without a slotted skill cannot pass.
+
+### What holds it now
+
+| gate | where | asserts |
+|---|---|---|
+| co-op offence, every pair | `tools/coop_offence_test.mjs` | all 196 selectable pairs, seed 424242, card answered, vote ticked, both `damageDealt` > 0 inside 22s, `openingFloored` === 0 |
+| the wire | same file | a decoded snapshot shows an enemy below full HP |
+| negative control | same file | samurai + monk with loadouts cleared at the door stay at 0 |
+| the recorded tally | same file | blacksmith + wizard on that seed deal damage and are hurt |
+| a real session | same file | two browsers, local relay, blacksmith hosting and wizard joining, seed 424242, each clicks the opening card, `startRun` enters region 1, both tallies move, the party is hurt, and the client snapshot shows a wounded enemy or a hit |
+
+`node tools/offence_test.mjs` still holds the solo half: every selectable class,
+the card rather than the floor, and a retired id throws.
+
+---
+
 ## 4. The boon panel could open with no exit, softlocking a solo touch run
 
 **Fixed 2026-08-05.** Three separate defects stacked into one unrecoverable
@@ -818,134 +926,6 @@ cannot reliably get there.
 
 ---
 
-## 11. Players deal no damage in the co-op run, and take it normally
-
-**Where:** unknown. Surfaced by every full co-op run once §10 stopped ending the
-phase early.
-
-**What is wrong.** Two checks fail together in run after run:
-
-```
-✗ no organic damage dealt on touch within 15s
-✗ damage tallies: {"d0":0,"d1":0,"hurt":true}
-```
-
-`hurt: true` means enemies are damaging players. `d0: 0, d1: 0` means neither
-player has dealt a single point in return.
-
-**Why it is recorded separately.** It is almost certainly why the phase then
-dies in three different places across three runs — `timeout waiting for host
-run`, `timeout waiting for host extraction shop`, `timeout waiting for a fight
-to clear` — because a fight that cannot be won never clears, and everything
-downstream waits on a clear. Those three timeouts read as three flaky checks;
-they are one defect wearing three names, which is the conflation this file
-exists to stop.
-
-### Diagnosed: 2 of 47 characters have a skill tree, and neither is selectable by default
-
-`tools/offence_test.mjs` puts each character in an arena, spends its opening
-skill point, ticks 20 real seconds and reads what the **player** dealt. It never
-calls `damageEnemy` on the player's behalf.
-
-| roster | characters | have any tree | can learn an active | deal aimed damage |
-|---|---|---|---|---|
-| `classic` (the default) | 33 | **0** | **0** | **0** |
-| `toh` | 14 | 2 | 2 | 2 |
-
-Weapons are removed — `CONFIG.WEAPONS_ENABLED` is false, `weaponSlots` is 0, and
-`_tickWeapons` is never called — so **skills are the only damage source.** Skills
-come from trees. `TREES_BY_CLASS` has exactly two entries, `toh_samurai` and
-`toh_necromancer`. Every other character in the game has no way to learn
-anything, and therefore no attack.
-
-The game boots on `classic`. **Not one of its 33 characters can deal a point of
-aimed damage.** That is the whole of the symptom: fights cannot be won, so they
-never clear, so everything waiting on a clear times out under a different name.
-
-**The engine is not broken, and that distinction decides where the fix goes.**
-Where a tree exists it works end to end — the character learns, `spendSkillPoint`
-auto-slots the active, and it kills:
-
-```
-toh_necromancer: learned necro_blip,      dealt 80,  4 kills
-toh_samurai:     learned sam_cross_guard, dealt 162, 4 kills
-```
-
-What is missing is content: 45 characters' worth of skill trees. That is GDD §14
-phase 5 work, not a bug fix.
-
-### Why nothing caught it
-
-- **`sim_test` clears every fight with `nuke()`** — `damageEnemy(e, 900, {owner: p})`
-  on every enemy every 240 ticks. A harness that kills the enemies for you cannot
-  answer whether the player can, so the suite stayed green against a party with
-  no offence at all. `tools/offence_test.mjs` exists because that gap did.
-- **A charId from the other roster resolved silently to `bulwark`.** Right stats,
-  right trait, wrong `charId` — and `treesFor(p)` keys off `charId`, so the
-  player got a character with no trees and nothing said so. Fixed: the fallback
-  still happens (a bad id must not crash a run) but it now names the id, the
-  active roster, and the fact that the trees do not follow.
-
-### Resolved by retiring the classic roster
-
-The 33 were never waiting for trees — they are pre-overhaul content the GDD's
-14-class design replaces. Building trees for them would have been authoring
-content the design had already removed. So:
-
-- **One roster.** The ToH 14 are the roster. The classic 33 are preserved,
-  unimported, in `archive/classic-roster/` with a README on what to mine from
-  them. `js/roster.js`, `setRoster()`, `ROSTERS`, `rosterOf()`,
-  `applyHostRoster()` and the lobby roster picker are gone — with one roster
-  there is nothing to resolve, guard or switch.
-- **The silent fallback is gone.** `CHAR_BY_ID[id] || CHAR_BY_ID.bulwark` threw
-  away the distinction between "this character" and "some character", which is
-  most of why this defect survived a patch. An unknown id now throws.
-- **Selection is gated on having a tree, derived from the tree data.** Today
-  that is `toh_samurai` and `toh_necromancer`. The other twelve are *visible*
-  and greyed with the reason on the card — a roster that silently shrinks to
-  two reads as broken rather than unfinished. As phase 5 lands trees they
-  become selectable with **no code change**.
-- **A load assertion** refuses any selectable class without a damaging tier-1
-  active. Tier 1 is all a level-1 character can reach, and "has a tree" is not
-  enough — a tree of passives arms nobody.
-- **`tools/offence_test.mjs` walks every selectable class**, never a sample, so
-  a class that becomes selectable without offence fails the moment it does.
-
-Twelve of fourteen classes still need trees. That is phase-5 content and is not
-attempted here; what changed is that it is now a *stated, gated, asserted* gap
-rather than a game that boots into a roster that cannot fight.
-
-### And `nuke()` is gone
-
-It was `damageEnemy(e, 900, {owner: p})` on every enemy every 240 ticks. It is
-now `clearFieldForSetup(sim, p, reason)`: it demands a reason, stamps the sim,
-and `assertPlayerCleared()` refuses to let any sim it has touched carry a combat
-result. Every run prints how many fights the harness ended and why.
-
-**The suite went from 30 failures to 58, and that is the deliverable.** The
-previous green was measured through the nuke. Classified:
-
-| class | count | what it is |
-|---|---|---|
-| offence, newly visible | 14 | objectives never clearing, `UNKILLABLE` regenerating marks, camper statues dying, per-class first fights |
-| retired-character trait tests | 20 | Rampart/Vesper/Facet/Broker/Pulsar/Gilded One/Quartermaster/Bulwark/Soulbond/aura/drip/toll — testing characters that no longer exist. **Delete next.** |
-| weapon leftovers | 10 | pre-existing, §15 defect #10 territory |
-| crashes | 5 | same two causes as the above two rows |
-| other | 9 | ToH trait gaps (Bard rhythm, infusion, hitbox), sprite/grid plumbing |
-
-The 20 retired-trait tests are noise that should be deleted rather than fixed —
-they assert on traits of archived characters. The 14 in the first row are the
-signal this whole change was for.
-
-**One caution recorded against the instrument itself.** Its first default was 12
-seconds, at which the two characters that *can* fight scored zero, and it
-declared an engine failure. A threshold short enough to make a working thing
-look broken is the same defect as a missing counter — it nearly sent the fix at
-the trigger core. The default is 20s and the reason is written at the top of the
-file.
-
----
-
 ## 18. `samurai_agility` scales on Footing, and its own play pattern destroys Footing
 
 **Where:** `js/content/skills/samurai_agility.js` — the tree declares
@@ -1411,7 +1391,11 @@ selections-of-target and names `DELIVERY` when the gap is wide.
 
 ## #22 — the converted Dark Matter tree makes standing still a winning strategy
 
-**Shipped deliberately, open, and the thing Casey is playtesting.**
+**Retired.** Dark Energy Blip is 9 damage every 1000ms (was 18 every 600ms, about 30 DPS down to about 9). A motionless Necromancer now dies in all 25 statue rooms. `STATUE_REF` in `tools/sim_test.mjs` points at `toh_necromancer` again, and the block that reported the survival count is gone. A survival fails the Statue Test.
+
+The record below is the state that shipped the exception.
+
+**Shipped deliberately, and was the thing Casey was playtesting.**
 
 The Necromancer's Dark Matter tree is converted from
 `docs/design/classes/necromancer.md`. Converted, a **never-moving** Necromancer
@@ -1440,11 +1424,13 @@ individually reasonable, remove the cost of not playing. **Marrow is the
 control** — melee, converted, and it passes. The difference is reach.
 
 **What was done about it: nothing, on purpose.** The tree ships as authored so
-the problem can be felt rather than read about. The statue check still runs for
+the problem can be felt rather than read about. The statue check still ran for
 the whole roster — its reference character moved to the Samurai, which is melee
-and unconverted — and the Necromancer still runs beside it, reporting the room
-count against this defect. The day that line reports zero clears, the exception
-can be retired and `STATUE_REF` pointed back at the Necromancer.
+and unconverted — and the Necromancer still ran beside it, reporting the room
+count against this defect. The day that line reported zero clears, the exception
+was to be retired and `STATUE_REF` pointed back at the Necromancer. That day
+arrived with the opener retune above: zero of 25 rooms survived, and the
+exception is retired.
 
 **AND THE TREE IS NOT UNIQUE — the test is already false of six classes.**
 Measured across all fourteen as motionless statues, 15 rooms each:
@@ -1474,8 +1460,8 @@ whether this check can tell you is now answered — it cannot, for six classes.
 
 **Shipped with #22, same reason, and the cause is a field the document never mentions.**
 
-`toh_necromancer cannot break a barricade: 27/135 damage in 150s`. Not a
-softlock — it chips — but a barricade that took seconds now takes minutes.
+`toh_necromancer cannot break a barricade: 18/135 damage in 150s` (was 27/135 before Dark Energy Blip went to 9 damage / 1000ms). Not a
+softlock — it chips — but a barricade that took seconds now takes minutes. The opener nerf moved the chip; it did not give the class a barricade selector.
 
 **The built tier-1 node declared `select: 'objective_target'` and the
 conversion changed it to `nearest`.** That selector was the class's
@@ -1807,3 +1793,135 @@ single large body that reads as a tank until you look at what it does.
 **Not fixed** because the classification is a design pass over every summon in
 the game and it lands with the balance rebalance, not with the node that
 exposed it.
+
+## #31 — the HUD "⚔ 1" has no clear meaning
+
+**From a map-1 playtest.** The number is on screen. Nothing next to it says
+what it is.
+
+**What it is.** Once a fight is no longer spawning and is not in the sweep,
+`updateHud` (`js/ui/hud.js`) writes `⚔ ${n}` into `#enemy-counter`. `n` is the
+alive count (`view.ec`, or the enemy list when that field is absent). The same
+glyph is a weapon mark and the Samurai's symbol, so "⚔ 1" does not read as a
+count of enemies. The "incoming" and "sweep" states of the same element use
+words. This state does not.
+
+**What a fix would have to do.** Name the count in that element, the way the
+other two states already do.
+
+**Not fixed** because this pass is the playtest log, not a HUD pass.
+
+## #32 — `?seed=` is not honoured in co-op
+
+**From a map-1 playtest.** A co-op URL carrying `?seed=` did not play that seed.
+
+**What it is.** Nothing in `js/` reads a `seed` query parameter. `hostStartRun`
+(`js/main.js`) uses `seedOverride ?? randomRunSeed()`. The override is a retry
+of a region the host already rolled, and the start message broadcasts whatever
+that function chose. A guest has no seed of their own to apply: the host's
+start message is the run.
+
+**What a fix would have to do.** Read the query on the host before
+`randomRunSeed()`, and send that value in the start message the guests already
+accept.
+
+**Not fixed** because the playtest recorded the miss. The query is still unread.
+
+## #33 — the skills button shows on the node map
+
+**From a map-1 playtest.**
+
+**What it is.** `startRunCommon` (`js/main.js`) calls `showHud(true)` for the
+whole run, and `showHud` (`js/ui/hud.js`) unhides `#skills-btn` with the rest
+of the HUD. The run begins on the node map (`app.runMode` starts as `'map'`),
+so the button is up while that screen is up.
+
+**What a fix would have to do.** Hide it on the node map, or decide that the
+button belongs between rooms and stop treating its presence there as a defect.
+
+**Not fixed** because which screens own the button is a screen decision, and
+this entry only records that it is there.
+
+## #34 — sprites under `item/`, `proj/`, `prop/` and `ui/` return 404s
+
+**This was there before the plague-mark and Cascade work.** The loader asks
+for every manifest path under `assets/sprites/`. Those four namespaces are
+declared and have no files, so each request 404s. Missing art is the loader's
+ordinary path (#29 is the same shape for `fx`).
+
+**The counts**, from the manifest against disk:
+
+| namespace | declared | on disk |
+|---|---|---|
+| `item` | 199 | 0 |
+| `proj` | 21 | 0 |
+| `prop` | 24 | 0 |
+| `ui` | 8 | 0 |
+
+**Not fixed** because the gap predates this branch, and a 404 on an undrawn
+sheet is what the loader is built to absorb.
+
+## #35 — opener cards show no picked indicator after a click
+
+**From a map-1 playtest.**
+
+**What it is.** `showOpening` (`js/ui/overlays.js`) paints each tier-1 choice
+as a `.boon-card`. The click calls `pickOpening` immediately. Nothing sets a
+picked or selected class on the card that was clicked, so the panel gives no
+sign that the click landed before it closes.
+
+**What a fix would have to do.** Mark the clicked card, then send the pick.
+The send itself already happens.
+
+**Not fixed** because the pick still goes through. The missing piece is the
+indicator.
+
+## #36 — (Low) a name label and damage numbers hide a plague mark when an enemy stands on the player
+
+**From a map-1 playtest. Draw order, not the art.** The mark itself is the
+redraw in `3e7be4f`. What covers it is later paint: the enemy's name and the
+floating damage numbers, when that enemy is standing on the player.
+
+**What a fix would have to do.** The designer will review the stacking order
+for all overhead labels together. It is not a mark-size change, and it is not
+a change to the plague sprite.
+
+**Not fixed** in this pass. Low.
+
+## #37 — `skillscreen_test` stops before the spend step
+
+**Reproduce.**
+
+    node tools/skillscreen_test.mjs
+
+**What it is.** `startRun` in `tools/cdp_harness.mjs` clicks
+`.world-card[data-region="…"]`. `tools/browser_test.mjs` clicks the same
+selector. The world map draws `.world-pin` (`js/ui/worldmap.js`). The helper
+throws `no region card` and never reaches the spend step. `.world-card` is
+still styled in `css/style.css`. It is not what the map emits.
+
+**Under plain Node 20.** The test crashes with `WebSocket is not defined`
+before it reaches the selector. It needs `node --experimental-websocket` or a
+polyfill.
+
+**What a fix would have to do.** Point the shared helper at `.world-pin`. The
+skill screen's own assertions are behind that click, so they do not run.
+
+**Not fixed** because the selector is the browser harness, not the skill
+screen, and this entry is the record of where the test stops.
+
+## #38 — `applySlow` in `js/skillsim.js` does not reset an expired `slowMult`
+
+**Found during the chill / slow status pass.**
+
+**What it is.** `Sim._applySlow` in `js/game.js` resets an expired slow before
+comparing multipliers (`const cur = e.slowT > 0 ? (e.slowMult || 1) : 1; e.slowMult = Math.min(cur, mult)`).
+`applySlow` in `js/skillsim.js` writes `e.slowMult = Math.min(e.slowMult || 1, m)`
+without checking `(e.slowT || 0) > 0`, and `js/entities/enemies.js` only stops
+multiplying speed when `e.slowT <= 0` without resetting `e.slowMult` to `1`. A
+weak composed-skill slow that lands after a deeper chill or slow has expired
+inherits the old deeper `slowMult`.
+
+**What a fix would have to do.** Reset `e.slowMult` to `1` when `(e.slowT || 0) <= 0`
+before taking `Math.min` in `js/skillsim.js` (matching `js/game.js`). Fixed on
+the chill status PR.
