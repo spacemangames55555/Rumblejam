@@ -109,7 +109,7 @@ export const DRUID_WILDKIN = [
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.thunderRange, count: 2 },
     cooldown: T.thunderCd,
-    compose: [{ kind: 'cone', damage: T.thunderDamage, arc: T.thunderArc, range: T.thunderRange, ...PACK, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.thunderDamage, angle: T.thunderArc, range: T.thunderRange, ...PACK, riders: {} }],
     ranks: R,
   },
   {
@@ -167,7 +167,7 @@ export const DRUID_WILDKIN = [
     trigger: { kind: 'SELF_THRESHOLD', pct: T.quakePct },
     cooldown: T.quakeCd,
     compose: [{
-      kind: 'cone', damage: T.quakeDamage, arc: T.quakeArc, range: T.quakeRange, ...PACK,
+      kind: 'cone', damage: T.quakeDamage, angle: T.quakeArc, range: T.quakeRange, ...PACK,
       riders: { stun: T.quakeStun },
     }],
     ranks: R,

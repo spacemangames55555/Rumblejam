@@ -47,7 +47,7 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  palmDamage: 11, palmReach: 100, palmArc: 1.5, palmCd: 1100,
+  palmDamage: 5, palmReach: 100, palmArc: 1.5, palmCd: 1100,
   // 0.004, NOT 0.010, AND THE DPS GATE NAMED THE CAUSE. This is a per-point
   // bonus on an engine that PUBLISHES up to 45 (CHI_CAP 40 plus the focus
   // step), so 0.010 is +45% on everything the Monk does — measured, exactly the
@@ -63,10 +63,10 @@ export const TUNING = {
   stillnessWeight: 0.15,
 
   // ---- branch A: Empty Hand (no chi cost anywhere — the floor, raised) ----
-  formlessDamage: 16, formlessReach: 112, formlessArc: 1.8, formlessCd: 2300,
+  formlessDamage: 8, formlessReach: 112, formlessArc: 1.8, formlessCd: 2300,
   hollowWeight: 0.18,
-  cascadeDamage: 19, cascadeArc: 1.6, cascadeRange: 285, cascadeCd: 4100,
-  nothingDamage: 27, nothingReach: 140, nothingArc: 2.8, nothingCd: 7400,
+  cascadeDamage: 9, cascadeArc: 1.6, cascadeRange: 285, cascadeCd: 4100,
+  nothingDamage: 13, nothingReach: 140, nothingArc: 2.8, nothingCd: 7400,
   nothingPulses: 2, nothingKnock: 235,
 
   // ---- branch B: One Breath (the heaviest costs in the class) ----
@@ -136,7 +136,7 @@ export const MONK_EMPTY_HAND = [
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.cascadeRange, count: 2 },
     cooldown: T.cascadeCd,
-    compose: [{ kind: 'cone', damage: T.cascadeDamage, arc: T.cascadeArc, range: T.cascadeRange, ...CHI, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.cascadeDamage, angle: T.cascadeArc, range: T.cascadeRange, ...CHI, riders: {} }],
     ranks: R,
   },
   {

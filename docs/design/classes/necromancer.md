@@ -54,11 +54,14 @@ under ruling 6), Summons **cannot pass** — see below.
 
 **Rate: 9.17/sec on a spread build, against a 6–9 target — ABOVE the target.** Held open pending playtest rather than corrected; see Ruling 1.
 The bucket-mix rule took this class from 8.75 by demoting Internal Collapse
-(Dark Matter held two very-fast nodes; Blip keeps the slot as the tier-1
-opener). It did not close the gap, and the reason is arithmetic in the rule
+(Dark Matter held two very-fast nodes; Blip kept the slot as the tier-1
+opener). That rule did not close the gap, and the reason is arithmetic in the rule
 rather than anything in this class: **at most 1 very-fast per tree means 3 per
 class**, and a spread build takes all three. 3 × 1.667/sec is 5.0/sec before a
-single other slot is filled.
+single other slot is filled. Blip has since left that bucket — 9 damage on a
+1000ms cooldown, about 9 DPS — so the very-fast slot in Dark Matter is empty
+and the 9.17/sec figure is the ruling's reading of the 600ms cooldowns, not
+the live opener.
 
 At the raised floor of 3 fast-or-better this class reads 9.17/sec, and the cause
 is unchanged: **at most 1 very-fast per tree means 3 per class**, and this class
@@ -1202,8 +1205,8 @@ SHAPE:                single target
 RANGE:                range long (480px)
 TARGETS:              1 (first hit)
 --- output ---
-DAMAGE TIER:          low (18)
-PACE:                 very fast (600ms)
+DAMAGE TIER:          low (9)
+PACE:                 1000ms
 DOMAIN:               spiritual
 --- effects ---
 RIDERS:               none
@@ -1215,11 +1218,12 @@ THREAT:               some
 --- growth ---
 RANK ADDS:            +3 damage
 --- identity ---
-ENGINE:               neutral — but the fastest cycle in the class, so the
-                      steadiest kill source, so the steadiest Essence
-COST:                 eighteen damage. It is the tick-over of the class, and
-                      by mid-run it is chip damage on a slot that could be
-                      holding something that matters
+ENGINE:               neutral — opener chip. 1000ms is off the very-fast
+                      bucket (600ms); Bone Dart still holds that cycle
+COST:                 nine damage every 1000ms, about 9 DPS. It is the
+                      tick-over of the class, and by mid-run it is chip
+                      damage on a slot that could be holding something
+                      that matters
 VISUAL:               a fast dark bead with a faint violet halo, no trail
 FLAVOR:               A small hole where a small amount of the world used to
                       be. It closes almost immediately. Almost.

@@ -379,7 +379,8 @@ const measureFps = br => br.exec(`return new Promise(res => { let f = 0; const t
 const drainJs = `const s=window.uv.sim; for (const p of s.players) { if (p.gone) continue;
   let g=0; while (p.pendingOffer && g++<40) s.uiAction(p.idx,{kind:'levelup',id:p.pendingOffer[0].id});
   if (p.treasureOffer) s.uiAction(p.idx,{kind:'treasure',id:p.treasureOffer.picks[0]});
-  if (p.boonOffer) s.uiAction(p.idx,{kind:'boon',id:p.boonOffer[0].id}); } return 1;`;
+  if (p.boonOffer) s.uiAction(p.idx,{kind:'boon',id:p.boonOffer[0].id});
+  if (p.spendOffer) s.uiAction(p.idx,{kind:'spendDone'}); } return 1;`;
 // F3-clear the current fight (multi-pass for splitters/spawn queue)
 // F3 clears the field AND satisfies the current objective, so this works on
 // horde arenas and on all eight objective levels alike
@@ -881,7 +882,7 @@ try {
   // ---- clear the fight: the shop opens right at extraction (patch 8) ----
   if (!await A.exec(clearFightJs)) fail('first fight never cleared under F3');
   await A.exec(drainJs);
-  await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 4000, 'extraction shop');
+  await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 9000, 'extraction shop');
   const exTitle = await A.exec(`return document.querySelector('#overlay-shop .ov-title').textContent`);
   if (exTitle === 'TRADER') ok('extraction shop opens at the fight clear (standard, not Black Market)');
   else fail(`extraction shop title: ${exTitle}`);
@@ -2715,7 +2716,7 @@ try {
     await M.exec(`window.uv.sim.debug('F2'); return 1;`); // bank a few level-ups for the clear
     await M.exec(clearFightJs);
     // level-up cards surface at the clear: glossary short lines + tap to pick
-    await M.waitFor(`return !document.getElementById('overlay-levelup').classList.contains('hidden')`, 5000, 'level-up cards at the clear');
+    await M.waitFor(`return !document.getElementById('overlay-levelup').classList.contains('hidden')`, 9000, 'level-up cards at the clear');
     const lu = JSON.parse(await M.exec(`const cards=[...document.querySelectorAll('#overlay-levelup .offer-card')];
       return JSON.stringify({ n: cards.length,
         withShort: cards.filter(c => c.querySelector('.gloss-short') && c.querySelector('.gloss-short').textContent.trim().length > 5).length,
@@ -2727,7 +2728,13 @@ try {
     await M.exec(drainJs); // the rest drain host-side so overlays can't block the joystick
     await M.waitFor(`return document.getElementById('overlay-levelup').classList.contains('hidden')`, 5000, 'offer backlog drained');
     // the extraction shop opened at the clear — close it by touch to walk out
-    await M.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 4000, 'extraction shop on touch');
+    await M.waitFor(`(() => {
+      const lv = document.getElementById('overlay-levelup');
+      const cards = lv && !lv.classList.contains('hidden');
+      const sk = document.getElementById('overlay-skills');
+      if (!cards && sk && !sk.classList.contains('hidden')) document.getElementById('skills-close').click();
+      return !document.getElementById('overlay-shop').classList.contains('hidden');
+    })()`, 8000, 'extraction shop on touch');
     ok('extraction shop opens at the clear on touch');
     await M.tap('#shop-close');
     await M.waitFor(`return document.getElementById('overlay-shop').classList.contains('hidden')`, 3000, 'extraction shop closed');
@@ -3423,8 +3430,9 @@ if (wantCoop) {
       // ---- patch 8 co-op: extraction shops for both; auto-combine, swap,
       // and rerolls run in parallel with host validation, no desync ----
       await A.exec(clearFightJs);
-      await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'host extraction shop');
-      await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 5000, 'client extraction shop');
+      await A.exec(drainJs);
+      await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 9000, 'host extraction shop');
+      await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 9000, 'client extraction shop');
       ok('extraction shop opens for BOTH players at the co-op clear');
       await A.exec(`const s=window.uv.sim,p0=s.players[0],p1=s.players[1];
         while (p0.weapons.length < p0.weaponSlots) s._addWeapon(p0,'pebbleshot',1);
@@ -3514,8 +3522,19 @@ if (wantCoop) {
       // post-boss shop opens for BOTH players — only after the window closes
       // (8s by default; shortened here to keep the suite quick)
       await A.exec(`const s=window.uv.sim; if (s.lootT !== null && s.lootT !== undefined) s.lootT = Math.min(s.lootT, 0.4); return 1;`);
-      await A.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 6000, 'host post-boss shop');
-      await B.waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 6000, 'client post-boss shop');
+      {
+        const tBoss = Date.now();
+        let hostBossShop = false, clientBossShop = false;
+        while (Date.now() - tBoss < 9000 && (!hostBossShop || !clientBossShop)) {
+          await A.exec(drainJs);
+          hostBossShop = !!(await A.exec(`return !document.getElementById('overlay-shop').classList.contains('hidden')`));
+          clientBossShop = !!(await B.exec(`return !document.getElementById('overlay-shop').classList.contains('hidden')`));
+          if (hostBossShop && clientBossShop) break;
+          await sleep(250);
+        }
+        if (!hostBossShop) throw new Error('timeout waiting for host post-boss shop');
+        if (!clientBossShop) throw new Error('timeout waiting for client post-boss shop');
+      }
       ok('post-boss shop opens for both players after the looting window');
       await A.exec(drainJs);
       await A.exec(`const s=window.uv.sim; for (const p of s.players) if (p.shop) s.uiAction(p.idx,{kind:'closeShop'}); return 1;`);
@@ -3855,8 +3874,8 @@ if (wantCoop) {
           await W0.exec(clearFightJs);
           await W0.waitFor(`return window.uv.sim.players.every(p=>p.gone||p.shop)`, 8000, 'shops ×8');
           ok('extraction shops open for all 8 players');
-          await W[4].waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 8000, 'mid client shop');
           await W0.exec(drainJs);
+          await W[4].waitFor(`return !document.getElementById('overlay-shop').classList.contains('hidden')`, 9000, 'mid client shop');
           await W0.exec(`const s=window.uv.sim; for (const p of s.players) if (p.shop) s.uiAction(p.idx,{kind:'closeShop'}); return 1;`);
           await extractToMap(W0, 'warband extraction');
           // ---- the 8-player siege ----

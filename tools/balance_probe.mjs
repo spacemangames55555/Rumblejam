@@ -3,14 +3,17 @@
 // unkillable fights, siege walls. Not a tuning oracle — a smoke alarm.
 // Walks the node map like a player: picks nodes, fights arenas, extracts,
 // shops at stops, and takes the Siege at the end of each floor.
-// Usage: node tools/balance_probe.mjs [charId] [floors=2]
+// Usage: node tools/balance_probe.mjs [charId] [floors=2] [--chase]
+// --chase walks onto the nearest enemy. Without it the bot holds a kite ring.
 
 import { Sim } from '../js/game.js';
 import { dist2 } from '../js/util.js';
 import { WEAPON_BY_ID } from '../js/content/weapons.js';
 
-const charId = process.argv[2] || 'bulwark';
-const maxFloor = Math.min(4, parseInt(process.argv[3] || '2', 10));
+const chase = process.argv.includes('--chase');
+const pos = process.argv.slice(2).filter(a => a !== '--chase');
+const charId = pos[0] || 'bulwark';
+const maxFloor = Math.min(4, parseInt(pos[1] || '2', 10));
 const sim = new Sim({ seed: 20260728, party: [{ idx: 0, key: 'k', name: 'BOT', charId, color: '#fff' }] });
 const p = sim.players[0];
 
@@ -35,21 +38,29 @@ function botInput() {
     const d2 = dist2(p.x, p.y, e.x, e.y);
     if (d2 < nd) { nd = d2; nearest = e; }
     count++;
-    const d = Math.sqrt(d2) || 1;
-    if (d < ring) {
-      const w = (ring - d) / ring;
-      vx += (p.x - e.x) / d * w * 3;
-      vy += (p.y - e.y) / d * w * 3;
+      const d = Math.sqrt(d2) || 1;
+      if (!chase && d < ring) {
+        const w = (ring - d) / ring;
+        vx += (p.x - e.x) / d * w * 3;
+        vy += (p.y - e.y) / d * w * 3;
+      }
     }
+  // Chase replaces the ring: walk onto the nearest body. Projectile dodge is
+  // part of the kite (it orbits ranged holdouts), so it stays off in this mode.
+  // Telegraph and hazard dodges below still shove the bot out of a commit.
+  if (chase && nearest) {
+    const d = Math.sqrt(nd) || 1;
+    vx += (nearest.x - p.x) / d * 4;
+    vy += (nearest.y - p.y) / d * 4;
   }
   // dodge enemy projectiles
-  for (const pr of sim.projPool) {
+  if (!chase) for (const pr of sim.projPool) {
     if (pr.friendly) continue;
     const d = Math.hypot(p.x - pr.x, p.y - pr.y) || 1;
     if (d < 110) { vx += (p.x - pr.x) / d * 2.5; vy += (p.y - pr.y) / d * 2.5; }
   }
   // hunt when nothing is inside the ring (stragglers like Lobbers)
-  if (nearest && nd > (ring + 30) * (ring + 30)) {
+  if (!chase && nearest && nd > (ring + 30) * (ring + 30)) {
     const d = Math.sqrt(nd);
     vx += (nearest.x - p.x) / d * 1.6;
     vy += (nearest.y - p.y) / d * 1.6;

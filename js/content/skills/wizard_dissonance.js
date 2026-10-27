@@ -48,7 +48,7 @@ export const TUNING = {
   chorusWeaken: { mult: 0.7, dur: 3000 },
 
   // ---- branch B: Conviction (paid for having been wrong) ----
-  recoilDamage: 17, recoilRadius: 150, recoilDuration: 3400, recoilTickMs: 400, recoilCd: 2800,
+  recoilDamage: 5, recoilRadius: 150, recoilDuration: 3400, recoilTickMs: 400, recoilCd: 2800,
   temperWeight: 0.18,
   bulwarkAmount: 40, bulwarkDuration: 4800, bulwarkPct: 55, bulwarkCd: 5200,
   // A REFLECT IS A FRACTION. This was authored as a whole number and read as
@@ -120,7 +120,7 @@ export const WIZARD_DISSONANCE = [
     trigger: { kind: 'PROXIMITY', radius: T.chorusRange, count: 2 },
     cooldown: T.chorusCd,
     compose: [{
-      kind: 'cone', damage: T.chorusDamage, arc: T.chorusArc, range: T.chorusRange, ...SHIFT,
+      kind: 'cone', damage: T.chorusDamage, angle: T.chorusArc, range: T.chorusRange, ...SHIFT,
       riders: { weakenDamage: T.chorusWeaken },
     }],
     ranks: R,

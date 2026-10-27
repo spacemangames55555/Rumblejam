@@ -34,23 +34,23 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  dartDamage: 10, dartRange: 300, dartSpeed: 520, dartRadius: 6, dartCd: 1100,
+  dartDamage: 7, dartRange: 300, dartSpeed: 520, dartRadius: 6, dartCd: 1100,
   steadyWeight: 0.15,
 
   // ---- branch A: Longline (reach — shoot past what is already on you) ----
-  pinDamage: 15, pinRange: 380, pinSpeed: 560, pinRadius: 6, pinCd: 2600,
+  pinDamage: 11, pinRange: 380, pinSpeed: 560, pinRadius: 6, pinCd: 2600,
   pinRoot: 1100,
   marksmanWeight: 0.18,
-  volleyDamage: 17, volleyRange: 400, volleySpeed: 540, volleyRadius: 6, volleyCount: 2, volleyCd: 4200,
-  deadfallDamage: 26, deadfallRange: 430, deadfallSpeed: 600, deadfallRadius: 7, deadfallCd: 8200,
+  volleyDamage: 12, volleyRange: 400, volleySpeed: 540, volleyRadius: 6, volleyCount: 2, volleyCd: 4200,
+  deadfallDamage: 19, deadfallRange: 430, deadfallSpeed: 600, deadfallRadius: 7, deadfallCd: 8200,
   deadfallSplash: { radius: 120, damage: 14 },
 
   // ---- branch B: Overwatch (finish what is already bleeding) ----
-  cullDamage: 18, cullRange: 320, cullSpeed: 540, cullRadius: 6, cullPct: 55, cullCd: 2800,
+  cullDamage: 13, cullRange: 320, cullSpeed: 540, cullRadius: 6, cullPct: 55, cullCd: 2800,
   coldEyeWeight: 0.18,
-  ricochetDamage: 19, ricochetRange: 340, ricochetSpeed: 520, ricochetRadius: 6,
+  ricochetDamage: 14, ricochetRange: 340, ricochetSpeed: 520, ricochetRadius: 6,
   ricochetCount: 2, ricochetPct: 45, ricochetCd: 4400,
-  headhunterDamage: 30, headhunterRange: 360, headhunterSpeed: 620, headhunterRadius: 7,
+  headhunterDamage: 22, headhunterRange: 360, headhunterSpeed: 620, headhunterRadius: 7,
   headhunterPct: 40, headhunterCd: 8600, headhunterWeaken: { mult: 0.65, dur: 3200 },
 
   rankDamage: 0.04, rankDuration: 0.03,
