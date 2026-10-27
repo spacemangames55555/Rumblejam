@@ -529,8 +529,8 @@ function clearArena(sim, buyStuff) {
     // the harness stands still at center (no kiting), so keep it alive — flow
     // tests verify structure/triggers; survivability is the balance probe's job
     for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
-    // money doesn't wait (patch 9): sweep pickups DURING the fight the way a
-    // player does — the end-of-fight vacuum is gone and uncollected fizzles
+    // Sweep pickups during the fight the way a player does. A clear also
+    // collects whatever is still on the floor; this walk is the mid-fight path.
     if (!sim.cleared && sim.pickups.length && ticks % 3 === 0) {
       const m = sim.pickups[0];
       p.x = m.x; p.y = m.y;
@@ -664,7 +664,7 @@ try {
   const matsBefore = gs.players[0].materials;
   gs.wave.done = true; gs.spawnQueue.length = 0;
   for (const e of [...gs.enemyPool]) gs.enemyPool.release(e);
-  for (let i = 0; i < 30 && !gs.cleared; i++) gs.tick();
+  for (let i = 0; i < 45 && !gs.cleared; i++) gs.tick();
   if (gs.players[0].materials - matsBefore >= 15) ok(`Greed pays floor(G/2) at fight clear (+${gs.players[0].materials - matsBefore})`);
   else fail(`Greed tithe: +${gs.players[0].materials - matsBefore} (want ≥15)`);
 
@@ -677,7 +677,7 @@ try {
   else fail(`banking: banked=${lp.banked} pending=${!!lp.pendingOffer}`);
   ls.wave.done = true; ls.spawnQueue.length = 0;
   for (const e of [...ls.enemyPool]) ls.enemyPool.release(e);
-  for (let i = 0; i < 30 && !lp.pendingOffer; i++) ls.tick();
+  for (let i = 0; i < 45 && !lp.pendingOffer; i++) ls.tick();
   if (lp.pendingOffer) ok('banked level-ups resolve at the fight clear');
   else fail('no offer surfaced at clear');
 } catch (err) { fail('per-fight trigger tests crashed', err); }
@@ -709,7 +709,7 @@ try {
   const p = sim.players[0];
   sim.wave.done = true; sim.spawnQueue.length = 0;
   for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
-  for (let i = 0; i < 30 && !sim.cleared; i++) sim.tick();
+  for (let i = 0; i < 45 && !sim.cleared; i++) sim.tick();
   drain(sim, p, false);
   p.x = sim.hatch.x; p.y = sim.hatch.y;
   for (let i = 0; i < 30; i++) sim.tick();
@@ -1418,19 +1418,19 @@ try {
     const snapMid = s.getSnapshot();
     if (snapMid.inc === 0 && snapMid.enemies.length > 0) ok(`counter: spawn-stop switches to the exact alive count (${snapMid.enemies.length})`);
     else fail(`counter state: inc=${snapMid.inc} n=${snapMid.enemies.length}`);
-    // leave drops on the ground, kill everything → they fizzle with a report
+    // leave drops on the ground, kill everything → the clear collects them
     for (const e of [...s.enemyPool]) s._killEnemy(e, null);
     for (const e of [...s.enemyPool]) s._killEnemy(e, null);
     for (const e of [...s.enemyPool]) s._killEnemy(e, null);
     const ground = s.pickups.reduce((a, m) => a + m.v, 0);
     const fl0 = s.fightLoot;
-    for (let i = 0; i < 30 && !s.cleared; i++) s.tick();
+    const mats0 = s.players[0].materials;
+    for (let i = 0; i < 45 && !s.cleared; i++) s.tick();
     const rc = s.events.filter(e => e.k === 'roomClear').pop();
-    // in-flight magnet pickups still land before the fizzle — the ledger must balance
     const scooped = s.fightLoot - fl0;
-    if (rc && ground > 0 && rc.lost === Math.round(ground - scooped) && s.pickups.length === 0)
-      ok(`uncollected materials fizzle at the last kill, loss reported (lost ${rc.lost}, scooped in flight ${scooped})`);
-    else fail(`fizzle: ground=${ground} scooped=${scooped} event=${JSON.stringify(rc)}`);
+    if (rc && ground > 0 && rc.lost === 0 && s.pickups.length === 0 && scooped >= ground && s.players[0].materials > mats0)
+      ok(`a clear collects the floor (ground ${ground}, credited ${scooped}, lost ${rc.lost})`);
+    else fail(`vacuum: ground=${ground} scooped=${scooped} mats=${s.players[0].materials - mats0} event=${JSON.stringify(rc)}`);
 
     // siege looting window: boss death → countdown → THEN fizzle + hatch + shop
     const g = new Sim({ seed: 62, party: [{ idx: 0, key: 'k', name: 'G', charId: T1, color: '#fff' }] });
@@ -1541,7 +1541,7 @@ try {
     for (let i = 0; i < snap.enemies.length && rt; i++) {
       const a = snap.enemies[i], b = back.enemies[i];
       rt = (a[0] & 0xffff) === b[0] && a[1] === b[1] && Math.abs(a[2] - b[2]) <= 1 && Math.abs(a[3] - b[3]) <= 1
-        && Math.abs(a[4] - b[4]) <= 0.01 && a[5] === b[5];
+        && Math.abs(a[4] - b[4]) <= 0.01 && a[5] === b[5] && (a[6] || 0) === (b[6] || 0);
     }
     for (let i = 0; i < snap.projs.length && rt; i++) {
       const a = snap.projs[i], b = back.projs[i];
@@ -3994,6 +3994,82 @@ try {
     }
   }
 
+  // Chill / slow status: applySlow expired-reset fix, second enemy flag byte
+  // (flags2 & 1) wire round-trip, chillFrostMetrics sizing, and tint precedence.
+  {
+    const R = await import('../js/render.js');
+    const { encodeSnap, decodeSnap } = await import('../js/netcodec.js');
+    const sheet = man['fx.chill_frost'];
+    if (!sheet || sheet.frames !== 4 || sheet.fps !== 6 || sheet.content[0] !== 29 || sheet.content[1] !== 13) {
+      fail(`fx.chill_frost manifest mismatch: ${JSON.stringify(sheet)}`);
+    } else {
+      ok('fx.chill_frost is in assets/assets.json with frames 4, fps 6, content [29, 13]');
+    }
+
+    // 1. applySlow in js/skillsim.js resets expired slowMult before Math.min
+    const sim = new Sim({ seed: 101, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+    const p0 = sim.players[0];
+    p0.stats.attunement = 0;
+    p0.hookAgg.statusBoost = 0;
+    const e = sim.spawnEnemyById('pnw_cedar_warden', p0.x + 80, p0.y, { noMats: true });
+    SKILLSIM.applySlow(sim, e, 0.35, 0.5, p0);
+    const deepMult = e.slowMult;
+    // While the deep slow is still active, a weaker slow (0.80) keeps the deeper 0.35 multiplier
+    SKILLSIM.applySlow(sim, e, 0.80, 0.5, p0);
+    const keptWhileActive = Math.abs(e.slowMult - deepMult) < 1e-9;
+    // Expire the slow via enemy update, then apply a weak slow (0.80)
+    e.slowT = 0;
+    SKILLSIM.applySlow(sim, e, 0.80, 1.0, p0);
+    const resetAfterExpiry = Math.abs(e.slowMult - 0.80) < 1e-9 && Math.abs(e.slowT - 1.0) < 1e-9;
+    if (keptWhileActive && resetAfterExpiry) {
+      ok('skillsim.applySlow keeps the stronger active slow via Math.min and resets an expired slowMult to 1 before applying a new slow');
+    } else {
+      fail(`applySlow expired-reset failed: deepMult=${deepMult}, keptWhileActive=${keptWhileActive}, afterExpiry slowMult=${e.slowMult} slowT=${e.slowT}`);
+    }
+
+    // 2. Second enemy flag byte (flags2 & 1) round-trips through encodeSnap/decodeSnap
+    const snapActive = sim.getSnapshot();
+    const rowActive = snapActive.enemies.find(n => n[0] === e.id);
+    const decActive = decodeSnap(encodeSnap(snapActive)).enemies.find(n => n[0] === e.id);
+    e.slowT = 0;
+    e.castSlowT = 0.4;
+    const decCastSlow = decodeSnap(encodeSnap(sim.getSnapshot())).enemies.find(n => n[0] === e.id);
+    e.castSlowT = 0;
+    const decCleared = decodeSnap(encodeSnap(sim.getSnapshot())).enemies.find(n => n[0] === e.id);
+    if (
+      rowActive && (rowActive[6] & 1) === 1 &&
+      decActive && (decActive[6] & 1) === 1 &&
+      decCastSlow && (decCastSlow[6] & 1) === 1 &&
+      decCleared && (decCleared[6] & 1) === 0
+    ) {
+      ok('second enemy flag byte (flags2 & 1) round-trips active slow / castSlow across encodeSnap/decodeSnap and clears on expiry');
+    } else {
+      fail(`slow wire flag round-trip failed: active=${rowActive && rowActive[6]} decActive=${decActive && decActive[6]} castSlow=${decCastSlow && decCastSlow[6]} cleared=${decCleared && decCleared[6]}`);
+    }
+
+    // 3. Tint precedence (chase > plague > chill) and frost strip geometry
+    const tChill = R.enemyBodyTint({ slowed: true }, { biome: 'pnw' });
+    const tPlagueChill = R.enemyBodyTint({ slowed: true, plagued: true }, { biome: 'pnw' });
+    const tChasePlagueChill = R.enemyBodyTint({ slowed: true, plagued: true, straggle: true }, { biome: 'pnw' });
+    const tChaseXib = R.enemyBodyTint({ slowed: true, straggle: true }, { biome: 'xibalba' });
+    const mSmallTight = R.chillFrostMetrics(12, 0.73, 1);
+    const mLargeFit1 = R.chillFrostMetrics(25, 1.0, 1);
+    if (
+      tChill && tChill.tint === '#8FC8E8' && tChill.tintStrength === 0.30 &&
+      tPlagueChill && tPlagueChill.tint === '#7A8C3A' && tPlagueChill.tintStrength === 0.30 &&
+      tChasePlagueChill && tChasePlagueChill.tint === '#8E4432' && tChasePlagueChill.tintStrength === 0.25 &&
+      tChaseXib && tChaseXib.tint === '#8E4432' && tChaseXib.tintStrength === 0.20 &&
+      Math.abs(mSmallTight.w * 0.73 - 36) < 1e-6 &&
+      Math.abs(mLargeFit1.w - 50) < 1e-6 &&
+      Math.abs(mLargeFit1.h - 50 * 13 / 29) < 1e-6 &&
+      mSmallTight.bottom - mSmallTight.h >= 12 * 0.4 - 1e-6
+    ) {
+      ok('chill tint (#8FC8E8 @ 0.30), precedence (chase > plague > chill), and fx.chill_frost feet geometry match spec');
+    } else {
+      fail('chill tint precedence or fx.chill_frost geometry mismatch');
+    }
+  }
+
   // Plague mark. 0004: the floor is 30 CSS px (scale/dpr), and only a fit
   // below 1 lifts it. A zoom-in still grows the mark. phaseOf is untouched.
   {
@@ -6317,6 +6393,9 @@ try {
     sim.tick();
     for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
     if (i % 240 === 0) clearFieldForSetup(sim, p, 'the spend-step fixture needs a cleared room, not a won fight');
+    // A clear now collects the floor. This fixture is about the points the
+    // test put in the pocket, so the room's drops must not level it first.
+    sim.pickups.length = 0;
   }
 
   if (atClear === 4) ok(`the spend step is offered at the clear, carrying the count: ${atClear} point(s)`);
@@ -6354,6 +6433,7 @@ try {
     sim2.tick();
     for (const q of sim2.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
     if (i % 240 === 0) clearFieldForSetup(sim2, p2, 'the spend-step fixture needs a cleared room, not a won fight');
+    sim2.pickups.length = 0;   // the clear would collect them and mint points
     p2.skillPoints = 0;   // held at zero: banked levels would otherwise fund it
   }
   if (!opened2) ok('no spend step with nothing to spend');

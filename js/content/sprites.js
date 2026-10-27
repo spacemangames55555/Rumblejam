@@ -250,6 +250,13 @@ export const FX = {
   // the skill-fx list, which made them invisible to the orphan gate's tables
   muzzle: 'fx.muzzle',
   impact: 'fx.impact',
+  // one-shot dissolve for a straggler removed by the cull (PR #139): a
+  // 6-frame strip at 20 fps, played once — the caller passes `frame`
+  cullPuff: 'fx.cull_puff',
+  // status strip at the FEET of a chilled / slowed enemy (slowT > 0): a
+  // 4-frame ice crust loop at 6 fps, phase-offset per enemy by `seed`.
+  // Art only here; the render hook and wire bit land in Engineer's PR.
+  chillFrost: 'fx.chill_frost',
 };
 
 // ---------------- UI chrome ----------------

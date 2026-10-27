@@ -514,6 +514,28 @@
       ],
       "scale": 0.875
     },
+    "fx.chill_frost": {
+      "file": "fx/chill_frost.png",
+      "w": 32,
+      "h": 32,
+      "frames": 4,
+      "fps": 6,
+      "content": [
+        29,
+        13
+      ]
+    },
+    "fx.cull_puff": {
+      "file": "fx/cull_puff.png",
+      "w": 32,
+      "h": 32,
+      "frames": 6,
+      "fps": 20,
+      "content": [
+        32,
+        28
+      ]
+    },
     "fx.dru_beam": {
       "file": "fx/dru_beam.png",
       "w": 32,

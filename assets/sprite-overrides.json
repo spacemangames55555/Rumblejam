@@ -199,6 +199,22 @@
     ],
     "scale": 0.875
   },
+  "fx.chill_frost": {
+    "frames": 4,
+    "fps": 6,
+    "content": [
+      29,
+      13
+    ]
+  },
+  "fx.cull_puff": {
+    "frames": 6,
+    "fps": 20,
+    "content": [
+      32,
+      28
+    ]
+  },
   "fx.dru_slash": {
     "content": [
       25,
