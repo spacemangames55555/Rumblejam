@@ -42,7 +42,8 @@ export const TUNING = {
   // tier_code 7 — Death Channel
   channelDamage: 14, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
   // tier_code 8 — Entropy Cascade
-  cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 600,
+  // 1600 is 16 trigger ticks. Damage stays 8.
+  cascadeDamage: 8, cascadeTick: 600, cascadeDur: 5000, cascadeRange: 300, cascadeCd: 1600,
   // tier_code 9 — Army of the Dead
   armyHp: 45, armyRadius: 13, armySpawnRadius: 66, armyCount: 6,
   armyDuration: 20000, armyCd: 25000, armyCrowdRadius: 400, armyCrowdCount: 10,
@@ -213,13 +214,18 @@ export const NECRO_SUMMONS = [
     flavor: 'It does not spread. It simply keeps arriving.',
     type: 'active', domain: 'spiritual', prereq: null,
     select: 'nearest',
-    trigger: docTrigger('TARGET_UNAFFECTED', { range: T.cascadeRange }),
+    // NEAREST, not the document's TARGET_UNAFFECTED. That name compiles to a
+    // 95% HP check, so a cast that is the only damage in the loadout never
+    // fires. The WHEN is "someone is in range". The WHO is the nearest enemy
+    // that does not already carry this plague (`preferClean`), and the nearest
+    // of any of them once every body in range already does. Distance only, no roll.
+    trigger: { kind: 'NEAREST', range: T.cascadeRange },
     cooldown: T.cascadeCd,
     // `plague` with NO spread radius, per the classification. "Stacks to 6" is
-    // not expressible — `applyPlague` refreshes rather than stacking — so this
-    // is a refreshing DoT and the stack count is reported, not faked.
+    // not expressible — `applyPlague` adds into one stack rather than keeping
+    // six — so this is one DoT, and the crowd is covered by retargeting.
     compose: [{ kind: 'plague', damage: T.cascadeDamage, duration: T.cascadeDur,
-      tick: T.cascadeTick, spreadRadius: 0 }],
+      tick: T.cascadeTick, spreadRadius: 0, preferClean: true }],
     ranks: rankPer(2, T.cascadeDamage),
   },
   {

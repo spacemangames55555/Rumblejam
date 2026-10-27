@@ -122,7 +122,7 @@ export const MAGE_REFRACTION = [
     trigger: { kind: 'PROXIMITY', radius: T.drawRange, count: 2 },
     cooldown: T.drawCd,
     compose: [{
-      kind: 'cone', damage: T.drawDamage, arc: T.drawArc, range: T.drawRange, ...CRY,
+      kind: 'cone', damage: T.drawDamage, angle: T.drawArc, range: T.drawRange, ...CRY,
       riders: { taunt: T.drawTaunt },
     }],
     ranks: R,
@@ -135,7 +135,7 @@ export const MAGE_REFRACTION = [
     trigger: { kind: 'PROXIMITY', radius: T.causticRange, count: 3 },
     cooldown: T.causticCd,
     compose: [{
-      kind: 'cone', damage: T.causticDamage, arc: T.causticArc, range: T.causticRange, ...CRY,
+      kind: 'cone', damage: T.causticDamage, angle: T.causticArc, range: T.causticRange, ...CRY,
       riders: { taunt: T.causticTaunt, weakenDamage: T.causticWeaken },
     }],
     ranks: R,

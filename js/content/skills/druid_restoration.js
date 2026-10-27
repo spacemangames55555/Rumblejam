@@ -153,7 +153,7 @@ export const DRUID_RESTORATION = [
     trigger: { kind: 'PROXIMITY', radius: T.barkRange, count: 2 },
     cooldown: T.barkCd,
     compose: [{
-      kind: 'cone', damage: T.barkDamage, arc: T.barkArc, range: T.barkRange,
+      kind: 'cone', damage: T.barkDamage, angle: T.barkArc, range: T.barkRange,
       ...PACK, riders: { mend: T.barkMend },
     }],
     ranks: R,

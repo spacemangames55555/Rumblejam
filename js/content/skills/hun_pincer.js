@@ -46,16 +46,16 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  loosedDamage: 13, loosedRange: 250, loosedSpeed: 450, loosedRadius: 7, loosedCd: 1250,
+  loosedDamage: 6, loosedRange: 250, loosedSpeed: 450, loosedRadius: 7, loosedCd: 1250,
   loosedHp: 30, loosedRadiusBody: 12, loosedSpawnRadius: 60,
-  loosedAttackCd: 1100, loosedBeastDamage: 8, loosedBeastArc: 1.5, loosedBeastReach: 58,
+  loosedAttackCd: 1100, loosedBeastDamage: 4, loosedBeastArc: 1.5, loosedBeastReach: 58,
   jawsWeight: 0.15,
 
   // ---- branch A: Crossfire (the Hunter's half of the jaw) ----
-  crossDamage: 19, crossArc: 1.7, crossRange: 285, crossCd: 2600,
+  crossDamage: 9, crossArc: 1.7, crossRange: 285, crossCd: 2600,
   bracketWeight: 0.18,
-  raakeDamage: 23, raakeLength: 320, raakeWidth: 60, raakeCd: 4400,
-  closeDamage: 31, closeArc: 2.8, closeRange: 320, closeCd: 7600,
+  raakeDamage: 11, raakeLength: 320, raakeWidth: 60, raakeCd: 4400,
+  closeDamage: 15, closeArc: 2.8, closeRange: 320, closeCd: 7600,
   closeWeaken: { mult: 0.7, dur: 3000 },
 
   // ---- branch B: Whistle (the beast's half — it decides WHEN) ----
@@ -64,10 +64,10 @@ export const TUNING = {
   // the fight reaches the BEAST and land where the HUNTER is standing. In the
   // middle band that is a genuine pincer; at either end it is one position
   // asking a question about itself, which is the cost the branch is paid for.
-  whistleDamage: 18, whistleReach: 122, whistleArc: 1.9, whistleRange: 200, whistleCd: 2500,
+  whistleDamage: 9, whistleReach: 122, whistleArc: 1.9, whistleRange: 200, whistleCd: 2500,
   kennelWeight: 0.18,
-  bellDamage: 22, bellRange: 270, bellSpeed: 460, bellRadius: 7, bellProxRadius: 210, bellCd: 4300,
-  quarryDamage: 30, quarryArc: 2.7, quarryReach: 150, quarryProxRadius: 230, quarryCd: 7800,
+  bellDamage: 10, bellRange: 270, bellSpeed: 460, bellRadius: 7, bellProxRadius: 210, bellCd: 4300,
+  quarryDamage: 14, quarryArc: 2.7, quarryReach: 150, quarryProxRadius: 230, quarryCd: 7800,
   quarryPulses: 2,
 
   rankDamage: 0.04, rankDuration: 0.03,
@@ -123,7 +123,7 @@ export const HUN_PINCER = [
     select: 'densest_cluster',
     trigger: { kind: 'PROXIMITY', radius: T.crossRange, count: 2 },
     cooldown: T.crossCd,
-    compose: [{ kind: 'cone', damage: T.crossDamage, arc: T.crossArc, range: T.crossRange, ...SPREAD, riders: {} }],
+    compose: [{ kind: 'cone', damage: T.crossDamage, angle: T.crossArc, range: T.crossRange, ...SPREAD, riders: {} }],
     ranks: R,
   },
   {
@@ -152,7 +152,7 @@ export const HUN_PINCER = [
     trigger: { kind: 'PROXIMITY', radius: T.closeRange, count: 3 },
     cooldown: T.closeCd,
     compose: [{
-      kind: 'cone', damage: T.closeDamage, arc: T.closeArc, range: T.closeRange, ...SPREAD,
+      kind: 'cone', damage: T.closeDamage, angle: T.closeArc, range: T.closeRange, ...SPREAD,
       riders: { weakenDamage: T.closeWeaken },
     }],
     ranks: R,

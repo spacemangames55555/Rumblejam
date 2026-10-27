@@ -347,6 +347,14 @@
     ],
     "scale": 0.875
   },
+  "fx.plague_mark": {
+    "frames": 4,
+    "fps": 6,
+    "content": [
+      23,
+      29
+    ]
+  },
   "fx.pri_bolt": {
     "content": [
       28,

@@ -1391,7 +1391,11 @@ selections-of-target and names `DELIVERY` when the gap is wide.
 
 ## #22 — the converted Dark Matter tree makes standing still a winning strategy
 
-**Shipped deliberately, open, and the thing Casey is playtesting.**
+**Retired.** Dark Energy Blip is 9 damage every 1000ms (was 18 every 600ms, about 30 DPS down to about 9). A motionless Necromancer now dies in all 25 statue rooms. `STATUE_REF` in `tools/sim_test.mjs` points at `toh_necromancer` again, and the block that reported the survival count is gone. A survival fails the Statue Test.
+
+The record below is the state that shipped the exception.
+
+**Shipped deliberately, and was the thing Casey was playtesting.**
 
 The Necromancer's Dark Matter tree is converted from
 `docs/design/classes/necromancer.md`. Converted, a **never-moving** Necromancer
@@ -1420,11 +1424,13 @@ individually reasonable, remove the cost of not playing. **Marrow is the
 control** — melee, converted, and it passes. The difference is reach.
 
 **What was done about it: nothing, on purpose.** The tree ships as authored so
-the problem can be felt rather than read about. The statue check still runs for
+the problem can be felt rather than read about. The statue check still ran for
 the whole roster — its reference character moved to the Samurai, which is melee
-and unconverted — and the Necromancer still runs beside it, reporting the room
-count against this defect. The day that line reports zero clears, the exception
-can be retired and `STATUE_REF` pointed back at the Necromancer.
+and unconverted — and the Necromancer still ran beside it, reporting the room
+count against this defect. The day that line reported zero clears, the exception
+was to be retired and `STATUE_REF` pointed back at the Necromancer. That day
+arrived with the opener retune above: zero of 25 rooms survived, and the
+exception is retired.
 
 **AND THE TREE IS NOT UNIQUE — the test is already false of six classes.**
 Measured across all fourteen as motionless statues, 15 rooms each:
@@ -1454,8 +1460,8 @@ whether this check can tell you is now answered — it cannot, for six classes.
 
 **Shipped with #22, same reason, and the cause is a field the document never mentions.**
 
-`toh_necromancer cannot break a barricade: 27/135 damage in 150s`. Not a
-softlock — it chips — but a barricade that took seconds now takes minutes.
+`toh_necromancer cannot break a barricade: 18/135 damage in 150s` (was 27/135 before Dark Energy Blip went to 9 damage / 1000ms). Not a
+softlock — it chips — but a barricade that took seconds now takes minutes. The opener nerf moved the chip; it did not give the class a barricade selector.
 
 **The built tier-1 node declared `select: 'objective_target'` and the
 conversion changed it to `nearest`.** That selector was the class's
@@ -1787,3 +1793,135 @@ single large body that reads as a tank until you look at what it does.
 **Not fixed** because the classification is a design pass over every summon in
 the game and it lands with the balance rebalance, not with the node that
 exposed it.
+
+## #31 — the HUD "⚔ 1" has no clear meaning
+
+**From a map-1 playtest.** The number is on screen. Nothing next to it says
+what it is.
+
+**What it is.** Once a fight is no longer spawning and is not in the sweep,
+`updateHud` (`js/ui/hud.js`) writes `⚔ ${n}` into `#enemy-counter`. `n` is the
+alive count (`view.ec`, or the enemy list when that field is absent). The same
+glyph is a weapon mark and the Samurai's symbol, so "⚔ 1" does not read as a
+count of enemies. The "incoming" and "sweep" states of the same element use
+words. This state does not.
+
+**What a fix would have to do.** Name the count in that element, the way the
+other two states already do.
+
+**Not fixed** because this pass is the playtest log, not a HUD pass.
+
+## #32 — `?seed=` is not honoured in co-op
+
+**From a map-1 playtest.** A co-op URL carrying `?seed=` did not play that seed.
+
+**What it is.** Nothing in `js/` reads a `seed` query parameter. `hostStartRun`
+(`js/main.js`) uses `seedOverride ?? randomRunSeed()`. The override is a retry
+of a region the host already rolled, and the start message broadcasts whatever
+that function chose. A guest has no seed of their own to apply: the host's
+start message is the run.
+
+**What a fix would have to do.** Read the query on the host before
+`randomRunSeed()`, and send that value in the start message the guests already
+accept.
+
+**Not fixed** because the playtest recorded the miss. The query is still unread.
+
+## #33 — the skills button shows on the node map
+
+**From a map-1 playtest.**
+
+**What it is.** `startRunCommon` (`js/main.js`) calls `showHud(true)` for the
+whole run, and `showHud` (`js/ui/hud.js`) unhides `#skills-btn` with the rest
+of the HUD. The run begins on the node map (`app.runMode` starts as `'map'`),
+so the button is up while that screen is up.
+
+**What a fix would have to do.** Hide it on the node map, or decide that the
+button belongs between rooms and stop treating its presence there as a defect.
+
+**Not fixed** because which screens own the button is a screen decision, and
+this entry only records that it is there.
+
+## #34 — sprites under `item/`, `proj/`, `prop/` and `ui/` return 404s
+
+**This was there before the plague-mark and Cascade work.** The loader asks
+for every manifest path under `assets/sprites/`. Those four namespaces are
+declared and have no files, so each request 404s. Missing art is the loader's
+ordinary path (#29 is the same shape for `fx`).
+
+**The counts**, from the manifest against disk:
+
+| namespace | declared | on disk |
+|---|---|---|
+| `item` | 199 | 0 |
+| `proj` | 21 | 0 |
+| `prop` | 24 | 0 |
+| `ui` | 8 | 0 |
+
+**Not fixed** because the gap predates this branch, and a 404 on an undrawn
+sheet is what the loader is built to absorb.
+
+## #35 — opener cards show no picked indicator after a click
+
+**From a map-1 playtest.**
+
+**What it is.** `showOpening` (`js/ui/overlays.js`) paints each tier-1 choice
+as a `.boon-card`. The click calls `pickOpening` immediately. Nothing sets a
+picked or selected class on the card that was clicked, so the panel gives no
+sign that the click landed before it closes.
+
+**What a fix would have to do.** Mark the clicked card, then send the pick.
+The send itself already happens.
+
+**Not fixed** because the pick still goes through. The missing piece is the
+indicator.
+
+## #36 — (Low) a name label and damage numbers hide a plague mark when an enemy stands on the player
+
+**From a map-1 playtest. Draw order, not the art.** The mark itself is the
+redraw in `3e7be4f`. What covers it is later paint: the enemy's name and the
+floating damage numbers, when that enemy is standing on the player.
+
+**What a fix would have to do.** The designer will review the stacking order
+for all overhead labels together. It is not a mark-size change, and it is not
+a change to the plague sprite.
+
+**Not fixed** in this pass. Low.
+
+## #37 — `skillscreen_test` stops before the spend step
+
+**Reproduce.**
+
+    node tools/skillscreen_test.mjs
+
+**What it is.** `startRun` in `tools/cdp_harness.mjs` clicks
+`.world-card[data-region="…"]`. `tools/browser_test.mjs` clicks the same
+selector. The world map draws `.world-pin` (`js/ui/worldmap.js`). The helper
+throws `no region card` and never reaches the spend step. `.world-card` is
+still styled in `css/style.css`. It is not what the map emits.
+
+**Under plain Node 20.** The test crashes with `WebSocket is not defined`
+before it reaches the selector. It needs `node --experimental-websocket` or a
+polyfill.
+
+**What a fix would have to do.** Point the shared helper at `.world-pin`. The
+skill screen's own assertions are behind that click, so they do not run.
+
+**Not fixed** because the selector is the browser harness, not the skill
+screen, and this entry is the record of where the test stops.
+
+## #38 — `applySlow` in `js/skillsim.js` does not reset an expired `slowMult`
+
+**Found during the chill / slow status pass.**
+
+**What it is.** `Sim._applySlow` in `js/game.js` resets an expired slow before
+comparing multipliers (`const cur = e.slowT > 0 ? (e.slowMult || 1) : 1; e.slowMult = Math.min(cur, mult)`).
+`applySlow` in `js/skillsim.js` writes `e.slowMult = Math.min(e.slowMult || 1, m)`
+without checking `(e.slowT || 0) > 0`, and `js/entities/enemies.js` only stops
+multiplying speed when `e.slowT <= 0` without resetting `e.slowMult` to `1`. A
+weak composed-skill slow that lands after a deeper chill or slow has expired
+inherits the old deeper `slowMult`.
+
+**What a fix would have to do.** Reset `e.slowMult` to `1` when `(e.slowT || 0) <= 0`
+before taking `Math.min` in `js/skillsim.js` (matching `js/game.js`). Fixed on
+the chill status PR.

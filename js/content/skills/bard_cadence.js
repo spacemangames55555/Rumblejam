@@ -32,7 +32,7 @@ export const TUNING = {
   // tier 1 — Opening Note. THE METRONOME: still the shortest cooldown in the
   // game, and single-target and cheap BECAUSE it is. A node that comes up this
   // often cannot also hit the room.
-  openDamage: 4, openSpeed: 520, openRange: 250, openCd: 900,
+  openDamage: 5, openSpeed: 520, openRange: 250, openCd: 900,
   // tier 2 — Quickstep
   quickDamage: 4, quickReach: 104, quickArc: 1.8, quickRadius: 130,
   quickCount: 1, quickCd: 2000, quickWeight: 0.88,

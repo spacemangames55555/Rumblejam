@@ -72,7 +72,7 @@ export const TUNING = {
   // than reduced.
 
   // tier 1 — Cross Guard Cut
-  cutDamage: 9, cutReach: 90, cutArc: 1.6, cutCd: 800,
+  cutDamage: 9, cutReach: 100, cutArc: 1.6, cutCd: 800,
   // tier 2 — Set Stance (passive). No max-stack bonus any more (see the cap
   // above); it is now purely an accrual passive, and rank-1-only per §1.3.
   stanceAccrualPct: 0.20,

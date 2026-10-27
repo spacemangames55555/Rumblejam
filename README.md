@@ -847,7 +847,9 @@ never loads them:
   flat row of cards passes every card-counting check while communicating *order*,
   which is the one thing branching does not mean. `skillscreen_test` asserts the
   geometry in a real browser (edge count, distinct lanes, forked columns), not
-  just that the nodes exist.
+  just that the nodes exist. Under plain Node 20, `node tools/skillscreen_test.mjs`
+  crashes with "WebSocket is not defined" before it reaches the selector; it
+  needs `node --experimental-websocket` or a polyfill.
 - `tools/pngkit.mjs` — dependency-free PNG decode/encode used by the above.
 - `node tools/peer_relay.mjs [port]` — minimal PeerServer-compatible signaling
   relay (zero dependencies).

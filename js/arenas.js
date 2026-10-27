@@ -185,27 +185,27 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 // not being onboarded, they are being idled. Map 2 keeps its 75% precisely
 // because the measurement did not indict it.
 //
-// THE THREE LEVELS RETURN BY DESIGN — AND THEY NOW RETURN TWICE. Mind this
-// before touching either number again. The three levels the halving cost had
-// ALREADY been paid back once, by ONBOARDING_XP_MULT's 3.4x below, which exists
-// only to undo this halving's effect on materials. With the halving gone that
-// multiplier compensates for something that no longer happens, and map 1 pays
-// out roughly twice what it is meant to.
+// THE THREE LEVELS RETURNED TWICE, AND THE MULTIPLIER WAS THEN CUT IN HALF.
+// The three levels the halving cost had already been paid back once, by
+// ONBOARDING_XP_MULT's 3.4x, which existed to undo this halving's effect on
+// materials. With the halving gone that 3.4 compensated for something that no
+// longer happened. Measured on the same god-mode probe `region_test` uses
+// (kill on contact, walk the loot), at 3.4:
 //
-// Measured on the same god-mode probe `region_test` uses (kill on contact, walk
-// the loot, so survivability cannot confound it), a character leaving map 1:
+//   seed 777    level 9, 71 materials, 241.4 XP
+//   seed a11ce  level 6, 38 materials, 129.2 XP
 //
-//   seed 777    level 6 -> level 9   (41 -> 71 materials banked)
-//   seed a11ce  level 6 -> level 8   (40 -> 64 materials banked)
+// `a11ce` is the hex literal 0xa11ce. The older note on this constant said
+// that seed went level 6 → level 8 (40 → 64 materials). That count does not
+// reproduce on this probe; 0xa11ce banks 38.
 //
-// AND NO GATE CATCHES THAT. `region_test`'s check is `p.level >= WANT_LEVEL` —
-// a FLOOR, not a band — so an overshoot to level 9 passes as silently as level
-// 6 does. The comment on ONBOARDING_XP_MULT says any change to the rate "lands
-// here by name"; that is true only for a change that makes the room pay LESS.
-// This one makes it pay more and the gate stays green.
-//
-// Retuning ONBOARDING_XP_MULT[0], and widening that assertion into a band, are
-// both separate calls and are deliberately NOT made here.
+// ONBOARDING_XP_MULT[0] stays 1.7. At 1.7 seed 777 is level 6 (120.7 XP, 3
+// slots) from drops, and seed a11ce is level 4 (64.6 XP, 2 slots). No step
+// from 1.5 to 3.4 puts both seeds inside levels 6–7 from the multiplier: 777
+// is in that window from 1.6 to 2.5, and a11ce does not reach level 6 until
+// 2.9, which puts 777 at level 8. The multiplier was not raised. Clearing map
+// 1 grants the missing levels instead — see ONBOARDING_LEVEL_FLOOR. Map 2's
+// 1.35 is untouched: its 75% rate is still in place.
 export const ONBOARDING_RATE = [1, 0.75, 1];
 export function onboardingMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
@@ -226,8 +226,9 @@ export function onboardingMult(regionIndex, depth) {
 // restricted table drops `gemmite`, which SPLITS on death and so paid twice,
 // and closes the profile levers that used to inject `gyre` and `lobber` at 2
 // materials each. What is left — skulker, flit, fusehead — is a poorer table as
-// well as a smaller one. Measured, map 1 banks 37 materials where it used to
-// bank roughly 110.
+// well as a smaller one. Measured under the halving, map 1 banked 37 materials
+// where it used to bank roughly 110. At full rate seed 777 banks 71 and seed
+// a11ce banks 38; the XP multiplier, not the material count, is what was cut.
 //
 // XP ONLY, DELIBERATELY. Gold is not compensated: fewer enemies paying less
 // money is legible, and the shop is priced against a floor's takings rather
@@ -237,9 +238,45 @@ export function onboardingMult(regionIndex, depth) {
 // produce it are not both computable — a splitter's second body is a runtime
 // quantity, not a table mean. That makes it exactly the kind of number that
 // goes stale silently, so region_test asserts the OUTCOME it exists to produce
-// (a fresh character leaves map 1 at level 6 with 2 slots) instead of trusting
-// the constant. Change the table or the rate and that gate names the reason.
-export const ONBOARDING_XP_MULT = [3.4, 1.35, 1];
+// (both measurement seeds, 777 and a11ce, leave map 1 at level 6 or 7, with 3
+// slots) instead of trusting the constant. The merged ladder opens the third
+// slot at level 5, so levels 6 and 7 have three slots, and the old "two slots"
+// figure was the ladder from before that merge. Level 4, where seed a11ce's
+// drops leave it, still has two; the clear-time grant crosses level 5 and
+// opens the third. Change the table or the rate and that gate names the reason.
+//
+// [0] was 3.4 while map 1's rate was 0.5. Density was half of the debt and
+// that half is gone, so [0] is 1.7. What remains is the poorer onboarding
+// table (no splitter, no injected 2-material archetypes).
+export const ONBOARDING_XP_MULT = [1.7, 1.35, 1];
+
+// MAP 1'S LEVEL FLOOR. Applied once, when that room is cleared, to every
+// character still below it. It is a level grant through the ordinary level-up
+// — points, slots, the level-up card — and it does not pay materials or draw
+// on a drop table. Map 2 and later regions do not have it. The XP multiplier
+// above stays 1.7; this is what keeps a short seed inside the 6–7 exit.
+export const ONBOARDING_LEVEL_FLOOR = 6;
+
+// MAP 1'S CEDAR WARDEN. The roster weight stays 2.6 for every later node.
+// Map 1's three-archetype roll is the only place this 1.5 is read.
+export const ONBOARDING_CEDAR_WEIGHT = 1.5;
+
+// Alive caps for that same room, written for a solo player. Spawn rate is
+// already multiplied by coopSpawn, and a solo coopSpawn is not 1 — it includes
+// SOLO_SPAWN_MULT. A party therefore scales by coopSpawn / soloCoopSpawn, and
+// a solo fight stays at 8 cedar wardens and 25 enemies.
+export const ONBOARDING_WARDEN_CAP = 8;
+export const ONBOARDING_ALIVE_CAP = 25;
+
+// MAP 1'S WAVE SIZE. The fight is still the 65s ramp: r0→r1 over that window,
+// and the window ends with the whole budget accrued. This 0.6 multiplies the
+// ramp, so the room fields about 0.6 of the enemies it used to (a solo
+// Standard mixed room was ~79, and 0.6 of that is ~47). It does not change
+// the Cedar Warden weight, the alive caps, or any later map. Each enemy's
+// drop is worth 1/0.6 so the smaller wave pays the same materials, gold and
+// XP — see ONBOARDING_DROP_SCALE, applied on the kill, not on the roster.
+export const ONBOARDING_WAVE_SCALE = 0.6;
+export const ONBOARDING_DROP_SCALE = 1 / ONBOARDING_WAVE_SCALE;
 export function onboardingXpMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
   return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];
@@ -253,13 +290,40 @@ export function onboardingXpMult(regionIndex, depth) {
 // difficulty_gate is the reason this is exported rather than private to the
 // sim. It fights "the first non-shop node" and measures how much enemy each
 // setting puts in front of the player — and that node is floor 1 column 0, the
-// one room in the game now built to field half the enemies and three of the
-// archetypes. It did not fail because difficulty stopped working; it failed
-// because its sample moved into the tutorial. A gate that cannot ask whether it
-// is standing in the exception will silently measure the exception, and this is
-// the second caller that makes the question a function instead of a comment.
+// one room in the game built on the three-archetype onboarding table. Its
+// spawn rate is full again (ONBOARDING_RATE[0] is 1); what is still
+// unrepresentative is the table, not the density. It did not fail because
+// difficulty stopped working; it failed because its sample moved into the
+// tutorial. A gate that cannot ask whether it is standing in the exception
+// will silently measure the exception, and this is the second caller that
+// makes the question a function instead of a comment.
 export function isOnboardingNode(regionIndex, node) {
   return regionIndex === 1 && !!node && node.col === 0 && node.kind !== 'siege';
+}
+
+// MAP 1 TAKES NEUTRAL DAMAGE. Resistances and weaknesses — the triangle's
+// ×0.80 and ×1.25 — start on map 2. This is the same room as the first step
+// of ONBOARDING_XP_MULT: region 1, column 0, and not a siege. It is derived
+// from the node the party is already standing in, so it adds no RNG draw.
+// The arena snapshot carries `domainNeutral` (1 or 0) so a client that only
+// has the snapshot still knows which rule the room is using.
+export function onboardingDomainNeutral(regionIndex, node) {
+  return isOnboardingNode(regionIndex, node);
+}
+
+// MAP 1'S CEDAR WARDEN LANE. The dash lane is the committed line telegraph
+// (260×70). On the tutorial room its warning lasts 1.5× the authored
+// windupMs, so the promise sits on the ground long enough to leave. The
+// lane's length, width and damage are unchanged, and map 2 uses the authored
+// wind-up. Derived from the node the party is standing in. No roll.
+export const ONBOARDING_CEDAR_WINDUP_MULT = 1.5;
+const CEDAR_WARDEN_ID = 'pnw_cedar_warden';
+
+export function onboardingCedarWindupMs(regionIndex, node, enemyId, windupMs) {
+  if (enemyId === CEDAR_WARDEN_ID && isOnboardingNode(regionIndex, node)) {
+    return windupMs * ONBOARDING_CEDAR_WINDUP_MULT;
+  }
+  return windupMs;
 }
 
 // `regionIndex` is the world axis (1..8) and `depth` is the ZERO-BASED map
@@ -280,8 +344,11 @@ export function waveConfig(regionIndex, depth, kind) {
   // it arrives through nodeModifiers(); leaving this bump in place would have
   // multiplied against it rather than agreeing with it.
   const onb = onboardingMult(regionIndex, depth);
-  const r0 = (0.5 + 0.25 * (regionIndex - 1)) * onb;
-  const r1 = (1.2 + 0.55 * (regionIndex - 1) + 0.18 * depth) * onb;
+  // Region 1's first combat map only. Duration stays 65s; the smaller budget
+  // is what the window rolls, not a window that closes early.
+  const count = (regionIndex === 1 && depth === 0 && kind === 'combat') ? ONBOARDING_WAVE_SCALE : 1;
+  const r0 = (0.5 + 0.25 * (regionIndex - 1)) * onb * count;
+  const r1 = (1.2 + 0.55 * (regionIndex - 1) + 0.18 * depth) * onb * count;
   return {
     t: 0, acc: 0, dur, r0, r1,
     rampT: siege ? 150 : dur,          // sieges plateau at 150s and hold
