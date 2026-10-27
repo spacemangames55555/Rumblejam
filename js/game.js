@@ -3152,6 +3152,10 @@ export class Sim {
     // was, so tickBounty can tell the difference; hp <= 0 is the only thing
     // that means "the party actually brought it down".
     if (e.bounty && this.obj && this.obj.type === 'bounty') this.obj.markDied = e.hp <= 0;
+    // A living enemy released by a room wipe still has hp. That is not a
+    // death, and a plague must not ride the wipe onto whoever is spawned next.
+    // hp <= 0 is the same test the bounty mark uses for "actually brought down".
+    if (e.hp <= 0) SK.handoffPlague(this, e);
     const { x, y } = e;
     if (killer && killer.trigEvents) SK.onSkillKill(this, killer);
     this.fx.deaths.push({ x: Math.round(x), y: Math.round(y), c: e.boss ? e.bossDef.color : e.def.color, r: e.radius });
