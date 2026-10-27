@@ -2,11 +2,9 @@
 // each player interacts at their own pace (movement keys still work).
 
 import { ITEM_BY_ID } from '../content/items.js';
-import { WEAPON_BY_ID, WEAPON_CLASS_NAMES, estimateDps } from '../content/weapons.js';
 import { CHAR_BY_ID } from '../content/characters.js';
-import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, TIER_MULT, TIER_NAMES, weaponBasePrice, sellValue } from '../config.js';
+import { STATS, STAT_NAME, STAT_IS_PCT, STAT_BASE, sellValue } from '../config.js';
 import { escapeHtml } from './screens.js';
-import { fmtCount } from './format.js';
 import { glossName, glossShort, glossDetail, glossify } from './gloss.js';
 import { SLOT_LEVELS, TIER_LEVELS, tierLevel } from '../skills.js';
 import { mechanics, passiveText } from '../skilltext.js';
@@ -38,79 +36,21 @@ function itemCardHtml(it, opts = {}) {
     <div class="odesc">${statLines(it.stats)}${it.desc ? `<div style="margin-top:4px;">${escapeHtml(it.desc)}</div>` : ''}</div>`;
 }
 
-function weaponCardHtml(def, tier, meta) {
-  const dmg = Math.round(def.dmg * TIER_MULT[tier - 1]);
-  const owned = meta ? meta.weapons.filter(w => w.id === def.id && w.tier === tier).length : 0;
-  const full = meta && meta.weaponSlots > 0 && meta.weapons.length >= meta.weaponSlots;
-  const bits = [];
-  if (def.summon) {
-    bits.push(`turret dmg ${Math.round(def.summon.dmg * TIER_MULT[tier - 1])} · every ${def.summon.cd}s · range ${def.summon.range}`);
-    bits.push(`structure HP ${Math.round(def.summon.hp * TIER_MULT[tier - 1])}`);
-  } else {
-    bits.push(`dmg ${dmg} · cooldown ${def.cd}s · range ${def.range}`);
-  }
-  if (def.count) bits.push(`${def.count} projectiles`);
-  if (def.pierce) bits.push(`pierce ${def.pierce}`);
-  if (def.aoe) bits.push(`blast radius ${def.aoe}`);
-  if (def.burn) bits.push(`burns ${def.burn.dps}/s for ${def.burn.dur}s`);
-  if (def.slow) bits.push(`slows ${Math.round((1 - def.slow.mult) * 100)}%`);
-  if (def.chainHit) bits.push(`chains to ${def.chainHit.count} at ${Math.round(def.chainHit.factor * 100)}%`);
-  // Tag names, not a live per-stat breakdown: the flat-stat conversion that
-  // produced the percentages went with SCALING_RATES.
-  const scaleLine = `scales with: ${def.scaling.map(t => glossName(t)).join(', ')}`;
-  const est = meta && meta.stats ? `<br><span class="wd-dps">est. <b>${estimateDps(def, tier, meta.stats).toFixed(1)}</b> DPS if bought</span>` : '';
-  // full-slot outcomes are shown BEFORE purchase — never a surprise
-  let note = '';
-  if (owned > 0 && full && tier < 4) note = `<br><span class="wpn-note wpn-upg">⇑ combines with your ${escapeHtml(def.name)} ${TIER_NAMES[tier - 1]} — buying upgrades it in place</span>`;
-  else if (owned > 0 && full) note = '<br><span class="wpn-note wpn-blocked">✕ your copy is tier IV — nothing higher to combine into</span>';
-  else if (owned > 0 && tier < 4) note = '<br><span class="wpn-note">▲ you own a copy — buy it and combine the pair below (free)</span>';
-  else if (full) note = '<br><span class="wpn-note">↔ weapons full — tap to choose a swap</span>';
-  return `
-    <div class="oname">${def.sym} ${escapeHtml(def.name)} <span style="color:var(--gold)">${TIER_NAMES[tier - 1]}</span></div>
-    <div class="orarity">${WEAPON_CLASS_NAMES[def.cls]}</div>
-    <div class="odesc">${bits.join('<br>')}<br><span class="dim">${scaleLine}</span>${est}${note}</div>`;
-}
-
-// the one information model for "what is this weapon worth to ME" — used by
-// owned-chip expansion and the make-room picker
-function weaponDetailHtml(def, tier, stats) {
-  const line = def.summon
-    ? `turret dmg ${Math.round(def.summon.dmg * TIER_MULT[tier - 1])} · every ${def.summon.cd}s · range ${def.summon.range} · HP ${Math.round(def.summon.hp * TIER_MULT[tier - 1])}`
-    : `dmg ${Math.round(def.dmg * TIER_MULT[tier - 1])} · cooldown ${def.cd}s · range ${def.range}${def.count ? ` · ${def.count} projectiles` : ''}${def.pierce ? ` · pierce ${def.pierce}` : ''}`;
-  return `
-    <div class="wdetail">
-      <span>${WEAPON_CLASS_NAMES[def.cls]} · ${TIER_NAMES[tier - 1]}</span>
-      <span>${line}</span>
-      <span>scales with: ${def.scaling.map(t => glossName(t)).join(', ')}</span>
-      <span class="wd-dps">est. <b>${estimateDps(def, tier, stats).toFixed(1)}</b> DPS with your stats</span>
-    </div>`;
-}
-
 // ---------------- shop ----------------
 
 let shopState = null;
-let shopCharId = null;  // for Quartermaster's invested-materials sell display
 let lastShopMeta = null;
-let armedSell = null;   // 'w<slot>' | 'i<itemId>' — two-step sell confirmation
-let combineSel = null;  // selected weapon slot awaiting its match
-let expandedChip = null; // owned-weapon chip showing its full detail card
-let swapSlot = null;    // stock slot pending the make-room swap picker
-let swapArmed = null;   // picker weapon index awaiting its confirming tap
+let armedSell = null;   // item id awaiting its confirming tap
 
-// stats are in the digest so est.-DPS lines re-render the moment a stat
-// changes (buying a Vitality item must update every Vitality-scaling card)
+// stats are in the digest so a bought item re-renders the moment the sheet moves
 let shopDigest = '';
 function shopMetaDigest(meta) {
-  return meta ? JSON.stringify([meta.materials, meta.weapons, meta.items, meta.weaponSlots, meta.stats]) : '';
+  return meta ? JSON.stringify([meta.materials, meta.items, meta.stats]) : '';
 }
 
-export function showShop(ev, meta, charId) {
+export function showShop(ev, meta) {
   shopState = ev;
-  if (charId !== undefined) shopCharId = charId;
   armedSell = null;
-  combineSel = null;
-  swapSlot = null;
-  swapArmed = null;
   shopDigest = shopMetaDigest(meta);
   renderShop(meta);
   $('overlay-shop').classList.remove('hidden');
@@ -128,34 +68,11 @@ export function updateShopMeta(meta) {
   renderShop(meta);
 }
 
-// ---- owned-build section (arsenal + items with combine/sell) ----
+// ---- owned items (sell). Weapons are not a slot anymore, so the shop does
+// not render an arsenal line. ----
 
 function ownedHtml(meta, floor) {
   if (!meta) return '';
-  const full = meta.weapons.length >= meta.weaponSlots;
-  const pairExists = meta.weapons.some((w, i) => w.tier < 4
-    && meta.weapons.some((v, j) => j !== i && v.id === w.id && v.tier === w.tier));
-  const sel = combineSel !== null ? meta.weapons[combineSel] : null;
-  const chr = shopCharId ? CHAR_BY_ID[shopCharId] : null;
-  const investedSell = chr && chr.trait.key === 'arsenal_doctrine';
-  const wchips = meta.weapons.map((w, i) => {
-    const def = WEAPON_BY_ID[w.id];
-    const val = investedSell ? (w.invested || 0) : sellValue(weaponBasePrice(def, w.tier), floor);
-    const isSel = i === combineSel;
-    const isMatch = sel && !isSel && w.id === sel.id && w.tier === sel.tier && w.tier < 4;
-    const armKey = `w${i}`;
-    const isExp = expandedChip === i;
-    return `
-      <div class="wchip ${isSel ? 'selected' : ''} ${isMatch ? 'combinable' : ''} ${isExp ? 'expanded' : ''}" data-wchip="${i}" data-keep="1">
-        <span class="wsym" style="color:${def.color}">${def.sym}</span>
-        <span><b>${escapeHtml(def.name)}</b> <span style="color:var(--gold)">${TIER_NAMES[w.tier - 1]}</span>
-        <span class="dim small">· ${def.scaling.map(t => glossName(t)).join(', ')}</span></span>
-        ${isMatch ? `<button class="chip-btn combine-btn" data-combine="${i}" data-keep="1">⇑ COMBINE</button>` : ''}
-        <button class="chip-btn sell-btn ${armedSell === armKey ? 'armed' : ''}" data-sellw="${i}" data-arm="${armKey}" data-keep="1">
-          ${armedSell === armKey ? `⟡${val} — tap again` : `Sell ⟡${val}`}</button>
-        ${isExp ? weaponDetailHtml(def, w.tier, meta.stats) : ''}
-      </div>`;
-  }).join('');
   const counts = new Map();
   for (const id of meta.items) counts.set(id, (counts.get(id) || 0) + 1);
   const ichips = [...counts.entries()].map(([id, n]) => {
@@ -171,65 +88,11 @@ function ownedHtml(meta, floor) {
       </div>`;
   }).join('');
   return `
-    <div class="owned-head">Your weapons ${meta.weapons.length}/${meta.weaponSlots}
-      ${full ? '<span style="color:var(--danger)"> — sell or combine to make room</span>' : ''}
-      ${pairExists && combineSel === null ? '<span class="dim small"> · you own a pair — tap one, then tap its match to combine (free)</span>' : ''}
-      ${combineSel !== null ? '<span style="color:var(--xp)"> · now tap the highlighted match to combine</span>' : ''}
-    </div>
-    <div class="owned-row">${wchips || '<span class="dim small">no weapons</span>'}</div>
     <div class="owned-head">Your items (${meta.items.length})</div>
     <div class="owned-row">${ichips || '<span class="dim small">no items yet</span>'}</div>`;
 }
 
 function wireOwned(el, meta) {
-  const hoverable = window.matchMedia && window.matchMedia('(hover: hover)').matches;
-  el.querySelectorAll('[data-wchip]').forEach(chip => {
-    chip.addEventListener('click', e => {
-      if (e.target.closest('button')) return; // buttons handle themselves
-      const i = parseInt(chip.dataset.wchip, 10);
-      const w = meta.weapons[i];
-      const hasMatch = w && w.tier < 4 && meta.weapons.some((v, j) => j !== i && v.id === w.id && v.tier === w.tier);
-      // one tap: expand the full detail card (and select for combine if a match exists)
-      expandedChip = expandedChip === i ? null : i;
-      combineSel = (combineSel === i || !hasMatch) ? null : i;
-      armedSell = null;
-      sfx.click();
-      renderShop(meta);
-    });
-    // desktop: hovering a chip shows its detail card without a click
-    if (hoverable) {
-      chip.addEventListener('mouseenter', () => {
-        const i = parseInt(chip.dataset.wchip, 10);
-        if (expandedChip !== i) { expandedChip = i; renderShop(meta); }
-      });
-    }
-  });
-  el.querySelectorAll('[data-combine]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const j = parseInt(btn.dataset.combine, 10);
-      const w = meta.weapons[combineSel];
-      if (combineSel === null || !w) return;
-      A.combine(combineSel, j, w.id, w.tier);
-      combineSel = null;
-      armedSell = null;
-    });
-  });
-  el.querySelectorAll('[data-sellw]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.sellw, 10);
-      const key = `w${i}`;
-      if (armedSell === key) {
-        const w = meta.weapons[i];
-        if (w) A.sellWeapon(i, w.id, w.tier);
-        armedSell = null;
-      } else {
-        armedSell = key;
-        combineSel = null;
-        sfx.click();
-        renderShop(meta);
-      }
-    });
-  });
   el.querySelectorAll('[data-selli]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.selli;
@@ -239,20 +102,17 @@ function wireOwned(el, meta) {
         armedSell = null;
       } else {
         armedSell = key;
-        combineSel = null;
         sfx.click();
         renderShop(meta);
       }
     });
   });
-  // tapping anywhere that isn't a build-management control disarms/deselects
+  // tapping anywhere that isn't a sell control disarms the confirmation
   // (assignment, not addEventListener — renderShop runs often and must not stack listeners)
   el.onclick = e => {
     if (e.target.closest('[data-keep]')) return;
-    if (armedSell !== null || combineSel !== null || expandedChip !== null) {
+    if (armedSell !== null) {
       armedSell = null;
-      combineSel = null;
-      expandedChip = null;
       renderShop(meta);
     }
   };
@@ -264,59 +124,41 @@ function renderShop(meta) {
   const el = $('overlay-shop');
   lastShopMeta = meta;
   const mats = meta ? meta.materials : 0;
-  if (swapSlot !== null) {
-    const s = ev.stock[swapSlot];
-    if (s && !s.sold && s.kind === 'weapon' && meta) return renderSwapPicker(el, meta, s);
-    swapSlot = null; swapArmed = null; // stale (rerolled/sold) — back to the stock
-  }
   el.innerHTML = `
     <div class="panel">
       <div class="row spread">
         <div>
           <div class="ov-title">${ev.black ? 'BLACK MARKET' : 'TRADER'}</div>
-          <div class="ov-sub">${ev.black ? '6 slots · cheaper rerolls · richer stock · ' : ''}your stock — others shop their own · you have <b style="color:var(--gold)">◆ ${fmtCount(mats)}</b></div>
+          <div class="ov-sub">${ev.black ? '6 slots · cheaper rerolls · richer stock · ' : ''}your stock — others shop their own · you have <b style="color:var(--gold)">◆ ${mats}</b></div>
         </div>
         <button id="shop-close">Close (walk away)</button>
       </div>
       <div class="offer-row">${ev.stock.map((s, i) => {
-        if (!s) return '';
-        const data = s.kind === 'item' ? ITEM_BY_ID[s.id] : WEAPON_BY_ID[s.id];
+        if (!s || s.kind !== 'item') return '';
+        const data = ITEM_BY_ID[s.id];
         if (!data) return '';
-        const rarity = s.kind === 'item' ? data.rarity : ['common', 'uncommon', 'rare', 'legendary'][s.tier - 1];
         const afford = mats >= s.price;
-        const ownedCount = s.kind === 'item' && meta ? meta.items.filter(id => id === s.id).length : 0;
+        const ownedCount = meta ? meta.items.filter(id => id === s.id).length : 0;
         return `
-        <div class="offer-card r-${rarity} ${s.sold ? 'sold' : ''} ${afford ? '' : 'cantafford'} ${s.locked ? 'locked' : ''}" data-slot="${i}">
+        <div class="offer-card r-${data.rarity} ${s.sold ? 'sold' : ''} ${afford ? '' : 'cantafford'} ${s.locked ? 'locked' : ''}" data-slot="${i}">
           <button class="lockbtn" data-lock="${i}">${s.locked ? '🔒' : '🔓'}</button>
-          ${s.kind === 'item' ? itemCardHtml(data, { owned: ownedCount }) : weaponCardHtml(data, s.tier, meta)}
+          ${itemCardHtml(data, { owned: ownedCount })}
           <div class="oprice">${s.sold ? 'SOLD' : `◆ ${s.price}`}</div>
         </div>`;
       }).join('')}</div>
-      ${ownedHtml(meta, ev.floor || 1)}
+      ${ownedHtml(meta, ev.floor || ev.region || 1)}
       <div class="shop-foot">
         <div class="row">
           <button id="shop-reroll">Reroll ◆ ${ev.rerollCost}</button>
           <button id="shop-sheet" data-keep="1">☰ Character</button>
         </div>
-        <span class="dim small">${ev.weaponsOnly ? 'This trader only deals in weapons for you. · ' : ''}lock 🔒 keeps an offer through rerolls and into the next shop</span>
+        <span class="dim small">lock 🔒 keeps an offer through rerolls and into the next shop</span>
       </div>
     </div>`;
   el.querySelectorAll('.offer-card').forEach(card => {
     card.onclick = e => {
       if (e.target.dataset.lock !== undefined) return;
-      const slot = parseInt(card.dataset.slot, 10);
-      const s = shopState.stock[slot];
-      // at max slots, a NON-duplicate weapon opens the make-room picker
-      // (duplicates auto-combine host-side; tier-IV matches get the host's reason)
-      if (s && !s.sold && s.kind === 'weapon' && meta && meta.weaponSlots > 0
-          && meta.weapons.length >= meta.weaponSlots
-          && !meta.weapons.some(w => w.id === s.id && w.tier === s.tier)) {
-        sfx.click();
-        swapSlot = slot; swapArmed = null;
-        renderShop(meta);
-        return;
-      }
-      A.buy(slot);
+      A.buy(parseInt(card.dataset.slot, 10));
     };
   });
   el.querySelectorAll('.lockbtn').forEach(btn => {
@@ -328,73 +170,10 @@ function renderShop(meta) {
   if (meta) wireOwned(el, meta);
 }
 
-// one-step "make room": every owned weapon as its full detail card with the
-// sell refund and the NET materials change; two-step confirm, atomic host-side
-function renderSwapPicker(el, meta, s) {
-  const buyDef = WEAPON_BY_ID[s.id];
-  const chr = shopCharId ? CHAR_BY_ID[shopCharId] : null;
-  const investedSell = chr && chr.trait.key === 'arsenal_doctrine';
-  const cards = meta.weapons.map((w, i) => {
-    const def = WEAPON_BY_ID[w.id];
-    const refund = investedSell ? (w.invested || 0) : sellValue(weaponBasePrice(def, w.tier), shopState.floor || 1);
-    const net = refund - s.price;
-    const canAfford = meta.materials + refund >= s.price;
-    const armed = swapArmed === i;
-    return `
-      <div class="offer-card swap-card ${armed ? 'armed' : ''} ${canAfford ? '' : 'cantafford'}" data-swapw="${i}" data-keep="1">
-        <div class="oname">${def.sym} ${escapeHtml(def.name)} <span style="color:var(--gold)">${TIER_NAMES[w.tier - 1]}</span></div>
-        ${weaponDetailHtml(def, w.tier, meta.stats)}
-        <div class="oprice">${canAfford
-          ? (armed
-            ? `sell +${refund} ⟡ → buy −${s.price} ⟡ · net ${net >= 0 ? '+' : ''}${net} ⟡ — tap again`
-            : `Sell ⟡${refund} · net ${net >= 0 ? '+' : ''}${net} ⟡`)
-          : `can't afford the difference (${net} ⟡)`}</div>
-      </div>`;
-  }).join('');
-  el.innerHTML = `
-    <div class="panel">
-      <div class="row spread">
-        <div>
-          <div class="ov-title">MAKE ROOM</div>
-          <div class="ov-sub">buying <b>${buyDef.sym} ${escapeHtml(buyDef.name)} ${TIER_NAMES[s.tier - 1]}</b> for ◆ ${s.price} — choose the weapon to sell · you have <b style="color:var(--gold)">◆ ${fmtCount(meta.materials)}</b></div>
-        </div>
-        <button id="swap-cancel">Cancel</button>
-      </div>
-      <div class="offer-row swap-row">${cards}</div>
-      <span class="dim small">both legs happen together — the sale only goes through if the purchase does</span>
-    </div>`;
-  el.querySelector('#swap-cancel').onclick = e => { e.stopPropagation(); sfx.click(); swapSlot = null; swapArmed = null; renderShop(meta); };
-  // tapping anywhere that isn't a picker card disarms the pending confirm
-  el.onclick = e => {
-    if (e.target.closest('[data-keep]')) return;
-    if (swapArmed !== null) { swapArmed = null; renderShop(meta); }
-  };
-  el.querySelectorAll('[data-swapw]').forEach(card => {
-    card.onclick = () => {
-      const i = parseInt(card.dataset.swapw, 10);
-      const w = meta.weapons[i];
-      if (!w) return;
-      const def = WEAPON_BY_ID[w.id];
-      const refund = investedSell ? (w.invested || 0) : sellValue(weaponBasePrice(def, w.tier), shopState.floor || 1);
-      if (meta.materials + refund < s.price) return;
-      if (swapArmed === i) {
-        A.swapBuy(swapSlot, i, w.id, w.tier);
-        swapSlot = null; swapArmed = null;
-      } else {
-        swapArmed = i;
-        sfx.click();
-        renderShop(meta);
-      }
-    };
-  });
-}
-
 export function closeShop() {
   $('overlay-shop').classList.add('hidden');
   shopState = null;
-  expandedChip = null;
-  swapSlot = null;
-  swapArmed = null;
+  armedSell = null;
   A.closeShop();
 }
 
@@ -786,31 +565,26 @@ export function updateSkillsMeta(meta, trees) {
 }
 
 export function isSkillsOpen() { return !$('overlay-skills').classList.contains('hidden'); }
-// Closing the tree screen is the map-end spend step's exit (§5.5) once the
-// clear announcement is over. The action decides: a close while banners or
-// level-up cards are still up only hides this panel and leaves the step
-// pending, and the close after the cards is the one the host hears. Both the
-// button and the K toggle come through here, so there is still one close.
+// Closing the tree screen is also the map-end spend step's exit (§5.5). Told to
+// the host unconditionally: if no step is open the host drops it, and making
+// the close path conditional would mean the one panel with two ways to open it
+// had two ways to close it, only one of which the host hears.
 export function closeSkills() {
-  const el = $('overlay-skills');
-  el.classList.add('hidden');
-  el.classList.remove('above-banners');
-  el.classList.remove('above-cards');
-  delete el.dataset.heldBanner;
+  $('overlay-skills').classList.add('hidden');
   SKILLS_STATE.pickSlot = null;
   if (A && A.spendDone) A.spendDone();
 }
 
 // ---------------- character sheet ----------------
 // Live view of one player's build: all sixteen stats (base shown where it
-// differs), weapons with tier/tags, items stacked by rarity. Per-player DOM —
-// never blocks anyone else's game.
+// differs) and items stacked by rarity. Weapons are not a slot, so the sheet
+// does not render an arsenal. Per-player DOM — never blocks anyone else's game.
 
 let sheetCharId = null;
 let sheetDigest = '';
 const sheetGlossOpen = new Set(); // stat keys with their inline detail expanded
 function sheetMetaDigest(meta) {
-  return meta ? JSON.stringify([meta.stats, meta.weapons, meta.items, meta.level, meta.materials]) : '';
+  return meta ? JSON.stringify([meta.stats, meta.items, meta.level, meta.materials]) : '';
 }
 
 export function showSheet(meta, charId) {
@@ -849,11 +623,6 @@ function renderSheet(meta) {
       <span><b>${cur}${pct}</b>${cur !== base ? ` <span class="dim small">(base ${base}${pct})</span>` : ''}</span></div>
       ${open ? `<div class="gloss-detail">${escapeHtml(glossDetail(s.key))}</div>` : ''}`;
   }).join('');
-  const wRows = meta.weapons.map(w => {
-    const def = WEAPON_BY_ID[w.id];
-    return `<div class="sheet-stat"><span><span class="wsym" style="color:${def.color}">${def.sym}</span> <b>${escapeHtml(def.name)}</b> <span style="color:var(--gold)">${TIER_NAMES[w.tier - 1]}</span></span>
-      <span class="dim small">scales: ${def.scaling.map(t => glossName(t)).join(', ')}</span></div>`;
-  }).join('') || '<div class="dim small">no weapons</div>';
   const counts = new Map();
   for (const id of meta.items) counts.set(id, (counts.get(id) || 0) + 1);
   const grouped = RARITY_ORDER.map(r => {
@@ -868,7 +637,7 @@ function renderSheet(meta) {
       <div class="row spread">
         <div>
           <div class="ov-title">${chr ? escapeHtml(chr.name).toUpperCase() : 'CHARACTER'}</div>
-          <div class="ov-sub">level ${meta.level} · ◆ ${fmtCount(meta.materials)} · ${chr ? glossify(chr.desc) : ''}</div>
+          <div class="ov-sub">level ${meta.level} · ◆ ${meta.materials} · ${chr ? glossify(chr.desc) : ''}</div>
         </div>
         <button id="sheet-close">Close</button>
       </div>
@@ -878,9 +647,7 @@ function renderSheet(meta) {
           <div class="sheet-stats">${statRows}</div>
         </div>
         <div>
-          <div class="owned-head">Weapons ${meta.weapons.length}/${meta.weaponSlots}</div>
-          ${wRows}
-          <div class="owned-head" style="margin-top:10px;">Items (${meta.items.length})</div>
+          <div class="owned-head">Items (${meta.items.length})</div>
           ${grouped}
         </div>
       </div>

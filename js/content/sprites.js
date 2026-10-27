@@ -243,9 +243,10 @@ export const FX = {
   heal: 'fx.heal',
   telegraphMark: 'fx.telegraph_mark',
   bonedust: 'fx.bonedust',
-  // status mark over an enemy carrying a plague (Entropy Cascade and the other
-  // plague skills): a 4-frame loop at 6 fps, phase-offset per enemy by `seed`
-  plagueMark: 'fx.plague_mark',
+  // drawn by name from js/render.js on every bolt fired / landed; these sat in
+  // the skill-fx list, which made them invisible to the orphan gate's tables
+  muzzle: 'fx.muzzle',
+  impact: 'fx.impact',
 };
 
 // ---------------- UI chrome ----------------

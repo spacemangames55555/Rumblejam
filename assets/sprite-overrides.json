@@ -143,12 +143,687 @@
       123
     ]
   },
-  "fx.plague_mark": {
-    "frames": 4,
-    "fps": 6,
+  "fx.asn_bolt": {
+    "content": [
+      27,
+      9
+    ],
+    "scale": 0.28125
+  },
+  "fx.asn_slash": {
     "content": [
       23,
-      29
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.asn_trap": {
+    "content": [
+      28,
+      27
+    ],
+    "scale": 0.84375
+  },
+  "fx.asn_ward_shell": {
+    "content": [
+      25,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.brd_bolt": {
+    "content": [
+      27,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.brd_cleave": {
+    "content": [
+      25,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.brd_heal_pulse": {
+    "content": [
+      26,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.brd_ward_shell": {
+    "content": [
+      24,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.dru_slash": {
+    "content": [
+      25,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.dru_summon_burst": {
+    "content": [
+      22,
+      27
+    ],
+    "scale": 0.84375
+  },
+  "fx.dru_ward_shell": {
+    "content": [
+      24,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.hun_bolt": {
+    "content": [
+      27,
+      9
+    ],
+    "scale": 0.28125
+  },
+  "fx.hun_slash": {
+    "content": [
+      26,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.hun_summon_burst": {
+    "content": [
+      28,
+      26
+    ],
+    "scale": 0.8125
+  },
+  "fx.hun_ward_shell": {
+    "content": [
+      27,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.impact": {
+    "content": [
+      22,
+      27
+    ],
+    "scale": 0.84375
+  },
+  "fx.mag_bolt": {
+    "content": [
+      28,
+      17
+    ],
+    "scale": 0.53125
+  },
+  "fx.mag_cleave": {
+    "content": [
+      23,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.mag_slash": {
+    "content": [
+      26,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.mag_ward_shell": {
+    "content": [
+      27,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.mnk_heal_pulse": {
+    "content": [
+      26,
+      26
+    ],
+    "scale": 0.8125
+  },
+  "fx.mnk_slash": {
+    "content": [
+      28,
+      27
+    ],
+    "scale": 0.84375
+  },
+  "fx.mnk_ward_shell": {
+    "content": [
+      25,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.muzzle": {
+    "content": [
+      28,
+      24
+    ],
+    "scale": 0.75
+  },
+  "fx.ncr_bolt": {
+    "content": [
+      28,
+      13
+    ],
+    "scale": 0.40625
+  },
+  "fx.ncr_slash": {
+    "content": [
+      22,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.ncr_summon_burst": {
+    "content": [
+      20,
+      27
+    ],
+    "scale": 0.84375
+  },
+  "fx.ncr_ward_shell": {
+    "content": [
+      24,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.pri_bolt": {
+    "content": [
+      28,
+      17
+    ],
+    "scale": 0.53125
+  },
+  "fx.pri_heal_pulse": {
+    "content": [
+      28,
+      24
+    ],
+    "scale": 0.75
+  },
+  "fx.pri_slash": {
+    "content": [
+      28,
+      24
+    ],
+    "scale": 0.75
+  },
+  "fx.pri_ward_shell": {
+    "content": [
+      28,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.sam_cleave": {
+    "content": [
+      25,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.sam_slash": {
+    "content": [
+      28,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.sam_ward_shell": {
+    "content": [
+      23,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.sav_blight": {
+    "content": [
+      27,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.sav_bolt": {
+    "content": [
+      26,
+      22
+    ],
+    "scale": 0.6875
+  },
+  "fx.sav_slash": {
+    "content": [
+      23,
+      26
+    ],
+    "scale": 0.8125
+  },
+  "fx.sav_ward_shell": {
+    "content": [
+      28,
+      27
+    ],
+    "scale": 0.84375
+  },
+  "fx.smt_bolt": {
+    "content": [
+      28,
+      24
+    ],
+    "scale": 0.75
+  },
+  "fx.smt_cleave": {
+    "content": [
+      26,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.smt_slash": {
+    "content": [
+      28,
+      24
+    ],
+    "scale": 0.75
+  },
+  "fx.smt_ward_shell": {
+    "content": [
+      24,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.sun_bolt": {
+    "content": [
+      28,
+      14
+    ],
+    "scale": 0.4375
+  },
+  "fx.sun_cleave": {
+    "content": [
+      28,
+      26
+    ],
+    "scale": 0.8125
+  },
+  "fx.sun_puddle": {
+    "content": [
+      28,
+      21
+    ],
+    "scale": 0.65625
+  },
+  "fx.sun_ward_shell": {
+    "content": [
+      25,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.wd_blight": {
+    "content": [
+      28,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.wd_bolt": {
+    "content": [
+      28,
+      15
+    ],
+    "scale": 0.46875
+  },
+  "fx.wd_slash": {
+    "content": [
+      25,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.wd_ward_shell": {
+    "content": [
+      28,
+      25
+    ],
+    "scale": 0.78125
+  },
+  "fx.wiz_beam": {
+    "content": [
+      17,
+      6
+    ],
+    "scale": 0.1875
+  },
+  "fx.wiz_bolt": {
+    "content": [
+      28,
+      19
+    ],
+    "scale": 0.59375
+  },
+  "fx.wiz_cleave": {
+    "content": [
+      21,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.wiz_heal_pulse": {
+    "content": [
+      27,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.wiz_puddle": {
+    "content": [
+      28,
+      22
+    ],
+    "scale": 0.6875
+  },
+  "fx.wiz_shockwave": {
+    "content": [
+      27,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.wiz_spread": {
+    "content": [
+      20,
+      28
+    ],
+    "scale": 0.875
+  },
+  "fx.wiz_ward_shell": {
+    "content": [
+      23,
+      26
+    ],
+    "scale": 0.8125
+  },
+  "tile.abyss_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.abyss_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.abyss_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.abyss_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.abyss_04": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.delta_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.delta_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.delta_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.delta_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.delta_04": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.norse_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.norse_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.norse_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.norse_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.norse_04": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.outback_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.outback_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.outback_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.outback_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.outback_04": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.pnw_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.pnw_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.pnw_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.pnw_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.pnw_04": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.sahel_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.sahel_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.sahel_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.sahel_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.sahel_04": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.steppe_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.steppe_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.steppe_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.steppe_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.steppe_04": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.tundra_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.tundra_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.tundra_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.tundra_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.tundra_04": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.xibalba_00": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.xibalba_01": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.xibalba_02": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.xibalba_03": {
+    "content": [
+      64,
+      64
+    ]
+  },
+  "tile.xibalba_04": {
+    "content": [
+      64,
+      64
     ]
   }
 }
