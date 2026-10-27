@@ -1900,8 +1900,28 @@ selector. The world map draws `.world-pin` (`js/ui/worldmap.js`). The helper
 throws `no region card` and never reaches the spend step. `.world-card` is
 still styled in `css/style.css`. It is not what the map emits.
 
+**Under plain Node 20.** The test crashes with `WebSocket is not defined`
+before it reaches the selector. It needs `node --experimental-websocket` or a
+polyfill.
+
 **What a fix would have to do.** Point the shared helper at `.world-pin`. The
 skill screen's own assertions are behind that click, so they do not run.
 
 **Not fixed** because the selector is the browser harness, not the skill
 screen, and this entry is the record of where the test stops.
+
+## #38 — `applySlow` in `js/skillsim.js` does not reset an expired `slowMult`
+
+**Found during the chill / slow status pass.**
+
+**What it is.** `Sim._applySlow` in `js/game.js` resets an expired slow before
+comparing multipliers (`const cur = e.slowT > 0 ? (e.slowMult || 1) : 1; e.slowMult = Math.min(cur, mult)`).
+`applySlow` in `js/skillsim.js` writes `e.slowMult = Math.min(e.slowMult || 1, m)`
+without checking `(e.slowT || 0) > 0`, and `js/entities/enemies.js` only stops
+multiplying speed when `e.slowT <= 0` without resetting `e.slowMult` to `1`. A
+weak composed-skill slow that lands after a deeper chill or slow has expired
+inherits the old deeper `slowMult`.
+
+**What a fix would have to do.** Reset `e.slowMult` to `1` when `(e.slowT || 0) <= 0`
+before taking `Math.min` in `js/skillsim.js` (matching `js/game.js`). Fixed on
+the chill status PR.
