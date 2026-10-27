@@ -1024,8 +1024,8 @@ export function statusMult(p) {
 export function applySlow(sim, e, mult, dur, owner = null) {
   const att = statusMult(owner);
   const m = Math.max(0.15, 1 - (1 - mult) * att);
+  e.slowMult = Math.min(e.slowMult === undefined || !(e.slowT > 0) ? 1 : e.slowMult, m);
   e.slowT = Math.max(e.slowT || 0, dur * Math.max(0.25, att));
-  e.slowMult = Math.min(e.slowMult || 1, m);
 }
 
 // Plague STACKS rather than refreshing — that is what makes Internal Collapse a
