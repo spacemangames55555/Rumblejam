@@ -1925,3 +1925,21 @@ inherits the old deeper `slowMult`.
 **What a fix would have to do.** Reset `e.slowMult` to `1` when `(e.slowT || 0) <= 0`
 before taking `Math.min` in `js/skillsim.js` (matching `js/game.js`). Fixed on
 the chill status PR.
+
+## #39 — (Low) `RETRY REGION` after dying at Level 2+ with banked level-ups opens the `LEVEL UP!` card modal on the node map
+
+**From a map-1 playtest.**
+
+**What it is.** `CARRY_FIELDS` in `js/game.js` carries `level`, `xp`, `materials`,
+`skillRanks`, `skillPoints`, and `banked` across `carryState()`, and `case 'end'` in
+`js/main.js` snapshots `app.carry = app.sim.carryState()` on both victory and wipe.
+On a retry (`hostRetryRegion` -> `hostStartRun`), the new `Sim` starts in
+`phase === 'map'` with `this.cleared === true`, so the first `tick()` sees
+`this.cleared && p.banked > 0` (`js/game.js:2166`) and calls `_maybeOffer(p)`,
+popping up the dead run's banked `LEVEL UP!` stat cards at the start of the retry.
+
+**What a fix would have to do.** Decide whether `RETRY REGION` after a wipe should
+reset run-scoped level/banked state (or only carry across region boundaries on a
+win), or clear `banked` when starting a fresh retry.
+
+**Not fixed** in this pass. Low.
