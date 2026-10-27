@@ -514,15 +514,15 @@
       ],
       "scale": 0.875
     },
-    "fx.cull_puff": {
-      "file": "fx/cull_puff.png",
+    "fx.chill_frost": {
+      "file": "fx/chill_frost.png",
       "w": 32,
       "h": 32,
-      "frames": 6,
-      "fps": 20,
+      "frames": 4,
+      "fps": 6,
       "content": [
-        32,
-        28
+        29,
+        13
       ]
     },
     "fx.dru_beam": {
@@ -844,6 +844,17 @@
         28
       ],
       "scale": 0.875
+    },
+    "fx.plague_mark": {
+      "file": "fx/plague_mark.png",
+      "w": 32,
+      "h": 32,
+      "frames": 4,
+      "fps": 6,
+      "content": [
+        23,
+        29
+      ]
     },
     "fx.pri_beam": {
       "file": "fx/pri_beam.png",

@@ -199,12 +199,12 @@
     ],
     "scale": 0.875
   },
-  "fx.cull_puff": {
-    "frames": 6,
-    "fps": 20,
+  "fx.chill_frost": {
+    "frames": 4,
+    "fps": 6,
     "content": [
-      32,
-      28
+      29,
+      13
     ]
   },
   "fx.dru_slash": {
@@ -346,6 +346,14 @@
       28
     ],
     "scale": 0.875
+  },
+  "fx.plague_mark": {
+    "frames": 4,
+    "fps": 6,
+    "content": [
+      23,
+      29
+    ]
   },
   "fx.pri_bolt": {
     "content": [
