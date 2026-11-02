@@ -1,8 +1,13 @@
 # Rumblejam — Game Design Document
 
-**Draft 11 · August 2026**
+**Draft 12 · November 2026 — horde pacing**
 
-*Reconciled against the code end to end. Draft 11 corrected 22 divergences accumulated since Draft 10 — every one of them an edit that added a claim without deleting the one it replaced. `tools/doc_gate.mjs` now checks the document's counts against the code on every run (§13 rule 70).*
+*Draft 12 replaces the slow-game pacing rules with horde pacing, on the user's ruling of 2 Nov 2026: Rumblejam plays at the speed of Brotato and Diablo 2 Survivors. The sections that carried the old rules — §1.1, §2.2, §2.4, new §2.6, §3.5, §4.3, §6.4, §8.4 and new §5.10 — are rewritten here. The numbers in §2.6 are targets from `docs/design/pace-spec.md` until the engineer's pace branch measures them.*
+
+*Three calls were decided 2026-11-02 (user): (1) the wave ends on the timer and leftover fodder is culled and pays its loot (§2.6 rule 3); (2) elite nodes are a horde with a few champions (§2.4); (3) the Samurai's Footing becomes a burst granted on stepping off after holding (§5.10, §8.4).*
+
+*Draft 11 (August 2026) was reconciled against the code end to end and corrected 22 divergences accumulated since Draft 10 — every one of them an edit that added a claim without deleting the one it replaced. `tools/doc_gate.mjs` now checks the document's counts against the code on every run (§13 rule 70).*
+
 **Status: authoritative.** This file supersedes all prior drafts. Where this document and any other source disagree, this document wins — except for tuning constants, where the per-tree `TUNING` blocks in code are authoritative and this document records intent.
 
 **Reference convention:** a bare §N means this document. Any other source must be named inline.
@@ -15,10 +20,14 @@
 
 Rumblejam is a browser-based co-op action RPG for up to 8 players, played from a link and a room code. Players are monster slayers working through the mythologies of the real world — a swamp, an Egyptian necropolis, a Russian tundra, a Celtic grassland — hunting the creatures, spirits, and old gods native to each region.
 
+Combat is a **horde**: big packs from the first second, dozens of enemies on screen, short intense waves and steady pressure, at the pace of Brotato and Diablo 2 Survivors. Most enemies are fast, weak fodder that the heroes' skills mow down. Only special enemies, elites and bosses wind up visibly before they attack.
+
 Combat is twin-stick movement and positioning. Players do not fire manually. Every ability triggers automatically from a condition the player controls through **where they stand and how they move**, and directs itself by a **selection rule the player chooses when building**. The build decides both what the player's movement means and what their damage lands on.
 
 ### 1.1 Design pillars
 
+- **Horde pace.** A fight is a crowd from the first second, never a trickle. If a player is waiting for the next enemy, the pace has failed (§2.6).
+- **The heroes are the game.** With that many enemies on screen, what each class's skills look and feel like is the reason to play this game over the ones that already exist. Every projectile and skill has to clear packs with visible impact, and each class has to play unlike the others (§5.10). Maps and enemies come second: their job is to make travelling and conquering the world feel like a journey.
 - **Move and react, not menu and think.** Combat stays fast and physical. All complexity lives in the build screen, never in the fight.
 - **Engine, not multiplier.** Every class has a distinct mechanical engine. No class is another class with bigger numbers.
 - **A link and a room code.** No accounts, no installs, no setup. Any friction added here is a design failure.
@@ -48,21 +57,15 @@ Combat is twin-stick movement and positioning. Players do not fire manually. Eve
 
 Picking 5 of 10 means a region replays with roughly half new content, and gives every region a route decision without touching global difficulty.
 
-**The onboarding ramp (region 1 only).** Region 1's first maps carry a fraction of the normal spawn rate, indexed by node column: **full at map 1, 75% at map 2, full from map 3** (`ONBOARDING_RATE` in `js/arenas.js`). Map 1 was 50% and that halving was reversed — a solo room at 0.5 idled between single enemies. While the halving was on, map 1 fielded ~39 enemies from three archetypes, against ~91 from seven before the table cut. The table cut is still on; the 50% rate is not.
+**Map 1 is a horde from the first second (region 1 only).** Map 1 used to be the slow room: a fraction of the normal spawn rate (`ONBOARDING_RATE`), a 0.6 wave scale (`ONBOARDING_WAVE_SCALE`) paid back by a 1/0.6 drop scale, and alive caps of 25 enemies and 8 Cedar Wardens. Measured on main at `7e189e5` (solo Samurai, seeds 777, `0xa11ce` and 424242), that room fielded 47–56 enemies over 70–75 s. A median of 2–3 were alive at once and the maximum was 6. The field held two or fewer enemies for 28–52% of the fight, and the first enemy arrived about 2.6–3.0 s in. **Under horde pacing those rules are retired.** Map 1 runs at the full §2.6 curve, with no rate fraction, no wave scale and no drop scale. The first pack lands at 1 s and the map lasts 30 s.
 
-A ramp rather than a one-map discount, because the cliff matters more than the discount. A character finishes map 1 at **level 6 or 7**, having entered at level 1 with one slot and one skill — map 1 is the only map in the game played at a single slot. The half-step at map 2 is for the build being *assembled*, not for the slots being open. The older writeup said "two slots" at that exit. The merged slot ladder opens the third slot at level 5, so levels 6 and 7 have three.
+**What still makes map 1 the tutorial is its table, not its density.** It draws fodder plus **one** special. In region 1 that special is the Cedar Warden, whose lane is the first wind-up a player reads, and it keeps its 1.5× wind-up on map 1 (`onboardingCedarWindupMs`). The special is capped at a few alive at once (§2.6) so the lesson stays legible inside the crowd. Map 1 damage stays neutral (×1.0 from every type), derived from the node with no RNG draw, and the arena snapshot still carries `domainNeutral`. Every lever that names an enemy id instead of drawing from the table, such as the profile's `flankers` and `artillery` injections, stays closed on map 1, or the table leaks.
 
-**That sentence was briefly false, and the ramp is what made it false.** XP rides materials and materials ride spawns, so halving map 1's density also halved its progression: measured on one harness either side of the change, a character left map 1 at **level 3 with one slot** instead of level 6 — entering map 2 on exactly the un-grown build the ramp's own justification claimed map 1 was the last of. `ONBOARDING_XP_MULT` paid that back on XP only; gold was left cut, because fewer enemies paying less money is legible and the shop is priced against a floor's takings rather than against a level. The density half of that debt is gone with the halving, so map 1's multiplier is **1.7** rather than 3.4. Map 2's 1.35 stays, because its 75% rate stays. `region_test` asserts the outcome — level 6 or 7, off map 1, on both measurement seeds — rather than the constant, because the constant cannot be derived: a splitter's second body is a runtime quantity, not a table mean. The second seed in the arenas.js note, `a11ce`, is the hex literal `0xa11ce`. At 1.7 seed 777's drops reach level 6 and seed `a11ce`'s reach level 4. No multiplier from 1.5 to 3.4 holds both inside 6–7, so the multiplier stays 1.7. Clearing map 1 tops any character still under level 6 up to exactly level 6 — points, slots and the ordinary level-up card, for every player in the party, and nothing else. Leaving below 6 or above 7 fails either seed.
+**The level window is still the outcome, and it is re-measured rather than assumed.** A character entered map 1 at level 1 with one slot and left at level 6 or 7. That exit is still the target, because map 2 has to be entered with three slots. More enemies at one material each would overshoot it, so the material and XP yield per map is held to the old totals (±15%) by the fodder drop chance in §2.6, not by thinning the room. `ONBOARDING_LEVEL_FLOOR` (6) stays as the clear-time guarantee. `region_test` asserts the outcome on both measurement seeds and must be re-run on the new curve.
 
-**Map 1 damage is neutral.** Enemies on that map take ×1.0 from every damage type. The triangle's resistances and weaknesses (×0.80 and ×1.25) start on map 2, including a Wizard shift and an item domain-add. The rule sits beside the map-1 XP bonus (`onboardingDomainNeutral` in `js/arenas.js`), is derived from the node, and adds no RNG draw. The arena snapshot carries `domainNeutral` so the fact survives a dropped event. `region_test` checks a live hit on map 1 and on map 2.
+**The map-2 half-step is retired too.** Map 2's 75% rate existed to cushion a build being assembled at slow pace. At horde pace the cushion is the curve itself: map 2 is a step up from map 1, never a step down.
 
-**Map 1's Cedar Warden lane warns for longer.** The dash lane is the committed line (260×70). On that same room its wind-up lasts 1.5× the authored 420 ms (`onboardingCedarWindupMs`, beside `onboardingDomainNeutral`). Length, width and damage stay as authored. Map 2 uses 420 ms. The multiplier is the node, not a roll. `region_test` checks a live commit on map 1 and on map 2.
-
-Map 1 also draws from a restricted table (`ONBOARDING_TABLE`) rather than the floor's: **skulker, flit, fusehead** — trash, a mover, and the floor's telegraphed threat. Three chosen so the composition teaches rather than merely thins, and drawn from **floor 1's own roster**: a three-id table is uniform, so importing one enemy from a later floor makes it a third of the tutorial. `gemmite` is excluded because it splits on death and so fights the density reduction directly.
-
-Both are arithmetic inside `waveConfig`'s existing `depth` parameter, not a new channel. Every lever that names an enemy id instead of drawing from the table — the profile's `flankers` and `artillery` injections — must be closed here too, or the archetype cut leaks.
-
-**Column 0 is now mechanically distinct, and that is a hazard for tuning fixtures.** `js/dungeon.js` already keeps objective levels off the entry column; the ramp extends that principle to density. Anything measuring a *ratio* — difficulty scaling, elite-vs-horde, objective clear times — must select a representative room, and `isOnboardingNode(floorNum, node)` is exported so it can assert that it did.
+**Column 0 is still mechanically distinct (its table and neutral damage), and that is a hazard for tuning fixtures.** `js/dungeon.js` already keeps objective levels off the entry column. Anything measuring a *ratio* — difficulty scaling, elite-vs-horde, objective clear times — must select a representative room, and `isOnboardingNode(floorNum, node)` is exported so it can assert that it did.
 
 ### 2.3 The map tree
 
@@ -95,12 +98,14 @@ Distribution per region: **4 Horde, 2 Elite, 2 Objective, 1 Shrine, 1 Cursed.**
 | Type | Contents |
 |---|---|
 | Horde | Standard arena wave combat |
-| Elite | ×0.55 count, ×2.4 HP, ×1.35 damage, ×1.35 gold, 75% drawn from the region's heavy half |
+| Elite | The fodder stream at reduced count plus telegraphing champions, ×1.35 damage, ×1.35 gold. **Decided 2026-11-02 (user):** ×0.7 count (was ×0.55), 25% drawn from the region's heavy half (was 75%), so an elite room is a horde with a few champions in it rather than a room of slabs. ×2.4 HP applies to the champions, not the fodder |
 | Objective | One of the 8 existing objective types |
 | Shrine | No combat. Party chooses: +1 skill point **or** one guaranteed shop reroll. Never both, never rolled |
 | Cursed | Region modifier active for that node only, ×1.6 gold |
 
 Placement: Shrine, Cursed and Objective may not sit in column 1; both Elites may not share a column. Node type is **visible before selection** — the route decision does not exist otherwise.
+
+**HORDE PACING SUPERSEDES THE NEXT TWO PARAGRAPHS' NUMBERS.** They were measured at 50–59% telegraph density and the old spawn curve. The Bastion ratio rule stands as a rule, but its figures and the camper-death times must be re-measured on the §2.6 curve before anyone cites them.
 
 **The Bastion sanction is a RATIO, not a survival.** A camper in the profile that sanctions camping lasts **at least ×1.5 as long** as the same camper in the worst other profile, same room, same seed (`sim_test`). It is stated this way because the survival form encoded one roster: floor 1's table could not touch a statue at all, so "camping must work where sanctioned" was reading the absence of a roster rather than the presence of a sanction, and every roster change since has moved it. Measured — floor-1 control ×1.98–×2.35, region 1 ×1.66–×2.51, region 2 ×1.38–×1.73. The control's figure is a lower bound: its camper never dies, so its numerator is the length of the fight rather than its survival capacity.
 
@@ -125,6 +130,34 @@ The tree regenerates from the region's node pool on party wipe. A failed region 
 ### 2.5 The world map
 
 A **lobby, not a hub**. No shops, no vendors, no walking around. Shows the eight regions with frontier gating and a stated reason on every locked card, each player's character and level, party difficulty, unspent points, and loadout editing.
+
+### 2.6 Pace — horde rules
+
+**Ruled 2 Nov 2026: Rumblejam plays at Brotato / Diablo 2 Survivors pace.** The benchmark figures and their sources are in `docs/design/pace-spec.md`. Brotato's Crash Zone wave 1 is 20 s long and drops 4–5 Baby Aliens every 3 s from the first second. Waves grow by 5 s each until they reach 60 s. Brotato allows 100 living enemies, and its weakest enemy has 3 HP against a 12-damage starting pistol.
+
+**The rules, in priority order:**
+
+1. **Packs, not singles.** Enemies arrive in clustered packs of 4–8 from one spawn mark, from 1 s into the fight. A lone spawn is the exception, used for specials.
+2. **The field is never empty while the timer runs.** With the timer running and spawning, the field holds two or fewer enemies for at most 5% of the fight (measured on main: 28–52% on map 1).
+3. **Short maps.** In region 1 the maps last 30 / 38 / 45 / 53 / 60 s, capped at 60 s and +5 s per later region, still capped at 60. The boss map keeps its own structure. The wave **ends on the timer**: fodder still alive dies and pays its loot, which is magneted to the party. Only specials, elites and the boss have to be killed; the 4 s chase and 20 s straggler cull apply to them only, and bosses and pylons stay exempt. Culled fodder is not credited as a kill. *Decided 2026-11-02 (user).*
+4. **Fodder dies to one hit.** On map 1, a fodder unit's live HP is at most the weakest rank-1 opener's packet, so every class's opener one-shots it. Specials take 3–5 hits and landmarks take 10 or more. Later regions keep the same hit counts through the world axis (§4.3).
+5. **Fodder converges.** Fodder moves at 0.55–0.8× player base speed (Brotato's range is 0.44–0.89 of 450), and packs spawn close enough to arrive within about 2.5 s.
+6. **A crowd has a ceiling.** A solo horde room holds at most 120 alive (map 1: 60), scaled by party the same way spawn rate is, up to `ALIVE_CEILING` (300). The cap banks budget rather than discarding it.
+7. **The yield is held, not the density.** More bodies must not mean runaway levels. Materials and XP per map stay within ±15% of the pre-horde totals, through a fodder drop chance, until a progression pass says otherwise.
+
+**Targets for region 1 (solo, effective rates after co-op and budget multipliers; targets, not measurements):**
+
+| Map | Length | Spawn rate start → end | Enemies spawned | Median alive | Peak alive |
+|---|---|---|---|---|---|
+| 1 | 30 s | 1.6 → 4.0 /s | ~85 | ≥ 10 | ≤ 60 |
+| 2 | 38 s | 2.0 → 4.8 /s | ~130 | ≥ 15 | ≤ 90 |
+| 3 | 45 s | 2.4 → 5.6 /s | ~180 | ≥ 20 | ≤ 120 |
+| 4 | 53 s | 2.8 → 6.4 /s | ~245 | ≥ 25 | ≤ 120 |
+| 5 | 60 s | 3.2 → 7.2 /s | ~310 | ≥ 30 | ≤ 120 |
+
+The measured baseline on main was 47–56 enemies over about 70 s on map 1, and 111 over 75 s plus a 20–30 s mop-up on map 3 (`docs/design/pace-spec.md` §1).
+
+**What this pacing costs, stated so nobody rediscovers it.** Telegraph density by encounter weight falls from 50–59% to roughly 10–25%. That breaks the old hold-or-break arithmetic Footing was tuned against, so Footing is redesigned as a step-off burst (§8.4, decided 2026-11-02 (user)). It also makes single-target openers the weakest classes in a room, which §5.10 answers with pack clear rather than with HP.
 
 ---
 
@@ -177,7 +210,7 @@ Asserted at load: every selectable class has a tier-1 active **carrying damage**
 4. **A damage-domain skew** per §3.2.
 5. **One boss** with at least two phases and a mechanic that is not a bigger normal enemy.
 6. **One Cursed modifier** unique to the region.
-7. **Telegraph density at or above 50% by encounter weight** — see §6.4.
+7. **Fodder plus a few specials.** Fodder makes up most of the encounter weight and never telegraphs. Specials, elites and the boss always telegraph, at 8–25% of the weight, with at least two telegraph shapes per region. See §2.6 and §6.4.
 8. A node pool large enough to generate a varied 10-node tree.
 
 ### 3.6 Where to spend effort
@@ -301,11 +334,13 @@ Authored per region band, not computed from a global curve. Expected player leve
 
 If a party arrives significantly above or below the anchor, that is the difficulty setting doing its job, not a bug.
 
-**EVERY REGION'S ROSTER IS AUTHORED AT FLOOR-1 PARITY. THE WORLD AXIS IS THE SOLE DIFFICULTY MULTIPLIER.** A roster is authored to a weighted mean of **7.9 HP and 3.45 damage**, ±15%, whatever its index — the same band for region 1 and region 8 — and the table above is what makes region 8 harder than region 1. A roster that also carries band scaling multiplies the axis a second time: Central America was authored at ×3.3 the floor-1 table *and* multiplied by ×2.13, arriving at 7.02× floor 1 for a player roughly 2.1× stronger.
+**HORDE PACING (§2.6) REPLACES THE SINGLE PARITY BAND WITH ROLE BANDS. THE WORLD AXIS IS STILL THE SOLE DIFFICULTY MULTIPLIER.** Every region's roster is authored to the same bands whatever its index, and the world-axis table above is what makes region 8 harder than region 1. **Fodder** has a live map-1 HP at or under the weakest rank-1 opener packet, authored at about 3–4 HP. **Specials** take 3–5 opener hits, and **landmarks** take 10 or more. The old single band was a weighted mean of 7.9 HP and 3.45 damage, ±15%. It is retired, because a horde roster's weighted mean is almost all fodder and would gate the wrong thing. *The paragraphs below record why parity was introduced. Their rule, no band scaling inside a roster, still holds.*
+
+*Historical:* a roster was authored to a weighted mean of **7.9 HP and 3.45 damage**, ±15%, whatever its index. A roster that also carries band scaling multiplies the axis a second time: Central America was authored at ×3.3 the floor-1 table *and* multiplied by ×2.13, arriving at 7.02× floor 1 for a player roughly 2.1× stronger.
 
 **A region's identity is composition, never weight** — which behaviours it fields, what shapes its telegraphs draw, how its slabs and its lights are distributed. Region 1 teaches circle, cone and line separately with small close zones; region 2 overlaps them, fields an orbiter region 1 has no equivalent of, and keeps three chaff archetypes where region 1 has two. Two regions with identical weighted means can play nothing alike; two differing only in weight are the same region twice with one of them wrong. `tools/roster_weight_gate.mjs` asserts the band on every built region, and **reports the composed figure without gating it** — composed is `mean × axis`, a derived quantity, and gating it would invite satisfying the check by moving the axis, which is the one number here that was measured rather than authored.
 
-**The weight has to be in the multiplier, not in the units.** Region 1 replaces floor 1 at ×1.00, so its roster should weigh what floor 1's table weighed — and the first version did not: ×2.14 the weighted mean HP and ×1.69 the damage, all of it authored into the units. The cause was a coupling rather than a tuning error. §3.5 requires ≥50% telegraph density for readability, and the only behaviours permitted to telegraph were the three the roster had authored as slabs, so **a readability goal imported a weight goal.** Telegraph is an animation and timing property; it has no necessary relationship to HP. Region 1 needs the most density and the least weight, and it had the most of both. `tools/roster_weight_gate.mjs` now asserts both halves together, because either alone is satisfiable by breaking the other.
+**The weight has to be in the multiplier, not in the units.** Region 1 replaces floor 1 at ×1.00, so its roster should weigh what floor 1's table weighed — and the first version did not: ×2.14 the weighted mean HP and ×1.69 the damage, all of it authored into the units. The cause was a coupling rather than a tuning error. §3.5 then required ≥50% telegraph density for readability (retired by §2.6), and the only behaviours permitted to telegraph were the three the roster had authored as slabs, so **a readability goal imported a weight goal.** Telegraph is an animation and timing property; it has no necessary relationship to HP. Region 1 needs the most density and the least weight, and it had the most of both. `tools/roster_weight_gate.mjs` now asserts both halves together, because either alone is satisfiable by breaking the other.
 
 **The multipliers those anchors buy** (`REGION_HP_MULT` / `REGION_DMG_MULT` in `js/regions.js`), measured by `tools/region_curve.mjs` against composed player output at each anchor, targeting flat time-to-kill:
 
@@ -625,6 +660,16 @@ Measured on a bounty mark: 23 of 23 shots correctly selected the mark; **2 arriv
 
 Consequence: until phase 4 ships modifier items, bounty marks are clear-the-escort-first. Tests for this objective assert **selection correctness**, never mark kills, so a throughput change cannot silently satisfy a targeting test.
 
+### 5.10 Skills at horde pace
+
+**The heroes are the emphasis of the game (§1.1).** At §2.6 density, a skill is judged by what it does to a *pack*, not to a dummy.
+
+- **Every tier-1 opener clears something.** At rank 1 on map 1 it one-shots fodder (§2.6 rule 4). Single-target bolts get pierce, chain or splash on their tier-1 or tier-2 node, so no class's opening tree is a single-target pea-shooter in a crowd. This changes §5.9's ruling that `pierce` is only an item: pierce stays an item for bolts that lack it, but a tree may author it.
+- **Impact is visible.** A hit that kills shows it. Fodder pops, packs scatter and big skills shake the screen. That feedback is owned by the hit-feel work and the skill-effect art, and it is part of the skill rather than polish on top.
+- **Classes stay distinct in a crowd.** Each class clears a pack in its own *shape* (lane, ring, cone, chain, pet swarm, ground zone), and the engine decides *when* that shape is strongest. Two classes that clear a pack the same way are one class twice. `docs/design/pace-spec.md` has the per-class sketch.
+- **Samurai: Footing pays on the step, not the stand.** *Decided 2026-11-02 (user).* Footing still builds while he stands still, but it is spent as a burst the first time he steps off: a released, iaido-style sweep through the crowd. At horde density a reward for standing still would make holding the answer to every room, so the stance becomes a pack-clear charge he chooses when to release (§8.4).
+- **The DPS gates measure kill rate on packs as well as single-target output.** A single-target band alone cannot see the difference between a class that clears a horde and one that doesn't.
+
 ---
 
 ## 6. Telegraphs
@@ -661,13 +706,13 @@ The zone draws on the ground in its committed shape. **Fill sweeps 0→100% over
 
 ### 6.4 Density
 
-**Every heavy or elite archetype telegraphs. Trash and swarm do not.**
+**Specials, elites and bosses telegraph. Fodder never does.**
 
-Target: **at or above 50% by encounter weight** per region, asserted at load.
+Under horde pacing (§2.6), most of the screen is fodder, and fodder is answered by killing it: by build, by pack clear, and by not standing in the crowd. A wind-up on every fodder unit would bury the few wind-ups that matter in clutter. So the telegraph is reserved for the enemies that are supposed to be *read*: the special that commits a lane or a cone, the elite champion, the boss.
 
-If everything telegraphs, holding stance is always punished. If nothing does, holding is free. The decision only exists when some damage is dodgeable and some is not.
+Target: **8–25% of encounter weight telegraphs** in a horde room, asserted at load. That means at least one telegraphing archetype per region and at least two telegraph shapes. Elite rooms are more telegraphed than their region's baseline. A telegraphing unit must be visibly distinct from fodder in silhouette and size, because it has to be found inside a crowd.
 
-Density is also the dial that resolved Footing's offensive balance: at 21% density the holder led by ×2.24; at 50% it is ×1.08. **Do not tune a stance mechanic against a low-density world and then raise the density.**
+*Retired:* the old floor of **at or above 50% by encounter weight** existed so a stance (Footing) faced a live hold-or-break decision. It was measured as the dial that balanced Footing: at 21% density the holder led by ×2.24, and at 50% by ×1.08. Horde pacing drops density into the range where holding won, so Footing was redesigned rather than retuned: it is now a burst granted on stepping off (§8.4, decided 2026-11-02 (user)).
 
 ### 6.5 `ON_DODGE`
 
@@ -1227,6 +1272,8 @@ Fixing it in the trees would have been the wrong lever twice over: the Hunter's 
 **The general form is the one §15 keeps rediscovering: a number inherited from a system that no longer owns it is not a default, it is an accident.** Recorded as §13 rule 43.
 
 ### 8.4 Footing
+
+> **DECIDED 2026-11-02 (user): under horde pacing, Footing is a burst granted on stepping off.** Everything below was measured at 50% telegraph density, where hold-or-break balanced (holder ×1.08). Horde rooms sit at 8–25%, where the same measurement had the holder ahead by ×2.24, so a stance that pays for standing still would dominate. Footing keeps its build rule (one stack per 500 ms stationary, cap 10), but the first step after holding **spends the stacks as a burst**, a released iaido-style sweep through the nearby crowd, instead of holding them as standing safety. Burst damage per stack, radius, and what remains of the shield and grit are tuning for the pace branch. The text below is kept as the record of the stance version. The holder / sidestepper / breaker comparison is re-run against the burst version on the §2.6 curve, and the failure condition below still applies.
 
 The Samurai's engine, and the most-iterated design in the project.
 

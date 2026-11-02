@@ -36,6 +36,8 @@ likewise only 7 of 10 documented. Both are open.
 
 ## CLASS ENGINE — FOOTING (built, and it supersedes Resolve)
 
+> **Draft 12 (decided 2026-11-02, user): Footing becomes a step-off burst.** Under horde pacing (GDD §2.6) telegraph density falls to 8–25%, where holding still dominated the hold-or-break measurement (×2.24 at 21%). Footing still builds one stack per 500 ms stationary to 10, but the first step after holding spends the stacks as a burst sweep through the crowd rather than paying him for standing still. See GDD §5.10 and §8.4. The stance-era text below is kept as history until the pace branch tunes the burst.
+
 Ruled: **Footing wins, Resolve is superseded.** Footing is built, documented at
 GDD §8.4, and stack-per-half-second-standing-still is the more distinctive
 mechanic. Resolve's clauses were written against a stance tree that no longer
