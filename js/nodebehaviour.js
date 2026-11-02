@@ -10,6 +10,7 @@
 // be tested without a sim and the sim has one entry point (applyNodeEntry).
 
 import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
+import { REGIONS } from './regions.js';
 
 export const NODE_TUNING = {
   // ---- Shrine: a free skill point OR a guaranteed reroll, chosen by the party
@@ -43,12 +44,22 @@ export const CURSED_MODIFIERS = {
     desc: 'Sight closes to arm’s length. The wind-ups are still there; you get less of them.',
     sightMult: 0.55,
   },
-  bloodmire: {
-    id: 'bloodmire', name: 'Bloodmire',
+  // Keyed `bloodprice` because that is the name central_america declares in
+  // regions.js; keyed `bloodmire` it matched nothing and region 2's cursed
+  // nodes rolled no curse at all. `bloodmire` is region 2's HAZARD, not this.
+  bloodprice: {
+    id: 'bloodprice', name: 'Bloodprice',
     desc: 'The ground drinks. Standing still costs you, and standing still is the whole plan.',
     // Deliberately aimed at Footing: a cursed node is where the stance is a
     // liability rather than free, which is the decision the engine exists for.
     stationaryDps: 3,
+  },
+  glamour: {
+    id: 'glamour', name: 'Glamour',
+    desc: 'The fae hide their intent. A wind-up shows no colour until the last moment before it lands.',
+    // Milliseconds before resolve at which a telegraph's tint is revealed.
+    // Aimed at the read itself: the zone is still drawn, its warning is late.
+    telegraphRevealMs: 150,
   },
 };
 
@@ -152,8 +163,17 @@ function assertNodeBehaviour() {
   // rather than imported, to keep this module free of a cycle.
   for (const [id, m] of Object.entries(CURSED_MODIFIERS)) {
     if (!m.name || !m.desc) problems.push(`cursed modifier ${id}: needs a name and a description — it is shown to the player before they commit to the node`);
-    const effects = ['sightMult', 'stationaryDps'].filter(k => m[k] !== undefined);
+    const effects = ['sightMult', 'stationaryDps', 'telegraphRevealMs'].filter(k => m[k] !== undefined);
     if (!effects.length) problems.push(`cursed modifier ${id}: has no effect field — a curse that does nothing is a gold bonus with a scary name`);
+  }
+
+  // Every region's declared curse must resolve to a modifier here. Region 2
+  // named `bloodprice` while this table keyed it `bloodmire`, and its cursed
+  // nodes silently rolled no curse.
+  for (const r of REGIONS) {
+    if (r.cursedModifier && !CURSED_MODIFIERS[r.cursedModifier]) {
+      problems.push(`${r.id}: cursedModifier "${r.cursedModifier}" is not a key of CURSED_MODIFIERS — its cursed nodes would roll no curse`);
+    }
   }
 
   // A cursed node must pay more than a horde or nobody takes it; an elite must

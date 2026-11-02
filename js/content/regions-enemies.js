@@ -19,6 +19,7 @@
 
 import { PNW_ENEMIES, PNW_BOSS } from './enemies-pnw.js';
 import { XIB_ENEMIES, XIB_BOSS } from './enemies-xibalba.js';
+import { GB_ENEMIES, GB_BOSS } from './enemies-britain.js';
 import { isDomain } from '../domains.js';
 
 // Half the population, by encounter weight.
@@ -54,6 +55,7 @@ export const COMMITTING_BEHAVIORS = new Set(['brute', 'warden', 'dasher']);
 export const REGION_ENEMIES = {
   pacific_northwest: { enemies: PNW_ENEMIES, boss: PNW_BOSS },
   central_america: { enemies: XIB_ENEMIES, boss: XIB_BOSS },
+  great_britain: { enemies: GB_ENEMIES, boss: GB_BOSS },
 };
 
 export const ALL_REGION_ENEMIES = Object.values(REGION_ENEMIES).flatMap(r => r.enemies);
