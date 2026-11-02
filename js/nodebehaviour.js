@@ -49,16 +49,19 @@ export const CURSED_MODIFIERS = {
   // nodes rolled no curse at all. `bloodmire` is region 2's HAZARD, not this.
   bloodprice: {
     id: 'bloodprice', name: 'Bloodprice',
-    desc: 'The ground drinks. Standing still costs you, and standing still is the whole plan.',
-    // Deliberately aimed at Footing: a cursed node is where the stance is a
-    // liability rather than free, which is the decision the engine exists for.
-    stationaryDps: 3,
+    desc: 'The blood you spent stays spent. You enter this room with the health you left the last one with.',
+    // GDD §5: full HP restore at the start of every room, EXCEPT under this
+    // curse. Read by Sim._enterArena. (Standing-still damage is region 2's
+    // `bloodmire` HAZARD, not this curse.)
+    noRoomHeal: true,
   },
   glamour: {
     id: 'glamour', name: 'Glamour',
     desc: 'The fae hide their intent. A wind-up shows no colour until the last moment before it lands.',
     // Milliseconds before resolve at which a telegraph's tint is revealed.
     // Aimed at the read itself: the zone is still drawn, its warning is late.
+    // RENDER-ONLY: read by render.js `zoneTint` from `view.telRevealMs`; the
+    // sim's telegraph timing is untouched and nothing here touches Sim.rng.
     telegraphRevealMs: 150,
   },
 };
@@ -90,6 +93,14 @@ export function applyShrine(choiceId) {
 export function cursedModifierFor(region) {
   const id = region && region.cursedModifier;
   return CURSED_MODIFIERS[id] || null;
+}
+
+// How late a telegraph's tint appears under the active curse, by curse id.
+// 0 means "tint from commit", the normal read. Shared by the host view (which
+// has the Sim) and the guest view (which has only the curse id from st.arena).
+export function telegraphRevealMsFor(curseId) {
+  const m = curseId ? CURSED_MODIFIERS[curseId] : null;
+  return m && m.telegraphRevealMs > 0 ? m.telegraphRevealMs : 0;
 }
 
 // ---------------------------------------------------------------- population
@@ -163,7 +174,7 @@ function assertNodeBehaviour() {
   // rather than imported, to keep this module free of a cycle.
   for (const [id, m] of Object.entries(CURSED_MODIFIERS)) {
     if (!m.name || !m.desc) problems.push(`cursed modifier ${id}: needs a name and a description — it is shown to the player before they commit to the node`);
-    const effects = ['sightMult', 'stationaryDps', 'telegraphRevealMs'].filter(k => m[k] !== undefined);
+    const effects = ['sightMult', 'noRoomHeal', 'telegraphRevealMs'].filter(k => m[k] !== undefined);
     if (!effects.length) problems.push(`cursed modifier ${id}: has no effect field — a curse that does nothing is a gold bonus with a scary name`);
   }
 

@@ -110,6 +110,17 @@ export function chillFrostMetrics(radius, scale, dpr) {
   return { w, h, bottom, cy: bottom - h / 2, fit };
 }
 
+// A committed zone's colour. Normally the domain tint from commit. Under a
+// Glamour-style curse (`revealMs` > 0) the zone is drawn in a neutral,
+// domain-less grey until `msLeft` drops to `revealMs` — the shape is still a
+// warning, the KIND of damage is withheld until the last moment. Pure and
+// render-only: it reads view data and never the Sim or its rng.
+export const GLAMOUR_HIDDEN_TINT = '#b8b8c0';
+export function zoneTint(domain, msLeft, revealMs) {
+  if (revealMs > 0 && msLeft > revealMs) return GLAMOUR_HIDDEN_TINT;
+  return DOMAIN_COLOR[domain] || '#ff5d6c';
+}
+
 export function enemyBodyTint(e, view) {
   if (!e) return null;
   if (e.straggle) {
@@ -450,7 +461,7 @@ export class Renderer {
 
     this._drawArena(ctx, view, aw, ah, cl, cr, ct, cb);
     // under everything else: the ground is where the promise is made
-    if (view.telZones && view.telZones.length) this._drawTelegraphZones(ctx, view.telZones);
+    if (view.telZones && view.telZones.length) this._drawTelegraphZones(ctx, view.telZones, view.telRevealMs || 0);
     this._drawHazards(ctx, view, inView);
     for (const z of view.zones || []) {
       if (!inView(z.x, z.y, z.r)) continue;
@@ -885,10 +896,10 @@ export class Renderer {
   // EVERY ZONE IS OUTLINED, not just filled. Overlapping translucent fills turn
   // to mud, and mud at 8 players is the failure mode this whole patch would die
   // of — the outline is what keeps two overlapping slams legible as two.
-  _drawTelegraphZones(ctx, zones) {
+  _drawTelegraphZones(ctx, zones, revealMs = 0) {
     for (const t of zones) {
       const z = t.z;
-      const col = DOMAIN_COLOR[z.domain] || '#ff5d6c';
+      const col = zoneTint(z.domain, t.msLeft, revealMs);
       ctx.save();
       ctx.translate(z.x, z.y);
       ctx.beginPath();
