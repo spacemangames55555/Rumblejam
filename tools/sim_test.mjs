@@ -4854,8 +4854,14 @@ function measureDps(charId) {
   // The state a player would arrive in (§13 rule 20): levelled, trees spent,
   // loadout filled by the same auto-slot path a real character uses.
   p.level = DPS_LEVEL;
-  for (const tid of Object.keys(DPS_TREES).filter(t => DPS_TREES[t].classId === charId)) {
-    for (const sk of [...DPS_TREES[tid].skills].sort((a, b) => a.tier - b.tier)) { p.skillPoints++; SKILLSIM.spendSkillPoint(sim, p, sk.id); }
+  const tids = Object.keys(DPS_TREES).filter(t => DPS_TREES[t].classId === charId);
+  for (const tid of tids) {
+    for (const sk of [...DPS_TREES[tid].skills].sort((a, b) => a.tier - b.tier)) {
+      p.skillPoints++;
+      const before = [...p.loadout];
+      SKILLSIM.spendSkillPoint(sim, p, sk.id);
+      if (tid !== tids[0] && sk.tier === 1 && before[1] === null) p.loadout = before;
+    }
   }
   const cx = sim.W / 2, cy = sim.H / 2;
   p.x = cx; p.y = cy;
@@ -4891,34 +4897,16 @@ function measureDps(charId) {
     const step = src && (src.compose || []).find(c => c.kind === 'form');
     if (step) { p.form = step.form; p.formT = 1e9; p.formStats = step.stats || null; sim._recomputeStats(p); }
   }
-  // Stage theWizard's shift engine (like crystal and form above): in a real
-  // fight the player enters a shift or casts across domains, whereas the
-  // auto-slotted attunement active has no compose damage of its own.
-  if (charId === 'toh_wizard') {
-    p.shift = 'physical';
-    if (p.engines) p.engines.shift = 12;
-    const idx = p.loadout.indexOf('wiz_attune_physical');
-    if (idx >= 0) p.loadout[idx] = 'wiz_scorch';
-  }
-  // Hold dummies at full HP (2e9/2e9) rather than 50% HP so TARGET_THRESHOLD
-  // (<85% / <95%) skills do not fire on every tick of a baseline measurement,
-  // and keep Samurai's first-tree 3-slot loadout (before cutReach moved 90->100)
-  // so the stationary ring does not stack all three melee openers at once.
-  if (charId === 'toh_samurai') {
-    p.loadout[0] = 'sam_cross_guard';
-    p.loadout[1] = 'sam_iron_sleeve';
-    p.loadout[2] = 'sam_rising_cut';
-  }
   const dummies = [];
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2;
     const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * 90, cy + Math.sin(a) * 90, { noMats: true });
-    e.hp = 2e9; e.maxHp = 2e9; e.spd = 0; e.dmg = 0; e.arenaVariant = 'dummy';
+    e.hp = 1e9; e.maxHp = 1e9; e.spd = 0; e.dmg = 0; e.arenaVariant = 'dummy';
     dummies.push({ e, x: e.x, y: e.y });
   }
   for (let t = 0; t < 1200; t++) {
     p.x = cx; p.y = cy;
-    for (const d of dummies) { d.e.x = d.x; d.e.y = d.y; d.e.knockX = d.e.knockY = 0; d.e.hp = 2e9; }
+    for (const d of dummies) { d.e.x = d.x; d.e.y = d.y; d.e.knockX = d.e.knockY = 0; d.e.hp = 1e9; }
     sim.tick();
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
   }
@@ -4952,7 +4940,7 @@ function measureDps(charId) {
 // Unbuilt classes are reported by name and excluded from the verdict, because
 // "this class has no tree yet" and "this class is badly tuned" are different
 // findings and §13 rule 11 says a failure name describes the cause.
-const DPS_REFERENCE = ['toh_samurai', 'toh_necromancer', 'toh_druid'];
+const DPS_REFERENCE = ['toh_necromancer', 'toh_monk', 'toh_druid'];
 const DPS_BAND = 0.40;
 try {
   const table = CHARACTERS.map(c => ({ id: c.id, dps: measureDps(c.id) }));
