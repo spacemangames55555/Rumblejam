@@ -424,10 +424,16 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   const m1 = AR.waveConfig(1, 0, 'combat');
   const m2 = AR.waveConfig(1, 1, 'combat');
   const later = AR.waveConfig(2, 0, 'combat');
-  if (m1.dur === 65 && Math.abs(m1.r0 - 0.3) < 1e-9 && Math.abs(m1.r1 - 0.72) < 1e-9
-      && Math.abs(m2.r0 - 0.375) < 1e-9 && Math.abs(later.r0 - 0.75) < 1e-9
-      && AR.ONBOARDING_WAVE_SCALE === 0.6 && Math.abs(AR.ONBOARDING_DROP_SCALE - (1 / 0.6)) < 1e-12) {
-    ok('map 1 rolls a 0.6 wave inside the same 65s window; map 2 and region 2 are not scaled, and each map 1 drop is worth 1/0.6');
+  // HORDE PACE (pace-spec.md §4, user ruling 2 Nov 2026). Map 1 is a 30 s
+  // horde wave on the spec's raw 1.11 → 2.78 curve × HORDE_RATE_TUNE (the
+  // measured step that clears the §7 bars), map 2 has no 75% step any more,
+  // region 2 is still on the slow curve, and the 0.6 wave / 1/0.6 drop scale
+  // are retired (fodder yield is hordeYieldScale instead).
+  const TUNE = AR.HORDE_RATE_TUNE;
+  if (m1.horde && m1.dur === 30 && Math.abs(m1.r0 - 1.11 * TUNE) < 1e-9 && Math.abs(m1.r1 - 2.78 * TUNE) < 1e-9
+      && m2.dur === 38 && Math.abs(m2.r0 - 1.39 * TUNE) < 1e-9 && !later.horde && Math.abs(later.r0 - 0.75) < 1e-9
+      && AR.ONBOARDING_WAVE_SCALE === 1 && AR.ONBOARDING_DROP_SCALE === 1 && AR.ONBOARDING_RATE.every(x => x === 1)) {
+    ok(`map 1 is a 30 s horde wave (raw ${m1.r0.toFixed(2)} → ${m1.r1.toFixed(2)}/s), map 2 38 s with no 75% step, region 2 still on the slow curve; the 0.6 wave and 1/0.6 drop are retired`);
   } else {
     fail(`map 1 wave scale drifted: r0 ${m1.r0} r1 ${m1.r1} dur ${m1.dur}, map2 r0 ${m2.r0}, region2 r0 ${later.r0}, drop ${AR.ONBOARDING_DROP_SCALE}`);
   }
@@ -466,19 +472,24 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     // 0.6 of the old ~79-enemy solo wave, rolled by the time the 65s window
     // ends. A swarm profile can sit a body or two higher; these two seeds
     // are not swarm.
-    const rolled = sim.wave && sim.wave.done && sim.wave.t <= 66 && (sim.wave.held || 0) === 0 && sim.wave.acc < 1;
-    if (spawned >= 47 && spawned <= 55 && rolled) {
-      ok(`seed ${name} rolls the smaller map 1 wave inside 65s (${spawned} enemies, wave t ${sim.wave.t.toFixed(1)})`);
+    // HORDE PACE: ~85 at the spec's raw curve, ~123 at HORDE_RATE_TUNE 1.45,
+    // all of it inside the 30 s timer (the wave ends on the timer, no tail).
+    const rolled = sim.wave && sim.wave.done && sim.wave.t <= 30.1;
+    const lo = Math.round(85 * AR.HORDE_RATE_TUNE * 0.85), hi = Math.round(85 * AR.HORDE_RATE_TUNE * 1.15);
+    if (spawned >= lo && spawned <= hi && rolled) {
+      ok(`seed ${name} rolls the map 1 horde inside its 30 s timer (${spawned} enemies, want ${lo}–${hi}, wave t ${sim.wave.t.toFixed(1)})`);
     } else {
       fail(`seed ${name} map 1 wave: spawned ${spawned}, done ${sim.wave && sim.wave.done}, t ${sim.wave && sim.wave.t}, held ${sim.wave && sim.wave.held}, acc ${sim.wave && sim.wave.acc}`);
     }
     // The old full wave paid 95 materials on 777 and 90 on a11ce. 0.6 of the
     // bodies at 1/0.6 the value lands on that number, give or take the mix of
     // the shorter sample (one cedar is 3.33 materials).
+    // HORDE PACE: pace-spec §7 holds region-1 materials within ±15% of today;
+    // fodder pays at HORDE_MAP1_YIELD on map 1 (an accumulator, no roll).
     const wantGold = name === '777' ? 95 : 90;
     const paid = sim.payout.gold;
-    if (Math.abs(paid - wantGold) <= 4 && Math.abs(sim.payout.xp - paid) < 1e-6) {
-      ok(`seed ${name} map 1 still pays about ${wantGold} materials and the same XP base (gold ${paid.toFixed(2)})`);
+    if (Math.abs(paid - wantGold) <= 0.15 * wantGold && Math.abs(sim.payout.xp - paid) < 1e-6) {
+      ok(`seed ${name} map 1 still pays within ±15% of ${wantGold} materials and the same XP base (gold ${paid.toFixed(2)})`);
     } else {
       fail(`seed ${name} map 1 payout gold ${paid} xp ${sim.payout.xp}, want about ${wantGold}`);
     }
@@ -594,8 +605,10 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   const AR = await import('../js/arenas.js');
   const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
   const cedar = ENEMY_BY_ID.pnw_cedar_warden;
-  if (cedar && cedar.w === 2.6 && AR.ONBOARDING_CEDAR_WEIGHT === 1.5) {
-    ok('Cedar Warden roster weight stays 2.6; map 1 overrides it to 1.5');
+  // HORDE PACE: roster 0.9 (the region's one light special), map 1 1.0
+  // (~12% of map 1's draws, inside the 8–25% special band).
+  if (cedar && cedar.w === 0.9 && AR.ONBOARDING_CEDAR_WEIGHT === 1.0 && AR.ONBOARDING_WARDEN_CAP === 4 && AR.ONBOARDING_ALIVE_CAP === 60) {
+    ok('Cedar Warden roster weight 0.9; map 1 overrides it to 1.0; map 1 caps 60 alive / 4 specials');
   } else fail(`cedar weight drifted: roster ${cedar && cedar.w}, map 1 ${AR.ONBOARDING_CEDAR_WEIGHT}`);
 
   const partyOf = n => Array.from({ length: n }, (_, i) => ({ idx: i, key: 'k' + i, name: 'P' + i, charId: 'toh_samurai', color: '#fff' }));
@@ -615,7 +628,11 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     const aliveCap = AR.ONBOARDING_ALIVE_CAP * scale;
     const wardenCap = AR.ONBOARDING_WARDEN_CAP * scale;
     for (let t = 0; t < ticks; t++) {
-      const blocked = sim._onboardingSpawnBlocked();
+      // HORDE PACE: only the ALIVE cap blocks a draw. At the special cap a
+      // Cedar Warden roll becomes fodder, so the pack still draws (by design).
+      const blocked = sim.wave && sim.wave.horde
+        ? sim.enemyPool.count + sim.spawnQueue.length >= sim._hordeAliveCap()
+        : sim._onboardingSpawnBlocked();
       const before = draws;
       sim.tick();
       if (blocked && draws !== before) blockedDraws++;
@@ -625,7 +642,7 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
       for (const s of sim.spawnQueue) if (s.id === 'pnw_cedar_warden') nowWardens++;
       maxAlive = Math.max(maxAlive, nowAlive);
       maxWardens = Math.max(maxWardens, nowWardens);
-      if (nowAlive + 1 > aliveCap || nowWardens + 1 > wardenCap) hitCap++;
+      if (nowAlive + 1 > aliveCap || (!(sim.wave && sim.wave.horde) && nowWardens + 1 > wardenCap)) hitCap++;
     }
     return { draws, blockedDraws, maxAlive, maxWardens, hitCap, aliveCap, wardenCap };
   };
@@ -636,15 +653,21 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   else {
     // A float of 0.60 lands on Cedar Warden under the old uniform index and
     // under weight 2.6. Under weight 1.5 it lands on the next archetype.
-    const saved = solo.waveRng.float.bind(solo.waveRng);
-    solo.waveRng.float = () => 0.60;
-    solo.wave.acc = 1;
-    solo._tickWave(0);
-    const spawned = solo.spawnQueue.map(s => s.id);
-    solo.waveRng.float = saved;
-    if (spawned.length && spawned.every(id => id === 'pnw_sapling')) ok(`map 1 roll 0.60 spawns a sapling, not a cedar warden (${spawned.length})`);
-    else fail(`map 1 roll 0.60 spawned ${spawned.join(',') || 'nothing'} — cedar weight is not 1.5`);
-    solo.spawnQueue.length = 0;
+    // HORDE PACE: table [sapling 4.0, thornhound 3.5, cedar 1.0]. A 0.60
+    // roll lands on thornhound, and only the top ~12% (0.99) on the cedar.
+    const roll = (f) => {
+      const saved = solo.waveRng.float.bind(solo.waveRng);
+      solo.waveRng.float = () => f;
+      solo.spawnQueue.length = 0; solo.wave.nextPack = 0; solo.wave.acc = 8;
+      solo._tickWave(0);
+      solo.waveRng.float = saved;
+      const ids = solo.spawnQueue.map(s => s.id);
+      solo.spawnQueue.length = 0;
+      return ids;
+    };
+    const r60 = roll(0.60), r99 = roll(0.99);
+    if (r60.length && r60.every(id => id === 'pnw_thornhound') && r99.length && r99.includes('pnw_cedar_warden')) ok(`map 1 roll 0.60 spawns a thornhound pack (${r60.length}); only the top of the roll (0.99) is a cedar warden`);
+    else fail(`map 1 rolls drifted: 0.60 → ${r60.join(',') || 'nothing'}, 0.99 → ${r99.join(',') || 'nothing'} — cedar weight is not 1.0`);
 
     const held = pressure(solo, 80 * 60);
     const aliveOver = held.maxAlive > held.aliveCap + 1e-6;
@@ -658,7 +681,8 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
 
   const four = new Sim({ seed: 777, party: partyOf(4) });
   enter(four);
-  const fourHeld = pressure(four, 50 * 60);
+  // 25 s: a horde map 1 ends on its 30 s timer and then is not map 1 any more.
+  const fourHeld = pressure(four, (four.wave && four.wave.horde ? 25 : 50) * 60);
   const fourAliveOver = fourHeld.maxAlive > fourHeld.aliveCap + 1e-6;
   const fourWardenOver = fourHeld.maxWardens > fourHeld.wardenCap + 1e-6;
   if (four._onboarding() && !fourAliveOver && !fourWardenOver && fourHeld.hitCap > 0 && fourHeld.blockedDraws === 0 && fourHeld.aliveCap > AR.ONBOARDING_ALIVE_CAP) {

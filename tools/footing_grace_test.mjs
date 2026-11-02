@@ -93,5 +93,46 @@ console.log(`  footingGraceMs=${SAM.footingGraceMs}  refill x${SAM.footingGraceR
   else fail(`hold-not-grow: ${before} -> ${p.engines.footing}`);
 }
 
+// THE STEP-OFF BURST (user ruling 2 Nov 2026, pace-spec §6.1b). A full
+// stance broken by a real step (past the grace window) releases one ring of
+// damage around the Samurai; a sidestep inside the window releases nothing;
+// a stance under footingBurstMinStacks releases nothing.
+{
+  const { g, p, cap, move, still } = samurai();
+  for (const e of [...g.enemyPool]) g.enemyPool.release(e);
+  g.spawnQueue.length = 0;
+  if (g.wave) Object.assign(g.wave, { r0: 0, r1: 0, acc: 0, firstPack: true, dur: Infinity });
+  p.loadout.fill(null);                                     // only the burst may hit
+  cap();
+  const stacks = p.engines.footing;
+  const r = SAM.footingBurstBaseR + SAM.footingBurstRPerStack * stacks;
+  const ring = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    const e = g.spawnEnemyById('pnw_thornhound', p.x + Math.cos(a) * (r - 30), p.y + Math.sin(a) * (r - 30), {});
+    e.spd = 0; e.dmg = 0; ring.push(e);
+  }
+  const far = g.spawnEnemyById('pnw_thornhound', p.x, p.y + r + 200, {}); far.spd = 0; far.dmg = 0;
+  const bursts0 = p.footingBursts || 0;
+  move(150);                                               // inside the window: holds, no burst
+  const early = (p.footingBursts || 0) - bursts0;
+  move(SAM.footingGraceMs + 100);                          // past it: the stance breaks
+  // The Samurai walked ~0.5 s before the break, so the burst lands where the
+  // step broke the stance: score the ring bodies inside r of THAT point.
+  const sw = (g.fxBatch.swings || []).filter(x => Math.abs(x.arc - Math.PI * 2) < 1e-6).pop();
+  const inR = sw ? ring.filter(e => Math.hypot(e.x - sw.x, e.y - sw.y) <= r + e.radius) : [];
+  const dead = inR.filter(e => !e.active).length;
+  const outsideAlive = ring.filter(e => !inR.includes(e)).every(e => e.active) && far.active;
+  if (early === 0 && (p.footingBursts || 0) === bursts0 + 1 && p.engines.footing === 0 && inR.length >= 2 && dead === inR.length && outsideAlive) {
+    ok(`step-off burst: ${stacks} stacks released ${Math.round(SAM.footingBurstPerStack * stacks)} damage in r${r} — ${dead}/${inR.length} fodder inside it died, every body outside lived, the sidestep inside the window fired nothing`);
+  } else fail(`step-off burst: early ${early}, bursts ${(p.footingBursts || 0) - bursts0}, stacks after ${p.engines.footing}, ring dead ${dead}/${inR.length} in range, outside alive ${outsideAlive}, swing ${!!sw}`);
+  // under the minimum, breaking costs the stance and pays nothing
+  still(SAM.footingTickMs * (SAM.footingBurstMinStacks - 1) + 50);
+  const small = p.engines.footing, b1 = p.footingBursts || 0;
+  move(SAM.footingGraceMs + 300);
+  if (small < SAM.footingBurstMinStacks && (p.footingBursts || 0) === b1) ok(`a ${small}-stack stance (under ${SAM.footingBurstMinStacks}) breaks without a burst`);
+  else fail(`small stance ${small} fired ${(p.footingBursts || 0) - b1} burst(s)`);
+}
+
 console.log(failures ? `\n${failures} GRACE-WINDOW FAILURE(S)` : '\nTHE GRACE WINDOW BEHAVES');
 process.exit(failures ? 1 : 0);

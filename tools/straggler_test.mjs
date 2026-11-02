@@ -264,5 +264,44 @@ else fail(`after clear: straggle=${pylon.straggle} cullAt=${g.straggleCullAt}`);
   }
 }
 
+// HORDE PACE: THE WAVE ENDS ON THE TIMER (user ruling 2 Nov 2026,
+// pace-spec.md §3 and §5). On a horde map, at w.t >= dur every FODDER body
+// still standing dies with its loot and no kill credit, queued fodder never
+// lands, and what is left (specials) is sent straight at the party. The 4 s
+// chase and 20 s cull above now only ever see specials and scripted bodies.
+{
+  const { Sim: RealSim } = await import('../js/game.js');
+  const { isOnboardingNode } = await import('../js/arenas.js');
+  const { enemyRole } = await import('../js/content/regions-enemies.js');
+  const s = new RealSim({ seed: 777, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'K', charId: 'toh_samurai', color: '#fff' }] });
+  const q = s.players[0];
+  if (q.openingOffer) s.uiAction(0, { kind: 'opening', id: q.openingOffer[0].id });
+  const starts = s.reachableNodes();
+  s.uiAction(0, { kind: 'pickNode', nodeId: starts.find(id => isOnboardingNode(1, s.floor.nodes[id])) ?? starts[0] });
+  s.god = true;
+  q.loadout.fill(null);                     // nobody dies to the player: the timer does the work
+  if (!s.wave || !s.wave.horde) fail('horde cull fixture did not enter a horde wave');
+  else {
+    let guard = 0;
+    while (s.wave.t + 1 / 60 < s.wave.dur && guard++ < 60 * 40) { s.setInput(0, { mx: 0, my: 0 }); s.tick(); }
+    const fodderBefore = [...s.enemyPool].filter(e => enemyRole(e.def) === 'fodder').length;
+    const specialsBefore = [...s.enemyPool].filter(e => enemyRole(e.def) !== 'fodder').length;
+    const kills0 = s.payout.kills, gold0 = s.payout.gold, q0 = q.kills || 0;
+    s.setInput(0, { mx: 0, my: 0 }); s.tick(); s.tick();
+    const fodderAfter = [...s.enemyPool].filter(e => enemyRole(e.def) === 'fodder').length;
+    const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
+    const queuedFodder = s.spawnQueue.filter(x => !x.elite && enemyRole(ENEMY_BY_ID[x.id]) === 'fodder').length;
+    const specialsAfter = [...s.enemyPool].filter(e => enemyRole(e.def) !== 'fodder');
+    if (s.wave.done && fodderBefore > 0 && fodderAfter === 0 && s.hordeCulled >= fodderBefore) {
+      ok(`horde timer cull: ${fodderBefore} fodder standing at t ${s.wave.dur}s, 0 a tick later (${s.hordeCulled} culled)`);
+    } else fail(`horde timer cull: fodder ${fodderBefore} -> ${fodderAfter}, culled ${s.hordeCulled}, wave done ${s.wave.done}`);
+    if (s.payout.gold > gold0 && (q.kills || 0) === q0) ok(`culled fodder paid its loot (gold ${gold0} -> ${s.payout.gold}) with no kill credit`);
+    else fail(`cull payout gold ${gold0} -> ${s.payout.gold}, player kills ${q0} -> ${q.kills}`);
+    if (specialsAfter.length === specialsBefore && specialsAfter.every(e => e.straggle)) ok(`specials survive the cull and come to the party: ${specialsAfter.length} chasing`);
+    else fail(`specials after cull: ${specialsAfter.length} (was ${specialsBefore}), chasing ${specialsAfter.filter(e => e.straggle).length}`);
+    if (queuedFodder === 0) ok('no fodder lands after the timer'); else fail(`${queuedFodder} fodder still queued after the timer`);
+  }
+}
+
 console.log(failures ? `\n${failures} STRAGGLER FAILURE(S)` : '\nSTRAGGLERS CHASE, THEN THE FIGHT ENDS');
 process.exit(failures ? 1 : 0);

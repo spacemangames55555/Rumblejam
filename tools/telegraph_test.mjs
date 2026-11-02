@@ -17,7 +17,7 @@ const SK = await import('../js/skillsim.js');
 const { TELEGRAPH_STATES, TELEGRAPH_MIN_WINDUP_MS, TELEGRAPHED_IDS, telegraphBusy } = await import('../js/telegraphs.js');
 const { inZone } = await import('../js/compose.js');
 const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
-const { REGION_ENEMIES, REGION_ENEMY_BY_ID, telegraphWeight, MIN_TELEGRAPH_WEIGHT } = await import('../js/content/regions-enemies.js');
+const { REGION_ENEMIES, REGION_ENEMY_BY_ID, telegraphWeight, MIN_TELEGRAPH_WEIGHT, HORDE_MIN_TELEGRAPH_WEIGHT, HORDE_MAX_TELEGRAPH_WEIGHT } = await import('../js/content/regions-enemies.js');
 const { CONFIG } = await import('../js/config.js');
 const { REGIONS } = await import('../js/regions.js');
 
@@ -35,6 +35,9 @@ function arena(seed, spot, enemyId, opts = {}) {
   const p = g.players[0];
   for (const e of [...g.enemyPool]) g.enemyPool.release(e);
   g.spawnQueue.length = 0; g.wave.done = false;
+  // HORDE PACE: a clean room also needs the spawner silenced — the horde wave
+  // lands a pack every ~1.5 s, and one of them walked into seed 13337's zone.
+  if (g.wave.horde) Object.assign(g.wave, { r0: 0, r1: 0, acc: 0, firstPack: true, dur: Infinity });
   g.obstacles.length = 0;
   p.level = 66;
   p.x = g.W * spot[0]; p.y = g.H * spot[1];
@@ -143,6 +146,7 @@ run('leaving the zone during wind-up takes no damage and fires ON_DODGE', 'slabj
     const [bait, away] = g.players;
     for (const x of [...g.enemyPool]) g.enemyPool.release(x);
     g.spawnQueue.length = 0; g.wave.done = false; g.obstacles.length = 0;
+    if (g.wave.horde) Object.assign(g.wave, { r0: 0, r1: 0, acc: 0, firstPack: true, dur: Infinity }); // see arena()
     bait.x = g.W * SPOTS[i][0]; bait.y = g.H * SPOTS[i][1];
     away.x = bait.x; away.y = bait.y + 600;          // well outside any zone here
     const e = g.spawnEnemyById('aegimand', bait.x + 52, bait.y, { noMats: true });
@@ -303,10 +307,16 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
   // the density the regions actually ship at.
   const tel = ids.filter(id => ENEMY_BY_ID[id] && ENEMY_BY_ID[id].telegraph).length;
   const share = ids.length ? tel / ids.length : 0;
-  if (ids.length === CONFIG.TELEGRAPH_PIT_COUNT && share >= 0.4 && share <= 0.7) {
+  // HORDE PACE: the pit samples the region it stands in, and a horde region
+  // ships at 8–25% telegraphing, so 40–70% is the slow-game band. A horde pit
+  // must still contain a telegrapher (it is a telegraph pit) and stay under
+  // half the room.
+  const pitHorde = g.region && REGION_ENEMIES[g.region] && REGION_ENEMIES[g.region].horde;
+  const [lo, hi] = pitHorde ? [1 / CONFIG.TELEGRAPH_PIT_COUNT, 0.5] : [0.4, 0.7];
+  if (ids.length === CONFIG.TELEGRAPH_PIT_COUNT && share >= lo - 1e-9 && share <= hi) {
     ok(`F7 telegraph pit: ${ids.length} enemies from a region population, ${tel} telegraphing (${(100 * share).toFixed(0)}%) — representative density, not an all-heavy room (${kinds.join(', ')})`);
   } else {
-    fail(`F7 pit seeded ${ids.length} enemies at ${(100 * share).toFixed(0)}% telegraphing, want ${CONFIG.TELEGRAPH_PIT_COUNT} at 40-70%: ${kinds.join(', ')}`);
+    fail(`F7 pit seeded ${ids.length} enemies at ${(100 * share).toFixed(0)}% telegraphing, want ${CONFIG.TELEGRAPH_PIT_COUNT} at ${(100 * lo).toFixed(0)}-${(100 * hi).toFixed(0)}%: ${kinds.join(', ')}`);
   }
   if (g.telStats.committed === 0) ok('...and the pit resets the telegraph counters, so a sitting measures itself');
   else fail('the pit did not reset the counters');
@@ -335,11 +345,13 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
     const pop = REGION_ENEMIES[r.id];
     if (!pop || !pop.enemies || !pop.enemies.length) { empty.push(r.id); continue; }
     const { share } = telegraphWeight(pop.enemies);
-    if (share < MIN_TELEGRAPH_WEIGHT) bad.push(`${r.id} ${(100 * share).toFixed(0)}%`);
+    // A horde region (pace-spec §5) is held to the 8–25% special band instead.
+    if (pop.horde) { if (share < HORDE_MIN_TELEGRAPH_WEIGHT || share > HORDE_MAX_TELEGRAPH_WEIGHT) bad.push(`${r.id} ${(100 * share).toFixed(0)}% (horde band)`); }
+    else if (share < MIN_TELEGRAPH_WEIGHT) bad.push(`${r.id} ${(100 * share).toFixed(0)}%`);
   }
   const built = REGIONS.filter(r => REGION_ENEMIES[r.id] && REGION_ENEMIES[r.id].enemies && REGION_ENEMIES[r.id].enemies.length);
   if (!bad.length && !empty.length) {
-    ok(`all ${REGIONS.length} regions in the table clear the ${(100 * MIN_TELEGRAPH_WEIGHT).toFixed(0)}% telegraph-density floor: ${built.map(r => `${r.id} ${(100 * telegraphWeight(REGION_ENEMIES[r.id].enemies).share).toFixed(0)}%`).join(', ')}`);
+    ok(`all ${REGIONS.length} regions in the table meet their telegraph-density rule (slow: ≥${(100 * MIN_TELEGRAPH_WEIGHT).toFixed(0)}%, horde: ${(100 * HORDE_MIN_TELEGRAPH_WEIGHT).toFixed(0)}–${(100 * HORDE_MAX_TELEGRAPH_WEIGHT).toFixed(0)}%): ${built.map(r => `${r.id} ${(100 * telegraphWeight(REGION_ENEMIES[r.id].enemies).share).toFixed(0)}%`).join(', ')}`);
   } else {
     if (bad.length) fail(`under the density floor: ${bad.join(', ')}`);
     if (empty.length) fail(`${empty.length} region(s) declared in js/regions.js with NO enemy population: ${empty.join(', ')} — a region the density floor cannot measure is a region that can ship unchecked`);
