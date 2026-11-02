@@ -36,6 +36,12 @@
       "h": 192,
       "directions": 8
     },
+    "boss.gb_boss": {
+      "file": "boss/gb_boss.png",
+      "w": 192,
+      "h": 192,
+      "directions": 8
+    },
     "boss.ossuary_hulk": {
       "file": "boss/ossuary_hulk.png",
       "w": 192,
@@ -234,6 +240,42 @@
     },
     "enemy.fusehead": {
       "file": "enemy/fusehead.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.gb_banshee": {
+      "file": "enemy/gb_banshee.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.gb_hunt_rider": {
+      "file": "enemy/gb_hunt_rider.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.gb_redcap": {
+      "file": "enemy/gb_redcap.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.gb_sidhe_knight": {
+      "file": "enemy/gb_sidhe_knight.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.gb_sprite": {
+      "file": "enemy/gb_sprite.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.gb_stone_giant": {
+      "file": "enemy/gb_stone_giant.png",
       "w": 128,
       "h": 128,
       "directions": 8

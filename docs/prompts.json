@@ -52,6 +52,18 @@
       ],
       "prompt": "Choir of Eyes, a floor-2 dungeon boss, a floating cluster of unblinking eyes, no limbs at all, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
+    "boss.gb_boss": {
+      "batch": 2,
+      "subject": "The Hollow King, a two-phase region boss, Great Britain region",
+      "silhouette": "a gaunt crowned figure whose chest is an empty open ring, robes flaring wide at the hem",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        192,
+        192
+      ],
+      "prompt": "The Hollow King, a two-phase region boss, Great Britain region, a gaunt crowned figure whose chest is an empty open ring, robes flaring wide at the hem, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
+    },
     "boss.ossuary_hulk": {
       "batch": 2,
       "subject": "The Ossuary Hulk, a floor-1 dungeon boss",
@@ -315,6 +327,78 @@
         128
       ],
       "prompt": "Fusehead, a bomber dungeon monster, a round body dominated by one lit fuse arcing off the top, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.gb_banshee": {
+      "batch": 3,
+      "subject": "Banshee, a spitter monster, Great Britain region",
+      "silhouette": "a floating veiled woman with arms raised and long hair streaming upward",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Banshee, a spitter monster, Great Britain region, a floating veiled woman with arms raised and long hair streaming upward, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.gb_hunt_rider": {
+      "batch": 3,
+      "subject": "Wild Hunt Rider, a dasher monster, Great Britain region",
+      "silhouette": "a horned rider fused low over a long galloping horse, all pointing one way",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Wild Hunt Rider, a dasher monster, Great Britain region, a horned rider fused low over a long galloping horse, all pointing one way, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.gb_redcap": {
+      "batch": 3,
+      "subject": "Redcap, a warden monster, Great Britain region",
+      "silhouette": "a squat hunched goblin under one tall pointed cap that leans forward",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Redcap, a warden monster, Great Britain region, a squat hunched goblin under one tall pointed cap that leans forward, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.gb_sidhe_knight": {
+      "batch": 3,
+      "subject": "Sidhe Knight, a warden monster, Great Britain region",
+      "silhouette": "a tall slender armoured knight with antler-crowned helm and a long leaf-blade shield",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Sidhe Knight, a warden monster, Great Britain region, a tall slender armoured knight with antler-crowned helm and a long leaf-blade shield, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.gb_sprite": {
+      "batch": 3,
+      "subject": "Sprite, a orbiter monster, Great Britain region",
+      "silhouette": "a tiny body between four thin dragonfly wings held in an X",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Sprite, a orbiter monster, Great Britain region, a tiny body between four thin dragonfly wings held in an X, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.gb_stone_giant": {
+      "batch": 3,
+      "subject": "Stone Giant, a brute monster, Great Britain region",
+      "silhouette": "a hulking boulder-shouldered figure with a tiny head and one arm dragging a menhir",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Stone Giant, a brute monster, Great Britain region, a hulking boulder-shouldered figure with a tiny head and one arm dragging a menhir, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.gemmite": {
       "batch": 3,
