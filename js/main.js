@@ -36,7 +36,9 @@ import { ITEMS } from './content/items.js';
 import { WEAPONS } from './content/weapons.js';
 import { ENEMIES, ALL_ENEMY_DEFS } from './content/enemies.js';
 import { ALL_BOSS_DEFS } from './content/bosses.js';
-import { bossForRegion, TOTAL_REGIONS, REGION_BY_INDEX } from './regions.js';
+import { bossForRegion, TOTAL_REGIONS, REGION_BY_INDEX, REGIONS } from './regions.js';
+import { telegraphRevealMsFor } from './nodebehaviour.js';
+import { unpackTelZones } from './telegraphs.js';
 import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
 import { projSpriteFor, PYLON_SPRITE } from './content/sprites.js';
 import { fxSpec } from './content/skillfx.js';
@@ -51,7 +53,8 @@ console.log(`%cUNDERVAULT%c content loaded — characters: ${CHARACTERS.length},
 console.assert(CHARACTERS.length === 14, 'need exactly 14 characters (the ToH roster; the classic 33 are archived)');
 console.assert(ITEMS.length >= 100, 'need ≥100 items');
 console.assert(WEAPONS.length === 26, 'need exactly 26 weapons');
-console.assert(ENEMIES.length === 12 && ALL_BOSS_DEFS.length === 6, 'need 12 base enemy types + 6 bosses (4 legacy + 2 region)');
+console.assert(ENEMIES.length === 12 && ALL_BOSS_DEFS.length === 4 + REGIONS.filter(r => r.contentReady).length,
+  `need 12 base enemy types + ${4 + REGIONS.filter(r => r.contentReady).length} bosses (4 legacy + one per built region)`);
 
 const canvas = document.getElementById('game-canvas');
 const renderer = new Renderer(canvas);
@@ -1715,6 +1718,8 @@ function viewFromSim(sim) {
     biome: sim.biome || null,
     // committed zones ride the view like any other world layer
     telZones: sim.telegraphZones(),
+    // Glamour: how late the zone tint appears (0 = from commit). Render-only.
+    telRevealMs: telegraphRevealMsFor(sim._arena && sim._arena.curse),
     kind: sim.arenaNode ? sim.arenaNode.kind : null,
     afterSiege: sim.afterSiege,
     obstacles: sim._snapObstacles(),
@@ -1901,6 +1906,11 @@ function viewFromSnaps(dtFrame) {
     // from the 'arena' event, not a snapshot — the floor is cosmetic and never
     // goes on the wire per frame. A client that missed the event draws flat.
     biome: app.arena ? app.arena.biome || null : null,
+    // committed enemy zones from the snapshot, in the host view's shape
+    telZones: unpackTelZones(s1.telZones),
+    // the curse id rides st.arena every snapshot, so a guest that joined late
+    // still hides Glamour's tint exactly as the host does
+    telRevealMs: telegraphRevealMsFor(app.arena && app.arena.curse),
     kind: app.arena ? app.arena.kind : null,
     afterSiege: app.arena ? app.arena.kind === 'siege' : false,
     obstacles: app.arena ? app.arena.obstacles : [],
