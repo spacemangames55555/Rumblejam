@@ -53,6 +53,8 @@ const CASES = [
   // selectable classes so the six configurations still cover distinct RNG paths
   { seed: 7, charId: 'toh_necromancer', roster: 'toh', region: 'pacific_northwest', ticks: 1800 },
   { seed: 31337, charId: 'toh_samurai', roster: 'toh', region: 'central_america', ticks: 2400 },
+  { seed: 19019, charId: 'toh_samurai', roster: 'toh', region: 'great_britain', ticks: 1800 },
+  { seed: 27182, charId: 'toh_necromancer', roster: 'toh', region: 'great_britain', ticks: 2400 },
 ];
 
 for (const c of CASES) {
