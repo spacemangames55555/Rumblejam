@@ -1046,6 +1046,76 @@ export function applyPlague(sim, e, damage, dur, p, skill) {
   // stack when the timer ends. The pool wipes the slot on the next spawn.
   if (!e.plagueFrom) e.plagueFrom = {};
   e.plagueFrom[skill.id] = 1;
+  // Only a step that names a radius can leave the body. Leaving the field
+  // untouched when this cast has none means a second plague stacked on
+  // Cascade does not strip the move, and a plague that never had one does
+  // not grow one.
+  const hop = (skill.compose || []).find(c => c.kind === 'plague' && c.handoff > 0);
+  if (hop) e.plagueHandoff = hop.handoff;
+}
+
+// The plague MOVES. One cast stays one plague: the corpse is cleared before
+// the new host is written, and nothing here rolls. Distance is centre to
+// centre, and the boundary counts — 120px is in range. Ties keep the first
+// live body in pool order, which is spawn order. A body already at 0 hp is
+// not a host; jumping onto the thing that is dying with this one would loop.
+//
+// There is no hand-off on the plague primitive to call. `_nearestEnemyExcept`
+// is the nearest-body search, and it is the wrong one: it excludes the
+// boundary (`d < range²`) and it will return an enemy that is already dead
+// but not yet released.
+export function handoffPlague(sim, e) {
+  const radius = e.plagueHandoff || 0;
+  const remain = e.plagueT || 0;
+  if (!(radius > 0) || !(remain > 0)) return;
+  const r2 = radius * radius;
+  let best = null, bd = Infinity;
+  for (const o of sim.enemyPool) {
+    if (o === e || !o.active || !(o.hp > 0)) continue;
+    const dx = o.x - e.x, dy = o.y - e.y;
+    const d = dx * dx + dy * dy;
+    if (d <= r2 && d < bd) { bd = d; best = o; }
+  }
+  const dps = e.plagueDps || 0;
+  const acc = e.plagueAcc || 0;
+  const owner = e.plagueOwner;
+  const domain = e.plagueDomain;
+  const from = e.plagueFrom ? { ...e.plagueFrom } : undefined;
+  const ticked = e.plagueTicked;
+  e.plagueT = 0;
+  e.plagueDps = 0;
+  e.plagueAcc = 0;
+  e.plagueFrom = undefined;
+  e.plagueHandoff = 0;
+  e.plagueOwner = undefined;
+  e.plagueDomain = undefined;
+  e.plagueTicked = 0;
+  if (!best) return;
+  // A clean host receives the stack as it stands: remaining time, the same
+  // damage per second, and the fraction of the next point of damage. An
+  // occupied host merges the way applyPlague already stacks, and keeps the
+  // move so a plague that arrived can leave again.
+  if ((best.plagueT || 0) > 0) {
+    best.plagueT = Math.max(best.plagueT, remain);
+    best.plagueDps = (best.plagueDps || 0) + dps;
+    best.plagueAcc = (best.plagueAcc || 0) + acc;
+    if (!best.plagueFrom) best.plagueFrom = {};
+    if (from) Object.assign(best.plagueFrom, from);
+    best.plagueHandoff = Math.max(best.plagueHandoff || 0, radius);
+  } else {
+    best.plagueT = remain;
+    best.plagueDps = dps;
+    best.plagueAcc = acc;
+    best.plagueFrom = from;
+    best.plagueHandoff = radius;
+    // The killing tick already spent this frame's dt. A death from some other
+    // blow has not, and the stamp is then an older tick, so the new host
+    // still takes this frame. tickNum 0 is a direct status tick in a harness
+    // that never entered Sim.tick; those calls must keep ticking.
+    best.plagueTicked = ticked;
+  }
+  best.plagueOwner = owner;
+  best.plagueDomain = domain;
 }
 
 export function tickSkillStatuses(sim, dt) {
@@ -1070,16 +1140,25 @@ export function tickSkillStatuses(sim, dt) {
     // is the unbounded-multiplier shape the cap exists to prevent.
     if (e.drenchT > 0) { e.drenchT -= dt; if (e.drenchT <= 0) { e.drench = 0; e.drenchBy = -1; } }
     if (e.plagueT > 0) {
-      e.plagueT -= dt;
-      e.plagueAcc = (e.plagueAcc || 0) + e.plagueDps * dt;
-      if (e.plagueAcc >= 1) {
-        const d = Math.floor(e.plagueAcc);
-        e.plagueAcc -= d;
-        const owner = sim.players[e.plagueOwner];
-        // routed through the triangle like every other damage source
-        sim.damageEnemy(e, d * enemyDomainMult(sim, e.plagueDomain, e.domain), { owner, silent: true, noEffects: true, tick: 'plague' });
+      // A stack that arrived from a host this frame already paid this dt.
+      // The stamp is the sim's tick, so a harness that calls this directly
+      // with tickNum still 0 is not frozen after the first call.
+      if (!(sim.tickNum > 0 && e.plagueTicked === sim.tickNum)) {
+        e.plagueT -= dt;
+        if (sim.tickNum > 0) e.plagueTicked = sim.tickNum;
+        e.plagueAcc = (e.plagueAcc || 0) + e.plagueDps * dt;
+        if (e.plagueAcc >= 1) {
+          const d = Math.floor(e.plagueAcc);
+          e.plagueAcc -= d;
+          const owner = sim.players[e.plagueOwner];
+          // routed through the triangle like every other damage source
+          sim.damageEnemy(e, d * enemyDomainMult(sim, e.plagueDomain, e.domain), { owner, silent: true, noEffects: true, tick: 'plague' });
+        }
+        if (e.plagueT <= 0) {
+          e.plagueDps = 0; e.plagueAcc = 0; e.plagueFrom = undefined;
+          e.plagueHandoff = 0; e.plagueTicked = 0;
+        }
       }
-      if (e.plagueT <= 0) { e.plagueDps = 0; e.plagueAcc = 0; e.plagueFrom = undefined; }
     }
   }
 }

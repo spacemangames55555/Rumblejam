@@ -287,6 +287,11 @@ export function mechanics(skill, rank = 1) {
         `${n1(rankedDamage(s.damage, skill, rk))} over ${secs(dur)}`,
         `${n1(rankedDamage(s.damage, skill, nx))} over ${secs(durN)}`));
       if (s.spreadRadius) fields.push(field('spread', 'Spreads', `radius ${s.spreadRadius}`));
+      // The move is a property of the step, so the card states it from the
+      // def. The sentence is the whole of what the player is told: the radius
+      // is how the sim searches, and printing it would put a second number
+      // next to Range.
+      if (s.handoff > 0) fields.push(field('handoff', 'On death', 'When its host dies, the plague moves to the nearest enemy.'));
     } else if ((s.kind === 'shield' || s.kind === 'ward') && s.duration) {
       const dur = rankedDuration(s.duration, skill, rk), durN = rankedDuration(s.duration, skill, nx);
       fields.push(field('duration', 'Lasts', secs(dur), secs(durN)));
