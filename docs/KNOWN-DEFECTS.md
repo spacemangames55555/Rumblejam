@@ -1953,3 +1953,26 @@ reset run-scoped level/banked state (or only carry across region boundaries on a
 win), or clear `banked` when starting a fresh retry.
 
 **Not fixed** in this pass. Low.
+
+## #40 — (Medium) cursed-modifier effect fields are declared but nothing applies them
+
+**Found while adding region 3's `glamour` curse.**
+
+**What it is.** `CURSED_MODIFIERS` in `js/nodebehaviour.js` declares one effect
+per curse — `pnw_gloom.sightMult`, `bloodprice.stationaryDps` and now
+`glamour.telegraphRevealMs` — and `nodeModifiers()` hands the resolved curse to
+`js/game.js` (`cursed: n.cursed`). No code in `js/game.js`, `js/render.js` or
+`js/telegraphs.js` reads any of the three fields, so a cursed node currently
+differs from a horde only by `cursedEnemyHpMult`, `cursedEnemyDmgMult` and
+`cursedGoldMult`. (Separately, region 2's `bloodprice` curse rolled nothing at
+all until the key was renamed to match `regions.js`; that part is fixed and
+`assertNodeBehaviour` now fails at import if a region names a curse that does
+not exist.)
+
+**What a fix would have to do.** Apply each effect where it belongs: sight
+radius for `sightMult`, a per-tick damage while `stillT` is high for
+`stationaryDps`, and, for `telegraphRevealMs`, have the renderer draw a
+winding-up zone untinted until `msLeft <= telegraphRevealMs` (the zone shape
+stays visible). The curse must reach the guest view through the snapshot.
+
+**Not fixed** in this pass.
