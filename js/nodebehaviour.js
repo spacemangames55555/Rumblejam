@@ -31,6 +31,15 @@ export const NODE_TUNING = {
   // bigger numbers. That is also what keeps the density rule meaningful at the
   // node level rather than only across a whole region.
   eliteHeavyShare: 0.75,
+
+  // ---- Elite at HORDE PACE (user ruling 2 Nov 2026: "a horde with a few
+  // champions", pace-spec §4). A horde region's elite room keeps most of its
+  // crowd (×0.7, still fewer than a horde node) and draws a quarter of it from
+  // the champions; the ×2.4 HP / ×1.35 damage land on CHAMPIONS ONLY, so the
+  // fodder still dies to one opener hit and the room still meets the density
+  // bar. Read for regions whose REGION_ENEMIES entry is `horde: true`.
+  hordeEliteCountMult: 0.7,
+  hordeEliteHeavyShare: 0.25,
 };
 
 export const SHRINE_CHOICES = ['skillPoint', 'reroll'];
@@ -116,7 +125,7 @@ export function nodePopulation(regionId, nodeType) {
   if (nodeType !== 'elite') return pop.enemies.map(e => ({ def: e, w: e.w }));
   // Elite: reweight toward the heavies rather than swapping the roster, so the
   // room still reads as this region.
-  const hShare = NODE_TUNING.eliteHeavyShare;
+  const hShare = pop.horde ? NODE_TUNING.hordeEliteHeavyShare : NODE_TUNING.eliteHeavyShare;
   const hTotal = heavies.reduce((a, e) => a + e.w, 0) || 1;
   const cTotal = chaff.reduce((a, e) => a + e.w, 0) || 1;
   return [
@@ -162,6 +171,8 @@ function assertNodeBehaviour() {
   if (!(NODE_TUNING.cursedGoldMult > 1)) problems.push('cursed nodes must pay more than a plain horde or the curse is a pure downside');
   if (!(NODE_TUNING.eliteGoldMult > 1)) problems.push('elite nodes must pay more than a plain horde');
   if (!(NODE_TUNING.eliteCountMult < 1)) problems.push('elite nodes must field FEWER enemies — same count with more HP is a slog, not an elite fight');
+  if (!(NODE_TUNING.hordeEliteCountMult < 1)) problems.push('horde elite nodes must still field fewer enemies than a horde node');
+  if (!(NODE_TUNING.hordeEliteCountMult >= 0.5)) problems.push('a horde elite room is a horde with champions — below ×0.5 it is the old fewer-and-fatter room again');
   if (!(NODE_TUNING.eliteHpMult > 1)) problems.push('elite enemies must be tougher than chaff');
 
   // An elite node has to be MORE telegraphed than the region average, or

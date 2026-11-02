@@ -225,7 +225,26 @@ export const CONFIG = {
   // spawn budget BANKS (capped) and flows in as slots free — fights get
   // longer, not laggier. Sized to the render/tick budget, under POOL_ENEMIES.
   ALIVE_CEILING: 300,
-  SPAWN_BANK_CAP: 45,      // banked budget units — bounds the post-ceiling flood
+  SPAWN_BANK_CAP: 60,      // banked budget units — bounds the post-ceiling flood
+                           // (horde pace: 45 → 60, one extra pack of backlog at the cap)
+
+  // HORDE PACE (pace-spec.md §3–4, user ruling 2 Nov 2026: Brotato / Diablo 2
+  // Survivors pacing). Regions listed here spawn in PACKS from the first
+  // second, cap the room at HORDE_ALIVE_CAP (map 1: ONBOARDING_ALIVE_CAP), end
+  // the wave on the timer with a fodder cull, and pay fodder loot through
+  // hordeYieldScale. Regions not listed keep the slow curve until their roster
+  // is re-authored into fodder + specials (Xibalba is next; its roster is
+  // still 50%+ telegraphing heavies, which at horde rates is a wall, not a pace).
+  HORDE_REGIONS: [1],
+  HORDE_ALIVE_CAP: 120,    // solo, per horde room; a party scales it like spawn rate, up to ALIVE_CEILING
+  PACK_MIN: 4,             // smallest pack a horde wave spends its budget in
+  PACK_MAX: 8,
+  PACK_SPREAD: 70,         // pack members land within this radius of one centre
+  PACK_MARK_R: 70,         // one spawn mark per pack, not per body
+  FIRST_PACK_T: 1.0,       // the first pack LANDS at t = 1.0 s (queued at 0.3 with the 0.7 s mark)
+  HORDE_RING_R: [500, 640],// ring spawn radius around the anchor (slow pace: 640–820)
+  HORDE_RING_MIN: 420,     // and never closer than this to any living player (slow pace: 520)
+  PICKUP_BLOB_CAP: 60,     // ground pickups; past it a drop merges into the nearest blob
   ARENA_CROWD_AT: 5,       // parties this size and up fight in scaled arenas
   ARENA_CROWD_SCALE: 1.25, // bounds ×1.25 (same templates, geometry scaled)
 
