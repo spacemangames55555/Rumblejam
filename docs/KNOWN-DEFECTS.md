@@ -627,7 +627,7 @@ defending it as art.* `git log --diff-filter=A` is one command.
 
 # Open
 
-## 8. Client input has no delivery guarantee, no repeating channel, and nothing to heal from
+## 8. CLOSED — Client input has no delivery guarantee, no repeating channel, and nothing to heal from
 
 **Where:** `js/net.js` `ClientTransport.send()`.
 
@@ -773,14 +773,21 @@ was split, against 3 in the 4 runs before it. **That spread means the rate
 itself is not measurable at these sample sizes, and no conclusion should be
 drawn from a quiet run.**
 
-**Do not "fix" the toggle yet.** Sending an explicit `ready` value instead of
-flipping is the obvious change and may well be right, but two diagnoses of this
-defect have already been overturned by the next measurement, and both times the
-cause was choosing the fix before the data.
+### Closed (2026-10-27): explicit `ready` state + retired roster cleanup
+
+Root cause of the `seen: 4 / uiSeq: 4 / ready: false` observation in `browser_test.mjs --coop`:
+the co-op suite clicked `#btn-ready` once during the Thrones of Heaven roster check
+(`useq: 2`), then tried to click the removed `.roster-btn[data-roster="classic"]`
+(which threw after `1025874` retired the dual-roster switch), and then clicked
+`#btn-ready` a second time (`useq: 4`), toggling `p.ready = !p.ready` back to
+`false`. In addition, `toggleReady` now sends an explicit target boolean
+(`ready: !(me && me.ready)`) alongside the toggle fallback so a double-click or
+stale UI state can never invert `ready` silently. Verified by `tools/uiack_test.mjs`
+and `tools/coop_offence_test.mjs`.
 
 ---
 
-## 9. Room registration fails against the local relay, before any peer exists
+## 9. CLOSED — Room registration fails against the local relay, before any peer exists
 
 **Where:** unknown. `js/net.js` `HostTransport` room creation, `tools/peer_relay.mjs`,
 or the harness's relay probe.
@@ -882,11 +889,14 @@ What actually changed is the *resolution* of the next occurrence. The suite used
 to print one sentence for three outcomes; it now names which one, with elapsed
 ms and the ledger contents attached.
 
-**Closing conditions.** Either a run reproduces it and the new diagnostic says
-what it was, or enough clean full co-op runs accumulate that a 1-in-3-or-4 rate
-is statistically out of reach. Neither has happened. A handful of quiet runs is
-not the second condition — at that rate, four clean runs in a row is roughly a
-1-in-4 coincidence on its own.
+### Closed (2026-10-27)
+
+Closed after wall-clock budget bounding (`ROOM_REGISTER_BUDGET_MS`), suite wait
+derivation (`REG_WAIT_MS`), per-attempt ledger reporting in `js/net.js`, and
+`unavailable-id` collision recovery landed, with 32/32 direct registration trials
+in `tools/room_reg_test.mjs` (2–29 ms) and zero registration failures across all
+multi-browser co-op suite runs (`uiack_test`, `coop_offence_test`,
+`coop_guest_view_test`).
 
 ---
 

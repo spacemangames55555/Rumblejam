@@ -17,7 +17,7 @@ import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
 import * as MIN from './minions.js';
 import { EnemyGrid } from './triggers.js';
-import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones } from './telegraphs.js';
+import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones, telegraphBusy } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING_TABLE } from './content/enemies.js';
 import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
@@ -3132,6 +3132,23 @@ export class Sim {
     // rebuilt every tick, nothing here is read back by the sim, no RNG.
     else if (opts.tick === 'plague') this.fx.hits.push({ x: Math.round(e.x), y: Math.round(e.y - e.radius), a: amount, c: 4 });
     const p = opts.owner;
+    // Hit micro-knockback: radial impulse away from opts.owner on direct hits
+    // (!opts.silent, skipping DoT ticks). 55 on normal hits (~6px flinch at
+    // 0.0001^dt decay) and 90 on crits (~10px). Skips bosses, ward pylons,
+    // spd === 0 dummies, and enemies in telegraphBusy(e) so wind-up telegraphs
+    // never slide off their committed zone. Draws 0 sim.rng.
+    if (!opts.silent && p && typeof p.x === 'number' && typeof p.y === 'number'
+        && !e.boss && e.typeIdx !== -2 && e.id !== this.pylonId && e.spd > 0 && !telegraphBusy(e)) {
+      const dx = e.x - p.x, dy = e.y - p.y;
+      const d = Math.hypot(dx, dy);
+      const knockV = opts.crit ? 90 : 55;
+      if (d > 1e-4) {
+        e.knockX = (e.knockX || 0) + (dx / d) * knockV;
+        e.knockY = (e.knockY || 0) + (dy / d) * knockV;
+      } else {
+        e.knockX = (e.knockX || 0) + knockV;
+      }
+    }
     this._dmgLedger(e, p, amount, 'landed');
     if (p && p.stats) {
       p.damageDealt += amount;
@@ -3155,7 +3172,12 @@ export class Sim {
     // A living enemy released by a room wipe still has hp. That is not a
     // death, and a plague must not ride the wipe onto whoever is spawned next.
     // hp <= 0 is the same test the bounty mark uses for "actually brought down".
-    if (e.hp <= 0) SK.handoffPlague(this, e);
+    if (e.hp <= 0) {
+      SK.handoffPlague(this, e);
+      // Kill screen-shake on real kills (e.hp <= 0): 1.5 normal, 3.5 elite, 7 boss.
+      const killShake = e.boss ? 7 : (e.eliteMod ? 3.5 : 1.5);
+      this.shake = Math.max(this.shake || 0, killShake);
+    }
     const { x, y } = e;
     if (killer && killer.trigEvents) SK.onSkillKill(this, killer);
     this.fx.deaths.push({ x: Math.round(x), y: Math.round(y), c: e.boss ? e.bossDef.color : e.def.color, r: e.radius });
@@ -4293,7 +4315,7 @@ export class Sim {
     this.cleared = true;
     this._sanitizeArena();   // the field is inert before any payout screen
     if (this.wave) this.wave.done = true;
-    this.shake = 8;
+    this.shake = Math.max(this.shake || 0, 7);
     this.holdCircle = null;
     this.enemyBuff = 1;
     // sweep the battlefield: leftover adds/hazards must not harass the
@@ -5785,6 +5807,10 @@ export class Sim {
       if (wl) { e.x = x0; e.y = y0; wl.hp -= spd * dt * 0.05; }
     }
     this.clampToRoom(e);
+  }
+  resolveEntityWalls(e) {
+    if (!e || e.straggle) return;
+    this._pushOut(e, (e.radius || 14) * 0.6);
   }
   clampToRoom(e) {
     e.x = clamp(e.x, WALL + e.radius * 0.6, this.W - WALL - e.radius * 0.6);

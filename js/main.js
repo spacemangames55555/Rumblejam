@@ -102,7 +102,10 @@ const actions = {
   leave: leaveToTitle,
   backToLobby: hostReturnToLobby,
   pickChar: charId => sendUi({ kind: 'pick', charId }),
-  toggleReady: () => sendUi({ kind: 'ready' }),
+  toggleReady: () => {
+    const me = app.lobby && app.lobby.players && app.lobby.players.find(p => p.key === app.myKey);
+    sendUi({ kind: 'ready', ready: me ? !me.ready : undefined });
+  },
   // §4.1's ladder, finally with a writer. `app.lobby.difficulty` was READ at the
   // lobby heartbeat and assigned nowhere in the codebase, so the field was
   // always undefined and every run resolved to Standard through
@@ -800,7 +803,7 @@ function hostHandleUi(key, msg) {
       if (CHAR_BY_ID[msg.charId] && isSelectable(msg.charId)) p.charId = msg.charId;
       else console.warn(`[lobby] refused pick "${msg.charId}" from ${key} — unknown or not selectable`);
     }
-    if (msg.kind === 'ready') p.ready = !p.ready;
+    if (msg.kind === 'ready') p.ready = typeof msg.ready === 'boolean' ? msg.ready : !p.ready;
     refreshLobby(); broadcastLobby();
   } else if (app.sim) {
     const idx = keyToIdx(key);
