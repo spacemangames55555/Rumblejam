@@ -68,13 +68,16 @@ export const PNW_ENEMIES = [
     // punish like one that takes ten. Five damage on a 3s cycle is 3% of a
     // level-12 character and 12% of the level-1 one that meets it on map 1 —
     // a real lesson where it is taught, a nuisance where it is not.
-    id: 'pnw_sapling', domain: 'physical', name: 'Sapling', behavior: 'warden',
-    hp: 7, spd: 108, dmg: 3, radius: 14, mats: 1, w: 3.0,
+    //
+    // HORDE PACE (2 Nov 2026) TURNS IT BACK INTO FODDER. The commonest unit in
+    // the region winding up was the right teacher at 2–3 bodies on screen and
+    // is clutter at 10–60: the user ruled that only specials and bosses
+    // telegraph. hp 7 → 3 (live 4 on map 1: every rank-1 opener one-shots
+    // it), spd 108 → 170, w 3.0 → 4.0, chaser, no telegraph. The read it
+    // taught now lives on the Cedar Warden, the region's one light special.
+    id: 'pnw_sapling', domain: 'physical', name: 'Sapling', behavior: 'chaser',
+    hp: 3, spd: 170, dmg: 3, radius: 14, mats: 1, w: 4.0,
     shape: 'triangle', color: '#6f8f4a',
-    telegraph: {
-      windupMs: 380, recoverMs: 260, cooldownMs: 3000, retryFrac: 0.3, recoverFrozen: true,
-      shape: { kind: 'cone', angle: 70, range: 105 }, damage: 5, domain: 'physical',
-    },
   },
   {
     // A committed line. Fast, narrow, and the one that most rewards reading the
@@ -86,8 +89,12 @@ export const PNW_ENEMIES = [
     // unchanged; only the cost of being wrong and the time to kill it moved.
     // Slightly more punishing than the Sapling because a lane is easier to
     // leave than a cone you are standing inside.
+    //
+    // HORDE PACE: the region's teachable SPECIAL. hp 7 → 8 (2–3 hits, above
+    // fodder), spd 140 → 150, w 2.6 → 0.9 (with the two landmarks that is 15%
+    // of the region by weight, inside the 8–25% band).
     id: 'pnw_cedar_warden', domain: 'spiritual', name: 'Cedar Warden', behavior: 'dasher',
-    hp: 7, spd: 140, dmg: 3, radius: 16, mats: 2, w: 2.6,
+    hp: 8, spd: 150, dmg: 3, radius: 16, mats: 2, w: 0.9,
     shape: 'triangle', color: '#4d7a5a',
     dash: { windup: 0.5, speed: 540, dur: 0.42, cd: 2.5 },
     telegraph: {
@@ -103,13 +110,18 @@ export const PNW_ENEMIES = [
   // and Footing collapses into "always break" — and two undodgeable archetypes
   // at 4.4 of 10.6 encounter weight is 42% of the room that cannot be read.
   {
+    // HORDE PACE: fast fodder. hp 6 → 3, spd 220 → 245 (0.82× the player),
+    // w 2.8 → 3.5.
     id: 'pnw_thornhound', domain: 'physical', name: 'Thornhound', behavior: 'sprinter',
-    hp: 6, spd: 220, dmg: 4, radius: 12, mats: 1, w: 2.8,
+    hp: 3, spd: 245, dmg: 4, radius: 12, mats: 1, w: 3.5,
     shape: 'diamond', color: '#8a5a3c',
   },
   {
+    // HORDE PACE: ranged fodder. hp 10 → 3, spd 95 → 165, w 1.6 → 1.0.
+    // The spec table says 4, but 4 is live 5.2 at map-1 multipliers, over the
+    // weakest opener packet (Rip, 4) that the same spec makes the fodder rule.
     id: 'pnw_mistwalker', domain: 'spiritual', name: 'Mistwalker', behavior: 'spitter',
-    hp: 10, spd: 95, dmg: 3, radius: 14, mats: 2, w: 1.6,
+    hp: 3, spd: 165, dmg: 3, radius: 14, mats: 2, w: 1.0,
     shape: 'pentagon', color: '#7fa8bf',
     proj: { dmg: 6, speed: 300, radius: 6 }, keepDist: 250, fireCd: 2.3,
   },

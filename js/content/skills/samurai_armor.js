@@ -60,6 +60,14 @@ export const TUNING = {
   // why. Roughly the old per-stack vitality, so a full stance is worth about
   // what it was worth before, without taking current HP when it breaks.
   footingShieldPerStack: 4,
+  // THE STEP-OFF BURST (horde pace). A full ten-stack stance releases 15 damage
+  // in a 150-unit ring — four map-1 fodder bodies' worth of HP each, enough to
+  // one-shot specials' neighbours and clear the pack that walked into the
+  // stance. Three stacks (1.5 s still) is the least that fires: 5 in r 96.
+  footingBurstMinStacks: 3,
+  footingBurstPerStack: 1.5,
+  footingBurstBaseR: 70,
+  footingBurstRPerStack: 8,
   footingGritPerStack: 2,
   // NO REFLEX TERM. Footing grants vitality and grit, and nothing else.
   //

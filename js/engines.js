@@ -80,7 +80,25 @@ function tickFooting(sim, p, dt, passives) {
     // cost the entire stance and the rebuild is slower than the next commit
     // arrives, so a bot that dodged correctly lived permanently at 0-3 stacks
     // and never had a stance to make a decision about.
-    if (p.engines.footing) { p.engines.footing = 0; p.footingShield = 0; sim._recomputeStats(p); }
+    //
+    // THE STEP-OFF BURST (user ruling 2 Nov 2026, pace-spec §6.1b). At horde
+    // density holding through fodder always wins, so the stance stops being a
+    // place to stand and becomes a CHARGE: the step that breaks it releases
+    // the stack as one iaido sweep around the Samurai — damage per stack over
+    // a radius that grows with the stack. Below footingBurstMinStacks nothing
+    // fires, so a sidestep inside a fight costs the stance and pays nothing.
+    if (p.engines.footing) {
+      const stacks = p.engines.footing;
+      if (stacks >= SAM.footingBurstMinStacks && sim._areaDamageEnemies) {
+        const r = SAM.footingBurstBaseR + SAM.footingBurstRPerStack * stacks;
+        const dmg = Math.max(1, Math.round(SAM.footingBurstPerStack * stacks));
+        sim.fx.swings.push({ x: Math.round(p.x), y: Math.round(p.y), a: p.aimA || 0, r, arc: Math.PI * 2, color: '#e8d9a8' });
+        sim._areaDamageEnemies(p.x, p.y, r, dmg, p);
+        p.footingBursts = (p.footingBursts || 0) + 1;
+        p.footingBurstStacks = (p.footingBurstStacks || 0) + stacks;
+      }
+      p.engines.footing = 0; p.footingShield = 0; sim._recomputeStats(p);
+    }
     p.footingAcc = 0;
     return;
   }
