@@ -671,6 +671,14 @@ function runSeed(seed) {
 
   const cap = FIGHT_CAP_S * 60;
   let ticks = 0, peak = 0;
+  // HORDE PACE SAMPLING (pace-spec.md §7 bars). Alive is sampled every tick
+  // while the wave timer runs, from t = 3 s.
+  const aliveSamples = [];
+  // ON SCREEN: bodies inside the camera's ~1280 × 720 view around player 0
+  // (CONFIG.ROOM_W/ROOM_H — the spec's assumed viewport), sampled like alive.
+  const screenSamples = [];
+  const VW = (CONFIG.ROOM_W || 1280) / 2, VH = (CONFIG.ROOM_H || 720) / 2;
+  let firstKillT = null, firstSpawnT = null, timerEndT = null;
   const casts = {};
   let topUp = null;
   while (sim.phase === 'arena' && !sim.over && !sim.cleared && ticks++ < cap) {
@@ -687,6 +695,16 @@ function runSeed(seed) {
       topUp = { from: lvl0, to: p.level, spends: spent };
     }
     peak = Math.max(peak, sim.enemyPool.count);
+    const wt = sim.wave ? sim.wave.t : 0;
+    if (firstSpawnT === null && spawned > 0) firstSpawnT = ticks / 60;
+    if (firstKillT === null && sim.payout.kills > 0) firstKillT = ticks / 60;
+    if (sim.wave && !sim.wave.done && wt >= 3) {
+      aliveSamples.push(sim.enemyPool.count);
+      let on = 0;
+      for (const e of sim.enemyPool) if (Math.abs(e.x - p.x) <= VW && Math.abs(e.y - p.y) <= VH) on++;
+      screenSamples.push(on);
+    }
+    if (timerEndT === null && sim.wave && sim.wave.done) timerEndT = ticks / 60;
     if (ticks % 30 === 0) resolveUi();
   }
 
@@ -698,9 +716,26 @@ function runSeed(seed) {
   let outcome = 'stall';
   if (sim.cleared || sim.phase === 'map') outcome = 'clear';
   else if (sim.over) outcome = 'death';
+  const sorted = [...aliveSamples].sort((a, b) => a - b);
+  const pace = {
+    median: sorted.length ? sorted[sorted.length >> 1] : 0,
+    onScreen: screenSamples.length ? [...screenSamples].sort((a, b) => a - b)[screenSamples.length >> 1] : 0,
+    onScreenMax: screenSamples.length ? Math.max(...screenSamples) : 0,
+    le2: sorted.length ? aliveSamples.filter(n => n <= 2).length / sorted.length : 1,
+    firstSpawnT, firstKillT,
+    dur: sim.wave ? sim.wave.dur : null,
+    tail: timerEndT === null ? null : +(ticks / 60 - timerEndT).toFixed(1),
+    culled: sim.hordeCulled || 0,
+    cap: typeof sim._hordeAliveCap === 'function' ? sim._hordeAliveCap() : null,
+    // The room's pressure profile: Bastion streams at ×0.65 by design (the
+    // sanctioned camping fight), so its kills/s ceiling sits below the bar.
+    rateMult: (sim.profile && sim.profile.rateMult) || 1,
+  };
+  pace.killsPerS = +((sim.payout.kills - pace.culled) / Math.max(1, ticks / 60)).toFixed(2);
   return {
     seed,
     outcome,
+    pace,
     secs: +(ticks / 60).toFixed(1),
     peak,
     kills: sim.payout.kills,
@@ -743,6 +778,10 @@ for (const r of rows) {
   else stalls++;
   const tag = r.seed === 0xa11ce ? '0xa11ce' : String(r.seed);
   console.log(`${tag}\t${r.outcome}\t${r.secs}s\tkills ${r.kills}/${r.total}\tpeak ${r.peak}\thp ${r.hp}/${r.maxHp}\tlvl ${r.level}\talive ${r.alive} waveDone ${r.waveDone} ${r.node || ''} ${r.left ? JSON.stringify(r.left) : r.detail || ''}`);
+  if (r.pace) {
+    const P = r.pace;
+    console.log(`PACE\t${tag}\tmedianAlive ${P.median}\tonScreen ${P.onScreen} (max ${P.onScreenMax})\tle2 ${(100 * P.le2).toFixed(1)}%\tpeak ${r.peak}/${P.cap}\tfirstSpawn ${P.firstSpawnT === null ? '-' : P.firstSpawnT.toFixed(2)}s\tfirstKill ${P.firstKillT === null ? '-' : P.firstKillT.toFixed(2)}s\tdur ${P.dur}s\ttail ${P.tail}s\tkills/s ${P.killsPerS}\tculled ${P.culled}\tprofile x${P.rateMult}\tlvl ${r.level}`);
+  }
   if (r.dmg) {
     const d = r.dmg;
     console.log(`DMG\t${tag}\tcontact ${d.contact}\tlanes ${d.lanes}\tcones ${d.cones}\tprojectiles ${d.projectiles}\tother ${d.other}`);
@@ -769,3 +808,23 @@ for (const r of rows) {
 }
 console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${difficulty}\t${charId}\t${clumsy ? `clumsy react ${reactS}s 8-dir no-learn` : (learn ? 'learn' : 'no-learn')}\t${openerId || 'default-opener'}\tring ${KITE_RING.toFixed(1)}`);
 console.log(`TOTAL\tclears ${clears}/${rows.length}\tdeaths ${deaths}\tstalls ${stalls}`);
+{
+  // pace-spec.md §7 map-1 bars, over every seed that entered the fight.
+  const ps = rows.filter(r => r.pace);
+  const bar = (name, ok, val) => console.log(`BAR\t${ok ? 'PASS' : 'FAIL'}\t${name}\t${val}`);
+  const worst = (f, cmp) => ps.reduce((a, r) => (a === null || cmp(f(r), a) ? f(r) : a), null);
+  bar('le2 alive <= 5% of ticks after 3 s', ps.every(r => r.pace.le2 <= 0.05), `worst ${(100 * worst(r => r.pace.le2, (a, b) => a > b)).toFixed(1)}%`);
+  bar('median alive >= 10', ps.every(r => r.pace.median >= 10), `min ${worst(r => r.pace.median, (a, b) => a < b)}`);
+  bar('peak <= cap', ps.every(r => r.peak <= r.pace.cap), `max ${worst(r => r.peak, (a, b) => a > b)}`);
+  bar('first pack <= 1.2 s', ps.every(r => r.pace.firstSpawnT !== null && r.pace.firstSpawnT <= 1.2), `max ${worst(r => r.pace.firstSpawnT ?? 99, (a, b) => a > b)}`);
+  bar('first kill <= 4 s', ps.every(r => r.pace.firstKillT !== null && r.pace.firstKillT <= 4), `max ${worst(r => r.pace.firstKillT ?? 99, (a, b) => a > b)?.toFixed(2)}`);
+  bar('ends <= 5 s after timer', ps.every(r => r.outcome !== 'clear' || (r.pace.tail !== null && r.pace.tail <= 5)), `max ${worst(r => r.pace.tail ?? 0, (a, b) => a > b)}`);
+  bar('kills/s >= 2.5', ps.every(r => r.outcome !== 'clear' || r.pace.killsPerS >= 2.5), `min ${worst(r => r.pace.killsPerS, (a, b) => a < b)}`);
+  {
+    // The same bar with Bastion rooms (rate ×0.65 by design) set aside — the
+    // budget there tops out near 2 kills/s whoever is playing.
+    const nb = ps.filter(r => r.pace.rateMult >= 1 && r.outcome === 'clear');
+    const mn = nb.reduce((a, r) => Math.min(a, r.pace.killsPerS), Infinity);
+    bar('kills/s >= 2.5 (non-Bastion rooms)', nb.every(r => r.pace.killsPerS >= 2.5), `min ${nb.length ? mn : '-'} over ${nb.length}`);
+  }
+}

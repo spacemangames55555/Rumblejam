@@ -67,7 +67,8 @@
 // authored (`tools/region_curve.mjs`).
 //
 // Usage: node tools/roster_weight_gate.mjs [--verbose]
-import { REGION_ENEMIES, telegraphWeight, MIN_TELEGRAPH_WEIGHT } from '../js/content/regions-enemies.js';
+import { REGION_ENEMIES, telegraphWeight, MIN_TELEGRAPH_WEIGHT, HORDE_MIN_TELEGRAPH_WEIGHT, HORDE_MAX_TELEGRAPH_WEIGHT, HORDE_MIN_TELEGRAPH_SHAPES, enemyRole } from '../js/content/regions-enemies.js';
+import { CONFIG } from '../js/config.js';
 import { ENEMY_BY_ID, FLOOR_TABLES } from '../js/content/enemies.js';
 import { REGIONS, regionHpMult, regionDmgMult, TOTAL_REGIONS, REGION_ANCHOR_LEVEL } from '../js/regions.js';
 import { Sim } from '../js/game.js';
@@ -171,6 +172,58 @@ console.log('ROSTER WEIGHT AND TELEGRAPH DENSITY — the two halves of one coupl
 console.log(`reference: floor-1 table (${FLOOR_TABLES[0].join(', ')}) — weighted mean HP ${REF_HP.toFixed(1)}, damage ${REF_DMG.toFixed(2)}`);
 console.log(`band: ±${(BAND * 100).toFixed(0)}% → HP [${(REF_HP * (1 - BAND)).toFixed(1)}, ${(REF_HP * (1 + BAND)).toFixed(1)}], damage [${(REF_DMG * (1 - BAND)).toFixed(2)}, ${(REF_DMG * (1 + BAND)).toFixed(2)}]\n`);
 
+// The weakest rank-1 opener packet on map 1 (Savage's Rip, 4 after rounding).
+// tools/opener_gate.mjs asserts the packets themselves against the live
+// bodies; this is the authoring-side half of the same rule.
+const WEAKEST_OPENER_PACKET = 4;
+const SOLO_COOP_HP = 1.15; // coopHp for one player, the map-1 measurement party
+const SPECIAL_PUNISH_LO = PUNISH_LO, SPECIAL_PUNISH_HI = PUNISH_HI;
+function hordeChecks(region, units) {
+  const { total, tel, share } = telegraphWeight(units);
+  const shapes = new Set(units.filter(e => e.telegraph).map(e => e.telegraph.shape.kind));
+  // A′ — 8–25% telegraphing, at least two shapes.
+  if (share >= HORDE_MIN_TELEGRAPH_WEIGHT && share <= HORDE_MAX_TELEGRAPH_WEIGHT && shapes.size >= HORDE_MIN_TELEGRAPH_SHAPES) {
+    ok(`A′ region ${region.index} telegraph density ${(share * 100).toFixed(1)}% (${tel.toFixed(2)}/${total.toFixed(2)}) inside the ${(HORDE_MIN_TELEGRAPH_WEIGHT * 100).toFixed(0)}–${(HORDE_MAX_TELEGRAPH_WEIGHT * 100).toFixed(0)}% special band, ${shapes.size} shapes (${[...shapes].join(', ')})`);
+  } else {
+    bad(`A′ region ${region.index} telegraph density ${(share * 100).toFixed(1)}% with ${shapes.size} shape(s) — want ${(HORDE_MIN_TELEGRAPH_WEIGHT * 100).toFixed(0)}–${(HORDE_MAX_TELEGRAPH_WEIGHT * 100).toFixed(0)}% and ≥${HORDE_MIN_TELEGRAPH_SHAPES} shapes`);
+  }
+  const fodder = units.filter(e => enemyRole(e) === 'fodder');
+  const specials = units.filter(e => enemyRole(e) === 'special');
+  const landmarks = units.filter(e => enemyRole(e) === 'landmark');
+  const live = e => e.hp * regionHpMult(region.index) * CONFIG.enemyHpMult * SOLO_COOP_HP;
+  const fodderMax = Math.max(...fodder.map(e => e.hp));
+  // B′ — role bands. Fodder dies to the weakest opener; specials 2–4×
+  // fodder; landmarks ≥ 6× fodder. No band-scaling inside a roster: the
+  // world axis (regionHpMult) is the only multiplier.
+  const fatFodder = fodder.filter(e => Math.round(live(e)) > WEAKEST_OPENER_PACKET);
+  if (fodder.length && !fatFodder.length) ok(`B′ region ${region.index} fodder live HP ${fodder.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${live(e).toFixed(1)}`).join(', ')} — every one ≤ the weakest rank-1 opener packet ${WEAKEST_OPENER_PACKET}`);
+  else bad(`B′ region ${region.index} fodder over the weakest opener packet ${WEAKEST_OPENER_PACKET}: ${fatFodder.map(e => `${e.id} ${live(e).toFixed(1)}`).join(', ') || 'no fodder at all'}`);
+  const offSpec = specials.filter(e => e.hp < 2 * fodderMax || e.hp > 4 * fodderMax);
+  if (specials.length && !offSpec.length) ok(`B′ region ${region.index} specials ${specials.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${e.hp}`).join(', ')} are 2–4× fodder max ${fodderMax}`);
+  else bad(`B′ region ${region.index} specials outside 2–4× fodder max ${fodderMax}: ${offSpec.map(e => `${e.id} ${e.hp}`).join(', ') || 'no specials'}`);
+  const thinMarks = landmarks.filter(e => e.hp < 6 * fodderMax);
+  if (landmarks.length && !thinMarks.length) ok(`B′ region ${region.index} landmarks ${landmarks.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${e.hp}`).join(', ')} are ≥ 6× fodder max ${fodderMax}`);
+  else bad(`B′ region ${region.index} landmarks under 6× fodder max ${fodderMax}: ${thinMarks.map(e => `${e.id} ${e.hp}`).join(', ') || 'no landmarks'}`);
+  // C′ — every telegrapher is above fodder, and one is teachable (≤ 3× fodder).
+  const tels = units.filter(e => e.telegraph);
+  const under = tels.filter(e => e.hp <= fodderMax);
+  const teach = tels.filter(e => e.hp <= 3 * fodderMax);
+  if (!under.length && teach.length) ok(`C′ region ${region.index} every telegrapher is above fodder max ${fodderMax}; teachable special(s): ${teach.map(e => `${e.id} ${e.hp}`).join(', ')}`);
+  else bad(`C′ region ${region.index}: ${under.length} telegrapher(s) at or under fodder HP, ${teach.length} teachable (≤ ${3 * fodderMax})`);
+  // D — the special's punish, against the anchor vitality. The band stays
+  // 6–9%: pace-spec §5 suggests ~8–15% [estimate], which the Cedar Warden's
+  // 6 damage would fail without a content change the spec does not list.
+  const anchor = REGION_ANCHOR_LEVEL[region.index - 1];
+  const vit = anchorVitality(anchor);
+  const pct = e => e.telegraph.damage / vit;
+  const outD = specials.filter(e => e.telegraph && (pct(e) < SPECIAL_PUNISH_LO || pct(e) > SPECIAL_PUNISH_HI));
+  if (specials.length && !outD.length) ok(`D region ${region.index} specials punish ${specials.map(e => `${(100 * pct(e)).toFixed(1)}%`).join(' / ')} of ${vit} vitality at level ${anchor} — inside ${(100 * SPECIAL_PUNISH_LO).toFixed(0)}–${(100 * SPECIAL_PUNISH_HI).toFixed(0)}%`);
+  else bad(`D region ${region.index} specials outside the punish band: ${outD.map(e => `${e.id} ${(100 * pct(e)).toFixed(1)}%`).join(', ') || 'no specials'}`);
+  // Fodder contact damage — reported, not gated: the 6-in-contact swarm check
+  // needs the contact cadence measured in a fight (i-frames), not a sum.
+  console.log(`  · fodder contact damage per touch: ${fodder.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${e.dmg}`).join(', ')} (swarm check pending a contact-cadence measurement)`);
+}
+
 for (const region of REGIONS) {
   const units = REGION_ENEMIES[region.id].enemies;
   const { total, tel, share } = telegraphWeight(units);
@@ -178,7 +231,12 @@ for (const region of REGIONS) {
   const dmg = weightedMean(units, e => e.dmg);
   const med = median(units.map(e => e.hp));
   const lightTel = units.filter(e => e.telegraph && e.hp < med);
-  console.log(`── region ${region.index} · ${region.name}`);
+  console.log(`── region ${region.index} · ${region.name}${REGION_ENEMIES[region.id].horde ? ' · HORDE PACE' : ''}`);
+  // HORDE PACE (user ruling 2 Nov 2026, pace-spec.md §5). A horde region is
+  // fodder plus a few specials, so A–C are replaced by A′–C′ and D is applied
+  // to specials. E (landmarks) is unchanged and runs below for both.
+  if (REGION_ENEMIES[region.id].horde) { hordeChecks(region, units); }
+  else {
   if (VERBOSE) {
     for (const e of [...units].sort((a, b) => a.hp - b.hp)) {
       console.log(`     ${e.id.padEnd(20)} hp ${String(e.hp).padStart(3)}  dmg ${String(e.dmg).padStart(2)}`
@@ -235,6 +293,7 @@ for (const region of REGIONS) {
     + ' — the band gates the light ones; a landmark hitting hard is the point of a landmark');
 
   // ---- E. at least one landmark, on BOTH halves ----
+  }
   const heavy = units.filter(e => e.hp > LANDMARK_HP_MULT * med);
   const landmarks = heavy.filter(e => e.w < LANDMARK_MAX_W);
   if (landmarks.length) {

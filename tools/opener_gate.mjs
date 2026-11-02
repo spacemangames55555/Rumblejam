@@ -6,11 +6,18 @@
 // crit. A hit is one impact of the opener's first damage step. A summon's
 // swing is not the opener.
 //
-// BURST. Two hits must kill every map-1 body. The packet is what
-// `damageEnemy` subtracts: rank 1, then round, minimum 1.
+// HORDE PACE (user ruling 2 Nov 2026, pace-spec.md §5). The bodies are no
+// longer hard-coded: they are map 1's live table (`_onboardingTable()` on a
+// real map-1 Sim, maxHp after every multiplier) and each body's role comes
+// from the roster (`enemyRole`).
+//
+// BURST. ONE hit must kill every map-1 FODDER body, and at most FOUR hits the
+// map-1 special (the Cedar Warden). The packet is what `damageEnemy`
+// subtracts: rank 1, then round, minimum 1. (Was: two hits for every body, at
+// 8 / 9 / 9 HP — the slow game's trickle.)
 //
 // DOT. A plague opener has no impact packet. One cast's total damage over
-// its full duration must be at least a Cedar Warden's map-1 HP. Kill speed
+// its full duration must be at least the toughest map-1 FODDER body. Kill speed
 // does not matter: the check is the application (`rankedDamage` at rank 1,
 // times Attunement), not the ticks that land before the cooldown is ready.
 // Ferocity does not scale a plague. Map 1 multiplies by 1.
@@ -23,15 +30,29 @@ import { ferocityMult } from '../js/skillsim.js';
 import { STAT_BASE } from '../js/config.js';
 import { TOH_BY_ID } from '../js/content/characters-toh.js';
 
-const BODIES = [
-  { id: 'pnw_thornhound', name: 'Thornhound', hp: 8, domain: 'physical' },
-  { id: 'pnw_sapling', name: 'Sapling', hp: 9, domain: 'physical' },
-  { id: 'pnw_cedar_warden', name: 'Cedar Warden', hp: 9, domain: 'spiritual' },
-];
-const WARDEN = BODIES[2];
+import { Sim } from '../js/game.js';
+import { isOnboardingNode } from '../js/arenas.js';
+import { enemyRole } from '../js/content/regions-enemies.js';
+
+// Map 1's live bodies: a solo Standard Sim enters the onboarding node and
+// spawns one of each id in its table. maxHp is the number damageEnemy fights.
+const BODIES = (() => {
+  const g = new Sim({ seed: 777, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_samurai', color: '#fff' }] });
+  const p = g.players[0];
+  if (p.openingOffer) g.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+  const starts = g.reachableNodes();
+  g._travelTo(starts.find(id => isOnboardingNode(1, g.floor.nodes[id])) ?? starts[0]);
+  return g._onboardingTable().map(id => {
+    const e = g.spawnEnemyById(id, g.W / 2, g.H / 2);
+    const role = enemyRole(e.def);
+    return { id, name: e.def.name, hp: Math.round(e.maxHp * 100) / 100, domain: e.def.domain, role, cap: role === 'fodder' ? 1 : 4 };
+  });
+})();
+const FODDER = BODIES.filter(b => b.role === 'fodder');
+// The plague rule's body: the toughest fodder (a plague cast clears fodder).
+const WARDEN = FODDER.reduce((a, b) => (b.hp > a.hp ? b : a), FODDER[0]);
 
 const IMPACT = new Set(['bolt', 'strike', 'cone', 'line', 'drain', 'channel']);
-const HIT_CAP = 2;
 
 function sheet(classId) {
   const stats = (TOH_BY_ID[classId] && TOH_BY_ID[classId].stats) || {};
@@ -94,8 +115,8 @@ function score(skill, classId) {
 
 const flags = [];
 console.log('OPENER GATE — map 1, rank 1, ×1 from every damage type, no crit, no engine stacks');
-console.log('bodies: Thornhound 8, Sapling 9, Cedar Warden 9');
-console.log('burst: 2 hits. dot: one cast\'s full-duration total is at least a Cedar Warden\'s 9 HP\n');
+console.log(`bodies (live map-1 maxHp): ${BODIES.map(b => `${b.name} ${b.hp} [${b.role}, ≤${b.cap} hit${b.cap > 1 ? 's' : ''}]`).join(', ')}`);
+console.log(`burst: fodder 1 hit, special ≤4. dot: one cast's full-duration total is at least a ${WARDEN.name}'s ${WARDEN.hp} HP\n`);
 
 let openers = 0;
 for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
@@ -118,15 +139,15 @@ for (const [classId, treeIds] of Object.entries(TREES_BY_CLASS)) {
         const word = r.dead ? 'covers' : 'short';
         console.log(`  ${r.body.name}\t${r.body.hp}hp\ttotal ${r.total.toFixed(1)}\t${word}${mark}`);
       } else {
-        if (r.hits > HIT_CAP) mark = '\tFLAG';
+        if (r.hits > r.body.cap) mark = '\tFLAG';
         console.log(`  ${r.body.name}\t${r.body.hp}hp\t${pkt}\thits ${r.hits === Infinity ? 'never' : r.hits}${mark}`);
       }
     }
     if (rule === 'dot') {
       const w = rows.find(r => r.body.id === WARDEN.id);
-      if (!w.dead) flags.push(`${sk.name} (${sk.id}) full-duration total ${w.total.toFixed(1)} is under a Cedar Warden's ${WARDEN.hp}`);
+      if (!w.dead) flags.push(`${sk.name} (${sk.id}) full-duration total ${w.total.toFixed(1)} is under a ${WARDEN.name}'s ${WARDEN.hp}`);
     } else {
-      const over = rows.filter(r => r.hits > HIT_CAP);
+      const over = rows.filter(r => r.hits > r.body.cap);
       if (over.length) flags.push(`${sk.name} (${sk.id}) ${over.map(r => `${r.body.name} ${r.hits === Infinity ? 'never' : r.hits}`).join(', ')}`);
     }
   }
