@@ -1953,3 +1953,41 @@ reset run-scoped level/banked state (or only carry across region boundaries on a
 win), or clear `banked` when starting a fresh retry.
 
 **Not fixed** in this pass. Low.
+
+## #40 — Savage DPS depends on skill firing order: a 50 ms cooldown move on the same grid jumps Cascade DPS +149%
+
+**Found on `cursor/horde-pace-map1` during the pace-spec §12 cooldown-grid pass (2 Nov 2026).**
+**Owner: Game Designer's DPS pass.**
+
+**What it is.** The §12 grid pass rewrote every 1150 ms skill cooldown as 1200 ms
+on the assumption that it changes no behaviour: every cooldown stays on the
+same 1200 ms grid. For the Savage that assumption fails. Savage Cascade breaks
+when the same skill fires twice in a row, so its damage depends on the ORDER in
+which the Savage's skills come off cooldown, not just on their rates. Moving
+`sav_bloodbound` `headCd` and `sav_aftermath` `emberCd` from 1150 to 1200 changes
+the rotation order, and the floor-1 Savage DPS in the `sim_test` table goes from
+**42.6 (+22% of the 34.8 anchor) to 86.8 (+149%)**, far outside the ±40% gate.
+
+**Reproduce.** On `cursor/horde-pace-map1`, set `headCd: 1200` in
+`js/content/skills/sav_bloodbound.js` and `emberCd: 1200` in
+`js/content/skills/sav_aftermath.js`, then run `node tools/sim_test.mjs` and read
+`toh_savage` in the "DPS table" block (the DPS gate fails).
+
+**Current state.** Both cooldowns are left at 1150 ms (Designer call, 2 Nov 2026).
+They are the only 1150 ms skill cooldowns not moved to 1200. The Savage measures
+42.6 DPS (+22%) and passes the gate.
+
+**Not yet traced.** Nobody has compared the two rotations side by side. The
+working explanation is that the 50 ms shift, together with the 10 Hz trigger
+clock (`TRIGGER_TICK_MS` 100), changes which skill comes off cooldown first,
+and Cascade's "same skill twice in a row" break condition then pays out very
+differently.
+
+**What a fix would have to do.** Make Savage damage robust to rotation order. One
+option is to make Cascade's payoff depend on rates (for example skill variety
+within a window) rather than on strict alternation. Another is to tune the
+Cascade numbers so that the 1200 ms order lands inside ±40%, then move both
+cooldowns onto 1200 with the rest of the grid. Either way, `sim_test`'s DPS gate
+at 1200 ms is the acceptance check.
+
+**Not fixed** in this pass.

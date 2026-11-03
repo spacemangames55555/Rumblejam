@@ -124,9 +124,11 @@ for (const N of NS) for (const tint of [false, true]) {
       allBefore, allAfter: time({ plagued: true, slowed: true }),
       markFrames: (A.Assets.get('fx.plague_mark') || {}).frames || null };
     // PARITY: one plagued, chilled body, before vs after, same frame. Pre-scaling
-    // resamples once with a better filter and snaps to whole device pixels, so
-    // edge pixels may move by a step; the count and the worst channel delta say
-    // whether the mark moved or only its anti-aliasing.
+    // is nearest-neighbour, the same filter as the main canvas, so the cached
+    // frame is pixel-crisp: no resampling differences, the 1 px outline and the
+    // mark palette survive. It also snaps to whole device pixels, so a nonzero
+    // diff is only the nearest-neighbour sampling phase (which source column or
+    // row lands on an edge), never new colours.
     const one = { ...base, enemies: base.enemies.slice(0, 1).map(e => ({ ...e, plagued: true, slowed: true, straggle: false })) };
     const grab = () => { R.draw(one, 0); return g.getImageData(0, 0, cv.width, cv.height).data; };
     // The same path drawn twice is the noise floor (loop phases and idle

@@ -617,8 +617,7 @@ function prescaledFrame(s, frame, dw, dh) {
       cv.width = dw; cv.height = dh;
       const g = cv.getContext('2d');
       if (g) {
-        g.imageSmoothingEnabled = true;
-        g.imageSmoothingQuality = 'high';   // paid once per frame per size, not per draw
+        g.imageSmoothingEnabled = false;   // pixel art: nearest-neighbour, same as the main canvas (render.js:222)
         g.drawImage(s.img, frame * s.w, 0, s.w, s.h, 0, 0, dw, dh);
         c = cv;
       }
