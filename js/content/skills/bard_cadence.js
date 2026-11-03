@@ -32,7 +32,7 @@ export const TUNING = {
   // tier 1 — Opening Note. THE METRONOME: still the shortest cooldown in the
   // game, and single-target and cheap BECAUSE it is. A node that comes up this
   // often cannot also hit the room.
-  openDamage: 5, openSpeed: 520, openRange: 250, openCd: 900,
+  openDamage: 5, openSpeed: 520, openRange: 250, openCd: 700, openSplash: 4, openSplashRadius: 70,   // pace-spec §12.1, Designer 2 Nov 2026: splash 4 r70, cd 700 (was 900)
   // tier 2 — Quickstep
   quickDamage: 4, quickReach: 104, quickArc: 1.8, quickRadius: 130,
   quickCount: 1, quickCd: 2000, quickWeight: 0.88,
@@ -78,7 +78,7 @@ export const BARD_CADENCE = [
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.openRange },
     cooldown: T.openCd,
-    compose: [{ kind: 'bolt', damage: T.openDamage, speed: T.openSpeed, range: T.openRange, riders: {} }],
+    compose: [{ kind: 'bolt', damage: T.openDamage, speed: T.openSpeed, range: T.openRange, riders: { splash: { damage: T.openSplash, radius: T.openSplashRadius } } }],
     ranks: R,
   },
   {

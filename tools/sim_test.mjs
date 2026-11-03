@@ -1509,7 +1509,11 @@ try {
   {
     const g = new Sim({ seed: 515151, party: octet(8) });
     g._travelTo(g.reachableNodes()[0]);
-    for (const q of g.players) q.weapons.length = 0; // pacifists — nothing dies, the ceiling must bind
+    // pacifists — nothing dies, the ceiling must bind. Skills too: the horde
+    // openers (pierce/splash, pace-spec §12) kill through a weapon-less party,
+    // free room under the ceiling and let packs drain the bank below it.
+    for (const q of g.players) { q.weapons.length = 0; if (q.loadout) q.loadout.fill(null); }
+    g.summons.length = 0;
     g.wave.r0 = g.wave.r1 = 400; // firehose
     for (let i = 0; i < 60 * 8; i++) { g.tick(); for (const q of g.players) { q.hp = q.stats.vitality; q.invuln = 1; } }
     const alive = g.enemyPool.count + g.spawnQueue.length;
