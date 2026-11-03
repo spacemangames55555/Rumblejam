@@ -6,6 +6,8 @@
 1. **Wave end on the timer.** When the timer runs out, leftover fodder is culled and drops/pays its loot (magneted in). Specials, elites and the boss still have to be killed.
 2. **Elite nodes are a horde with a few champions.** ×0.7 count (was ×0.55) and about 25% heavies/champions (was 75%), with ×2.4 HP on champions only, instead of a handful of tough enemies.
 3. **Samurai's Footing is a step-off burst.** Stacks still build while standing; the first step after holding spends them as a burst (was option §6.1b).
+
+**Ruled 2026-11-02 (Designer)** on the engineer's map-1 build (`cursor/horde-pace-map1` at `98db2c3`): see §11 for the eight rulings and §12 for opener tuning.
 **Direction (user, 2 Nov 2026):** match Brotato and Diablo 2 Survivors pacing. That means big packs from the first second, many enemies on screen, short intense waves and steady pressure. Most enemies are fast, weak fodder, and only specials and bosses telegraph. The priorities, in order, are **pace**, then **hero skill feel and class distinctness**, then maps and enemies.
 
 Labels used below: **[measured]** comes from the live sim this session. **[cited]** has a source link. **[estimate]** is a design target or inference with no source, so tune it.
@@ -83,7 +85,7 @@ Map 1 draws only thornhound, sapling and cedar warden. That table is `_onboardin
 | `ONBOARDING_CEDAR_WEIGHT` | `js/arenas.js:262` | 1.5 |
 | `ONBOARDING_WARDEN_CAP` / `_ALIVE_CAP` | `js/arenas.js:268-269` | 8 / 25 (solo, scaled by `_onboardingCapScale`) |
 | `ONBOARDING_CEDAR_WINDUP_MULT` | `js/arenas.js:319` | 1.5 |
-| Profile `rateMult` | `js/arenas.js:132-142` | bastion 0.65, swarm 1.18, others 1 |
+| Profile `rateMult` | `js/arenas.js:132-142` | bastion 0.65, swarm 1.18, others 1 (horde maps: Bastion's 0.65 is not applied, ruled 2026-11-02, Designer, §11.2) |
 | `SOLO_SPAWN_MULT` | `js/config.js:117` (applied `js/game.js:207`) | 1.15 |
 | `COOP_SPAWN_SCALE` / `COOP_SPAWN_SOFT` | `js/config.js:219,222` | 0.5 / 0.3 |
 | `ALIVE_CEILING` / `SPAWN_BANK_CAP` | `js/config.js:227-228` | 300 / 45 |
@@ -165,12 +167,13 @@ Effective rate = raw × `coopSpawn` (solo 1.15) × `spawnBudgetMult` (1.25) = ra
 | `waveConfig` dur | `js/arenas.js:336` | `round(60 + 5·depth + 5·region)` | `min(60, round(30 + 7.5·depth + 5·(region−1)))` (sieges unchanged) |
 | `waveConfig` r0 | `js/arenas.js:350` | `(0.5 + 0.25(reg−1))·onb·count` | `(1.11 + 0.28·depth)·(1 + 0.15(reg−1))` |
 | `waveConfig` r1 | `js/arenas.js:351` | `(1.2 + 0.55(reg−1) + 0.18·depth)·onb·count` | `(2.78 + 0.56·depth)·(1 + 0.15(reg−1))` |
+| `HORDE_RATE_TUNE` (map 1 r0 and r1) | `js/arenas.js` (new) | — | **×1.45**, about 120 spawned on map 1 (ruled 2026-11-02, Designer; density is the bar; revisit after §12) |
 | `ONBOARDING_RATE` | `js/arenas.js:209` | [1, 0.75, 1] | remove (all 1) |
 | `ONBOARDING_XP_MULT` | `js/arenas.js:251` | [1.7, 1.35, 1] | [1.7, 1, 1] (re-measure [0]) |
 | `ONBOARDING_WAVE_SCALE` / `_DROP_SCALE` | `js/arenas.js:278-279` | 0.6 / 1.667 | remove (1 / 1) |
 | `ONBOARDING_ALIVE_CAP` | `js/arenas.js:269` | 25 | 60 |
 | `ONBOARDING_WARDEN_CAP` | `js/arenas.js:268` | 8 | 4 (now "map-1 special cap") |
-| `ONBOARDING_CEDAR_WEIGHT` | `js/arenas.js:262` | 1.5 | 0.6 (special, about 12% of the map-1 weight) |
+| `ONBOARDING_CEDAR_WEIGHT` | `js/arenas.js:262` | 1.5 | **1.0** (ruled 2026-11-02, Designer; 0.6 was 7.4% of map-1 draws, under the 8% floor; 1.0 is about 12%) |
 | `ONBOARDING_CEDAR_WINDUP_MULT` | `js/arenas.js:319` | 1.5 | 1.5 (keep) |
 | NEW `HORDE_ALIVE_CAP` (solo, per horde room) | `js/config.js` near :227 | — (only 300 global) | 120, scaled like map 1's cap |
 | `ALIVE_CEILING` | `js/config.js:227` | 300 | 300 (keep, as the co-op ceiling) |
@@ -178,20 +181,20 @@ Effective rate = raw × `coopSpawn` (solo 1.15) × `spawnBudgetMult` (1.25) = ra
 | NEW `PACK_MIN` / `PACK_MAX` / `PACK_SPREAD` | `js/config.js` | — | 4 / 8 / 70 u. `_tickWave` spends `acc` in pack-sized chunks at one `_spawnWavePos` centre |
 | NEW `FIRST_PACK_T` | `js/config.js` | — (first spawn about 2–3 s) | 1.0 s (seed `acc` with one pack at t = 0.3) |
 | Ring spawn R / min distance | `js/game.js:1241,1246` | 640–820 / 520 | 500–640 / 420 |
-| NEW wave-end fodder cull | `_tickWave` / `_spawningStopped` | the fight runs until the field is empty | at `w.t ≥ dur`, fodder dies with loot and magnets in, and specials have to be killed |
-| `STRAGGLER_CULL_S` / `_CULL_ALIVE` | `js/config.js:252,258` | 20 s / 8 | apply to specials only (fodder is culled at the timer) |
+| NEW wave-end fodder cull | `_tickWave` / `_spawningStopped` | the fight runs until the field is empty | at `w.t ≥ dur`, fodder dies with loot and magnets in. Specials and elites then chase hard for 3 s, and survivors are culled with loot. Bosses, pylons and landmarks are exempt (ruled 2026-11-02, Designer; tail ≤ 5 s) |
+| `STRAGGLER_CULL_S` / `_CULL_ALIVE` | `js/config.js:252,258` | 20 s / 8 | horde maps: replaced by the 3 s post-timer chase and cull of specials and elites (ruled 2026-11-02, Designer). The slow curve (region 2 for now) keeps 20 s / 8 |
 | NEW `hordeYieldScale` (fodder drop chance) | `js/arenas.js` | — (100%) | `oldTotal/newTotal` per region and depth |
 | NEW `PICKUP_BLOB_CAP` | `js/config.js` | — | 60, merging value into the nearest blob |
 | `BASE_SPEED` | `js/config.js:37` | 300 | 300 (unchanged, see §3) |
 | pnw_thornhound | `enemies-pnw.js:107` | hp 6, spd 220, w 2.8 | hp 3, spd 245, w 3.5 (fast fodder) |
 | pnw_sapling | `enemies-pnw.js:72` | hp 7, spd 108, behavior warden + telegraph, w 3.0 | hp 3, spd 170, behaviour → chaser fodder, **no telegraph**, w 4.0 |
 | pnw_cedar_warden | `enemies-pnw.js:90` | hp 7, spd 140, w 2.6 | hp 8, spd 150, w 0.9 (special, keeps the lane telegraph) |
-| pnw_mistwalker | `enemies-pnw.js:112` | hp 10, spd 95, w 1.6 | hp 4, spd 165, w 1.0 (ranged fodder, cap about 8 alive) |
+| pnw_mistwalker | `enemies-pnw.js:112` | hp 10, spd 95, w 1.6 | **hp 3** (ruled 2026-11-02, Designer; hp 4 is live 5.2 on map 1, over the Rip packet of 4), spd 165, w 1.0 (ranged fodder, cap about 8 alive) |
 | pnw_bark_hulk / pnw_elk | `enemies-pnw.js:129,140` | as is | as is (landmarks) |
 | `MIN_TELEGRAPH_WEIGHT` | `regions-enemies.js:25` | ≥ 0.5 | band 0.08–0.25 (`MIN_`/`MAX_TELEGRAPH_WEIGHT`) |
 | `eliteCountMult` / `eliteHeavyShare` | `js/nodebehaviour.js:25,33` | 0.55 / 0.75 | 0.7 / 0.25 (×2.4 HP on champions only) |
 
-The region 2 (Xibalba) roster needs the same fodder/special split. It's out of map-1 scope, but `roster_weight_gate` will fail on it until it is re-authored.
+The region 2 (Xibalba) roster needs the same fodder/special split. It's out of map-1 scope. *Ruled 2026-11-02 (Designer):* region 2 stays on the slow curve (and the slow-curve gate rules) on the map-1 branch only. It gets its own horde pass before `HORDE_REGIONS` includes it.
 
 ---
 
@@ -202,7 +205,7 @@ The region 2 (Xibalba) roster needs the same fodder/special split. It's out of m
 | `roster_weight_gate` **A** | telegraph weight ≥ 50% | Horde rosters sit at 8–25% | **A′:** 8% ≤ telegraph weight ≤ 25%, at least 2 telegraph shapes per region |
 | `roster_weight_gate` **B** | weighted mean HP 7.9 / dmg 3.45, ±15% (floor-1 parity) | The fodder mean falls to about 4 | **B′:** role bands. Fodder live map-1 HP ≤ the weakest rank-1 opener packet. Specials 2–4× fodder HP. Landmarks ≥ 6× fodder HP. A separate fodder contact-damage band. The no-band-scaling-inside-a-roster rule is kept |
 | `roster_weight_gate` **C** | ≥ 2 telegraphers below median HP | Telegraphers are now above fodder by design | **C′:** every telegrapher's HP is above fodder max, and at least one telegrapher is ≤ 3× fodder HP (the teachable special) |
-| `roster_weight_gate` **D** | light-telegrapher punish 6–9% of vitality | Mostly compatible | Apply to specials, re-banded to about 8–15% (one commit is now rarer and should matter more) [estimate], plus a fodder swarm check: 6 fodder in contact for 1 s ≤ 15% of level-anchor vitality [estimate] |
+| `roster_weight_gate` **D** | light-telegrapher punish 6–9% of vitality | Mostly compatible | Apply to specials. **Band stays 6–9% for now (ruled 2026-11-02, Designer, §11.5)**; the 8–15% re-band floated here is withdrawn, plus a fodder swarm check: 6 fodder in contact for 1 s ≤ 15% of level-anchor vitality [estimate] |
 | `roster_weight_gate` **E** | landmark > 2× median HP at w < 0.3 | Compatible (the median falls) | Keep |
 | `regions-enemies.js` load rule 2 | `MIN_TELEGRAPH_WEIGHT` 0.5 | Same as A | Band 0.08–0.25 |
 | `regions-enemies.js` rules 1 / 3 | committing behaviours telegraph, chaff doesn't | Compatible, but the sapling (fodder) has `warden` behaviour | Keep the rules and move the sapling to a chaff behaviour. Optionally rename `COMMITTING_BEHAVIORS` to "special behaviours" |
@@ -274,7 +277,7 @@ Use the `map1_bot` kite and the clumsy bot, solo Standard, the default 5 seeds, 
 
 Shared rules (GDD §5.10): the rank-1 opener one-shots map-1 fodder. Every class has a way to clear a **pack** by its tier-1 or tier-2 node, using the existing `pierce`/`splash` bolt riders for bolt trees. Every kill visibly pops. Each class clears in its own *shape*, and its engine decides *when* that shape peaks. Engines are from `docs/design/classes/*.md` and GDD §8.3.
 
-- **Samurai (Footing):** wide close-range arcs that already clear packs (4.4 kills/s, the best in the probe). The horde fantasy is wading in and sweeping. Footing pays as a burst on the first step after holding (§6.1b, decided 2026-11-02 (user)), a released iaido-style sweep through the crowd, not as standing safety. Distinct shape: the 360° / long-arc cut.
+- **Samurai (Footing):** wide close-range arcs that already clear packs (4.4 kills/s, the best in the probe). The horde fantasy is wading in and sweeping. Footing pays as a burst on the first step after holding (§6.1b, decided 2026-11-02 (user)). Grit and shield stay only as flat values that don't grow with time stood still (ruled 2026-11-02, Designer, §11.7), a released iaido-style sweep through the crowd, not as standing safety. Distinct shape: the 360° / long-arc cut.
 - **Priest (Conviction / judgment marks):** Rebuke one-shots, and marks should **chain-detonate** through a pack on death (a mark kill heals and pops neighbours). Distinct shape: chain reactions spreading outward from one kill, with holy light bursts.
 - **Monk (Chi loop):** fast palm combos that cleave (3.2 kills/s). Spending Chi should release a shockwave ring, and Stone Garden traps should be a crowd funnel. Distinct shape: rhythmic close bursts and rings, with the Monk weaving through the horde.
 - **Druid (the pack):** Rake one-shots. The fantasy is **your animals versus their horde**: wolves and the pack should hunt fodder on their own, with pounces that scatter packs. Distinct shape: allied bodies carving lanes, so pet count and pet uptime are the clear.
@@ -297,3 +300,90 @@ Shared rules (GDD §5.10): the rank-1 opener one-shots map-1 fodder. Every class
 
 - `docs/design/pace-spec.md` (this file) and `docs/GDD.md` Draft 12 (the GDD rewrite that goes with it).
 - The measuring scripts are `tools/pace_measure.mjs`, `tools/ttk_probe.mjs` and `tools/perf_probe.mjs`; run them from the repo root with `node tools/<name>.mjs` (Node only, no browser or WebSocket needed). Their raw outputs from this session (`pace_measure_out.jsonl`, `ttk_thornhound.tsv`, `ttk_mistwalker.tsv`, `perf.tsv`) are not committed; rerun to regenerate.
+
+---
+
+## 11. Designer rulings on the map-1 build (2026-11-02)
+
+Ruled 2026-11-02 (Designer) on Game Engineer's departures from this spec in `cursor/horde-pace-map1` at `98db2c3`. The user's three decisions (top of file) are unchanged.
+
+1. **Map 1 spawn rate is the §3 curve ×1.45 (about 120 spawned).** *Ruled 2026-11-02 (Designer).* At the raw curve (about 85), the kite bot sat at a median 8–13 alive and 1.9–2.5 kills/s, under the §7 bars. Density is the bar, so the rate moves rather than the bar (`HORDE_RATE_TUNE` 1.45). Revisit after the §12 opener pass: faster openers thin the field, and the multiplier may come back down.
+2. **Bastion on horde maps.** *Ruled 2026-11-02 (Designer).* Packs form on the horde ring (R 500–640, at least 420 from any player) in an arc facing the room's front, not at the arena edge. The ×0.65 rate is not applied. Bastion keeps its one-front stream and its bans, and its telegraphing units stay specials. From the edge, the first pack took about 10 s to reach a camper (`map1_bot` seed 10).
+3. **Cedar Warden weight on map 1 is 1.0.** *Ruled 2026-11-02 (Designer).* Against the two fodder units' 3.5 + 4.0, that's about 12% of map-1 draws. The spec's 0.6 was 7.4%, under the 8% floor of the special band. The band wins over the constant.
+4. **Mistwalker HP is 3 (fodder).** *Ruled 2026-11-02 (Designer).* HP 4 is live 5.2 at map-1 multipliers, over the weakest opener packet (Rip, 4) that §3 makes the fodder rule. All three fodder units now read live 3.9.
+5. **Check D stays 6–9% for now.** *Ruled 2026-11-02 (Designer).* The two telegraph numbers measure different things:
+   - **The 8–25% band (check A′, GDD §6.4) is a share.** It's the telegraphing fraction of a region's encounter weight (`telegraphWeight`): how often there is something to read. Region 1 measures 15.0% (1.50 / 10.00, three shapes: line, circle, cone).
+   - **Check D (`tools/roster_weight_gate.mjs`, `hordeChecks`) is a punish.** For each special (a telegrapher with `w ≥ 0.5`), it divides `telegraph.damage` by the vitality of a character at the region's anchor level, and requires 6–9%. That's how much one missed read costs, not how often a read appears. The Cedar Warden measures 7.5% (6 of 80).
+   - The two are independent. A region can sit anywhere in 8–25% with every special inside 6–9%. The ~8–15% re-band floated in §5 is withdrawn until a content pass gives specials harder hits.
+   - Caveat, from the gate's own note: the harness never spends banked stat picks, so every anchor resolves to 80 vitality, and D is a flat band rather than a level-scaled one.
+6. **Region 2 stays on the slow curve, on this branch only.** *Ruled 2026-11-02 (Designer).* Its roster is still 50%+ telegraphing heavies, which is a wall at horde rates. It gets its own horde pass (fodder plus specials, A′–D, its own pace measurement) before `HORDE_REGIONS` includes it.
+7. **Samurai's Footing keeps grit and shield alongside the step-off burst, provided neither scales with time stood still.** *Ruled 2026-11-02 (Designer).*
+   - Today both are per stack (`footingShieldPerStack` 4, `footingGritPerStack` 2), so they grow the longer he stands. They become flat values granted while Footing is active.
+   - All of the extra payoff for holding comes from stepping off. The stack count buys only the burst (first build: 3-stack minimum, 1.5 damage per stack, radius 70 + 8 per stack).
+   - Suggested flat values: about the 3-stack amount (shield 12, grit 6) [estimate]. Tune them on the pace branch.
+8. **Map-3 tail: the post-timer chase.** *Ruled 2026-11-02 (Designer).*
+   - At the timer, fodder is culled and pays (the user's decision).
+   - Specials and elites still alive then chase the party hard for **3 s**. Whatever survives is culled and pays its loot.
+   - Bosses, pylons and landmarks are objectives: exempt, and they have to be killed.
+   - Target: **the fight ends within 5 s of the timer** on every horde map. This replaces the 4 s chase and 20 s straggler cull on horde maps (GDD §2.6 rule 3).
+   - It is also the answer to the measured map-1 tails over 5 s (9 classes, up to 9.8 s for the Mage), which are not an opener problem.
+
+---
+
+## 12. Opener tuning at horde pace (design numbers; nothing built)
+
+**Goal:** with fodder at 4 live HP (3.9 measured), every class's tier-1 opener reaches at least **2.5 kills/s on map 1** and **4 on map 3**, and the floor-1 DPS table stays within **±40%** of the reference median.
+
+**Cooldowns are authored on the 100 ms grid.** Triggers evaluate at 10 Hz (`TRIGGER_TICK_MS` 100, `js/triggers.js:17`), so a 950 or 1150 ms cooldown actually fires at 1000 or 1200.
+
+**Method** (local scratch on `cursor/horde-pace-map1` at `98db2c3`; nothing was pushed to that branch):
+- **Overrides:** applied to the live skill objects before each run (cooldown, riders, range). The code was not edited.
+- **Map 1:** `tools/map1_bot.mjs`, solo Standard kite bot, default opener with learning, on 16 seeds: 777, 0xa11ce, 424242, 20260728, 99, 1, 2, 3, 31337, 4242, 5, 6, 7, 8, 9 and 10. Kills/s is the bot's own figure: non-culled kills ÷ fight seconds.
+- **Map 3:** `tools/pace_measure.mjs --depth=3 --god`, with the character granted level 8 first (the level a map-1 exit at 6–7 reaches map 3 at) [estimate]. It ran on the 6 seeds of 8 tried that have a depth-3 combat node. The figure is kills inside the timer ÷ 45 s, so the tail doesn't dilute it.
+- **DPS:** the `sim_test` §10 harness (`measureDps`, 3 slots, four 1e9-HP dummies at 90 u), with the same overrides.
+- **Seed effects:** seed 10 is a Bastion room and seed 2 a `cramped_crypt`. They are the low readings for every class, so minima are also given without them.
+
+### 12.1 Bolt openers: the changes
+
+| Class | Opener | Today | Proposed | Map 1 kills/s, mean / worst / worst without seeds 2 and 10 | First kill, worst seed | Map 3 kills/s (lvl 8), mean | Floor-1 DPS vs median |
+|---|---|---|---|---|---|---|---|
+| Necromancer | Dark Energy Blip | 6 dmg, cd 1000, no riders | **pierce 3**, cd **700** | 0.88 / 0.79 → **2.76 / 2.33 / 2.55** | 2.77 s | 1.59 → **4.32** | −30% → 0% (anchor) |
+| Hunter | Sighting Shot | 5 dmg, cd 1100, range 260 | **pierce 4**, cd **700** | 0.97 / 0.86 → **2.79 / 2.24 / 2.54** | 2.77 s | 2.72 → 3.74 | −2% → +16% |
+| Bard | Opening Note | 5 dmg, cd 900 | **splash 4 dmg, r 70**, cd **700** | 0.92 / 0.80 → **2.86 / 2.11 / 2.66** | 2.70 s | 2.74 → 3.61 | +17% → +34% |
+| Sundian | Spindrift | 6 dmg, cd 1150 (fires at 1200) | **splash 4 dmg, r 60**, cd **1000** | 1.66 / 1.23 → **3.03 / 2.59 / 2.74** | 4.35 → 3.98 s | 4.52 → 4.53 | −8% → −1% |
+| Wizard | Cinder Bolt | 7 dmg, cd 950 (fires at 1000), range 250 | **splash 4 dmg, r 60**, range **320**, cd **800** | 2.33 / 1.71 → **2.84 / 2.59 / 2.59** | 4.83 → **3.18 s** | 4.61 → 4.78 | −36% → −26% |
+
+- **Why these shapes** (§9): Necromancer and Hunter pierce, so each shot is a lane through a column. Necromancer's lane feeds soul tokens, and Hunter's is the crossfire lane. Bard, Sundian and Wizard splash, so each shot is a burst on impact: Bard's ring pulse, Sundian's spray that later carries drench, and Wizard's fire burst, which the domain shift should later reshape (fire splash, frost pierce, arcane chain). Splash damage 4 is the fodder one-shot (live 3.9). It is not meant to touch specials meaningfully.
+- **Wizard's first-kill fix:** range 250 → 320 lets Cinder Bolt fire as the first pack closes (packs land at 500–640 and converge in about 2.5 s), not after it arrives. Splash forgives the misses on 245 u/s Thornhounds. The worst seed moves from 4.83 s to 3.18 s against the 4 s bar. Engineer's 7 s seed wasn't in this set and should be re-checked with these numbers.
+- **Pierce over splash for Necromancer and Hunter, and the cooldown:** pierce 2 or 3 at cd 800 left them at 2.4–2.5 mean. The 700 cooldown is what lifts the worst seeds. Pierce 4 at 800 did no better for the Necromancer (2.57 mean, 1.91 worst).
+- **DPS spread:** every class stays inside ±40%. The edges are Druid +34% (untouched), Bard +34% (from cd 900 → 700) and Wizard −26%, up from −36%. The Necromancer is a reference class, so its rise moves the anchor: the median went from 34.5 (Monk) to 34.8 (Necromancer). If the Bard edge needs room, cd 800 with r 70 measured 2.74 mean / 2.15 worst on map 1.
+
+### 12.2 Strike openers: no change this pass
+
+| Class | Opener | Map 1 kills/s, mean / worst / worst without seeds 2 and 10 | First kill, worst seed | Map 3 kills/s (lvl 8), mean |
+|---|---|---|---|---|
+| Samurai | Cross Guard Cut | 3.00 / 1.84 / 2.57 | 2.92 s | 3.40 |
+| Blacksmith | Hammer Blow | 2.93 / 1.74 / 2.68 | 3.32 s | 3.82 |
+| Assassin | Shiv | 2.88 / 1.10 / 2.65 | 3.92 s | 3.38 |
+| Savage | Rip | 2.87 / 2.00 / 2.40 | 3.32 s | 3.77 |
+| Mage | Shardcut | 2.86 / 1.87 / 2.75 | 4.02 s | 4.25 |
+| Witch Doctor | Bone Rattle | 2.84 / 1.61 / 2.57 | 3.92 s | 3.55 |
+| Priest | Rebuke | 2.81 / 1.46 / 2.50 | 3.72 s | 3.51 |
+| Druid | Rake | 2.75 / 1.82 / 2.36 | 2.92 s | 3.42 |
+| Monk | Open Palm | 2.68 / 1.44 / 2.37 | 3.12 s | 3.90 |
+
+- **Strike openers already clear packs.** Every mean is over 2.5. The worst seeds (1.1–2.0) are seed 10, the Bastion room, where the field sits at 39–58 alive, so kill capacity rather than supply is the limit, and seed 2. Both are room effects that every class shares.
+- **Room fixes come first.** The answer to those seeds is ruling §11.2, then a re-measure on that build. Changing openers to fix two rooms would over-tune the other 14.
+- **Mage:** its 4.02 s first kill on seed 2 is the only strike first-kill miss.
+- **Cooldown grid:** Spindrift, Shiv, Hammer Blow and Rake at 1150 fire at 1200 anyway. Author them as 1200 so the number on the card is the number that plays. This changes nothing in behaviour.
+
+### 12.3 Map 3
+
+- **At level 8, the 4.0 bar is mostly not an opener question.** Bolt classes after tuning read 3.6–4.8. Strike classes read 3.4–4.3 untouched. One seed is low for every class.
+- **Bard and Hunter (3.6 and 3.7) are next.** They need their tier-2 and tier-3 pack answers, per §9: Bard's rhythm stacks widen the note into ring waves, and Hunter's Spotter's Call should pierce. They shouldn't get more opener.
+- **Bar ownership:** the map-3 bar stays 4.0. Playtester owns the measurement, and this level-8 harness is an estimate of the arrival level, not a played run.
+
+**Next:**
+- Engineer builds these numbers on a branch after sign-off.
+- Then re-run `map1_bot` on all 14 classes, plus Engineer's 16 Samurai seeds, and `sim_test` §10.
+- Then revisit the ×1.45 map-1 rate (§11.1).
