@@ -582,6 +582,122 @@ export function drawSprite(ctx, id, x, y, opts) {
   return true;
 }
 
+// THE BATCHED OVERLAY PASS (horde pace, Designer ruling 2 Nov 2026). Status
+// marks over a 100–200 body horde were each a save/translate/scale/drawImage/
+// restore nested inside the enemy's own save/restore — measured +3.2–4.4 ms a
+// frame at 150–200 plagued on a software canvas (tools/horde_render_bench.mjs).
+//
+// PRE-SCALED, NOT SCALED PER DRAW (Art & Assets, 2 Nov 2026: the mark's cost is
+// almost all image SCALING, not its frame count). Each frame of a status sprite
+// is resampled ONCE into a cached canvas at the exact device-pixel size it lands
+// on screen, then blitted 1:1 at an integer device position — a copy, with no
+// filter. The size key folds in the camera scale and DPR (the canvas
+// transform's a/d), so a zoom or DPR change simply asks for new sizes; the
+// cache is dropped whenever that scale changes, so stale sizes do not pile up.
+// A sheet with one frame and a sheet with four take the same path: frameOf()
+// returns 0 for a single-frame sheet, so a one-frame PNG is one cache entry per
+// size and a looped sheet is one per frame per size.
+//
+// Only for UNROTATED, NON-DIRECTIONAL sprites under a transform with no
+// rotation or skew; anything else falls back to the scaled draw (still exact).
+// `setSpritePrescale(false)` turns it off (bench/parity only).
+let PRESCALE = true;
+export function setSpritePrescale(on) { PRESCALE = !!on; }
+const prescaled = new Map();
+let prescaledAt = null;   // the transform scale the cache was built for
+const PRESCALE_CACHE_MAX = 512;
+function prescaledFrame(s, frame, dw, dh) {
+  const key = `${s.file}|${frame}|${dw}x${dh}`;
+  let c = prescaled.get(key);
+  if (c !== undefined) return c;
+  c = null;
+  try {
+    if (typeof document !== 'undefined') {
+      const cv = document.createElement('canvas');
+      cv.width = dw; cv.height = dh;
+      const g = cv.getContext('2d');
+      if (g) {
+        g.imageSmoothingEnabled = true;
+        g.imageSmoothingQuality = 'high';   // paid once per frame per size, not per draw
+        g.drawImage(s.img, frame * s.w, 0, s.w, s.h, 0, 0, dw, dh);
+        c = cv;
+      }
+    }
+  } catch { c = null; }
+  if (prescaled.size >= PRESCALE_CACHE_MAX) prescaled.clear();
+  prescaled.set(key, c);
+  return c;
+}
+// One item, with the context ALREADY reset to identity; m is the world→device
+// transform it was drawn under. Returns false if it could not pre-scale.
+function blitPrescaled(ctx, s, it, k, m) {
+  const sc = (it.scale === undefined ? 1 : it.scale) * k;
+  const dw = Math.max(1, Math.round(s.w * sc * m.a)), dh = Math.max(1, Math.round(s.h * sc * m.d));
+  const frame = frameOf(s, null, it.seed);
+  const c = prescaledFrame(s, frame, dw, dh);
+  if (!c) return false;
+  const ay = (s.anchor === 'bottom' ? 1 : 0.5) * dh;
+  const px = m.a * it.x + m.e, py = m.d * it.y + m.f;
+  ctx.drawImage(c, Math.round(px - dw / 2), Math.round(py - ay));
+  return true;
+}
+function prescaleUsable(ctx, s) {
+  if (!PRESCALE || s.directions > 1 || typeof ctx.getTransform !== 'function') return null;
+  const m = ctx.getTransform();
+  if (m.b !== 0 || m.c !== 0 || !(m.a > 0) || !(m.d > 0)) return null;
+  if (prescaledAt === null || prescaledAt.a !== m.a || prescaledAt.d !== m.d) { prescaled.clear(); prescaledAt = { a: m.a, d: m.d }; }
+  return m;
+}
+function scaleOf(s) { return s.fit * s.scale * (s.player ? TUNE_PLAYER : TUNE_ALL); }
+
+// Every item of ONE sprite, one save/restore. items: [{ x, y, scale, seed }] in
+// the caller's (world) space.
+export function drawSpriteBatch(ctx, id, items) {
+  if (SPRITE_MODE === 'off' || !id || !items.length) return false;
+  const s = Assets.get(id);
+  if (!s) return false;
+  const w = s.w, h = s.h;
+  const ay = s.anchor === 'bottom' ? h : h / 2;
+  const k = scaleOf(s);
+  ctx.save();
+  const m = prescaleUsable(ctx, s);
+  if (m) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (let i = 0; i < items.length; i++) {
+      if (blitPrescaled(ctx, s, items[i], k, m)) continue;
+      // no canvas (headless harness): the scaled draw, under the world transform
+      ctx.setTransform(m); scaledItem(ctx, s, items[i], k, w, h, ay); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+  } else {
+    for (let i = 0; i < items.length; i++) scaledItem(ctx, s, items[i], k, w, h, ay);
+  }
+  ctx.restore();
+  return true;
+}
+function scaledItem(ctx, s, it, k, w, h, ay) {
+  const sc = (it.scale === undefined ? 1 : it.scale) * k;
+  const sx = frameOf(s, null, it.seed) * w;
+  ctx.drawImage(s.img, sx, 0, w, h, it.x - w * sc / 2, it.y - ay * sc, w * sc, h * sc);
+}
+
+// One status sprite drawn where it stands in the draw order (the chill frost at
+// an enemy's feet stays under the next body), pre-scaled the same way.
+export function drawSpritePrescaled(ctx, id, x, y, opts) {
+  if (SPRITE_MODE === 'off' || !id) return false;
+  const s = Assets.get(id);
+  if (!s) return false;
+  const it = { x, y, scale: opts && opts.scale, seed: opts && opts.seed };
+  const m = prescaleUsable(ctx, s);
+  if (m && !(opts && (opts.alpha !== undefined && opts.alpha !== 1))) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const done = blitPrescaled(ctx, s, it, scaleOf(s), m);
+    ctx.restore();
+    if (done) return true;
+  }
+  return drawSprite(ctx, id, x, y, opts);
+}
+
 // ?sprites=debug — a magenta outline exactly where art is expected, sized from
 // the manifest when it knows, so a half-finished sheet is obvious on screen.
 const debugSeen = new Set();

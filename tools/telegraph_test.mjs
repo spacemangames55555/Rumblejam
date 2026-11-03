@@ -254,6 +254,9 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
   const p = g.players[0];
   for (const e of [...g.enemyPool]) g.enemyPool.release(e);
   g.spawnQueue.length = 0; g.wave.done = false; g.obstacles.length = 0;
+  // A quiet room: on a horde map the wave keeps landing packs, and with the
+  // flat 12-point pool (pace-spec §11.7) one hit empties it before it is read.
+  Object.assign(g.wave, { r0: 0, r1: 0, acc: 0, firstPack: true, dur: Infinity });
   p.x = g.W / 2; p.y = g.H / 2;
 
   const vit0 = p.stats.vitality, hp0 = p.hp;

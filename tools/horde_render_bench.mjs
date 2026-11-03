@@ -28,6 +28,7 @@ const NS = (process.env.NS || '100,150').split(',').map(Number);
 bootHttpd(PORT); await sleep(800);
 const relay = await bootRelay(9800);
 const P = await new Page('rb', DBG, loadPeerjs()).open();
+process.on('exit', () => P.close());
 await P.goto(`http://localhost:${PORT}/index.html?peerhost=localhost&peerport=${relay.port}&peersecure=0${QS}`);
 await P.waitFor(`return !document.getElementById('screen-title').classList.contains('hidden') ? 1 : 0`, 10000, 'title');
 await P.exec(`document.getElementById('name-input').value='RB'; document.getElementById('btn-host').click(); return 1;`);
@@ -107,7 +108,42 @@ for (const N of NS) for (const tint of [false, true]) {
       for (let i = 0; i < 150; i++) { const t = performance.now(); R.draw(v, 1 / 60); g.getImageData(0, 0, 1, 1); ms.push(performance.now() - t); }
       ms.sort((a, b) => a - b); return +ms[75].toFixed(2);
     };
-    return { n: base.enemies.length, none: time({}), chaseTintOnly: time({ straggle: true }), plagueTintAndMark: time({ plagued: true }), chillTintAndFrost: time({ slowed: true }), all: time({ plagued: true, slowed: true }) };`);
+    // THE MARK AND FROST PATHS, before and after:
+    //   inline         each mark drawn scaled inside its enemy (pre-batch)
+    //   batchScaled    one batched pass, still resampled per draw
+    //   batchPrescaled one batched pass, frames pre-scaled to screen size (live)
+    // and the frost strip scaled per draw vs pre-scaled (drawn in place).
+    const A = await import('/js/assets.js');
+    const mode = (batch, pre) => { R.markBatching = batch; A.setSpritePrescale(pre); };
+    mode(false, false); const plagueInline = time({ plagued: true }); const chillScaled = time({ slowed: true }); const allBefore = time({ plagued: true, slowed: true });
+    mode(true, false); const plagueBatchScaled = time({ plagued: true });
+    mode(true, true);
+    const out = { n: base.enemies.length, none: time({}), chaseTintOnly: time({ straggle: true }),
+      plagueInline, plagueBatchScaled, plagueBatchPrescaled: time({ plagued: true }),
+      chillScaled, chillPrescaled: time({ slowed: true }),
+      allBefore, allAfter: time({ plagued: true, slowed: true }),
+      markFrames: (A.Assets.get('fx.plague_mark') || {}).frames || null };
+    // PARITY: one plagued, chilled body, before vs after, same frame. Pre-scaling
+    // resamples once with a better filter and snaps to whole device pixels, so
+    // edge pixels may move by a step; the count and the worst channel delta say
+    // whether the mark moved or only its anti-aliasing.
+    const one = { ...base, enemies: base.enemies.slice(0, 1).map(e => ({ ...e, plagued: true, slowed: true, straggle: false })) };
+    const grab = () => { R.draw(one, 0); return g.getImageData(0, 0, cv.width, cv.height).data; };
+    // The same path drawn twice is the noise floor (loop phases and idle
+    // animation run on the wall clock between grabs).
+    const cmp = (a, b) => {
+      let diff = 0, worst = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+        if (d) { diff++; worst = Math.max(worst, d); }
+      }
+      return [diff, worst];
+    };
+    mode(false, false); const a = grab(); const a2 = grab(); mode(true, false); const bs = grab(); mode(true, true); const b = grab();
+    [out.noiseDiffPx, out.noiseWorstDelta] = cmp(a, a2);
+    [out.batchVsInlineDiffPx, out.batchVsInlineWorst] = cmp(a2, bs);       // batching alone
+    [out.prescaleVsInlineDiffPx, out.prescaleVsInlineWorst] = cmp(a2, b);  // batching + pre-scale
+    return out;`);
   console.log('BREAKDOWN ' + JSON.stringify(bd));
 }
 const spriteState = await P.exec(`

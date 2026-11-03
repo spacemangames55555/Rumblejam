@@ -22,7 +22,7 @@ const FORM_COLOR = {
   marrownaut: PALETTE.hazardSpike,
 };
 import { WEAPON_BY_ID } from './content/weapons.js';
-import { Assets, drawSprite, spriteScaleFor, DEFAULT_FACING } from './assets.js';
+import { Assets, drawSprite, drawSpriteBatch, drawSpritePrescaled, spriteScaleFor, DEFAULT_FACING } from './assets.js';
 import { PROP, FX, BEAST_SPRITE, MINION_SPRITE } from './content/sprites.js';
 import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
 import { DOMAIN_COLOR } from './domains.js';
@@ -40,8 +40,10 @@ import { fxSpec, SHAPE } from './content/skillfx.js';
 //  - body tint: a desaturated sickly yellow-green. dE2000-far from the chase
 //    tint #8E4432, the telegraph red #ff5d6c and the elite purple, and green is
 //    the one hue no warning in the game uses.
-//  - fx.plague_mark: a small skull shedding spores, looped over the head, sized
-//    off the body so a Bark Hulk's mark is not a Thornhound's.
+//  - fx.plague_mark: a small skull shedding spores over the head, sized off the
+//    body so a Bark Hulk's mark is not a Thornhound's. The sheet may be a
+//    single frame or a loop (4 frames at the manifest fps); both draw the same
+//    way, and a single-frame sheet simply never changes phase.
 //  - tick numbers: the silent plague ticks get a small number in the light end
 //    of the same family, smaller and shorter-lived than a hit number.
 const PLAGUE_ART = {
@@ -64,7 +66,8 @@ export const CHILL_ART = {
   fps: 6, frames: 4,
 };
 
-// Loop phase for a per-enemy status mark. assets.js phaseOf() hashes the seed
+// Loop phase for a per-enemy status mark (moot for a single-frame sheet, which
+// has one phase). assets.js phaseOf() hashes the seed
 // with one multiply and one xor-shift, which leaves the low bits of
 // consecutive ids correlated: with seed = e.id, 4-frame loops two ids apart
 // share a phase 90% of the time and neighbours 48%, so a wave's marks blink in
@@ -514,7 +517,16 @@ export class Renderer {
     for (const s of view.summons || []) { if (inView(s.x, s.y)) this._drawSummon(ctx, s, view); }
     for (const tk of view.tokens || []) { if (inView(tk.x, tk.y)) this._drawSoulToken(ctx, tk); }
     (view.minions || []).forEach((m, i) => { if (inView(m.x, m.y)) this._drawMinion(ctx, m, view, i); });
+    // Overhead status marks are COLLECTED by _drawEnemy and painted in one
+    // batched pass after every body (drawSpriteBatch): one draw state for the
+    // whole horde, and a mark is never covered by a neighbour drawn after it.
+    // `markBatching = false` (bench/parity only) draws each mark inline as before.
+    const marks = this.markBatching === false ? null : (this._marks || (this._marks = []));
+    this._markBatch = marks;
+    if (marks) marks.length = 0;
     for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e, view); }
+    this._markBatch = null;
+    if (marks && marks.length) { drawSpriteBatch(ctx, FX.plagueMark, marks); marks.length = 0; }
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
     // projectiles
     for (const pr of view.projs || []) {
@@ -1360,7 +1372,9 @@ export class Renderer {
     }
     if (e.slowed) {
       const m = chillFrostMetrics(r, this._screen && this._screen.scale, this.dpr);
-      const drewFrost = drawSprite(ctx, FX.chillFrost, 0, m.cy, {
+      // Pre-scaled once per frame per on-screen size (drawSpritePrescaled), and
+      // drawn in place so the frost stays under the next body in the order.
+      const drewFrost = drawSpritePrescaled(ctx, FX.chillFrost, 0, m.cy, {
         scale: spriteScaleFor(FX.chillFrost, m.h),
         seed: markSeed(e.id),
       });
@@ -1419,8 +1433,9 @@ export class Renderer {
       ctx.fillRect(-bw / 2, -r - 10, bw * clamp(e.hpFrac, 0, 1), 5);
     }
     if (e.plagued) {
-      // looped by drawSprite from the manifest fps; `seed` offsets the phase so
-      // a plagued wave does not pulse in lockstep
+      // single-frame or looped at the manifest fps (drawSpriteBatch handles
+      // both); for a loop `seed` offsets the phase so a plagued wave does not
+      // pulse in lockstep.
       // markMin/markMax are CSS px on screen (Designer: 30px minimum). The room
       // is fit to the canvas (draw(): scale = min(cw/VIEW_W, ch/VIEW_H)) and
       // the canvas is sized in DEVICE px (window × this.dpr, _resize), so CSS
@@ -1429,7 +1444,10 @@ export class Renderer {
       // enlarges it. Render-only: the fit comes from this._screen, set in
       // draw() before any entity is drawn; a missing dpr counts as 1.
       const mh = plagueMarkWorldHeight(r, this._screen && this._screen.scale, this.dpr);
-      drawSprite(ctx, FX.plagueMark, 0, -r - PLAGUE_ART.markGap - mh / 2, { scale: spriteScaleFor(FX.plagueMark, mh), seed: markSeed(e.id) });
+      // Queued, not drawn: the batched pass after all bodies paints it (world space).
+      const item = { x: e.x, y: e.y - r - PLAGUE_ART.markGap - mh / 2, scale: spriteScaleFor(FX.plagueMark, mh), seed: markSeed(e.id) };
+      if (this._markBatch) this._markBatch.push(item);
+      else drawSprite(ctx, FX.plagueMark, item.x - e.x, item.y - e.y, { scale: item.scale, seed: item.seed });
     }
     ctx.restore();
   }
