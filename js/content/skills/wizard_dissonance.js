@@ -37,7 +37,7 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  frayDamage: 11, frayRange: 250, fraySpeed: 440, frayRadius: 7, frayCd: 1150,
+  frayDamage: 11, frayRange: 250, fraySpeed: 440, frayRadius: 7, frayCd: 1200,   // 1150 → 1200: triggers run at 10 Hz (TRIGGER_TICK_MS 100), so it already fired at 1200 (pace-spec §12)
   discordWeight: 0.15,
 
   // ---- branch A: Spread (one of each domain — always something that fits) ----

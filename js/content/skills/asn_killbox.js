@@ -28,7 +28,7 @@
 
 export const TUNING = {
   // tier 1 — Shiv
-  shivDamage: 6, shivReach: 100, shivArc: 1.6, shivRadius: 126, shivCount: 1, shivCd: 1150,
+  shivDamage: 6, shivReach: 100, shivArc: 1.6, shivRadius: 126, shivCount: 1, shivCd: 1200,   // 1150 → 1200: triggers run at 10 Hz (TRIGGER_TICK_MS 100), so it already fired at 1200 (pace-spec §12)
   // tier 2 — Caltrops
   caltropDamage: 11, caltropRadius: 88, caltropDuration: 14000, caltropCd: 3000,
   // tier 3 — Cold Read
