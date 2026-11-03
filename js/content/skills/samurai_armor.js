@@ -10,6 +10,10 @@
 // trees is in this patch; the resource is exposed so they drop in without
 // rework.
 //
+// HORDE PACE (pace-spec §11.7): the stack still climbs, but its DEFENCE does
+// not — Footing grants a flat shield and grit while active, and the count
+// only sizes the step-off burst (and whatever Tactics scales off it).
+//
 // The full stack drops the INSTANT the player moves. No decay, no partial
 // retention. A gradual falloff would let the Samurai drift around the arena and
 // keep most of the payoff, which erases the decision the engine exists to
@@ -56,9 +60,11 @@ export const TUNING = {
   // thing the instant drop existed to prevent.
   footingGraceRefill: 1.0,
 
-  // Absorb per stack, NOT max HP — see engineStatBonus in js/skillsim.js for
-  // why. Roughly the old per-stack vitality, so a full stance is worth about
-  // what it was worth before, without taking current HP when it breaks.
+  // RETIRED by pace-spec §11.7 (flat defence, see footingShieldFlat /
+  // footingGritFlat below): the old per-stack absorb and grit, kept only as
+  // the record of what the flat values were derived from (3 stacks × 4 = 12,
+  // 3 × 2 = 6). Nothing reads them. Absorb, NOT max HP — see engineStatBonus
+  // in js/skillsim.js for why.
   footingShieldPerStack: 4,
   // THE STEP-OFF BURST (horde pace). A full ten-stack stance releases 15 damage
   // in a 150-unit ring — four map-1 fodder bodies' worth of HP each, enough to
@@ -69,6 +75,19 @@ export const TUNING = {
   footingBurstBaseR: 70,
   footingBurstRPerStack: 8,
   footingGritPerStack: 2,
+  // FLAT DEFENCE (Game Designer ruling, 2 Nov 2026, approving the horde-pace
+  // departures): Footing's grit, its absorb pool and Iron Sleeve's footing
+  // scaling stop growing at this many stacks — the same 3 that arms the
+  // step-off burst. Standing past 1.5 s buys burst size, never more armour.
+  // The stack itself still climbs to FOOTING_MAX_STACKS; only the defensive
+  // terms read min(stacks, footingDefenseCapStacks).
+  footingDefenseCapStacks: 3,
+  // pace-spec §11.7: grit and shield are FLAT values granted while Footing is
+  // active (one stack or more) — the 3-stack amounts of the old per-stack
+  // terms (4 and 2 per stack). Weight's footingGritBonus is per stack of the
+  // cap, so it adds 3 × its bonus, also flat.
+  footingShieldFlat: 12,
+  footingGritFlat: 6,
   // NO REFLEX TERM. Footing grants vitality and grit, and nothing else.
   //
   // It used to grant 1.2% dodge per stack, which at the measured 17 stacks was

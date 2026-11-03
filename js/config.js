@@ -244,6 +244,18 @@ export const CONFIG = {
   FIRST_PACK_T: 1.0,       // the first pack LANDS at t = 1.0 s (queued at 0.3 with the 0.7 s mark)
   HORDE_RING_R: [500, 640],// ring spawn radius around the anchor (slow pace: 640–820)
   HORDE_RING_MIN: 420,     // and never closer than this to any living player (slow pace: 520)
+  // Footing's defensive terms (grit, absorb pool, Iron Sleeve's footing
+  // scaling) stop at this many stacks. Mirrors samurai_armor TUNING
+  // footingDefenseCapStacks; engines.js asserts the two agree at load.
+  FOOTING_DEFENSE_CAP_STACKS: 3,
+  // Horde timer end: fodder dies at once; specials chase (the straggler chase)
+  // for this long, then die with their loot. Objectives are exempt.
+  HORDE_SPECIAL_CHASE_S: 3,
+  // Landmark-ROLE enemies (heavy telegraphers, w < 0.5: Bark Hulk, Elk) are
+  // exempt from that cull as objectives under the 2 Nov ruling. On map 3 they
+  // are part of the ordinary mix: up to 14 stand at the cull and the tail runs
+  // 11–20 s (vs 3.5 s with this true). A Designer switch, off per the ruling.
+  HORDE_CULL_LANDMARK_ROLE: false,
   PICKUP_BLOB_CAP: 60,     // ground pickups; past it a drop merges into the nearest blob
   ARENA_CROWD_AT: 5,       // parties this size and up fight in scaled arenas
   ARENA_CROWD_SCALE: 1.25, // bounds ×1.25 (same templates, geometry scaled)

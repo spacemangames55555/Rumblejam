@@ -126,9 +126,15 @@ function tickFooting(sim, p, dt, passives) {
 // breaking stance must drop exactly the Footing part and not eat an Iron Sleeve
 // proc that happens to be running. Recomputed whenever the stack changes, so it
 // tracks the stack exactly in both directions.
-export function footingShieldFor(p) {
+if (SAM.footingDefenseCapStacks !== CONFIG.FOOTING_DEFENSE_CAP_STACKS || SAM.footingDefenseCapStacks > SAM.footingBurstMinStacks) {
+  throw new Error(`Footing defence cap: samurai_armor says ${SAM.footingDefenseCapStacks}, config says ${CONFIG.FOOTING_DEFENSE_CAP_STACKS}; it must match and sit at or under the burst's ${SAM.footingBurstMinStacks}`);
+}
+export function footingDefenseStacks(p) {
   const f = (p.engines && p.engines.footing) || 0;
-  return f * SAM.footingShieldPerStack;
+  return Math.min(f, SAM.footingDefenseCapStacks);
+}
+export function footingShieldFor(p) {
+  return footingDefenseStacks(p) > 0 ? SAM.footingShieldFlat : 0;
 }
 
 // Footing's contribution to the stat sheet.
@@ -145,8 +151,9 @@ export function footingShieldFor(p) {
 // for standing still was the opposite of that, and most of why holding beat
 // dodging on both axes.
 function footingStats(p, passives) {
-  const f = (p.engines && p.engines.footing) || 0;
-  return { grit: f * (SAM.footingGritPerStack + passives(p, 'footingGritBonus')) };
+  // FLAT while active (pace-spec §11.7): standing longer buys no more grit.
+  if (footingDefenseStacks(p) <= 0) return { grit: 0 };
+  return { grit: SAM.footingGritFlat + SAM.footingDefenseCapStacks * passives(p, 'footingGritBonus') };
 }
 
 // ---------------------------------------------------------------- chi
