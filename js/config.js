@@ -251,11 +251,13 @@ export const CONFIG = {
   // Horde timer end: fodder dies at once; specials chase (the straggler chase)
   // for this long, then die with their loot. Objectives are exempt.
   HORDE_SPECIAL_CHASE_S: 3,
-  // Landmark-ROLE enemies (heavy telegraphers, w < 0.5: Bark Hulk, Elk) are
-  // exempt from that cull as objectives under the 2 Nov ruling. On map 3 they
-  // are part of the ordinary mix: up to 14 stand at the cull and the tail runs
-  // 11–20 s (vs 3.5 s with this true). A Designer switch, off per the ruling.
-  HORDE_CULL_LANDMARK_ROLE: false,
+  // Landmark-ROLE enemies (heavy telegraphers, w < 0.5: Bark Hulk, Elk) chase
+  // and are culled like specials (Designer call 2 Nov 2026). On map 3 they are
+  // part of the ordinary mix: exempting them left up to 14 standing and an
+  // 11–20 s tail. A landmark a room must kill to clear opts out per unit with
+  // `cullExempt: true` (or `clearObjective: true`); bosses, minibosses and
+  // pylons stay exempt regardless.
+  HORDE_CULL_LANDMARK_ROLE: true,
   PICKUP_BLOB_CAP: 60,     // ground pickups; past it a drop merges into the nearest blob
   ARENA_CROWD_AT: 5,       // parties this size and up fight in scaled arenas
   ARENA_CROWD_SCALE: 1.25, // bounds ×1.25 (same templates, geometry scaled)

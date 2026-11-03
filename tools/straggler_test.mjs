@@ -302,12 +302,18 @@ else fail(`after clear: straggle=${pylon.straggle} cullAt=${g.straggleCullAt}`);
     if (queuedFodder === 0) ok('no fodder lands after the timer'); else fail(`${queuedFodder} fodder still queued after the timer`);
 
     // THE SPECIAL CULL (Designer ruling 2 Nov 2026): HORDE_SPECIAL_CHASE_S after
-    // the timer the specials die too, with loot and no credit. Objectives —
-    // a boss, a landmark — are exempt and stay.
+    // the timer the specials die too, with loot and no credit — and so do
+    // landmark-ROLE enemies (Designer call 2 Nov 2026, HORDE_CULL_LANDMARK_ROLE).
+    // Objectives stay: a boss, a landmark opted out with `cullExempt`, and a
+    // landmark stamped as the room's clear objective.
     const landmark = s.spawnEnemyById('pnw_bark_hulk', q.x + 300, q.y, {});
+    const objLandmark = s.spawnEnemyById('pnw_bark_hulk', q.x, q.y + 300, { cullExempt: true });
+    const clearLandmark = s.spawnEnemyById('pnw_elk', q.x, q.y - 300, { clearObjective: true });
     const boss = s.spawnEnemyById('pnw_cedar_warden', q.x - 300, q.y, {});
     boss.boss = true; boss.bossDef = { name: 'Stub', color: '#fff' }; boss.bs = {}; boss.spd = 0;
-    landmark.spd = 0;
+    landmark.spd = 0; objLandmark.spd = 0; clearLandmark.spd = 0;
+    if (enemyRole(landmark.def) === 'landmark' && enemyRole(clearLandmark.def) === 'landmark') ok('bark hulk and elk are landmark-role');
+    else fail(`landmark roles: ${enemyRole(landmark.def)}, ${enemyRole(clearLandmark.def)}`);
     const specials = specialsAfter.filter(e => e.active);
     const sc0 = s.hordeSpecialCulled || 0, gold1 = s.payout.gold, k1 = q.kills || 0;
     const tEnd = s.time;
@@ -321,8 +327,16 @@ else fail(`after clear: straggle=${pylon.straggle} cullAt=${g.straggleCullAt}`);
     if (stillUp === 0 && (s.hordeSpecialCulled || 0) - sc0 >= specials.length && s.payout.gold > gold1 && (q.kills || 0) === k1) {
       ok(`then die with their loot and no credit: ${(s.hordeSpecialCulled || 0) - sc0} specials culled, gold ${gold1} -> ${s.payout.gold}`);
     } else fail(`special cull: ${stillUp} still up, culled ${(s.hordeSpecialCulled || 0) - sc0}, gold ${gold1} -> ${s.payout.gold}, kills ${k1} -> ${q.kills}`);
-    if (landmark.active && boss.active) ok('the boss and the landmark (objectives) survive the special cull');
-    else fail(`objective culled: landmark ${landmark.active}, boss ${boss.active}`);
+    if (!landmark.active) ok('an ordinary landmark-role enemy is culled with the specials');
+    else fail('an ordinary landmark (bark hulk) survived the special cull');
+    if (objLandmark.active && clearLandmark.active && boss.active) ok('objectives survive the special cull: the boss, a cullExempt landmark, the room\'s clear-objective landmark');
+    else fail(`objective culled: cullExempt landmark ${objLandmark.active}, clearObjective landmark ${clearLandmark.active}, boss ${boss.active}`);
+    // Pooled slots must not inherit the opt-out.
+    objLandmark.boss = false;
+    s._killEnemy(objLandmark, null);
+    const recycled = s.spawnEnemyById('pnw_bark_hulk', q.x, q.y + 300, {});
+    if (!recycled.cullExempt && !recycled.clearObjective) ok('cullExempt / clearObjective do not ride a recycled pool slot');
+    else fail(`recycled slot kept cullExempt ${recycled.cullExempt} clearObjective ${recycled.clearObjective}`);
   }
 }
 

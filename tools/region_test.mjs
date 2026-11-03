@@ -713,8 +713,10 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
 
 // ---- HORDE PACE: the timer-end special cull, and Bastion's specials ----
 // Designer ruling 2 Nov 2026. (1) HORDE_SPECIAL_CHASE_S after a horde wave's
-// timer, nothing but objectives (bosses, landmarks, straggler exemptions) is
-// left standing, on map 1 and on map 3 — measured with a player who deals no
+// timer, nothing but objectives (bosses, minibosses, pylons and the other
+// straggler exemptions, cullExempt / clearObjective units) is left standing —
+// landmark-ROLE enemies are culled too (Designer call 2 Nov 2026) — 
+// on map 1 and on map 3, measured with a player who deals no
 // damage, so the cull and not the kill rate is what clears the field.
 // (2) A Bastion room on a horde map still fields its telegraphing specials,
 // they form on the horde ring (one front, R 500–640 ± the pack spread), and
@@ -742,8 +744,14 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     const sim = enter(seed, pick);
     if (!sim || !sim.wave || !sim.wave.horde) { fail(`${label} special-cull fixture: no horde combat room (seed ${seed})`); continue; }
     const p = sim.players[0];
-    let guard = 0;
-    while (!sim.wave.done && guard++ < 120 * 60) { sim.setInput(0, { mx: 0, my: 0 }); sim.tick(); p.hp = p.stats.vitality; }
+    let guard = 0, objLm = null, lmSeen = 0;
+    const lmIds = new Set();
+    while (!sim.wave.done && guard++ < 120 * 60) {
+      sim.setInput(0, { mx: 0, my: 0 }); sim.tick(); p.hp = p.stats.vitality;
+      for (const e of sim.enemyPool) if (e.active && enemyRole(e.def) === 'landmark' && !lmIds.has(e.id)) { lmIds.add(e.id); lmSeen++; }
+      // A landmark the room needs dead to clear, stamped mid-wave: it must outlive the cull.
+      if (!objLm && sim.wave.t > sim.wave.dur - 2) objLm = sim.spawnEnemyById('pnw_bark_hulk', p.x + 420, p.y, { clearObjective: true });
+    }
     const tDone = sim.time;
     while (sim.time < tDone + CONFIG.HORDE_SPECIAL_CHASE_S + 0.2 && sim.phase === 'arena') { sim.setInput(0, { mx: 0, my: 0 }); sim.tick(); p.hp = p.stats.vitality; }
     const left = [...sim.enemyPool].filter(e => e.active);
@@ -753,6 +761,11 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     if (nonObjective.length === 0 && (sim.hordeSpecialCulled || 0) > 0) {
       ok(`${label}: ${CONFIG.HORDE_SPECIAL_CHASE_S} s after the ${sim.wave.dur} s timer only objectives stand (${left.length}: ${JSON.stringify(kinds)}); ${sim.hordeCulled} culled, ${sim.hordeSpecialCulled} of them specials`);
     } else fail(`${label}: ${nonObjective.length} non-objective bodies still up ${CONFIG.HORDE_SPECIAL_CHASE_S} s after the timer (${nonObjective.slice(0, 4).map(e => e.def.id).join(', ')}), specials culled ${sim.hordeSpecialCulled}`);
+    const lmLeft = left.filter(e => enemyRole(e.def) === 'landmark' && e !== objLm);
+    if (CONFIG.HORDE_CULL_LANDMARK_ROLE && lmLeft.length === 0) ok(`${label}: landmark-role enemies are culled (${lmSeen} fielded, 0 left)`);
+    else fail(`${label}: ${lmLeft.length} landmark-role bodies survive the cull (switch ${CONFIG.HORDE_CULL_LANDMARK_ROLE})`);
+    if (objLm && objLm.active) ok(`${label}: the room's clear-objective landmark survives the cull`);
+    else fail(`${label}: clear-objective landmark ${objLm ? 'culled' : 'never spawned'}`);
   }
 
   {

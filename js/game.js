@@ -1332,12 +1332,25 @@ export class Sim {
   // THE SPECIAL CULL. HORDE_SPECIAL_CHASE_S after the timer cull, every body
   // still standing dies with its loot and no kill credit, exactly like the
   // fodder did — except the room's OBJECTIVES: bosses and minibosses, the
-  // straggler exemptions (pylons, nests, bounties, arena variants) and
-  // landmark-role enemies. Queued non-objective spawns are dropped with them.
-  // One-shot: a brood child born after it falls to the ordinary straggler rules.
+  // straggler exemptions (pylons, nests, bounties, arena variants), any body
+  // opted out with `cullExempt` (per unit, or on its def: a landmark the room
+  // requires killing to clear) and any body stamped as the room's clear
+  // objective (`clearObjective`). Landmark-ROLE enemies (Bark Hulk, Elk) are
+  // ordinary bodies and are culled (Designer call 2 Nov 2026,
+  // HORDE_CULL_LANDMARK_ROLE). Queued non-objective spawns are dropped with
+  // them. One-shot: a brood child born after it falls to the ordinary
+  // straggler rules.
   _hordeObjectiveBody(e) {
     return !!(e.boss || e.mini || this._straggleExempt(e)
+      || e.cullExempt || e.clearObjective || (e.def && e.def.cullExempt)
       || (!CONFIG.HORDE_CULL_LANDMARK_ROLE && enemyRole(e.def) === 'landmark'));
+  }
+
+  _hordeObjectiveQueued(q) {
+    const def = ENEMY_BY_ID[q.id];
+    if (!def) return true;
+    return !!(q.cullExempt || q.clearObjective || def.cullExempt
+      || (!CONFIG.HORDE_CULL_LANDMARK_ROLE && enemyRole(def) === 'landmark'));
   }
 
   _hordeSpecialCull() {
@@ -1346,8 +1359,7 @@ export class Sim {
     if (this.obj) return;
     for (let i = this.spawnQueue.length - 1; i >= 0; i--) {
       const q = this.spawnQueue[i];
-      const def = ENEMY_BY_ID[q.id];
-      if (def && enemyRole(def) !== 'landmark') this.spawnQueue.splice(i, 1);
+      if (!this._hordeObjectiveQueued(q)) this.spawnQueue.splice(i, 1);
     }
     let n = 0;
     for (const e of [...this.enemyPool]) {
@@ -2322,6 +2334,10 @@ export class Sim {
       // six unkillable enemies standing in a later horde arena, and the fight
       // could never end.
       isNest: false, nestShielded: false, bounty: false, arenaVariant: null,
+      // Horde special-cull opt-outs (see _hordeObjectiveBody). A room that
+      // needs a landmark dead to clear spawns it with { cullExempt: true }
+      // or { clearObjective: true }; recycled slots start clean.
+      cullExempt: !!opts.cullExempt, clearObjective: !!opts.clearObjective,
       spawnCdMult: 1, maxBroodCap: 0, enrageRate: 0, baseSpd: 0, payloadCd: 0,
       // Straggler clock. Wiped by the pool, set here so a fresh body starts
       // at zero rather than inheriting a chase from the slot's previous life
@@ -2446,7 +2462,7 @@ export class Sim {
       q.t -= dt;
       if (q.t <= 0) {
         this.spawnQueue.splice(i, 1);
-        this.spawnEnemyById(q.id, q.x, q.y, { elite: q.elite, mod: q.mod, mortar: q.mortar, puddle: q.puddle });
+        this.spawnEnemyById(q.id, q.x, q.y, { elite: q.elite, mod: q.mod, mortar: q.mortar, puddle: q.puddle, cullExempt: q.cullExempt, clearObjective: q.clearObjective });
       }
     }
   }
