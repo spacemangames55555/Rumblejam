@@ -300,6 +300,29 @@ else fail(`after clear: straggle=${pylon.straggle} cullAt=${g.straggleCullAt}`);
     if (specialsAfter.length === specialsBefore && specialsAfter.every(e => e.straggle)) ok(`specials survive the cull and come to the party: ${specialsAfter.length} chasing`);
     else fail(`specials after cull: ${specialsAfter.length} (was ${specialsBefore}), chasing ${specialsAfter.filter(e => e.straggle).length}`);
     if (queuedFodder === 0) ok('no fodder lands after the timer'); else fail(`${queuedFodder} fodder still queued after the timer`);
+
+    // THE SPECIAL CULL (Designer ruling 2 Nov 2026): HORDE_SPECIAL_CHASE_S after
+    // the timer the specials die too, with loot and no credit. Objectives —
+    // a boss, a landmark — are exempt and stay.
+    const landmark = s.spawnEnemyById('pnw_bark_hulk', q.x + 300, q.y, {});
+    const boss = s.spawnEnemyById('pnw_cedar_warden', q.x - 300, q.y, {});
+    boss.boss = true; boss.bossDef = { name: 'Stub', color: '#fff' }; boss.bs = {}; boss.spd = 0;
+    landmark.spd = 0;
+    const specials = specialsAfter.filter(e => e.active);
+    const sc0 = s.hordeSpecialCulled || 0, gold1 = s.payout.gold, k1 = q.kills || 0;
+    const tEnd = s.time;
+    let early = false;
+    while (s.time < tEnd + CONFIG.HORDE_SPECIAL_CHASE_S - 0.1) { s.setInput(0, { mx: 0, my: 0 }); s.tick(); if (specials.some(e => !e.active)) early = true; }
+    const heldOn = specials.filter(e => e.active && e.straggle).length;
+    for (let i = 0; i < 20; i++) { s.setInput(0, { mx: 0, my: 0 }); s.tick(); }
+    const stillUp = specials.filter(e => e.active).length;
+    if (specials.length > 0 && !early && heldOn === specials.length) ok(`specials chase for the full ${CONFIG.HORDE_SPECIAL_CHASE_S} s before the cull (${heldOn} chasing)`);
+    else fail(`special chase window: ${specials.length} specials, early deaths ${early}, chasing at ${CONFIG.HORDE_SPECIAL_CHASE_S} s ${heldOn}`);
+    if (stillUp === 0 && (s.hordeSpecialCulled || 0) - sc0 >= specials.length && s.payout.gold > gold1 && (q.kills || 0) === k1) {
+      ok(`then die with their loot and no credit: ${(s.hordeSpecialCulled || 0) - sc0} specials culled, gold ${gold1} -> ${s.payout.gold}`);
+    } else fail(`special cull: ${stillUp} still up, culled ${(s.hordeSpecialCulled || 0) - sc0}, gold ${gold1} -> ${s.payout.gold}, kills ${k1} -> ${q.kills}`);
+    if (landmark.active && boss.active) ok('the boss and the landmark (objectives) survive the special cull');
+    else fail(`objective culled: landmark ${landmark.active}, boss ${boss.active}`);
   }
 }
 

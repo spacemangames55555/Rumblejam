@@ -711,5 +711,81 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   }
 }
 
+// ---- HORDE PACE: the timer-end special cull, and Bastion's specials ----
+// Designer ruling 2 Nov 2026. (1) HORDE_SPECIAL_CHASE_S after a horde wave's
+// timer, nothing but objectives (bosses, landmarks, straggler exemptions) is
+// left standing, on map 1 and on map 3 — measured with a player who deals no
+// damage, so the cull and not the kill rate is what clears the field.
+// (2) A Bastion room on a horde map still fields its telegraphing specials,
+// they form on the horde ring (one front, R 500–640 ± the pack spread), and
+// they wind up their telegraphs at the party.
+{
+  const { CONFIG } = await import('../js/config.js');
+  const { enemyRole } = await import('../js/content/regions-enemies.js');
+  const { liveZones } = await import('../js/telegraphs.js');
+  const AR = await import('../js/arenas.js');
+  const enter = (seed, pick) => {
+    const sim = new Sim({ seed, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_samurai', color: '#fff' }] });
+    const p = sim.players[0];
+    if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+    const node = pick(sim);
+    if (!node) return null;
+    sim.god = true;
+    sim._travelTo(node.id);
+    p.loadout.fill(null); sim.summons.length = 0;
+    return sim;
+  };
+  for (const [label, seed, pick] of [
+    ['map 1', 777, s => s.floor.nodes[s.reachableNodes().find(id => AR.isOnboardingNode(1, s.floor.nodes[id])) ?? s.reachableNodes()[0]]],
+    ['map 3', 777, s => s.floor.nodes.find(n => n.depth === 3 && n.kind === 'combat')],
+  ]) {
+    const sim = enter(seed, pick);
+    if (!sim || !sim.wave || !sim.wave.horde) { fail(`${label} special-cull fixture: no horde combat room (seed ${seed})`); continue; }
+    const p = sim.players[0];
+    let guard = 0;
+    while (!sim.wave.done && guard++ < 120 * 60) { sim.setInput(0, { mx: 0, my: 0 }); sim.tick(); p.hp = p.stats.vitality; }
+    const tDone = sim.time;
+    while (sim.time < tDone + CONFIG.HORDE_SPECIAL_CHASE_S + 0.2 && sim.phase === 'arena') { sim.setInput(0, { mx: 0, my: 0 }); sim.tick(); p.hp = p.stats.vitality; }
+    const left = [...sim.enemyPool].filter(e => e.active);
+    const nonObjective = left.filter(e => !sim._hordeObjectiveBody(e));
+    const kinds = {};
+    for (const e of left) kinds[enemyRole(e.def)] = (kinds[enemyRole(e.def)] || 0) + 1;
+    if (nonObjective.length === 0 && (sim.hordeSpecialCulled || 0) > 0) {
+      ok(`${label}: ${CONFIG.HORDE_SPECIAL_CHASE_S} s after the ${sim.wave.dur} s timer only objectives stand (${left.length}: ${JSON.stringify(kinds)}); ${sim.hordeCulled} culled, ${sim.hordeSpecialCulled} of them specials`);
+    } else fail(`${label}: ${nonObjective.length} non-objective bodies still up ${CONFIG.HORDE_SPECIAL_CHASE_S} s after the timer (${nonObjective.slice(0, 4).map(e => e.def.id).join(', ')}), specials culled ${sim.hordeSpecialCulled}`);
+  }
+
+  {
+    const sim = enter(777, s => {
+      const n = s.floor.nodes[s.reachableNodes().find(id => AR.isOnboardingNode(1, s.floor.nodes[id])) ?? s.reachableNodes()[0]];
+      n.profile = 'bastion';
+      return n;
+    });
+    const p = sim.players[0];
+    const seen = new Set(), dists = [];
+    let specials = 0, specialTelegraphs = 0;
+    const telSeen = new Set();
+    for (let i = 0; i < 28 * 60; i++) {
+      sim.setInput(0, { mx: 0, my: 0 }); sim.tick(); p.hp = p.stats.vitality;
+      for (const e of sim.enemyPool) {
+        if (!e.active || seen.has(e.id)) continue;
+        seen.add(e.id);
+        dists.push(Math.hypot(e.x - p.x, e.y - p.y));
+        if (enemyRole(e.def) === 'special') specials++;
+      }
+      for (const z of liveZones(sim)) {
+        const e = [...sim.enemyPool].find(x => x.id === z.id);
+        if (e && enemyRole(e.def) === 'special' && !telSeen.has(e.id)) { telSeen.add(e.id); specialTelegraphs++; }
+      }
+    }
+    dists.sort((a, b) => a - b);
+    const lo = CONFIG.HORDE_RING_MIN - CONFIG.PACK_SPREAD, hi = CONFIG.HORDE_RING_R[1] + CONFIG.PACK_SPREAD;
+    const inRing = dists.filter(d => d >= lo && d <= hi).length / Math.max(1, dists.length);
+    if (sim.profile && sim.profile.ring === false && sim.wave.horde && specials > 0 && specialTelegraphs > 0 && inRing >= 0.9) {
+      ok(`a Bastion horde room keeps its specials: ${specials} cedar wardens of ${dists.length} bodies, ${specialTelegraphs} wound up a telegraph on the party; ${(inRing * 100).toFixed(0)}% landed on the ring (${lo}–${hi} u, median ${Math.round(dists[dists.length >> 1])})`);
+    } else fail(`Bastion horde room: profile ring ${sim.profile && sim.profile.ring}, specials ${specials}, special telegraphs ${specialTelegraphs}, on-ring ${(inRing * 100).toFixed(0)}% of ${dists.length}`);
+  }
+}
+
 console.log(failures ? `\n${failures} REGION-SHELL FAILURE(S)` : '\nALL REGION-SHELL PATHS VERIFIED');
 process.exit(failures ? 1 : 0);

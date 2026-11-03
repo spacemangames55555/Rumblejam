@@ -925,7 +925,8 @@ export class Sim {
     this.fightPaid = 0;  // whole materials those pickups actually paid
     this.payout = { kills: 0, gold: 0, xp: 0 };  // and what the fight paid out
     this._goldAcc = 0;   // the difficulty multiplier's carried fraction, per fight
-    this._yieldAcc = 0.5; // horde fodder yield accumulator, per fight (first kill pays)
+    this._yieldAcc = 0.5;
+    this.hordeCulled = 0; this.hordeSpecialCulled = 0; // timer-cull counters, per fight
     this.lootT = null;   // the siege's post-boss looting countdown
     this.safe = false;   // the room is live again
     this._armCurses();   // last round's curses expire; this round's bite
@@ -1034,7 +1035,11 @@ export class Sim {
   // (forever in sieges), then stops; the fight ends when the field is cleared.
   _tickWave(dt) {
     const w = this.wave;
-    if (!w || w.done) return;
+    if (!w) return;
+    if (w.done) {
+      if (w.horde && w.specialCullAt != null && this.time >= w.specialCullAt) this._hordeSpecialCull();
+      return;
+    }
     if (w.horde) { this._tickHordeWave(dt); return; }
     w.t += dt;
     // Map 1's alive caps defer budget instead of discarding it. Ending the
@@ -1312,8 +1317,51 @@ export class Sim {
     // nearest living player (no RNG). This is the 5–32 s mop-up the spec
     // removes; the 20 s cull still applies to specials once the room thins.
     for (const e of this.enemyPool) if (e.active && !this._straggleExempt(e)) e.straggle = true;
+    // ...and HORDE_SPECIAL_CHASE_S later the specials go too (Designer ruling
+    // 2 Nov 2026): the map-3 tail was 16–21 s of specials walking in.
+    this.wave.specialCullAt = this.time + CONFIG.HORDE_SPECIAL_CHASE_S;
     // Everything on the floor comes to the party now, not when the last
     // special dies: the fodder's loot is the wave's payout.
+    for (const m of this.pickups) {
+      if (m.target !== -1) continue;
+      const p = this.nearestLivingPlayer(m.x, m.y);
+      if (p) m.target = p.idx;
+    }
+  }
+
+  // THE SPECIAL CULL. HORDE_SPECIAL_CHASE_S after the timer cull, every body
+  // still standing dies with its loot and no kill credit, exactly like the
+  // fodder did — except the room's OBJECTIVES: bosses and minibosses, the
+  // straggler exemptions (pylons, nests, bounties, arena variants) and
+  // landmark-role enemies. Queued non-objective spawns are dropped with them.
+  // One-shot: a brood child born after it falls to the ordinary straggler rules.
+  _hordeObjectiveBody(e) {
+    return !!(e.boss || e.mini || this._straggleExempt(e)
+      || (!CONFIG.HORDE_CULL_LANDMARK_ROLE && enemyRole(e.def) === 'landmark'));
+  }
+
+  _hordeSpecialCull() {
+    const w = this.wave;
+    w.specialCullAt = null;
+    if (this.obj) return;
+    for (let i = this.spawnQueue.length - 1; i >= 0; i--) {
+      const q = this.spawnQueue[i];
+      const def = ENEMY_BY_ID[q.id];
+      if (def && enemyRole(def) !== 'landmark') this.spawnQueue.splice(i, 1);
+    }
+    let n = 0;
+    for (const e of [...this.enemyPool]) {
+      if (!e.active || this._hordeObjectiveBody(e)) continue;
+      const rx = Math.round(e.x), ry = Math.round(e.y);
+      this.fx.culls.push({ x: rx, y: ry, r: e.radius });
+      this._killEnemy(e, null);
+      const deaths = this.fx.deaths;
+      const last = deaths[deaths.length - 1];
+      if (last && last.x === rx && last.y === ry) deaths.pop();
+      n++;
+    }
+    this.hordeSpecialCulled = (this.hordeSpecialCulled || 0) + n;
+    this.hordeCulled = (this.hordeCulled || 0) + n;
     for (const m of this.pickups) {
       if (m.target !== -1) continue;
       const p = this.nearestLivingPlayer(m.x, m.y);

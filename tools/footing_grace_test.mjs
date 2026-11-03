@@ -93,6 +93,38 @@ console.log(`  footingGraceMs=${SAM.footingGraceMs}  refill x${SAM.footingGraceR
   else fail(`hold-not-grow: ${before} -> ${p.engines.footing}`);
 }
 
+// FLAT DEFENCE (Game Designer ruling, 2 Nov 2026). Grit, the Footing absorb
+// pool and Iron Sleeve's footing scaling stop at footingDefenseCapStacks; the
+// stack keeps climbing (it sizes the step-off burst) but standing longer buys
+// no more armour.
+{
+  const { g, p, still } = samurai();
+  const { engineScale } = await import('../js/compose.js');
+  const { SKILL_BY_ID } = await import('../js/skills.js');
+  const sleeve = SKILL_BY_ID && SKILL_BY_ID.sam_iron_sleeve;
+  const sleeveStep = sleeve && sleeve.compose.find(c => c.kind === 'shield');
+  const read = () => ({ n: p.engines.footing, grit: p.stats.grit || 0, shield: p.footingShield || 0, sleeve: sleeveStep ? engineScale(sleeveStep, p, sleeve) : null });
+  const cap = SAM.footingDefenseCapStacks;
+  const bare = read();
+  for (let i = 0; i < 60 * 20 && p.engines.footing < 1; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+  const one = read();
+  if (bare.n === 0 && one.n === 1 && one.shield === SAM.footingShieldFlat && one.grit - bare.grit === SAM.footingGritFlat) {
+    ok(`Footing grants a flat shield ${SAM.footingShieldFlat} and grit +${SAM.footingGritFlat} from its first stack`);
+  } else fail(`flat Footing values: 0 stacks ${JSON.stringify(bare)}, 1 stack ${JSON.stringify(one)}, want shield ${SAM.footingShieldFlat} grit +${SAM.footingGritFlat}`);
+  for (let i = 0; i < 60 * 20 && p.engines.footing < cap; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+  const atCap = read();
+  if (atCap.grit !== one.grit || atCap.shield !== one.shield) fail(`defence moved between 1 and ${cap} stacks: ${JSON.stringify(one)} -> ${JSON.stringify(atCap)}`);
+  for (let i = 0; i < 60 * 20 && p.engines.footing < SAM.FOOTING_MAX_STACKS; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+  still(3000);
+  const full = read();
+  if (atCap.n === cap && full.n > cap && full.grit === atCap.grit && full.shield === atCap.shield && atCap.grit > 0 && atCap.shield > 0) {
+    ok(`standing longer adds no defence: ${atCap.n} stacks grit ${atCap.grit} / absorb ${atCap.shield}, ${full.n} stacks (3 s more) grit ${full.grit} / absorb ${full.shield}`);
+  } else fail(`defence grew with standing: ${JSON.stringify(atCap)} -> ${JSON.stringify(full)}`);
+  if (!sleeveStep) fail('Iron Sleeve shield step not found — the cap assertion cannot see it');
+  else if (Math.abs(full.sleeve - atCap.sleeve) < 1e-9 && atCap.sleeve > 1) ok(`Iron Sleeve's footing scaling is flat past ${cap} stacks (×${atCap.sleeve.toFixed(3)} at ${atCap.n} and at ${full.n})`);
+  else fail(`Iron Sleeve scaling ${atCap.sleeve} at ${atCap.n} -> ${full.sleeve} at ${full.n}`);
+}
+
 // THE STEP-OFF BURST (user ruling 2 Nov 2026, pace-spec §6.1b). A full
 // stance broken by a real step (past the grace window) releases one ring of
 // damage around the Samurai; a sidestep inside the window releases nothing;
