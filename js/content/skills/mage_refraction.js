@@ -42,7 +42,7 @@
 
 export const TUNING = {
   // tier 1 — Splinter
-  splinterDamage: 11, splinterRange: 240, splinterSpeed: 430, splinterRadius: 7, splinterCd: 1150,
+  splinterDamage: 11, splinterRange: 240, splinterSpeed: 430, splinterRadius: 7, splinterCd: 1200,   // 1150 → 1200: triggers run at 10 Hz (TRIGGER_TICK_MS 100), so it already fired at 1200 (pace-spec §12)
   // tier 2 — Inclusion (passive, the branch point)
   inclusionWeight: 0.15,
 

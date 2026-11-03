@@ -34,7 +34,7 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  hexDamage: 11, hexRange: 250, hexSpeed: 430, hexRadius: 7, hexCd: 1150,
+  hexDamage: 11, hexRange: 250, hexSpeed: 430, hexRadius: 7, hexCd: 1200,   // 1150 → 1200: triggers run at 10 Hz (TRIGGER_TICK_MS 100), so it already fired at 1200 (pace-spec §12)
   manyWeight: 0.15,
 
   // ---- branch A: Plague (contact and count, never designation) ----
