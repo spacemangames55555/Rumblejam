@@ -17,7 +17,7 @@ const SK = await import('../js/skillsim.js');
 const { TELEGRAPH_STATES, TELEGRAPH_MIN_WINDUP_MS, TELEGRAPHED_IDS, telegraphBusy } = await import('../js/telegraphs.js');
 const { inZone } = await import('../js/compose.js');
 const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
-const { REGION_ENEMIES, REGION_ENEMY_BY_ID, telegraphWeight, MIN_TELEGRAPH_WEIGHT } = await import('../js/content/regions-enemies.js');
+const { REGION_ENEMIES, REGION_ENEMY_BY_ID, telegraphWeight, MIN_TELEGRAPH_WEIGHT, HORDE_MIN_TELEGRAPH_WEIGHT, HORDE_MAX_TELEGRAPH_WEIGHT } = await import('../js/content/regions-enemies.js');
 const { CONFIG } = await import('../js/config.js');
 const { REGIONS } = await import('../js/regions.js');
 
@@ -335,11 +335,13 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
     const pop = REGION_ENEMIES[r.id];
     if (!pop || !pop.enemies || !pop.enemies.length) { empty.push(r.id); continue; }
     const { share } = telegraphWeight(pop.enemies);
-    if (share < MIN_TELEGRAPH_WEIGHT) bad.push(`${r.id} ${(100 * share).toFixed(0)}%`);
+    // A horde region (pace-spec §5) is held to the 8–25% special band instead.
+    if (pop.horde) { if (share < HORDE_MIN_TELEGRAPH_WEIGHT || share > HORDE_MAX_TELEGRAPH_WEIGHT) bad.push(`${r.id} ${(100 * share).toFixed(0)}% (horde band)`); }
+    else if (share < MIN_TELEGRAPH_WEIGHT) bad.push(`${r.id} ${(100 * share).toFixed(0)}%`);
   }
   const built = REGIONS.filter(r => REGION_ENEMIES[r.id] && REGION_ENEMIES[r.id].enemies && REGION_ENEMIES[r.id].enemies.length);
   if (!bad.length && !empty.length) {
-    ok(`all ${REGIONS.length} regions in the table clear the ${(100 * MIN_TELEGRAPH_WEIGHT).toFixed(0)}% telegraph-density floor: ${built.map(r => `${r.id} ${(100 * telegraphWeight(REGION_ENEMIES[r.id].enemies).share).toFixed(0)}%`).join(', ')}`);
+    ok(`all ${REGIONS.length} regions in the table meet their telegraph-density rule (slow: ≥${(100 * MIN_TELEGRAPH_WEIGHT).toFixed(0)}%, horde: ${(100 * HORDE_MIN_TELEGRAPH_WEIGHT).toFixed(0)}–${(100 * HORDE_MAX_TELEGRAPH_WEIGHT).toFixed(0)}%): ${built.map(r => `${r.id} ${(100 * telegraphWeight(REGION_ENEMIES[r.id].enemies).share).toFixed(0)}%`).join(', ')}`);
   } else {
     if (bad.length) fail(`under the density floor: ${bad.join(', ')}`);
     if (empty.length) fail(`${empty.length} region(s) declared in js/regions.js with NO enemy population: ${empty.join(', ')} — a region the density floor cannot measure is a region that can ship unchecked`);

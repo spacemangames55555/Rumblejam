@@ -22,8 +22,17 @@ import { XIB_ENEMIES, XIB_BOSS } from './enemies-xibalba.js';
 import { GB_ENEMIES, GB_BOSS } from './enemies-britain.js';
 import { isDomain } from '../domains.js';
 
-// Half the population, by encounter weight.
+// Half the population, by encounter weight — for a region still on the SLOW
+// curve. A HORDE region (entry `horde: true`, user ruling 2 Nov 2026) is
+// fodder plus a few specials: 8–25% telegraphing by encounter weight, with at
+// least two telegraph shapes, and fodder never telegraphs (GDD §6.4 at horde
+// pace). The 50% floor was written for a room of 2–3 bodies; at 10–60 on
+// screen it turns the floor into clutter that hides the specials it exists to
+// teach.
 export const MIN_TELEGRAPH_WEIGHT = 0.5;
+export const HORDE_MIN_TELEGRAPH_WEIGHT = 0.08;
+export const HORDE_MAX_TELEGRAPH_WEIGHT = 0.25;
+export const HORDE_MIN_TELEGRAPH_SHAPES = 2;
 
 // The behaviours that must commit. A "heavy" is anything whose answer is
 // positioning rather than kiting; if a new behaviour belongs in that set it
@@ -55,7 +64,7 @@ export const COMMITTING_BEHAVIORS = new Set(['brute', 'warden', 'dasher']);
 export const REGION_ENEMIES = {
   pacific_northwest: { enemies: PNW_ENEMIES, boss: PNW_BOSS },
   central_america: { enemies: XIB_ENEMIES, boss: XIB_BOSS },
-  great_britain: { enemies: GB_ENEMIES, boss: GB_BOSS },
+  great_britain: { enemies: GB_ENEMIES, boss: GB_BOSS, horde: true },
 };
 
 export const ALL_REGION_ENEMIES = Object.values(REGION_ENEMIES).flatMap(r => r.enemies);
@@ -154,9 +163,16 @@ function assertRegionEnemies() {
       if (e.telegraph) checkTelegraph(e.id, e.telegraph, problems);
     }
 
-    // RULE 2: at least half the population, by encounter weight.
+    // RULE 2: at least half the population, by encounter weight — or, in a
+    // horde region, the 8–25% special band with at least two shapes.
     const { total, tel, share } = telegraphWeight(enemies);
-    if (share < MIN_TELEGRAPH_WEIGHT) {
+    if (REGION_ENEMIES[regionId].horde) {
+      if (share < HORDE_MIN_TELEGRAPH_WEIGHT || share > HORDE_MAX_TELEGRAPH_WEIGHT) {
+        problems.push(`${regionId}: horde region telegraphing weight ${tel.toFixed(2)}/${total.toFixed(2)} = ${(100 * share).toFixed(1)}%, outside the ${(100 * HORDE_MIN_TELEGRAPH_WEIGHT).toFixed(0)}–${(100 * HORDE_MAX_TELEGRAPH_WEIGHT).toFixed(0)}% special band — below it there is nothing to read in the crowd, above it the crowd is clutter`);
+      }
+      const shapes = new Set(enemies.filter(e => e.telegraph).map(e => e.telegraph.shape && e.telegraph.shape.kind));
+      if (shapes.size < HORDE_MIN_TELEGRAPH_SHAPES) problems.push(`${regionId}: horde region has ${shapes.size} telegraph shape(s); a region teaches at least ${HORDE_MIN_TELEGRAPH_SHAPES}`);
+    } else if (share < MIN_TELEGRAPH_WEIGHT) {
       problems.push(`${regionId}: telegraphing weight ${tel.toFixed(1)}/${total.toFixed(1)} = ${(100 * share).toFixed(1)}%, under the ${(100 * MIN_TELEGRAPH_WEIGHT).toFixed(0)}% floor — most incoming damage would be undodgeable and the hold-or-break decision is settled by arithmetic rather than by play`);
     }
 
