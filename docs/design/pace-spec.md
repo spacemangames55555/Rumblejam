@@ -316,7 +316,7 @@ Ruled 2026-11-02 (Designer) on Game Engineer's departures from this spec in `cur
    - **Check D (`tools/roster_weight_gate.mjs`, `hordeChecks`) is a punish.** For each special (a telegrapher with `w ≥ 0.5`), it divides `telegraph.damage` by the vitality of a character at the region's anchor level, and requires 6–9%. That's how much one missed read costs, not how often a read appears. The Cedar Warden measures 7.5% (6 of 80).
    - The two are independent. A region can sit anywhere in 8–25% with every special inside 6–9%. The ~8–15% re-band floated in §5 is withdrawn until a content pass gives specials harder hits.
    - Caveat, from the gate's own note: the harness never spends banked stat picks, so every anchor resolves to 80 vitality, and D is a flat band rather than a level-scaled one.
-6. **Region 2 stays on the slow curve, on this branch only.** *Ruled 2026-11-02 (Designer).* Its roster is still 50%+ telegraphing heavies, which is a wall at horde rates. It gets its own horde pass (fodder plus specials, A′–D, its own pace measurement) before `HORDE_REGIONS` includes it.
+6. **Region 2 stays on the slow curve, on this branch only.** *Ruled 2026-11-02 (Designer).* Its roster is still 50%+ telegraphing heavies, which is a wall at horde rates. It gets its own horde pass (fodder plus specials, A′–D, its own pace measurement) before `HORDE_REGIONS` includes it. The roster for that pass is §15. *Ruled 2026-11-04 (Designer):* Region 2 goes horde before Region 3 or together with it, never after (§11.10).
 7. **Samurai's Footing keeps grit and shield alongside the step-off burst, provided neither scales with time stood still.** *Ruled 2026-11-02 (Designer).*
    - Today both are per stack (`footingShieldPerStack` 4, `footingGritPerStack` 2), so they grow the longer he stands. They become flat values granted while Footing is active.
    - All of the extra payoff for holding comes from stepping off. The stack count buys only the burst (first build: 3-stack minimum, 1.5 damage per stack, radius 70 + 8 per stack).
@@ -328,6 +328,18 @@ Ruled 2026-11-02 (Designer) on Game Engineer's departures from this spec in `cur
    - Target: **the fight ends within 5 s of the timer** on every horde map. This replaces the 4 s chase and 20 s straggler cull on horde maps (GDD §2.6 rule 3).
    - It is also the answer to the measured map-1 tails over 5 s (9 classes, up to 9.8 s for the Mage), which are not an opener problem.
 
+
+9. **Clumsy-player fix on map 1.** *Ruled 2026-11-04 (Designer).* On `83322eb`, clumsy Cascade cleared 14/20 against a bar of 17. The fix applies to map 1 only:
+   - Fodder contact damage ×0.7.
+   - Fodder speed capped at 230 u/s (it ran up to 270).
+   - Pack size ramps 4 → 8 over the first 15 s.
+   - The density bar is unchanged. Engineer implements it.
+   - The §14 thin-field pack and this ramp don't conflict: a struggling player keeps the field full, so the thin-field pack never fires for them.
+10. **Region 3 (`cursor/region3-great-britain` at `3a55d3e`).** *Ruled 2026-11-04 (Designer).*
+    - **The fodder HP check is measured at each region's arrival level, not level 1.** A region's live fodder HP must be at most the weakest opener hit of a character at that region's arrival level (`REGION_ANCHOR_LEVEL`: 1, 10, 19, …; level 19 for Region 3). That hit includes ranks and level stats, as it lands. The level-1 packet of 4 is region 1's case of this rule, not the rule itself.
+    - **The Wild Hunt Rider loses its lane telegraph and stays sprinter fodder** (hp 3, spd 245, w 3.5). The Redcap is the region's one light special (circle).
+    - **Engineer's R3 fodder speeds, weights and damage are confirmed as built**, including the Sprite at 200 u/s.
+    - **Region 3 joins `HORDE_REGIONS` when the pace branch passes.** Region 2 goes horde first or at the same time (§15). A slow Region 2 between two horde regions would read as a broken map, not a breather.
 ---
 
 ## 12. Opener tuning at horde pace (design numbers; nothing built)
@@ -387,3 +399,93 @@ Ruled 2026-11-02 (Designer) on Game Engineer's departures from this spec in `cur
 - Engineer builds these numbers on a branch after sign-off.
 - Then re-run `map1_bot` on all 14 classes, plus Engineer's 16 Samurai seeds, and `sim_test` §10.
 - Then revisit the ×1.45 map-1 rate (§11.1).
+
+---
+
+## 13. Tier 2/3 pack clearing (design numbers; nothing built)
+
+**Goal:** every class gets a pack answer at tier 2/3 in its own shape, with Bard and Hunter first (both under 4.0 kills/s on map 3). Cooldowns are on the 100 ms grid, and the floor-1 DPS table stays within ±40%.
+
+**Method** (local scratch on `cursor/horde-pace-map1` at `83322eb`; nothing pushed there, scratch files deleted afterwards):
+- **Overrides:** applied to the live skill objects before each run. The code was not edited.
+- **Map 3:** the §12 god-mode harness (`pace_measure.mjs --depth=3 --god`, character granted level 8). Kills inside the timer ÷ 45 s.
+- **Seeds:** 12 of the 27 seeds tried have a depth-3 combat room: 777, 424242, 20260728, 31337, 1, 4242, 9, 10, 14, 17, 21 and 22. Seed 1 is a room every class reads low in (median 57–103 alive, 0.8–3.2 kills/s), so the mean is also given without it.
+- **DPS:** the `sim_test` §10 harness (`measureDps`), with all the changes below applied together. Median 34.8, unchanged.
+- **Which skills get measured:** the bot buys tier 2 and tier 3 from its opener's tree. Monk, Savage, Samurai and Druid have a passive or heal at tier 2/3 of their default tree, so they were measured on the tree that has active tier-2/3 nodes (`--opener` shown).
+- **Noise:** single-class differences under about ±0.3 kills/s are within run-to-run noise on 12 seeds [estimate from the spread between variants].
+
+| Class (chain) | Tier 2 change | Tier 3 change | Map 3 kills/s before → after, mean (excluding seed 1) | DPS vs median before → after | Pack identity |
+|---|---|---|---|---|---|
+| **Bard** (Opening Note) | Quickstep: no change (arc 3.2 measured +82% DPS on the 4-dummy ring) | **Counterpoint: 3 bolts (was 2), pierce 1, damage 5 → 4**; also **Opening Note cd 700 → 800** to pay for it | **3.58 (3.63) → 3.94 (4.02)** | +34% → +32% | fanned notes that pass through the front row |
+| **Hunter** (Sighting Shot) | **Falconer: hawk strike arc 1.5 → 2.6, reach 46 → 70, attack cd 1150 → 800** | **Spotter's Call: pierce 3** | **3.65 (3.74) → 3.92 (4.16)** | +16% → +28% | crossfire: hawk sweeps on one side, lanes from the other |
+| Necromancer (Blip) | Dark Matter Bomb: splash radius 60 → 90, cd 1200 → 1000 | Tainted Dark Matter: pierce 2, cd 2000 → 1600 | 4.12 (4.22) → 4.15 (4.25), within noise | 0% → 0% | lanes and a big pop |
+| Wizard (Cinder Bolt) | Attune: no change (a shift, no damage) | Refracted Lance: width 30 → 44, cd 3400 → 2400 | 4.72 (4.74) → 4.82 (4.85) | −26% → −22% | splash bursts and a wide lance |
+| Priest (Rebuke) | Judgment: pierce 2, mark radius 190 → 240, cd 2800 → 2000 | none in the tree at tier 3 | 3.50 (3.65) → 3.72 (3.94) | +14% → +21% | marks spread down a line, then chain-pop |
+| Mage (Shardcut) | Facet Strike: arc 1.8 → 2.6 | Fracture Line: arc 2.0 → 2.6 | 4.33 (4.58) → 4.36 (4.57), within noise | +7% → +7% | wide crystal cuts |
+| Witch Doctor (Bone Rattle) | Pin: no change (the doll is single-target by design) | Sympathetic Ache: splash 6 dmg, r 90, cd 3000 → 2200 | 3.53 (3.64) → 3.94 (4.12) | −26% → −19% | the ache leaps from the doll's neighbours |
+| Sundian (Spindrift) | Souse: cone angle 1.7 → 2.2 | Rip Current: width 34 → 48 | 4.57 (4.75) → 4.57 (4.77), within noise | −1% → −1% | wide tide, then a channel |
+| Assassin (Shiv) | Caltrops: trap radius 88 → 120, cd 3000 → 2400 | Cold Read: pierce 2 | 3.88 (4.14) → 4.14 (4.32) | −22% → −17% | a minefield the pack is kited through |
+| Monk (`--opener monk_low_sweep`) | Set Stone: trap radius 62 → 90 | Turning Elbow: arc 1.6 → 2.4 | 3.97 (4.21) → 4.00 (4.29), within noise | −1% → −1% | stone funnel, then a wide elbow |
+| Savage (`--opener sav_headbutt`) | Bleed Them: plague spread radius 150 → 190 | — (sav_bloodbound has no tier 3) | 4.10 (4.23) → 4.22 (4.34) | +22% → +22% | bleeding that jumps through the crowd |
+| Blacksmith (Hammer Blow) | Iron Pyrite: no change (a form) | Anvil Strike: arc 1.9 → 2.6, reach 112 → 140, cd 2400 → 1800 | 4.08 (4.29) → 3.92 (4.09), no gain measured | −21% → −10% | quake ring while in form |
+| Samurai (`--opener sam_draw_cut`) | Measured Breath: passive, no change | Rising Cut: arc 1.3 → 2.4 | 3.77 (3.93) → 3.83 (4.01), within noise | +23% → +23% | the long-arc cut (plus the Footing burst) |
+| Druid (`--opener druid_thorn_lash`) | Call Wolf: wolf strike arc 1.5 → 2.4, attack cd 950 → 800 | — | 3.64 (3.81) → 3.49 (3.69); the override had no effect in bot runs | +34% → +36% | the pack versus the horde |
+
+**What this does and doesn't settle:**
+- **Bard and Hunter** move about +0.3 to +0.4 kills/s: just above 4.0 without seed 1, and just under it on all 12 seeds. Bard's ±40% budget is the constraint: it was already +34% from the §12 opener cooldown.
+  - Rejected for Bard: Quickstep arc 3.2 (+82% DPS on its own, because the harness rings the caster with four dummies) and Counterpoint at cd 2400 (+49%).
+  - Rejected for Hunter: Spotter's Call cd 1200 (+40% on its own, +59% combined with the hawk).
+- **Bard's Opening Note at cd 800** is the §12 fallback. On `98db2c3` it measured 2.74 mean / 2.15 worst kills/s on map 1 (16 seeds). Re-check it on map 1 after the build.
+- **Druid:** Call Wolf's changes moved nothing in any bot run (identical numbers across variants), though they show in the DPS harness (+0.7). The bot likely never fields the wolf in this chain; I haven't verified why. Druid's map-3 number is unmeasured here.
+- **Within-noise classes** (Necromancer, Mage, Sundian, Monk, Samurai, Blacksmith): the changes are shape and identity changes this harness can't separate from noise. Keep them for feel and re-measure on Playtester's harness.
+- **Cooldowns:** every new cooldown is on the 100 ms grid.
+
+## 14. Map-1 density: the thin-field pack (Wizard)
+
+**The two misses, identified** (`map1_bot` on `83322eb`, Wizard, default seeds plus 1–40, 45 runs):
+- Seed **20260728** has a median of **6** alive (12.3% of ticks at 2 or fewer).
+- Seed **99** is the **13.7%** run (median 8). Both are Wizard: its splash opener plus Refracted Lance clear faster than the curve refills.
+- Wizard is over 5% on 25 of 45 runs. Bard is over 5% on 9 of 45 (worst 17.0%, seed 28, a Bastion room). Samurai is 0 of 45.
+
+**Proposed fix: bigger packs when the field is thin, not a higher rate.** When live bodies (alive plus queued) drop below **12**, the next pack lands now instead of waiting for the bank to fill: it is borrowed against the bank, which may go down to −16 units, and repaid by the curve. Pack size and the spawn curve are unchanged, and the total budget over the wave is unchanged apart from any debt left at the timer.
+
+Measured (scratch edit of `_tickHordeWave`, since reverted; 45 runs per class unless noted):
+
+| | Wizard: worst median alive | Wizard: worst ticks at ≤2 / runs over 5% | Wizard: kills/s mean / worst | Others |
+|---|---|---|---|---|
+| Today | 6 | 13.7% / 25 of 45 | 2.89 / 2.30 | Bard 17.0% worst, 9 of 45 over 5%; Samurai 0 of 45 |
+| Thin < 8, debt 8 | 10 | 7.8% / 10 of 45 | 3.16 / 2.68 | — |
+| Thin < 10, +2 pack, debt 16 | 11 | 5.9% / 7 of 45 | 3.31 / 2.80 | — |
+| **Thin < 12, debt 16 (proposed)** | **13** | **5.2% / 6 of 45** | **3.30 / 2.71** | Bard 0 of 45 (worst median 14); Samurai 0 of 45; clumsy Savage 20 of 20 clears |
+| Thin < 14, +2 pack, debt 16 | 14 | 5.2% / 9 of 45 | 3.60 / 3.07 | — |
+
+- **Ticks at ≤2 don't reach exactly 0** for Wizard. The residue is about 5%, and I think it's the gap before packs that land on the ring 500–640 u away arrive [estimate; I didn't trace it tick by tick].
+- **Spawned bodies barely change:** Wizard 115.6 → 116.5, Samurai 114.6 → 118.4.
+- **Map-1 exit level moves:** Wizard goes from level 6 on 4 runs and 7 on 41, to 7 on 41 and **8 on 4**. That's outside the 6–7 exit. `HORDE_MAP1_YIELD` needs a re-tune with this rule; 0.62 → about 0.58 is my estimate, not measured.
+- **The ×1.45 revisit:** with this in place, the ×1.45 multiplier may come down. That's a measurement for after the build.
+- **Clumsy runs:** my clumsy Savage run (20 seeds, no `--react` override) cleared 20/20 both with and without the rule, not the 14/20 Playtester saw. Our flags differ, so this only shows that the rule doesn't hurt a slow player.
+
+## 15. Region 2 (Xibalba) horde roster (for Engineer)
+
+Same rules as map 1 (§3) and Region 3 (§11.10): fodder plus a few specials, no band scaling inside the roster, the world axis (`REGION_HP_MULT[1]` ×2.13) as the only multiplier, 8–25% telegraph share with at least two shapes, and check D at 6–9%. Built from `js/content/enemies-xibalba.js` as it is at `83322eb`.
+
+| Unit | Today | Horde role | Proposed |
+|---|---|---|---|
+| `xib_obsidian_lancer` | dasher, line telegraph (7 dmg), hp 7, spd 150, w 2.5, mats 3 | **the special** | hp 7 → **8**, spd 150, w 2.5 → **0.9**; telegraph and dash unchanged. It keeps the line: the sidestep is Region 2's read, the one Region 3's circle then takes away |
+| `xib_howler` | warden, cone telegraph (6 dmg), hp 7, spd 112, w 2.9 | fodder | behaviour → **chaser**, **no telegraph**, hp **3**, spd **185**, w **4.0**, mats 1 |
+| `xib_ashmoth` | orbiter chaff, hp 6, spd 170, w 2.4 | fast fodder | hp **3**, spd **230** (the map-1 fodder cap), w **3.5**, mats 1; stays an orbiter |
+| `xib_censer` | spitter chaff, hp 9, spd 90, w 1.6 | ranged fodder | hp **3**, spd **165**, w **1.0** (as the Mistwalker) |
+| `xib_jade_colossus` | brute landmark, circle, hp 52, w 0.18 | landmark | unchanged |
+| `xib_bloodpriest` | warden landmark, cone, hp 36, w 0.25 | landmark | unchanged |
+
+**Checks, worked from these numbers:**
+- **A′ (share):** telegraphing weight 0.9 + 0.18 + 0.25 = 1.33 out of 4.0 + 3.5 + 1.0 + 0.9 + 0.18 + 0.25 = 9.83, which is **13.5%**. Three shapes (line, circle, cone).
+- **B′:** specials 8 vs fodder max 3 is 2.7×, inside 2–4×. Landmarks 52 and 36 are both at least 6 × 3 = 18.
+- **C′:** every telegrapher is above fodder, and the Lancer is teachable (8 ≤ 9).
+- **D:** Lancer 7 / 80 = **8.75%**, inside 6–9%. Today's gate already reads 8.8% for it.
+- **Fodder HP at the arrival level (§11.10):** authored 3 is live 3 × 2.13 × 1.12 (`enemyHpMult`) × 1.15 (solo `coopHp`) ≈ **8.2** in Region 2. Whether every opener one-shots that at level 10 depends on ranks (+4–4.5% per rank on most openers) and level stats. I didn't measure that hit, so it's the gate's job to say. If the gate says no, the lever is authored fodder HP 3 → 2 for the whole region, never a per-unit band.
+- **Region 3 by the same arithmetic:** 3 × 3.84 × 1.12 × 1.15 ≈ 14.8 live at level 19. Same caveat.
+
+**Also on the switch:**
+- `bloodprice` / `bloodmire` (Region 2 curses, §6.2) were tuned against the slow Footing. Re-check them on the horde curve.
+- Region 2 wave length follows `hordeWaveDur(2, depth)`: 35 → 60 s.

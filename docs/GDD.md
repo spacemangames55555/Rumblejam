@@ -157,7 +157,7 @@ A **lobby, not a hub**. No shops, no vendors, no walking around. Shows the eight
 
 **Map 1 runs at the curve above ×1.45 (about 120 spawned).** *Ruled 2026-11-02 (Designer).* At the raw curve (about 85) the kite bot sat at a median 8–13 alive and missed the density bar. Density is the bar, so the rate moved rather than the bar. Revisit after the opener pierce/splash pass (`docs/design/pace-spec.md` §12), since faster openers thin the field.
 
-**Region scope (ruled 2026-11-02, Designer).** The first horde build covers region 1 only. Region 2 (Xibalba) stays on the slow curve on that branch, because its roster is still 50%+ telegraphing heavies and would be a wall at horde rates. It gets its own horde pass, with its roster re-authored into fodder and specials, before it switches.
+**Region scope (ruled 2026-11-02, Designer).** The first horde build covers region 1 only. Region 2 (Xibalba) stays on the slow curve on that branch, because its roster is still 50%+ telegraphing heavies and would be a wall at horde rates. It gets its own horde pass, with its roster re-authored into fodder and specials, before it switches. *Ruled 2026-11-04 (Designer):* Region 2 goes horde before Region 3 or at the same time (roster in `docs/design/pace-spec.md` §15). Region 3 joins `HORDE_REGIONS` when the pace branch passes. Each region's fodder HP is checked against the weakest opener hit at that region's arrival level, not at level 1.
 
 The measured baseline on main was 47–56 enemies over about 70 s on map 1, and 111 over 75 s plus a 20–30 s mop-up on map 3 (`docs/design/pace-spec.md` §1).
 
