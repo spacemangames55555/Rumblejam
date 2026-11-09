@@ -45,9 +45,20 @@ await H.waitFor(`return (window.uv.lobby && window.uv.lobby.code) || ''`, CONFIG
 await H.waitFor(`return !document.getElementById('screen-lobby').classList.contains('hidden') ? 1 : 0`, 5000, 'lobby');
 await H.exec(`document.querySelector('.char-card[data-char="${CLS}"]').click(); return 1;`);
 await sleep(300);
+if (process.env.ENTRY) {
+  // Entry mode: throttle and start the frame recorder BEFORE the run starts,
+  // so the transition (opening offer -> map screen, where the renderer
+  // prewarms) is measured at 4x too, not only the arena.
+  await H.cdp('Emulation.setCPUThrottlingRate', { rate: RATE });
+  await H.exec(`const R = window.uvRenderer; window.__ets = []; window.__edms = []; window.__erec = true;
+    const d0 = R.draw.bind(R); R.draw = function (v, dt) { const t0 = performance.now(); d0(v, dt); if (window.__erec) window.__edms.push([t0, performance.now() - t0]); };
+    const f = t => { if (!window.__erec) return; window.__ets.push(t); requestAnimationFrame(f); }; requestAnimationFrame(f); return 1;`);
+}
 await startRun(H, 1);
 await H.waitFor(`return document.querySelector('#overlay-opening .offer-card') ? 1 : 0`, 8000, 'opening');
+if (process.env.ENTRY) await H.exec(`window.__openT = performance.now(); return 1;`);
 await H.exec(`document.querySelector('#overlay-opening .offer-card').click(); return 1;`);
+if (process.env.ENTRY) await entryMode();
 await sleep(400);
 await H.exec(`const b=document.querySelector('.map-node.reachable'); b.click(); return 1;`);
 await H.waitFor(`return window.uv.sim.phase==='arena' ? 1 : 0`, 12000, 'arena');
@@ -64,6 +75,57 @@ await H.exec(`const s=window.uv.sim; window.__N=0; let k=0;
   const R=window.uvRenderer; const d0=R.draw.bind(R); window.__drawMs=null;
   R.draw=function(v,dt){ const t0=performance.now(); d0(v,dt); if(window.__drawMs) window.__drawMs.push(performance.now()-t0); };
   return 1;`);
+// ENTRY MODE (ENTRY=1): the first seconds of the first arena of a run, from
+// a cold page, which is when every render cache is empty. The CPU is slowed
+// from the map screen on; the map screen is shown for MAP_MS (a player reading
+// it), then a node is clicked and combat starts on that tick (solo). rAF
+// deltas are recorded across both: the TRANSITION window (map screen, where
+// the renderer pre-builds its caches) and the first ENTRY_MS of combat.
+// ENTRY_N > 0 tops the room up to that many alive from combat start (fixed
+// spawn angles, tool-side counter, never Sim.rng); ENTRY_N=0 is the normal
+// map-1 pace (the real wave, first pack at FIRST_PACK_T).
+async function entryMode() {
+  const MAP_MS = +(process.env.MAP_MS || 1500), ENTRY_MS = +(process.env.ENTRY_MS || 5000);
+  const EN = +(process.env.ENTRY_N || 0);
+  await H.waitFor(`return document.querySelector('.map-node.reachable') ? 1 : 0`, 8000, 'map screen');
+  const r = JSON.parse(await H.exec(`
+    const s = window.uv.sim; const R = window.uvRenderer;
+    if (${EN} > 0) { let k = 0; const orig = s.tick.bind(s);
+      const MIX=['pnw_thornhound','pnw_sapling','pnw_thornhound','pnw_mistwalker','pnw_sapling','pnw_thornhound','pnw_sapling','pnw_cedar_warden'];
+      s.tick = function () { if (s.phase === 'arena') { for (const p of s.players) p.hp = p.stats.vitality;
+        s._hordeAliveCap = () => ${EN}; const me = s.players[0]; let n = 0;
+        while (s.enemyPool.count < ${EN} && n++ < 8) { k++; const a = k * 2.39996; s.spawnEnemyById(MIX[k % 8], me.x + Math.cos(a) * 560, me.y + Math.sin(a) * 400, {}); } }
+        return orig(); }; }
+    // the node is clicked MAP_MS after the opening offer was taken
+    let clickT = null, warmAtClick = null;
+    const ws = () => R.warmStats ? { ...R.warmStats, startedAt: +((R.warmStats.startedAt || 0) - window.__openT).toFixed(0), finishedAt: R.warmStats.finishedAt === null ? null : +(R.warmStats.finishedAt - (clickT || 0)).toFixed(0), ms: +R.warmStats.ms.toFixed(1) } : null;
+    await new Promise(res => setTimeout(res, Math.max(0, window.__openT + ${MAP_MS} - performance.now())));
+    clickT = performance.now(); warmAtClick = ws(); document.querySelector('.map-node.reachable').click();
+    await new Promise(res => setTimeout(res, ${ENTRY_MS} + 100));
+    window.__erec = false;
+    return JSON.stringify({ ts: window.__ets, dms: window.__edms, openT: window.__openT, clickT, alive: s.enemyPool.count, phase: s.phase, warmAtClick, warmAtEnd: ws() });`));
+  const deltas = r.ts.slice(1).map((t, i) => [t, t - r.ts[i]]);
+  const stat = (lo, hi) => {
+    const d = deltas.filter(([t]) => t > lo && t <= hi).map(x => x[1]).sort((a, b) => a - b);
+    if (!d.length) return null;
+    const w = d.slice(Math.floor(d.length * 0.99));
+    return { frames: d.length, fpsMed: +(1000 / d[d.length >> 1]).toFixed(1), low1: +(1000 / (w.reduce((a, b) => a + b, 0) / w.length)).toFixed(1),
+      worstMs: +d[d.length - 1].toFixed(1), over20: d.filter(x => x > 20).length };
+  };
+  const c = r.clickT;
+  const worstDraw = (lo, hi) => +Math.max(0, ...r.dms.filter(([t]) => t > lo && t <= hi).map(x => x[1])).toFixed(1);
+  const row = { mode: 'entry', N: EN, mapMs: MAP_MS,
+    transition: { ...stat(r.openT, c), worstDrawMs: worstDraw(r.openT, c),
+      longFrames: deltas.filter(([t, d]) => t > r.openT && t <= c && d > 20).map(([t, d]) => [+(t - r.openT).toFixed(0), +d.toFixed(1)]) },
+    first3s: { ...stat(c, c + 3000), worstDrawMs: worstDraw(c, c + 3000),
+      longFrames: deltas.filter(([t, d]) => t > c && t <= c + 3000 && d > 20).map(([t, d]) => [+(t - c).toFixed(0), +d.toFixed(1)]) },
+    first5s: { ...stat(c, c + 5000), worstDrawMs: worstDraw(c, c + 5000) },
+    aliveAt5s: r.alive, phase: r.phase, warmAtClick: r.warmAtClick, warmAtEnd: r.warmAtEnd };
+  console.log(JSON.stringify(row));
+  if (process.env.OUT) writeFileSync(process.env.OUT, JSON.stringify(row, null, 1));
+  H.close(); relay.proc.kill(); process.exit(0);
+}
+
 const pct = (a, q) => a[Math.min(a.length - 1, Math.floor(q * a.length))];
 const out = [];
 for (const N of NS) {
