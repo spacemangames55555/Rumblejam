@@ -63,7 +63,20 @@
 // `--difficulty <id>` picks the party's difficulty. The default is standard,
 // which is what every earlier table used. Gentle is the half-HP floor.
 //
-// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [--clumsy] [--react <seconds>] [--difficulty <id>] [--opener <skillId>] [--class <id>] [charId] [seed ...]
+// `--prefer <skillId>` forces the learner to buy that skill and every prereq
+// on the path to it before anything else. For Druid Call Wolf that is
+// `druid_thorn_lash` then `druid_call_wolf`. The prefer skill must belong to
+// the class. Its tier-1 root becomes the kite opener for the run (same ring
+// rule as `--opener`). Combining `--prefer` with `--opener` is allowed only
+// when the opener is that same root. Absent the flag, the learner is unchanged.
+//
+// `--god` refills HP every tick (Designer map-3 god-mode harness). `--depth=N`
+// travels to a combat node at that depth instead of map 1 (`_travelTo`).
+// `--start-level=N` grants level N and N skill points before the opening spend
+// (map-3 §12/§13 harness starts at 8). All three default off / depth 1 /
+// level 1, so existing map-1 tables and gate results are untouched.
+//
+// Usage: node tools/map1_bot.mjs [--chase] [--no-learn] [--clumsy] [--react <seconds>] [--difficulty <id>] [--opener <skillId>] [--prefer <skillId>] [--god] [--depth=N] [--start-level=N] [--class <id>] [charId] [seed ...]
 // Default class: toh_samurai. Default seeds: 777, 0xa11ce, 424242, 20260728, 99.
 // Default difficulty: standard.
 
@@ -90,10 +103,35 @@ function parseArgs(argv) {
   let difficulty = 'standard';
   let charId = 'toh_samurai';
   let openerId = null;
+  let preferId = null;
+  let god = false;
+  let depth = 1;
+  let startLevel = 1;
   const seeds = [];
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--chase') { chase = true; continue; }
+    if (a === '--god') { god = true; continue; }
+    if (a === '--depth' || a.startsWith('--depth=')) {
+      const raw = a === '--depth' ? argv[++i] : a.slice('--depth='.length);
+      const v = Number(raw);
+      if (!Number.isInteger(v) || v < 1) {
+        console.error('map1_bot: --depth needs a positive integer');
+        process.exit(1);
+      }
+      depth = v;
+      continue;
+    }
+    if (a === '--start-level' || a.startsWith('--start-level=')) {
+      const raw = a === '--start-level' ? argv[++i] : a.slice('--start-level='.length);
+      const v = Number(raw);
+      if (!Number.isInteger(v) || v < 1) {
+        console.error('map1_bot: --start-level needs a positive integer');
+        process.exit(1);
+      }
+      startLevel = v;
+      continue;
+    }
     if (a === '--no-learn') { learn = false; continue; }
     if (a === '--clumsy') { clumsy = true; continue; }
     if (a === '--react' || a.startsWith('--react=')) {
@@ -126,6 +164,15 @@ function parseArgs(argv) {
       continue;
     }
     if (a.startsWith('--opener=')) { openerId = a.slice('--opener='.length); continue; }
+    if (a === '--prefer') {
+      preferId = argv[++i];
+      if (!preferId || preferId.startsWith('--')) {
+        console.error('map1_bot: --prefer needs a skill id');
+        process.exit(1);
+      }
+      continue;
+    }
+    if (a.startsWith('--prefer=')) { preferId = a.slice('--prefer='.length); continue; }
     if (a === '--class') {
       const id = argv[++i];
       if (!id) {
@@ -148,10 +195,10 @@ function parseArgs(argv) {
     console.error(`map1_bot: unknown class ${charId}`);
     process.exit(1);
   }
-  return { chase, learn, clumsy, reactS, reactSet, difficulty, charId, openerId, seeds: seeds.length ? seeds : DEFAULT_SEEDS };
+  return { chase, learn, clumsy, reactS, reactSet, difficulty, charId, openerId, preferId, god, depth, startLevel, seeds: seeds.length ? seeds : DEFAULT_SEEDS };
 }
 
-const { chase, learn, clumsy, reactS, reactSet, difficulty, charId, openerId, seeds: list } = parseArgs(process.argv);
+const { chase, learn, clumsy, reactS, reactSet, difficulty, charId, openerId, preferId, god, depth, startLevel, seeds: list } = parseArgs(process.argv);
 if (reactSet && !clumsy) {
   console.error('map1_bot: --react sets the clumsy-mode delay, so it needs --clumsy');
   process.exit(1);
@@ -302,8 +349,8 @@ function defaultOpener(id) {
   return null;
 }
 
-if (openerId && !learn && !clumsy) {
-  console.error('--opener spends the level-1 point, so it cannot be combined with --no-learn');
+if ((openerId || preferId) && !learn && !clumsy) {
+  console.error('--opener/--prefer spend skill points, so they cannot be combined with --no-learn');
   process.exit(1);
 }
 if (openerId) {
@@ -315,9 +362,46 @@ if (openerId) {
   }
 }
 
+// Prefer chain: root tier-1 … target. Walks `prereq` links. Empty if unknown.
+function preferChain(id) {
+  const out = [];
+  const seen = new Set();
+  let cur = SKILL_BY_ID[id];
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    out.unshift(cur);
+    cur = cur.prereq ? SKILL_BY_ID[cur.prereq] : null;
+  }
+  return out;
+}
+
+let preferRootId = null;
+if (preferId) {
+  const sk = SKILL_BY_ID[preferId];
+  const trees = TREES_BY_CLASS[charId] || [];
+  if (!sk || !trees.includes(sk.tree)) {
+    console.error(`--prefer ${preferId} is not a skill of ${charId}`);
+    process.exit(1);
+  }
+  const chain = preferChain(preferId);
+  if (!chain.length || chain[0].tier !== 1) {
+    console.error(`--prefer ${preferId} has no tier-1 root on its prereq chain`);
+    process.exit(1);
+  }
+  preferRootId = chain[0].id;
+  if (openerId && openerId !== preferRootId) {
+    console.error(`--opener ${openerId} conflicts with --prefer root ${preferRootId}`);
+    process.exit(1);
+  }
+}
+
+// Effective opener for the kite ring and the learner's chain root. Prefer's
+// tier-1 root wins when set; otherwise `--opener`; otherwise the registry first.
+const effectiveOpenerId = preferRootId || openerId || null;
+
 // No weapon: hold inside the opener's hit. 0.85 of that reach, and never
 // past the old 200. A ranged opener whose hit is past 200/0.85 stays at 200.
-const OPENER_SKILL = openerId ? SKILL_BY_ID[openerId] : defaultOpener(charId);
+const OPENER_SKILL = effectiveOpenerId ? SKILL_BY_ID[effectiveOpenerId] : defaultOpener(charId);
 const OPENER_REACH = openerReach(OPENER_SKILL);
 const KITE_RING = OPENER_REACH > 0 ? Math.min(200, OPENER_REACH * 0.85) : 200;
 
@@ -346,10 +430,10 @@ function tierOne(p) {
     || null;
 }
 
-// The tier-1 this run is building from. `--opener` wins once it is owned;
-// otherwise the tier-1 already known, which is the registry opener.
+// The tier-1 this run is building from. `--prefer`'s root / `--opener` wins
+// once owned; otherwise the tier-1 already known, which is the registry opener.
 function ownedOpener(p) {
-  if (openerId && (p.skillRanks[openerId] || 0) >= 1) return SKILL_BY_ID[openerId];
+  if (effectiveOpenerId && (p.skillRanks[effectiveOpenerId] || 0) >= 1) return SKILL_BY_ID[effectiveOpenerId];
   return classSkills(p.charId).find(s => s.tier === 1 && (p.skillRanks[s.id] || 0) >= 1) || null;
 }
 
@@ -377,8 +461,15 @@ function chainNode(p, tier, prereqId) {
 }
 
 function nextSkill(p) {
-  if (openerId && (p.skillRanks[openerId] || 0) < 1) {
-    const op = SKILL_BY_ID[openerId];
+  // Prefer chain first: buy every still-missing node on the path to `--prefer`
+  // before the ordinary tier walk. Default behaviour is unchanged when unset.
+  if (preferId) {
+    for (const sk of preferChain(preferId)) {
+      if ((p.skillRanks[sk.id] || 0) < 1 && canLearn(p, sk)) return sk;
+    }
+  }
+  if (effectiveOpenerId && (p.skillRanks[effectiveOpenerId] || 0) < 1) {
+    const op = SKILL_BY_ID[effectiveOpenerId];
     if (canLearn(p, op)) return op;
   }
   const owned = ownedOpener(p);
@@ -442,6 +533,14 @@ function runSeed(seed) {
     party: [{ idx: 0, key: 'k', name: 'BOT', charId, color: '#fff' }],
   });
   const p = sim.players[0];
+  // §12/§13 map-3 harness: grant level N and N skill points before the opening
+  // spend. Level 1 (default) leaves the character exactly as constructed.
+  if (startLevel > 1) {
+    p.level = startLevel;
+    p.skillPoints = startLevel;
+    sim._recomputeStats(p);
+    p.hp = p.stats.vitality;
+  }
   const dmg = attachDamageLedger(sim, p);
 
   let dodgeTicks = 0;
@@ -653,16 +752,27 @@ function runSeed(seed) {
   // Clumsy buys the named opener and then stops. Further points stay unspent.
   const learnFight = learn && !clumsy;
   if (learnFight) spendSkills(sim, p, learned);
-  else if (clumsy && openerId && (p.skillRanks[openerId] || 0) < 1 && canLearn(p, SKILL_BY_ID[openerId])) {
-    sim.uiAction(p.idx, { kind: 'learnSkill', id: openerId });
+  else if (clumsy && effectiveOpenerId && (p.skillRanks[effectiveOpenerId] || 0) < 1 && canLearn(p, SKILL_BY_ID[effectiveOpenerId])) {
+    sim.uiAction(p.idx, { kind: 'learnSkill', id: effectiveOpenerId });
   }
 
-  const starts = sim.reachableNodes();
-  const nodeId = starts.find(id => isOnboardingNode(sim.regionIndex, sim.floor.nodes[id])) ?? starts[0];
-  const node = sim.floor.nodes[nodeId];
-  sim.uiAction(0, { kind: 'pickNode', nodeId });
-  if (sim.phase !== 'arena' || !isOnboardingNode(sim.regionIndex, sim.arenaNode)) {
-    return { seed, outcome: 'error', dodgeTicks: 0, detail: `did not enter map 1 (phase ${sim.phase}, node ${node && node.kind})` };
+  let nodeId, node;
+  if (depth === 1) {
+    const starts = sim.reachableNodes();
+    nodeId = starts.find(id => isOnboardingNode(sim.regionIndex, sim.floor.nodes[id])) ?? starts[0];
+    node = sim.floor.nodes[nodeId];
+    sim.uiAction(0, { kind: 'pickNode', nodeId });
+    if (sim.phase !== 'arena' || !isOnboardingNode(sim.regionIndex, sim.arenaNode)) {
+      return { seed, outcome: 'error', dodgeTicks: 0, detail: `did not enter map 1 (phase ${sim.phase}, node ${node && node.kind})` };
+    }
+  } else {
+    node = sim.floor.nodes.find(n => n.depth === depth && n.kind === 'combat');
+    if (!node) return { seed, outcome: 'error', dodgeTicks: 0, detail: `no combat node at depth ${depth}` };
+    nodeId = node.id;
+    sim._travelTo(nodeId);
+    if (sim.phase !== 'arena') {
+      return { seed, outcome: 'error', dodgeTicks: 0, detail: `did not enter depth ${depth} (phase ${sim.phase})` };
+    }
   }
 
   let spawned = 0;
@@ -681,6 +791,9 @@ function runSeed(seed) {
   let firstKillT = null, firstSpawnT = null, timerEndT = null;
   const casts = {};
   let topUp = null;
+  let killsAtTimer = null;
+  let wolfAliveTicks = 0, wolfPeak = 0, wolfSummonsSeen = 0;
+  const seenWolfIds = new Set();
   while (sim.phase === 'arena' && !sim.over && !sim.cleared && ticks++ < cap) {
     botInput();
     const lvl0 = p.level;
@@ -704,7 +817,20 @@ function runSeed(seed) {
       for (const e of sim.enemyPool) if (Math.abs(e.x - p.x) <= VW && Math.abs(e.y - p.y) <= VH) on++;
       screenSamples.push(on);
     }
-    if (timerEndT === null && sim.wave && sim.wave.done) timerEndT = ticks / 60;
+    if (timerEndT === null && sim.wave && sim.wave.done) {
+      timerEndT = ticks / 60;
+      killsAtTimer = sim.payout.kills;
+    }
+    // Wolf fielding (Druid Call Wolf / any `arch === 'wolf'` minion).
+    let wolves = 0;
+    for (const m of p.minions || []) {
+      if (m.arch !== 'wolf') continue;
+      wolves++;
+      if (!seenWolfIds.has(m.id)) { seenWolfIds.add(m.id); wolfSummonsSeen++; }
+    }
+    if (wolves > 0) wolfAliveTicks++;
+    if (wolves > wolfPeak) wolfPeak = wolves;
+    if (god) p.hp = p.stats.vitality;
     if (ticks % 30 === 0) resolveUi();
   }
 
@@ -732,6 +858,11 @@ function runSeed(seed) {
     rateMult: (sim.profile && sim.profile.rateMult) || 1,
   };
   pace.killsPerS = +((sim.payout.kills - pace.culled) / Math.max(1, ticks / 60)).toFixed(2);
+  // §12/§13 map-3 figure: kills inside the timer ÷ wave duration (tail excluded).
+  const waveDur = (sim.wave && Number.isFinite(sim.wave.dur)) ? sim.wave.dur : null;
+  const timerKills = killsAtTimer === null ? sim.payout.kills : killsAtTimer;
+  const killsPerSTimer = waveDur ? +(timerKills / waveDur).toFixed(2) : null;
+  const ranks = { ...p.skillRanks };
   return {
     seed,
     outcome,
@@ -739,6 +870,9 @@ function runSeed(seed) {
     secs: +(ticks / 60).toFixed(1),
     peak,
     kills: sim.payout.kills,
+    timerKills,
+    killsPerSTimer,
+    waveDur,
     total: (sim.wave && sim.wave.done && sim.spawnQueue.length === 0 && (sim.wave.held || 0) === 0 && sim.wave.acc < 1)
       ? spawned : waveTotal(sim),
     alive: sim.enemyPool.count,
@@ -751,12 +885,20 @@ function runSeed(seed) {
     node: `${node.kind}/${node.template}`,
     learned,
     casts,
+    ranks,
     dmg,
     dodgeTicks,
     topUp,
     unspent: p.skillPoints,
     loadout: (p.loadout || []).filter(Boolean),
-    openerRank: openerId ? (p.skillRanks[openerId] || 0) : null,
+    openerRank: effectiveOpenerId ? (p.skillRanks[effectiveOpenerId] || 0) : null,
+    wolf: {
+      casts: casts.druid_call_wolf || 0,
+      summons: wolfSummonsSeen,
+      peak: wolfPeak,
+      uptime: +(wolfAliveTicks / Math.max(1, ticks)).toFixed(3),
+      aliveTicks: wolfAliveTicks,
+    },
   };
 }
 
@@ -765,9 +907,9 @@ for (const id of Object.keys(TREES_BY_CLASS)) {
   const sk = defaultOpener(id);
   console.log(`OPENER\t${id}\t${sk ? sk.id : '?'}\t${sk ? sk.name : ''}`);
 }
-if (openerId) {
-  const sk = SKILL_BY_ID[openerId];
-  console.log(`CHOSEN\t${charId}\t${sk.id}\t${sk.name}`);
+if (effectiveOpenerId) {
+  const sk = SKILL_BY_ID[effectiveOpenerId];
+  console.log(`CHOSEN\t${charId}\t${sk.id}\t${sk.name}${preferId ? `\tprefer ${preferId}` : ''}`);
 }
 
 const rows = list.map(runSeed);
@@ -787,7 +929,9 @@ for (const r of rows) {
     console.log(`DMG\t${tag}\tcontact ${d.contact}\tlanes ${d.lanes}\tcones ${d.cones}\tprojectiles ${d.projectiles}\tother ${d.other}`);
   }
   console.log(`DODGE\t${tag}\t${((r.dodgeTicks || 0) / 60).toFixed(1)}s`);
-  if (openerId) console.log(`OPENER_RANK\t${tag}\t${r.openerRank}`);
+  if (effectiveOpenerId) console.log(`OPENER_RANK\t${tag}\t${r.openerRank}`);
+  if (r.wolf) console.log(`WOLF\t${tag}\tcasts ${r.wolf.casts}\tsummons ${r.wolf.summons}\tpeak ${r.wolf.peak}\tuptime ${(100 * r.wolf.uptime).toFixed(1)}%`);
+  if (r.killsPerSTimer !== null) console.log(`TIMER_KILLS\t${tag}\t${r.timerKills}\t/ ${r.waveDur}s\t= ${r.killsPerSTimer}/s`);
   if (learn && !clumsy && r.learned) {
     for (const L of r.learned) {
       const slotted = L.active ? ((r.loadout || []).includes(L.id) ? 'slotted' : 'NOT SLOTTED') : 'passive';
@@ -806,7 +950,7 @@ for (const r of rows) {
     if (r.unspent > 0) console.log(`UNSPENT\t${tag}\t${r.unspent}`);
   }
 }
-console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${difficulty}\t${charId}\t${clumsy ? `clumsy react ${reactS}s 8-dir no-learn` : (learn ? 'learn' : 'no-learn')}\t${openerId || 'default-opener'}\tring ${KITE_RING.toFixed(1)}`);
+console.log(`MODE\t${chase ? 'chase' : 'kite'}\t${difficulty}\t${charId}\t${clumsy ? `clumsy react ${reactS}s 8-dir no-learn` : (learn ? 'learn' : 'no-learn')}\t${preferId ? `prefer ${preferId}` : (effectiveOpenerId || 'default-opener')}\tring ${KITE_RING.toFixed(1)}\tdepth ${depth}\tgod ${god ? 1 : 0}\tstartLevel ${startLevel}`);
 console.log(`TOTAL\tclears ${clears}/${rows.length}\tdeaths ${deaths}\tstalls ${stalls}`);
 {
   // pace-spec.md §7 map-1 bars, over every seed that entered the fight.
