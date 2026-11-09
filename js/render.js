@@ -1733,6 +1733,7 @@ export class Renderer {
       cv.width = x1 - x0; cv.height = y1 - y0;
       const g = cv.getContext('2d');
       if (g) {
+        g.imageSmoothingEnabled = false;
         g.drawImage(cell.cv, -x0, -y0);
         g.drawImage(ring.cv, rox - x0, roy - y0);
         c = { cv, ox: x0, oy: y0 };
