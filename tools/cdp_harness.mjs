@@ -34,21 +34,43 @@ export class Page {
   }
 
   async open() {
-    const profile = mkdtempSync(path.join(tmpdir(), 'uvcdp-'));
+    // HARDCODED CDP PORTS WERE A SILENT HANG. room_reg_test / uiack_test /
+    // skillscreen_test each pinned a fixed --remote-debugging-port (9711,
+    // 9741/9742, 9755). A prior run killed by timeout left Chromium holding
+    // that port; the next open() then attached to the orphan (or waited on a
+    // wedged /json/list) and printed nothing — the "quiet machine" hang on
+    // cursor/horde-pace-map1. Pace-branch benches make those leftovers more
+    // common. Always bind an ephemeral port (0) and read it back from
+    // DevToolsActivePort so two tools can never collide, and kill the child
+    // on process exit so a timeout cannot leave the next run wedged.
+    this.profile = mkdtempSync(path.join(tmpdir(), 'uvcdp-'));
     this.proc = spawn(CHROME, [
       '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-      `--remote-debugging-port=${this.port}`, `--user-data-dir=${profile}`,
+      '--remote-debugging-port=0', `--user-data-dir=${this.profile}`,
       '--window-size=1280,800', '--mute-audio', 'about:blank',
     ], { stdio: 'ignore' });
-    let target = null;
-    for (let i = 0; i < 60 && !target; i++) {
+    const reap = () => this.close();
+    this._reapExit = reap;
+    process.on('exit', reap);
+    let port = 0;
+    for (let i = 0; i < 60 && !port; i++) {
       await sleep(250);
       try {
-        const list = await (await fetch(`http://localhost:${this.port}/json/list`)).json();
-        target = list.find(t => t.type === 'page');
+        const active = readFileSync(path.join(this.profile, 'DevToolsActivePort'), 'utf8').trim().split(/\r?\n/);
+        port = parseInt(active[0], 10) || 0;
       } catch { /* not up yet */ }
     }
-    if (!target) throw new Error(`[${this.label}] chromium devtools endpoint never came up`);
+    if (!port) throw new Error(`[${this.label}] chromium DevToolsActivePort never appeared`);
+    this.port = port;
+    let target = null;
+    for (let i = 0; i < 40 && !target; i++) {
+      try {
+        const list = await (await fetch(`http://127.0.0.1:${this.port}/json/list`)).json();
+        target = list.find(t => t.type === 'page');
+      } catch { /* not up yet */ }
+      if (!target) await sleep(100);
+    }
+    if (!target) throw new Error(`[${this.label}] chromium page target never came up on :${this.port}`);
     this.ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((res, rej) => { this.ws.onopen = res; this.ws.onerror = () => rej(new Error('ws error')); });
     this.ws.onmessage = e => this._onMsg(JSON.parse(e.data));
@@ -121,7 +143,14 @@ export class Page {
     }
   }
 
-  close() { try { this.proc.kill(); } catch { /* gone */ } }
+  close() {
+    if (this._reapExit) {
+      try { process.off('exit', this._reapExit); } catch { /* node < off */ }
+      this._reapExit = null;
+    }
+    try { this.ws && this.ws.close(); } catch { /* gone */ }
+    try { this.proc && this.proc.kill('SIGKILL'); } catch { /* gone */ }
+  }
 }
 
 // STARTING A RUN IS TWO CLICKS NOW, AND EVERY BROWSER SUITE MADE ONE.
