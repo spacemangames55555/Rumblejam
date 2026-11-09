@@ -269,6 +269,8 @@ Use the `map1_bot` kite and the clumsy bot, solo Standard, the default 5 seeds, 
 - **Host upload is a risk.** An 8-player host sends 7 streams. At 120 alive that's about 85 KB/s per guest, roughly 600 KB/s (about 5 Mbit/s) up. At 300 alive it's about 1.15 MB/s (about 9 Mbit/s). Check: WebRTC relay throughput, and whether snapshots should delta-encode or cull enemies by guest viewport.
 - **Engineer flag (Game Engineer, 2 Nov 2026):** co-op snapshots send every live enemy to each guest, so 100+ alive multiplies that traffic per guest. Before tuning anything, Engineer will profile frame rate and snapshot size at 100 and 150 enemies so Playtester has numbers for the frame-rate check.
 - **Unmeasured (browser):** canvas draw cost of 120–300 sprites plus particles (`POOL_PARTICLES` 900), damage numbers, death pops and pickups on low-end laptops and mobile (`touch.js`). Audio voice spam from many hits and deaths needs a voice cap. Pickups also need checking (hence `PICKUP_BLOB_CAP`). Playtester should run a CDP fps capture (`tools/cdp_harness.mjs`) at 60 / 120 / 200 alive, solo and as a 4-player guest.
+- **Frame-rate gate for Region 2+ (ruled 2026-11-09, Designer, §11.14):** alive cap stays 120; Region 2 joins `HORDE_REGIONS` only once a solo host at 4× CPU slowdown holds median 50 fps at 120 alive. Cached images must be built during the room transition so the first pack (at 1 s) is smooth. Engineer's `cursor/render-batch-perf` at `d48e8f9` reports 59.9 / 59.5 at 120 (pending Playtester).
+- **Fodder draw size (ruled 2026-11-09, Designer, §11.15):** per-unit manifest scale so fodder reads about 19 px vs Cedar Warden about 21 px; unit radius unchanged.
 - `POOL_ENEMIES` is 320, so the 300 ceiling fits. `POOL_PROJECTILES` (700) needs checking with many spitters plus player bolts.
 
 ---
@@ -340,6 +342,12 @@ Ruled 2026-11-02 (Designer) on Game Engineer's departures from this spec in `cur
     - **The Wild Hunt Rider loses its lane telegraph and stays sprinter fodder** (hp 3, spd 245, w 3.5). The Redcap is the region's one light special (circle).
     - **Engineer's R3 fodder speeds, weights and damage are confirmed as built**, including the Sprite at 200 u/s.
     - **Region 3 joins `HORDE_REGIONS` when the pace branch passes.** Region 2 goes horde first or at the same time (§15). A slow Region 2 between two horde regions would read as a broken map, not a breather.
+
+11. **Druid Call Wolf keeps its current numbers.** *Ruled 2026-11-09 (Designer).* Drop the §13 Call Wolf change (wolf strike arc 1.5 → 2.4, attack cd 950 → 800). Engineer's forced-wolf bot (`cursor/druid-wolf-bot` at `556e726`) measured map 3 in god mode on 12 seeds: default path 5.12 kills/s, wolf path current 5.01, wolf with the §13 change 5.04 — within noise. The change adds DPS at the ±40% edge and buys no clear. The wolf stays as built.
+12. **`HORDE_MAP1_YIELD` stays 0.58.** *Ruled 2026-11-09 (Designer).* Playtester: 20 seeds × Necromancer / Samurai / Savage, plus 70 default kite runs, all exit map 1 at level 6–7. One `region_test` seed 777 at level 8 is an outlier. Lower the yield only if level 8 shows on more than 1 seed in 20. The §14 estimate of "0.62 → about 0.58" is confirmed as the live constant; do not re-tune further without that threshold.
+13. **Near misses on `d34fc01` are accepted for map 1.** *Ruled 2026-11-09 (Designer).* Wizard at 5.2% of ticks with 2 or fewer alive is noise (the §14 residue). Monk's worst-seed 2.27 kills/s is accepted for now. Re-check both after §13 is built.
+14. **Frame-rate gate for Region 2+.** *Ruled 2026-11-09 (Designer).* The alive cap for Region 2 and later stays **120**. Region 2 joins `HORDE_REGIONS` only once a solo host at 4× CPU slowdown holds a median **50 fps** at 120 alive. Engineer's `cursor/render-batch-perf` at `d48e8f9` reports 59.9 / 59.5 at 120; that is pending Playtester. Cached images must be built during the room transition so the first pack (at 1 s) meets smooth frames.
+15. **Fodder draw size.** *Ruled 2026-11-09 (Designer).* Per-unit manifest scale so fodder reads about **19 px** against the Cedar Warden's about **21 px**. Unit radius is unchanged — this is a draw-size change only, not a hitbox change.
 ---
 
 ## 12. Opener tuning at horde pace (design numbers; nothing built)
@@ -429,14 +437,14 @@ Ruled 2026-11-02 (Designer) on Game Engineer's departures from this spec in `cur
 | Savage (`--opener sav_headbutt`) | Bleed Them: plague spread radius 150 → 190 | — (sav_bloodbound has no tier 3) | 4.10 (4.23) → 4.22 (4.34) | +22% → +22% | bleeding that jumps through the crowd |
 | Blacksmith (Hammer Blow) | Iron Pyrite: no change (a form) | Anvil Strike: arc 1.9 → 2.6, reach 112 → 140, cd 2400 → 1800 | 4.08 (4.29) → 3.92 (4.09), no gain measured | −21% → −10% | quake ring while in form |
 | Samurai (`--opener sam_draw_cut`) | Measured Breath: passive, no change | Rising Cut: arc 1.3 → 2.4 | 3.77 (3.93) → 3.83 (4.01), within noise | +23% → +23% | the long-arc cut (plus the Footing burst) |
-| Druid (`--opener druid_thorn_lash`) | Call Wolf: wolf strike arc 1.5 → 2.4, attack cd 950 → 800 | — | 3.64 (3.81) → 3.49 (3.69); the override had no effect in bot runs | +34% → +36% | the pack versus the horde |
+| Druid (`--opener druid_thorn_lash`) | **Call Wolf: no change** (current numbers kept; §13 arc/cd change dropped, ruled 2026-11-09, Designer, §11.11) | — | — (forced-wolf bot on `556e726`: default 5.12, wolf current 5.01, wolf with §13 change 5.04; within noise) | +34% stays (the change would have pushed +36% at the ±40% edge) | the pack versus the horde |
 
 **What this does and doesn't settle:**
 - **Bard and Hunter** move about +0.3 to +0.4 kills/s: just above 4.0 without seed 1, and just under it on all 12 seeds. Bard's ±40% budget is the constraint: it was already +34% from the §12 opener cooldown.
   - Rejected for Bard: Quickstep arc 3.2 (+82% DPS on its own, because the harness rings the caster with four dummies) and Counterpoint at cd 2400 (+49%).
   - Rejected for Hunter: Spotter's Call cd 1200 (+40% on its own, +59% combined with the hawk).
 - **Bard's Opening Note at cd 800** is the §12 fallback. On `98db2c3` it measured 2.74 mean / 2.15 worst kills/s on map 1 (16 seeds). Re-check it on map 1 after the build.
-- **Druid:** Call Wolf's changes moved nothing in any bot run (identical numbers across variants), though they show in the DPS harness (+0.7). The bot likely never fields the wolf in this chain; I haven't verified why. Druid's map-3 number is unmeasured here.
+- **Druid:** *Ruled 2026-11-09 (Designer, §11.11):* drop the Call Wolf change. Engineer's forced-wolf bot (`cursor/druid-wolf-bot` at `556e726`) measured map 3 god-mode on 12 seeds at 5.12 / 5.01 / 5.04 (default / wolf current / wolf with §13 change) — within noise. It adds DPS at the ±40% edge. The wolf keeps its current numbers.
 - **Within-noise classes** (Necromancer, Mage, Sundian, Monk, Samurai, Blacksmith): the changes are shape and identity changes this harness can't separate from noise. Keep them for feel and re-measure on Playtester's harness.
 - **Cooldowns:** every new cooldown is on the 100 ms grid.
 
@@ -459,11 +467,15 @@ Measured (scratch edit of `_tickHordeWave`, since reverted; 45 runs per class un
 | **Thin < 12, debt 16 (proposed)** | **13** | **5.2% / 6 of 45** | **3.30 / 2.71** | Bard 0 of 45 (worst median 14); Samurai 0 of 45; clumsy Savage 20 of 20 clears |
 | Thin < 14, +2 pack, debt 16 | 14 | 5.2% / 9 of 45 | 3.60 / 3.07 | — |
 
-- **Ticks at ≤2 don't reach exactly 0** for Wizard. The residue is about 5%, and I think it's the gap before packs that land on the ring 500–640 u away arrive [estimate; I didn't trace it tick by tick].
+- **Ticks at ≤2 don't reach exactly 0** for Wizard. The residue is about 5%, and I think it's the gap before packs that land on the ring 500–640 u away arrive [estimate; I didn't trace it tick by tick]. *Ruled 2026-11-09 (Designer, §11.13):* the near misses on `d34fc01` are accepted for map 1 — Wizard at 5.2% ticks ≤2 alive is that noise, and Monk's worst-seed 2.27 kills/s stands for now. Re-check both after §13 is built.
 - **Spawned bodies barely change:** Wizard 115.6 → 116.5, Samurai 114.6 → 118.4.
-- **Map-1 exit level moves:** Wizard goes from level 6 on 4 runs and 7 on 41, to 7 on 41 and **8 on 4**. That's outside the 6–7 exit. `HORDE_MAP1_YIELD` needs a re-tune with this rule; 0.62 → about 0.58 is my estimate, not measured.
+- **Map-1 exit level moves:** Wizard goes from level 6 on 4 runs and 7 on 41, to 7 on 41 and **8 on 4**. That's outside the 6–7 exit. *Ruled 2026-11-09 (Designer, §11.12):* `HORDE_MAP1_YIELD` **stays 0.58**. Playtester confirmed the 6–7 exit across 20 seeds × Necro / Samurai / Savage and 70 default kite runs; one `region_test` seed 777 at level 8 is an outlier. Lower only if level 8 shows on more than 1 seed in 20.
 - **The ×1.45 revisit:** with this in place, the ×1.45 multiplier may come down. That's a measurement for after the build.
 - **Clumsy runs:** my clumsy Savage run (20 seeds, no `--react` override) cleared 20/20 both with and without the rule, not the 14/20 Playtester saw. Our flags differ, so this only shows that the rule doesn't hurt a slow player.
+
+**Frame rate and fodder draw (ruled 2026-11-09, Designer):**
+- **Alive cap for Region 2+ stays 120** (§11.14). Region 2 joins `HORDE_REGIONS` only once a solo host at 4× CPU slowdown holds a median 50 fps at 120 alive. Engineer's `cursor/render-batch-perf` at `d48e8f9` reports 59.9 / 59.5 at 120; pending Playtester. Cached images must be built during the room transition so the first pack (at 1 s) meets smooth frames.
+- **Fodder draw size** (§11.15): per-unit manifest scale so fodder reads about 19 px against the Cedar Warden's about 21 px. Unit radius is unchanged.
 
 ## 15. Region 2 (Xibalba) horde roster (for Engineer)
 
