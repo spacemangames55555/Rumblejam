@@ -364,7 +364,23 @@ export function isHordeRegion(regionIndex) {
 // HORDE PACE — the region-1 curve (pace-spec.md §3). Pack sizes ramp from the
 // first to the second number across the wave, by map (depth 0..4).
 export const HORDE_PACK_START = [4, 4, 5, 5, 6];
-export const HORDE_PACK_END = [6, 7, 7, 8, 8];
+// Map 1 ends at 8 (Designer 4 Nov 2026 clumsy fix): packs ramp 4 → 8 over the
+// first HORDE_MAP1_PACK_RAMP_S seconds. Later maps keep their prior ends.
+export const HORDE_PACK_END = [8, 7, 7, 8, 8];
+// MAP 1 FODDER (Designer call 4 Nov 2026, clumsy-bot survival bar 17/20).
+// Map-1 fodder hits for ×0.7 on contact and runs at most 230 u/s (Thornhound
+// was 245), so a slow-reacting player is not run down before the opener has
+// cleared its first packs. Spawn budget, pack count and HP are unchanged, so
+// the §7 density bars hold. Applied in Sim.spawnEnemyById; map 1 only.
+export const HORDE_MAP1_FODDER_CONTACT_MULT = 0.7;
+export const HORDE_MAP1_FODDER_SPD_CAP = 230;
+// Pack-size ramp window on map 1 (pace-spec §11.9). Other maps still ramp
+// across the whole wave duration.
+export const HORDE_MAP1_PACK_RAMP_S = 15;
+// Thin-field pack (pace-spec §14): when alive+queued < this, borrow the next
+// pack against the bank down to -HORDE_MAP1_THIN_DEBT. Map 1 only.
+export const HORDE_MAP1_THIN_ALIVE = 12;
+export const HORDE_MAP1_THIN_DEBT = 16;
 export function hordePackRange(depth) {
   const d = Math.max(0, Math.min(HORDE_PACK_START.length - 1, depth | 0));
   return [HORDE_PACK_START[d], HORDE_PACK_END[d]];
@@ -398,7 +414,9 @@ function hordeWaveUnits(regionIndex, depth) {
 // region_test holds the outcome (level 6–7 with 3 slots on 777 and 0xa11ce).
 // Measured on region_test's god-mode loot walker (×1.45 rate tune): 0.62 →
 // seed 777 level 7 / 94 materials (was 95), 0xa11ce level 7 / 94 (was 90).
-export const HORDE_MAP1_YIELD = 0.62;
+// 0.62 → ~0.58 with the §14 thin-field pack so Wizard's exit stays in 6–7
+// (pace-spec §14; Designer 9 Nov 2026). Re-measure on region_test / map1_bot.
+export const HORDE_MAP1_YIELD = 0.58;
 export function hordeYieldScale(regionIndex, depth) {
   if (!isHordeRegion(regionIndex)) return 1;
   if (regionIndex === 1 && depth === 0) return HORDE_MAP1_YIELD;

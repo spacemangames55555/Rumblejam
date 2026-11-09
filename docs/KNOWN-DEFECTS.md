@@ -1954,7 +1954,7 @@ win), or clear `banked` when starting a fresh retry.
 
 **Not fixed** in this pass. Low.
 
-## #40 — Savage DPS depends on skill firing order: a 50 ms cooldown move on the same grid jumps Cascade DPS +149%
+## #42 — Savage DPS depends on skill firing order: a 50 ms cooldown move on the same grid jumps Cascade DPS +149%
 
 **Found on `cursor/horde-pace-map1` during the pace-spec §12 cooldown-grid pass (2 Nov 2026).**
 **Owner: Game Designer's DPS pass.**

@@ -73,6 +73,7 @@ import { ENEMY_BY_ID, FLOOR_TABLES } from '../js/content/enemies.js';
 import { REGIONS, regionHpMult, regionDmgMult, TOTAL_REGIONS, REGION_ANCHOR_LEVEL } from '../js/regions.js';
 import { Sim } from '../js/game.js';
 import * as SKILLSIM from '../js/skillsim.js';
+import { stepDamage } from '../js/compose.js';
 import { TREES, TREES_BY_CLASS } from '../js/skills.js';
 import { SELECTABLE } from '../js/content/characters.js';
 
@@ -172,10 +173,63 @@ console.log('ROSTER WEIGHT AND TELEGRAPH DENSITY — the two halves of one coupl
 console.log(`reference: floor-1 table (${FLOOR_TABLES[0].join(', ')}) — weighted mean HP ${REF_HP.toFixed(1)}, damage ${REF_DMG.toFixed(2)}`);
 console.log(`band: ±${(BAND * 100).toFixed(0)}% → HP [${(REF_HP * (1 - BAND)).toFixed(1)}, ${(REF_HP * (1 + BAND)).toFixed(1)}], damage [${(REF_DMG * (1 - BAND)).toFixed(2)}, ${(REF_DMG * (1 + BAND)).toFixed(2)}]\n`);
 
-// The weakest rank-1 opener packet on map 1 (Savage's Rip, 4 after rounding).
-// tools/opener_gate.mjs asserts the packets themselves against the live
-// bodies; this is the authoring-side half of the same rule.
-const WEAKEST_OPENER_PACKET = 4;
+// THE WEAKEST OPENER HIT ON ARRIVAL (Designer ruling 4 Nov 2026). B′'s rule is
+// that a region's fodder dies to ONE opener hit at the level a player arrives
+// in that region, so the packet is computed, not a constant (it was a
+// hard-coded 4, the map-1 Rip, applied to every region).
+//
+// The level is the region's `expectedLevel` (falling back to its §4.3 anchor),
+// so map 1 stays at level 1. A character of every class is built at that level
+// the way tools/region_curve.mjs builds one — (level − 1) points spent
+// breadth-first in tier order, which is the build REGION_HP_MULT was measured
+// against — and every tree's tier-1 is scored as that class's opener: one
+// impact of its first damage step at the rank that spend reached (at least 1),
+// times the class's Ferocity (harness characters bank no stat picks), rounded
+// as damageEnemy rounds it. Neutral domain, no crit, no engine stacks, the same
+// reading tools/opener_gate.mjs makes on map 1. Plague openers have no impact
+// packet and are left to opener_gate's DoT rule. The weakest packet across
+// every class and tree is the bar.
+const IMPACT_KINDS = new Set(['bolt', 'strike', 'cone', 'line', 'drain', 'channel']);
+const _packetCache = new Map();
+function arrivalLevel(region) {
+  return region.expectedLevel || REGION_ANCHOR_LEVEL[region.index - 1] || 1;
+}
+function weakestOpenerPacket(level) {
+  if (_packetCache.has(level)) return _packetCache.get(level);
+  let weakest = null;
+  for (const classId of Object.keys(TREES_BY_CLASS)) {
+    const sim = new Sim({
+      seed: 4242, allowUnplayable: true,
+      party: [{ idx: 0, key: 'k', name: 'C', charId: classId, color: '#fff' }],
+    });
+    const p = sim.players[0];
+    if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+    p.level = level;
+    const skills = TREES_BY_CLASS[classId].flatMap(t => TREES[t].skills).sort((a, b) => a.tier - b.tier);
+    let budget = level - 1;
+    for (let pass = 0; pass < 12 && budget > 0; pass++) {
+      let spent = 0;
+      for (const sk of skills) {
+        if (budget <= 0) break;
+        p.skillPoints++;
+        if (SKILLSIM.spendSkillPoint(sim, p, sk.id)) { budget--; spent++; } else p.skillPoints--;
+      }
+      if (!spent) break;
+    }
+    sim._recomputeStats(p);
+    const caster = { stats: { ferocity: p.stats.ferocity }, engines: {} };
+    for (const tid of TREES_BY_CLASS[classId]) {
+      const sk = TREES[tid].skills.find(s => s.tier === 1);
+      const step = sk && (sk.compose || []).find(s => IMPACT_KINDS.has(s.kind) && Number.isFinite(s.damage));
+      if (!step) continue;
+      const rank = Math.max(1, p.skillRanks[sk.id] || 0);
+      const packet = Math.max(1, Math.round(stepDamage(step, sk, rank, caster) * SKILLSIM.ferocityMult(caster)));
+      if (!weakest || packet < weakest.packet) weakest = { packet, id: sk.id, classId, rank, ferocity: p.stats.ferocity };
+    }
+  }
+  _packetCache.set(level, weakest);
+  return weakest;
+}
 const SOLO_COOP_HP = 1.15; // coopHp for one player, the map-1 measurement party
 const SPECIAL_PUNISH_LO = PUNISH_LO, SPECIAL_PUNISH_HI = PUNISH_HI;
 function hordeChecks(region, units) {
@@ -195,9 +249,12 @@ function hordeChecks(region, units) {
   // B′ — role bands. Fodder dies to the weakest opener; specials 2–4×
   // fodder; landmarks ≥ 6× fodder. No band-scaling inside a roster: the
   // world axis (regionHpMult) is the only multiplier.
-  const fatFodder = fodder.filter(e => Math.round(live(e)) > WEAKEST_OPENER_PACKET);
-  if (fodder.length && !fatFodder.length) ok(`B′ region ${region.index} fodder live HP ${fodder.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${live(e).toFixed(1)}`).join(', ')} — every one ≤ the weakest rank-1 opener packet ${WEAKEST_OPENER_PACKET}`);
-  else bad(`B′ region ${region.index} fodder over the weakest opener packet ${WEAKEST_OPENER_PACKET}: ${fatFodder.map(e => `${e.id} ${live(e).toFixed(1)}`).join(', ') || 'no fodder at all'}`);
+  const lvl = arrivalLevel(region);
+  const W = weakestOpenerPacket(lvl);
+  const bar = `the weakest opener hit at arrival level ${lvl}, ${W.packet} (${W.id} rank ${W.rank}, ferocity ${W.ferocity})`;
+  const fatFodder = fodder.filter(e => Math.round(live(e)) > W.packet);
+  if (fodder.length && !fatFodder.length) ok(`B′ region ${region.index} fodder live HP ${fodder.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${live(e).toFixed(1)}`).join(', ')} — every one ≤ ${bar}`);
+  else bad(`B′ region ${region.index} fodder over ${bar}: ${fatFodder.map(e => `${e.id} ${live(e).toFixed(1)}`).join(', ') || 'no fodder at all'}`);
   const offSpec = specials.filter(e => e.hp < 2 * fodderMax || e.hp > 4 * fodderMax);
   if (specials.length && !offSpec.length) ok(`B′ region ${region.index} specials ${specials.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${e.hp}`).join(', ')} are 2–4× fodder max ${fodderMax}`);
   else bad(`B′ region ${region.index} specials outside 2–4× fodder max ${fodderMax}: ${offSpec.map(e => `${e.id} ${e.hp}`).join(', ') || 'no specials'}`);

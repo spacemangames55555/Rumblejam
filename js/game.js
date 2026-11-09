@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateTree, serializeMap } from './nodetree.js';
-import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP, ONBOARDING_DROP_SCALE, isHordeRegion, hordeYieldScale } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP, ONBOARDING_DROP_SCALE, isHordeRegion, hordeYieldScale, HORDE_MAP1_FODDER_CONTACT_MULT, HORDE_MAP1_FODDER_SPD_CAP, HORDE_MAP1_PACK_RAMP_S, HORDE_MAP1_THIN_ALIVE, HORDE_MAP1_THIN_DEBT } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -1182,7 +1182,10 @@ export class Sim {
   }
 
   _hordePackSize(w) {
-    const f = Math.min(1, w.t / Math.max(1e-6, w.dur));
+    // Map 1 combat ramps 4 → 8 over the first 15 s (§11.9); objective rooms
+    // on map 1 and other horde maps still ramp across the whole wave.
+    const ramp = (this._onboarding() && !this.obj) ? HORDE_MAP1_PACK_RAMP_S : w.dur;
+    const f = Math.min(1, w.t / Math.max(1e-6, ramp));
     const size = w.packStart + (w.packEnd - w.packStart) * f;
     const n = Math.floor(size + this.waveRng.float());
     return Math.max(CONFIG.PACK_MIN, Math.min(CONFIG.PACK_MAX, n));
@@ -1217,8 +1220,22 @@ export class Sim {
     while (guard++ < 8) {
       if (!w.nextPack) w.nextPack = this._hordePackSize(w);
       const n = w.nextPack;
-      if (w.acc < n) break;
-      const room = cap - (this.enemyPool.count + this.spawnQueue.length);
+      const field = this.enemyPool.count + this.spawnQueue.length;
+      // Thin-field pack (pace-spec §14, map 1 only): when alive+queued drops
+      // below 12 after the opening pack, land the next pack now and borrow
+      // against the bank down to -16. Pack size and the spawn curve are
+      // unchanged; the curve repays the debt. Gated on firstPack so the
+      // opening still lands at FIRST_PACK_T rather than at t≈0.
+      // Objective rooms (bounty/nest/…) keep their own stream geometry;
+      // §14 is a combat-room density fix for Wizard on map 1.
+      // rate > 0: fixtures silence the wave with r0=r1=0 (telegraph_test's
+      // quiet room); borrowing against a zero curve would still land packs.
+      const thin = this._onboarding() && !this.obj && w.firstPack
+        && rate > 0 && field < HORDE_MAP1_THIN_ALIVE;
+      if (w.acc < n) {
+        if (!(thin && (w.acc - n) >= -HORDE_MAP1_THIN_DEBT)) break;
+      }
+      const room = cap - field;
       if (room <= 0) break;
       // A pack that does not fit lands as what fits: the cap is a ceiling on
       // bodies, not a gate that holds the whole room empty for a full pack.
@@ -2298,13 +2315,20 @@ export class Sim {
     // the objective's own furniture (nests) opts out with noObjHp
     if (!opts.noObjHp) hp *= (this.objHpMult || 1);
     if (opts.mini) hp *= 0.35;
+    // Map 1 fodder (Designer call 4 Nov 2026 / pace-spec §11.9): ×0.7 contact,
+    // top speed 230. Density (spawn budget, packs, HP) is unchanged.
+    const map1Fodder = this._onboarding() && !this.obj && !opts.elite && !opts.mini
+      && enemyRole(def) === 'fodder';
     Object.assign(e, {
       id: ++this.spawnCounter, def, typeIdx: ENEMY_INDEX[id], boss: false, bossDef: null,
       x: clamp(x, WALL + 20, this.W - WALL - 20), y: clamp(y, WALL + 20, this.H - WALL - 20),
       hp: Math.round(hp), maxHp: Math.round(hp),
       radius: def.radius * (opts.elite ? 1.45 : 1) * (opts.mini ? 0.6 : 1),
-      spd: def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * (opts.spdMult || 1),
-      dmg: def.dmg * dmgScale, dmgScale,
+      spd: (() => {
+        const v = def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * (opts.spdMult || 1);
+        return map1Fodder ? Math.min(HORDE_MAP1_FODDER_SPD_CAP, v) : v;
+      })(),
+      dmg: def.dmg * dmgScale * (map1Fodder ? HORDE_MAP1_FODDER_CONTACT_MULT : 1), dmgScale,
       mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
