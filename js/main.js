@@ -1999,7 +1999,9 @@ function frame(now) {
   // Overlay state is read straight off the host sim. On a client it stays null,
   // which is correct — a client has no trigger state to show because it never
   // evaluates one.
-  renderer.trigDebug = app.sim ? {
+  // Built only while the T overlay is on: assembling it (player filters, the
+  // live telegraph-zone list) every frame was pure JS cost on a throttled host.
+  renderer.trigDebug = app.sim && renderer.debugTrig ? {
     stats: app.sim.trigStats,
     players: app.sim.players.filter(q => !q.gone).map(q => ({
       idx: q.idx, name: q.name, footing: q.engines ? q.engines.footing : 0,

@@ -22,7 +22,7 @@ const FORM_COLOR = {
   marrownaut: PALETTE.hazardSpike,
 };
 import { WEAPON_BY_ID } from './content/weapons.js';
-import { Assets, drawSprite, drawSpriteBatch, drawSpritePrescaled, spriteScaleFor, DEFAULT_FACING } from './assets.js';
+import { Assets, drawSprite, drawSpriteBatch, drawSpritePrescaled, spriteDeviceCell, deviceCellOrigin, spriteScaleFor, DEFAULT_FACING } from './assets.js';
 import { PROP, FX, BEAST_SPRITE, MINION_SPRITE } from './content/sprites.js';
 import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
 import { DOMAIN_COLOR } from './domains.js';
@@ -182,6 +182,13 @@ const { ROOM_W: VIEW_W, ROOM_H: VIEW_H, WALL } = CONFIG;
 // (the Deadeye, at 62) and comfortably over interpolation jitter on a client.
 // AIM_HOLD is how long a shot keeps a unit looking at what it shot.
 const FACE_MOVE_EPS2 = 0.25;
+
+// Floor chunk cache (Renderer._drawFloorCached): chunk edge in device px, and
+// how many chunks are kept (each C*C*4 bytes; 64 x 1 MB at 512).
+const FLOOR_CHUNK = 512;
+const FLOOR_CHUNK_MAX = 64;
+// Rotating-triangle primitive cells per 120-degree period (Renderer._primitiveCell).
+const TRI_STEPS = 96;
 const FACE_AIM_HOLD_S = 0.6;
 
 export class Renderer {
@@ -444,6 +451,13 @@ export class Renderer {
       ox += (Math.random() * 2 - 1) * view.shake * scale;
       oy += (Math.random() * 2 - 1) * view.shake * scale;
     }
+    // WHOLE DEVICE PIXELS. The world is placed at an integer device offset so
+    // the cached floor chunks (_drawFloor) and the pre-scaled enemy cells
+    // (_drawEnemy) land on the same pixel grid a live draw would: a cached
+    // blit is then bit-identical to painting the tiles in place, and pixel art
+    // never straddles a half pixel. The camera still glides; it simply moves in
+    // device-pixel steps, which at a fit of ~0.8-2.25 px/unit is invisible.
+    ox = Math.round(ox); oy = Math.round(oy);
     ctx.setTransform(scale, 0, 0, scale, ox, oy);
     // culling bounds (world coords, with margin for radii/bars)
     const cl = this.camX - vw / 2 - 90, cr = this.camX + vw / 2 + 90;
@@ -515,7 +529,20 @@ export class Renderer {
     }
     for (const d of view.decoys || []) { if (inView(d.x, d.y)) this._drawDecoy(ctx, d, view); }
     for (const s of view.summons || []) { if (inView(s.x, s.y)) this._drawSummon(ctx, s, view); }
-    for (const tk of view.tokens || []) { if (inView(tk.x, tk.y)) this._drawSoulToken(ctx, tk); }
+    if (view.tokens && view.tokens.length) {
+      const M = this.enemyFastPath === false ? null : ctx.getTransform();
+      const fast = M && M.b === 0 && M.c === 0 && M.a > 0 && M.a === M.d;
+      ctx.save();
+      if (fast) ctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (const tk of view.tokens) {
+        if (!inView(tk.x, tk.y)) continue;
+        if (fast && this._drawSoulTokenFast(ctx, tk, M)) continue;
+        if (fast) ctx.setTransform(M);
+        this._drawSoulToken(ctx, tk);
+        if (fast) ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+      ctx.restore();
+    }
     (view.minions || []).forEach((m, i) => { if (inView(m.x, m.y)) this._drawMinion(ctx, m, view, i); });
     // Overhead status marks are COLLECTED by _drawEnemy and painted in one
     // batched pass after every body (drawSpriteBatch): one draw state for the
@@ -524,7 +551,17 @@ export class Renderer {
     const marks = this.markBatching === false ? null : (this._marks || (this._marks = []));
     this._markBatch = marks;
     if (marks) marks.length = 0;
+    // One save/restore around the whole horde: the fast body path below sets
+    // transforms and styles directly instead of saving per enemy.
+    ctx.save();
+    {
+      const M = this.enemyFastPath === false || typeof document === 'undefined' ? null : ctx.getTransform();
+      this._worldM = M && M.b === 0 && M.c === 0 && M.a > 0 && M.d > 0 ? M : null;
+      if (this._worldM) ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
     for (const e of view.enemies || []) { if (inView(e.x, e.y, e.radius)) this._drawEnemy(ctx, e, view); }
+    this._worldM = null;
+    ctx.restore();
     this._markBatch = null;
     if (marks && marks.length) { drawSpriteBatch(ctx, FX.plagueMark, marks); marks.length = 0; }
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
@@ -838,7 +875,9 @@ export class Renderer {
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
 
     const tiles = biome ? this._tileSet(biome) : null;
-    if (tiles) {
+    if (tiles && this.floorCache !== false && this._drawFloorCached(ctx, view, biome, tiles, aw, ah, x0, y0, x1, y1)) {
+      // painted from cache
+    } else if (tiles) {
       // One row and column of margin on each side, so a tile only partly on
       // screen is still drawn and the viewport edge can never show a gap.
       const tx0 = Math.floor(x0 / T) - 1, tx1 = Math.floor((x1 - 1) / T) + 1;
@@ -865,6 +904,95 @@ export class Renderer {
     for (let x = gx0; x <= gx1; x += T) { ctx.moveTo(x, Math.max(WALL, ct)); ctx.lineTo(x, Math.min(ah - WALL, cb)); }
     for (let y = gy0; y <= gy1; y += T) { ctx.moveTo(Math.max(WALL, cl), y); ctx.lineTo(Math.min(aw - WALL, cr), y); }
     ctx.stroke();
+  }
+
+  // FLOOR CHUNK CACHE (render-batch-perf). The tiled floor was ~400 scaled
+  // drawImage calls a frame — ~7.5 ms of software raster at 120 alive under a
+  // 4x CPU throttle, a third of the whole frame — for a picture that only
+  // changes when the arena, the biome art or the zoom does. It is now painted
+  // once into FLOOR_CHUNK x FLOOR_CHUNK device-pixel canvases (lazily, only
+  // the chunks the camera has seen) and each frame is a handful of 1:1 copies.
+  //
+  // BIT-IDENTICAL, NOT "CLOSE". A chunk is painted under the same scale as the
+  // live floor with its origin at a whole device pixel of the world's origin,
+  // and draw() now places the world at a whole device pixel (ox/oy rounded),
+  // so every floor pixel samples the same texel it would have live. Chunks are
+  // keyed on arena, biome, tile-set version and the transform scale; a change
+  // in any of them drops the lot. LRU-capped so a 2x-DPR phone on a 3000-unit
+  // arena never holds the whole floor (that would be ~120 MB).
+  //
+  // Returns false when it cannot cache (no canvas, rotated/fractional
+  // transform), and the caller paints the floor live exactly as before.
+  _drawFloorCached(ctx, view, biome, tiles, aw, ah, x0, y0, x1, y1) {
+    if (typeof document === 'undefined' || typeof ctx.getTransform !== 'function') return false;
+    const m = ctx.getTransform();
+    if (m.b !== 0 || m.c !== 0 || !(m.a > 0) || !(m.d > 0) || m.e !== Math.round(m.e) || m.f !== Math.round(m.f)) return false;
+    const key = `${view.arenaKey}|${biome.id}|${Assets.version}|${Assets.ready}|${tiles.length}|${m.a}|${m.d}|${aw}x${ah}`;
+    let fc = this._floorChunks;
+    if (!fc || fc.key !== key) fc = this._floorChunks = { key, map: new Map(), stamp: 0 };
+    fc.stamp++;
+    const C = FLOOR_CHUNK;
+    // visible floor rect in device px relative to the world origin
+    const lx0 = Math.max(0, Math.floor(m.a * x0)), ly0 = Math.max(0, Math.floor(m.d * y0));
+    const lx1 = Math.min(Math.ceil(m.a * aw), Math.ceil(m.a * x1)), ly1 = Math.min(Math.ceil(m.d * ah), Math.ceil(m.d * y1));
+    if (lx1 <= lx0 || ly1 <= ly0) return true;
+    const cx0 = Math.floor(lx0 / C), cx1 = Math.floor((lx1 - 1) / C);
+    const cy0 = Math.floor(ly0 / C), cy1 = Math.floor((ly1 - 1) / C);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const ck = cx + ',' + cy;
+        let ent = fc.map.get(ck);
+        if (!ent) {
+          const cv = this._paintFloorChunk(biome, tiles, aw, ah, m.a, m.d, cx, cy);
+          if (!cv) { ctx.restore(); return false; }
+          ent = { cv, used: 0 };
+          fc.map.set(ck, ent);
+        }
+        ent.used = fc.stamp;
+        // only the visible part of the chunk
+        const sx = Math.max(lx0, cx * C) - cx * C, sy = Math.max(ly0, cy * C) - cy * C;
+        const ex = Math.min(lx1, (cx + 1) * C) - cx * C, ey = Math.min(ly1, (cy + 1) * C) - cy * C;
+        if (ex > sx && ey > sy) ctx.drawImage(ent.cv, sx, sy, ex - sx, ey - sy, m.e + cx * C + sx, m.f + cy * C + sy, ex - sx, ey - sy);
+      }
+    }
+    ctx.restore();
+    if (fc.map.size > FLOOR_CHUNK_MAX) {
+      const old = [...fc.map.entries()].sort((p, q) => p[1].used - q[1].used);
+      for (let i = 0; i < old.length - FLOOR_CHUNK_MAX; i++) if (old[i][1].used !== fc.stamp) fc.map.delete(old[i][0]);
+    }
+    return true;
+  }
+
+  _paintFloorChunk(biome, tiles, aw, ah, a, d, cx, cy) {
+    const C = FLOOR_CHUNK;
+    let cv;
+    try { cv = document.createElement('canvas'); } catch { return null; }
+    cv.width = C; cv.height = C;
+    const g = cv.getContext('2d');
+    if (!g) return null;
+    g.imageSmoothingEnabled = false;   // pixel art: nearest-neighbour, as the main canvas (_resize)
+    g.setTransform(a, 0, 0, d, -cx * C, -cy * C);
+    // the chunk's world rect, clipped to the arena like the live floor's
+    const wx0 = Math.max(0, (cx * C) / a), wy0 = Math.max(0, (cy * C) / d);
+    const wx1 = Math.min(aw, ((cx + 1) * C) / a), wy1 = Math.min(ah, ((cy + 1) * C) / d);
+    if (wx1 <= wx0 || wy1 <= wy0) return cv;
+    const T = CONFIG.FLOOR_TILE;
+    g.beginPath();
+    g.rect(0, 0, aw, ah);
+    g.clip();
+    g.fillStyle = biome.fallbackFill;
+    g.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
+    const tx0 = Math.floor(wx0 / T) - 1, tx1 = Math.floor(wx1 / T) + 1;
+    const ty0 = Math.floor(wy0 / T) - 1, ty1 = Math.floor(wy1 / T) + 1;
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const s = tiles[tileVariant(tx, ty, tiles.length)];
+        g.drawImage(s.img, 0, 0, s.w, s.h, tx * T, ty * T, T, T);
+      }
+    }
+    return cv;
   }
 
   // The loaded tiles for a biome, or null if none of them are there. Cached
@@ -1328,7 +1456,258 @@ export class Renderer {
     return false;
   }
 
+  // A domain ring (the damage-triangle colour, 4 world units wide at r + 3)
+  // pre-rasterised once per colour, radius and device scale. Stroking an
+  // anti-aliased arc per enemy was the single largest cost in the horde frame:
+  // ~7.7 ms of software raster for 120 rings at a 4x CPU throttle, double the
+  // bodies themselves. A cached ring is one 1:1 copy. Same colour, radius and
+  // line width as the live stroke; only its sub-pixel phase is snapped.
+  _domainRing(color, r, a, d) {
+    const rc = this._ringCache || (this._ringCache = new Map());
+    if (this._ringAt !== a * 1e4 + d) { rc.clear(); this._ringAt = a * 1e4 + d; }
+    let byR = rc.get(color);
+    if (!byR) { byR = new Map(); rc.set(color, byR); }
+    let c = byR.get(r);
+    if (c !== undefined) return c;
+    c = null;
+    try {
+      const half = Math.ceil((r + 3 + 2) * Math.max(a, d)) + 1;
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = half * 2;
+      const g = cv.getContext('2d');
+      if (g) {
+        g.setTransform(a, 0, 0, d, half, half);
+        g.strokeStyle = color;
+        g.lineWidth = 4;
+        g.beginPath();
+        g.arc(0, 0, r + 3, 0, Math.PI * 2);
+        g.stroke();
+        c = { cv, half, color, r };
+      }
+    } catch { c = null; }
+    if (byR.size > 64) byR.clear();
+    byR.set(r, c);
+    return c;
+  }
+
+  // Body cell + domain ring as ONE cell, when nothing draws between them (no
+  // frost, no wind-up ring). Halves the horde's copies. The ring sits where
+  // the separate blit would put it for a body on a whole device pixel (and
+  // within 1 px otherwise); it is still painted over the body, as before.
+  _bodyRingCell(cell, ring) {
+    const combos = cell.combos || (cell.combos = new Map());
+    let c = combos.get(ring);
+    if (c !== undefined) return c;
+    c = null;
+    try {
+      const rox = -ring.half - Math.round(-cell.dw / 2), roy = -ring.half - Math.round(-cell.ay);
+      const x0 = Math.min(0, rox), y0 = Math.min(0, roy);
+      const x1 = Math.max(cell.dw, rox + ring.half * 2), y1 = Math.max(cell.dh, roy + ring.half * 2);
+      const cv = document.createElement('canvas');
+      cv.width = x1 - x0; cv.height = y1 - y0;
+      const g = cv.getContext('2d');
+      if (g) {
+        g.drawImage(cell.cv, -x0, -y0);
+        g.drawImage(ring.cv, rox - x0, roy - y0);
+        c = { cv, ox: x0, oy: y0 };
+      }
+    } catch { c = null; }
+    if (combos.size > 16) combos.clear();
+    combos.set(ring, c);
+    return c;
+  }
+
+  // A PRIMITIVE BODY as a cached cell. With no enemy sheet on disk (the
+  // shipped state for region 1 today) every body is an anti-aliased polygon:
+  // fill, outline stroke and, under a status, a second tinted fill — three
+  // path rasterisations per enemy per frame. The same polygon is painted once
+  // per (shape, colour, radius, tint, scale) into a small canvas and copied.
+  // The rotating triangle keys on its angle within one 120-degree period,
+  // quantised to TRI_STEPS (1.25 degrees: under a quarter pixel of travel at
+  // the tip for a radius-14 body), so it still turns smoothly.
+  // `ring` (optional) is painted on top, after the body, exactly as the
+  // separate domain stroke would be, when nothing draws between them.
+  _primitiveCell(e, r, bodyTint, a, d, ring) {
+    let rot = 0, q = 0;
+    if (e.shape === 'triangle') {
+      const P = Math.PI * 2 / 3;
+      let ph = ((this.t + (e.id || 0)) * 0.8) % P; if (ph < 0) ph += P;
+      q = Math.round(ph / P * TRI_STEPS) % TRI_STEPS;
+      rot = q * P / TRI_STEPS;
+    }
+    const pc = this._primCache || (this._primCache = new Map());
+    if (this._primAt !== a * 1e4 + d) { pc.clear(); this._primAt = a * 1e4 + d; }
+    const key = `${e.shape}|${e.color}|${r}|${bodyTint ? bodyTint.tint + bodyTint.tintStrength : ''}|${q}|${ring ? ring.color : ''}`;
+    let c = pc.get(key);
+    if (c !== undefined) return c;
+    c = null;
+    try {
+      const lw = Math.max(2, r * 0.14);
+      const ext = Math.max(r * 1.25 + lw, ring ? r + 3 + 2 : 0);   // star/cross reach r; outline adds lw/2
+      const half = Math.ceil(ext * Math.max(a, d)) + 2;
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = half * 2;
+      const g = cv.getContext('2d');
+      if (g) {
+        g.setTransform(a, 0, 0, d, half, half);
+        g.lineWidth = lw;
+        g.strokeStyle = PALETTE.outline;
+        g.fillStyle = e.color;
+        if (e.shape === 'triangle') poly(g, 0, 0, r, 3, rot); else drawShape(g, e.shape, r, 0);
+        g.fill();
+        g.stroke();
+        if (bodyTint) {
+          g.globalAlpha = bodyTint.tintStrength;
+          g.fillStyle = bodyTint.tint;
+          g.fill();
+          g.globalAlpha = 1;
+        }
+        if (ring) {
+          g.strokeStyle = ring.color;
+          g.lineWidth = 4;
+          g.beginPath();
+          g.arc(0, 0, r + 3, 0, Math.PI * 2);
+          g.stroke();
+        }
+        c = { cv, half };
+      }
+    } catch { c = null; }
+    if (pc.size > 2048) pc.clear();
+    pc.set(key, c);
+    return c;
+  }
+
+  // THE HORDE FAST PATH (render-batch-perf). A plain body — not elite, not
+  // fusing or hit-flashing, not flickering in a wall — is drawn with no
+  // save/restore: the body is a pre-scaled 1:1 cell (spriteDeviceCell), the
+  // domain ring a cached ring, both copied at identity; the frost, wind-up
+  // ring and hp bar draw under the same world-translated transform the old
+  // path used. Order within the enemy is unchanged: body, frost, wind-up,
+  // domain, hp bar, plague mark (queued). The status tint is chosen by
+  // enemyBodyTint() exactly as before (chase > plague > chill).
+  //
+  // Enters and leaves with the context at IDENTITY (the enemy pass sets it
+  // once). Returns false, having drawn nothing, to use the full path.
+  _drawEnemyFast(ctx, e, view, M) {
+    if (e.elite || e.fusing || e.flash) return false;
+    if (e.straggle && view && this._straggleInWall(e, view)) return false;   // alpha flicker: full path
+    const r = e.radius;
+    const bodyTint = enemyBodyTint(e, view);
+    const sc = spriteScaleFor(e.spriteId, r * 2);
+    const opt = { scale: sc, facing: this._faceAngle(this._enemyKey(e.id), e.x, e.y, null), seed: e.id };
+    if (bodyTint) { opt.tint = bodyTint.tint; opt.tintStrength = bodyTint.tintStrength; }
+    const px = M.a * e.x + M.e, py = M.d * e.y + M.f;
+    const ringCol = e.domain ? DOMAIN_COLOR[e.domain] : null;
+    const ring = ringCol ? this._domainRing(ringCol, r, M.a, M.d) : null;
+    const cell = spriteDeviceCell(e.spriteId, M, opt);
+    let ringDone = false;
+    if (cell) {
+      const [dx, dy] = deviceCellOrigin(cell, M, e.x, e.y);
+      const combo = ring && !e.slowed && !e.winding ? this._bodyRingCell(cell, ring) : null;
+      if (combo) { ctx.drawImage(combo.cv, dx + combo.ox, dy + combo.oy); ringDone = true; }
+      else ctx.drawImage(cell.cv, dx, dy);
+    }
+    let world = false;   // context currently at the world transform translated to the body
+    const toWorld = () => { if (!world) { ctx.setTransform(M.a, 0, 0, M.d, px, py); world = true; } };
+    let prim = null;
+    if (!cell && !Assets.get(e.spriteId)) {
+      const withRing = ring && !e.slowed && !e.winding;
+      prim = this._primitiveCell(e, r, bodyTint, M.a, M.d, withRing ? ring : null);
+      if (prim) {
+        ctx.drawImage(prim.cv, Math.round(px) - prim.half, Math.round(py) - prim.half);
+        if (withRing) ringDone = true;
+      }
+    }
+    if (!cell && !prim) {
+      toWorld();
+      ctx.lineWidth = Math.max(2, r * 0.14);
+      ctx.strokeStyle = PALETTE.outline;
+      ctx.fillStyle = e.color;
+      if (!drawSprite(ctx, e.spriteId, 0, 0, opt)) {
+        drawShape(ctx, e.shape, r, this.t + (e.id || 0));
+        ctx.fill();
+        ctx.stroke();
+        if (bodyTint) {
+          ctx.globalAlpha = bodyTint.tintStrength;
+          ctx.fillStyle = bodyTint.tint;
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+    if (e.slowed) {
+      toWorld();
+      const m = chillFrostMetrics(r, this._screen && this._screen.scale, this.dpr);
+      const drewFrost = drawSpritePrescaled(ctx, FX.chillFrost, 0, m.cy, {
+        scale: spriteScaleFor(FX.chillFrost, m.h),
+        seed: markSeed(e.id),
+      });
+      if (!drewFrost) this._drawChillFrostFallback(ctx, m.w, m.h, m.bottom, e.id);
+    }
+    if (e.winding) {
+      toWorld();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(this.t * 22);
+      ctx.beginPath();
+      ctx.arc(0, 0, r + 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (ringCol && !ringDone) {
+      if (ring) {
+        if (world) { ctx.setTransform(1, 0, 0, 1, 0, 0); world = false; }
+        ctx.drawImage(ring.cv, Math.round(px) - ring.half, Math.round(py) - ring.half);
+      } else {
+        toWorld();
+        ctx.strokeStyle = ringCol;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, r + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    if (e.hpFrac < 1) {
+      toWorld();
+      const bw = r * 2;
+      ctx.fillStyle = '#0008';
+      ctx.fillRect(-bw / 2, -r - 10, bw, 5);
+      ctx.fillStyle = e.boss ? PALETTE.boss : '#e2504c';
+      ctx.fillRect(-bw / 2, -r - 10, bw * clamp(e.hpFrac, 0, 1), 5);
+    }
+    if (e.plagued) {
+      const mh = plagueMarkWorldHeight(r, this._screen && this._screen.scale, this.dpr);
+      const item = { x: e.x, y: e.y - r - PLAGUE_ART.markGap - mh / 2, scale: spriteScaleFor(FX.plagueMark, mh), seed: markSeed(e.id) };
+      if (this._markBatch) this._markBatch.push(item);
+      else { toWorld(); drawSprite(ctx, FX.plagueMark, 0, item.y - e.y, { scale: item.scale, seed: item.seed }); }
+    }
+    if (world) ctx.setTransform(1, 0, 0, 1, 0, 0);
+    return true;
+  }
+
+  // `e${id}` interned: the facing map is keyed by string, and building a fresh
+  // one per enemy per frame was measurable JS on a throttled host.
+  _enemyKey(id) {
+    const k = this._eKeys || (this._eKeys = new Map());
+    let s = k.get(id);
+    if (s === undefined) { if (k.size > 4096) k.clear(); s = `e${id}`; k.set(id, s); }
+    return s;
+  }
+
   _drawEnemy(ctx, e, view) {
+    const M = this._worldM;
+    if (M) {
+      // the enemy pass runs at identity (draw()); the full path wants the world
+      if (this._drawEnemyFast(ctx, e, view, M)) return;
+      ctx.setTransform(M);
+      this._drawEnemyFull(ctx, e, view);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      return;
+    }
+    this._drawEnemyFull(ctx, e, view);
+  }
+
+  _drawEnemyFull(ctx, e, view) {
     ctx.save();
     ctx.translate(e.x, e.y);
     const r = e.radius;
@@ -1593,6 +1972,44 @@ export class Renderer {
   // A soul token on the floor. It fades as it expires rather than vanishing on
   // a timer nobody can see — the ttl fraction rides the wire so this can read
   // it, which is the only reason that field exists.
+  // A soul token is a stroked, filled AA disc, and a Necromancer horde leaves
+  // 100-150 on the floor: ~2.5 ms of raster a frame stroked live. The disc is
+  // pre-rasterised per radius (the pulse quantised to 1/4 device px) and
+  // blitted with the ttl fade as globalAlpha — the same fill, outline and
+  // fade, one copy each.
+  _drawSoulTokenFast(ctx, tk, M) {
+    const pulse = 1 + Math.sin(this.t * 4 + tk.x * 0.11) * MINION_ART.tokenPulse;
+    const rq = Math.round(MINION_ART.tokenR * pulse * M.a * 4) / 4;   // device px
+    const rc = this._tokenCache || (this._tokenCache = new Map());
+    const key = rq * 64 + M.a;
+    let c = rc.get(key);
+    if (c === undefined) {
+      c = null;
+      try {
+        const half = Math.ceil(rq + MINION_ART.outline * M.a) + 2;
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = half * 2;
+        const g = cv.getContext('2d');
+        if (g) {
+          g.setTransform(M.a, 0, 0, M.a, half, half);
+          g.fillStyle = MINION_ART.tokenFill;
+          g.strokeStyle = PALETTE.outline;
+          g.lineWidth = MINION_ART.outline;
+          g.beginPath();
+          g.arc(0, 0, rq / M.a, 0, Math.PI * 2);
+          g.fill(); g.stroke();
+          c = { cv, half };
+        }
+      } catch { c = null; }
+      if (rc.size > 128) rc.clear();
+      rc.set(key, c);
+    }
+    if (!c) return false;
+    ctx.globalAlpha = MINION_ART.tokenAlphaMin + (1 - MINION_ART.tokenAlphaMin) * clamp(tk.ttlP, 0, 1);
+    ctx.drawImage(c.cv, Math.round(M.a * tk.x + M.e) - c.half, Math.round(M.d * tk.y + M.f) - c.half);
+    return true;
+  }
+
   _drawSoulToken(ctx, tk) {
     ctx.save();
     ctx.translate(tk.x, tk.y);

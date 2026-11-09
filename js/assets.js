@@ -697,6 +697,85 @@ export function drawSpritePrescaled(ctx, id, x, y, opts) {
   return drawSprite(ctx, id, x, y, opts);
 }
 
+// THE HORDE BODY BLIT (render-batch-perf). drawSprite() paints an enemy body
+// as a SCALED drawImage under save/translate/scale/restore: on a software
+// canvas every one of those is a resample through the general sampler, and at
+// 120 alive under a 4x CPU throttle the bodies alone were ~4 ms of raster. The
+// same cell is now resampled ONCE per (sheet, tint, frame, facing row, device
+// size) into a cached canvas, nearest-neighbour, and blitted 1:1 at a whole
+// device pixel — the treatment the plague mark and chill frost already get
+// (blitPrescaled above). The tint picks the source image exactly as in
+// drawSprite, so chase > plague > chill precedence is the caller's, unchanged.
+//
+// The CONTEXT MUST ALREADY BE AT IDENTITY; `m` is the world->device transform
+// the body would have been drawn under (no rotation or skew). Only for the
+// unrotated, unmirrored, opaque case drawSprite would take; returns false for
+// anything else (and on a headless harness with no canvas), and the caller
+// falls back to drawSprite under the world transform.
+const bodyCells = new Map();
+let bodyCellsAt = null;
+const BODY_CACHE_MAX = 4096;
+export function spriteDeviceCell(id, m, opts) {
+  if (!PRESCALE || SPRITE_MODE !== 'on' || !id) return null;
+  const s = Assets.get(id);
+  if (!s) return null;
+  if (opts && ((opts.alpha !== undefined && opts.alpha !== 1) || opts.flipX)) return null;
+  if (bodyCellsAt === null || bodyCellsAt.a !== m.a || bodyCellsAt.d !== m.d) { bodyCells.clear(); bodyCellsAt = { a: m.a, d: m.d }; }
+  const w = s.w, h = s.h;
+  let row = 0;
+  if (s.directions > 1) {
+    let face = DEFAULT_FACING;
+    if (opts && opts.facing !== undefined && opts.facing !== null) face = opts.facing;
+    else if (opts && opts.rot !== undefined && opts.rot !== null) face = opts.rot;
+    row = dirIndex(face, s.directions);
+  } else if (opts && opts.rot) return null;
+  const col = frameOf(s, opts && opts.frame, opts && opts.seed);
+  const callerScale = opts && opts.scale !== undefined ? opts.scale : 1;
+  const sc = callerScale * scaleOf(s);
+  const dw = Math.max(1, Math.round(w * sc * m.a)), dh = Math.max(1, Math.round(h * sc * m.d));
+  const tint = opts && opts.tint;
+  const strength = tint ? (opts.tintStrength ?? DEFAULT_TINT) : 0;
+  // Two-level key (sheet+tint string, then a packed number) so the hot path
+  // does not build a string per body per frame.
+  const tkey = tint ? `${s.file}|${tint}|${strength}` : s.file;
+  let cells = bodyCells.get(tkey);
+  if (!cells) { if (bodyCells.size >= BODY_CACHE_MAX) bodyCells.clear(); cells = new Map(); bodyCells.set(tkey, cells); }
+  const key = ((col * 16 + row) * 4096 + dw) * 4096 + dh;
+  let c = cells.get(key);
+  if (c === undefined) {
+    c = null;
+    const img = (tint && tintedSheet(s, tint, strength)) || s.img;
+    try {
+      if (typeof document !== 'undefined') {
+        const cv = document.createElement('canvas');
+        cv.width = dw; cv.height = dh;
+        const g = cv.getContext('2d');
+        if (g) {
+          g.imageSmoothingEnabled = false;   // pixel art: nearest-neighbour, as the main canvas
+          g.drawImage(img, col * w, row * h, w, h, 0, 0, dw, dh);
+          c = { cv, dw, dh, ay: (s.anchor === 'bottom' ? 1 : 0.5) * dh, combos: null };
+        }
+      }
+    } catch { c = null; }
+    if (cells.size >= BODY_CACHE_MAX) cells.clear();
+    cells.set(key, c);
+  }
+  return c;
+}
+
+// Where a cell from spriteDeviceCell() lands for a body at world (x, y).
+export function deviceCellOrigin(cell, m, x, y) {
+  return [Math.round(m.a * x + m.e - cell.dw / 2), Math.round(m.d * y + m.f - cell.ay)];
+}
+
+export function drawSpriteDevice(ctx, id, m, x, y, opts) {
+  const c = spriteDeviceCell(id, m, opts);
+  if (!c) return false;
+  const [dx, dy] = deviceCellOrigin(c, m, x, y);
+  ctx.drawImage(c.cv, dx, dy);
+  return true;
+}
+
 // ?sprites=debug — a magenta outline exactly where art is expected, sized from
 // the manifest when it knows, so a half-finished sheet is obvious on screen.
 const debugSeen = new Set();
