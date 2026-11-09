@@ -572,6 +572,30 @@ export const SIEGES = [
 // Build the runtime obstacle/hazard lists for a node's arena.
 // Parties of ARENA_CROWD_AT+ fight in the same templates scaled up
 // ~25% in bounds — 8 spread players need somewhere to spread to.
+// AN ARENA'S BOUNDS FROM ITS NODE ALONE — no seed, no RNG. buildArena() takes
+// its w/h from here, so the two cannot disagree. The renderer uses it on the
+// map screen (js/main.js prewarmRender) to pre-build the floor around where
+// the camera will open in each reachable room, before combat starts.
+// dropX/dropY is the party's drop point before the obstacle nudge
+// (Sim._enterArena: the centre, or the corridor mouth for a breach).
+export function arenaBounds(regionIndex, node, playerCount = 1) {
+  const crowd = playerCount >= CONFIG.ARENA_CROWD_AT ? CONFIG.ARENA_CROWD_SCALE : 1;
+  let w, h;
+  if (node.kind === 'siege') {
+    const sg = SIEGES[Math.min(SIEGES.length, Math.max(1, regionIndex)) - 1];
+    const shape = objectiveShape(node.kind);
+    const kx = crowd * shape.x, ky = crowd * shape.y;
+    w = Math.round(sg.w * kx); h = Math.round(sg.h * ky);
+  } else {
+    const shape = objectiveShape(node.kind);
+    const t = ARENA_TEMPLATES[node.template];
+    if (!t) return null;
+    const kx = crowd * shape.x, ky = crowd * shape.y;   // the same products buildArena scales geometry by
+    w = Math.round(t.w * kx); h = Math.round(t.h * ky);
+  }
+  return { w, h, dropX: node.kind === 'breach' ? CONFIG.WALL + 190 : w / 2, dropY: h / 2 };
+}
+
 export function buildArena(seed, regionIndex, node, playerCount = 1) {
   const crowd = playerCount >= CONFIG.ARENA_CROWD_AT ? CONFIG.ARENA_CROWD_SCALE : 1;
   // Objective levels can reshape the room (Breach is a corridor). That scale
@@ -580,6 +604,7 @@ export function buildArena(seed, regionIndex, node, playerCount = 1) {
   // and _pushOut then shoves players through the wall to escape it.
   const shape = objectiveShape(node.kind);
   const kx = crowd * shape.x, ky = crowd * shape.y;
+  const bounds = arenaBounds(regionIndex, node, playerCount);
   // The REGION's theme. Cosmetic: the renderer is the only consumer, and a
   // region with no biome renders exactly as it did before this existed.
   const b = biomeFor(regionIndex);
@@ -593,7 +618,7 @@ export function buildArena(seed, regionIndex, node, playerCount = 1) {
     // party fighting in the walled yard from the tutorial.
     const s = SIEGES[Math.min(SIEGES.length, Math.max(1, regionIndex)) - 1];
     return {
-      w: Math.round(s.w * kx), h: Math.round(s.h * ky), name: s.name,
+      w: bounds.w, h: bounds.h, name: s.name,
       obstacles: s.obstacles.map(o => scaleRect(o, kx, ky)),
       hazards: s.hazards.map(h => scaleHazard(h, kx, ky)),
       mutations: (kx === 1 && ky === 1) ? s.mutations : s.mutations.map(m => scaleMutation(m, kx, ky)),
@@ -604,7 +629,7 @@ export function buildArena(seed, regionIndex, node, playerCount = 1) {
   const t = ARENA_TEMPLATES[node.template];
   const rng = subRng(seed, 'arena', regionIndex, node.id);
   return {
-    w: Math.round(t.w * kx), h: Math.round(t.h * ky), name: t.name,
+    w: bounds.w, h: bounds.h, name: t.name,
     obstacles: t.obstacles(rng).map(o => scaleRect(o, kx, ky)),
     hazards: t.hazards(rng).map(h => scaleHazard(h, kx, ky)),
     mutations: null,

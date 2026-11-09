@@ -649,6 +649,21 @@ function prescaleUsable(ctx, s) {
 }
 function scaleOf(s) { return s.fit * s.scale * (s.player ? TUNE_PLAYER : TUNE_ALL); }
 
+// Pre-build every frame of a status sprite at the size blitPrescaled() would
+// ask for under world->device transform `m` ({a, d}), so the first plagued or
+// chilled body of a fight is a copy, not a resample (Renderer.prewarm).
+// Returns false if there is nothing to build (no art, prescale off).
+export function prescaleWarm(id, scale, m) {
+  if (!PRESCALE || SPRITE_MODE === 'off' || !id) return false;
+  const s = Assets.get(id);
+  if (!s || s.directions > 1) return false;
+  if (prescaledAt === null || prescaledAt.a !== m.a || prescaledAt.d !== m.d) { prescaled.clear(); prescaledAt = { a: m.a, d: m.d }; }
+  const sc = (scale === undefined ? 1 : scale) * scaleOf(s);
+  const dw = Math.max(1, Math.round(s.w * sc * m.a)), dh = Math.max(1, Math.round(s.h * sc * m.d));
+  for (let f = 0; f < Math.max(1, s.frames); f++) prescaledFrame(s, f, dw, dh);
+  return true;
+}
+
 // Every item of ONE sprite, one save/restore. items: [{ x, y, scale, seed }] in
 // the caller's (world) space.
 export function drawSpriteBatch(ctx, id, items) {

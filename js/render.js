@@ -22,7 +22,7 @@ const FORM_COLOR = {
   marrownaut: PALETTE.hazardSpike,
 };
 import { WEAPON_BY_ID } from './content/weapons.js';
-import { Assets, drawSprite, drawSpriteBatch, drawSpritePrescaled, spriteDeviceCell, deviceCellOrigin, spriteScaleFor, DEFAULT_FACING } from './assets.js';
+import { Assets, drawSprite, drawSpriteBatch, drawSpritePrescaled, spriteDeviceCell, deviceCellOrigin, prescaleWarm, spriteScaleFor, DEFAULT_FACING } from './assets.js';
 import { PROP, FX, BEAST_SPRITE, MINION_SPRITE } from './content/sprites.js';
 import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
 import { DOMAIN_COLOR } from './domains.js';
@@ -189,7 +189,24 @@ const FLOOR_CHUNK = 512;
 const FLOOR_CHUNK_MAX = 64;
 // Rotating-triangle primitive cells per 120-degree period (Renderer._primitiveCell).
 const TRI_STEPS = 96;
+// Cache prewarm (Renderer.prewarm, run in idle time): idle ms a first job
+// needs before it starts, and the margin kept; world units of floor beyond
+// the opening view (the camera lookahead clamps at 130); floor tile rows and
+// primitive rotation steps built per job call.
+const WARM_FIRST_MS = 6;     // assumed cost of the first job of an idle period
+const WARM_MARGIN_MS = 1;
+const WARM_FLOOR_MARGIN = 140;
+const WARM_FLOOR_BAND = 2;   // tile rows of a floor chunk per prewarm call
+const WARM_PRIM_BATCH = 4;
 const FACE_AIM_HOLD_S = 0.6;
+
+// A canvas 2D context records its draw calls and rasterises them lazily, on
+// the first read or the first time the canvas is drawn somewhere else. A
+// prewarmed cache has to pay that cost now, during the transition, not on the
+// first arena frame: a 1-px readback forces it.
+function warmFlush(cv) {
+  try { const g = cv && cv.getContext && cv.getContext('2d'); if (g) g.getImageData(0, 0, 1, 1); } catch (_) {}
+}
 
 export class Renderer {
   constructor(canvas) {
@@ -406,6 +423,190 @@ export class Renderer {
     }
   }
 
+  // ---- cache prewarm (render-batch-perf) ----
+  //
+  // Every cache the horde fast path reads (floor chunks, enemy body cells,
+  // domain rings, the body+ring cells, plague-mark / chill-frost frames, soul
+  // tokens) used to fill on first use, and the first use is the first second
+  // of a fight: at a 4x CPU throttle the opening frame of a cold arena was
+  // 90-180 ms, right as the first pack lands (FIRST_PACK_T = 1 s).
+  //
+  // So main.js hands the renderer a PLAN on the map screen — the region's
+  // roster and the rooms the party can walk into next — and the renderer
+  // builds those entries a few milliseconds at a time in the browser's idle
+  // time between frames (_scheduleWarm): through the opening offer and the
+  // node map, and in the quiet opening of a fight for anything still left.
+  // Render-only: nothing here reads or advances the sim (no Sim.rng), and
+  // nothing draws to the screen.
+  //
+  // plan: { key, biomeId, roster: [{ spriteId, shape, color, radius, domain }],
+  //         views: [{ aw, ah, x, y }] }   (x, y: where the camera opens)
+  prewarm(plan) {
+    if (!plan || plan.key === this._warmKey || typeof document === 'undefined') return;
+    this._warmKey = plan.key;
+    // jobs in priority order: what the first second of a fight meets first
+    const queued = [];
+    const add = (p, f) => queued.push({ p, f });
+    const biome = plan.biomeId && BIOMES[plan.biomeId] ? BIOMES[plan.biomeId] : null;
+    const scaleNow = () => {
+      const cw = this.canvas.width, ch = this.canvas.height;
+      const s = Math.min(cw / VIEW_W, ch / VIEW_H);
+      // read the zoom back through the context, exactly as draw() will see it
+      // (getTransform() hands back float32-rounded values, and the chunk-set
+      // key must match bit for bit or the whole prewarmed set is dropped)
+      let a = s, d = s;
+      const g = this.ctx;
+      if (g && typeof g.getTransform === 'function') {
+        g.save(); g.setTransform(s, 0, 0, s, 0, 0);
+        const m = g.getTransform(); a = m.a; d = m.d;
+        g.restore();
+      }
+      return { a, d, b: 0, c: 0, e: 0, f: 0, cw, ch };
+    };
+    const NOT_READY = false;
+    // 1. floor chunks under every room's opening camera (+ the lookahead)
+    if (biome) {
+      for (const v of plan.views || []) {
+        let pend = null;
+        add(0, () => {
+          if (!Assets.ready) return NOT_READY;
+          const tiles = this._tileSet(biome);
+          if (!tiles) return true;   // flat-fill biome: nothing to cache
+          const M = scaleNow(), C = FLOOR_CHUNK;
+          const vw = M.cw / M.a, vh = M.ch / M.a;
+          const cx = clamp(v.x, Math.min(vw / 2, v.aw / 2), Math.max(v.aw - vw / 2, v.aw / 2));
+          const cy = clamp(v.y, Math.min(vh / 2, v.ah / 2), Math.max(v.ah - vh / 2, v.ah / 2));
+          const m = WARM_FLOOR_MARGIN;
+          const x0 = Math.max(0, cx - vw / 2 - m), x1 = Math.min(v.aw, cx + vw / 2 + m);
+          const y0 = Math.max(0, cy - vh / 2 - m), y1 = Math.min(v.ah, cy + vh / 2 + m);
+          const fc = this._floorChunkSet(biome, tiles, M.a, M.d);
+          const k0 = Math.floor(M.a * x0 / C), k1 = Math.floor((Math.ceil(M.a * x1) - 1) / C);
+          const j0 = Math.floor(M.d * y0 / C), j1 = Math.floor((Math.ceil(M.d * y1) - 1) / C);
+          // one band of one chunk per job call (rasterised there and then),
+          // so a slow chunk cannot blow a frame's budget
+          if (pend && pend.fc === fc && !fc.map.has(pend.ck)) {
+            const st = pend.st, to = Math.min(st.ty1, pend.ty + WARM_FLOOR_BAND - 1);
+            this._floorChunkRows(st, tiles, pend.ty, to);
+            warmFlush(st.cv);
+            pend.ty = to + 1;
+            if (pend.ty > st.ty1) { fc.map.set(pend.ck, { cv: st.cv, used: fc.stamp }); pend = null; }
+            return 'again';
+          }
+          pend = null;
+          for (let j = j0; j <= j1; j++) for (let k = k0; k <= k1; k++) {
+            const ck = k + ',' + j;
+            if (fc.map.has(ck)) continue;
+            const st = this._floorChunkBegin(biome, M.a, M.d, k, j);
+            if (!st) return true;
+            pend = { fc, ck, st, ty: st.ty0 };
+            return 'again';
+          }
+          return true;
+        });
+      }
+    }
+    // 2. the roster: rings, bodies (every tint, facing row and frame), and the
+    //    body+ring cells, plain first, then the statuses in the order a fight
+    //    meets them; then the plague-mark / chill-frost frames at each size.
+    const view = { biome: plan.biomeId };
+    const TINTS = [null, enemyBodyTint({ plagued: true }, view), enemyBodyTint({ slowed: true }, view), enemyBodyTint({ straggle: true }, view)];
+    for (let ti = 0; ti < TINTS.length; ti++) {
+      const tint = TINTS[ti];
+      for (const def of plan.roster || []) {
+        const r = def.radius;
+        const ringCol = def.domain ? DOMAIN_COLOR[def.domain] : null;
+        const proto = { shape: def.shape, color: def.color, id: 0 };
+        let step = 0;
+        add(ti === 0 ? 1 : 3, () => {
+          if (!Assets.ready) return NOT_READY;
+          const M = scaleNow();
+          const ring = ringCol ? this._domainRing(ringCol, r, M.a, M.d) : null;
+          const s = def.spriteId ? Assets.get(def.spriteId) : null;
+          if (s) {
+            const dirs = Math.max(1, s.directions || 1), frames = Math.max(1, s.frames || 1);
+            if (step >= dirs * frames) return true;
+            const row = (step / frames) | 0, frame = step % frames;
+            const opt = { scale: spriteScaleFor(def.spriteId, r * 2), facing: dirs > 1 ? row * Math.PI * 2 / dirs : null, frame };
+            if (tint) { opt.tint = tint.tint; opt.tintStrength = tint.tintStrength; }
+            const cell = spriteDeviceCell(def.spriteId, M, opt);
+            if (cell && ring) this._bodyRingCell(cell, ring);
+            step++;
+            return step >= dirs * frames ? true : 'again';
+          }
+          // primitive body: every rotation step of a triangle, the ring-merged
+          // cell, and the ring-less one a chilled body draws (frost between)
+          const steps = def.shape === 'triangle' ? TRI_STEPS : 1;
+          if (step >= steps) return true;
+          for (let n = 0; n < WARM_PRIM_BATCH && step < steps; n++, step++) {
+            if (ring) this._primitiveCell(proto, r, tint, M.a, M.d, ring, step);
+            if (!ring || (tint && ti <= 2)) this._primitiveCell(proto, r, tint, M.a, M.d, null, step);
+          }
+          return step >= steps ? true : 'again';
+        });
+      }
+    }
+    for (const def of plan.roster || []) {
+      add(4, () => {
+        if (!Assets.ready) return NOT_READY;
+        const M = scaleNow();
+        const mh = plagueMarkWorldHeight(def.radius, M.a, this.dpr);
+        prescaleWarm(FX.plagueMark, spriteScaleFor(FX.plagueMark, mh), M);
+        const fm = chillFrostMetrics(def.radius, M.a, this.dpr);
+        prescaleWarm(FX.chillFrost, spriteScaleFor(FX.chillFrost, fm.h), M);
+        return true;
+      });
+    }
+    // 3. soul tokens: every quantised pulse radius
+    add(2, () => {
+      const M = scaleNow();
+      const lo = Math.round(MINION_ART.tokenR * (1 - MINION_ART.tokenPulse) * M.a * 4);
+      const hi = Math.round(MINION_ART.tokenR * (1 + MINION_ART.tokenPulse) * M.a * 4);
+      for (let q = lo; q <= hi; q++) this._tokenCell(q / 4, M);
+      return true;
+    });
+    const jobs = queued.sort((x, y) => x.p - y.p).map(q => q.f);   // stable
+    this._warmJobs = jobs;
+    this._warmAt = 0;
+    this.warmStats = { jobs: jobs.length, done: 0, ms: 0, frames: 0, finishedAt: null, worstJobMs: 0, worstJob: -1 };
+  }
+
+  // Prewarm jobs run in the browser's idle time (requestIdleCallback): after a
+  // frame's script, style, layout and paint are done, never inside a frame,
+  // so a screen change that is already heavy on its own (the opening offer
+  // closing onto the map) is not pushed over the vsync by cache building.
+  // No timeout: on a frame with no idle time the jobs wait; whatever is still
+  // cold when combat starts is built by draw() on demand, as before.
+  _scheduleWarm() {
+    if (this._warmIdle || !this._warmJobs || this._warmAt >= this._warmJobs.length) return;
+    if (typeof requestIdleCallback !== 'function') return;
+    this._warmIdle = requestIdleCallback(dl => { this._warmIdle = 0; this._runWarm(dl); this._scheduleWarm(); });
+  }
+
+  // Run queued jobs while the idle period has room. A job returns true
+  // (done), 'again' (more of it next call) or false (assets not loaded yet:
+  // stop for now). A job starts only if the idle time left still holds the
+  // last job's cost (or WARM_FIRST_MS for the first one) plus a margin.
+  _runWarm(deadline) {
+    const jobs = this._warmJobs;
+    if (!jobs || this._warmAt >= jobs.length) return;
+    const t0 = performance.now();
+    const st = this.warmStats;
+    if (!st.frames) st.startedAt = t0;
+    st.frames++;
+    let last = WARM_FIRST_MS;
+    while (this._warmAt < jobs.length && deadline.timeRemaining() > last + WARM_MARGIN_MS) {
+      const tj = performance.now();
+      const r = jobs[this._warmAt]();
+      const dj = performance.now() - tj;
+      last = Math.max(dj, 0.05);
+      if (dj > st.worstJobMs) { st.worstJobMs = dj; st.worstJob = this._warmAt; }
+      if (r === false) break;
+      if (r === true) { this._warmAt++; st.done++; }
+    }
+    st.ms += performance.now() - t0;
+    if (this._warmAt >= jobs.length && st.finishedAt === null) st.finishedAt = performance.now();
+  }
+
   draw(view, dtFrame) {
     const _t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
     this.t += dtFrame;
@@ -416,7 +617,12 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#0c0d13';
     ctx.fillRect(0, 0, cw, ch);
-    if (!view || view.mode === 'map') { this._drawJoystick(ctx); return; } // the node map is a DOM screen
+    if (!view || view.mode === 'map') {   // the node map is a DOM screen
+      this._drawJoystick(ctx);
+      this._scheduleWarm();
+      return;
+    }
+    this._scheduleWarm();
 
     const aw = view.aw || VIEW_W, ah = view.ah || VIEW_H;
     const scale = Math.min(cw / VIEW_W, ch / VIEW_H); // fixed zoom: one room-screen of world
@@ -913,12 +1119,14 @@ export class Renderer {
   // once into FLOOR_CHUNK x FLOOR_CHUNK device-pixel canvases (lazily, only
   // the chunks the camera has seen) and each frame is a handful of 1:1 copies.
   //
-  // BIT-IDENTICAL, NOT "CLOSE". A chunk is painted under the same scale as the
-  // live floor with its origin at a whole device pixel of the world's origin,
-  // and draw() now places the world at a whole device pixel (ox/oy rounded),
-  // so every floor pixel samples the same texel it would have live. Chunks are
-  // keyed on arena, biome, tile-set version and the transform scale; a change
-  // in any of them drops the lot. LRU-capped so a 2x-DPR phone on a 3000-unit
+  // A chunk is painted under the same scale as the live floor with its origin
+  // at a whole device pixel of the world's origin, and draw() places the world
+  // at a whole device pixel (ox/oy rounded), so a floor pixel samples the
+  // texel it would have live, up to nearest-neighbour ties at the tile seams
+  // (tools/render_parity_test.mjs measures it). Chunks are keyed on biome,
+  // tile-set version and the transform scale, not on the arena (see
+  // _floorChunkSet), so they survive the door and can be prewarmed; a change
+  // in any key drops the lot. LRU-capped so a 2x-DPR phone on a 3000-unit
   // arena never holds the whole floor (that would be ~120 MB).
   //
   // Returns false when it cannot cache (no canvas, rotated/fractional
@@ -927,9 +1135,7 @@ export class Renderer {
     if (typeof document === 'undefined' || typeof ctx.getTransform !== 'function') return false;
     const m = ctx.getTransform();
     if (m.b !== 0 || m.c !== 0 || !(m.a > 0) || !(m.d > 0) || m.e !== Math.round(m.e) || m.f !== Math.round(m.f)) return false;
-    const key = `${view.arenaKey}|${biome.id}|${Assets.version}|${Assets.ready}|${tiles.length}|${m.a}|${m.d}|${aw}x${ah}`;
-    let fc = this._floorChunks;
-    if (!fc || fc.key !== key) fc = this._floorChunks = { key, map: new Map(), stamp: 0 };
+    const fc = this._floorChunkSet(biome, tiles, m.a, m.d);
     fc.stamp++;
     const C = FLOOR_CHUNK;
     // visible floor rect in device px relative to the world origin
@@ -945,7 +1151,7 @@ export class Renderer {
         const ck = cx + ',' + cy;
         let ent = fc.map.get(ck);
         if (!ent) {
-          const cv = this._paintFloorChunk(biome, tiles, aw, ah, m.a, m.d, cx, cy);
+          const cv = this._paintFloorChunk(tiles, biome, m.a, m.d, cx, cy);
           if (!cv) { ctx.restore(); return false; }
           ent = { cv, used: 0 };
           fc.map.set(ck, ent);
@@ -965,7 +1171,29 @@ export class Renderer {
     return true;
   }
 
-  _paintFloorChunk(biome, tiles, aw, ah, a, d, cx, cy) {
+  // The chunk set for a biome at one zoom. NOT keyed by arena: a chunk is the
+  // biome's tiling of a fixed device-pixel square of world space, and every
+  // arena of the region uses the same tiling (tileVariant is a pure function
+  // of the tile coordinate), so chunks survive the door and can be painted on
+  // the map screen before the room exists (prewarm). The arena's own extent is
+  // applied when the chunk is copied (_drawFloorCached clips to it).
+  _floorChunkSet(biome, tiles, a, d) {
+    const key = `${biome.id}|${Assets.version}|${Assets.ready}|${tiles.length}|${a}|${d}`;
+    let fc = this._floorChunks;
+    if (!fc || fc.key !== key) fc = this._floorChunks = { key, map: new Map(), stamp: 0 };
+    return fc;
+  }
+
+  _paintFloorChunk(tiles, biome, a, d, cx, cy) {
+    const st = this._floorChunkBegin(biome, a, d, cx, cy);
+    if (!st) return null;
+    this._floorChunkRows(st, tiles, st.ty0, st.ty1);
+    return st.cv;
+  }
+
+  // A chunk painted in row bands (the prewarm spreads one chunk over several
+  // frames). Same draw calls in the same order as one pass, so the same pixels.
+  _floorChunkBegin(biome, a, d, cx, cy) {
     const C = FLOOR_CHUNK;
     let cv;
     try { cv = document.createElement('canvas'); } catch { return null; }
@@ -974,25 +1202,23 @@ export class Renderer {
     if (!g) return null;
     g.imageSmoothingEnabled = false;   // pixel art: nearest-neighbour, as the main canvas (_resize)
     g.setTransform(a, 0, 0, d, -cx * C, -cy * C);
-    // the chunk's world rect, clipped to the arena like the live floor's
-    const wx0 = Math.max(0, (cx * C) / a), wy0 = Math.max(0, (cy * C) / d);
-    const wx1 = Math.min(aw, ((cx + 1) * C) / a), wy1 = Math.min(ah, ((cy + 1) * C) / d);
-    if (wx1 <= wx0 || wy1 <= wy0) return cv;
+    const wx0 = (cx * C) / a, wy0 = (cy * C) / d;
+    const wx1 = ((cx + 1) * C) / a, wy1 = ((cy + 1) * C) / d;
     const T = CONFIG.FLOOR_TILE;
-    g.beginPath();
-    g.rect(0, 0, aw, ah);
-    g.clip();
     g.fillStyle = biome.fallbackFill;
     g.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
-    const tx0 = Math.floor(wx0 / T) - 1, tx1 = Math.floor(wx1 / T) + 1;
-    const ty0 = Math.floor(wy0 / T) - 1, ty1 = Math.floor(wy1 / T) + 1;
-    for (let ty = ty0; ty <= ty1; ty++) {
+    return { cv, g, T, tx0: Math.floor(wx0 / T) - 1, tx1: Math.floor(wx1 / T) + 1,
+      ty0: Math.floor(wy0 / T) - 1, ty1: Math.floor(wy1 / T) + 1 };
+  }
+
+  _floorChunkRows(st, tiles, tyFrom, tyTo) {
+    const { g, T, tx0, tx1 } = st;
+    for (let ty = tyFrom; ty <= tyTo; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
         const s = tiles[tileVariant(tx, ty, tiles.length)];
         g.drawImage(s.img, 0, 0, s.w, s.h, tx * T, ty * T, T, T);
       }
     }
-    return cv;
   }
 
   // The loaded tiles for a biome, or null if none of them are there. Cached
@@ -1527,12 +1753,15 @@ export class Renderer {
   // the tip for a radius-14 body), so it still turns smoothly.
   // `ring` (optional) is painted on top, after the body, exactly as the
   // separate domain stroke would be, when nothing draws between them.
-  _primitiveCell(e, r, bodyTint, a, d, ring) {
+  _primitiveCell(e, r, bodyTint, a, d, ring, qWarm) {
     let rot = 0, q = 0;
     if (e.shape === 'triangle') {
       const P = Math.PI * 2 / 3;
-      let ph = ((this.t + (e.id || 0)) * 0.8) % P; if (ph < 0) ph += P;
-      q = Math.round(ph / P * TRI_STEPS) % TRI_STEPS;
+      if (qWarm !== undefined) q = qWarm;   // prewarm: one rotation step by index
+      else {
+        let ph = ((this.t + (e.id || 0)) * 0.8) % P; if (ph < 0) ph += P;
+        q = Math.round(ph / P * TRI_STEPS) % TRI_STEPS;
+      }
       rot = q * P / TRI_STEPS;
     }
     const pc = this._primCache || (this._primCache = new Map());
@@ -1980,6 +2209,14 @@ export class Renderer {
   _drawSoulTokenFast(ctx, tk, M) {
     const pulse = 1 + Math.sin(this.t * 4 + tk.x * 0.11) * MINION_ART.tokenPulse;
     const rq = Math.round(MINION_ART.tokenR * pulse * M.a * 4) / 4;   // device px
+    const c = this._tokenCell(rq, M);
+    if (!c) return false;
+    ctx.globalAlpha = MINION_ART.tokenAlphaMin + (1 - MINION_ART.tokenAlphaMin) * clamp(tk.ttlP, 0, 1);
+    ctx.drawImage(c.cv, Math.round(M.a * tk.x + M.e) - c.half, Math.round(M.d * tk.y + M.f) - c.half);
+    return true;
+  }
+
+  _tokenCell(rq, M) {
     const rc = this._tokenCache || (this._tokenCache = new Map());
     const key = rq * 64 + M.a;
     let c = rc.get(key);
@@ -2004,10 +2241,7 @@ export class Renderer {
       if (rc.size > 128) rc.clear();
       rc.set(key, c);
     }
-    if (!c) return false;
-    ctx.globalAlpha = MINION_ART.tokenAlphaMin + (1 - MINION_ART.tokenAlphaMin) * clamp(tk.ttlP, 0, 1);
-    ctx.drawImage(c.cv, Math.round(M.a * tk.x + M.e) - c.half, Math.round(M.d * tk.y + M.f) - c.half);
-    return true;
+    return c;
   }
 
   _drawSoulToken(ctx, tk) {
