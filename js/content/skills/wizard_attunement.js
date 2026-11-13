@@ -24,7 +24,7 @@
 
 export const TUNING = {
   // tier 1 — Cinder Bolt
-  cinderDamage: 7, cinderSpeed: 500, cinderRange: 250, cinderCd: 950,
+  cinderDamage: 7, cinderSpeed: 500, cinderRange: 320, cinderCd: 800, cinderSplash: 4, cinderSplashRadius: 60,   // pace-spec §12.1, Designer 2 Nov 2026: splash 4 r60, range 320 (was 250), cd 800 (was 950, which fired at 1000)
   // tier 2 — Attune: Physical
   attunePhysCd: 5200,
   // tier 3 — Refracted Lance
@@ -63,7 +63,7 @@ export const WIZARD_ATTUNEMENT = [
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.cinderRange },
     cooldown: T.cinderCd,
-    compose: [{ kind: 'bolt', damage: T.cinderDamage, speed: T.cinderSpeed, range: T.cinderRange, riders: {} }],
+    compose: [{ kind: 'bolt', damage: T.cinderDamage, speed: T.cinderSpeed, range: T.cinderRange, riders: { splash: { damage: T.cinderSplash, radius: T.cinderSplashRadius } } }],
     ranks: R,
   },
   {

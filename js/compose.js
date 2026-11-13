@@ -13,6 +13,7 @@
 import { domainMult } from './domains.js';
 import { selectTarget, selectTargets, selectAllies, SHAPE_NEEDS_EFFECT } from './selectors.js';
 import { scalePerFor } from './enginescale.js';
+import { CONFIG } from './config.js';
 
 // Rank scaling. LINEAR against base, never compounding: `damage *= 1.04` per
 // rank is 4.8x at rank 40 and is the single most likely way to break the patch.
@@ -106,7 +107,12 @@ export function engineScale(step, p, skill) {
   // future tree can do it for any other engine with no code here. It arrives
   // already converted out of weight units by `passiveBonusPer`.
   const bonus = (p.engineScaleBonus && p.engineScaleBonus[step.scaleWith]) || 0;
-  return 1 + ((p.engines && p.engines[step.scaleWith]) || 0) * (scalePerFor(step) + bonus);
+  let n = (p.engines && p.engines[step.scaleWith]) || 0;
+  // FOOTING DEFENCE IS FLAT past CONFIG.FOOTING_DEFENSE_CAP_STACKS (Designer
+  // ruling 2 Nov 2026): a shield riding Footing (Iron Sleeve) stops growing
+  // with time stood still. Damage that rides Footing is not touched here.
+  if (step.scaleWith === 'footing' && step.kind === 'shield') n = Math.min(n, CONFIG.FOOTING_DEFENSE_CAP_STACKS);
+  return 1 + n * (scalePerFor(step) + bonus);
 }
 
 // Magnitude for a step: base, ranked, then scaled by whatever engine it rides.

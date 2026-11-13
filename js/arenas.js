@@ -206,7 +206,12 @@ export const COMBAT_PROFILE_KEYS = ['artillery', 'flanker', 'puddle', 'swarm', '
 // 2.9, which puts 777 at level 8. The multiplier was not raised. Clearing map
 // 1 grants the missing levels instead — see ONBOARDING_LEVEL_FLOOR. Map 2's
 // 1.35 is untouched: its 75% rate is still in place.
-export const ONBOARDING_RATE = [1, 0.75, 1];
+// HORDE PACE RETIRES THE RAMP (pace-spec.md §4, GDD §2.6). Map 2's 75% step
+// existed to thin a slow room further while a build assembled; at horde pace
+// the room is fodder that every opener one-shots, and a thinned room is the
+// "waiting for enemies" the user ruled out. All 1 — kept as data so a region
+// still on the slow curve reads the same function.
+export const ONBOARDING_RATE = [1, 1, 1];
 export function onboardingMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
   return ONBOARDING_RATE[Math.min(depth, ONBOARDING_RATE.length - 1)];
@@ -248,7 +253,9 @@ export function onboardingMult(regionIndex, depth) {
 // [0] was 3.4 while map 1's rate was 0.5. Density was half of the debt and
 // that half is gone, so [0] is 1.7. What remains is the poorer onboarding
 // table (no splitter, no injected 2-material archetypes).
-export const ONBOARDING_XP_MULT = [1.7, 1.35, 1];
+// HORDE PACE: [1] 1.35 → 1. It compensated map 2's 75% rate, which is gone.
+// [0] stays 1.7 and the level 6–7 exit is re-measured by region_test.
+export const ONBOARDING_XP_MULT = [1.7, 1, 1];
 
 // MAP 1'S LEVEL FLOOR. Applied once, when that room is cleared, to every
 // character still below it. It is a level grant through the ordinary level-up
@@ -259,14 +266,24 @@ export const ONBOARDING_LEVEL_FLOOR = 6;
 
 // MAP 1'S CEDAR WARDEN. The roster weight stays 2.6 for every later node.
 // Map 1's three-archetype roll is the only place this 1.5 is read.
-export const ONBOARDING_CEDAR_WEIGHT = 1.5;
+// HORDE PACE: the Cedar Warden is map 1's ONE special (pace-spec §3). 1.0
+// against the two fodder units' 3.5 + 4.0 makes it ~12% of map 1's draws,
+// inside the 8–25% special band. The spec's 0.6 works out to 7.4% on this
+// table, under that band's floor, so the band won over the constant.
+export const ONBOARDING_CEDAR_WEIGHT = 1.0;
 
 // Alive caps for that same room, written for a solo player. Spawn rate is
 // already multiplied by coopSpawn, and a solo coopSpawn is not 1 — it includes
 // SOLO_SPAWN_MULT. A party therefore scales by coopSpawn / soloCoopSpawn, and
 // a solo fight stays at 8 cedar wardens and 25 enemies.
-export const ONBOARDING_WARDEN_CAP = 8;
-export const ONBOARDING_ALIVE_CAP = 25;
+//
+// HORDE PACE: 8 / 25 → 4 / 60. 60 is map 1's room cap (HORDE_ALIVE_CAP 120 is
+// every later horde room's); the warden cap is now "map 1's special cap" —
+// four committed lanes in a crowd is the most a first map should ask a player
+// to read. At the cap a Cedar Warden roll becomes fodder rather than holding
+// the whole pack back.
+export const ONBOARDING_WARDEN_CAP = 4;
+export const ONBOARDING_ALIVE_CAP = 60;
 
 // MAP 1'S WAVE SIZE. The fight is still the 65s ramp: r0→r1 over that window,
 // and the window ends with the whole budget accrued. This 0.6 multiplies the
@@ -275,8 +292,11 @@ export const ONBOARDING_ALIVE_CAP = 25;
 // the Cedar Warden weight, the alive caps, or any later map. Each enemy's
 // drop is worth 1/0.6 so the smaller wave pays the same materials, gold and
 // XP — see ONBOARDING_DROP_SCALE, applied on the kill, not on the roster.
-export const ONBOARDING_WAVE_SCALE = 0.6;
-export const ONBOARDING_DROP_SCALE = 1 / ONBOARDING_WAVE_SCALE;
+//
+// HORDE PACE RETIRES BOTH (pace-spec §4): map 1 fields the full horde curve and
+// its loot is held level by hordeYieldScale below, not by a per-kill multiplier.
+export const ONBOARDING_WAVE_SCALE = 1;
+export const ONBOARDING_DROP_SCALE = 1;
 export function onboardingXpMult(regionIndex, depth) {
   if (regionIndex !== 1) return 1;
   return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];
@@ -330,9 +350,101 @@ export function onboardingCedarWindupMs(regionIndex, node, enemyId, windupMs) {
 // index inside the region (0..4) — the same two numbers this took as
 // `floorNum` and `node.col`, re-keyed. The caller does the −1, so map 1 sits on
 // exactly the arithmetic column 0 sat on.
+
+// MEASURED, NOT DERIVED. The spec's raw 1.11 → 2.78 (~85 spawned) left the kite
+// bot at a median 8–13 alive and 1.9–2.5 kills/s on map 1 — under the §7 bars
+// (median ≥ 10, ≥ 2.5 kills/s). ×1.45 (~120 spawned on map 1) clears median
+// alive, first kill and le2 on all 16 Samurai seeds and kills/s on 14/16
+// (×1.35 cleared it on 11/16). tools/map1_bot.mjs prints the BAR lines.
+export const HORDE_RATE_TUNE = 1.45;
+export function isHordeRegion(regionIndex) {
+  return CONFIG.HORDE_REGIONS.includes(regionIndex);
+}
+
+// HORDE PACE — the region-1 curve (pace-spec.md §3). Pack sizes ramp from the
+// first to the second number across the wave, by map (depth 0..4).
+export const HORDE_PACK_START = [4, 4, 5, 5, 6];
+// Map 1 ends at 8 (Designer 4 Nov 2026 clumsy fix): packs ramp 4 → 8 over the
+// first HORDE_MAP1_PACK_RAMP_S seconds. Later maps keep their prior ends.
+export const HORDE_PACK_END = [8, 7, 7, 8, 8];
+// MAP 1 FODDER (Designer call 4 Nov 2026, clumsy-bot survival bar 17/20).
+// Map-1 fodder hits for ×0.7 on contact and runs at most 230 u/s (Thornhound
+// was 245), so a slow-reacting player is not run down before the opener has
+// cleared its first packs. Spawn budget, pack count and HP are unchanged, so
+// the §7 density bars hold. Applied in Sim.spawnEnemyById; map 1 only.
+export const HORDE_MAP1_FODDER_CONTACT_MULT = 0.7;
+export const HORDE_MAP1_FODDER_SPD_CAP = 230;
+// Pack-size ramp window on map 1 (pace-spec §11.9). Other maps still ramp
+// across the whole wave duration.
+export const HORDE_MAP1_PACK_RAMP_S = 15;
+// Thin-field pack (pace-spec §14): when alive+queued < this, borrow the next
+// pack against the bank down to -HORDE_MAP1_THIN_DEBT. Map 1 only.
+export const HORDE_MAP1_THIN_ALIVE = 12;
+export const HORDE_MAP1_THIN_DEBT = 16;
+export function hordePackRange(depth) {
+  const d = Math.max(0, Math.min(HORDE_PACK_START.length - 1, depth | 0));
+  return [HORDE_PACK_START[d], HORDE_PACK_END[d]];
+}
+
+export function hordeWaveDur(regionIndex, depth) {
+  return Math.min(60, Math.round(30 + 7.5 * depth + 5 * (regionIndex - 1)));
+}
+
+// The slow curve's budget and the horde curve's, in raw (pre-coop) units over
+// the whole window. Their ratio is the fodder drop chance below.
+function slowWaveUnits(regionIndex, depth) {
+  const dur = Math.round(60 + depth * 5 + regionIndex * 5);
+  const onb = regionIndex === 1 ? [1, 0.75, 1][Math.min(depth, 2)] : 1;
+  const count = (regionIndex === 1 && depth === 0) ? 0.6 : 1;
+  const r0 = (0.5 + 0.25 * (regionIndex - 1)) * onb * count;
+  const r1 = (1.2 + 0.55 * (regionIndex - 1) + 0.18 * depth) * onb * count;
+  return (r0 + r1) / 2 * dur;
+}
+function hordeWaveUnits(regionIndex, depth) {
+  const k = 1 + 0.15 * (regionIndex - 1);
+  return ((1.11 + 0.28 * depth) + (2.78 + 0.56 * depth)) * k / 2 * hordeWaveDur(regionIndex, depth);
+}
+
+// FODDER DROP CHANCE (pace-spec §3 "XP and materials"). The horde fields 1.8–3×
+// the bodies the slow curve did; at 100% drop levels would run away. Fodder
+// pays loot at oldTotal / newTotal of the time (an accumulator, not a roll —
+// no RNG is drawn), so a map pays within ±15% of what it paid. Specials,
+// landmarks, elites and bosses always drop. Map 1 is measured rather than
+// derived: the slow map 1 paid 1/0.6 per kill on a different table, and
+// region_test holds the outcome (level 6–7 with 3 slots on 777 and 0xa11ce).
+// Measured on region_test's god-mode loot walker (×1.45 rate tune): 0.62 →
+// seed 777 level 7 / 94 materials (was 95), 0xa11ce level 7 / 94 (was 90).
+// 0.62 → ~0.58 with the §14 thin-field pack so Wizard's exit stays in 6–7
+// (pace-spec §14; Designer 9 Nov 2026). Re-measure on region_test / map1_bot.
+export const HORDE_MAP1_YIELD = 0.58;
+export function hordeYieldScale(regionIndex, depth) {
+  if (!isHordeRegion(regionIndex)) return 1;
+  if (regionIndex === 1 && depth === 0) return HORDE_MAP1_YIELD;
+  return Math.min(1, slowWaveUnits(regionIndex, depth) / hordeWaveUnits(regionIndex, depth));
+}
+
 export function waveConfig(regionIndex, depth, kind) {
   const elite = kind === 'elite';
   const siege = kind === 'siege';
+  if (!siege && isHordeRegion(regionIndex)) {
+    // HORDE PACE. Effective solo rate = raw × coopSpawn 1.15 × spawnBudgetMult
+    // 1.25 = raw × 1.4375, so map 1's 1.11 → 2.78 raw is the spec's 1.6 → 4.0/s.
+    // The wave ENDS ON THE TIMER (hordeCull): leftover fodder dies and pays,
+    // specials have to be killed. Elite nodes get champions through
+    // nodeModifiers, not injections.
+    const dur = hordeWaveDur(regionIndex, depth);
+    const k = 1 + 0.15 * (regionIndex - 1);
+    const [packStart, packEnd] = hordePackRange(depth);
+    return {
+      t: 0, acc: 0, dur,
+      r0: (1.11 + 0.28 * depth) * k * HORDE_RATE_TUNE,
+      r1: (2.78 + 0.56 * depth) * k * HORDE_RATE_TUNE,
+      rampT: dur,
+      eliteEvery: 0, eliteT: 8,
+      horde: true, packStart, packEnd, firstPack: false, culled: false,
+      done: false,
+    };
+  }
   const dur = siege ? Infinity : Math.round(60 + depth * 5 + regionIndex * 5); // 65–110s
   // floor 1 is the baseline a one-weapon starting kit can chew through
   // (~0.6 kills/sec organic); later floors outpace it and force build growth
@@ -460,6 +572,30 @@ export const SIEGES = [
 // Build the runtime obstacle/hazard lists for a node's arena.
 // Parties of ARENA_CROWD_AT+ fight in the same templates scaled up
 // ~25% in bounds — 8 spread players need somewhere to spread to.
+// AN ARENA'S BOUNDS FROM ITS NODE ALONE — no seed, no RNG. buildArena() takes
+// its w/h from here, so the two cannot disagree. The renderer uses it on the
+// map screen (js/main.js prewarmRender) to pre-build the floor around where
+// the camera will open in each reachable room, before combat starts.
+// dropX/dropY is the party's drop point before the obstacle nudge
+// (Sim._enterArena: the centre, or the corridor mouth for a breach).
+export function arenaBounds(regionIndex, node, playerCount = 1) {
+  const crowd = playerCount >= CONFIG.ARENA_CROWD_AT ? CONFIG.ARENA_CROWD_SCALE : 1;
+  let w, h;
+  if (node.kind === 'siege') {
+    const sg = SIEGES[Math.min(SIEGES.length, Math.max(1, regionIndex)) - 1];
+    const shape = objectiveShape(node.kind);
+    const kx = crowd * shape.x, ky = crowd * shape.y;
+    w = Math.round(sg.w * kx); h = Math.round(sg.h * ky);
+  } else {
+    const shape = objectiveShape(node.kind);
+    const t = ARENA_TEMPLATES[node.template];
+    if (!t) return null;
+    const kx = crowd * shape.x, ky = crowd * shape.y;   // the same products buildArena scales geometry by
+    w = Math.round(t.w * kx); h = Math.round(t.h * ky);
+  }
+  return { w, h, dropX: node.kind === 'breach' ? CONFIG.WALL + 190 : w / 2, dropY: h / 2 };
+}
+
 export function buildArena(seed, regionIndex, node, playerCount = 1) {
   const crowd = playerCount >= CONFIG.ARENA_CROWD_AT ? CONFIG.ARENA_CROWD_SCALE : 1;
   // Objective levels can reshape the room (Breach is a corridor). That scale
@@ -468,6 +604,7 @@ export function buildArena(seed, regionIndex, node, playerCount = 1) {
   // and _pushOut then shoves players through the wall to escape it.
   const shape = objectiveShape(node.kind);
   const kx = crowd * shape.x, ky = crowd * shape.y;
+  const bounds = arenaBounds(regionIndex, node, playerCount);
   // The REGION's theme. Cosmetic: the renderer is the only consumer, and a
   // region with no biome renders exactly as it did before this existed.
   const b = biomeFor(regionIndex);
@@ -481,7 +618,7 @@ export function buildArena(seed, regionIndex, node, playerCount = 1) {
     // party fighting in the walled yard from the tutorial.
     const s = SIEGES[Math.min(SIEGES.length, Math.max(1, regionIndex)) - 1];
     return {
-      w: Math.round(s.w * kx), h: Math.round(s.h * ky), name: s.name,
+      w: bounds.w, h: bounds.h, name: s.name,
       obstacles: s.obstacles.map(o => scaleRect(o, kx, ky)),
       hazards: s.hazards.map(h => scaleHazard(h, kx, ky)),
       mutations: (kx === 1 && ky === 1) ? s.mutations : s.mutations.map(m => scaleMutation(m, kx, ky)),
@@ -492,7 +629,7 @@ export function buildArena(seed, regionIndex, node, playerCount = 1) {
   const t = ARENA_TEMPLATES[node.template];
   const rng = subRng(seed, 'arena', regionIndex, node.id);
   return {
-    w: Math.round(t.w * kx), h: Math.round(t.h * ky), name: t.name,
+    w: bounds.w, h: bounds.h, name: t.name,
     obstacles: t.obstacles(rng).map(o => scaleRect(o, kx, ky)),
     hazards: t.hazards(rng).map(h => scaleHazard(h, kx, ky)),
     mutations: null,

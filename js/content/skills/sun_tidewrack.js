@@ -29,7 +29,7 @@ export const TUNING = {
   // counter reads the same wherever it came from
   drenchCap: 12, drenchDur: 9000,
   // tier 1 — Spindrift
-  spinDamage: 6, spinSpeed: 520, spinRange: 250, spinCd: 1150,
+  spinDamage: 6, spinSpeed: 520, spinRange: 250, spinCd: 1000, spinSplash: 4, spinSplashRadius: 60,   // pace-spec §12.1, Designer 2 Nov 2026: splash 4 r60, cd 1000 (was 1150, which fired at 1200)
   // tier 2 — Souse
   souseDamage: 7, souseAngle: 1.7, souseRange: 215, souseRadius: 165,
   souseCount: 2, souseCd: 2600, souseStacks: 2,
@@ -71,7 +71,7 @@ export const SUN_TIDEWRACK = [
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.spinRange },
     cooldown: T.spinCd,
-    compose: [{ kind: 'bolt', damage: T.spinDamage, speed: T.spinSpeed, range: T.spinRange, riders: {} }],
+    compose: [{ kind: 'bolt', damage: T.spinDamage, speed: T.spinSpeed, range: T.spinRange, riders: { splash: { damage: T.spinSplash, radius: T.spinSplashRadius } } }],
     ranks: R,
   },
   {

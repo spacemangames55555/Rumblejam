@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateTree, serializeMap } from './nodetree.js';
-import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP, ONBOARDING_DROP_SCALE } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP, ONBOARDING_DROP_SCALE, isHordeRegion, hordeYieldScale, HORDE_MAP1_FODDER_CONTACT_MULT, HORDE_MAP1_FODDER_SPD_CAP, HORDE_MAP1_PACK_RAMP_S, HORDE_MAP1_THIN_ALIVE, HORDE_MAP1_THIN_DEBT } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -20,8 +20,8 @@ import { EnemyGrid } from './triggers.js';
 import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones, telegraphBusy } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING_TABLE } from './content/enemies.js';
-import { REGION_ENEMIES, telegraphWeight } from './content/regions-enemies.js';
-import { nodePopulation, nodeModifiers, shrineOffer, applyShrine } from './nodebehaviour.js';
+import { REGION_ENEMIES, telegraphWeight, enemyRole } from './content/regions-enemies.js';
+import { nodePopulation, nodeModifiers, shrineOffer, applyShrine, NODE_TUNING } from './nodebehaviour.js';
 import { REGION_BY_INDEX, depthMult, regionHpMult, regionDmgMult, bossForRegion, TOTAL_REGIONS } from './regions.js';
 import { difficultyOf, DEFAULT_DIFFICULTY } from './worldmap.js';
 
@@ -925,6 +925,8 @@ export class Sim {
     this.fightPaid = 0;  // whole materials those pickups actually paid
     this.payout = { kills: 0, gold: 0, xp: 0 };  // and what the fight paid out
     this._goldAcc = 0;   // the difficulty multiplier's carried fraction, per fight
+    this._yieldAcc = 0.5;
+    this.hordeCulled = 0; this.hordeSpecialCulled = 0; // timer-cull counters, per fight
     this.lootT = null;   // the siege's post-boss looting countdown
     this.safe = false;   // the room is live again
     this._armCurses();   // last round's curses expire; this round's bite
@@ -1033,7 +1035,12 @@ export class Sim {
   // (forever in sieges), then stops; the fight ends when the field is cleared.
   _tickWave(dt) {
     const w = this.wave;
-    if (!w || w.done) return;
+    if (!w) return;
+    if (w.done) {
+      if (w.horde && w.specialCullAt != null && this.time >= w.specialCullAt) this._hordeSpecialCull();
+      return;
+    }
+    if (w.horde) { this._tickHordeWave(dt); return; }
     w.t += dt;
     // Map 1's alive caps defer budget instead of discarding it. Ending the
     // wave on the timer while that budget is still banked would drop the
@@ -1156,6 +1163,241 @@ export class Sim {
     if (overtime && !this._onboardingDeferred()) w.done = true;
   }
 
+  // ---------------- HORDE PACE (pace-spec.md §3–4) ----------------
+  //
+  // The slow wave spent its budget one body at a time at a random ring point,
+  // so a room filled as a trickle. A horde wave spends it in PACKS: one centre
+  // from _spawnWavePos, 4–8 bodies within PACK_SPREAD of it, one spawn mark
+  // per pack. The first pack is queued at t = FIRST_PACK_T − 0.7 so it lands
+  // at t = FIRST_PACK_T. The wave ENDS ON THE TIMER: there is no deferred tail
+  // (a capped room loses the overflow, as Brotato's 100-cap does), and the
+  // fodder still standing is culled with its loot (_hordeTimerCull).
+  //
+  // RNG: every draw is waveRng, in a fixed order per pack — the size roll,
+  // the centre (inside _spawnWavePos), then per body the id pick (plus any
+  // lever rolls) and two offset floats. Sim.rng is not read here.
+  _hordeAliveCap() {
+    const base = this._onboarding() ? ONBOARDING_ALIVE_CAP : CONFIG.HORDE_ALIVE_CAP;
+    return Math.min(CONFIG.ALIVE_CEILING, CONFIG.POOL_ENEMIES - 10, Math.floor(base * this._onboardingCapScale()));
+  }
+
+  _hordePackSize(w) {
+    // Map 1 combat ramps 4 → 8 over the first 15 s (§11.9); objective rooms
+    // on map 1 and other horde maps still ramp across the whole wave.
+    const ramp = (this._onboarding() && !this.obj) ? HORDE_MAP1_PACK_RAMP_S : w.dur;
+    const f = Math.min(1, w.t / Math.max(1e-6, ramp));
+    const size = w.packStart + (w.packEnd - w.packStart) * f;
+    const n = Math.floor(size + this.waveRng.float());
+    return Math.max(CONFIG.PACK_MIN, Math.min(CONFIG.PACK_MAX, n));
+  }
+
+  _tickHordeWave(dt) {
+    const w = this.wave;
+    w.t += dt;
+    if (w.t >= w.dur) {
+      w.done = true;
+      if (!w.culled) { w.culled = true; this._hordeTimerCull(); }
+      return;
+    }
+    const rate = (w.r0 + (w.r1 - w.r0) * Math.min(1, w.t / w.rampT)) * this.coopSpawn * CONFIG.spawnBudgetMult
+      // Bastion's ×0.65 is not applied on a horde map: at 0.65 the room ran
+      // at median 5–8 alive and ~1.9 kills/s whatever the player did (§7 wants
+      // ≥10 and ≥2.5). It keeps its one-front stream and its bans. Swarm ×1.18 stands.
+      * Math.max(1, (this.profile && this.profile.rateMult) || 1)
+      * ((this.fightMods && this.fightMods.count) || 1)
+      * objectiveSpawnMult(this)
+      * (this.holdCircle && this.holdCircle.held ? 0.3 : 1);
+    w.acc = Math.min(CONFIG.SPAWN_BANK_CAP, w.acc + rate * dt);
+    if (w.nextPack == null) w.nextPack = 0;
+    // The opening pack: queued so it lands at FIRST_PACK_T. It is extra budget
+    // on top of the curve (one pack), which is what "packs from second 1" costs.
+    if (!w.firstPack && w.t + 0.7 >= CONFIG.FIRST_PACK_T) {
+      w.firstPack = true;
+      w.acc = Math.max(w.acc, w.packStart);
+    }
+    const cap = this._hordeAliveCap();
+    let guard = 0;
+    while (guard++ < 8) {
+      if (!w.nextPack) w.nextPack = this._hordePackSize(w);
+      const n = w.nextPack;
+      const field = this.enemyPool.count + this.spawnQueue.length;
+      // Thin-field pack (pace-spec §14, map 1 only): when alive+queued drops
+      // below 12 after the opening pack, land the next pack now and borrow
+      // against the bank down to -16. Pack size and the spawn curve are
+      // unchanged; the curve repays the debt. Gated on firstPack so the
+      // opening still lands at FIRST_PACK_T rather than at t≈0.
+      // Objective rooms (bounty/nest/…) keep their own stream geometry;
+      // §14 is a combat-room density fix for Wizard on map 1.
+      // rate > 0: fixtures silence the wave with r0=r1=0 (telegraph_test's
+      // quiet room); borrowing against a zero curve would still land packs.
+      const thin = this._onboarding() && !this.obj && w.firstPack
+        && rate > 0 && field < HORDE_MAP1_THIN_ALIVE;
+      if (w.acc < n) {
+        if (!(thin && (w.acc - n) >= -HORDE_MAP1_THIN_DEBT)) break;
+      }
+      const room = cap - field;
+      if (room <= 0) break;
+      // A pack that does not fit lands as what fits: the cap is a ceiling on
+      // bodies, not a gate that holds the whole room empty for a full pack.
+      const k = Math.min(n, room);
+      w.acc -= n;
+      w.nextPack = 0;
+      this._spawnHordePack(k);
+    }
+  }
+
+  _spawnHordePack(n) {
+    const prof = this.profile || {};
+    const center = this._spawnWavePos();
+    const bx = objectiveSpawnX(this);
+    if (bx !== null) center.x = bx;
+    const regionPopFor = () => this._regionPick();
+    let specials = 0;
+    if (this._onboarding()) {
+      for (const e of this.enemyPool) if (e.def && e.def.id === 'pnw_cedar_warden') specials++;
+      for (const q of this.spawnQueue) if (q.id === 'pnw_cedar_warden') specials++;
+    }
+    const specialCap = Math.floor(ONBOARDING_WARDEN_CAP * this._onboardingCapScale());
+    for (let i = 0; i < n; i++) {
+      const regionPop = regionPopFor();
+      const table = this._spawnTable(regionPop);
+      let id = this._onboarding()
+        ? this._onboardingPick(table)
+        : (regionPop || table[Math.floor(this.waveRng.float() * table.length)]);
+      let mortar = false, puddle = false;
+      if (!this._onboarding() && prof.flankers && this.waveRng.chance(prof.flankers)) {
+        id = this._leverPick(FLANKER_BEHAVIORS) || (this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish');
+      } else if (!this._onboarding() && prof.artillery && this.waveRng.chance(prof.artillery)) {
+        id = this._leverPick(ARTILLERY_BEHAVIORS) || 'lobber'; mortar = true;
+      }
+      if (prof.ban && prof.ban.includes(id)) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
+      const capT = SPAWN_CAPS[id] && Math.round(SPAWN_CAPS[id] * CONFIG.spawnBudgetMult);
+      if (capT && this._aliveOfType(id) >= capT) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
+      // Map 1's special cap: at the cap a Cedar Warden roll becomes the
+      // table's first fodder id instead of holding the pack back.
+      if (this._onboarding() && id === 'pnw_cedar_warden') {
+        if (specials >= specialCap) id = table.find(t => t !== 'pnw_cedar_warden') || id;
+        else specials++;
+      }
+      if (prof.puddle && (id === 'skulker' || id === 'flit') && this.waveRng.chance(prof.puddle)) puddle = true;
+      const a = this.waveRng.float() * Math.PI * 2;
+      const r = Math.sqrt(this.waveRng.float()) * CONFIG.PACK_SPREAD;
+      let x = clamp(center.x + Math.cos(a) * r, WALL + 40, this.W - WALL - 40);
+      let y = clamp(center.y + Math.sin(a) * r, WALL + 40, this.H - WALL - 40);
+      if (this._inObstacle(x, y, 20)) { x = center.x; y = center.y; }
+      this.spawnQueue.push({ t: 0.7, id, x, y, mortar, puddle });
+    }
+    this.addTelegraph({ shape: 'circle', x: center.x, y: center.y, r: CONFIG.PACK_MARK_R, dur: 0.7, spawnMark: true });
+  }
+
+  // Is this body fodder for the timer cull? Fodder is the ordinary roster
+  // body that does not telegraph. Specials, landmarks, elites, bosses and
+  // every scripted body (the straggler exemptions) have to be killed.
+  _isFodderDef(e) {
+    if (!e || e.boss || e.elite || e.mini || this._straggleExempt(e)) return false;
+    return enemyRole(e.def) === 'fodder';
+  }
+
+  _isFodder(e) {
+    if (!e || !e.active || this._straggleExempt(e)) return false;
+    if (e.elite || e.mini) return false;
+    return enemyRole(e.def) === 'fodder';
+  }
+
+  // THE WAVE ENDS ON THE TIMER (user ruling 2 Nov 2026). Fodder still standing
+  // dies where it is, through the null-killer death path the straggler cull
+  // uses: loot drops and nobody is credited. Fodder still in the spawn queue
+  // never lands. When the specials are dead the clear vacuums the floor, which
+  // is the "magneted in" half of the ruling. Objective rooms are not hordes
+  // and are not culled.
+  _hordeTimerCull() {
+    if (this.obj) return;
+    for (let i = this.spawnQueue.length - 1; i >= 0; i--) {
+      const q = this.spawnQueue[i];
+      if (q.elite) continue;
+      if (enemyRole(ENEMY_BY_ID[q.id]) === 'fodder') this.spawnQueue.splice(i, 1);
+    }
+    let n = 0;
+    for (const e of [...this.enemyPool]) {
+      if (!this._isFodder(e)) continue;
+      const rx = Math.round(e.x), ry = Math.round(e.y);
+      this.fx.culls.push({ x: rx, y: ry, r: e.radius });
+      this._killEnemy(e, null);
+      const deaths = this.fx.deaths;
+      const last = deaths[deaths.length - 1];
+      if (last && last.x === rx && last.y === ry) deaths.pop();
+      n++;
+    }
+    this.hordeCulled = (this.hordeCulled || 0) + n;
+    // What is left has to be killed, so it comes to the party now rather than
+    // after STRAGGLER_CHASE_S: the chase flag sends it straight at the
+    // nearest living player (no RNG). This is the 5–32 s mop-up the spec
+    // removes; the 20 s cull still applies to specials once the room thins.
+    for (const e of this.enemyPool) if (e.active && !this._straggleExempt(e)) e.straggle = true;
+    // ...and HORDE_SPECIAL_CHASE_S later the specials go too (Designer ruling
+    // 2 Nov 2026): the map-3 tail was 16–21 s of specials walking in.
+    this.wave.specialCullAt = this.time + CONFIG.HORDE_SPECIAL_CHASE_S;
+    // Everything on the floor comes to the party now, not when the last
+    // special dies: the fodder's loot is the wave's payout.
+    for (const m of this.pickups) {
+      if (m.target !== -1) continue;
+      const p = this.nearestLivingPlayer(m.x, m.y);
+      if (p) m.target = p.idx;
+    }
+  }
+
+  // THE SPECIAL CULL. HORDE_SPECIAL_CHASE_S after the timer cull, every body
+  // still standing dies with its loot and no kill credit, exactly like the
+  // fodder did — except the room's OBJECTIVES: bosses and minibosses, the
+  // straggler exemptions (pylons, nests, bounties, arena variants), any body
+  // opted out with `cullExempt` (per unit, or on its def: a landmark the room
+  // requires killing to clear) and any body stamped as the room's clear
+  // objective (`clearObjective`). Landmark-ROLE enemies (Bark Hulk, Elk) are
+  // ordinary bodies and are culled (Designer call 2 Nov 2026,
+  // HORDE_CULL_LANDMARK_ROLE). Queued non-objective spawns are dropped with
+  // them. One-shot: a brood child born after it falls to the ordinary
+  // straggler rules.
+  _hordeObjectiveBody(e) {
+    return !!(e.boss || e.mini || this._straggleExempt(e)
+      || e.cullExempt || e.clearObjective || (e.def && e.def.cullExempt)
+      || (!CONFIG.HORDE_CULL_LANDMARK_ROLE && enemyRole(e.def) === 'landmark'));
+  }
+
+  _hordeObjectiveQueued(q) {
+    const def = ENEMY_BY_ID[q.id];
+    if (!def) return true;
+    return !!(q.cullExempt || q.clearObjective || def.cullExempt
+      || (!CONFIG.HORDE_CULL_LANDMARK_ROLE && enemyRole(def) === 'landmark'));
+  }
+
+  _hordeSpecialCull() {
+    const w = this.wave;
+    w.specialCullAt = null;
+    if (this.obj) return;
+    for (let i = this.spawnQueue.length - 1; i >= 0; i--) {
+      const q = this.spawnQueue[i];
+      if (!this._hordeObjectiveQueued(q)) this.spawnQueue.splice(i, 1);
+    }
+    let n = 0;
+    for (const e of [...this.enemyPool]) {
+      if (!e.active || this._hordeObjectiveBody(e)) continue;
+      const rx = Math.round(e.x), ry = Math.round(e.y);
+      this.fx.culls.push({ x: rx, y: ry, r: e.radius });
+      this._killEnemy(e, null);
+      const deaths = this.fx.deaths;
+      const last = deaths[deaths.length - 1];
+      if (last && last.x === rx && last.y === ry) deaths.pop();
+      n++;
+    }
+    this.hordeSpecialCulled = (this.hordeSpecialCulled || 0) + n;
+    this.hordeCulled = (this.hordeCulled || 0) + n;
+    for (const m of this.pickups) {
+      if (m.target !== -1) continue;
+      const p = this.nearestLivingPlayer(m.x, m.y);
+      if (p) m.target = p.idx;
+    }
+  }
+
   // Ordinary rooms cap the bank at SPAWN_BANK_CAP. Map 1 does not: a cap
   // that deferred spawns into a capped bank would delete the overflow.
   _accrueSpawn(w, inflow) {
@@ -1238,12 +1480,36 @@ export class Sim {
           const back = Math.atan2(-anchor.my, -anchor.mx);
           a = back + (rng.float() - 0.5) * Math.PI * 1.5;
         }
-        const R = 640 + rng.float() * 180;
+        const horde = this.wave && this.wave.horde;
+        const [r0, r1] = horde ? CONFIG.HORDE_RING_R : [640, 820];
+        const R = r0 + rng.float() * (r1 - r0);
         const x = clamp(anchor.x + Math.cos(a) * R, WALL + 40, this.W - WALL - 40);
         const y = clamp(anchor.y + Math.sin(a) * R, WALL + 40, this.H - WALL - 40);
         if (this._inObstacle(x, y, 24)) continue;
         let ok = true;
-        for (const p of live) if (dist2(x, y, p.x, p.y) < 520 * 520) { ok = false; break; }
+        const minD = horde ? CONFIG.HORDE_RING_MIN : 520;
+        for (const p of live) if (dist2(x, y, p.x, p.y) < minD * minD) { ok = false; break; }
+        if (ok) return { x, y };
+      }
+    }
+    if (this.profile && !this.profile.ring && this.wave && this.wave.horde && live.length) {
+      // HORDE BASTION: still one stream from the fight's fronts, but each pack
+      // forms on the horde ring (R 500–640, ≥420 to everyone) in a 90° arc
+      // FACING its front, not at the arena edge. From the edge a 300 u/s
+      // camper is 800–1300 u away and the first pack took ~10 s to arrive
+      // (map1_bot seed 10: first kill 10.3 s, tail 9.4 s); pace-spec §3.
+      const FACE = [-Math.PI / 2, 0, Math.PI / 2, Math.PI];
+      const [r0, r1] = CONFIG.HORDE_RING_R;
+      for (let tries = 0; tries < 24; tries++) {
+        const anchor = live[Math.floor(rng.float() * live.length)];
+        const edge = this.fronts[Math.floor(rng.float() * this.fronts.length)];
+        const a = FACE[edge] + (rng.float() - 0.5) * Math.PI / 2;
+        const R = r0 + rng.float() * (r1 - r0);
+        const x = clamp(anchor.x + Math.cos(a) * R, WALL + 40, this.W - WALL - 40);
+        const y = clamp(anchor.y + Math.sin(a) * R, WALL + 40, this.H - WALL - 40);
+        if (this._inObstacle(x, y, 24)) continue;
+        let ok = true;
+        for (const p of live) if (dist2(x, y, p.x, p.y) < CONFIG.HORDE_RING_MIN * CONFIG.HORDE_RING_MIN) { ok = false; break; }
         if (ok) return { x, y };
       }
     }
@@ -2035,23 +2301,34 @@ export class Sim {
     const e = this.enemyPool.alloc();
     if (!e) return null;
     const fl = regionHpMult(this.regionIndex);
+    // HORDE ELITE (user ruling 2 Nov 2026): the node's ×HP / ×damage land on
+    // CHAMPIONS only — a horde region's elite room is a horde with a few
+    // champions, and its fodder still dies to one opener hit.
+    const nodeMult = !(this.fightMods && this.fightMods.championOnly) || def.telegraph;
     const dmgScale = regionDmgMult(this.regionIndex) * (opts.elite ? CONFIG.ELITE_DMG_MULT : 1)
-      * ((this.fightMods && this.fightMods.dmg) || 1);      // §2.4 node damage
+      * (nodeMult ? ((this.fightMods && this.fightMods.dmg) || 1) : 1);      // §2.4 node damage
     let hp = def.hp * fl * this.coopHp * this.greedHp * CONFIG.enemyHpMult * (opts.elite ? CONFIG.ELITE_HP_MULT : 1);
-    hp *= (this.fightMods && this.fightMods.hp) || 1;      // §2.4: and each one TOUGHER
+    if (nodeMult) hp *= (this.fightMods && this.fightMods.hp) || 1;      // §2.4: and each one TOUGHER
     hp *= this.curseEnemyHp;                       // cursed round: tougher enemies
     if (opts.hpMult) hp *= opts.hpMult;            // objective variants (elite arena, bounties)
     // a level-wide toughness dial the objective owns (Nest Purge: +50%);
     // the objective's own furniture (nests) opts out with noObjHp
     if (!opts.noObjHp) hp *= (this.objHpMult || 1);
     if (opts.mini) hp *= 0.35;
+    // Map 1 fodder (Designer call 4 Nov 2026 / pace-spec §11.9): ×0.7 contact,
+    // top speed 230. Density (spawn budget, packs, HP) is unchanged.
+    const map1Fodder = this._onboarding() && !this.obj && !opts.elite && !opts.mini
+      && enemyRole(def) === 'fodder';
     Object.assign(e, {
       id: ++this.spawnCounter, def, typeIdx: ENEMY_INDEX[id], boss: false, bossDef: null,
       x: clamp(x, WALL + 20, this.W - WALL - 20), y: clamp(y, WALL + 20, this.H - WALL - 20),
       hp: Math.round(hp), maxHp: Math.round(hp),
       radius: def.radius * (opts.elite ? 1.45 : 1) * (opts.mini ? 0.6 : 1),
-      spd: def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * (opts.spdMult || 1),
-      dmg: def.dmg * dmgScale, dmgScale,
+      spd: (() => {
+        const v = def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * (opts.spdMult || 1);
+        return map1Fodder ? Math.min(HORDE_MAP1_FODDER_SPD_CAP, v) : v;
+      })(),
+      dmg: def.dmg * dmgScale * (map1Fodder ? HORDE_MAP1_FODDER_CONTACT_MULT : 1), dmgScale,
       mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
@@ -2081,6 +2358,10 @@ export class Sim {
       // six unkillable enemies standing in a later horde arena, and the fight
       // could never end.
       isNest: false, nestShielded: false, bounty: false, arenaVariant: null,
+      // Horde special-cull opt-outs (see _hordeObjectiveBody). A room that
+      // needs a landmark dead to clear spawns it with { cullExempt: true }
+      // or { clearObjective: true }; recycled slots start clean.
+      cullExempt: !!opts.cullExempt, clearObjective: !!opts.clearObjective,
       spawnCdMult: 1, maxBroodCap: 0, enrageRate: 0, baseSpd: 0, payloadCd: 0,
       // Straggler clock. Wiped by the pool, set here so a fresh body starts
       // at zero rather than inheriting a chase from the slot's previous life
@@ -2205,7 +2486,7 @@ export class Sim {
       q.t -= dt;
       if (q.t <= 0) {
         this.spawnQueue.splice(i, 1);
-        this.spawnEnemyById(q.id, q.x, q.y, { elite: q.elite, mod: q.mod, mortar: q.mortar, puddle: q.puddle });
+        this.spawnEnemyById(q.id, q.x, q.y, { elite: q.elite, mod: q.mod, mortar: q.mortar, puddle: q.puddle, cullExempt: q.cullExempt, clearObjective: q.clearObjective });
       }
     }
   }
@@ -3236,6 +3517,18 @@ export class Sim {
     // aggregate rather than truncated on every enemy.
     const goldMult = (this.fightMods && this.fightMods.gold) || 1;
     let mats = objectiveKillPays(this, e) ? e.mats * this.greedMats : 0;
+    // HORDE YIELD (pace-spec §3): fodder pays at hordeYieldScale — an
+    // accumulator, not a roll, so no RNG is drawn and the rate is exact in
+    // aggregate. Specials, landmarks, elites and bosses always pay.
+    // Objective rooms keep their own economics (anti-farm caps, bounty
+    // streams); the accumulator starts at ½ so the first fodder kill pays.
+    if (mats > 0 && this.wave && this.wave.horde && !this.obj && this._isFodderDef(e)) {
+      const y = hordeYieldScale(this.regionIndex, (this.regionColumn || 1) - 1);
+      if (y < 1) {
+        this._yieldAcc = (this._yieldAcc ?? 0.5) + y;
+        if (this._yieldAcc >= 1) this._yieldAcc -= 1; else mats = 0;
+      }
+    }
     // XP RIDES THE PRE-MULTIPLIER AMOUNT (§4.1: XP is never scaled by
     // difficulty). XP is earned per material banked, so paying more gold on a
     // harder setting would pay more XP with it through the back door and make
@@ -4089,9 +4382,15 @@ export class Sim {
   // `xpValue` defaults to the material's value, so every existing caller keeps
   // paying XP exactly as before. Only the gold multiplier's extra materials
   // pass 0 — see _killEnemy.
+  //
+  // PICKUP_BLOB_CAP (horde pace, pace-spec §3): past 60 blobs on the ground a
+  // drop merges into the NEAREST blob (Brotato caps at 50 and merges). It was
+  // 240 with a random merge target that drew Sim.rng; a horde map kills
+  // 85–310 bodies, and nearest is both readable and draws nothing.
   _dropMaterial(x, y, value = 1, xpValue = value) {
-    if (this.pickups.length >= 240) {
-      const m = this.pickups[(this.rng.float() * this.pickups.length) | 0];
+    if (this.pickups.length >= CONFIG.PICKUP_BLOB_CAP) {
+      let m = this.pickups[0], bd = Infinity;
+      for (const q of this.pickups) { const d = dist2(q.x, q.y, x, y); if (d < bd) { bd = d; m = q; } }
       m.v += value; m.xp = (m.xp === undefined ? m.v - value : m.xp) + xpValue;
       return;
     }
@@ -4646,6 +4945,18 @@ export class Sim {
   _onboardingTable() {
     const pop = this.region && REGION_ENEMIES[this.region];
     if (!pop || pop.enemies.length < ONBOARDING_TABLE.length) return ONBOARDING_TABLE;
+    // HORDE PACE: map 1 is fodder plus ONE special. The two lightest fodder
+    // ids and the lightest telegrapher (region 1: sapling, thornhound, Cedar
+    // Warden — the same three ids the HP sort chose before the re-author).
+    if (pop.horde) {
+      const byHp = (a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1);
+      // The COMMONEST fodder (highest weight) — the ranged one stays off map 1.
+      const fodder = pop.enemies.filter(e => enemyRole(e) === 'fodder').sort((a, b) => b.w - a.w || byHp(a, b));
+      const special = pop.enemies.filter(e => e.telegraph).sort(byHp);
+      if (fodder.length >= 2 && special.length) {
+        return [...fodder.slice(0, ONBOARDING_TABLE.length - 1).map(e => e.id), special[0].id];
+      }
+    }
     return [...pop.enemies]
       .sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))
       .slice(0, ONBOARDING_TABLE.length)
@@ -4703,8 +5014,10 @@ export class Sim {
     const region = REGION_BY_INDEX[this.regionIndex] || null;
     const n = nodeModifiers(this.nodeType || 'horde', region);
     const d = difficultyOf(this.difficulty);
+    const hordeElite = this.nodeType === 'elite' && isHordeRegion(this.regionIndex);
     return {
-      count: n.count * d.density,
+      count: (hordeElite ? NODE_TUNING.hordeEliteCountMult : n.count) * d.density,
+      championOnly: hordeElite,
       hp: n.hp * d.hp,
       dmg: n.dmg * d.dmg,
       gold: n.gold * d.gold,

@@ -35,7 +35,7 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  rakeDamage: 10, rakeReach: 100, rakeArc: 1.6, rakeCd: 1150,
+  rakeDamage: 10, rakeReach: 100, rakeArc: 1.6, rakeCd: 1200,   // 1150 → 1200: triggers run at 10 Hz (TRIGGER_TICK_MS 100), so it already fired at 1200 (pace-spec §12)
   kinshipWeight: 0.15,
 
   // ---- branch A: Wild Kin (scale on the standing pack) ----

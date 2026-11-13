@@ -17,7 +17,7 @@ import { docTrigger, rankPer, RANK_NONE, pctRemaining, pctToFraction } from '../
 
 export const TUNING = {
   // tier_code 0 — Dark Energy Blip
-  blipDamage: 9, blipSpeed: 520, blipRange: 480, blipCd: 1000,
+  blipDamage: 9, blipSpeed: 520, blipRange: 480, blipCd: 700, blipPierce: 3,   // pace-spec §12.1, Designer 2 Nov 2026: pierce 3, cd 700 (was 1000, no riders)
   // tier_code 1 — Dark Matter Bomb
   bombDamage: 30, bombSpeed: 500, bombRange: 420, bombCd: 1200,
   bombSplash: 12, bombSplashRadius: 60,
@@ -64,7 +64,7 @@ export const NECRO_DARK_MATTER = [
     select: 'nearest',
     trigger: docTrigger('NEAREST_IN_RANGE', { range: T.blipRange }),
     cooldown: T.blipCd,
-    compose: [{ kind: 'bolt', damage: BLIP_BASE, speed: T.blipSpeed, range: T.blipRange, riders: {} }],
+    compose: [{ kind: 'bolt', damage: BLIP_BASE, speed: T.blipSpeed, range: T.blipRange, riders: { pierce: T.blipPierce } }],
     ranks: rankPer(BLIP_RANK_ADD, BLIP_BASE),
   },
   {

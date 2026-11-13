@@ -264,5 +264,81 @@ else fail(`after clear: straggle=${pylon.straggle} cullAt=${g.straggleCullAt}`);
   }
 }
 
+// HORDE PACE: THE WAVE ENDS ON THE TIMER (user ruling 2 Nov 2026,
+// pace-spec.md §3 and §5). On a horde map, at w.t >= dur every FODDER body
+// still standing dies with its loot and no kill credit, queued fodder never
+// lands, and what is left (specials) is sent straight at the party. The 4 s
+// chase and 20 s cull above now only ever see specials and scripted bodies.
+{
+  const { Sim: RealSim } = await import('../js/game.js');
+  const { isOnboardingNode } = await import('../js/arenas.js');
+  const { enemyRole } = await import('../js/content/regions-enemies.js');
+  const s = new RealSim({ seed: 777, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'K', charId: 'toh_samurai', color: '#fff' }] });
+  const q = s.players[0];
+  if (q.openingOffer) s.uiAction(0, { kind: 'opening', id: q.openingOffer[0].id });
+  const starts = s.reachableNodes();
+  s.uiAction(0, { kind: 'pickNode', nodeId: starts.find(id => isOnboardingNode(1, s.floor.nodes[id])) ?? starts[0] });
+  s.god = true;
+  q.loadout.fill(null);                     // nobody dies to the player: the timer does the work
+  if (!s.wave || !s.wave.horde) fail('horde cull fixture did not enter a horde wave');
+  else {
+    let guard = 0;
+    while (s.wave.t + 1 / 60 < s.wave.dur && guard++ < 60 * 40) { s.setInput(0, { mx: 0, my: 0 }); s.tick(); }
+    const fodderBefore = [...s.enemyPool].filter(e => enemyRole(e.def) === 'fodder').length;
+    const specialsBefore = [...s.enemyPool].filter(e => enemyRole(e.def) !== 'fodder').length;
+    const kills0 = s.payout.kills, gold0 = s.payout.gold, q0 = q.kills || 0;
+    s.setInput(0, { mx: 0, my: 0 }); s.tick(); s.tick();
+    const fodderAfter = [...s.enemyPool].filter(e => enemyRole(e.def) === 'fodder').length;
+    const { ENEMY_BY_ID } = await import('../js/content/enemies.js');
+    const queuedFodder = s.spawnQueue.filter(x => !x.elite && enemyRole(ENEMY_BY_ID[x.id]) === 'fodder').length;
+    const specialsAfter = [...s.enemyPool].filter(e => enemyRole(e.def) !== 'fodder');
+    if (s.wave.done && fodderBefore > 0 && fodderAfter === 0 && s.hordeCulled >= fodderBefore) {
+      ok(`horde timer cull: ${fodderBefore} fodder standing at t ${s.wave.dur}s, 0 a tick later (${s.hordeCulled} culled)`);
+    } else fail(`horde timer cull: fodder ${fodderBefore} -> ${fodderAfter}, culled ${s.hordeCulled}, wave done ${s.wave.done}`);
+    if (s.payout.gold > gold0 && (q.kills || 0) === q0) ok(`culled fodder paid its loot (gold ${gold0} -> ${s.payout.gold}) with no kill credit`);
+    else fail(`cull payout gold ${gold0} -> ${s.payout.gold}, player kills ${q0} -> ${q.kills}`);
+    if (specialsAfter.length === specialsBefore && specialsAfter.every(e => e.straggle)) ok(`specials survive the cull and come to the party: ${specialsAfter.length} chasing`);
+    else fail(`specials after cull: ${specialsAfter.length} (was ${specialsBefore}), chasing ${specialsAfter.filter(e => e.straggle).length}`);
+    if (queuedFodder === 0) ok('no fodder lands after the timer'); else fail(`${queuedFodder} fodder still queued after the timer`);
+
+    // THE SPECIAL CULL (Designer ruling 2 Nov 2026): HORDE_SPECIAL_CHASE_S after
+    // the timer the specials die too, with loot and no credit — and so do
+    // landmark-ROLE enemies (Designer call 2 Nov 2026, HORDE_CULL_LANDMARK_ROLE).
+    // Objectives stay: a boss, a landmark opted out with `cullExempt`, and a
+    // landmark stamped as the room's clear objective.
+    const landmark = s.spawnEnemyById('pnw_bark_hulk', q.x + 300, q.y, {});
+    const objLandmark = s.spawnEnemyById('pnw_bark_hulk', q.x, q.y + 300, { cullExempt: true });
+    const clearLandmark = s.spawnEnemyById('pnw_elk', q.x, q.y - 300, { clearObjective: true });
+    const boss = s.spawnEnemyById('pnw_cedar_warden', q.x - 300, q.y, {});
+    boss.boss = true; boss.bossDef = { name: 'Stub', color: '#fff' }; boss.bs = {}; boss.spd = 0;
+    landmark.spd = 0; objLandmark.spd = 0; clearLandmark.spd = 0;
+    if (enemyRole(landmark.def) === 'landmark' && enemyRole(clearLandmark.def) === 'landmark') ok('bark hulk and elk are landmark-role');
+    else fail(`landmark roles: ${enemyRole(landmark.def)}, ${enemyRole(clearLandmark.def)}`);
+    const specials = specialsAfter.filter(e => e.active);
+    const sc0 = s.hordeSpecialCulled || 0, gold1 = s.payout.gold, k1 = q.kills || 0;
+    const tEnd = s.time;
+    let early = false;
+    while (s.time < tEnd + CONFIG.HORDE_SPECIAL_CHASE_S - 0.1) { s.setInput(0, { mx: 0, my: 0 }); s.tick(); if (specials.some(e => !e.active)) early = true; }
+    const heldOn = specials.filter(e => e.active && e.straggle).length;
+    for (let i = 0; i < 20; i++) { s.setInput(0, { mx: 0, my: 0 }); s.tick(); }
+    const stillUp = specials.filter(e => e.active).length;
+    if (specials.length > 0 && !early && heldOn === specials.length) ok(`specials chase for the full ${CONFIG.HORDE_SPECIAL_CHASE_S} s before the cull (${heldOn} chasing)`);
+    else fail(`special chase window: ${specials.length} specials, early deaths ${early}, chasing at ${CONFIG.HORDE_SPECIAL_CHASE_S} s ${heldOn}`);
+    if (stillUp === 0 && (s.hordeSpecialCulled || 0) - sc0 >= specials.length && s.payout.gold > gold1 && (q.kills || 0) === k1) {
+      ok(`then die with their loot and no credit: ${(s.hordeSpecialCulled || 0) - sc0} specials culled, gold ${gold1} -> ${s.payout.gold}`);
+    } else fail(`special cull: ${stillUp} still up, culled ${(s.hordeSpecialCulled || 0) - sc0}, gold ${gold1} -> ${s.payout.gold}, kills ${k1} -> ${q.kills}`);
+    if (!landmark.active) ok('an ordinary landmark-role enemy is culled with the specials');
+    else fail('an ordinary landmark (bark hulk) survived the special cull');
+    if (objLandmark.active && clearLandmark.active && boss.active) ok('objectives survive the special cull: the boss, a cullExempt landmark, the room\'s clear-objective landmark');
+    else fail(`objective culled: cullExempt landmark ${objLandmark.active}, clearObjective landmark ${clearLandmark.active}, boss ${boss.active}`);
+    // Pooled slots must not inherit the opt-out.
+    objLandmark.boss = false;
+    s._killEnemy(objLandmark, null);
+    const recycled = s.spawnEnemyById('pnw_bark_hulk', q.x, q.y + 300, {});
+    if (!recycled.cullExempt && !recycled.clearObjective) ok('cullExempt / clearObjective do not ride a recycled pool slot');
+    else fail(`recycled slot kept cullExempt ${recycled.cullExempt} clearObjective ${recycled.clearObjective}`);
+  }
+}
+
 console.log(failures ? `\n${failures} STRAGGLER FAILURE(S)` : '\nSTRAGGLERS CHASE, THEN THE FIGHT ENDS');
 process.exit(failures ? 1 : 0);

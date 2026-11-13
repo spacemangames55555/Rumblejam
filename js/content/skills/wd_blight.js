@@ -21,7 +21,7 @@
 
 export const TUNING = {
   // tier 1 — Bogspit
-  spitDamage: 6, spitSpeed: 490, spitRange: 250, spitCd: 1150,
+  spitDamage: 6, spitSpeed: 490, spitRange: 250, spitCd: 1200,   // 1150 → 1200: triggers run at 10 Hz (TRIGGER_TICK_MS 100), so it already fired at 1200 (pace-spec §12)
   // tier 2 — Rot
   rotDamage: 5, rotDuration: 3600, rotSpread: 130, rotCd: 4200,
   // tier 3 — Fen Shroud

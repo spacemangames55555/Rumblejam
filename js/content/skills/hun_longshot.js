@@ -39,7 +39,7 @@
 
 export const TUNING = {
   // tier 1 — Sighting Shot
-  sightDamage: 5, sightSpeed: 540, sightRange: 260, sightCd: 1100,
+  sightDamage: 5, sightSpeed: 540, sightRange: 260, sightCd: 700, sightPierce: 4,   // pace-spec §12.1, Designer 2 Nov 2026: pierce 4, cd 700 (was 1100)
   // tier 2 — Falconer (the beast: the engine's other body)
   falconHp: 26, falconRadius: 11, falconSpawn: 60, falconAtkCd: 1150,
   falconDamage: 4, falconArc: 1.5, falconReach: 46,
@@ -79,7 +79,7 @@ export const HUN_LONGSHOT = [
     select: 'nearest',
     trigger: { kind: 'NEAREST', range: T.sightRange },
     cooldown: T.sightCd,
-    compose: [{ kind: 'bolt', damage: T.sightDamage, speed: T.sightSpeed, range: T.sightRange, riders: {} }],
+    compose: [{ kind: 'bolt', damage: T.sightDamage, speed: T.sightSpeed, range: T.sightRange, riders: { pierce: T.sightPierce } }],
     ranks: R,
   },
   {

@@ -67,11 +67,13 @@
 // authored (`tools/region_curve.mjs`).
 //
 // Usage: node tools/roster_weight_gate.mjs [--verbose]
-import { REGION_ENEMIES, telegraphWeight, MIN_TELEGRAPH_WEIGHT } from '../js/content/regions-enemies.js';
+import { REGION_ENEMIES, telegraphWeight, MIN_TELEGRAPH_WEIGHT, HORDE_MIN_TELEGRAPH_WEIGHT, HORDE_MAX_TELEGRAPH_WEIGHT, HORDE_MIN_TELEGRAPH_SHAPES, enemyRole } from '../js/content/regions-enemies.js';
+import { CONFIG } from '../js/config.js';
 import { ENEMY_BY_ID, FLOOR_TABLES } from '../js/content/enemies.js';
 import { REGIONS, regionHpMult, regionDmgMult, TOTAL_REGIONS, REGION_ANCHOR_LEVEL } from '../js/regions.js';
 import { Sim } from '../js/game.js';
 import * as SKILLSIM from '../js/skillsim.js';
+import { stepDamage } from '../js/compose.js';
 import { TREES, TREES_BY_CLASS } from '../js/skills.js';
 import { SELECTABLE } from '../js/content/characters.js';
 
@@ -171,6 +173,114 @@ console.log('ROSTER WEIGHT AND TELEGRAPH DENSITY — the two halves of one coupl
 console.log(`reference: floor-1 table (${FLOOR_TABLES[0].join(', ')}) — weighted mean HP ${REF_HP.toFixed(1)}, damage ${REF_DMG.toFixed(2)}`);
 console.log(`band: ±${(BAND * 100).toFixed(0)}% → HP [${(REF_HP * (1 - BAND)).toFixed(1)}, ${(REF_HP * (1 + BAND)).toFixed(1)}], damage [${(REF_DMG * (1 - BAND)).toFixed(2)}, ${(REF_DMG * (1 + BAND)).toFixed(2)}]\n`);
 
+// THE WEAKEST OPENER HIT ON ARRIVAL (Designer ruling 4 Nov 2026). B′'s rule is
+// that a region's fodder dies to ONE opener hit at the level a player arrives
+// in that region, so the packet is computed, not a constant (it was a
+// hard-coded 4, the map-1 Rip, applied to every region).
+//
+// The level is the region's `expectedLevel` (falling back to its §4.3 anchor),
+// so map 1 stays at level 1. A character of every class is built at that level
+// the way tools/region_curve.mjs builds one — (level − 1) points spent
+// breadth-first in tier order, which is the build REGION_HP_MULT was measured
+// against — and every tree's tier-1 is scored as that class's opener: one
+// impact of its first damage step at the rank that spend reached (at least 1),
+// times the class's Ferocity (harness characters bank no stat picks), rounded
+// as damageEnemy rounds it. Neutral domain, no crit, no engine stacks, the same
+// reading tools/opener_gate.mjs makes on map 1. Plague openers have no impact
+// packet and are left to opener_gate's DoT rule. The weakest packet across
+// every class and tree is the bar.
+const IMPACT_KINDS = new Set(['bolt', 'strike', 'cone', 'line', 'drain', 'channel']);
+const _packetCache = new Map();
+function arrivalLevel(region) {
+  return region.expectedLevel || REGION_ANCHOR_LEVEL[region.index - 1] || 1;
+}
+function weakestOpenerPacket(level) {
+  if (_packetCache.has(level)) return _packetCache.get(level);
+  let weakest = null;
+  for (const classId of Object.keys(TREES_BY_CLASS)) {
+    const sim = new Sim({
+      seed: 4242, allowUnplayable: true,
+      party: [{ idx: 0, key: 'k', name: 'C', charId: classId, color: '#fff' }],
+    });
+    const p = sim.players[0];
+    if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+    p.level = level;
+    const skills = TREES_BY_CLASS[classId].flatMap(t => TREES[t].skills).sort((a, b) => a.tier - b.tier);
+    let budget = level - 1;
+    for (let pass = 0; pass < 12 && budget > 0; pass++) {
+      let spent = 0;
+      for (const sk of skills) {
+        if (budget <= 0) break;
+        p.skillPoints++;
+        if (SKILLSIM.spendSkillPoint(sim, p, sk.id)) { budget--; spent++; } else p.skillPoints--;
+      }
+      if (!spent) break;
+    }
+    sim._recomputeStats(p);
+    const caster = { stats: { ferocity: p.stats.ferocity }, engines: {} };
+    for (const tid of TREES_BY_CLASS[classId]) {
+      const sk = TREES[tid].skills.find(s => s.tier === 1);
+      const step = sk && (sk.compose || []).find(s => IMPACT_KINDS.has(s.kind) && Number.isFinite(s.damage));
+      if (!step) continue;
+      const rank = Math.max(1, p.skillRanks[sk.id] || 0);
+      const packet = Math.max(1, Math.round(stepDamage(step, sk, rank, caster) * SKILLSIM.ferocityMult(caster)));
+      if (!weakest || packet < weakest.packet) weakest = { packet, id: sk.id, classId, rank, ferocity: p.stats.ferocity };
+    }
+  }
+  _packetCache.set(level, weakest);
+  return weakest;
+}
+const SOLO_COOP_HP = 1.15; // coopHp for one player, the map-1 measurement party
+const SPECIAL_PUNISH_LO = PUNISH_LO, SPECIAL_PUNISH_HI = PUNISH_HI;
+function hordeChecks(region, units) {
+  const { total, tel, share } = telegraphWeight(units);
+  const shapes = new Set(units.filter(e => e.telegraph).map(e => e.telegraph.shape.kind));
+  // A′ — 8–25% telegraphing, at least two shapes.
+  if (share >= HORDE_MIN_TELEGRAPH_WEIGHT && share <= HORDE_MAX_TELEGRAPH_WEIGHT && shapes.size >= HORDE_MIN_TELEGRAPH_SHAPES) {
+    ok(`A′ region ${region.index} telegraph density ${(share * 100).toFixed(1)}% (${tel.toFixed(2)}/${total.toFixed(2)}) inside the ${(HORDE_MIN_TELEGRAPH_WEIGHT * 100).toFixed(0)}–${(HORDE_MAX_TELEGRAPH_WEIGHT * 100).toFixed(0)}% special band, ${shapes.size} shapes (${[...shapes].join(', ')})`);
+  } else {
+    bad(`A′ region ${region.index} telegraph density ${(share * 100).toFixed(1)}% with ${shapes.size} shape(s) — want ${(HORDE_MIN_TELEGRAPH_WEIGHT * 100).toFixed(0)}–${(HORDE_MAX_TELEGRAPH_WEIGHT * 100).toFixed(0)}% and ≥${HORDE_MIN_TELEGRAPH_SHAPES} shapes`);
+  }
+  const fodder = units.filter(e => enemyRole(e) === 'fodder');
+  const specials = units.filter(e => enemyRole(e) === 'special');
+  const landmarks = units.filter(e => enemyRole(e) === 'landmark');
+  const live = e => e.hp * regionHpMult(region.index) * CONFIG.enemyHpMult * SOLO_COOP_HP;
+  const fodderMax = Math.max(...fodder.map(e => e.hp));
+  // B′ — role bands. Fodder dies to the weakest opener; specials 2–4×
+  // fodder; landmarks ≥ 6× fodder. No band-scaling inside a roster: the
+  // world axis (regionHpMult) is the only multiplier.
+  const lvl = arrivalLevel(region);
+  const W = weakestOpenerPacket(lvl);
+  const bar = `the weakest opener hit at arrival level ${lvl}, ${W.packet} (${W.id} rank ${W.rank}, ferocity ${W.ferocity})`;
+  const fatFodder = fodder.filter(e => Math.round(live(e)) > W.packet);
+  if (fodder.length && !fatFodder.length) ok(`B′ region ${region.index} fodder live HP ${fodder.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${live(e).toFixed(1)}`).join(', ')} — every one ≤ ${bar}`);
+  else bad(`B′ region ${region.index} fodder over ${bar}: ${fatFodder.map(e => `${e.id} ${live(e).toFixed(1)}`).join(', ') || 'no fodder at all'}`);
+  const offSpec = specials.filter(e => e.hp < 2 * fodderMax || e.hp > 4 * fodderMax);
+  if (specials.length && !offSpec.length) ok(`B′ region ${region.index} specials ${specials.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${e.hp}`).join(', ')} are 2–4× fodder max ${fodderMax}`);
+  else bad(`B′ region ${region.index} specials outside 2–4× fodder max ${fodderMax}: ${offSpec.map(e => `${e.id} ${e.hp}`).join(', ') || 'no specials'}`);
+  const thinMarks = landmarks.filter(e => e.hp < 6 * fodderMax);
+  if (landmarks.length && !thinMarks.length) ok(`B′ region ${region.index} landmarks ${landmarks.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${e.hp}`).join(', ')} are ≥ 6× fodder max ${fodderMax}`);
+  else bad(`B′ region ${region.index} landmarks under 6× fodder max ${fodderMax}: ${thinMarks.map(e => `${e.id} ${e.hp}`).join(', ') || 'no landmarks'}`);
+  // C′ — every telegrapher is above fodder, and one is teachable (≤ 3× fodder).
+  const tels = units.filter(e => e.telegraph);
+  const under = tels.filter(e => e.hp <= fodderMax);
+  const teach = tels.filter(e => e.hp <= 3 * fodderMax);
+  if (!under.length && teach.length) ok(`C′ region ${region.index} every telegrapher is above fodder max ${fodderMax}; teachable special(s): ${teach.map(e => `${e.id} ${e.hp}`).join(', ')}`);
+  else bad(`C′ region ${region.index}: ${under.length} telegrapher(s) at or under fodder HP, ${teach.length} teachable (≤ ${3 * fodderMax})`);
+  // D — the special's punish, against the anchor vitality. The band stays
+  // 6–9%: pace-spec §5 suggests ~8–15% [estimate], which the Cedar Warden's
+  // 6 damage would fail without a content change the spec does not list.
+  const anchor = REGION_ANCHOR_LEVEL[region.index - 1];
+  const vit = anchorVitality(anchor);
+  const pct = e => e.telegraph.damage / vit;
+  const outD = specials.filter(e => e.telegraph && (pct(e) < SPECIAL_PUNISH_LO || pct(e) > SPECIAL_PUNISH_HI));
+  if (specials.length && !outD.length) ok(`D region ${region.index} specials punish ${specials.map(e => `${(100 * pct(e)).toFixed(1)}%`).join(' / ')} of ${vit} vitality at level ${anchor} — inside ${(100 * SPECIAL_PUNISH_LO).toFixed(0)}–${(100 * SPECIAL_PUNISH_HI).toFixed(0)}%`);
+  else bad(`D region ${region.index} specials outside the punish band: ${outD.map(e => `${e.id} ${(100 * pct(e)).toFixed(1)}%`).join(', ') || 'no specials'}`);
+  // Fodder contact damage — reported, not gated: the 6-in-contact swarm check
+  // needs the contact cadence measured in a fight (i-frames), not a sum.
+  console.log(`  · fodder contact damage per touch: ${fodder.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${e.dmg}`).join(', ')} (swarm check pending a contact-cadence measurement)`);
+}
+
 for (const region of REGIONS) {
   const units = REGION_ENEMIES[region.id].enemies;
   const { total, tel, share } = telegraphWeight(units);
@@ -178,7 +288,12 @@ for (const region of REGIONS) {
   const dmg = weightedMean(units, e => e.dmg);
   const med = median(units.map(e => e.hp));
   const lightTel = units.filter(e => e.telegraph && e.hp < med);
-  console.log(`── region ${region.index} · ${region.name}`);
+  console.log(`── region ${region.index} · ${region.name}${REGION_ENEMIES[region.id].horde ? ' · HORDE PACE' : ''}`);
+  // HORDE PACE (user ruling 2 Nov 2026, pace-spec.md §5). A horde region is
+  // fodder plus a few specials, so A–C are replaced by A′–C′ and D is applied
+  // to specials. E (landmarks) is unchanged and runs below for both.
+  if (REGION_ENEMIES[region.id].horde) { hordeChecks(region, units); }
+  else {
   if (VERBOSE) {
     for (const e of [...units].sort((a, b) => a.hp - b.hp)) {
       console.log(`     ${e.id.padEnd(20)} hp ${String(e.hp).padStart(3)}  dmg ${String(e.dmg).padStart(2)}`
@@ -235,6 +350,7 @@ for (const region of REGIONS) {
     + ' — the band gates the light ones; a landmark hitting hard is the point of a landmark');
 
   // ---- E. at least one landmark, on BOTH halves ----
+  }
   const heavy = units.filter(e => e.hp > LANDMARK_HP_MULT * med);
   const landmarks = heavy.filter(e => e.w < LANDMARK_MAX_W);
   if (landmarks.length) {

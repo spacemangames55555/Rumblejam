@@ -7,10 +7,10 @@ import { readsTokens, TREES as TREES_UI, TREES_BY_CLASS as TREES_BY_CLASS_UI } f
 import { mechanicalLine } from './skilltext.js';
 // A player row's class, host-side. `char` is the def object; charId is the id.
 const myCharId = p => (p && p.char ? p.char.id : null);
-import { BIOMES, tileVariant } from './biomes.js';
+import { BIOMES, tileVariant, biomeFor } from './biomes.js';
 import { randomRunSeed } from './rng.js';
 import { Sim } from './game.js';
-import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR } from './arenas.js';
+import { isOnboardingNode, ONBOARDING_LEVEL_FLOOR, arenaBounds } from './arenas.js';
 import { BEAST, hurtBeast } from './entities/beast.js';
 import { HostTransport, ClientTransport } from './net.js';
 import { encodeSnap, decodeSnap, wireSize } from './netcodec.js';
@@ -1974,8 +1974,39 @@ const lastMove = { mx: 0, my: 0 };
 
 let hudTimer = 0;
 
+// RENDER CACHE PREWARM. While the world map, the opening offer or the node
+// map is up, hand the renderer the region's roster and the rooms the party
+// can enter next (bounds from the node alone: arenaBounds needs no seed and no
+// RNG), so it can build its floor chunks and enemy cells before the first
+// pack lands rather than during it. Re-planned only when the region, the
+// reachable set, the party size or the canvas changes. Render-only.
+let prewarmKey = null;
+const ENEMY_DEF_BY_ID = Object.fromEntries(ALL_ENEMY_DEFS.map(e => [e.id, e]));
+function prewarmRender() {
+  const ri = app.regionIndex | 0;
+  const m = app.map;
+  if (!ri || !m || !m.layout || !m.layout.nodes) return;
+  const reach = m.reachable || [];
+  const n = (app.party && app.party.length) || 1;
+  const key = `${ri}|${reach.join(',')}|${n}|${canvas.width}x${canvas.height}`;
+  if (key === prewarmKey) return;
+  prewarmKey = key;
+  const region = REGION_BY_INDEX[ri];
+  const roster = ((region && region.enemies) || []).map(id => ENEMY_DEF_BY_ID[id]).filter(Boolean)
+    .map(d => ({ spriteId: d.spriteId, shape: d.shape, color: d.color, radius: d.radius, domain: d.domain }));
+  const views = [];
+  for (const id of reach) {
+    const node = m.layout.nodes.find(q => q.id === id);
+    const b = node && arenaBounds(ri, node, n);
+    if (b) views.push({ aw: b.w, ah: b.h, x: b.dropX, y: b.dropY });
+  }
+  const biome = biomeFor(ri);
+  renderer.prewarm({ key, biomeId: biome ? biome.id : null, roster, views });
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
+  prewarmRender();
   const dtFrame = Math.min(0.1, (now - lastFrame) / 1000);
   lastFrame = now;
   app.fps.frames++;
@@ -1999,7 +2030,9 @@ function frame(now) {
   // Overlay state is read straight off the host sim. On a client it stays null,
   // which is correct — a client has no trigger state to show because it never
   // evaluates one.
-  renderer.trigDebug = app.sim ? {
+  // Built only while the T overlay is on: assembling it (player filters, the
+  // live telegraph-zone list) every frame was pure JS cost on a throttled host.
+  renderer.trigDebug = app.sim && renderer.debugTrig ? {
     stats: app.sim.trigStats,
     players: app.sim.players.filter(q => !q.gone).map(q => ({
       idx: q.idx, name: q.name, footing: q.engines ? q.engines.footing : 0,

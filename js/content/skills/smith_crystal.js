@@ -49,7 +49,7 @@
 export const TUNING = {
   // tier 1 — Hammer Blow
   hammerDamage: 7, hammerReach: 100, hammerArc: 1.5, hammerRadius: 124,
-  hammerCount: 1, hammerCd: 1150, hammerWeight: 0.92,
+  hammerCount: 1, hammerCd: 1200, hammerWeight: 0.92,   // 1150 → 1200: triggers run at 10 Hz (TRIGGER_TICK_MS 100), so it already fired at 1200 (pace-spec §12)
   // tier 2 — IRON PYRITE, the defensive form
   pyritePct: 70, pyriteDuration: 7000, pyriteCd: 12000,
   pyriteGrit: 22, pyriteVit: 14,

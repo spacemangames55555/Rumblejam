@@ -105,11 +105,14 @@ function room(difficultyId, seed, seconds = SECONDS) {
   const onboarding = g._onboarding();
 
   let n = 0, hp = 0, dmg = 0;
+  const byId = {};
   const xp0 = p.xpEarned, matsC0 = p.matsCollected;
   for (let t = 0; t < 60 * seconds; t++) {
     for (const e of g.enemyPool) {
       if (!e.active || e._dg) continue;
       e._dg = 1; n++; hp += e.maxHp; dmg += e.dmg;
+      const b = byId[e.def.id] || (byId[e.def.id] = { n: 0, hp: 0, dmg: 0 });
+      b.n++; b.hp += e.maxHp; b.dmg += e.dmg;
     }
     const tgt = g.trigGrid && g.trigGrid.nearest ? g.trigGrid.nearest(p.x, p.y, 900) : null;
     if (tgt) {
@@ -125,7 +128,7 @@ function room(difficultyId, seed, seconds = SECONDS) {
   // end-to-end check that the split survives the pickup path.
   const k = Math.max(1, g.payout.kills);
   return {
-    onboarding, count: n,
+    onboarding, count: n, byId,
     hp: hp / Math.max(1, n),
     dmg: dmg / Math.max(1, n),
     kills: g.payout.kills,
@@ -160,9 +163,28 @@ else fail(`baseline fielded ${base.count} enemies and killed ${base.kills}; ever
 
 console.log('\n  setting     fielded  avg HP  avg dmg   kills   gold/kill   xp/kill   banked');
 console.log('  -------     -------  ------  -------   -----   ---------   -------   ------');
+// HORDE PACE: THE HP AND DAMAGE AXES ARE READ ON THE BASELINE'S MIX.
+// A horde room is ~90% 3-HP fodder plus a few 8-HP wardens, so the room mean
+// moves by a warden or two of luck more than by the setting: Harrowed (×1.3)
+// once fielded a LOWER mean HP than Standard on one seed because its waveRng
+// drew fewer wardens. The setting's question is "is each enemy tougher", so
+// each setting's per-type mean is weighted by Standard's own type counts.
+// Types one setting never fielded (Gentle's half density rolled no bark hulk
+// on this seed) drop out of BOTH sides, so the result is a per-type ratio
+// re-expressed on base's scale: r.hp / base.hp is that ratio.
+const onBaseMix = (r, key) => {
+  let num = 0, den = 0;
+  for (const [id, b] of Object.entries(base.byId || {})) {
+    const o = r.byId && r.byId[id];
+    if (!o || !o.n) continue;
+    num += b.n * (o[key] / o.n); den += b[key];
+  }
+  return den ? base[key] * num / den : r[key];
+};
 const rows = [];
 for (const d of DIFFICULTIES) {
-  const r = d.id === DEFAULT_DIFFICULTY ? base : room(d.id, SEED);
+  const r0 = d.id === DEFAULT_DIFFICULTY ? base : room(d.id, SEED);
+  const r = r0.noRoom ? r0 : { ...r0, hp: onBaseMix(r0, 'hp'), dmg: onBaseMix(r0, 'dmg') };
   rows.push({ d, r });
   console.log(`  ${d.name.padEnd(11)} ${String(r.count).padStart(7)}  ${r.hp.toFixed(1).padStart(6)}  ${r.dmg.toFixed(2).padStart(7)}  ${String(r.kills).padStart(6)}   ${r.gold.toFixed(3).padStart(9)}   ${r.xpPerKill.toFixed(3).padStart(7)}   ${String(r.banked).padStart(6)}`);
 }

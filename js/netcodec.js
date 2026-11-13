@@ -24,6 +24,7 @@ const FX_BLOCK = 4;     // u16 x | u16 y
 const FX_SWING = 10;    // u16 x | u16 y | i16 a×1000 | u16 r | u8 arc×100 | u8 col
 const FX_BEAM = 10;     // u16 x1 | u16 y1 | u16 x2 | u16 y2 | u8 col | u8 w
 const FX_CULL = 5;      // u16 x | u16 y | u8 r   — straggler cull puff, packed like a death
+const TK_STRIDE = 5;    // u16 x | u16 y | u8 ttl×255 — soul tokens (horde pace: one per death, 30 s ttl)
 
 const cU16 = v => Math.max(0, Math.min(65535, Math.round(v)));
 const cI16 = v => Math.max(-32768, Math.min(32767, Math.round(v)));
@@ -130,6 +131,35 @@ export function encodeSnap(snap) {
     }
     out.tb = buf; delete out.tele;
   }
+  // soul tokens. Every death drops one with a 30 s ttl, so at horde pace
+  // (4–7 kills/s) the list stands at 100–200 entries; as plain arrays of
+  // [x, y, ttl.toFixed(2)] that was ~30 B each and the single largest block on
+  // the wire (tools/horde_profile.mjs). Packed it is 5 B each.
+  if (Array.isArray(snap.tokens)) {
+    const src = snap.tokens;
+    const buf = new ArrayBuffer(src.length * TK_STRIDE);
+    const dv = new DataView(buf);
+    for (let i = 0, o = 0; i < src.length; i++, o += TK_STRIDE) {
+      dv.setUint16(o, cU16(src[i][0]), true);
+      dv.setUint16(o + 2, cU16(src[i][1]), true);
+      dv.setUint8(o + 4, cU8(src[i][2] * 255));
+    }
+    out.okb = buf; delete out.tokens;
+  }
+  // The arena layout block (st.arena) rides every snapshot because presence is
+  // the truth. Its hazard and obstacle geometry came straight off the RNG as
+  // doubles (9 B each on BinaryPack); whole units are what the renderer draws
+  // and what every other spatial field ships, and it halves the block.
+  if (snap.st && snap.st.arena) {
+    const a = snap.st.arena, R = v => (typeof v === 'number' ? Math.round(v) : v);
+    out.st = { ...snap.st, arena: {
+      ...a,
+      hazards: Array.isArray(a.hazards) ? a.hazards.map(h => {
+        const q = {}; for (const k in h) q[k] = R(h[k]); return q;
+      }) : a.hazards,
+      obstacles: Array.isArray(a.obstacles) ? a.obstacles.map(o => (Array.isArray(o) ? o.map(R) : o)) : a.obstacles,
+    } };
+  }
   // fx
   {
     const fx = snap.fx || {};
@@ -188,7 +218,16 @@ export function decodeSnap(wire) {
   const cols = wire.cols || [];
   const col = i => cols[i] || '#ffffff';
   const out = { ...wire };
-  delete out.eb; delete out.pb; delete out.kb; delete out.zb; delete out.tb; delete out.fxb; delete out.cols;
+  delete out.eb; delete out.pb; delete out.kb; delete out.zb; delete out.tb; delete out.fxb; delete out.cols; delete out.okb;
+  if (wire.okb !== undefined) {
+    const dv = asView(wire.okb);
+    const n = Math.floor(dv.byteLength / TK_STRIDE);
+    const tokens = new Array(n);
+    for (let i = 0, o = 0; i < n; i++, o += TK_STRIDE) {
+      tokens[i] = [dv.getUint16(o, true), dv.getUint16(o + 2, true), +(dv.getUint8(o + 4) / 255).toFixed(2)];
+    }
+    out.tokens = tokens;
+  }
 
   {
     const dv = asView(wire.eb);

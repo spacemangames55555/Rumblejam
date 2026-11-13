@@ -93,5 +93,78 @@ console.log(`  footingGraceMs=${SAM.footingGraceMs}  refill x${SAM.footingGraceR
   else fail(`hold-not-grow: ${before} -> ${p.engines.footing}`);
 }
 
+// FLAT DEFENCE (Game Designer ruling, 2 Nov 2026). Grit, the Footing absorb
+// pool and Iron Sleeve's footing scaling stop at footingDefenseCapStacks; the
+// stack keeps climbing (it sizes the step-off burst) but standing longer buys
+// no more armour.
+{
+  const { g, p, still } = samurai();
+  const { engineScale } = await import('../js/compose.js');
+  const { SKILL_BY_ID } = await import('../js/skills.js');
+  const sleeve = SKILL_BY_ID && SKILL_BY_ID.sam_iron_sleeve;
+  const sleeveStep = sleeve && sleeve.compose.find(c => c.kind === 'shield');
+  const read = () => ({ n: p.engines.footing, grit: p.stats.grit || 0, shield: p.footingShield || 0, sleeve: sleeveStep ? engineScale(sleeveStep, p, sleeve) : null });
+  const cap = SAM.footingDefenseCapStacks;
+  const bare = read();
+  for (let i = 0; i < 60 * 20 && p.engines.footing < 1; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+  const one = read();
+  if (bare.n === 0 && one.n === 1 && one.shield === SAM.footingShieldFlat && one.grit - bare.grit === SAM.footingGritFlat) {
+    ok(`Footing grants a flat shield ${SAM.footingShieldFlat} and grit +${SAM.footingGritFlat} from its first stack`);
+  } else fail(`flat Footing values: 0 stacks ${JSON.stringify(bare)}, 1 stack ${JSON.stringify(one)}, want shield ${SAM.footingShieldFlat} grit +${SAM.footingGritFlat}`);
+  for (let i = 0; i < 60 * 20 && p.engines.footing < cap; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+  const atCap = read();
+  if (atCap.grit !== one.grit || atCap.shield !== one.shield) fail(`defence moved between 1 and ${cap} stacks: ${JSON.stringify(one)} -> ${JSON.stringify(atCap)}`);
+  for (let i = 0; i < 60 * 20 && p.engines.footing < SAM.FOOTING_MAX_STACKS; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+  still(3000);
+  const full = read();
+  if (atCap.n === cap && full.n > cap && full.grit === atCap.grit && full.shield === atCap.shield && atCap.grit > 0 && atCap.shield > 0) {
+    ok(`standing longer adds no defence: ${atCap.n} stacks grit ${atCap.grit} / absorb ${atCap.shield}, ${full.n} stacks (3 s more) grit ${full.grit} / absorb ${full.shield}`);
+  } else fail(`defence grew with standing: ${JSON.stringify(atCap)} -> ${JSON.stringify(full)}`);
+  if (!sleeveStep) fail('Iron Sleeve shield step not found — the cap assertion cannot see it');
+  else if (Math.abs(full.sleeve - atCap.sleeve) < 1e-9 && atCap.sleeve > 1) ok(`Iron Sleeve's footing scaling is flat past ${cap} stacks (×${atCap.sleeve.toFixed(3)} at ${atCap.n} and at ${full.n})`);
+  else fail(`Iron Sleeve scaling ${atCap.sleeve} at ${atCap.n} -> ${full.sleeve} at ${full.n}`);
+}
+
+// THE STEP-OFF BURST (user ruling 2 Nov 2026, pace-spec §6.1b). A full
+// stance broken by a real step (past the grace window) releases one ring of
+// damage around the Samurai; a sidestep inside the window releases nothing;
+// a stance under footingBurstMinStacks releases nothing.
+{
+  const { g, p, cap, move, still } = samurai();
+  for (const e of [...g.enemyPool]) g.enemyPool.release(e);
+  g.spawnQueue.length = 0;
+  if (g.wave) Object.assign(g.wave, { r0: 0, r1: 0, acc: 0, firstPack: true, dur: Infinity });
+  p.loadout.fill(null);                                     // only the burst may hit
+  cap();
+  const stacks = p.engines.footing;
+  const r = SAM.footingBurstBaseR + SAM.footingBurstRPerStack * stacks;
+  const ring = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    const e = g.spawnEnemyById('pnw_thornhound', p.x + Math.cos(a) * (r - 30), p.y + Math.sin(a) * (r - 30), {});
+    e.spd = 0; e.dmg = 0; ring.push(e);
+  }
+  const far = g.spawnEnemyById('pnw_thornhound', p.x, p.y + r + 200, {}); far.spd = 0; far.dmg = 0;
+  const bursts0 = p.footingBursts || 0;
+  move(150);                                               // inside the window: holds, no burst
+  const early = (p.footingBursts || 0) - bursts0;
+  move(SAM.footingGraceMs + 100);                          // past it: the stance breaks
+  // The Samurai walked ~0.5 s before the break, so the burst lands where the
+  // step broke the stance: score the ring bodies inside r of THAT point.
+  const sw = (g.fxBatch.swings || []).filter(x => Math.abs(x.arc - Math.PI * 2) < 1e-6).pop();
+  const inR = sw ? ring.filter(e => Math.hypot(e.x - sw.x, e.y - sw.y) <= r + e.radius) : [];
+  const dead = inR.filter(e => !e.active).length;
+  const outsideAlive = ring.filter(e => !inR.includes(e)).every(e => e.active) && far.active;
+  if (early === 0 && (p.footingBursts || 0) === bursts0 + 1 && p.engines.footing === 0 && inR.length >= 2 && dead === inR.length && outsideAlive) {
+    ok(`step-off burst: ${stacks} stacks released ${Math.round(SAM.footingBurstPerStack * stacks)} damage in r${r} — ${dead}/${inR.length} fodder inside it died, every body outside lived, the sidestep inside the window fired nothing`);
+  } else fail(`step-off burst: early ${early}, bursts ${(p.footingBursts || 0) - bursts0}, stacks after ${p.engines.footing}, ring dead ${dead}/${inR.length} in range, outside alive ${outsideAlive}, swing ${!!sw}`);
+  // under the minimum, breaking costs the stance and pays nothing
+  still(SAM.footingTickMs * (SAM.footingBurstMinStacks - 1) + 50);
+  const small = p.engines.footing, b1 = p.footingBursts || 0;
+  move(SAM.footingGraceMs + 300);
+  if (small < SAM.footingBurstMinStacks && (p.footingBursts || 0) === b1) ok(`a ${small}-stack stance (under ${SAM.footingBurstMinStacks}) breaks without a burst`);
+  else fail(`small stance ${small} fired ${(p.footingBursts || 0) - b1} burst(s)`);
+}
+
 console.log(failures ? `\n${failures} GRACE-WINDOW FAILURE(S)` : '\nTHE GRACE WINDOW BEHAVES');
 process.exit(failures ? 1 : 0);

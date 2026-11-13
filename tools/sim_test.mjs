@@ -690,7 +690,15 @@ for (const template of TEMPLATE_KEYS) {
     sim.arenaNode.template = template;
     sim._enterArena(sim.arenaNode);
     let spawned = 0;
-    for (let i = 0; i < 60 * 12; i++) { sim.tick(); spawned = Math.max(spawned, sim.enemyPool.count); }
+    // HORDE PACE: a level-1 Samurai standing still at centre for 12 s under the
+    // map-1 horde (packs from t=1) can die before clearArena() starts topping
+    // HP up (pillared_field, seed 77, died at 11.4 s). This section checks
+    // structure — spawn, no clipping, clear, extract — so keep it alive here
+    // too, exactly as clearArena() does; survival is map1_bot's job.
+    for (let i = 0; i < 60 * 12; i++) {
+      sim.tick(); spawned = Math.max(spawned, sim.enemyPool.count);
+      for (const q of sim.players) if (!q.downed && !q.gone) q.hp = q.stats.vitality;
+    }
     if (spawned === 0) { fail(`${template}: nothing spawned`); continue; }
     // players/enemies never inside obstacles
     let clip = 0;
@@ -1501,7 +1509,11 @@ try {
   {
     const g = new Sim({ seed: 515151, party: octet(8) });
     g._travelTo(g.reachableNodes()[0]);
-    for (const q of g.players) q.weapons.length = 0; // pacifists — nothing dies, the ceiling must bind
+    // pacifists — nothing dies, the ceiling must bind. Skills too: the horde
+    // openers (pierce/splash, pace-spec §12) kill through a weapon-less party,
+    // free room under the ceiling and let packs drain the bank below it.
+    for (const q of g.players) { q.weapons.length = 0; if (q.loadout) q.loadout.fill(null); }
+    g.summons.length = 0;
     g.wave.r0 = g.wave.r1 = 400; // firehose
     for (let i = 0; i < 60 * 8; i++) { g.tick(); for (const q of g.players) { q.hp = q.stats.vitality; q.invuln = 1; } }
     const alive = g.enemyPool.count + g.spawnQueue.length;
@@ -1582,16 +1594,18 @@ try {
       p.y = 0.5 * g.H + (i % 2 ? 130 : -130);
     });
     let bad = 0, minD = 1e9;
+    // HORDE PACE: the ring comes in to 500–640 with a 420 floor (pace-spec §3).
+    const MIN = g.wave && g.wave.horde ? CFG.HORDE_RING_MIN : 520;
     for (let s = 0; s < 40; s++) {
       const pos = g._spawnWavePos();
       for (const p of g.players) {
         const d = Math.hypot(pos.x - p.x, pos.y - p.y);
         minD = Math.min(minD, d);
-        if (d < 519) { bad++; break; }
+        if (d < MIN - 1) { bad++; break; }
       }
     }
-    if (bad === 0) ok(`8-player merged ring: 40 samples all ≥520u from every player (closest ${Math.round(minD)}u)`);
-    else fail(`ring at 8: ${bad}/40 samples inside 520u (closest ${Math.round(minD)})`);
+    if (bad === 0) ok(`8-player merged ring: 40 samples all ≥${MIN}u from every player (closest ${Math.round(minD)}u)`);
+    else fail(`ring at 8: ${bad}/40 samples inside ${MIN}u (closest ${Math.round(minD)})`);
   }
 
   // airhorn: ally horns cap at 2 per window; own unaffected
@@ -3376,7 +3390,14 @@ try {
       return g;
     };
     const beastOf = g => g.summons.find(x => x.type === 'beast');
-    const quiet = g => { g.spawnQueue.length = 0; for (const e of [...g.enemyPool]) g.enemyPool.release(e); };
+    // HORDE PACE: the wave keeps landing packs every ~1.5 s, so emptying the
+    // room once is not quiet — the next pack walks inside the leash. The
+    // fixture also stops the spawner (rate 0, no opening pack) without ending
+    // the wave, which would clear the room and sanitise the beast's targets.
+    const quiet = g => {
+      g.spawnQueue.length = 0; for (const e of [...g.enemyPool]) g.enemyPool.release(e);
+      if (g.wave) { g.wave.r0 = 0; g.wave.r1 = 0; g.wave.acc = 0; g.wave.firstPack = true; g.wave.dur = Infinity; }
+    };
 
     // 1. world units only. A viewport term in here would make the beast behave
     //    differently per peer, and it would be invisible until two players sat
@@ -4987,6 +5008,31 @@ try {
   ok(`snapshot at crest: ${(snap.length / 1024).toFixed(1)} KB (~${(snap.length * 15 / 1024).toFixed(0)} KB/s at 15Hz)`);
 } catch (err) { fail('stress test crashed', err); }
 
+// ---- 11b. HORDE PACE: a 120-alive horde room, 4-player host, on the wire ----
+// pace-spec.md §5/§7: snapshot wire ≤ ~8 KB per snapshot at peak. Measured
+// with the codec main.js ships (encodeSnap → wireSize), with telegraph zones,
+// spawn marks and every death's soul token (the block tools/horde_profile.mjs
+// found unpacked and largest). tools/horde_profile.mjs prints the full table.
+try {
+  const { encodeSnap: encH, wireSize: wsH } = await import('../js/netcodec.js');
+  const party = ['toh_samurai', 'toh_priest', 'toh_mage', 'toh_savage'].map((charId, idx) => ({ idx, key: 'k' + idx, name: 'H' + idx, charId, color: '#fff' }));
+  const sim = new Sim({ seed: 777, regionIndex: 1, party });
+  for (const p of sim.players) if (p.openingOffer) sim.uiAction(p.idx, { kind: 'learnSkill', id: p.openingOffer[0].id });
+  sim._travelTo(sim.reachableNodes()[0]);
+  Object.assign(sim.wave, { r0: 0, r1: 0, dur: 1e9, rampT: 1e9, firstPack: true });
+  const MIX = ['pnw_thornhound', 'pnw_sapling', 'pnw_thornhound', 'pnw_mistwalker', 'pnw_sapling', 'pnw_thornhound', 'pnw_sapling', 'pnw_cedar_warden'];
+  let k = 0, peak = 0, ms = 0;
+  for (let i = 0; i < 60 * 12; i++) {
+    while (sim.enemyPool.count < 120) { const a = (k++) * 2.4; sim.spawnEnemyById(MIX[k % MIX.length], sim.W / 2 + Math.cos(a) * (250 + (k % 7) * 60), sim.H / 2 + Math.sin(a) * (200 + (k % 5) * 50)); }
+    for (const p of sim.players) { p.hp = p.stats.vitality; p.downed = false; }
+    const t0 = performance.now(); sim.tick(); ms += performance.now() - t0;
+    if (i % 4 === 0 && i > 60) peak = Math.max(peak, wsH(encH(sim.getSnapshot())));
+  }
+  const tokens = sim.tokens.length;
+  if (peak <= 8 * 1024) ok(`horde room, 4-player host, 120 alive: peak snapshot ${(peak / 1024).toFixed(1)} KB on the wire (≤ 8 KB), ${tokens} soul tokens standing, avg tick ${(ms / 720).toFixed(3)} ms`);
+  else fail(`horde room 120 alive: peak snapshot ${(peak / 1024).toFixed(1)} KB > 8 KB (${tokens} tokens)`);
+} catch (err) { fail('horde wire check crashed', err); }
+
 // ---- 12. snapshot serializability (with Gauntlet fields) ----
 try {
   const sim = new Sim({ seed: 5, party: [
@@ -5721,7 +5767,10 @@ try {
       if (pp && pp.minion) ((e.ampT > 0 && e.ampBy === pp.idx) ? minAmped++ : minPlain++);
       return origSD(e, a, pp, sk);
     };
-    for (let t = 0; t < 60 * 45; t++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); if (!p.downed) p.hp = p.stats.vitality; }
+    // 25 s, not 45: a horde map-1 wave ends on its 30 s timer and the clear
+    // sanitises the room — the aura goes with it, and the swing below then
+    // measures a field that no longer exists (measured: 80.0 vs 80.0).
+    for (let t = 0; t < 60 * 25; t++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); if (!p.downed) p.hp = p.stats.vitality; }
     // AND THE MARKER IS NOT THE EFFECT. Counting hits that carried `ampT` says
     // the field reached them; it does not say the blow landed harder. So the
     // claim is settled the same way the source probe settles its own — one
@@ -6285,9 +6334,14 @@ try {
     for (let t = 0; t < 60 * 60; t++) {
       g.setInput(0, { mx: 0, my: 0 });
       g.tick();
-      for (const e of g.enemyPool) {
+      for (const e of [...g.enemyPool]) {
         if (!e.active || e._d24) continue;
         e._d24 = 1; n++; hp += e.maxHp; dmg += e.dmg; mats += e.mats;
+        // HORDE PACE: a horde room hits its alive cap (120) inside this
+        // minute, and then both rooms field "the cap" — measured, 120 against
+        // 120. A counted body is lifted out of the room so the count is the
+        // spawn budget, which is what eliteCountMult scales.
+        if (g.wave && g.wave.horde) g.enemyPool.release(e);
       }
     }
     return { nodeType: g.nodeType, n, hp: hp / Math.max(1, n), dmg: dmg / Math.max(1, n), mats: mats / Math.max(1, n) };
@@ -6371,7 +6425,19 @@ try {
     return popMean(NODE_POP(g0.region, 'elite'), f) / popMean(NODE_POP(g0.region, 'horde'), f);
   };
   const tHp = rosterTerm(d => d.hp), tDmg = rosterTerm(d => d.dmg), tMats = rosterTerm(d => d.mats);
-  const axes = [
+  // HORDE PACE (user ruling 2 Nov 2026): a horde region's elite room is a
+  // horde with champions — ×hordeEliteCountMult, and the HP / damage
+  // multipliers land on champions (telegraphers) only. The expected per-enemy
+  // ratio is then the champion-weighted mean, not multiplier × roster term.
+  const g1 = new Sim({ seed: SEED, regionIndex: 1, party: [{ idx: 0, key: 'k', name: 'P', charId: T1, color: '#fff' }] });
+  const hordeRoom = (await import('../js/arenas.js')).isHordeRegion(g1.regionIndex) && g1.region;
+  const champTerm = (f, mult) => popMean(NODE_POP(g1.region, 'elite'), d => f(d) * (d.telegraph ? mult : 1)) / popMean(NODE_POP(g1.region, 'horde'), f);
+  const axes = hordeRoom ? [
+    ['count', e.n / Math.max(1, h.n), NODE_T.hordeEliteCountMult, 'fewer', 1],
+    ['HP', e.hp / Math.max(1e-9, h.hp), champTerm(d => d.hp, NODE_T.eliteHpMult), 'tougher', 1],
+    ['damage', e.dmg / Math.max(1e-9, h.dmg), champTerm(d => d.dmg, NODE_T.eliteDmgMult), 'harder-hitting', 1],
+    ['gold', e.mats / Math.max(1e-9, h.mats), NODE_T.eliteGoldMult * tMats, 'better-paying', tMats],
+  ] : [
     ['count', e.n / Math.max(1, h.n), NODE_T.eliteCountMult, 'fewer', 1],
     ['HP', e.hp / Math.max(1e-9, h.hp), NODE_T.eliteHpMult * tHp, 'tougher', tHp],
     ['damage', e.dmg / Math.max(1e-9, h.dmg), NODE_T.eliteDmgMult * tDmg, 'harder-hitting', tDmg],
