@@ -319,3 +319,32 @@ export function liveZones(sim) {
   }
   return out;
 }
+
+// ---------------------------------------------------- zones on the snapshot
+//
+// The guest's copy of `liveZones`. Compact tuples, one per committed zone:
+// [kind, x, y, angle0, a, b, domain, fill, msLeft], kind 'c' circle, 'o' cone,
+// 'l' line; a/b are radius/0, angle(rad)/range, width/length. Not packed by
+// netcodec.js (a view addition, like `minions`). `unpackTelZones` returns the
+// exact shape `liveZones` does, so the renderer cannot tell host from guest.
+const ZONE_CODE = { circle: 'c', cone: 'o', line: 'l' };
+const ZONE_KIND = { c: 'circle', o: 'cone', l: 'line' };
+export function packTelZones(zones) {
+  const r = Math.round;
+  return (zones || []).map(t => {
+    const z = t.z;
+    const a = z.kind === 'circle' ? r(z.radius) : z.kind === 'cone' ? +z.angle.toFixed(3) : r(z.width);
+    const b = z.kind === 'circle' ? 0 : z.kind === 'cone' ? r(z.range) : r(z.length);
+    return [ZONE_CODE[z.kind] || 'c', r(z.x), r(z.y), +(z.angle0 || 0).toFixed(3), a, b, z.domain, +t.fill.toFixed(2), t.msLeft];
+  });
+}
+export function unpackTelZones(list) {
+  return (list || []).map(t => {
+    const kind = ZONE_KIND[t[0]] || 'circle';
+    const z = { kind, x: t[1], y: t[2], angle0: t[3], domain: t[6] };
+    if (kind === 'circle') z.radius = t[4];
+    else if (kind === 'cone') { z.angle = t[4]; z.range = t[5]; }
+    else { z.width = t[4]; z.length = t[5]; }
+    return { z, fill: t[7], msLeft: t[8] };
+  });
+}

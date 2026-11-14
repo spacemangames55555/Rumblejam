@@ -126,12 +126,30 @@ export const REGIONS = [
     tuning: { hpMult: 1.15, damageMult: 1.1, densityMult: 1.05 },
     contentReady: true,
   },
+  {
+    id: 'great_britain', index: 3, name: 'Great Britain',
+    nativeClass: 'bard',
+    expectedLevel: 19,
+    // Mental after spiritual: the triangle turns a second time, so a party
+    // that re-specced for region 2 is pushed again rather than rewarded.
+    domainSkew: { primary: 'mental', secondary: null, maxShare: 0.60 },
+    // No `britain` biome is declared yet (no tile art on disk), so the region
+    // draws its flat fill — the normal missing-art state, see biomes.js.
+    tileset: 'britain',
+    hazard: 'fae_ring',                // a ring you should not step into
+    cursedModifier: 'glamour',         // telegraph tint hidden until just before it fires
+    enemies: ['gb_redcap', 'gb_hunt_rider', 'gb_sprite', 'gb_banshee', 'gb_stone_giant', 'gb_sidhe_knight'],
+    boss: 'gb_boss',
+    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
+    contentReady: true,
+  },
 ];
 
-// Regions 3-8 exist as names so a player can see the shape of the whole run
-// from the first session. They are not playable and carry no data.
+// Regions 4-8 exist as names so a player can see the shape of the whole run
+// from the first session. They are not playable and carry no data. The names
+// are the GDD's (§3.2), in index order, starting at the first unbuilt region.
 export const LOCKED_REGION_NAMES = [
-  'The Sahel', 'Norse Reach', 'Steppe', 'Indus Delta', 'Abyssal Trench', 'The Vault',
+  'Egypt', 'Central Africa', 'Northern Russia', 'Off Indonesia', 'Australian Outback',
 ];
 export const TOTAL_REGIONS = 8;
 
@@ -140,7 +158,8 @@ export const REGION_BY_INDEX = Object.fromEntries(REGIONS.map(r => [r.index, r])
 
 // ------------------------------------------------------------------- bosses
 //
-// Eight regions need eight bosses. Two are authored (`pnw_boss`, `xib_boss`)
+// Eight regions need eight bosses. Three are authored (`pnw_boss`, `xib_boss`,
+// `gb_boss`; an authored boss always wins over the legacy table below)
 // and four exist as the old floor bosses, which are real, finished, two-phase
 // fights and are worth redistributing rather than retiring.
 //

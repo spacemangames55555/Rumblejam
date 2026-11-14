@@ -59,7 +59,7 @@ export function worldMapState(character, playerStore) {
     const region = REGION_BY_INDEX[i];
     if (!region) {
       rows.push({
-        index: i, id: null, name: LOCKED_REGION_NAMES[i - 3] || `Region ${i}`,
+        index: i, id: null, name: LOCKED_REGION_NAMES[i - REGIONS.length - 1] || `Region ${i}`,
         state: 'unbuilt', reason: 'Not built yet.', contentReady: false,
         enterable: false, expectedLevel: null, depth: null,
       });

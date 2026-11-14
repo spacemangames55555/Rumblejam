@@ -17,7 +17,7 @@ import { WEAPONS, WEAPON_BY_ID } from './content/weapons.js';
 import * as SK from './skillsim.js';
 import * as MIN from './minions.js';
 import { EnemyGrid } from './triggers.js';
-import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones, telegraphBusy } from './telegraphs.js';
+import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones, telegraphBusy, packTelZones } from './telegraphs.js';
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING_TABLE } from './content/enemies.js';
 import { REGION_ENEMIES, telegraphWeight, enemyRole } from './content/regions-enemies.js';
@@ -954,6 +954,7 @@ export class Sim {
     const dropX = node.kind === 'breach' ? WALL + 190 : arena.w / 2;
     const [rx, ry] = this.mainRegionSpot(dropX, arena.h / 2);
     const [cx, cy] = this._clearSpot(rx, ry, 40);
+    const curse = this.fightMods && this.fightMods.cursed;
     this.players.forEach((p, i) => {
       if (p.gone) return;
       const [sx, sy] = this._clearSpot(
@@ -968,7 +969,11 @@ export class Sim {
       // it is worth the most and was earned the least.
       p.concealT = 0;
       p.formTree = null;
-      p.hp = p.stats.vitality;   // every room starts at full health
+      // every room starts at full health — except under a `noRoomHeal` curse
+      // (region 2's Bloodprice), where the room starts with what the last one
+      // left you. Never above the cap: vitality may have changed since.
+      if (curse && curse.noRoomHeal) p.hp = Math.max(1, Math.min(p.hp, p.stats.vitality));
+      else p.hp = p.stats.vitality;
       // §8.5, rows 5 and 7, and they are one moment because they are two halves
       // of the same rule: the Necromancer's summons WIPE and the Druid's pack
       // PERSISTS. Skeletons leave, so every fight ramps from zero and capacity
@@ -1013,6 +1018,10 @@ export class Sim {
       // 1 on map 1, 0 from map 2 on. Same predicate the damage path reads.
       // Rides `st.arena` on every snapshot. No roll.
       domainNeutral: isOnboardingNode(this.regionIndex, node) ? 1 : 0,
+      // The active node curse's id, or null. It is gameplay information (a
+      // guest under Glamour must draw zones untinted exactly as the host
+      // does), so it rides `st.arena` on every snapshot, not only the event.
+      curse: (this.fightMods && this.fightMods.cursed && this.fightMods.cursed.id) || null,
     };
     this.pushEvent({ k: 'arena', ...this._arena, biome: this.biome, obstacles: this._snapObstacles() });
   }
@@ -5989,6 +5998,13 @@ export class Sim {
       else snap.tele.push(['b', r(tg.x), r(tg.y), +tg.angle.toFixed(3), r(tg.w), r(tg.len), +(tg.t / tg.dur).toFixed(2)]);
     }
     for (const z of this.zones) snap.zones.push([r(z.x), r(z.y), r(z.r), z.color, z.hurts === 'players' ? 1 : 0]);
+    // COMMITTED ENEMY TELEGRAPH ZONES, for the guest. The host draws these
+    // from the Sim (`telegraphZones()`); a guest had no copy at all, so it saw
+    // the wind-up pose and never the zone. Like `minions`, this list is not
+    // packed by netcodec.js — a VIEW addition, not a wire-format change.
+    // [kind, x, y, angle0, a, b, domain, fill, msLeft] where a/b are
+    // radius/0 (circle), angle(rad)/range (cone), width/length (line).
+    snap.telZones = packTelZones(liveZones(this));
     for (const v of this.vortexes) snap.zones.push([r(v.x), r(v.y), r(v.coreR), '#a86ae8', 1]);
     this.fxBatch = this._emptyFx(); // snapshot consumed the batch
     return snap;

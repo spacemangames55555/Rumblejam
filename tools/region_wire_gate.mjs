@@ -154,6 +154,20 @@ console.log('THE REGION LAYER, FROM A REAL ENTRY POINT — nothing here assigns 
   else if (shared.length) bad(`region 2 spawned ${shared.length} id(s) that region 1 also spawned: ${shared.join(', ')}`);
   else ok(`region 2 fielded [${[...d2].join(', ')}] against region 1's [${[...d1].join(', ')}] — disjoint, drawn from the live sim`);
 
+  // REGION 3, the same claim against both earlier rosters.
+  {
+    const three = new Set(REGION_ENEMIES.great_britain.enemies.map(e => e.id));
+    const overlap3 = [...three].filter(id => one.has(id) || two.has(id));
+    const d3 = drawn(sim(31337, 3));
+    const shared3 = [...d3].filter(id => d1.has(id) || d2.has(id));
+    const foreign3 = [...d3].filter(id => !three.has(id));
+    if (overlap3.length) bad(`region 3's roster shares ${overlap3.length} id(s) with regions 1-2: ${overlap3.join(', ')}`);
+    else if (!d3.size) bad('could not sample region 3 — no enemy spawned in its first non-onboarding fight');
+    else if (shared3.length) bad(`region 3 spawned ${shared3.length} id(s) that region 1 or 2 also spawned: ${shared3.join(', ')}`);
+    else if (foreign3.length) bad(`region 3 spawned ${foreign3.join(', ')}, which is not on its own roster`);
+    else ok(`region 3 fielded [${[...d3].join(', ')}] — its own roster, disjoint from regions 1 and 2, drawn from the live sim`);
+  }
+
   // AND NEITHER OF THEM IS BORROWING THE BASE ROSTER.
   //
   // The check above passed on its first run with region 1 fielding
@@ -169,13 +183,14 @@ console.log('THE REGION LAYER, FROM A REAL ENTRY POINT — nothing here assigns 
   // neither has. That is a CONTENT gap — six archetypes, no spawner — reported
   // below rather than folded into a wiring failure, because conflating the two
   // is how a missing enemy gets "fixed" by deleting a check.
-  const nestBorrow = [1, 2].filter(i => {
+  const BUILT = REGIONS.map(r => r.index);
+  const nestBorrow = BUILT.filter(i => {
     const g = sim(4242, i);
     return nestIdFor(g) === 'wombden';
   });
   const OBJECTIVE_STRUCTURES = new Set(nestBorrow.length ? ['wombden', 'flit'] : []);
   const contaminated = [];
-  for (const [label, region] of [['region 1', 1], ['region 2', 2]]) {
+  for (const [label, region] of BUILT.map(i => [`region ${i}`, i])) {
     const own = new Set(REGIONS.find(r => r.index === region).enemies);
     const strays = new Set();
     // Many fights and many seeds: the levers are chance-gated, so one room
@@ -196,7 +211,7 @@ console.log('THE REGION LAYER, FROM A REAL ENTRY POINT — nothing here assigns 
   }
   if (contaminated.length) bad(`${contaminated.length} region(s) still draw from the base roster: ${contaminated.join('; ')} — `
     + 'every lever that names an id instead of drawing from the table has to be closed');
-  else ok('across 12 seeded regions and every fight node in them, neither region fielded a base-roster enemy outside Nest Purge\'s own structure — the profile levers resolve their role from the region');
+  else ok(`across ${6 * BUILT.length} seeded regions and every fight node in them, no built region fielded a base-roster enemy outside Nest Purge's own structure — the profile levers resolve their role from the region`);
 
   // The content gap, named rather than hidden by the exemption above.
   checks++;
@@ -212,7 +227,7 @@ console.log('THE REGION LAYER, FROM A REAL ENTRY POINT — nothing here assigns 
 {
   const misses = [];
   for (let s = 0; s < 60; s++) {
-    const g = sim(555 + s * 4099, 1 + (s % 2));
+    const g = sim(555 + s * 4099, 1 + (s % REGIONS.length));
     // exhaustive, not sampled: walkRoute picks ONE path and the claim is about
     // all of them, which is the difference between this and a spot check
     const routes = [];
@@ -238,7 +253,7 @@ console.log('THE REGION LAYER, FROM A REAL ENTRY POINT — nothing here assigns 
   const dupes = [];
   const histogram = {};
   for (let s = 0; s < 200; s++) {
-    const g = sim(90210 + s * 7717, 1 + (s % 2));
+    const g = sim(90210 + s * 7717, 1 + (s % REGIONS.length));
     const objs = g.floor.objectives;
     if (objs.length !== NODE_MIX.objective) dupes.push(`seed ${s}: ${objs.length} objectives`);
     if (new Set(objs).size !== objs.length) dupes.push(`seed ${s}: ${objs.join(' + ')}`);
