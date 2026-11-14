@@ -73,7 +73,59 @@ export const CURSED_MODIFIERS = {
     // sim's telegraph timing is untouched and nothing here touches Sim.rng.
     telegraphRevealMs: 150,
   },
+  // REGIONS 4–8. Five curses, five DIFFERENT levers — a second curse on a
+  // lever one already pulls is the same node with a different name. Each is
+  // read at exactly one site in the sim, named beside it, and each is driven
+  // in play by tools/curse_gate.mjs against a control without it.
+  sandglass: {
+    id: 'sandglass', name: 'Sandglass',
+    desc: 'The glass is turned again. The fight runs a third longer, and nothing stops coming.',
+    // Multiplies the wave's duration and its ramp together, so the room ends
+    // at the same peak rate and simply holds the crowd for longer.
+    // Read by Sim._enterArena, right after waveConfig().
+    waveDurMult: 1.3,
+  },
+  fever: {
+    id: 'fever', name: 'Fever',
+    desc: 'The swamp is in your blood. Every touch from the crowd lands half again as hard.',
+    // CONTACT damage of FODDER only — the bodies §4.3 takes off the HP axis.
+    // Their threat is count and touch, so this is the curse that leans on
+    // exactly that. Specials, landmarks and projectiles are unchanged.
+    // Read by Sim.spawnEnemyById.
+    fodderDmgMult: 1.5,
+  },
+  deep_winter: {
+    id: 'deep_winter', name: 'Deep Winter',
+    desc: 'The snow is to your knees. You move slower. They do not.',
+    // The only curse that touches the player's one input. Applied by the host
+    // AND by a guest's own movement prediction (main.js predictSelf) through
+    // playerSpdMultFor(), or a guest would rubber-band for the whole room.
+    playerSpdMult: 0.85,
+  },
+  undertow: {
+    id: 'undertow', name: 'Undertow',
+    desc: 'The current is with them. Everything that hunts you is faster.',
+    // Read by Sim.spawnEnemyById, on every body.
+    enemySpdMult: 1.2,
+  },
+  big_country: {
+    id: 'big_country', name: 'Big Country',
+    desc: 'Out here the big things come in numbers. Specials and landmarks are drawn twice as often.',
+    // Multiplies the draw weight of every telegraphing unit. The crowd is the
+    // same size; more of it has to be read. Read by Sim._regionPick.
+    specialWeightMult: 2,
+  },
 };
+
+// Every effect field a curse may declare. One list, so the load assertion
+// below, the gate and a reader of this file agree on what "has an effect"
+// means — the assertion carried its own three-entry copy, which is how a
+// fourth field would have been declared, read and still reported as "no
+// effect".
+export const CURSE_EFFECT_FIELDS = [
+  'sightMult', 'noRoomHeal', 'telegraphRevealMs',
+  'waveDurMult', 'fodderDmgMult', 'playerSpdMult', 'enemySpdMult', 'specialWeightMult',
+];
 
 // ---------------------------------------------------------------- shrine
 
@@ -107,6 +159,14 @@ export function cursedModifierFor(region) {
 // How late a telegraph's tint appears under the active curse, by curse id.
 // 0 means "tint from commit", the normal read. Shared by the host view (which
 // has the Sim) and the guest view (which has only the curse id from st.arena).
+// The player's move-speed multiplier under the active curse, by curse id.
+// Shared by the host sim and a guest's movement prediction, for the same
+// reason telegraphRevealMsFor is: the guest has only the id from st.arena.
+export function playerSpdMultFor(curseId) {
+  const m = curseId ? CURSED_MODIFIERS[curseId] : null;
+  return m && m.playerSpdMult > 0 ? m.playerSpdMult : 1;
+}
+
 export function telegraphRevealMsFor(curseId) {
   const m = curseId ? CURSED_MODIFIERS[curseId] : null;
   return m && m.telegraphRevealMs > 0 ? m.telegraphRevealMs : 0;
@@ -183,7 +243,7 @@ function assertNodeBehaviour() {
   // rather than imported, to keep this module free of a cycle.
   for (const [id, m] of Object.entries(CURSED_MODIFIERS)) {
     if (!m.name || !m.desc) problems.push(`cursed modifier ${id}: needs a name and a description — it is shown to the player before they commit to the node`);
-    const effects = ['sightMult', 'noRoomHeal', 'telegraphRevealMs'].filter(k => m[k] !== undefined);
+    const effects = CURSE_EFFECT_FIELDS.filter(k => m[k] !== undefined);
     if (!effects.length) problems.push(`cursed modifier ${id}: has no effect field — a curse that does nothing is a gold bonus with a scary name`);
   }
 

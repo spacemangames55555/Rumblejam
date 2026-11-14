@@ -125,8 +125,12 @@ console.log('THE REGION LAYER, FROM A REAL ENTRY POINT — nothing here assigns 
   else if (wrong.length) bad(`${wrong.length} region-1 arena(s) do not render pnw: ${wrong.map(([k, b]) => `${k}=${b}`).join(', ')}`);
   else ok(`all ${seen.size} region-1 arenas (five maps, both stops' neighbours and the boss room) render pnw ground; no tundra at any column`);
   checks++;
-  if (BIOMES.tundra && !REGION_BIOMES.includes('tundra')) console.log('✓ the tundra tileset is still declared and assigned to no region — the art is kept, the slot is not guessed');
-  else { fails++; console.log('✗ tundra is either deleted or assigned to a region; the brief says declared and unassigned'); }
+  // The brief said "declared and unassigned" while the Russian region had no
+  // index. It has one now (6), so the claim is the one underneath it: the
+  // tundra exists and is worn by that region alone.
+  const tundraWearers = REGIONS.filter(r => r.tileset === 'tundra').map(r => r.id);
+  if (BIOMES.tundra && tundraWearers.length === 1 && tundraWearers[0] === 'northern_russia') console.log('✓ the tundra tileset is worn by Northern Russia, the region it was drawn for, and by no other');
+  else { fails++; console.log(`✗ tundra is worn by [${tundraWearers.join(', ') || 'nobody'}] — it belongs to northern_russia alone`); }
 }
 
 // ---- 5. region 2 spawns a population disjoint from region 1 ----

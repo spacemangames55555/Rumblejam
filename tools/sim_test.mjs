@@ -4994,6 +4994,14 @@ try {
   sim._travelTo(sim.floor.bossId);
   const p = sim.players[0];
   p.weapons.length = 0; sim.summons.length = 0; // let the siege pile up
+  // ...and that has to include SKILLS, which the line above predates. It
+  // stripped the weapons and left the class's opener firing, which did not
+  // matter while region 4 fell back to the base roster at ×4.33 HP — one
+  // opener could not dent that crowd. Region 4 now has its own horde roster
+  // and its fodder dies to one hit (§4.3), so the same opener held the crest
+  // at 106. This is a STRESS measurement: the crowd it wants is the siege's,
+  // not what one level-1 skill leaves of it.
+  p.loadout = new Array(p.loadout ? p.loadout.length : 8).fill(null);
   for (let t = 0; t < 60 * 130; t++) { sim.tick(); drain(sim, p, false); }
   const alive0 = sim.enemyPool.count;
   for (const id of ['coilgun', 'hailburst', 'gravelmouth', 'sparkbolt', 'threadneedle']) sim._addWeapon(p, id, 4);
@@ -5290,8 +5298,16 @@ try {
     if (themed.length === declared.length && themed.every(([i]) => declared.includes(i))) {
       ok(`the ground follows the region: ${themed.map(([i, id]) => `${i}=${id}`).join(', ')}; regions ${REGION_BIOMES.map((id, i) => id ? null : i + 1).filter(Boolean).join('/')} draw the flat fill`);
     } else fail(`REGION_BIOMES ${JSON.stringify(themed)} disagrees with the regions that declare a tileset (${declared.join(', ')})`);
-    if (!REGION_BIOMES.includes('tundra')) ok('tundra is declared in BIOMES and worn by no region — the art is kept, the slot is unassigned');
-    else fail('tundra is assigned to a region; it belongs to the Russian / necromancer region, whose index is undecided');
+    // TUNDRA HAS ITS REGION. This asserted "declared and worn by nobody" while
+    // the Russian region's index was undecided — the honest state then. It is
+    // decided: Northern Russia is region 6 and wears the snow drawn for it.
+    // The real claim survives the flip, and is the one that was always the
+    // point: the tundra goes to the Russian region and to nowhere else.
+    {
+      const wearers = REGIONS.filter(r => r.tileset === 'tundra').map(r => r.id);
+      if (wearers.length === 1 && wearers[0] === 'northern_russia' && REGION_BIOMES[5] === 'tundra') ok('tundra is worn by Northern Russia (region 6) — the region it was drawn for — and by no other');
+      else fail(`tundra is worn by [${wearers.join(', ') || 'nobody'}]; it belongs to northern_russia alone`);
+    }
     if (REGION_BIOMES.length === TOTAL_REGIONS) ok(`REGION_BIOMES covers all ${TOTAL_REGIONS} regions`);
     else fail(`REGION_BIOMES has ${REGION_BIOMES.length} entries for ${TOTAL_REGIONS} regions — a region past the end would be undefined`);
     if (!biomeFor(0) && !biomeFor(99) && !biomeFor(undefined)) ok('biomeFor() returns null off the end of the region list rather than throwing');

@@ -24,8 +24,20 @@
         124
       ]
     },
+    "boss.aus_boss": {
+      "file": "boss/aus_boss.png",
+      "w": 192,
+      "h": 192,
+      "directions": 8
+    },
     "boss.broodmother_viv": {
       "file": "boss/broodmother_viv.png",
+      "w": 192,
+      "h": 192,
+      "directions": 8
+    },
+    "boss.caf_boss": {
+      "file": "boss/caf_boss.png",
       "w": 192,
       "h": 192,
       "directions": 8
@@ -36,8 +48,20 @@
       "h": 192,
       "directions": 8
     },
+    "boss.eg_boss": {
+      "file": "boss/eg_boss.png",
+      "w": 192,
+      "h": 192,
+      "directions": 8
+    },
     "boss.gb_boss": {
       "file": "boss/gb_boss.png",
+      "w": 192,
+      "h": 192,
+      "directions": 8
+    },
+    "boss.ind_boss": {
+      "file": "boss/ind_boss.png",
       "w": 192,
       "h": 192,
       "directions": 8
@@ -50,6 +74,12 @@
     },
     "boss.pnw_boss": {
       "file": "boss/pnw_boss.png",
+      "w": 192,
+      "h": 192,
+      "directions": 8
+    },
+    "boss.ru_boss": {
+      "file": "boss/ru_boss.png",
       "w": 192,
       "h": 192,
       "directions": 8
@@ -226,8 +256,116 @@
       "h": 128,
       "directions": 8
     },
+    "enemy.aus_cinder": {
+      "file": "enemy/aus_cinder.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.aus_diprotodon": {
+      "file": "enemy/aus_diprotodon.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.aus_dust_dingo": {
+      "file": "enemy/aus_dust_dingo.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.aus_genyornis": {
+      "file": "enemy/aus_genyornis.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.aus_mirage": {
+      "file": "enemy/aus_mirage.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.aus_thylacoleo": {
+      "file": "enemy/aus_thylacoleo.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.caf_bloat_toad": {
+      "file": "enemy/caf_bloat_toad.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.caf_elder_mask": {
+      "file": "enemy/caf_elder_mask.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.caf_mask_bearer": {
+      "file": "enemy/caf_mask_bearer.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.caf_mire_lunger": {
+      "file": "enemy/caf_mire_lunger.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.caf_mire_shade": {
+      "file": "enemy/caf_mire_shade.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.caf_rot_hippo": {
+      "file": "enemy/caf_rot_hippo.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
     "enemy.deadeye": {
       "file": "enemy/deadeye.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.eg_eye": {
+      "file": "enemy/eg_eye.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.eg_jackal": {
+      "file": "enemy/eg_jackal.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.eg_mummy": {
+      "file": "enemy/eg_mummy.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.eg_sobek_guard": {
+      "file": "enemy/eg_sobek_guard.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.eg_sphinx": {
+      "file": "enemy/eg_sphinx.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.eg_ushabti": {
+      "file": "enemy/eg_ushabti.png",
       "w": 128,
       "h": 128,
       "directions": 8
@@ -292,6 +430,42 @@
       "h": 128,
       "directions": 8
     },
+    "enemy.ind_coral_colossus": {
+      "file": "enemy/ind_coral_colossus.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ind_drowned_sentinel": {
+      "file": "enemy/ind_drowned_sentinel.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ind_lantern_lure": {
+      "file": "enemy/ind_lantern_lure.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ind_spearfish": {
+      "file": "enemy/ind_spearfish.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ind_tide_caller": {
+      "file": "enemy/ind_tide_caller.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ind_tide_eel": {
+      "file": "enemy/ind_tide_eel.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
     "enemy.lancerfish": {
       "file": "enemy/lancerfish.png",
       "w": 128,
@@ -336,6 +510,42 @@
     },
     "enemy.pnw_thornhound": {
       "file": "enemy/pnw_thornhound.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ru_blizzard_wraith": {
+      "file": "enemy/ru_blizzard_wraith.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ru_frozen_dead": {
+      "file": "enemy/ru_frozen_dead.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ru_leshy": {
+      "file": "enemy/ru_leshy.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ru_rusalka": {
+      "file": "enemy/ru_rusalka.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ru_shieldbearer": {
+      "file": "enemy/ru_shieldbearer.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ru_upyr": {
+      "file": "enemy/ru_upyr.png",
       "w": 128,
       "h": 128,
       "directions": 8

@@ -20,6 +20,11 @@
 import { PNW_ENEMIES, PNW_BOSS } from './enemies-pnw.js';
 import { XIB_ENEMIES, XIB_BOSS } from './enemies-xibalba.js';
 import { GB_ENEMIES, GB_BOSS } from './enemies-britain.js';
+import { EG_ENEMIES, EG_BOSS } from './enemies-egypt.js';
+import { CAF_ENEMIES, CAF_BOSS } from './enemies-congo.js';
+import { RU_ENEMIES, RU_BOSS } from './enemies-russia.js';
+import { IND_ENEMIES, IND_BOSS } from './enemies-sunda.js';
+import { AUS_ENEMIES, AUS_BOSS } from './enemies-outback.js';
 import { isDomain } from '../domains.js';
 
 // Half the population, by encounter weight — for a region still on the SLOW
@@ -75,6 +80,11 @@ export const REGION_ENEMIES = {
   pacific_northwest: { enemies: PNW_ENEMIES, boss: PNW_BOSS, horde: true },
   central_america: { enemies: XIB_ENEMIES, boss: XIB_BOSS },
   great_britain: { enemies: GB_ENEMIES, boss: GB_BOSS, horde: true },
+  egypt: { enemies: EG_ENEMIES, boss: EG_BOSS, horde: true },
+  central_africa: { enemies: CAF_ENEMIES, boss: CAF_BOSS, horde: true },
+  northern_russia: { enemies: RU_ENEMIES, boss: RU_BOSS, horde: true },
+  off_indonesia: { enemies: IND_ENEMIES, boss: IND_BOSS, horde: true },
+  australian_outback: { enemies: AUS_ENEMIES, boss: AUS_BOSS, horde: true },
 };
 
 export const ALL_REGION_ENEMIES = Object.values(REGION_ENEMIES).flatMap(r => r.enemies);
@@ -116,7 +126,12 @@ const SHAPE_PARAMS = { circle: ['radius'], cone: ['angle', 'range'], line: ['wid
 // that cannot tick is content that does not exist, and it should say so at
 // import rather than mid-fight.
 export const BEHAVIOR_PARAMS = {
-  chaser: [], sprinter: [], brute: [], splitter: [],
+  chaser: [], sprinter: [], brute: [],
+  // `splitInto` is read on DEATH, not per tick (sim._killEnemy), so a missing
+  // one is not a crash: `for (i < undefined)` runs zero times and the unit is
+  // silently a chaser. That is worse than a crash — required here so a
+  // splitter that does not split fails the load instead of shipping.
+  splitter: ['splitInto'],
   // warden's aura is applied in sim.damageEnemy's shieldedBy scan, not in
   // updateEnemy — it walks and nothing else, so it needs no per-tick block.
   warden: [],
@@ -127,6 +142,21 @@ export const BEHAVIOR_PARAMS = {
   nest: ['spawnCd', 'maxBrood', 'broodId'],
   dasher: ['dash'],
   sniper: ['beam'],
+};
+
+// What each boss signature block reads, by name. The implementation is
+// `tickBossBlocks` in js/entities/enemies.js; this table is here rather than
+// there because content must not import the sim, and it is cross-checked
+// against that file's BOSS_BLOCKS list by tools/boss_gate.mjs so the two
+// cannot drift.
+export const BOSS_BLOCK_PARAMS = {
+  adds: ['cd', 'count'],
+  ring: ['cd', 'count', 'speed', 'dmg'],
+  volley: ['cd', 'count', 'spreadDeg', 'speed', 'dmg'],
+  pools: ['cd', 'count', 'radius', 'windup', 'dps', 'dur'],
+  vortex: ['cd', 'windup', 'pullR', 'pullSpd', 'dur', 'dps', 'coreR'],
+  beams: ['cd', 'windup', 'count', 'width', 'spin', 'dur', 'dmg'],
+  ward: ['reduce'],
 };
 
 function checkTelegraph(id, t, problems, label = 'telegraph') {
@@ -190,6 +220,20 @@ function assertRegionEnemies() {
     if (!boss) { problems.push(`${regionId}: no boss`); continue; }
     if (!boss.telegraph) problems.push(`${boss.id}: a region boss must telegraph`);
     else checkTelegraph(boss.id, boss.telegraph, problems);
+    // SIGNATURE BLOCKS (js/entities/enemies.js, BOSS_BLOCK_PARAMS). A block
+    // with a missing number does not throw — `cd: undefined` makes its timer
+    // NaN and the block never fires, which is a boss quietly missing its
+    // mechanic. So every declared block is checked for every number it reads,
+    // in both phases, and an `adds` block must name a body from THIS region.
+    for (const [where, holder] of [['', boss], ['p2.', boss.p2 || {}]]) {
+      for (const [name, need] of Object.entries(BOSS_BLOCK_PARAMS)) {
+        const blk = holder[name];
+        if (blk === undefined || blk === null) continue;
+        for (const k of need) if (!(blk[k] > 0)) problems.push(`${boss.id}: ${where}${name}.${k} must be > 0 — a block with a missing number never fires`);
+        if (name === 'adds' && !enemies.some(e => e.id === blk.id)) problems.push(`${boss.id}: ${where}adds.id "${blk.id}" is not one of ${regionId}'s own enemies — a boss raises its own region's dead`);
+        if (name === 'ward' && !(blk.reduce < 1)) problems.push(`${boss.id}: ${where}ward.reduce must be below 1 — a boss that takes nothing reads as broken`);
+      }
+    }
     if (!boss.p2) problems.push(`${boss.id}: no phase 2 — a region boss is two-phase`);
     else {
       if (!(boss.p2.atFrac > 0 && boss.p2.atFrac < 1)) problems.push(`${boss.id}: p2.atFrac must be a fraction in (0,1)`);

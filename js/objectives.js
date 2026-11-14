@@ -311,6 +311,37 @@ const ELITE_ARENA_VARIANTS = [
 ];
 const ELITE_BY_KEY = Object.fromEntries(ELITE_ARENA_VARIANTS.map(v => [v.key, v]));
 
+// THE CHAMPIONS ARE THE REGION'S OWN. The four variants above name dungeon
+// monsters, and an Elite Arena in the Outback fielded a Lancerfish, a Lobber,
+// a Gemmite and a Slabjaw — the last place in the game still borrowing the
+// base roster, and invisible until a region late enough to roll the objective
+// had a roster of its own. A variant is a ROLE (charge / shoot / split / grow
+// angry), so it is resolved against the region by behaviour, in preference
+// order, exactly as the wave's flanker and artillery levers are.
+//
+// The variant's HEALTH IS KEPT, not inherited: `hp` above is a multiplier on
+// the base monster's authored HP, sized so a geared party spends 10–15 s per
+// champion. The stand-in is scaled to land on that same number whatever its
+// own authored HP is, or a 3 HP fodder body and a 60 HP landmark standing in
+// for the same variant would be two different fights.
+const VARIANT_ROLES = {
+  charger: ['dasher', 'sprinter', 'orbiter', 'chaser'],
+  lobber: ['spitter', 'sniper', 'orbiter', 'chaser'],
+  splitter: ['splitter', 'chaser', 'bomber', 'sprinter'],
+  enrager: ['brute', 'warden', 'chaser'],
+};
+function regionStandIn(sim, v) {
+  const pop = sim.region && REGION_ENEMIES[sim.region];
+  if (!pop) return { id: v.id, hpScale: 1 };
+  for (const beh of VARIANT_ROLES[v.key] || []) {
+    // Deterministic: the lowest-HP match, ties by id, so a seed replays and a
+    // light unit is preferred over a landmark as the body to scale up.
+    const m = pop.enemies.filter(e => e.behavior === beh).sort((a, b) => a.hp - b.hp || (a.id < b.id ? -1 : 1))[0];
+    if (m) return { id: m.id, hpScale: sim.baseEnemyHp(v.id) / m.hp };
+  }
+  return { id: pop.enemies[0].id, hpScale: sim.baseEnemyHp(v.id) / pop.enemies[0].hp };
+}
+
 function tickEliteArena(sim, o, dt) {
   if (!o.spawned) { o.spawned = true; spawnEliteArena(sim, o); }
   // every champion spawned and every one dead
@@ -346,9 +377,11 @@ function spawnEliteArena(sim, o) {
 
   for (const v of bag) {
     const p = eliteSpot(sim);
-    const e = sim.spawnEnemyById(v.id, p.x, p.y, { hpMult: v.hp * shrink * floorHarden, spdMult: v.spd });
+    const stand = regionStandIn(sim, v);
+    const e = sim.spawnEnemyById(stand.id, p.x, p.y, { hpMult: v.hp * stand.hpScale * shrink * floorHarden, spdMult: v.spd });
     if (!e) continue;
     e.arenaVariant = v.key;
+    if (v.key === 'splitter') e.splitInto = 2;
     e.radius *= 1.35;
     e.mats = Math.round(e.mats * 6 * shrink);
     e.dmg *= 1.15;

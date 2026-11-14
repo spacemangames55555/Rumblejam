@@ -666,6 +666,19 @@ never loads them:
   so the read can be learned on something that dies. The composed figure
   (`mean × axis`) is printed and never gated — gating a derived number invites
   satisfying the check by moving the axis.
+- `node tools/boss_gate.mjs [regionIndex …] [--verbose]` — **every region boss
+  is a fight, and every mechanic it declares happens.** A character at the
+  region's anchor level fights each boss in its real siege room and the gate
+  reads the WORLD rather than the def: the boss moves, commits its phase-1
+  zone, changes shape in phase 2, and each signature block it declares
+  (`adds`, `ring`, `volley`, `pools`, `vortex`, `beams`, `ward`) leaves what
+  it should — raised bodies, projectiles, pools, a live vortex, turning
+  lanes, a pylon and the damage it refuses. Its first run found a ring born
+  inside the player (sixteen bolts landing in the tick they spawned).
+- `node tools/curse_gate.mjs` — **every curse changes the room it is cast
+  on.** For each of the eight region curses, a cursed node and a plain one are
+  staged in the same region and the lever is read off the running Sim, with
+  the control half checked as hard as the effect half.
 - `node tools/region_wire_gate.mjs` — **the region layer, asserted by effect from
   the entry point `main.js` uses.** Every check constructs `new Sim({seed, party,
   regionIndex})` and reads what came out; none assigns a region by hand. Five maps

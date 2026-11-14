@@ -72,6 +72,7 @@ import { CONFIG } from '../js/config.js';
 import { ENEMY_BY_ID, FLOOR_TABLES } from '../js/content/enemies.js';
 import { REGIONS, regionHpMult, regionDmgMult, enemyHpAxis, TOTAL_REGIONS, REGION_ANCHOR_LEVEL, REGION_OPENER_PACKET } from '../js/regions.js';
 import { Sim } from '../js/game.js';
+import { DISADVANTAGE_MULT } from '../js/domains.js';
 import * as SKILLSIM from '../js/skillsim.js';
 import { stepDamage } from '../js/compose.js';
 import { TREES, TREES_BY_CLASS } from '../js/skills.js';
@@ -259,6 +260,15 @@ function hordeChecks(region, units) {
   const fatFodder = fodder.filter(e => Math.round(live(e)) > W.packet);
   if (fodder.length && !fatFodder.length) ok(`B′ region ${region.index} fodder live HP ${fodder.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${live(e).toFixed(1)}`).join(', ')} — every one ≤ ${bar}`);
   else bad(`B′ region ${region.index} fodder over ${bar}: ${fatFodder.map(e => `${e.id} ${live(e).toFixed(1)}`).join(', ') || 'no fodder at all'}`);
+  // ...AND AT TRIANGLE DISADVANTAGE (§7). "Every class's opener one-shots it"
+  // has to hold for the class whose domain the body BEATS, or a third of the
+  // roster needs two hits on a third of the crowd. The margin is exactly
+  // zero today — 5 × 0.80 = 4.0 against a 4 HP body — so this is the check
+  // that fails first if `enemyHpMult` or the packet moves.
+  const weak = W.packet * DISADVANTAGE_MULT;
+  const fatWeak = fodder.filter(e => Math.round(live(e)) > weak + 1e-9);
+  if (fodder.length && !fatWeak.length) ok(`B′ region ${region.index} fodder still dies to one hit at triangle disadvantage — ${W.packet} × ${DISADVANTAGE_MULT} = ${weak.toFixed(1)} against ${Math.max(...fodder.map(e => Math.round(live(e))))} HP`);
+  else bad(`B′ region ${region.index} fodder survives a disadvantaged opener (${weak.toFixed(1)}): ${fatWeak.map(e => `${e.id} ${Math.round(live(e))}`).join(', ')}`);
   const offSpec = specials.filter(e => e.hp < 2 * fodderMax || e.hp > 4 * fodderMax);
   if (specials.length && !offSpec.length) ok(`B′ region ${region.index} specials ${specials.map(e => `${e.id.replace(/^[a-z]+_/, '')} ${e.hp}`).join(', ')} are 2–4× fodder max ${fodderMax}`);
   else bad(`B′ region ${region.index} specials outside 2–4× fodder max ${fodderMax}: ${offSpec.map(e => `${e.id} ${e.hp}`).join(', ') || 'no specials'}`);
@@ -366,6 +376,29 @@ for (const region of REGIONS) {
       + 'Both halves are the check: heavy alone is a slab you meet constantly, low weight alone is a rare mid unit');
   }
 
+  // ---- the domain cap (§3.2), by ENCOUNTER WEIGHT ----
+  //
+  // "No region exceeds 60% one domain" is a statement about what a player
+  // meets, so it is measured the way spawns are drawn — by weight — not by
+  // counting archetypes. REPORTED, NOT YET GATED: region 1 is over its own cap
+  // (its horde re-weighting put two physical bodies at 7.5 of 10) and that
+  // fix is a balance change to the most-played region in the game, owed by
+  // the balance pass and not smuggled into a content patch. Regions 4–8 were
+  // authored to the cap by this measure. When region 1 is fixed this becomes
+  // a check for all eight at once — an opt-in list is how region 2's weight
+  // went unmeasured.
+  {
+    const by = {};
+    for (const e of units) by[e.domain] = (by[e.domain] || 0) + e.w;
+    const tot = Object.values(by).reduce((a, b) => a + b, 0);
+    const shares = Object.entries(by).sort((a, b) => b[1] - a[1]).map(([d, w]) => [d, w / tot]);
+    const cap = region.domainSkew.maxShare;
+    const over = shares[0][1] > cap + 1e-9;
+    const lead = shares[0][0] === region.domainSkew.primary;
+    console.log(`  · domain share by weight: ${shares.map(([d, sh]) => `${d} ${(100 * sh).toFixed(1)}%`).join(', ')} — cap ${(100 * cap).toFixed(0)}%, declared primary ${region.domainSkew.primary}`
+      + `${over ? '   ⚠ OVER ITS CAP' : ''}${lead ? '' : '   ⚠ the declared primary does not lead'}`);
+  }
+
   // ---- reported, never gated: what the axis makes of it ----
   console.log(`  · composed: HP ${(hp * regionHpMult(region.index)).toFixed(1)} (${(hp * regionHpMult(region.index) / REF_HP).toFixed(2)}× floor 1), `
     + `damage ${(dmg * regionDmgMult(region.index)).toFixed(2)} (${(dmg * regionDmgMult(region.index) / REF_DMG).toFixed(2)}×) `
@@ -417,12 +450,18 @@ for (const region of REGIONS) {
   const base = g.coopHp * g.greedHp * CONFIG.enemyHpMult;
   const body = (def) => g.spawnEnemyById(def.id, g.W / 2, g.H / 2, { noObjHp: true });
   const f = body(fod), m = body(mark);
+  // "FODDER" IS A ROLE IN A CROWD, NOT A PROPERTY OF A DEF. The same body
+  // spawned as an elite is meant to take a fight and must keep the world axis
+  // — the first version of enemyHpAxis asked only the def, and an elite Dust
+  // Dingo in region 8 would have arrived at 9 HP beside a 683 HP landmark.
+  const el = g.spawnEnemyById(fod.id, g.W / 2, g.H / 2, { noObjHp: true, elite: true });
   const wantF = Math.round(fod.hp * (REGION_OPENER_PACKET[region.index - 1] / REGION_OPENER_PACKET[0]) * base * (g.curseEnemyHp || 1));
   const wantM = Math.round(mark.hp * regionHpMult(region.index) * base * (g.curseEnemyHp || 1));
-  if (f && m && f.maxHp === wantF && m.maxHp === wantM) {
-    ok(`region ${region.index} spawns ${fod.id} at ${f.maxHp} HP (packet axis) and ${mark.id} at ${m.maxHp} HP (world axis ×${regionHpMult(region.index).toFixed(2)}) — one landmark is worth ${(m.maxHp / f.maxHp).toFixed(0)} fodder`);
+  const wantE = Math.round(fod.hp * regionHpMult(region.index) * base * CONFIG.ELITE_HP_MULT * (g.curseEnemyHp || 1));
+  if (f && m && el && f.maxHp === wantF && m.maxHp === wantM && el.maxHp === wantE) {
+    ok(`region ${region.index} spawns ${fod.id} at ${f.maxHp} HP (packet axis), the same body as an ELITE at ${el.maxHp} (world axis), and ${mark.id} at ${m.maxHp} (world axis ×${regionHpMult(region.index).toFixed(2)}) — one landmark is worth ${(m.maxHp / f.maxHp).toFixed(0)} fodder`);
   } else {
-    bad(`region ${region.index} spawn path disagrees with the axis: ${fod.id} ${f && f.maxHp} (want ${wantF}), ${mark.id} ${m && m.maxHp} (want ${wantM})`);
+    bad(`region ${region.index} spawn path disagrees with the axis: ${fod.id} ${f && f.maxHp} (want ${wantF}), elite ${el && el.maxHp} (want ${wantE}), ${mark.id} ${m && m.maxHp} (want ${wantM})`);
   }
 }
 console.log('');

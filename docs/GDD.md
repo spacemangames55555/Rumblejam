@@ -212,7 +212,7 @@ Asserted at load: every selectable class has a tier-1 active **carrying damage**
 2. **Six or more enemy archetypes**, at least two unique to the region.
 3. **One environmental hazard** that changes how players move.
 4. **A damage-domain skew** per §3.2.
-5. **One boss** with at least two phases and a mechanic that is not a bigger normal enemy.
+5. **One boss** with at least two phases and a mechanic that is not a bigger normal enemy. Phase 2 must change the zone's *shape* (a load assertion). The mechanic is declared as **signature blocks** on the boss def — `adds`, `ring`, `volley`, `pools`, `vortex`, `beams`, `ward` — each driving a sim primitive that already exists (§3.7). `boss_gate` fights every boss and checks each declared block against what it left in the world.
 6. **One Cursed modifier** unique to the region.
 7. **Fodder plus a few specials.** Fodder makes up most of the encounter weight and never telegraphs. Specials, elites and the boss always telegraph, at 8–25% of the weight, with at least two telegraph shapes per region. See §2.6 and §6.4.
 8. A node pool large enough to generate a varied 10-node tree.
@@ -220,6 +220,27 @@ Asserted at load: every selectable class has a tier-1 active **carrying damage**
 ### 3.6 Where to spend effort
 
 Region 1 is played more than regions 6, 7 and 8 combined — every new save starts there, every new player's first impression is there, every wipe replays it. It gets the most map variety, the most polish, the most archetypes. If scope must be cut, it is cut at the top of the list.
+
+### 3.7 The eight rosters
+
+Every roster is authored to the same role bands (§4.3) whatever its index, so **a region's identity is what it asks of the player, never how much HP it has.** Each region adds one thing the regions before it did not ask.
+
+| # | Region | What it asks | New to the game here | Light special | Boss · signature | Curse |
+|---|---|---|---|---|---|---|
+| 1 | Pacific Northwest | Learn to read a wind-up | — | lane | The Cedar Mother · — | Gloom |
+| 2 | Central America | Zones overlap | orbiter | lane | Ixkik, the Blood Moon · — | Bloodprice |
+| 3 | Great Britain | Distance, not direction | the light circle | circle | The Hollow King · — | Glamour |
+| 4 | Egypt | The kill is not the end of the body; the threat is not where the crowd is | **splitter** as the commonest body, **sniper** | cone | Apep, the Unmaking Coil · `adds` — the dead rise for him | Sandglass |
+| 5 | Central Africa | The crowd is not uniform: kill this first, do not stand on that | **bomber**, **medic** | lane | Mokele-mbembe, the River-Stopper · `pools` — the ground rots | Fever |
+| 6 | Northern Russia | The crowd is not always one hit | the ally aura on a **special** (a shield-wall) | cone | Koschei the Deathless · `ward` — his death is elsewhere | Deep Winter |
+| 7 | Off Indonesia | Nothing comes at you in a straight line | an **orbiter** as the commonest body | the longest lane | The Drowned King · `vortex` then `ring` — drawn in, thrown out | Undertow |
+| 8 | Australian Outback | Everything at once, and no single answer | one fodder per domain at near-equal weight; a 40% domain cap | lane | Megalania, the Last Dragon · `beams`, `ring`, `adds` — the last fight | Big Country |
+
+**The three bosses of regions 1–3 declare no signature block** and are the same fight at three sizes. Giving each one is a content edit now that the blocks exist; it has not been done.
+
+**Curses are one lever each, and each lever is read at one site.** Gloom (sight — *no reader yet*, KNOWN-DEFECTS #41), Bloodprice (no room heal), Glamour (late telegraph tint), Sandglass (the wave runs ×1.3), Fever (fodder's touch ×1.5), Deep Winter (the player moves ×0.85 — host and guest prediction through one function), Undertow (every body ×1.2 faster), Big Country (telegraphing units drawn twice as often). `curse_gate` stages a cursed and a plain room in the same region for every one and reads the lever off the running Sim.
+
+**On source material (ruled 2026-11-14, R-3).** Regions 5, 7 and 8 are built from invented creatures, a river cryptid and extinct megafauna. No figure from a living tradition's sacred stories is used as a monster to be killed — in particular nothing from any Aboriginal people's Dreaming, which §3.2 names as region 8's mythology. That is a ruling made on the user's behalf and is theirs to revisit.
 
 ---
 
@@ -2208,7 +2229,7 @@ Two apparent defects died of it in one pass, both from single-seed comparisons i
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
 | 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
 | 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | **Done** |
-| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **CLASSES COMPLETE** — 14 of 14 built (28 trees, 280 skills, 14 selectable). Region 3 built; regions 4–8 are authoring work, no longer blocked on art (ruled 2026-11-14) |
+| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **CLASSES COMPLETE** — 14 of 14 built (28 trees, 280 skills, 14 selectable). **REGIONS COMPLETE** — 8 of 8 built (14 Nov 2026). Hazards, nests and painted sprites remain |
 
 Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
 
@@ -2745,9 +2766,9 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
 | Node types | Horde, Elite and Objective all live and measured; difficulty wired (D-24) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
-| Regions built | **3 of 8 playable** — 18 enemies, 3 two-phase bosses. Pacific Northwest, Central America, Great Britain. Region 1 runs at horde pace; regions 2 and 3 join `HORDE_REGIONS` on the pace pass (§2.6) |
-| Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
-| Regions 4–8 | **Names only.** No longer blocked on art: ruled 2026-11-14 (user) that regions ship on code-drawn silhouettes and painted sprites follow, so the binding constraint is authoring, not `PIXELLAB_API_KEY` |
+| Regions built | **8 of 8 playable** — 48 enemies, 8 two-phase bosses (§3.7). Region 1 runs at horde pace; regions 2–8 join `HORDE_REGIONS` on the pace pass (§2.6), which also owes each one its spawn rate (§4.3) |
+| Region tilesets, hazards | **Tilesets: 7 of 8** wear a biome (Great Britain has no tile art and draws the flat fill). **Hazards: all eight named, none implemented** — `undergrowth`, `bloodmire`, `fae_ring`, `quicksand`, `rot_pool`, `black_ice`, `riptide`, `bushfire`. One engine feature, not eight |
+| Regions 4–8 | **Built 14 Nov 2026** — horde rosters, five bosses with signature blocks, five curses each read at one site, all gated (`roster_weight_gate`, `boss_gate`, `curse_gate`). **Not yet done:** nest archetypes (all eight regions still borrow `wombden`), painted sprites (silhouette notes are written; `docs/silhouettes.json`), and the per-region spawn rate |
 | Classes 3–14 | **COMPLETE — 14 of 14 built** (42 trees, 420 skills, 14 selectable). Every class is at the ruled three; all fourteen third trees branch. Phase 5's class work is done. **Outstanding: the original 28 chains are not yet converted to the branching spec** (§8.1) |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |

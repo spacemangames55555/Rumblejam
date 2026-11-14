@@ -28,6 +28,18 @@
       ],
       "prompt": "Risen Skeleton, a necromancer's summoned armoured swordsman, skull-faced, humanoid, a bare round skull on fully armoured shoulders — helmetless where every other armoured humanoid is helmed, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
+    "boss.aus_boss": {
+      "batch": 2,
+      "subject": "Megalania, the Last Dragon, a two-phase region boss, Australian Outback region",
+      "silhouette": "an enormous monitor lizard, belly low to the ground, forked tongue out, tail longer than its body",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        192,
+        192
+      ],
+      "prompt": "Megalania, the Last Dragon, a two-phase region boss, Australian Outback region, an enormous monitor lizard, belly low to the ground, forked tongue out, tail longer than its body, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
+    },
     "boss.broodmother_viv": {
       "batch": 2,
       "subject": "Broodmother Viv, a floor-3 dungeon boss",
@@ -39,6 +51,18 @@
         192
       ],
       "prompt": "Broodmother Viv, a floor-3 dungeon boss, a bloated radial abdomen carried on six thin splayed legs, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
+    },
+    "boss.caf_boss": {
+      "batch": 2,
+      "subject": "Mokele-mbembe, the River-Stopper, a two-phase region boss, Central Africa region",
+      "silhouette": "a long-necked four-legged river beast, small head held high, thick tail sweeping the ground",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        192,
+        192
+      ],
+      "prompt": "Mokele-mbembe, the River-Stopper, a two-phase region boss, Central Africa region, a long-necked four-legged river beast, small head held high, thick tail sweeping the ground, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "boss.choir_of_eyes": {
       "batch": 2,
@@ -52,6 +76,18 @@
       ],
       "prompt": "Choir of Eyes, a floor-2 dungeon boss, a floating cluster of unblinking eyes, no limbs at all, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
+    "boss.eg_boss": {
+      "batch": 2,
+      "subject": "Apep, the Unmaking Coil, a two-phase region boss, Egypt region",
+      "silhouette": "a towering serpent reared up in three stacked coils with a flared hood and a gaping jaw",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        192,
+        192
+      ],
+      "prompt": "Apep, the Unmaking Coil, a two-phase region boss, Egypt region, a towering serpent reared up in three stacked coils with a flared hood and a gaping jaw, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
+    },
     "boss.gb_boss": {
       "batch": 2,
       "subject": "The Hollow King, a two-phase region boss, Great Britain region",
@@ -63,6 +99,18 @@
         192
       ],
       "prompt": "The Hollow King, a two-phase region boss, Great Britain region, a gaunt crowned figure whose chest is an empty open ring, robes flaring wide at the hem, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
+    },
+    "boss.ind_boss": {
+      "batch": 2,
+      "subject": "The Drowned King, a two-phase region boss, Off Indonesia region",
+      "silhouette": "a drowned king slumped on a broken throne, tall tiered crown, his cloak dissolving into waves at the hem",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        192,
+        192
+      ],
+      "prompt": "The Drowned King, a two-phase region boss, Off Indonesia region, a drowned king slumped on a broken throne, tall tiered crown, his cloak dissolving into waves at the hem, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "boss.ossuary_hulk": {
       "batch": 2,
@@ -87,6 +135,18 @@
         192
       ],
       "prompt": "The Cedar Mother, a two-phase region boss, Pacific Northwest region, a broad rooted torso crowned by a canopy of splayed limbs, wider at the top than the base, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
+    },
+    "boss.ru_boss": {
+      "batch": 2,
+      "subject": "Koschei the Deathless, a two-phase region boss, Northern Russia region",
+      "silhouette": "a skeletal crowned king in a ragged cloak holding a long straight sword point-down before him",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        192,
+        192
+      ],
+      "prompt": "Koschei the Deathless, a two-phase region boss, Northern Russia region, a skeletal crowned king in a ragged cloak holding a long straight sword point-down before him, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 192px, transparent background, no ground shadow, no outline glow"
     },
     "boss.vault_regent": {
       "batch": 2,
@@ -292,6 +352,150 @@
       ],
       "prompt": "Aegimand, a warden dungeon monster, a broad shield plate carried in front, hiding most of the body, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
+    "enemy.aus_cinder": {
+      "batch": 3,
+      "subject": "Bushfire Cinder, a spitter monster, Australian Outback region",
+      "silhouette": "a small ball of fire with one tall tongue rising and a trail of sparks behind",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Bushfire Cinder, a spitter monster, Australian Outback region, a small ball of fire with one tall tongue rising and a trail of sparks behind, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.aus_diprotodon": {
+      "batch": 3,
+      "subject": "Diprotodon, a brute monster, Australian Outback region",
+      "silhouette": "a rhinoceros-sized wombat with a huge blocky head held low, short thick legs and no neck",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Diprotodon, a brute monster, Australian Outback region, a rhinoceros-sized wombat with a huge blocky head held low, short thick legs and no neck, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.aus_dust_dingo": {
+      "batch": 3,
+      "subject": "Dust Dingo, a sprinter monster, Australian Outback region",
+      "silhouette": "a lean dog at full stretch mid-run, ears forward, bushy tail straight out behind",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Dust Dingo, a sprinter monster, Australian Outback region, a lean dog at full stretch mid-run, ears forward, bushy tail straight out behind, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.aus_genyornis": {
+      "batch": 3,
+      "subject": "Genyornis, a warden monster, Australian Outback region",
+      "silhouette": "a tall flightless bird with a deep heavy beak, long thick legs and stub wings",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Genyornis, a warden monster, Australian Outback region, a tall flightless bird with a deep heavy beak, long thick legs and stub wings, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.aus_mirage": {
+      "batch": 3,
+      "subject": "Mirage, a orbiter monster, Australian Outback region",
+      "silhouette": "a wavering upright column that splits into two offset copies of itself",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Mirage, a orbiter monster, Australian Outback region, a wavering upright column that splits into two offset copies of itself, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.aus_thylacoleo": {
+      "batch": 3,
+      "subject": "Thylacoleo, a dasher monster, Australian Outback region",
+      "silhouette": "a stocky big-cat body with heavy forelimbs, a blunt short head and a thick straight tail",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Thylacoleo, a dasher monster, Australian Outback region, a stocky big-cat body with heavy forelimbs, a blunt short head and a thick straight tail, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.caf_bloat_toad": {
+      "batch": 3,
+      "subject": "Bloat-Toad, a bomber monster, Central Africa region",
+      "silhouette": "a squat toad swollen into a near-perfect sphere with tiny legs splayed beneath",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Bloat-Toad, a bomber monster, Central Africa region, a squat toad swollen into a near-perfect sphere with tiny legs splayed beneath, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.caf_elder_mask": {
+      "batch": 3,
+      "subject": "Elder Mask, a warden monster, Central Africa region",
+      "silhouette": "a broad robed figure whose head is a wide two-horned mask with a fringe hanging to its waist",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Elder Mask, a warden monster, Central Africa region, a broad robed figure whose head is a wide two-horned mask with a fringe hanging to its waist, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.caf_mask_bearer": {
+      "batch": 3,
+      "subject": "Mask-Bearer, a medic monster, Central Africa region",
+      "silhouette": "a thin figure carrying a tall oval mask on a pole, the mask twice the height of its own head",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Mask-Bearer, a medic monster, Central Africa region, a thin figure carrying a tall oval mask on a pole, the mask twice the height of its own head, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.caf_mire_lunger": {
+      "batch": 3,
+      "subject": "Mire Lunger, a dasher monster, Central Africa region",
+      "silhouette": "a low flat crocodile with a long tapering snout and a tail as long as its body",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Mire Lunger, a dasher monster, Central Africa region, a low flat crocodile with a long tapering snout and a tail as long as its body, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.caf_mire_shade": {
+      "batch": 3,
+      "subject": "Mire Shade, a chaser monster, Central Africa region",
+      "silhouette": "a hunched figure rising out of a puddle, long dripping arms hanging to the ground",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Mire Shade, a chaser monster, Central Africa region, a hunched figure rising out of a puddle, long dripping arms hanging to the ground, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.caf_rot_hippo": {
+      "batch": 3,
+      "subject": "Rot Hippo, a brute monster, Central Africa region",
+      "silhouette": "a barrel-bodied hippo with a huge square open jaw and four short pillar legs",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Rot Hippo, a brute monster, Central Africa region, a barrel-bodied hippo with a huge square open jaw and four short pillar legs, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
     "enemy.deadeye": {
       "batch": 3,
       "subject": "Deadeye, a sniper dungeon monster",
@@ -303,6 +507,78 @@
         128
       ],
       "prompt": "Deadeye, a sniper dungeon monster, an elongated narrow diamond with a single enormous forward eye, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.eg_eye": {
+      "batch": 3,
+      "subject": "Eye of the Horizon, a sniper monster, Egypt region",
+      "silhouette": "a single large almond-shaped eye floating upright with a curled stroke hanging beneath it",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Eye of the Horizon, a sniper monster, Egypt region, a single large almond-shaped eye floating upright with a curled stroke hanging beneath it, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.eg_jackal": {
+      "batch": 3,
+      "subject": "Tomb Jackal, a sprinter monster, Egypt region",
+      "silhouette": "a lean long-legged dog with two tall upright pointed ears and a thin tail curled over its back",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Tomb Jackal, a sprinter monster, Egypt region, a lean long-legged dog with two tall upright pointed ears and a thin tail curled over its back, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.eg_mummy": {
+      "batch": 3,
+      "subject": "Shambling Mummy, a splitter monster, Egypt region",
+      "silhouette": "a stooped shuffling figure with both arms held straight out and loose wrappings trailing behind",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Shambling Mummy, a splitter monster, Egypt region, a stooped shuffling figure with both arms held straight out and loose wrappings trailing behind, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.eg_sobek_guard": {
+      "batch": 3,
+      "subject": "Sobek Guard, a dasher monster, Egypt region",
+      "silhouette": "an upright spear-carrier with a long crocodile snout jutting forward and a thick tail behind",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Sobek Guard, a dasher monster, Egypt region, an upright spear-carrier with a long crocodile snout jutting forward and a thick tail behind, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.eg_sphinx": {
+      "batch": 3,
+      "subject": "Sphinx, a brute monster, Egypt region",
+      "silhouette": "a massive crouching lion body with a human head under a wide flared headcloth",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Sphinx, a brute monster, Egypt region, a massive crouching lion body with a human head under a wide flared headcloth, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.eg_ushabti": {
+      "batch": 3,
+      "subject": "Ushabti, a warden monster, Egypt region",
+      "silhouette": "a small rigid statue with arms crossed on its chest, flat-topped headcloth, feet together",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Ushabti, a warden monster, Egypt region, a small rigid statue with arms crossed on its chest, flat-topped headcloth, feet together, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.flit": {
       "batch": 3,
@@ -424,6 +700,78 @@
       ],
       "prompt": "Gyre, a orbiter dungeon monster, a spinning double blade with no body between the halves, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
+    "enemy.ind_coral_colossus": {
+      "batch": 3,
+      "subject": "Coral Colossus, a brute monster, Off Indonesia region",
+      "silhouette": "a hulking figure built of branching coral, its antlers spreading wider than its shoulders",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Coral Colossus, a brute monster, Off Indonesia region, a hulking figure built of branching coral, its antlers spreading wider than its shoulders, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ind_drowned_sentinel": {
+      "batch": 3,
+      "subject": "Drowned Sentinel, a chaser monster, Off Indonesia region",
+      "silhouette": "a rigid armoured guard in a tiered pointed helmet holding a long halberd upright",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Drowned Sentinel, a chaser monster, Off Indonesia region, a rigid armoured guard in a tiered pointed helmet holding a long halberd upright, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ind_lantern_lure": {
+      "batch": 3,
+      "subject": "Lantern Lure, a spitter monster, Off Indonesia region",
+      "silhouette": "a round deep-sea fish with a huge underbite and a lamp dangling on a stalk above its head",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Lantern Lure, a spitter monster, Off Indonesia region, a round deep-sea fish with a huge underbite and a lamp dangling on a stalk above its head, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ind_spearfish": {
+      "batch": 3,
+      "subject": "Sunda Spearfish, a dasher monster, Off Indonesia region",
+      "silhouette": "a slim fish with a needle bill as long as its body and a tall sail fin along its back",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Sunda Spearfish, a dasher monster, Off Indonesia region, a slim fish with a needle bill as long as its body and a tall sail fin along its back, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ind_tide_caller": {
+      "batch": 3,
+      "subject": "Tide-Caller, a warden monster, Off Indonesia region",
+      "silhouette": "a robed figure under a wide flat fan-shaped headdress, one arm raised holding a spiral shell",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Tide-Caller, a warden monster, Off Indonesia region, a robed figure under a wide flat fan-shaped headdress, one arm raised holding a spiral shell, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ind_tide_eel": {
+      "batch": 3,
+      "subject": "Tide Eel, a orbiter monster, Off Indonesia region",
+      "silhouette": "a ribbon-thin eel bent in an S-curve with a gaping round mouth",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Tide Eel, a orbiter monster, Off Indonesia region, a ribbon-thin eel bent in an S-curve with a gaping round mouth, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
     "enemy.lancerfish": {
       "batch": 3,
       "subject": "Lancerfish, a dasher dungeon monster",
@@ -519,6 +867,78 @@
         128
       ],
       "prompt": "Thornhound, a sprinter monster, Pacific Northwest region, long and low on four legs, spine ridged with backswept quills, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ru_blizzard_wraith": {
+      "batch": 3,
+      "subject": "Blizzard Wraith, a orbiter monster, Northern Russia region",
+      "silhouette": "a legless swirl tapering to a point below, two long arms reaching forward",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Blizzard Wraith, a orbiter monster, Northern Russia region, a legless swirl tapering to a point below, two long arms reaching forward, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ru_frozen_dead": {
+      "batch": 3,
+      "subject": "Frozen Dead, a chaser monster, Northern Russia region",
+      "silhouette": "a stiff upright corpse with one arm frozen straight out and icicles hanging from it",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Frozen Dead, a chaser monster, Northern Russia region, a stiff upright corpse with one arm frozen straight out and icicles hanging from it, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ru_leshy": {
+      "batch": 3,
+      "subject": "Leshy, a brute monster, Northern Russia region",
+      "silhouette": "a towering man-shaped tree with antler branches for a head and arms reaching the ground",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Leshy, a brute monster, Northern Russia region, a towering man-shaped tree with antler branches for a head and arms reaching the ground, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ru_rusalka": {
+      "batch": 3,
+      "subject": "Rusalka, a spitter monster, Northern Russia region",
+      "silhouette": "a long-haired woman risen to the waist out of a round hole, hair falling over her face",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Rusalka, a spitter monster, Northern Russia region, a long-haired woman risen to the waist out of a round hole, hair falling over her face, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ru_shieldbearer": {
+      "batch": 3,
+      "subject": "Druzhina Shade, a warden monster, Northern Russia region",
+      "silhouette": "a warrior crouched behind a tall teardrop shield, only a conical helm showing above it",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Druzhina Shade, a warden monster, Northern Russia region, a warrior crouched behind a tall teardrop shield, only a conical helm showing above it, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ru_upyr": {
+      "batch": 3,
+      "subject": "Upyr, a dasher monster, Northern Russia region",
+      "silhouette": "a gaunt hunched figure with a high pointed collar and long clawed fingers spread wide",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Upyr, a dasher monster, Northern Russia region, a gaunt hunched figure with a high pointed collar and long clawed fingers spread wide, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.skulker": {
       "batch": 3,
