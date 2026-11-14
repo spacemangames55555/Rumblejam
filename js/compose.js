@@ -508,8 +508,46 @@ export const PRIMITIVES = {
 
   // Ground pool that ticks. Routed through the triangle like everything else —
   // hazard ticks are exactly the kind of damage that quietly escapes a rule.
+  // A HAZARD CAN NOW HEAL, AND IT CAN FOLLOW.
+  //
+  // `heal` is a per-tick amount paid to friendlies standing in the field. It is
+  // NOT a third `hurts` value: Tribal Ritual heals allies and weakens enemies in
+  // one circle, so the two effects have to compose rather than exclude. A pure
+  // healing field declares `heal` with `damage: 0`; a mixed one declares both,
+  // and it is ONE zone either way rather than two stacked.
+  //
+  // `follow` binds the field's centre to the caster instead of to the floor.
+  // The zone list has carried follow since `aura` shipped, so this is a flag
+  // rather than a mechanism — placed and following are the same field with the
+  // centre bound differently, which is exactly what the ruling asks for.
+  //
+  // `includeSelf` defaults to TRUE here, the opposite of the ally-shield
+  // default, because the ruling says a healing field heals its caster unless the
+  // skill says otherwise.
+  //
+  // RULES FOR A PERMANENT FIELD, for whoever writes the first one. Nothing uses
+  // `persist.field` yet, and these are not assertions because there is nothing
+  // to measure them against — they are what Casey ruled on 2026-09-13 after the
+  // sustain measurement, and the numbers behind them are worth restating:
+  // against a 4-player party taking 2.0 HP/sec in a real room, a permanent field
+  // at the TIMED fields' own rates pays 12 to 40 HP/sec, six to twenty times
+  // incoming. So a permanent field takes a MUCH SMALLER radius and a LOWER heal
+  // rate than any of the nine: the intent is a trickle holding one or two
+  // people, not a party at full pace.
+  //
+  // TICK IS THE STRONGER LEVER THAN AMOUNT, and it is the one that gets missed:
+  // 5 per 500ms is double 5 per 1000ms for the same number written down. Halving
+  // a tick doubles the field. `false` is the per-skill override.
   hazard(sim, p, skill, step, rank, grid, out) {
-    const target = selectTarget(skill.select, grid, p.x, p.y, skill.trigger.radius || skill.trigger.range || step.radius, sightFrom(sim, p.x, p.y));
+    // `atCaster` DROPS IT WHERE YOU ARE, and a healing field usually needs it.
+    // `hazard` has always chosen its centre by seeking an enemy, which is right
+    // for a patch of burning ground and wrong for a circle you want your party
+    // standing in: seven of the nine healing-field documents say "at caster",
+    // and without this the field would land on whichever enemy the selector
+    // found. The fallback was never a substitute — a hazard with no enemy in
+    // range lands at the caster by accident, and with one in range it does not.
+    const target = step.atCaster ? null
+      : selectTarget(skill.select, grid, p.x, p.y, skill.trigger.radius || skill.trigger.range || step.radius, sightFrom(sim, p.x, p.y));
     const x = target ? target.x : p.x, y = target ? target.y : p.y;
     const r = step.riders || {};
     sim.addZone({
@@ -517,6 +555,14 @@ export const PRIMITIVES = {
       dps: stepDamage(step, skill, rank, p) / (step.tickMs / MS),
       dur: rankedDuration(step.duration, skill, rank) / MS,
       hurts: 'enemies', color: p.color,
+      every: step.tickMs / MS,
+      // THE HEAL IS PER TICK, not per second, so it reads the way the documents
+      // write it — "heals 4 per 1000ms" is `heal: 4, tickMs: 1000`. The zone
+      // loop multiplies by the elapsed slice, so the payout is honest whatever
+      // the frame rate does.
+      heals: step.heal ? rankedDamage(step.heal, skill, rank) / (step.tickMs / MS) : 0,
+      includeSelf: step.includeSelf !== false,
+      ...(step.follow ? { follow: p.idx } : {}),
       skillDomain: skill.domain, ownerIdx: p.idx, owner: p.idx,   // owner: the zone loop reads z.owner, not ownerIdx — without it hazard damage landed uncredited
       slowMult: r.slow ? r.slow.mult : 0, slowDur: r.slow ? r.slow.dur / MS : 0,
     });
