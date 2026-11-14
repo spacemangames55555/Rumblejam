@@ -33,6 +33,8 @@ import { SELECT_KINDS } from '../js/selectors.js';
 import { PRIMITIVE_KINDS, IMPACT_RIDERS, SHAPE_RIDERS, BOLT_RIDERS } from '../js/compose.js';
 import { TREES, TREES_BY_CLASS, TIER_LEVELS, TREE_NODES } from '../js/skills.js';
 import { ENGINE_SCALE } from '../js/enginescale.js';
+import { REGIONS } from '../js/regions.js';
+import { ALL_REGION_ENEMIES, ALL_REGION_BOSSES } from '../js/content/regions-enemies.js';
 
 const DOC = readFileSync(new URL('../docs/GDD.md', import.meta.url), 'utf8');
 let fails = 0, checks = 0;
@@ -79,6 +81,12 @@ claim('§8.2 built skills', /\*\*Built: \d+ of \d+ — \d+ trees, (\d+) skills/,
 claim('§8.2 built classes', /\*\*Built: (\d+) of \d+ —/, nClasses);
 claim('§16 class trees', /\*\*COMPLETE — \d+ of \d+ built\*\* \((\d+) trees/, nTrees);
 claim('§16 class skills', /\*\*COMPLETE — \d+ of \d+ built\*\* \(\d+ trees, (\d+) skills/, nSkills);
+// REGIONS. These three were unchecked while every skill count beside them was,
+// and the row said "Regions 1–2" in its own label — a claim that could not be
+// updated without being reworded, which is the shape that goes stale.
+claim('§16 regions playable', /\*\*(\d+) of 8 playable\*\*/, REGIONS.filter(r => r.contentReady).length);
+claim('§16 region enemies', /\*\*\d+ of 8 playable\*\* — (\d+) enemies/, ALL_REGION_ENEMIES.length);
+claim('§16 region bosses', /of 8 playable\*\* — \d+ enemies, (\d+) two-phase bosses/, ALL_REGION_BOSSES.length);
 claim('§16 engine count', /Built across \*\*(\d+) engines\*\*/, Object.keys(ENGINE_SCALE).length);
 claim('§16 engine gate', /`engine_gate\.mjs`: every key in `p\.engines`[^|]*?\*\*(\d+) of \d+\*\*/, Object.keys(ENGINE_SCALE).length);
 

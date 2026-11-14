@@ -22,7 +22,7 @@ import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING_TABLE } from './content/enemies.js';
 import { REGION_ENEMIES, telegraphWeight, enemyRole } from './content/regions-enemies.js';
 import { nodePopulation, nodeModifiers, shrineOffer, applyShrine, NODE_TUNING } from './nodebehaviour.js';
-import { REGION_BY_INDEX, depthMult, regionHpMult, regionDmgMult, bossForRegion, TOTAL_REGIONS } from './regions.js';
+import { REGION_BY_INDEX, depthMult, regionHpMult, regionDmgMult, enemyHpAxis, bossForRegion, TOTAL_REGIONS } from './regions.js';
 import { difficultyOf, DEFAULT_DIFFICULTY } from './worldmap.js';
 
 import { STAT_BOOSTS } from './content/statboosts.js';
@@ -2309,7 +2309,9 @@ export class Sim {
     if (!def) return null;
     const e = this.enemyPool.alloc();
     if (!e) return null;
-    const fl = regionHpMult(this.regionIndex);
+    // WHICH axis, not just how much: in a horde roster fodder rides the opener
+    // packet and everything meant to take a fight rides total output (§4.3).
+    const fl = enemyHpAxis(this.regionIndex, def);
     // HORDE ELITE (user ruling 2 Nov 2026): the node's ×HP / ×damage land on
     // CHAMPIONS only — a horde region's elite room is a horde with a few
     // champions, and its fodder still dies to one opener hit.

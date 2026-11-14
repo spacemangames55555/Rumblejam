@@ -70,7 +70,7 @@
 import { REGION_ENEMIES, telegraphWeight, MIN_TELEGRAPH_WEIGHT, HORDE_MIN_TELEGRAPH_WEIGHT, HORDE_MAX_TELEGRAPH_WEIGHT, HORDE_MIN_TELEGRAPH_SHAPES, enemyRole } from '../js/content/regions-enemies.js';
 import { CONFIG } from '../js/config.js';
 import { ENEMY_BY_ID, FLOOR_TABLES } from '../js/content/enemies.js';
-import { REGIONS, regionHpMult, regionDmgMult, TOTAL_REGIONS, REGION_ANCHOR_LEVEL } from '../js/regions.js';
+import { REGIONS, regionHpMult, regionDmgMult, enemyHpAxis, TOTAL_REGIONS, REGION_ANCHOR_LEVEL, REGION_OPENER_PACKET } from '../js/regions.js';
 import { Sim } from '../js/game.js';
 import * as SKILLSIM from '../js/skillsim.js';
 import { stepDamage } from '../js/compose.js';
@@ -244,11 +244,15 @@ function hordeChecks(region, units) {
   const fodder = units.filter(e => enemyRole(e) === 'fodder');
   const specials = units.filter(e => enemyRole(e) === 'special');
   const landmarks = units.filter(e => enemyRole(e) === 'landmark');
-  const live = e => e.hp * regionHpMult(region.index) * CONFIG.enemyHpMult * SOLO_COOP_HP;
+  // `enemyHpAxis` is the same call the spawn path makes, so "live" here is the
+  // number the game fields — fodder on the opener-packet axis, everything
+  // else on total output (§4.3, ruled 2026-11-14).
+  const live = e => e.hp * enemyHpAxis(region.index, e) * CONFIG.enemyHpMult * SOLO_COOP_HP;
   const fodderMax = Math.max(...fodder.map(e => e.hp));
   // B′ — role bands. Fodder dies to the weakest opener; specials 2–4×
   // fodder; landmarks ≥ 6× fodder. No band-scaling inside a roster: the
-  // world axis (regionHpMult) is the only multiplier.
+  // world axis is the only multiplier, and `enemyHpAxis` says which half of
+  // it a role rides.
   const lvl = arrivalLevel(region);
   const W = weakestOpenerPacket(lvl);
   const bar = `the weakest opener hit at arrival level ${lvl}, ${W.packet} (${W.id} rank ${W.rank}, ferocity ${W.ferocity})`;
@@ -368,6 +372,60 @@ for (const region of REGIONS) {
     + `— derived from the ×${regionHpMult(region.index).toFixed(2)} world axis, not asserted`);
   console.log('');
 }
+
+// ---- the fodder axis is MEASURED, so measure it ----
+//
+// `REGION_OPENER_PACKET` is what takes fodder off the world axis: fodder's HP
+// multiplier at region N is packet[N] / packet[1]. It is a table of numbers in
+// a source file, which is the shape every stale constant in this project has
+// had — the gate above this one compared fodder to a hard-coded 4 for every
+// region until 4 Nov. So every entry is re-measured here against the same
+// fourteen builds, for ALL eight regions rather than only the built ones, and
+// drift fails in BOTH directions: a table entry above the measured packet is
+// fodder that no longer dies to one hit, and one below it is a horde thinner
+// than the player's hits have earned.
+console.log('── the fodder axis · REGION_OPENER_PACKET against the measured packet');
+{
+  const drift = [];
+  const row = [];
+  for (let i = 0; i < TOTAL_REGIONS; i++) {
+    const W = weakestOpenerPacket(REGION_ANCHOR_LEVEL[i]);
+    row.push(`${W.packet}`);
+    if (W.packet !== REGION_OPENER_PACKET[i]) drift.push(`region ${i + 1} (level ${REGION_ANCHOR_LEVEL[i]}): table ${REGION_OPENER_PACKET[i]}, measured ${W.packet} (${W.id} rank ${W.rank})`);
+  }
+  if (!drift.length) ok(`REGION_OPENER_PACKET [${REGION_OPENER_PACKET.join(', ')}] matches the weakest opener hit measured at all ${TOTAL_REGIONS} anchors [${row.join(', ')}] — fodder HP ×${REGION_OPENER_PACKET.map(v => (v / REGION_OPENER_PACKET[0]).toFixed(2)).join(' / ')}`);
+  else bad(`REGION_OPENER_PACKET has drifted from the measured weakest opener hit: ${drift.join('; ')} — re-measure and update js/regions.js; the table is a measurement, not a dial`);
+  console.log('');
+}
+
+// ---- and the spawn path FIELDS it ----
+//
+// Everything above reads `enemyHpAxis`, and so does `spawnEnemyById` — which
+// makes them agree by construction and proves nothing about whether the call
+// in the spawn path survives the next edit to it. So spawn one fodder and one
+// landmark through a real Sim in every horde-roster region and read the body:
+// fodder must come out at the packet axis, the landmark at the world axis, and
+// the two must DIFFER wherever the axes do (regions 2+), or the split is a
+// function nothing calls.
+console.log('── the fodder axis · read off a spawned body');
+for (const region of REGIONS) {
+  if (!REGION_ENEMIES[region.id].horde) continue;
+  const units = REGION_ENEMIES[region.id].enemies;
+  const fod = units.find(e => enemyRole(e) === 'fodder');
+  const mark = units.find(e => enemyRole(e) === 'landmark');
+  const g = new Sim({ seed: 9100 + region.index, party: [{ idx: 0, key: 'k', name: 'C', charId: 'toh_samurai', color: '#fff' }], regionIndex: region.index });
+  const base = g.coopHp * g.greedHp * CONFIG.enemyHpMult;
+  const body = (def) => g.spawnEnemyById(def.id, g.W / 2, g.H / 2, { noObjHp: true });
+  const f = body(fod), m = body(mark);
+  const wantF = Math.round(fod.hp * (REGION_OPENER_PACKET[region.index - 1] / REGION_OPENER_PACKET[0]) * base * (g.curseEnemyHp || 1));
+  const wantM = Math.round(mark.hp * regionHpMult(region.index) * base * (g.curseEnemyHp || 1));
+  if (f && m && f.maxHp === wantF && m.maxHp === wantM) {
+    ok(`region ${region.index} spawns ${fod.id} at ${f.maxHp} HP (packet axis) and ${mark.id} at ${m.maxHp} HP (world axis ×${regionHpMult(region.index).toFixed(2)}) — one landmark is worth ${(m.maxHp / f.maxHp).toFixed(0)} fodder`);
+  } else {
+    bad(`region ${region.index} spawn path disagrees with the axis: ${fod.id} ${f && f.maxHp} (want ${wantF}), ${mark.id} ${m && m.maxHp} (want ${wantM})`);
+  }
+}
+console.log('');
 
 // ---- and the coupling itself, named where it lives ----
 {
