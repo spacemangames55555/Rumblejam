@@ -37,7 +37,7 @@ import { WEAPONS } from './content/weapons.js';
 import { ENEMIES, ALL_ENEMY_DEFS } from './content/enemies.js';
 import { ALL_BOSS_DEFS } from './content/bosses.js';
 import { bossForRegion, TOTAL_REGIONS, REGION_BY_INDEX, REGIONS } from './regions.js';
-import { telegraphRevealMsFor } from './nodebehaviour.js';
+import { telegraphRevealMsFor, playerSpdMultFor } from './nodebehaviour.js';
 import { unpackTelZones } from './telegraphs.js';
 import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
 import { projSpriteFor, PYLON_SPRITE } from './content/sprites.js';
@@ -1961,7 +1961,10 @@ function predictSelf(dtFrame, serverP, chr) {
   if (!app.predicted) app.predicted = { x: serverP[1], y: serverP[2] };
   const pr = app.predicted;
   const tempo = app.meta ? app.meta.stats.tempo : 0;
-  const spd = Math.max(60, CONFIG.BASE_SPEED * (1 + tempo / 100));
+  // The room's curse can slow the body (Deep Winter). The host applies the
+  // same multiplier from the same function; without it here a guest predicts
+  // at full speed and is pulled back every snapshot for the whole room.
+  const spd = Math.max(60, CONFIG.BASE_SPEED * (1 + tempo / 100) * playerSpdMultFor(app.arena && app.arena.curse));
   pr.x += lastMove.mx * spd * dtFrame;
   pr.y += lastMove.my * spd * dtFrame;
   // clamp to the CURRENT arena's bounds (obstacles reconcile via the server)

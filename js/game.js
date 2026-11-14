@@ -21,12 +21,12 @@ import { tickTelegraphs, initTelegraph, cancelTelegraph, liveZones, telegraphBus
 import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING_TABLE } from './content/enemies.js';
 import { REGION_ENEMIES, telegraphWeight, enemyRole } from './content/regions-enemies.js';
-import { nodePopulation, nodeModifiers, shrineOffer, applyShrine, NODE_TUNING } from './nodebehaviour.js';
+import { nodePopulation, nodeModifiers, shrineOffer, applyShrine, NODE_TUNING, playerSpdMultFor } from './nodebehaviour.js';
 import { REGION_BY_INDEX, depthMult, regionHpMult, regionDmgMult, enemyHpAxis, bossForRegion, TOTAL_REGIONS } from './regions.js';
 import { difficultyOf, DEFAULT_DIFFICULTY } from './worldmap.js';
 
 import { STAT_BOOSTS } from './content/statboosts.js';
-import { updateEnemy } from './entities/enemies.js';
+import { updateEnemy, bossWardReduce } from './entities/enemies.js';
 import { BEAST, initBeast, updateBeast, beastUp, beastBlocks, beastAbsorbs, hurtBeast } from './entities/beast.js';
 import {
   tohInitPlayer, tohStartFight, tohStats, tohTick, tohOnFire,
@@ -907,6 +907,16 @@ export class Sim {
     this.regionColumn = node.depth || 1;
     const mapIdx = (node.depth || 1) - 1;
     this.wave = waveConfig(this.regionIndex, mapIdx, node.kind);
+    // SANDGLASS (region 4's curse): the room runs longer. Duration and ramp
+    // scale together so the peak rate is unchanged and merely held. A siege's
+    // wave has no end (dur Infinity) and is left alone.
+    {
+      const c = this.fightMods && this.fightMods.cursed;
+      if (c && c.waveDurMult > 0 && Number.isFinite(this.wave.dur)) {
+        this.wave.dur = Math.round(this.wave.dur * c.waveDurMult);
+        if (Number.isFinite(this.wave.rampT)) this.wave.rampT = Math.round(this.wave.rampT * c.waveDurMult);
+      }
+    }
     // the fight's pressure profile: sieges are always high-friction; stops
     // have none; combat/elite carry the recipe rolled at map generation
     this.profile = node.kind === 'siege' ? PROFILES.siege : (PROFILES[node.profile] || PROFILES.mixed);
@@ -1149,14 +1159,14 @@ export class Sim {
       // returns null when there is no region or no match, and the base ids are
       // then exactly what they always were.
       if (!this._onboarding() && prof.flankers && this.waveRng.chance(prof.flankers)) {
-        id = this._leverPick(FLANKER_BEHAVIORS) || (this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish');
+        id = this._leverId(FLANKER_BEHAVIORS, id, () => (this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish'));
       } else if (!this._onboarding() && prof.artillery && this.waveRng.chance(prof.artillery)) {
         // AND THE ARTILLERY LEVER IS THE SAME DOOR. It hard-assigns `lobber`
         // regardless of the table, so closing only the flanker one cut seven
         // archetypes to four rather than three — measured, `lobber` was still
         // 9-12 of every 39 spawns. Every lever that names an id instead of
         // drawing from the table has to be closed, and these are both of them.
-        id = this._leverPick(ARTILLERY_BEHAVIORS) || 'lobber'; mortar = true;
+        { const was = id; id = this._leverId(ARTILLERY_BEHAVIORS, id, () => 'lobber'); mortar = id !== was || ARTILLERY_BEHAVIORS.has((ENEMY_BY_ID[id] || {}).behavior); }
       }
       if (prof.ban && prof.ban.includes(id)) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
       const cap = SPAWN_CAPS[id] && Math.round(SPAWN_CAPS[id] * CONFIG.spawnBudgetMult);
@@ -1275,9 +1285,9 @@ export class Sim {
         : (regionPop || table[Math.floor(this.waveRng.float() * table.length)]);
       let mortar = false, puddle = false;
       if (!this._onboarding() && prof.flankers && this.waveRng.chance(prof.flankers)) {
-        id = this._leverPick(FLANKER_BEHAVIORS) || (this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish');
+        id = this._leverId(FLANKER_BEHAVIORS, id, () => (this.waveRng.chance(0.5) ? 'gyre' : 'lancerfish'));
       } else if (!this._onboarding() && prof.artillery && this.waveRng.chance(prof.artillery)) {
-        id = this._leverPick(ARTILLERY_BEHAVIORS) || 'lobber'; mortar = true;
+        { const was = id; id = this._leverId(ARTILLERY_BEHAVIORS, id, () => 'lobber'); mortar = id !== was || ARTILLERY_BEHAVIORS.has((ENEMY_BY_ID[id] || {}).behavior); }
       }
       if (prof.ban && prof.ban.includes(id)) { id = table[0] === id ? table[1] : table[0]; mortar = false; }
       const capT = SPAWN_CAPS[id] && Math.round(SPAWN_CAPS[id] * CONFIG.spawnBudgetMult);
@@ -1992,10 +2002,10 @@ export class Sim {
     }
   }
 
-  _spawnPylon(x, y) {
+  _spawnPylon(x, y, hpMult = 1) {
     const e = this.enemyPool.alloc();
     if (!e) return;
-    const hp = Math.round(PYLON_DEF.hp * regionHpMult(this.regionIndex) * this.coopHp * CONFIG.enemyHpMult);
+    const hp = Math.round(PYLON_DEF.hp * regionHpMult(this.regionIndex) * this.coopHp * CONFIG.enemyHpMult * hpMult);
     Object.assign(e, {
       id: ++this.spawnCounter, def: PYLON_DEF, typeIdx: -2, boss: false, bossDef: null,
       x, y, hp, maxHp: hp, radius: PYLON_DEF.radius, spd: 0, dmg: 0, dmgScale: 1,
@@ -2304,6 +2314,10 @@ export class Sim {
     }
   }
 
+  // Authored HP of any enemy id, base roster or region — for callers that
+  // scale one body to stand in for another (the Elite Arena's champions).
+  baseEnemyHp(id) { const d = ENEMY_BY_ID[id]; return d ? d.hp : 1; }
+
   spawnEnemyById(id, x, y, opts = {}) {
     const def = ENEMY_BY_ID[id];
     if (!def) return null;
@@ -2311,7 +2325,7 @@ export class Sim {
     if (!e) return null;
     // WHICH axis, not just how much: in a horde roster fodder rides the opener
     // packet and everything meant to take a fight rides total output (§4.3).
-    const fl = enemyHpAxis(this.regionIndex, def);
+    const fl = enemyHpAxis(this.regionIndex, def, opts);
     // HORDE ELITE (user ruling 2 Nov 2026): the node's ×HP / ×damage land on
     // CHAMPIONS only — a horde region's elite room is a horde with a few
     // champions, and its fodder still dies to one opener hit.
@@ -2330,16 +2344,21 @@ export class Sim {
     // top speed 230. Density (spawn budget, packs, HP) is unchanged.
     const map1Fodder = this._onboarding() && !this.obj && !opts.elite && !opts.mini
       && enemyRole(def) === 'fodder';
+    // FEVER (region 5): fodder's TOUCH lands harder. UNDERTOW (region 7):
+    // every body is faster. Both are the room's curse, read once per spawn.
+    const nodeCurse = (this.fightMods && this.fightMods.cursed) || null;
+    const feverMult = nodeCurse && nodeCurse.fodderDmgMult > 0 && enemyRole(def) === 'fodder' ? nodeCurse.fodderDmgMult : 1;
+    const undertowMult = nodeCurse && nodeCurse.enemySpdMult > 0 ? nodeCurse.enemySpdMult : 1;
     Object.assign(e, {
       id: ++this.spawnCounter, def, typeIdx: ENEMY_INDEX[id], boss: false, bossDef: null,
       x: clamp(x, WALL + 20, this.W - WALL - 20), y: clamp(y, WALL + 20, this.H - WALL - 20),
       hp: Math.round(hp), maxHp: Math.round(hp),
       radius: def.radius * (opts.elite ? 1.45 : 1) * (opts.mini ? 0.6 : 1),
       spd: (() => {
-        const v = def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * (opts.spdMult || 1);
+        const v = def.spd * (opts.elite ? 1.1 : 1) * (opts.mini ? 1.25 : 1) * this.curseEnemySpd * undertowMult * (opts.spdMult || 1);
         return map1Fodder ? Math.min(HORDE_MAP1_FODDER_SPD_CAP, v) : v;
       })(),
-      dmg: def.dmg * dmgScale * (map1Fodder ? HORDE_MAP1_FODDER_CONTACT_MULT : 1), dmgScale,
+      dmg: def.dmg * dmgScale * (map1Fodder ? HORDE_MAP1_FODDER_CONTACT_MULT : 1) * feverMult, dmgScale,
       mats: opts.noMats ? 0 : def.mats, mini: !!opts.mini,
       elite: !!opts.elite, eliteMod: opts.elite ? (opts.mod || ELITE_MODS[0]) : null,
       domain: def.domain || (def.bossDomain || 'physical'),
@@ -2368,7 +2387,7 @@ export class Sim {
       // room: a nest's invulnerability shield leaking onto ordinary chaff left
       // six unkillable enemies standing in a later horde arena, and the fight
       // could never end.
-      isNest: false, nestShielded: false, bounty: false, arenaVariant: null,
+      isNest: false, nestShielded: false, bounty: false, arenaVariant: null, splitInto: 0,
       // Horde special-cull opt-outs (see _hordeObjectiveBody). A room that
       // needs a landmark dead to clear spawns it with { cullExempt: true }
       // or { clearObjective: true }; recycled slots start clean.
@@ -2528,6 +2547,9 @@ export class Sim {
     p.movingT = p.moving ? (p.movingT || 0) + dt : 0;
     const t = p.char.trait;
     let spd = CONFIG.BASE_SPEED * (1 + p.stats.tempo / 100);
+    // DEEP WINTER (region 6's curse). The same multiplier a guest's own
+    // prediction applies, through the same function.
+    spd *= playerSpdMultFor(this.fightMods && this.fightMods.cursed && this.fightMods.cursed.id);
     spd = Math.max(60, spd);
     if (this.carryingRelic(p)) spd *= 0.8; // a relic is heavy: −20% move speed
     const pullResist = (t.key === 'immovable' || t.key === 'crystal_infusion') ? 0 : CONFIG.ARMOR_K / (CONFIG.ARMOR_K + Math.max(0, p.stats.grit));
@@ -3392,6 +3414,11 @@ export class Sim {
     // rule absolute, so novas and other line-of-sight-ignoring damage do
     // not quietly skip the part of the level that IS the level.
     if (e.nestShielded) { this.fx.blocks.push({ x: e.x, y: e.y }); this._dmgLedger(e, opts.owner, 0, 'nest-shielded'); return; }
+    // A WARDED BOSS (§3.5, the `ward` block): while its pylon stands, most of
+    // every hit is refused. Not all of it — a boss that reads as immune
+    // reads as broken, and chip damage is what tells a player the fight is
+    // still a fight while they go and find the ward.
+    if (e.boss) { const wr = bossWardReduce(this, e); if (wr > 0) { amount *= (1 - wr); this.fx.blocks.push({ x: e.x, y: e.y }); } }
     // warden allies shield: 50% reduction if a living warden is nearby (not self)
     if (!e.boss && e.def.behavior !== 'warden') {
       for (const w of this.enemyPool) {
@@ -3618,8 +3645,10 @@ export class Sim {
           dur: CONFIG.PUDDLE_DUR, hurts: 'players', color: '#7dee6a', acid: true,
         });
       }
-      if (e.def.behavior === 'splitter' && !e.mini) {
-        for (let i = 0; i < e.def.splitInto; i++) {
+      // `e.splitInto` lets an Elite Arena 'Splitter' champion split whatever
+      // regional body is standing in for it (objectives.js regionStandIn).
+      if ((e.def.behavior === 'splitter' || e.splitInto) && !e.mini) {
+        for (let i = 0; i < (e.splitInto || e.def.splitInto); i++) {
           this.spawnEnemyById(e.def.id, x + (i ? 18 : -18), y + (this.rng.float() * 20 - 10), { mini: true, noMats: false });
         }
       }
@@ -4947,6 +4976,20 @@ export class Sim {
   // A profile lever's ROLE, resolved from the region's own population. Null
   // when the party is not in a region or the region has nothing of that shape,
   // which is what keeps the base-roster fallback honest rather than silent.
+  // A LEVER ASKS FOR A ROLE, AND A REGION THAT HAS NOBODY IN THAT ROLE HAS NO
+  // LEVER. `_leverPick(...) || 'lobber'` closed the door for regions whose
+  // roster happened to hold a spitter and left it open for any that did not:
+  // Central Africa has no ranged body by design, so its artillery rooms
+  // fielded the dungeon's Lobber — found by region_wire_gate the first time a
+  // region without a spitter existed. The base id is the answer ONLY when
+  // there is no region roster at all; with one, no match means the drawn id
+  // stands.
+  _leverId(behaviors, drawn, baseId) {
+    const pick = this._leverPick(behaviors);
+    if (pick) return pick;
+    return (this.region && REGION_ENEMIES[this.region]) ? drawn : baseId();
+  }
+
   _leverPick(behaviors) {
     if (!this.region) return null;
     const pop = REGION_ENEMIES[this.region];
@@ -5042,9 +5085,15 @@ export class Sim {
     if (!this.region) return null;
     const pop = nodePopulation(this.region, this.nodeType || 'horde');
     if (!pop || !pop.length) return null;
-    const total = pop.reduce((a, x) => a + x.w, 0);
+    // BIG COUNTRY (region 8's curse): telegraphing units are drawn more
+    // often. Same number of waveRng draws as without it — one — so the curse
+    // changes WHAT a roll selects and never how many rolls a room makes.
+    const c = this.fightMods && this.fightMods.cursed;
+    const sm = c && c.specialWeightMult > 0 ? c.specialWeightMult : 1;
+    const wOf = (x) => (x.def.telegraph ? x.w * sm : x.w);
+    const total = pop.reduce((a, x) => a + wOf(x), 0);
     let roll = this.waveRng.float() * total;
-    for (const x of pop) { roll -= x.w; if (roll <= 0) return x.def.id; }
+    for (const x of pop) { roll -= wOf(x); if (roll <= 0) return x.def.id; }
     return pop[pop.length - 1].def.id;
   }
 

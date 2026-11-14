@@ -142,8 +142,18 @@ export function isHordeRoster(regionIndex) {
 // and the gate call this, so they cannot disagree about what "live HP" means —
 // two implementations of one multiplier is how a gate ends up asserting a
 // number the game never fields.
-export function enemyHpAxis(regionIndex, def) {
-  return isHordeRoster(regionIndex) && enemyRole(def) === 'fodder'
+//
+// `opts` IS PART OF THE QUESTION. "Fodder" is a role in a crowd, not a property
+// of a def: the same Dust Dingo is fodder when the wave draws it and is NOT
+// fodder when it is spawned as an elite, or as an Elite Arena champion, or as
+// a bounty — those are bodies meant to take a fight, and they keep the world
+// axis whatever they are a copy of. The first version asked only the def, so
+// an elite fodder in region 8 would have arrived at 3 × 1 × 3 = 9 HP against a
+// landmark's 683. Anything spawned with `elite` or an objective's `hpMult` is
+// not a plain body.
+export function enemyHpAxis(regionIndex, def, opts) {
+  const plain = !opts || (!opts.elite && !opts.hpMult);
+  return plain && isHordeRoster(regionIndex) && enemyRole(def) === 'fodder'
     ? regionFodderHpMult(regionIndex)
     : regionHpMult(regionIndex);
 }
@@ -201,14 +211,84 @@ export const REGIONS = [
     tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
     contentReady: true,
   },
+  {
+    id: 'egypt', index: 4, name: 'Egypt',
+    nativeClass: 'wizard',
+    expectedLevel: 28,
+    // Back to spiritual, with mental second: region 2's answer works again,
+    // but only for half the crowd.
+    domainSkew: { primary: 'spiritual', secondary: 'mental', maxShare: 0.60 },
+    tileset: 'sahel',
+    hazard: 'quicksand',               // ground that holds you while the lane is drawn
+    cursedModifier: 'sandglass',       // the wave runs long
+    enemies: ['eg_ushabti', 'eg_mummy', 'eg_jackal', 'eg_eye', 'eg_sphinx', 'eg_sobek_guard'],
+    boss: 'eg_boss',
+    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
+    contentReady: true,
+  },
+  {
+    id: 'central_africa', index: 5, name: 'Central Africa',
+    nativeClass: 'witch_doctor',
+    expectedLevel: 37,
+    domainSkew: { primary: 'spiritual', secondary: 'physical', maxShare: 0.60 },
+    tileset: 'delta',
+    hazard: 'rot_pool',                // standing water that rots: do not fight in it
+    cursedModifier: 'fever',           // the crowd's touch lands harder
+    enemies: ['caf_mire_lunger', 'caf_mire_shade', 'caf_bloat_toad', 'caf_mask_bearer', 'caf_rot_hippo', 'caf_elder_mask'],
+    boss: 'caf_boss',
+    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
+    contentReady: true,
+  },
+  {
+    id: 'northern_russia', index: 6, name: 'Northern Russia',
+    nativeClass: 'necromancer',
+    expectedLevel: 46,
+    domainSkew: { primary: 'physical', secondary: 'mental', maxShare: 0.60 },
+    tileset: 'tundra',
+    hazard: 'black_ice',               // ground you cannot stop on
+    cursedModifier: 'deep_winter',     // you move slower
+    enemies: ['ru_shieldbearer', 'ru_frozen_dead', 'ru_blizzard_wraith', 'ru_rusalka', 'ru_leshy', 'ru_upyr'],
+    boss: 'ru_boss',
+    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
+    contentReady: true,
+  },
+  {
+    id: 'off_indonesia', index: 7, name: 'Off Indonesia',
+    nativeClass: 'sundian',
+    expectedLevel: 55,
+    domainSkew: { primary: 'mental', secondary: null, maxShare: 0.60 },
+    tileset: 'abyss',
+    hazard: 'riptide',                 // a current that carries you
+    cursedModifier: 'undertow',        // they move faster
+    enemies: ['ind_spearfish', 'ind_tide_eel', 'ind_drowned_sentinel', 'ind_lantern_lure', 'ind_coral_colossus', 'ind_tide_caller'],
+    boss: 'ind_boss',
+    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
+    contentReady: true,
+  },
+  {
+    id: 'australian_outback', index: 8, name: 'Australian Outback',
+    nativeClass: 'hunter',
+    expectedLevel: 64,
+    // EVEN, and the cap says so: 40% where every other region allows 60%.
+    // §3.2 — "the endgame demands full party coverage rather than one
+    // counter-build". `primary` names the plurality; it leads by four points.
+    domainSkew: { primary: 'physical', secondary: null, maxShare: 0.40 },
+    tileset: 'outback',
+    hazard: 'bushfire',                // a front that moves across the room
+    cursedModifier: 'big_country',     // the big things come in numbers
+    enemies: ['aus_thylacoleo', 'aus_dust_dingo', 'aus_mirage', 'aus_cinder', 'aus_diprotodon', 'aus_genyornis'],
+    boss: 'aus_boss',
+    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
+    contentReady: true,
+  },
 ];
 
-// Regions 4-8 exist as names so a player can see the shape of the whole run
-// from the first session. They are not playable and carry no data. The names
-// are the GDD's (§3.2), in index order, starting at the first unbuilt region.
-export const LOCKED_REGION_NAMES = [
-  'Egypt', 'Central Africa', 'Northern Russia', 'Off Indonesia', 'Australian Outback',
-];
+// Every region is built. This list held the names of the unbuilt ones so a
+// player could see the shape of the whole run from the first session; it is
+// kept, empty, because `built + named === 8` is asserted below and the world
+// map reads it — an unbuilt region is a state the code should still be able to
+// express, even though the game no longer has one.
+export const LOCKED_REGION_NAMES = [];
 export const TOTAL_REGIONS = 8;
 
 export const REGION_BY_ID = Object.fromEntries(REGIONS.map(r => [r.id, r]));

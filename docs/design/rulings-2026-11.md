@@ -36,3 +36,65 @@ Decided by the user, 14 Nov 2026:
 **How it is held.** `roster_weight_gate` re-measures the packet at all eight anchors and fails on drift either way, and spawns a fodder and a landmark through a real Sim in each horde region to read the HP off the body. Both checks were driven red on purpose before being trusted.
 
 **Not decided here.** Whether openers *should* gain per-level growth, so that numbers visibly climb across a run. That would move the table and thicken fodder to match; it changes how the game feels and not how it balances, and it belongs to the balance pass.
+
+---
+
+## R-2 — Regions 4–8: five rosters, five bosses, five curses
+
+**14 Nov. GDD §3.7. Code: `js/content/enemies-{egypt,congo,russia,sunda,outback}.js`.**
+
+The roster brief (`docs/regions-3-8-roster-brief.md`) is a template with empty slots; these are the slots filled. Every roster is authored to the same role bands — fodder 3 HP, one light special at 8, two landmarks — so the only thing that distinguishes a region is **what it asks of the player.** Each adds one thing the regions before it did not:
+
+| Region | Asks | By fielding |
+|---|---|---|
+| 4 Egypt | The kill is not the end of the body | a **splitter** as the commonest unit, and the game's first **sniper** |
+| 5 Central Africa | The crowd is not uniform | a **bomber** you must not stand beside and a **medic** you must kill first |
+| 6 Northern Russia | The crowd is not always one hit | the warden's ally aura on a common **special** — a shield-wall |
+| 7 Off Indonesia | Nothing arrives in a straight line | an **orbiter** as the commonest unit, and the longest light lane |
+| 8 Australian Outback | Everything at once | one fodder per domain at near-equal weight, under a 40% cap |
+
+The five behaviours no earlier roster used (splitter, sniper, bomber, medic, and the aura on a light unit) are each introduced once, in order of how much they ask.
+
+**Boss health continues the 900 → 1600 → 2300 line** against measured output at each anchor: 2600, 3200, 3600, 4400, and 8000 for the last. These are provisional. `boss_gate` reports a level-anchor Necromancer killing them in 26–51 s in god mode, which is short — the Necromancer is the fastest boss-killer measured — and the last boss at 51 s is not yet the endurance fight §3.4 intends. **The balance pass owes all eight bosses a time-to-kill target and a re-measure.**
+
+**Not done, and said so.** Hazards are named for all eight regions and implemented for none. No region authors a nest, so Nest Purge still borrows the dungeon's. Regions 2–8 are not yet on the horde curve.
+
+## R-3 — Source material for regions 5, 7 and 8
+
+**14 Nov. Recorded in the roster files and GDD §3.7.**
+
+The GDD names region 5 for "Congo spirit cosmology … masked ancestors", region 7 for "tide gods", and region 8 for "Aboriginal Dreaming". **No figure from a living tradition's sacred stories is used as a monster to be killed.**
+
+- Region 5 is invented swamp-and-rot bodies and Mokele-mbembe, a river cryptid.
+- Region 7 is invented sea-things and a drowned king of an invented city.
+- Region 8 is built entirely from the continent's extinct megafauna — Thylacoleo, Diprotodon, Genyornis, Megalania — and the country itself (dust, heat, fire). Nothing from any people's Dreaming appears.
+
+This is a call made on the user's behalf about their game, and it narrows what the GDD describes. It is theirs to revisit.
+
+## R-4 — Boss mechanics become data
+
+**14 Nov. GDD §3.5 item 5. Code: `tickBossBlocks` in `js/entities/enemies.js`.**
+
+The three region bosses shared one kit — zone, charge, a phase 2 with a different shape — and were the same fight at three sizes. The four legacy bosses each had a real mechanic, as four bespoke `kit` cases, which is why a fifth boss could not have one without a fifth case.
+
+The mechanics are lifted into seven optional **blocks** on a boss def: `adds`, `ring`, `volley`, `pools`, `vortex`, `beams`, `ward`. Each drives a sim primitive that already existed. `p2.<block>` **replaces** rather than merges, so a block can exist in phase 2 only, tighten, or stop.
+
+**Two things the gate found on its first run, both fixed here:**
+
+- **A ring born at the boss's centre is born inside the player.** A boss walks onto its target, so all sixteen bolts of Megalania's ring struck a stationary player in the tick they spawned — 192 damage with no travel time. Bolts now leave from the rim. *The legacy Choir and Regent kits spawn from the centre the same way and have not been changed.*
+- **Phase 2 waited on phase 1's timers.** A block redeclared with a shorter cooldown still ran out the old one first. Timers are now clamped on the tick the phase turns. This was found by the gate's own negative control.
+
+## R-5 — Two leaks closed, and a hole in R-1
+
+**14 Nov. Found by `region_wire_gate` when regions 4–8 first existed.**
+
+- **A lever asks for a role, and a region with nobody in that role has no lever.** `_leverPick(...) || 'lobber'` borrowed the dungeon's Lobber for any region without a ranged body. Central Africa has none by design. With a region roster, no match now means the drawn id stands.
+- **The Elite Arena's champions are the region's own.** Its four variants named dungeon monsters outright. They are now resolved by role against the region, scaled to land on the variant's tuned health whatever the stand-in's own HP is, and the "Splitter" champion splits whatever body is standing in for it.
+- **R-1 asked the def and should have asked the spawn.** "Fodder" is a role in a crowd. The same body spawned as an elite, an Elite Arena champion or a bounty is meant to take a fight; `enemyHpAxis` now takes the spawn options and keeps the world axis for all three. Without this an elite fodder in region 8 would have had 9 HP.
+
+## Findings logged, not acted on
+
+- **Region 1 is over its own domain cap.** By encounter weight it is 77.5% physical against a 60% cap; the horde re-weighting put two physical bodies at 7.5 of 10. `roster_weight_gate` now reports the share for every region. Fixing it changes the most-played region in the game and belongs to the balance pass.
+- **Fodder one-hit has zero margin at triangle disadvantage.** 5 × 0.80 = 4.0 against a 4 HP body. Now gated, so it fails first if `enemyHpMult` or the packet moves.
+- **Nest Purge's +50% map toughness lands on fodder**, taking it to 6 HP against a 5-damage opener — in region 1 too, today. Not changed here.
+- **A siege's crowd is thinner under R-1.** `sim_test`'s stress harness fell from ≥150 alive to 106 in region 4 because one level-1 opener now mows the fodder it could not dent before. The harness was stripping weapons and leaving the skill firing; it now strips both, as its comment always intended. The underlying fact stands and is the pace pass's: **the horde has to grow in count.**
