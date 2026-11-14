@@ -49,7 +49,7 @@ export const EG_ENEMIES = [
     // smaller). Slower than any earlier region's chaser on purpose — the
     // pressure is the count, not the pace.
     id: 'eg_mummy', domain: 'spiritual', name: 'Shambling Mummy', behavior: 'splitter',
-    hp: 3, spd: 150, dmg: 3, radius: 15, mats: 1, w: 3.8, splitInto: 2,
+    hp: 3, spd: 150, dmg: 3, radius: 15, mats: 1, w: 3.8, splitInto: 2, splitNoMats: true,
     shape: 'circle', color: '#c9b98a',
   },
   {

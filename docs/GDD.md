@@ -157,7 +157,20 @@ A **lobby, not a hub**. No shops, no vendors, no walking around. Shows the eight
 
 **Map 1 runs at the curve above ×1.45 (about 120 spawned).** *Ruled 2026-11-02 (Designer).* At the raw curve (about 85) the kite bot sat at a median 8–13 alive and missed the density bar. Density is the bar, so the rate moved rather than the bar. Revisit after the opener pierce/splash pass (`docs/design/pace-spec.md` §12), since faster openers thin the field.
 
-**Region scope (ruled 2026-11-02, Designer).** The first horde build covers region 1 only. Region 2 (Xibalba) stays on the slow curve on that branch, because its roster is still 50%+ telegraphing heavies and would be a wall at horde rates. It gets its own horde pass, with its roster re-authored into fodder and specials, before it switches. *Ruled 2026-11-04 (Designer):* Region 2 goes horde before Region 3 or at the same time (roster in `docs/design/pace-spec.md` §15). Region 3 joins `HORDE_REGIONS` when the pace branch passes. Each region's fodder HP is checked against the weakest opener hit at that region's arrival level, not at level 1.
+**All eight regions run at horde pace (14 Nov 2026, rulings R-6).** Region 2's roster is re-authored into fodder and specials as `docs/design/pace-spec.md` §15 specified, and `HORDE_REGIONS` is every region. *History: the first horde build covered region 1 only (ruled 2026-11-02, Designer); region 2 was to go horde before or with region 3 (ruled 2026-11-04).*
+
+**The horde's growth is the fodder's.** A region's spawn rate is the region-1 curve × `HORDE_REGION_RATE`, and that factor is divided back out of every telegraphing unit's draw weight, so specials and landmarks arrive at region 1's rate *per second* however large the crowd around them is. They already scale with the player — their HP rides the world axis (§4.3) — and multiplying their arrival rate as well multiplied that axis twice. Measured before the split, a region-8 room fielded about fourteen landmarks where region 1's fields one or two, and thirteen of fourteen classes sat pinned at the alive cap for the whole wave.
+
+`HORDE_REGION_RATE` is set by measurement against the density bars above (`tools/region_pace.mjs`, all fourteen classes), not by formula:
+
+| Region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| Fodder rate × | 1.00 | 1.30 | 1.00 | 1.00 | 1.80 | 1.00 | 1.10 | 1.10 |
+| Median alive, map 3 | 43 | 56 | 66 | 76 | 53 | 61 | 61 | 57 |
+
+It is not a smooth climb because it depends on what a roster does to its own crowd: Egypt's mummies split into more bodies, Central Africa's bombers remove themselves, and an orbiter-heavy roster accumulates. At these rates no room is ever near empty (two or fewer alive for at most 5% of the wave outside region 1's first map) and almost no class is pinned at the cap.
+
+**The horde does not yet grow much across the run, and the reason is the classes.** The median class clears about 5–7 fodder a second at level 4 with two skills and about the same at level 70 with eight; half the roster's pack-clearing does not grow with level at all. The rate table can only follow that. Raising it is owed to the class pass (§5.10), after which this table is re-measured.
 
 The measured baseline on main was 47–56 enemies over about 70 s on map 1, and 111 over 75 s plus a 20–30 s mop-up on map 3 (`docs/design/pace-spec.md` §1).
 
@@ -283,7 +296,9 @@ The measurement denominator is its own lesson. The first version of the gate sto
 
 ### 4.2 The player power curve
 
-- **1–2 levels per map.** Across 48 maps this produces a character in the **low 70s** at the end of a run.
+- **1–2 levels per map — 1.5, held.** Six fights a region, nine levels a region, and a run that ends at about **level 77**. Region 1's first map is the one exception: it is the onboarding room and leaves a character at level 6–7 with three slots (ruled 2 Nov 2026).
+
+  *This rule was in every draft and was only ever checked on that one map.* XP rides materials, and materials are sized for the shop by spawn count; nothing sized them for the level curve. Measured on main at `22419eb`, region 1 paid five to seven levels a map, a character arrived at region 2 at level 23 against an anchor of 10, and at region 4 at about level 50 against 28. `MAP_XP_MULT` (`js/arenas.js`) now multiplies **XP only**, at the one site it is credited, by a measured factor per region and map; gold is untouched. `tools/level_curve_gate.mjs` plays every map and every boss in every region and asserts 1.0–2.0 levels and that each region's six fights join the next region's anchor (rulings R-7).
 - **No rank cap.** A skill accepts unlimited points.
 - **Per-rank increment: +4% of base damage, +3% of base duration, linear against base.** Never compounding — `damage *= 1.04` per rank is explosive at rank 40.
 - **Ranks raise damage and duration only.** Not radius, not cooldown, not projectile count, not trigger thresholds.
@@ -355,7 +370,9 @@ Authored per region band, not computed from a global curve. Expected player leve
 
 | Region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 |---|---|---|---|---|---|---|---|---|
-| Level | 1 | 10 | 19 | 28 | 37 | 46 | 55 | 64 |
+| Level | 1 | 14 | 23 | 32 | 41 | 50 | 59 | 68 |
+
+*These read 1, 10, 19 … 64 until 14 Nov 2026 — nine levels a region from level 1. Region 1 now runs 1 → 6.5 on its first map and 1.5 a fight after it, arriving at region 2 at 14; every later region is nine levels (§4.2). `expectedLevelAt(region, fight)` in `js/regions.js` is the level a character carries into any fight, and a load assertion holds the anchors, each region's `expectedLevel` and the 1.5-a-fight rule to each other.*
 
 If a party arrives significantly above or below the anchor, that is the difficulty setting doing its job, not a bug.
 
@@ -371,10 +388,14 @@ If a party arrives significantly above or below the anchor, that is the difficul
 
 | Region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 |---|---|---|---|---|---|---|---|---|
-| HP × | 1.00 | 2.13 | 3.84 | 4.33 | 5.29 | 6.02 | 7.35 | 7.36 |
-| damage × | 1.00 | 1.59 | 2.26 | 2.44 | 2.75 | 2.98 | 3.36 | 3.36 |
+| HP × | 1.00 | 4.74 | 10.04 | 10.04 | 12.16 | 14.64 | 17.04 | 20.92 |
+| damage × | 1.00 | 2.57 | 4.06 | 4.06 | 4.56 | 5.11 | 5.60 | 6.34 |
 
-This replaces `FLOOR_HP_MULT ^ (floor-1)`, a geometric ramp over four points, and it was **re-derived rather than rescaled**. The old curve reached ×2.46 by floor 4; this reaches ×4.33 by region 4, whose anchor is level 28 — so the four-floor curve was scaling enemies slower than it scaled players, and a run got easier the longer it ran. Regions 7 and 8 are flat because three of four measured classes stop gaining output between level 55 and 64: the trees absorb every point, but the last nine buy ranks, and a rank is −3% cooldown against a floor of 70%. Region 8's difficulty comes from its even domain spread (§3.2) and its boss, not from this axis.
+**Re-measured 14 Nov 2026 (rulings R-8).** These read ×1.00 / 2.13 / 3.84 / 4.33 / 5.29 / 6.02 / 7.35 / 7.36, measured honestly against a character that does not exist: four classes, at anchors the XP economy overshot by two regions, built by assigning `p.level` — which grants a level's skill points and none of its stat cards. By region 8 that fixture was missing sixty-three cards, most of a character's Damage stat. Re-measured across all fourteen classes, at the anchors the game now pays, on characters built through the game's own level-up path (`tools/lib/build_char.mjs`), median output runs 16.3 → 77.1 → 163.1 → 155.9 → 197.7 → 237.9 → 276.9 → 340.0: **a region-8 character puts out about 21× a level-1 one, and the axis said 7.36.** Everything that rides it was a third as tough as flat time-to-kill asks by the end of the run. Region 4 measures a hair under region 3 and holds region 3's value; the axis may flatten and never reverse.
+
+Damage keeps `HP^0.608`. It is no longer unmeasurable: with stat cards spent, effective HP for a build that takes damage and vitality evenly grows about ×7 to ×9 by region 8 against ×6.34 here, so the inherited exponent lands where a measured one would. A build that takes only damage cards grows its effective HP ×1.2 and will find region 8 lethal — that is the card's price.
+
+*History:* the table replaces `FLOOR_HP_MULT ^ (floor-1)`, a geometric ramp over four points, and it was **re-derived rather than rescaled**. The old curve reached ×2.46 by floor 4; this reaches ×4.33 by region 4, whose anchor is level 28 — so the four-floor curve was scaling enemies slower than it scaled players, and a run got easier the longer it ran. Regions 7 and 8 are flat because three of four measured classes stop gaining output between level 55 and 64: the trees absorb every point, but the last nine buy ranks, and a rank is −3% cooldown against a floor of 70%. Region 8's difficulty comes from its even domain spread (§3.2) and its boss, not from this axis.
 
 Damage is not measured separately — player effective HP grows from banked stat picks, which are a choice rather than a table. It keeps the relationship the old curve authored between the two axes, `ln(1.20)/ln(1.35) = 0.608`, so damage grows as HP^0.608.
 
@@ -404,7 +425,9 @@ So the axis is split by what each half measures:
 
 `REGION_OPENER_PACKET` is **measured, not authored**, and the gate re-measures every entry for all eight regions and fails on drift in either direction. It is flat today. If openers are ever given real per-level growth, the table moves with them and fodder thickens to match — which is why the multiplier is derived from the packet rather than written as eight ones.
 
-**What this costs, stated so nobody rediscovers it.** A landmark is worth 11 fodder in region 1 and 62 in region 3, and the ratio keeps widening to region 8. That is the intended shape — a crowd you mow and a few things you fight — but it means **the horde's threat in later regions comes from count, speed and contact damage, never from fodder HP**, and a region whose spawn rate is not raised to match the player's rate will play as an empty room. The per-region spawn rate is the pace pass's number and is set by the density bars of §2.6, the way map 1's ×1.45 was.
+**What this costs, stated so nobody rediscovers it.** A landmark is worth 11 fodder in region 1 and well over a hundred by region 8. That is the intended shape — a crowd you mow and a few things you fight — and it means **the horde's threat in later regions comes from count, speed and contact damage, never from fodder HP.**
+
+**CORRECTION (14 Nov 2026).** This paragraph first went on to say that a region whose spawn rate is not raised to match the player's "will play as an empty room". **Measured, that is wrong**, and in the opposite direction: with every region on the horde curve at the old rate, median alive at map 3 ran 49–107 and from region 4 on nearly every class was pinned at the alive cap. Specials and landmarks keep the world axis and carry most of a room's health, so a room fills rather than empties. What followed from the measurement is §2.6: the horde's growth is the fodder's, and the per-region rate is a measured table.
 
 **PER-BODY TUNING FOR REGIONS 3–8 IS PROVISIONAL.** Those six regions have **no authored rosters** and fall back to the base 12-enemy table, so every per-body figure measured for them describes the fallback rather than the region. `tools/power_curve_phase2.mjs` §6 shows the shape of the problem: once the world axis is divided out, mean per-body HP still declines 14.0 → 11.3 across regions 3–6, which is spawn composition drawing from a table that was never written for those bands. **Any per-body tuning applied to regions 3–8 must be re-derived when real rosters land** (42 units and 6 bosses, `docs/regions-3-8-roster-brief.md`), and a survey quoting those numbers should cite this paragraph.
 
@@ -2766,9 +2789,12 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
 | Node types | Horde, Elite and Objective all live and measured; difficulty wired (D-24) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
-| Regions built | **8 of 8 playable** — 48 enemies, 8 two-phase bosses (§3.7). Region 1 runs at horde pace; regions 2–8 join `HORDE_REGIONS` on the pace pass (§2.6), which also owes each one its spawn rate (§4.3) |
+| Regions built | **8 of 8 playable** — 48 enemies, 8 two-phase bosses (§3.7). All eight run at horde pace, each at a measured fodder rate (§2.6) |
 | Region tilesets, hazards | **Tilesets: 7 of 8** wear a biome (Great Britain has no tile art and draws the flat fill). **Hazards: all eight named, none implemented** — `undergrowth`, `bloodmire`, `fae_ring`, `quicksand`, `rot_pool`, `black_ice`, `riptide`, `bushfire`. One engine feature, not eight |
-| Regions 4–8 | **Built 14 Nov 2026** — horde rosters, five bosses with signature blocks, five curses each read at one site, all gated (`roster_weight_gate`, `boss_gate`, `curse_gate`). **Not yet done:** nest archetypes (all eight regions still borrow `wombden`), painted sprites (silhouette notes are written; `docs/silhouettes.json`), and the per-region spawn rate |
+| Regions 4–8 | **Built 14 Nov 2026** — horde rosters, five bosses with signature blocks, five curses each read at one site, all gated (`roster_weight_gate`, `boss_gate`, `curse_gate`). **Not yet done:** nest archetypes (all eight regions still borrow `wombden`), painted sprites (silhouette notes are written; `docs/silhouettes.json`) |
+| Level curve | **Held and gated** — 1.5 levels a fight in every region, level 77 at the end (§4.2). `MAP_XP_MULT` is measured; `level_curve_gate.mjs` plays all 48 fights. Before 14 Nov the curve was asserted on one map and overshot the anchors by two regions |
+| World axis | **Re-measured 14 Nov 2026** against real characters at the paid anchors, all fourteen classes: ×20.92 by region 8, where it read ×7.36 (§4.3) |
+| Test characters | `tools/lib/build_char.mjs` — levels through `_grantLevel`, skill points through `spendSkillPoint`, and the banked stat cards actually spent, by a stated policy. Every earlier harness assigned `p.level` and measured a character with no stat cards; two sent `levelUp` for an action spelled `levelup` |
 | Classes 3–14 | **COMPLETE — 14 of 14 built** (42 trees, 420 skills, 14 selectable). Every class is at the ruled three; all fourteen third trees branch. Phase 5's class work is done. **Outstanding: the original 28 chains are not yet converted to the branching spec** (§8.1) |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |

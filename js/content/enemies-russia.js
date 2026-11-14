@@ -109,12 +109,20 @@ export const RU_ENEMIES = [
 // follows — and the 15% that still lands is there so the health bar keeps
 // moving and nobody mistakes the mechanic for a bug.
 //
-// `hpMult: 0.45` because the siege pylon rides the world axis (×6.02 here)
-// and would arrive at more than half of Koschei's own health; at 0.45 it is
-// roughly ten seconds of a level-46 character's focus.
+// `hpMult: 0.15` because the siege pylon rides the world axis (×14.64 here,
+// re-measured 14 Nov) and at full size would carry more health than Koschei
+// himself; at 0.15 it is about 750 — several seconds of a level-57
+// character's focus once they have crossed the room to it.
+//
+// 2,800 HP, BELOW the 3,200 of the boss before him, on purpose: the walk to
+// the ward and the ward itself are a third of this fight, and they are paid
+// in time rather than in health. At 3,600 the median of fourteen classes
+// took 114 s against 53 s for regions 4 and 5 (tools/boss_ttk_probe.mjs,
+// with a bot that goes to the ward) — twice as long, for a fight that should
+// be different rather than longer.
 export const RU_BOSS = {
   id: 'ru_boss', name: 'Koschei the Deathless', domain: 'mental',
-  hp: 3600, spd: 70, dmg: 26, radius: 46, mats: 105,
+  hp: 2800, spd: 70, dmg: 26, radius: 46, mats: 105,
   shape: 'hex', color: '#8fa3b0',
   telegraph: {
     windupMs: 640, recoverMs: 520, cooldownMs: 2800, retryFrac: 0.25, recoverFrozen: true,
@@ -124,7 +132,7 @@ export const RU_BOSS = {
   p2: {
     atFrac: 0.5, spdMult: 1.2,
     chargeCd: 3.8,
-    ward: { reduce: 0.85, hpMult: 0.45 },
+    ward: { reduce: 0.85, hpMult: 0.15 },
     telegraph: {
       windupMs: 480, recoverMs: 400, cooldownMs: 2200, retryFrac: 0.25, recoverFrozen: true,
       shape: { kind: 'cone', angle: 130, range: 300 }, damage: 46, domain: 'mental',

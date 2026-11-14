@@ -6,7 +6,7 @@ import { CONFIG, DEV, TIER_MULT, TIER_PRICE_MULT, weaponBasePrice, sellValue, ST
 import { Rng, subRng, hashString } from './rng.js';
 import { Pool, SpatialHash, clamp, dist, dist2, angleTo, segHitsRect, segRectEntryT } from './util.js';
 import { generateTree, serializeMap } from './nodetree.js';
-import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP, ONBOARDING_DROP_SCALE, isHordeRegion, hordeYieldScale, HORDE_MAP1_FODDER_CONTACT_MULT, HORDE_MAP1_FODDER_SPD_CAP, HORDE_MAP1_PACK_RAMP_S, HORDE_MAP1_THIN_ALIVE, HORDE_MAP1_THIN_DEBT } from './arenas.js';
+import { buildArena, waveConfig, PROFILES, isOnboardingNode, onboardingXpMult, mapXpMult, ONBOARDING_LEVEL_FLOOR, ONBOARDING_CEDAR_WEIGHT, ONBOARDING_WARDEN_CAP, ONBOARDING_ALIVE_CAP, ONBOARDING_DROP_SCALE, isHordeRegion, hordeYieldScale, hordeSpecialWeightScale, HORDE_MAP1_FODDER_CONTACT_MULT, HORDE_MAP1_FODDER_SPD_CAP, HORDE_MAP1_PACK_RAMP_S, HORDE_MAP1_THIN_ALIVE, HORDE_MAP1_THIN_DEBT } from './arenas.js';
 import {
   IS_OBJECTIVE, OBJECTIVE_KINDS, initObjective, tickObjective,
   serializeObjective, objectiveKillPays, objectiveSpawnMult, objectiveEndless,
@@ -3649,7 +3649,11 @@ export class Sim {
       // regional body is standing in for it (objectives.js regionStandIn).
       if ((e.def.behavior === 'splitter' || e.splitInto) && !e.mini) {
         for (let i = 0; i < (e.splitInto || e.def.splitInto); i++) {
-          this.spawnEnemyById(e.def.id, x + (i ? 18 : -18), y + (this.rng.float() * 20 - 10), { mini: true, noMats: false });
+          // `splitNoMats`: a body that is the COMMONEST unit of its roster and
+          // splits would pay three times for one draw — Egypt measured at
+          // double the materials of any other region before its mummies
+          // declared this. The split is the fight; the mummy is the pay.
+          this.spawnEnemyById(e.def.id, x + (i ? 18 : -18), y + (this.rng.float() * 20 - 10), { mini: true, noMats: !!e.def.splitNoMats });
         }
       }
       if (e.def.behavior === 'bomber' && !e.fusing) {
@@ -4525,7 +4529,11 @@ export class Sim {
     // `v`, and it still does not grant XP when the pickup named its own.
     // …and the onboarding ramp's XP compensation rides here, at the single
     // point XP is credited, so it touches experience and nothing else.
-    const onbXp = this.arenaNode ? onboardingXpMult(this.regionIndex, (this.arenaNode.depth || 1) - 1) : 1;
+    // The boss room has no depth (`siege`, depth null), and `|| 1` used to file
+    // it under MAP 1 — so region 1's boss paid the onboarding room's ×1.7.
+    // It is the sixth fight and has its own column.
+    const xpCol = this.arenaNode ? (this.arenaNode.kind === 'siege' ? 5 : (this.arenaNode.depth || 1) - 1) : 0;
+    const onbXp = this.arenaNode ? mapXpMult(this.regionIndex, xpCol) : 1;
     const xpExact = (xpV === undefined ? v : xpV) * (1 + p.hookAgg.xpBonus / 100) * onbXp;
     const xpGain = this._takeWhole(p, 'xpRem', xpExact);
     p.xp += xpGain;
@@ -5089,7 +5097,12 @@ export class Sim {
     // often. Same number of waveRng draws as without it — one — so the curse
     // changes WHAT a roll selects and never how many rolls a room makes.
     const c = this.fightMods && this.fightMods.cursed;
-    const sm = c && c.specialWeightMult > 0 ? c.specialWeightMult : 1;
+    // AND THE HORDE'S GROWTH IS FODDER'S (arenas.js, R-6): a telegraphing
+    // unit's weight is scaled so it arrives at region 1's rate per second.
+    // Elite rooms draw their champions through nodePopulation's own split and
+    // are left alone — a room that is ABOUT champions should not thin them.
+    const grow = (this.nodeType === 'elite') ? 1 : hordeSpecialWeightScale(this.regionIndex);
+    const sm = (c && c.specialWeightMult > 0 ? c.specialWeightMult : 1) * grow;
     const wOf = (x) => (x.def.telegraph ? x.w * sm : x.w);
     const total = pop.reduce((a, x) => a + wOf(x), 0);
     let roll = this.waveRng.float() * total;

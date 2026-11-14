@@ -10,36 +10,26 @@
 import { Sim } from '../js/game.js';
 import { TREES, TREES_BY_CLASS, slotsAtLevel } from '../js/skills.js';
 import * as SKILLSIM from '../js/skillsim.js';
-import { REGIONS, anchorLevel, bossForRegion } from '../js/regions.js';
+import { REGIONS, expectedLevelAt, bossForRegion } from '../js/regions.js';
+import { buildCharacter } from './lib/build_char.mjs';
 
-const CLASSES = ['toh_blacksmith', 'toh_wizard', 'toh_necromancer', 'toh_druid'];
-const SEEDS = [5, 6, 7];
+const CLASSES = process.argv.includes('--ref') ? ['toh_blacksmith', 'toh_wizard', 'toh_necromancer', 'toh_druid'] : Object.keys(TREES_BY_CLASS);
+const SEEDS = [5];
 const CAP_S = 600;
-const args = process.argv.slice(2).map(Number).filter(n => n > 0);
+const args = process.argv.slice(2).filter(a => !a.startsWith('--')).map(Number).filter(n => n > 0);
 const regions = args.length ? args : REGIONS.map(r => r.index);
 
 function run(regionIndex, classId, seed) {
-  const level = anchorLevel(regionIndex);
+  // THE LEVEL A PLAYER MEETS THE BOSS AT, not the level they entered the
+  // region at: the boss is the sixth fight, five maps and 7.5 levels later
+  // (expectedLevelAt). And a character BUILT, not assigned — this probe set
+  // `p.level` and sent `{kind:'levelUp'}` for the stat cards, which is not an
+  // action the sim has (it is `levelup`), so every figure it printed was for
+  // a character with no stat cards at all.
+  const level = Math.floor(expectedLevelAt(regionIndex, 5));
   const sim = new Sim({ seed, regionIndex, party: [{ idx: 0, key: 'k', name: 'C', charId: classId, color: '#fff' }] });
   sim.god = true;
-  const p = sim.players[0];
-  if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
-  p.level = level;
-  const skills = (TREES_BY_CLASS[classId] || []).flatMap(t => TREES[t].skills).sort((a, b) => a.tier - b.tier);
-  let budget = level - 1;
-  for (let pass = 0; pass < 12 && budget > 0; pass++) {
-    let spent = 0;
-    for (const sk of skills) {
-      if (budget <= 0) break;
-      p.skillPoints++;
-      if (SKILLSIM.spendSkillPoint(sim, p, sk.id)) { budget--; spent++; } else p.skillPoints--;
-    }
-    if (!spent) break;
-  }
-  const slots = slotsAtLevel(level);
-  const learned = skills.filter(s => s.type === 'active' && (p.skillRanks[s.id] || 0) >= 1).map(s => s.id);
-  if (learned.length) { p.loadout = new Array(8).fill(null); for (let i = 0; i < slots && i < learned.length; i++) p.loadout[i] = learned[i]; }
-  sim._recomputeStats(p);
+  const { p } = buildCharacter(sim, { level });
   sim._travelTo(sim.floor.bossId);
   sim.siegeT = sim.bossAt;
   for (let i = 0; i < 600 && !sim.boss; i++) sim.tick();
@@ -48,10 +38,16 @@ function run(regionIndex, classId, seed) {
   const maxHp = b.maxHp, t0 = sim.time;
   let p2At = null;
   for (let i = 0; i < CAP_S * 60 && b.active && b.hp > 0; i++) {
-    for (const e of sim.enemyPool) if (e.active && !e.boss && e !== b && e.id !== sim.pylonId) { e.hp = 0; sim.enemyPool.release(e); }
+    for (const e of sim.enemyPool) if (e.active && !e.boss && e !== b && e.id !== sim.pylonId && !(b.bs && e.id === b.bs.wardId)) { e.hp = 0; sim.enemyPool.release(e); }
+    // A WARDED BOSS IS FOUGHT AT THE WARD. The character's only input is where
+    // it stands, so a probe that stands still measures a boss it is not
+    // fighting: Koschei read 272 s here because the bot stayed beside him
+    // while he refused 85% of every hit. Walk to the ward while it stands.
+    const ward = b.bs && b.bs.wardId ? sim.enemyById(b.bs.wardId) : null;
+    if (ward) { const d = Math.hypot(ward.x - p.x, ward.y - p.y) || 1; sim.setInput(0, d > 90 ? { mx: (ward.x - p.x) / d, my: (ward.y - p.y) / d } : { mx: 0, my: 0 }); }
+    else sim.setInput(0, { mx: 0, my: 0 });
     sim.tick();
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
-    if (p.pendingOffer && p.pendingOffer.length) sim.uiAction(0, { kind: 'levelUp', id: p.pendingOffer[0].id });
     if (p2At === null && b.bs && b.bs.phase2) p2At = sim.time - t0;
   }
   const dead = !(b.active && b.hp > 0);
@@ -76,7 +72,7 @@ for (const ri of regions) {
     ttks.push(median(per));
   }
   out[ri] = { boss: boss.id, authored: boss.hp, spawned: hp, ttk: median(ttks), perClass: ttks };
-  console.log(`region ${ri} ${boss.id} (${boss.name}): authored ${boss.hp} HP, spawned ${hp} HP — median TTK ${median(ttks).toFixed(1)}s across ${CLASSES.join(', ')} at level ${anchorLevel(ri)} [${ttks.map(t => t.toFixed(1)).join(', ')}]\n`);
+  console.log(`region ${ri} ${boss.id} (${boss.name}): authored ${boss.hp} HP, spawned ${hp} HP — median TTK ${median(ttks).toFixed(1)}s across ${CLASSES.join(', ')} at level ${Math.floor(expectedLevelAt(ri, 5))} [${ttks.map(t => t.toFixed(1)).join(', ')}]\n`);
 }
 const base = out[1] && out[1].ttk;
 if (base) for (const [ri, o] of Object.entries(out)) console.log(`region ${ri}: ${o.ttk.toFixed(1)}s = ×${(o.ttk / base).toFixed(2)} of region 1`);

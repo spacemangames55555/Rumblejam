@@ -427,15 +427,31 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
   // HORDE PACE (pace-spec.md §4, user ruling 2 Nov 2026). Map 1 is a 30 s
   // horde wave on the spec's raw 1.11 → 2.78 curve × HORDE_RATE_TUNE (the
   // measured step that clears the §7 bars), map 2 has no 75% step any more,
-  // region 2 is still on the slow curve, and the 0.6 wave / 1/0.6 drop scale
-  // are retired (fodder yield is hordeYieldScale instead).
+  // and the 0.6 wave / 1/0.6 drop scale are retired (fodder yield is
+  // hordeYieldScale instead).
+  //
+  // REGION 2 IS ON THE HORDE CURVE TOO (14 Nov 2026, rulings R-6). This
+  // pinned "region 2 still on the slow curve" at r0 0.75; it now pins the
+  // horde value: raw 1.11 × the region's measured rate × TUNE, on a 35 s
+  // wave. A horde region between two slow ones would read as a broken map
+  // (pace-spec §11.10), and the same goes for every region after it — so the
+  // last one is pinned as well.
+  //
+  // The two rates are LITERALS, 1.30 and 1.10, not read from
+  // HORDE_REGION_RATE: that table is set by measurement against the density
+  // bars (tools/region_pace.mjs), and a check that read it back would pass
+  // for any value. Changing the table should have to be done twice, here and
+  // there, on purpose.
   const TUNE = AR.HORDE_RATE_TUNE;
+  const last = AR.waveConfig(8, 0, 'combat');
   if (m1.horde && m1.dur === 30 && Math.abs(m1.r0 - 1.11 * TUNE) < 1e-9 && Math.abs(m1.r1 - 2.78 * TUNE) < 1e-9
-      && m2.dur === 38 && Math.abs(m2.r0 - 1.39 * TUNE) < 1e-9 && !later.horde && Math.abs(later.r0 - 0.75) < 1e-9
+      && m2.dur === 38 && Math.abs(m2.r0 - 1.39 * TUNE) < 1e-9
+      && later.horde && later.dur === 35 && Math.abs(later.r0 - 1.11 * 1.30 * TUNE) < 1e-9
+      && last.horde && last.dur === 60 && Math.abs(last.r0 - 1.11 * 1.10 * TUNE) < 1e-9
       && AR.ONBOARDING_WAVE_SCALE === 1 && AR.ONBOARDING_DROP_SCALE === 1 && AR.ONBOARDING_RATE.every(x => x === 1)) {
-    ok(`map 1 is a 30 s horde wave (raw ${m1.r0.toFixed(2)} → ${m1.r1.toFixed(2)}/s), map 2 38 s with no 75% step, region 2 still on the slow curve; the 0.6 wave and 1/0.6 drop are retired`);
+    ok(`map 1 is a 30 s horde wave (raw ${m1.r0.toFixed(2)} → ${m1.r1.toFixed(2)}/s), map 2 38 s with no 75% step; region 2 is a 35 s horde wave at ×1.30 and region 8 a 60 s one at ×1.10; the 0.6 wave and 1/0.6 drop are retired`);
   } else {
-    fail(`map 1 wave scale drifted: r0 ${m1.r0} r1 ${m1.r1} dur ${m1.dur}, map2 r0 ${m2.r0}, region2 r0 ${later.r0}, drop ${AR.ONBOARDING_DROP_SCALE}`);
+    fail(`map 1 wave scale drifted: r0 ${m1.r0} r1 ${m1.r1} dur ${m1.dur}, map2 r0 ${m2.r0}, region2 horde ${later.horde} r0 ${later.r0} dur ${later.dur}, region8 horde ${last.horde} r0 ${last.r0} dur ${last.dur}, drop ${AR.ONBOARDING_DROP_SCALE}`);
   }
 
   for (const { name, seed } of seeds) {

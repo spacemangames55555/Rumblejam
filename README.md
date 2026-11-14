@@ -666,6 +666,23 @@ never loads them:
   so the read can be learned on something that dies. The composed figure
   (`mean × axis`) is printed and never gated — gating a derived number invites
   satisfying the check by moving the axis.
+- `node tools/level_curve_gate.mjs [--measure] [--regions=…]` — **every fight
+  pays one to two levels.** GDD §4.2's rule, asserted in every region: a
+  character at the expected level plays each map and each boss, and the gate
+  reads the levels off it and checks that a region's six fights join the next
+  region's anchor. `--measure` prints what each room credits at ×1 and the
+  multiplier that lands it on 1.5, to paste into `MAP_XP_MULT`.
+- `node tools/region_pace.mjs [--regions=…] [--depths=…] [--classes=all]
+  [--rate=R:K,…] [--mortal]` — **how full is the room, in every region.** The
+  region-general pace bot: spawned, kills/s, median alive, share of the wave
+  near empty, peak, tail, levels and materials paid, per region × map ×
+  class. `--rate` trials a per-region fodder rate through the table the game
+  reads. A measurement, not a gate; it is how `HORDE_REGION_RATE` is set.
+- `tools/lib/build_char.mjs`, `tools/lib/room_bot.mjs` — **the character and
+  the bot every measurement should use.** A character built through the
+  game's own level-up path with its stat cards spent, and a bot that stands
+  where its skills connect and picks up what drops. Use these rather than
+  assigning `p.level`.
 - `node tools/boss_gate.mjs [regionIndex …] [--verbose]` — **every region boss
   is a fight, and every mechanic it declares happens.** A character at the
   region's anchor level fights each boss in its real siege room and the gate
