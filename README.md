@@ -559,6 +559,15 @@ unbuilt for exactly as long as it took to build them. A pointer cannot drift.
 `tools/` contains the test harnesses used during development — the game itself
 never loads them:
 
+- `node tools/run_gates.mjs [--browser] [--only=name] [--save=FILE] [--baseline=FILE]`
+  — **every gate, one command.** Runs each `*_gate.mjs` / `*_test.mjs` in
+  `tools/` (plus `skill_sweep`, `phase2_gates`, `tree_dps`, `validate_items`)
+  in parallel and lists the red ones with their failing lines. `--save` writes
+  the result; `--baseline` compares against a saved run and fails only on a
+  failing line that was not already there, so a patch is judged against what
+  main carried rather than against an imagined clean slate. Use it before
+  every merge: the suite alone was green on main while ten focused gates were
+  red, because nothing ran them together.
 - `node tools/sim_test.mjs` — headless full-game test suite: content counts
   (32/≥100/26), the dead-stat gate (every stat on ≥2 weapons, ≥5 items,
   ≥1 statline), 600 seeded node-map generations (counts, guarantees,

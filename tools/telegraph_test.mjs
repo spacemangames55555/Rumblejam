@@ -403,7 +403,7 @@ run('Reflex-roll avoidance does NOT fire ON_DODGE', 'slabjaw', (g, p, e) => {
 // The mirror of the check above, and the one that would have caught the defect.
 // A region boss's authored telegraph has to actually fire.
 {
-  for (const ri of [1, 2]) {
+  for (const ri of REGIONS.map(r => r.index)) {
     const g = new Sim({ seed: 5, regionIndex: ri, party: [{ idx: 0, key: 'k', name: 'T', charId: 'toh_samurai', color: '#fff' }] });
     g.god = true;
     g._travelTo(g.floor.bossId);

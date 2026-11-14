@@ -140,7 +140,7 @@ A **lobby, not a hub**. No shops, no vendors, no walking around. Shows the eight
 1. **Packs, not singles.** Enemies arrive in clustered packs of 4–8 from one spawn mark, from 1 s into the fight. A lone spawn is the exception, used for specials.
 2. **The field is never empty while the timer runs.** With the timer running and spawning, the field holds two or fewer enemies for at most 5% of the fight (measured on main: 28–52% on map 1).
 3. **Short maps.** In region 1 the maps last 30 / 38 / 45 / 53 / 60 s, capped at 60 s and +5 s per later region, still capped at 60. The boss map keeps its own structure. The wave **ends on the timer**: fodder still alive dies and pays its loot, which is magneted to the party. Culled fodder is not credited as a kill. *Decided 2026-11-02 (user).* **Then the tail (ruled 2026-11-02, Designer):** specials and elites still alive at the timer chase the party hard for 3 s, and whatever survives the chase is culled and pays its loot. Bosses, pylons and landmarks are objectives: they are exempt from the cull and have to be killed. Target: the fight ends within 5 s of the timer. This replaces the 4 s chase and 20 s straggler cull on horde maps.
-4. **Fodder dies to one hit.** On map 1, a fodder unit's live HP is at most the weakest rank-1 opener's packet, so every class's opener one-shots it. Specials take 3–5 hits and landmarks take 10 or more. Later regions keep the same hit counts through the world axis (§4.3).
+4. **Fodder dies to one hit — in every region.** A fodder unit's live HP is at most the weakest opener's packet at the level a player arrives, so every class's opener one-shots it. Specials take 3–5 hits and landmarks take 10 or more. **Fodder does not ride the world axis** (§4.3, ruled 2026-11-14): its HP follows the size of one hit, which is flat, and the horde grows across regions in **count** instead.
 5. **Fodder converges.** Fodder moves at 0.55–0.8× player base speed (Brotato's range is 0.44–0.89 of 450), and packs spawn close enough to arrive within about 2.5 s.
 6. **A crowd has a ceiling.** A solo horde room holds at most 120 alive (map 1: 60), scaled by party the same way spawn rate is, up to `ALIVE_CEILING` (300). The cap banks budget rather than discarding it.
 7. **The yield is held, not the density.** More bodies must not mean runaway levels. Materials and XP per map stay within ±15% of the pre-horde totals, through a fodder drop chance, until a progression pass says otherwise.
@@ -338,7 +338,7 @@ Authored per region band, not computed from a global curve. Expected player leve
 
 If a party arrives significantly above or below the anchor, that is the difficulty setting doing its job, not a bug.
 
-**HORDE PACING (§2.6) REPLACES THE SINGLE PARITY BAND WITH ROLE BANDS. THE WORLD AXIS IS STILL THE SOLE DIFFICULTY MULTIPLIER.** Every region's roster is authored to the same bands whatever its index, and the world-axis table above is what makes region 8 harder than region 1. **Fodder** has a live map-1 HP at or under the weakest rank-1 opener packet, authored at about 3–4 HP. **Specials** take 3–5 opener hits, and **landmarks** take 10 or more. The old single band was a weighted mean of 7.9 HP and 3.45 damage, ±15%. It is retired, because a horde roster's weighted mean is almost all fodder and would gate the wrong thing. *The paragraphs below record why parity was introduced. Their rule, no band scaling inside a roster, still holds.*
+**HORDE PACING (§2.6) REPLACES THE SINGLE PARITY BAND WITH ROLE BANDS. THE WORLD AXIS IS STILL THE SOLE DIFFICULTY MULTIPLIER — BUT IT IS SPLIT BY ROLE (below).** Every region's roster is authored to the same bands whatever its index, and the world axis is what makes region 8 harder than region 1. **Fodder** has a live map-1 HP at or under the weakest rank-1 opener packet, authored at about 3–4 HP. **Specials** take 3–5 opener hits, and **landmarks** take 10 or more. The old single band was a weighted mean of 7.9 HP and 3.45 damage, ±15%. It is retired, because a horde roster's weighted mean is almost all fodder and would gate the wrong thing. *The paragraphs below record why parity was introduced. Their rule, no band scaling inside a roster, still holds.*
 
 *Historical:* a roster was authored to a weighted mean of **7.9 HP and 3.45 damage**, ±15%, whatever its index. A roster that also carries band scaling multiplies the axis a second time: Central America was authored at ×3.3 the floor-1 table *and* multiplied by ×2.13, arriving at 7.02× floor 1 for a player roughly 2.1× stronger.
 
@@ -356,6 +356,34 @@ If a party arrives significantly above or below the anchor, that is the difficul
 This replaces `FLOOR_HP_MULT ^ (floor-1)`, a geometric ramp over four points, and it was **re-derived rather than rescaled**. The old curve reached ×2.46 by floor 4; this reaches ×4.33 by region 4, whose anchor is level 28 — so the four-floor curve was scaling enemies slower than it scaled players, and a run got easier the longer it ran. Regions 7 and 8 are flat because three of four measured classes stop gaining output between level 55 and 64: the trees absorb every point, but the last nine buy ranks, and a rank is −3% cooldown against a floor of 70%. Region 8's difficulty comes from its even domain spread (§3.2) and its boss, not from this axis.
 
 Damage is not measured separately — player effective HP grows from banked stat picks, which are a choice rather than a table. It keeps the relationship the old curve authored between the two axes, `ln(1.20)/ln(1.35) = 0.608`, so damage grows as HP^0.608.
+
+#### The world axis is split by role — fodder rides the hit, not the output
+
+*Ruled 2026-11-14 (Claude, under the user's delegation of 14 Nov — see `docs/design/rulings-2026-11.md` R-1).*
+
+`REGION_HP_MULT` is the player's **total output** growth, and it is measured honestly: ×7.36 by region 8. But that growth is almost entirely **rate**. A level-1 character fires one skill; a level-64 character fires eight. The size of a single hit barely moves, because a rank is +4% of base and a breadth-first build puts one or two ranks in an opener. Measured across all fourteen classes at every anchor, on the same build the world axis was measured against:
+
+| Region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| Weakest opener hit | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 |
+| Fodder HP on `REGION_HP_MULT` | 3.9 | 8.2 | 14.8 | 16.7 | 20.4 | 23.3 | 28.4 | 28.4 |
+| Hits to kill it | 1 | 2 | 3 | 4 | 4 | 5 | 6 | 6 |
+
+§2.6 rule 4 says fodder dies to one hit and that later regions keep the same hit counts. Multiplying a one-hit body by a rate-growth number breaks exactly that, and **no authored HP can repair it**: 1 HP × 4.33 is already over the packet by region 4. The Designer's ruling of 4 Nov named "authored fodder HP 3 → 2 for the whole region" as the lever if the gate said no; the gate says no from region 2 onward and that lever runs out at region 3.
+
+So the axis is split by what each half measures:
+
+| Role | Rides | Why |
+|---|---|---|
+| **Fodder** | `REGION_OPENER_PACKET[n] / REGION_OPENER_PACKET[1]` — the weakest opener hit at the anchor | It is meant to die to **one hit**, so it scales with how hard one hit lands |
+| **Special, landmark, elite, boss, pylon, nest** | `REGION_HP_MULT` — unchanged | It is meant to take **a fight**, so it scales with total output |
+| **The horde's size** | the spawn rate, per region | The player's growth is in rate, so the crowd grows in **count** |
+
+`enemyHpAxis(regionIndex, def)` in `js/regions.js` is the one place that decides which axis a body rides. The spawn path and `roster_weight_gate` both call it, so they cannot disagree about what "live HP" means. The split applies only in a **horde roster** (`REGION_ENEMIES[id].horde`): a region still on the slow curve fields 6–9 HP chaff that was tuned against the world axis and keeps it.
+
+`REGION_OPENER_PACKET` is **measured, not authored**, and the gate re-measures every entry for all eight regions and fails on drift in either direction. It is flat today. If openers are ever given real per-level growth, the table moves with them and fodder thickens to match — which is why the multiplier is derived from the packet rather than written as eight ones.
+
+**What this costs, stated so nobody rediscovers it.** A landmark is worth 11 fodder in region 1 and 62 in region 3, and the ratio keeps widening to region 8. That is the intended shape — a crowd you mow and a few things you fight — but it means **the horde's threat in later regions comes from count, speed and contact damage, never from fodder HP**, and a region whose spawn rate is not raised to match the player's rate will play as an empty room. The per-region spawn rate is the pace pass's number and is set by the density bars of §2.6, the way map 1's ×1.45 was.
 
 **PER-BODY TUNING FOR REGIONS 3–8 IS PROVISIONAL.** Those six regions have **no authored rosters** and fall back to the base 12-enemy table, so every per-body figure measured for them describes the fallback rather than the region. `tools/power_curve_phase2.mjs` §6 shows the shape of the problem: once the world axis is divided out, mean per-body HP still declines 14.0 → 11.3 across regions 3–6, which is spawn composition drawing from a table that was never written for those bands. **Any per-body tuning applied to regions 3–8 must be re-derived when real rosters land** (42 units and 6 bosses, `docs/regions-3-8-roster-brief.md`), and a survey quoting those numbers should cite this paragraph.
 
@@ -2180,7 +2208,7 @@ Two apparent defects died of it in one pass, both from single-seed comparisons i
 | 2b | Node behaviour, world map, difficulty, regions 1–2 | **Done** |
 | 3 | Co-op hardening, roster retirement, selectors, offence gate | **Done** |
 | 4 | Economy: stat items, modifier tiers, sinks, respec, §9.5 stats | **Done** |
-| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **CLASSES COMPLETE** — 14 of 14 built (28 trees, 280 skills, 14 selectable). Regions 3–8 blocked on `PIXELLAB_API_KEY`, an external dependency |
+| 5 | Remaining 12 classes, 38 trees, regions 3–8 | **CLASSES COMPLETE** — 14 of 14 built (28 trees, 280 skills, 14 selectable). Region 3 built; regions 4–8 are authoring work, no longer blocked on art (ruled 2026-11-14) |
 
 Phase 5 is the bulk of remaining work by volume, but phases 1–3 established that it is authoring rather than engineering: zero bespoke handlers across 40 skills, `scaleWith` generalising with no engine known by name, and selectability derived from tree data so a new class needs no code. **The binding constraint on phase 5 is art** — 36+ enemies and 6 bosses.
 
@@ -2717,9 +2745,9 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Build-shape sweep | Measured — `shape_by_node.mjs`: region-weighted deep/wide 1.16; objective nodes favour breadth 0/6 (§4.2) |
 | Node types | Horde, Elite and Objective all live and measured; difficulty wired (D-24) |
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
-| Regions 1–2 | Playable — 12 enemies, 2 two-phase bosses |
+| Regions built | **3 of 8 playable** — 18 enemies, 3 two-phase bosses. Pacific Northwest, Central America, Great Britain. Region 1 runs at horde pace; regions 2 and 3 join `HORDE_REGIONS` on the pace pass (§2.6) |
 | Region tilesets, hazards | **Named, unimplemented** — `undergrowth`, `bloodmire` |
-| Regions 3–8 | **Names only** — blocked on `PIXELLAB_API_KEY`, an EXTERNAL dependency, not on code |
+| Regions 4–8 | **Names only.** No longer blocked on art: ruled 2026-11-14 (user) that regions ship on code-drawn silhouettes and painted sprites follow, so the binding constraint is authoring, not `PIXELLAB_API_KEY` |
 | Classes 3–14 | **COMPLETE — 14 of 14 built** (42 trees, 420 skills, 14 selectable). Every class is at the ruled three; all fourteen third trees branch. Phase 5's class work is done. **Outstanding: the original 28 chains are not yet converted to the branching spec** (§8.1) |
 | Summoning | **Built, conformant, balanced** — 8 divergence rows closed, balance pass run at two anchors, no cap needed |
 | `ON_TOKEN` trigger | **Built and conformant** — every kill drops, 30 s, per-player render, Raise Skeleton throws at it |

@@ -161,6 +161,22 @@ the axis that keeps them apart.*
 | 13 | `enemy.xib_obsidian_lancer` | 128×128 | a lean angular runner holding one long lance flat and forward |
 | 14 | `boss.xib_boss` — *Ixkik, the Blood Moon* | **192×192** | a tall thin figure inside a broken crescent ring that arcs overhead |
 
+### Region 3 — Great Britain
+*tileset `britain` (not yet declared — the region draws its flat fill until
+tiles land), hazard `fae_ring`, primary domain mental. Fae, standing stone,
+hollow hill. Placeholder shapes and colours render until these sprites exist;
+the briefs below are first drafts from the engineering pass for Art to own.*
+
+| # | sprite id | cell | brief |
+|---|---|---|---|
+| 15 | `enemy.gb_redcap` | 128×128 | a squat hunched goblin under one tall pointed cap that leans forward |
+| 16 | `enemy.gb_hunt_rider` | 128×128 | a horned rider fused low over a long galloping horse, all pointing one way |
+| 17 | `enemy.gb_sprite` | 128×128 | a tiny body between four thin dragonfly wings held in an X |
+| 18 | `enemy.gb_banshee` | 128×128 | a floating veiled woman with arms raised and long hair streaming upward |
+| 19 | `enemy.gb_stone_giant` | 128×128 | a hulking boulder-shouldered figure with a tiny head and one arm dragging a menhir |
+| 20 | `enemy.gb_sidhe_knight` | 128×128 | a tall slender armoured knight with antler-crowned helm and a long leaf-blade shield |
+| 21 | `boss.gb_boss` — *The Hollow King* | **192×192** | a gaunt crowned figure whose chest is an empty open ring, robes flaring wide at the hem |
+
 Full prompts, including the style clause, are in
 [`prompts.json`](prompts.json) keyed by sprite id — useful as a written brief
 even though nothing will be generated from them.

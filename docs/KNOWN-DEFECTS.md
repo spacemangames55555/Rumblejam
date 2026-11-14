@@ -1954,6 +1954,52 @@ win), or clear `banked` when starting a fresh retry.
 
 **Not fixed** in this pass. Low.
 
+## #40 — ~~(Medium) cursed-modifier effect fields are declared but nothing applies them~~ — CLOSED for Bloodprice and Glamour
+
+**Found while adding region 3's `glamour` curse.**
+
+**What it was.** `CURSED_MODIFIERS` in `js/nodebehaviour.js` declared one effect
+per curse and `nodeModifiers()` handed the resolved curse to `js/game.js`, but
+nothing read the effect fields. A cursed node differed from a horde only by
+`cursedEnemyHpMult`, `cursedEnemyDmgMult` and `cursedGoldMult`. (Region 2's
+curse also rolled nothing at all until its key was renamed to `bloodprice` to
+match `regions.js`. `assertNodeBehaviour` now fails at import on a region curse
+that does not exist.)
+
+**Fixed.**
+- **Bloodprice** now declares `noRoomHeal: true`, per the GDD ("full HP restore
+  at the start of every room, except under the `bloodprice` curse"). The
+  `stationaryDps: 3` field is gone, and nothing read it. Region 2's `bloodmire`
+  *hazard* is untouched. `Sim._enterArena` skips the full-health restore on a
+  `noRoomHeal` node and clamps HP to the current cap.
+- **Glamour** (`telegraphRevealMs: 150`) is render-only. `render.js` `zoneTint`
+  draws a committed zone in a neutral grey until 150ms remain, then in its
+  domain tint. The shape is visible the whole time. The host view gets the
+  reveal from `sim._arena.curse`, and the guest gets it from `st.arena.curse`,
+  which rides every snapshot. Committed enemy zones now also ride the snapshot
+  (`telZones`, packed by `packTelZones`/`unpackTelZones` in `js/telegraphs.js`).
+  Before this, a guest saw the wind-up pose and never the zone. No `Sim.rng`
+  draw is involved.
+- `tools/curse_gate.mjs` proves both curses in a running sim, with controls.
+  It covers a plain fight and Gloom restoring HP, a plain region-3 fight
+  tinting from commit, host and guest tint agreeing through the wire codec,
+  and the sim staying byte-identical with and without the tint work.
+
+**Still open:** Gloom's `sightMult` is split out as #41.
+
+## #41 — (Low) Region 1's Gloom curse (`sightMult: 0.55`) has no reader
+
+**Split from #40.** The game has no player sight radius to multiply: enemies are
+drawn arena-wide and attacks are limited only by line of sight through walls.
+So `pnw_gloom` changes nothing beyond the generic cursed-node HP, damage and
+gold multipliers. A fix needs a design call on what "sight" means here (a
+render-only vignette, an enemy-draw cull for the local player, or a targeting
+range). It should be render-only, like Glamour, unless the design wants it to
+change targeting.
+
+**Not fixed.** `tools/curse_gate.mjs` uses Gloom as the control for "a cursed
+node that is not Bloodprice still restores HP".
+
 ## #42 — Savage DPS depends on skill firing order: a 50 ms cooldown move on the same grid jumps Cascade DPS +149%
 
 **Found on `cursor/horde-pace-map1` during the pace-spec §12 cooldown-grid pass (2 Nov 2026).**

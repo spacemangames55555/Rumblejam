@@ -62,14 +62,15 @@ export const MAP_GEO = [
   },
   {
     index: 3,
-    id: 'sahel',
-    where: 'the Sahel belt',
-    lat: 14.5, lng: 1.5,
-    tileset: 'sahel',
+    id: 'great_britain',
+    where: 'Great Britain',
+    lat: 54.0, lng: -2.5,
+    tileset: 'britain',
+    // Plate not yet repainted — still the old region-3 art. Art swaps the file.
     regionMap: 'assets/maps/regions/sahel.jpg',
-    ground: 'packed sand and cactus scrub',
-    startAt: 'the Atlantic edge',
-    bossAt: 'Lake Chad',
+    ground: 'moorland turf and standing stones',
+    startAt: 'Cornwall',
+    bossAt: 'the Highlands',
     campaign: {
       branch: 9,
       path: [
@@ -83,14 +84,15 @@ export const MAP_GEO = [
   },
   {
     index: 4,
-    id: 'norse_reach',
-    where: 'the Norse North',
-    lat: 63.4, lng: -19.0,
-    tileset: 'norse',
+    id: 'egypt',
+    where: 'the Nile valley',
+    lat: 26.0, lng: 32.5,
+    tileset: 'sahel',
+    // Plate not yet repainted — still the old region-4 art.
     regionMap: 'assets/maps/regions/norse_reach.jpg',
-    ground: 'packed snow and basalt',
-    startAt: 'Iceland',
-    bossAt: 'the fjords',
+    ground: 'necropolis sand and limestone',
+    startAt: 'the delta',
+    bossAt: 'the Valley of the Kings',
     campaign: {
       branch: 9,
       path: [
@@ -104,14 +106,15 @@ export const MAP_GEO = [
   },
   {
     index: 5,
-    id: 'steppe',
-    where: 'the Kazakh steppe',
-    lat: 48.0, lng: 67.0,
-    tileset: 'steppe',
+    id: 'central_africa',
+    where: 'the Congo basin',
+    lat: -1.0, lng: 23.0,
+    tileset: 'delta',
+    // Plate not yet repainted — still the old region-5 art.
     regionMap: 'assets/maps/regions/steppe.jpg',
-    ground: 'dry grassland',
-    startAt: 'the Caspian',
-    bossAt: 'the Altai',
+    ground: 'swamp rot and red laterite',
+    startAt: 'the river mouth',
+    bossAt: 'the deep forest',
     campaign: {
       branch: 9,
       path: [
@@ -125,14 +128,17 @@ export const MAP_GEO = [
   },
   {
     index: 6,
-    id: 'indus_delta',
-    where: 'the Indus fan',
-    lat: 24.5, lng: 67.8,
-    tileset: 'delta',
+    id: 'northern_russia',
+    where: 'the Russian north',
+    lat: 66.0, lng: 60.0,
+    // Intended ground only. `tundra` stays unassigned in REGIONS (and so in
+    // REGION_BIOMES) until region 6 is built — region_wire_gate check 4.
+    tileset: 'tundra',
+    // Plate not yet repainted — still the old region-6 art.
     regionMap: 'assets/maps/regions/indus_delta.jpg',
-    ground: 'muddy wetland silt',
-    startAt: 'the upper Indus',
-    bossAt: 'the fan',
+    ground: 'frozen permafrost and birch',
+    startAt: 'the White Sea',
+    bossAt: 'the Urals',
     campaign: {
       branch: 10,
       path: [
@@ -146,10 +152,11 @@ export const MAP_GEO = [
   },
   {
     index: 7,
-    id: 'abyssal_trench',
-    where: 'the Sunda trench',
+    id: 'off_indonesia',
+    where: 'drowned Sundaland',
     lat: -9.0, lng: 114.0,
     tileset: 'abyss',
+    // Plate file keeps its old name until Art re-exports it.
     regionMap: 'assets/maps/regions/abyssal_trench.jpg',
     ground: 'abyssal silt',
     startAt: 'Sumatra',
@@ -167,10 +174,11 @@ export const MAP_GEO = [
   },
   {
     index: 8,
-    id: 'vault',
+    id: 'australian_outback',
     where: 'the Australian outback',
     lat: -25.3, lng: 131.0,
     tileset: 'outback',
+    // Plate file keeps its old name until Art re-exports it.
     regionMap: 'assets/maps/regions/vault.jpg',
     ground: 'red earth and spinifex',
     startAt: 'the west coast',

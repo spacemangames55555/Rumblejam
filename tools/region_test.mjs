@@ -592,6 +592,20 @@ const fail = m => { failures++; console.error(`✗ ${m}`); };
     if (p.level === 2 && p.xp === 5 && p.skillPoints === pts) ok('region 2 does not catch a character up to the map 1 floor');
     else fail(`region 2 catch-up moved a level-2 character to level ${p.level}`);
   }
+
+  // Region 3 likewise: the onboarding floor is region 1's alone.
+  {
+    const sim = new Sim({ seed: 778, regionIndex: 3, party: [{ idx: 0, key: 'k', name: 'P', charId: 'toh_samurai', color: '#fff' }] });
+    const p = sim.players[0];
+    if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
+    sim.uiAction(0, { kind: 'pickNode', nodeId: sim.reachableNodes()[0] });
+    if (AR.isOnboardingNode(sim.regionIndex, sim.arenaNode)) fail('region 3 map 1 was treated as the onboarding node');
+    p.level = 2; p.xp = 5; p.banked = 0;
+    const pts = p.skillPoints;
+    sim._onboardingCatchUp(p);
+    if (p.level === 2 && p.xp === 5 && p.skillPoints === pts) ok('region 3 does not catch a character up to the map 1 floor');
+    else fail(`region 3 catch-up moved a level-2 character to level ${p.level}`);
+  }
 }
 
 // ------------------------------------------- map 1 cedar weight and alive caps

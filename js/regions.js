@@ -12,7 +12,7 @@
 // can actually be played, and the assertions below do not pretend otherwise.
 
 import { DOMAINS } from './domains.js';
-import { REGION_ENEMY_BY_ID, REGION_BOSS_BY_ID } from './content/regions-enemies.js';
+import { REGION_ENEMY_BY_ID, REGION_BOSS_BY_ID, REGION_ENEMIES, enemyRole } from './content/regions-enemies.js';
 import { BOSS_BY_ID, ALL_BOSS_DEFS } from './content/bosses.js';
 
 export const CROSS_LINK_CHANCE = 0.45;
@@ -80,6 +80,43 @@ export const REGION_ANCHOR_LEVEL = [1, 10, 19, 28, 37, 46, 55, 64];
 export const REGION_HP_MULT = [1.00, 2.13, 3.84, 4.33, 5.29, 6.02, 7.35, 7.36];
 export const REGION_DMG_MULT = [1.00, 1.59, 2.26, 2.44, 2.75, 2.98, 3.36, 3.36];
 
+// ------------------------------------------------ the fodder axis (§4.3, §2.6)
+//
+// FODDER DOES NOT RIDE `REGION_HP_MULT`. Ruled 2026-11-14.
+//
+// `REGION_HP_MULT` is the player's TOTAL output growth, and it was measured
+// honestly — ×7.36 by region 8. But that growth is almost all RATE: a level-1
+// character fires one skill and a level-64 one fires eight. The size of a
+// single hit barely moves. Measured across all fourteen classes at every
+// anchor (`tools/roster_weight_gate.mjs`, the build the world axis itself was
+// measured against):
+//
+//   region                  1     2     3     4     5     6     7     8
+//   weakest opener hit      5     5     5     5     5     5     5     5
+//   fodder on REGION_HP   3.9   8.2  14.8  16.7  20.4  23.3  28.4  28.4
+//   hits to kill it         1     2     3     4     4     5     6     6
+//
+// §2.6 rule 4 says fodder dies to one hit and that "later regions keep the
+// same hit counts". Multiplying a one-hit body by a rate-growth number breaks
+// exactly that, and no authored HP can repair it: 1 HP × 4.33 is already over
+// the packet by region 4. The two rules could never both hold.
+//
+// So the axis is split by what it measures. A body that is supposed to die to
+// ONE HIT scales with how hard one hit lands — this table. A body that is
+// supposed to take a FIGHT (special, landmark, elite, boss, pylon, nest)
+// scales with total output — `REGION_HP_MULT`, unchanged. And the horde grows
+// the way the player's rate grows: in COUNT, through the spawn rate, which is
+// the pace pass's number and deliberately not this file's.
+//
+// This is the weakest opener packet at each anchor, MEASURED, not authored.
+// It is flat today because ranks are +4% of base on a 5-damage packet and a
+// breadth-first build puts one or two ranks in an opener. If openers are ever
+// given real per-level growth the table moves with them and fodder thickens
+// to match — which is the point of deriving the multiplier from the packet
+// rather than writing eight ones. `roster_weight_gate` re-measures every
+// entry and fails on drift in either direction.
+export const REGION_OPENER_PACKET = [5, 5, 5, 5, 5, 5, 5, 5];
+
 // Clamped rather than wrapped: a region index outside 1..8 is a bug, and the
 // last band is the safe thing to be wrong with.
 function bandIndex(regionIndex) {
@@ -89,6 +126,27 @@ function bandIndex(regionIndex) {
 export function regionHpMult(regionIndex) { return REGION_HP_MULT[bandIndex(regionIndex)]; }
 export function regionDmgMult(regionIndex) { return REGION_DMG_MULT[bandIndex(regionIndex)]; }
 export function anchorLevel(regionIndex) { return REGION_ANCHOR_LEVEL[bandIndex(regionIndex)]; }
+export function regionFodderHpMult(regionIndex) {
+  return REGION_OPENER_PACKET[bandIndex(regionIndex)] / REGION_OPENER_PACKET[0];
+}
+
+// A roster authored for horde pace — fodder plus a few specials — as opposed
+// to one still on the slow curve, whose non-telegraphing units are 6–9 HP
+// chaff tuned AGAINST the world axis and must keep it.
+export function isHordeRoster(regionIndex) {
+  const r = REGION_BY_INDEX[regionIndex];
+  return !!(r && REGION_ENEMIES[r.id] && REGION_ENEMIES[r.id].horde);
+}
+
+// THE ONE PLACE THAT DECIDES WHICH HP AXIS A BODY RIDES. Both the spawn path
+// and the gate call this, so they cannot disagree about what "live HP" means —
+// two implementations of one multiplier is how a gate ends up asserting a
+// number the game never fields.
+export function enemyHpAxis(regionIndex, def) {
+  return isHordeRoster(regionIndex) && enemyRole(def) === 'fodder'
+    ? regionFodderHpMult(regionIndex)
+    : regionHpMult(regionIndex);
+}
 
 export const REGIONS = [
   {
@@ -126,12 +184,30 @@ export const REGIONS = [
     tuning: { hpMult: 1.15, damageMult: 1.1, densityMult: 1.05 },
     contentReady: true,
   },
+  {
+    id: 'great_britain', index: 3, name: 'Great Britain',
+    nativeClass: 'bard',
+    expectedLevel: 19,
+    // Mental after spiritual: the triangle turns a second time, so a party
+    // that re-specced for region 2 is pushed again rather than rewarded.
+    domainSkew: { primary: 'mental', secondary: null, maxShare: 0.60 },
+    // No `britain` biome is declared yet (no tile art on disk), so the region
+    // draws its flat fill — the normal missing-art state, see biomes.js.
+    tileset: 'britain',
+    hazard: 'fae_ring',                // a ring you should not step into
+    cursedModifier: 'glamour',         // telegraph tint hidden until just before it fires
+    enemies: ['gb_redcap', 'gb_hunt_rider', 'gb_sprite', 'gb_banshee', 'gb_stone_giant', 'gb_sidhe_knight'],
+    boss: 'gb_boss',
+    tuning: { hpMult: 1.0, damageMult: 1.0, densityMult: 1.0 },
+    contentReady: true,
+  },
 ];
 
-// Regions 3-8 exist as names so a player can see the shape of the whole run
-// from the first session. They are not playable and carry no data.
+// Regions 4-8 exist as names so a player can see the shape of the whole run
+// from the first session. They are not playable and carry no data. The names
+// are the GDD's (§3.2), in index order, starting at the first unbuilt region.
 export const LOCKED_REGION_NAMES = [
-  'The Sahel', 'Norse Reach', 'Steppe', 'Indus Delta', 'Abyssal Trench', 'The Vault',
+  'Egypt', 'Central Africa', 'Northern Russia', 'Off Indonesia', 'Australian Outback',
 ];
 export const TOTAL_REGIONS = 8;
 
@@ -140,7 +216,8 @@ export const REGION_BY_INDEX = Object.fromEntries(REGIONS.map(r => [r.index, r])
 
 // ------------------------------------------------------------------- bosses
 //
-// Eight regions need eight bosses. Two are authored (`pnw_boss`, `xib_boss`)
+// Eight regions need eight bosses. Three are authored (`pnw_boss`, `xib_boss`,
+// `gb_boss`; an authored boss always wins over the legacy table below)
 // and four exist as the old floor bosses, which are real, finished, two-phase
 // fights and are worth redistributing rather than retiring.
 //
@@ -231,7 +308,7 @@ function assertRegions() {
   // read `undefined` at floor five, and the shop's tier table has the same
   // shape. A curve with seven entries for eight regions is a game that gets
   // easier at the end and says nothing about it.
-  for (const [name, arr] of [['REGION_HP_MULT', REGION_HP_MULT], ['REGION_DMG_MULT', REGION_DMG_MULT], ['REGION_ANCHOR_LEVEL', REGION_ANCHOR_LEVEL]]) {
+  for (const [name, arr] of [['REGION_HP_MULT', REGION_HP_MULT], ['REGION_DMG_MULT', REGION_DMG_MULT], ['REGION_ANCHOR_LEVEL', REGION_ANCHOR_LEVEL], ['REGION_OPENER_PACKET', REGION_OPENER_PACKET]]) {
     if (arr.length !== TOTAL_REGIONS) problems.push(`${name} has ${arr.length} entries for ${TOTAL_REGIONS} regions`);
     if (arr.some(v => !(v > 0))) problems.push(`${name} contains a non-positive entry`);
     for (let i = 1; i < arr.length; i++) {
