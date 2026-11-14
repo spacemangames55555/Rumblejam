@@ -51,13 +51,15 @@ export const XIB_ENEMIES = [
     // Its cone is WIDER than region 1's Sapling (80° at 115 against 70° at 105)
     // and that is the region's signature: two commonplace units whose zones
     // intersect, so leaving one can put you inside the other.
-    id: 'xib_howler', domain: 'spiritual', name: 'Howler', behavior: 'warden',
-    hp: 7, spd: 112, dmg: 3, radius: 14, mats: 1, w: 2.9,
+    //
+    // HORDE PACE (pace-spec §15, applied 14 Nov 2026) TURNS IT INTO FODDER, as
+    // it turned region 1's Sapling: the commonest unit winding up is the right
+    // teacher at 2–3 bodies on screen and clutter at 60. warden → chaser, no
+    // telegraph, hp 7 → 3, spd 112 → 185, w 2.9 → 4.0. The overlap this unit
+    // carried now lives between the Lancer's lane and the two landmarks.
+    id: 'xib_howler', domain: 'spiritual', name: 'Howler', behavior: 'chaser',
+    hp: 3, spd: 185, dmg: 3, radius: 14, mats: 1, w: 4.0,
     shape: 'circle', color: '#8e4a7a',
-    telegraph: {
-      windupMs: 400, recoverMs: 280, cooldownMs: 3000, retryFrac: 0.3, recoverFrozen: true,
-      shape: { kind: 'cone', angle: 80, range: 115 }, damage: 6, domain: 'spiritual',
-    },
   },
   {
     // THE ROSTER'S MID, lightened. 22 → 7 HP, zone 24 → 7, on a longer cycle.
@@ -71,8 +73,12 @@ export const XIB_ENEMIES = [
     // region 1's Cedar Warden at 7.5% of 80. Slightly steeper, because a lane is
     // easier to leave than a cone you are already standing in — and because the
     // player has had a region to learn the read.
+    //
+    // HORDE PACE: the region's one light SPECIAL. hp 7 → 8 (above fodder),
+    // w 2.5 → 0.9. Telegraph and dash unchanged — it keeps the lane, the
+    // sidestep region 3's circle then takes away.
     id: 'xib_obsidian_lancer', domain: 'physical', name: 'Obsidian Lancer', behavior: 'dasher',
-    hp: 7, spd: 150, dmg: 3, radius: 16, mats: 3, w: 2.5,
+    hp: 8, spd: 150, dmg: 3, radius: 16, mats: 3, w: 0.9,
     shape: 'triangle', color: '#3a3a4d',
     dash: { windup: 0.48, speed: 600, dur: 0.45, cd: 2.3 },
     telegraph: {
@@ -88,13 +94,16 @@ export const XIB_ENEMIES = [
   // encounter weight, 41% of the room, which is what keeps rule 3's trade
   // alive: if everything committed, holding stance would always be punished.
   {
+    // HORDE PACE: fast fodder. hp 6 → 3, spd 170 → 230, w 2.4 → 3.5, mats 1.
     id: 'xib_ashmoth', domain: 'mental', name: 'Ashmoth', behavior: 'orbiter',
-    hp: 6, spd: 170, dmg: 4, radius: 12, mats: 2, w: 2.4,
+    hp: 3, spd: 230, dmg: 4, radius: 12, mats: 1, w: 3.5,
     shape: 'diamond', color: '#c98b3a', orbitR: 185, diveCd: 2.5, diveWindup: 0.35,
   },
   {
+    // HORDE PACE: ranged fodder, as region 1's Mistwalker. hp 9 → 3,
+    // spd 90 → 165, w 1.6 → 1.0.
     id: 'xib_censer', domain: 'spiritual', name: 'Censer Bearer', behavior: 'spitter',
-    hp: 9, spd: 90, dmg: 3, radius: 15, mats: 2, w: 1.6,
+    hp: 3, spd: 165, dmg: 3, radius: 15, mats: 2, w: 1.0,
     shape: 'pentagon', color: '#6a9a7a',
     proj: { dmg: 5, speed: 315, radius: 6 }, keepDist: 265, fireCd: 2.1,
   },

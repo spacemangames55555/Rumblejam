@@ -105,13 +105,18 @@ export const AUS_ENEMIES = [
 // committed attacks are deliberately three different relationships to the
 // triangle, because this is the even region.
 //
+// 13,000 HP: measured at 8,000, the median of fourteen level-75 classes
+// killed it in 91 s — one and a half times region 7's boss, which is one
+// more fight rather than the endurance test. 13,000 is sized for about two
+// and a half minutes at the median (tools/boss_ttk_probe.mjs).
+//
 // SIGNATURE — EVERYTHING THE RUN TAUGHT. `beams`: three rotating lanes the
 // party has to walk with, the Regent's own. `ring`: a burst of sixteen bolts
 // between them. And in phase 2 `adds`: the dingo pack arrives, so the last
 // phase of the last fight is a boss inside a horde — which is the game.
 export const AUS_BOSS = {
   id: 'aus_boss', name: 'Megalania, the Last Dragon', domain: 'physical',
-  hp: 8000, spd: 72, dmg: 30, radius: 56, mats: 150,
+  hp: 13000, spd: 72, dmg: 30, radius: 56, mats: 150,
   shape: 'hex', color: '#7a5a2f',
   telegraph: {
     windupMs: 680, recoverMs: 520, cooldownMs: 2800, retryFrac: 0.25, recoverFrozen: true,

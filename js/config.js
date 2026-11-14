@@ -235,7 +235,7 @@ export const CONFIG = {
   // hordeYieldScale. Regions not listed keep the slow curve until their roster
   // is re-authored into fodder + specials (Xibalba is next; its roster is
   // still 50%+ telegraphing heavies, which at horde rates is a wall, not a pace).
-  HORDE_REGIONS: [1],
+  HORDE_REGIONS: [1, 2, 3, 4, 5, 6, 7, 8],
   HORDE_ALIVE_CAP: 120,    // solo, per horde room; a party scales it like spawn rate, up to ALIVE_CEILING
   PACK_MIN: 4,             // smallest pack a horde wave spends its budget in
   PACK_MAX: 8,

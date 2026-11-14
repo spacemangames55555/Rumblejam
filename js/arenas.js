@@ -302,6 +302,40 @@ export function onboardingXpMult(regionIndex, depth) {
   return ONBOARDING_XP_MULT[Math.min(depth, ONBOARDING_XP_MULT.length - 1)];
 }
 
+// WHAT A FIGHT PAYS IN EXPERIENCE, PER REGION AND MAP (§4.2; rulings R-7).
+//
+// XP rides materials — each drop carries its own XP value — and materials are
+// sized for the SHOP, by spawn count. Nothing ever sized them for the level
+// curve, and the two want different things: a room's materials grow with the
+// horde, while the XP a level costs grows with the level (10 + 4 × level).
+// Left to ride each other, region 1 paid five to seven levels a map and
+// region 8 paid one and a half. §4.2 says 1–2 everywhere.
+//
+// This multiplies XP ONLY, at the one site it is credited
+// (Sim._collectMaterial). Gold is untouched: the shop's economy is the
+// economy it was. Row = region, column = map 1–5 then the boss. Each entry is
+// (the XP 1.5 levels cost at the level §4.3 expects a player to have there) ÷
+// (the XP that room credits at ×1), MEASURED by
+// `node tools/level_curve_gate.mjs --measure`, not derived — a room's raw
+// yield depends on its roster, its profile and its pace.
+//
+// Region 1's first entry is the onboarding room's own 1.7, unchanged: that
+// map is the deliberate exception and still leaves a character at level 6–7.
+export const MAP_XP_MULT = [
+  [1.7, 0.30, 0.25, 0.23, 0.21, 0.40],
+  [0.35, 0.32, 0.31, 0.29, 0.24, 0.29],
+  [0.70, 0.45, 0.43, 0.36, 0.37, 0.33],
+  [0.79, 0.47, 0.43, 0.39, 0.40, 0.33],
+  [0.53, 0.42, 0.39, 0.39, 0.37, 0.32],
+  [0.85, 0.73, 0.63, 0.59, 0.58, 0.29],
+  [1.07, 0.88, 0.77, 0.69, 0.60, 0.35],
+  [1.21, 1.16, 1.12, 0.91, 0.87, 0.37],
+];
+export function mapXpMult(regionIndex, depth) {
+  const row = MAP_XP_MULT[Math.max(0, Math.min(MAP_XP_MULT.length - 1, (regionIndex | 0) - 1))];
+  return row[Math.max(0, Math.min(row.length - 1, depth | 0))];
+}
+
 // IS THIS THE TUTORIAL ROOM? Lives here, beside the rate it governs, because
 // two very different things need the same answer: the sim, to pick the reduced
 // archetype table, and the tuning gates, to stay OUT of a room that is
@@ -361,6 +395,39 @@ export function isHordeRegion(regionIndex) {
   return CONFIG.HORDE_REGIONS.includes(regionIndex);
 }
 
+// HOW MUCH BIGGER THE HORDE IS, REGION BY REGION — and it is the FODDER that
+// grows (rulings R-6, 14 Nov 2026).
+//
+// This was `k = 1 + 0.15 × (regionIndex − 1)`, written inline in two places.
+// It multiplied the whole spawn rate, so every role in the roster arrived
+// 2.05× as often by region 8 — including the landmarks, which the rosters
+// author at a draw weight meant to make one "an event rather than a texture".
+// Measured at the old curve (tools/region_pace.mjs, fourteen classes): a
+// region-8 room fielded about fourteen landmarks where region 1's fields one
+// or two, their HP inflow ran 2–3× the player's whole output, and thirteen of
+// fourteen classes sat pinned at the 120 alive cap for the entire wave.
+//
+// A special or a landmark already scales with the player — its HP rides the
+// world axis (§4.3), which is the player's own output growth. Multiplying its
+// arrival rate too multiplies the same axis a second time. So the growth is
+// split the way R-1 split the HP axis: this factor is how much more FODDER a
+// region fields, and `hordeSpecialWeightScale` divides it back out of every
+// telegraphing unit's draw weight, so those arrive at region 1's rate per
+// second however large the crowd around them is.
+//
+// A table, not a formula, because it is set by measurement against the §2.6
+// density bars. Index 0 is region 1 and is 1 by definition.
+export const HORDE_REGION_RATE = [1.00, 1.30, 1.00, 1.00, 1.80, 1.00, 1.10, 1.10];
+export function hordeRegionRate(regionIndex) {
+  const i = Math.max(0, Math.min(HORDE_REGION_RATE.length - 1, (regionIndex | 0) - 1));
+  return HORDE_REGION_RATE[i];
+}
+// The factor a telegraphing unit's draw weight is multiplied by, so that its
+// arrival rate per second does not ride the fodder's growth. 1 in region 1.
+export function hordeSpecialWeightScale(regionIndex) {
+  return isHordeRegion(regionIndex) ? 1 / hordeRegionRate(regionIndex) : 1;
+}
+
 // HORDE PACE — the region-1 curve (pace-spec.md §3). Pack sizes ramp from the
 // first to the second number across the wave, by map (depth 0..4).
 export const HORDE_PACK_START = [4, 4, 5, 5, 6];
@@ -401,7 +468,7 @@ function slowWaveUnits(regionIndex, depth) {
   return (r0 + r1) / 2 * dur;
 }
 function hordeWaveUnits(regionIndex, depth) {
-  const k = 1 + 0.15 * (regionIndex - 1);
+  const k = hordeRegionRate(regionIndex);
   return ((1.11 + 0.28 * depth) + (2.78 + 0.56 * depth)) * k / 2 * hordeWaveDur(regionIndex, depth);
 }
 
@@ -433,7 +500,7 @@ export function waveConfig(regionIndex, depth, kind) {
     // specials have to be killed. Elite nodes get champions through
     // nodeModifiers, not injections.
     const dur = hordeWaveDur(regionIndex, depth);
-    const k = 1 + 0.15 * (regionIndex - 1);
+    const k = hordeRegionRate(regionIndex);
     const [packStart, packEnd] = hordePackRange(depth);
     return {
       t: 0, acc: 0, dur,

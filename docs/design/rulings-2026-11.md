@@ -98,3 +98,81 @@ The mechanics are lifted into seven optional **blocks** on a boss def: `adds`, `
 - **Fodder one-hit has zero margin at triangle disadvantage.** 5 × 0.80 = 4.0 against a 4 HP body. Now gated, so it fails first if `enemyHpMult` or the packet moves.
 - **Nest Purge's +50% map toughness lands on fodder**, taking it to 6 HP against a 5-damage opener — in region 1 too, today. Not changed here.
 - **A siege's crowd is thinner under R-1.** `sim_test`'s stress harness fell from ≥150 alive to 106 in region 4 because one level-1 opener now mows the fodder it could not dent before. The harness was stripping weapons and leaving the skill firing; it now strips both, as its comment always intended. The underlying fact stands and is the pace pass's: **the horde has to grow in count.**
+
+---
+
+## R-6 — Every region runs at horde pace, and the horde's growth is the fodder's
+
+**14 Nov. GDD §2.6. Code: `HORDE_REGION_RATE`, `hordeSpecialWeightScale` in `js/arenas.js`; `CONFIG.HORDE_REGIONS`.**
+
+Region 2's roster is re-authored to the Designer's spec of 4 Nov (`pace-spec.md` §15) and all eight regions are on the horde curve.
+
+**A correction to R-1 first.** R-1 predicted that a region whose spawn rate was not raised "will play as an empty room". **Measured, that was wrong, and in the opposite direction.** With every region on the horde curve at the rate it then had, median alive at map 3 ran 49–107, and from region 4 on thirteen of fourteen classes sat pinned at the 120 alive cap for the whole wave. Specials and landmarks keep the world axis and carry most of a room's health; a room fills rather than empties.
+
+**Why it filled.** The region rate was `1 + 0.15 × (region − 1)`, applied to the whole spawn stream — ×2.05 by region 8, landmarks included. The rosters author a landmark at a draw weight meant to make it "an event rather than a texture"; a region-8 room fielded about fourteen. Their health already scales with the player through the world axis, so multiplying their arrival rate multiplied the same axis twice.
+
+**The ruling.** The region factor is how much more *fodder* a region fields. It is divided back out of every telegraphing unit's draw weight, so specials and landmarks arrive at region 1's rate per second whatever the crowd's size. Elite rooms are exempt — a room about champions should not thin them.
+
+**The table is measured, not a formula** (`tools/region_pace.mjs`, fourteen classes): ×1.00 / 1.30 / 1.00 / 1.00 / 1.80 / 1.00 / 1.10 / 1.10. It is not a smooth climb because it depends on what a roster does to its own crowd — mummies split, bombers remove themselves, orbiters accumulate.
+
+**What it shows about the classes.** The horde barely grows across the run because the classes' crowd-clearing barely does: the median class clears 5–7 fodder a second at level 4 and about the same at level 70. The rate table can only follow that. **Raising it is owed to the class pass, after which it is re-measured.**
+
+**Also fixed.** Egypt paid double the materials of any other region, because each mummy's two scarabs paid as well. The split is the fight; the mummy is the pay (`splitNoMats`).
+
+## R-7 — The level curve is held to what the GDD says it is
+
+**14 Nov. GDD §4.2, §4.3. Code: `REGION_ANCHOR_LEVEL`, `expectedLevelAt` in `js/regions.js`; `MAP_XP_MULT` in `js/arenas.js`.**
+
+**The finding, and it pre-dates this push.** The GDD says 1–2 levels per map. The game paid five to seven in region 1. Measured on main at `22419eb`, before any of this work:
+
+| Arriving at region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| Anchor the game was tuned for | 1 | 10 | 19 | 28 | 37 | 46 | 55 | 64 |
+| Level the XP actually bought | 1 | ~23 | ~39 | ~50 | ~65 | ~75 | ~83 | ~92 |
+
+Every enemy number in the game is measured at the top row. The only map whose exit level any check asserted was region 1's first.
+
+**Why.** XP rides materials, and materials are sized for the shop by spawn count. A room's materials grow with the horde; a level's cost grows with the level. Nothing ever tied them.
+
+**The ruling.** 1.5 levels a fight, six fights a region. Region 1's first map keeps the exception it was given on 2 Nov — it is the onboarding room and exits at level 6–7 — so the anchors become **1, 14, 23, 32, 41, 50, 59, 68** and the run ends at about level 77, which is the "level 80" `power-curve-phase1.md` confirmed as the design assumption.
+
+`MAP_XP_MULT` multiplies **XP only**, at the single site it is credited, by a measured factor per region and map. **Gold is untouched** — the shop's economy is the economy it was.
+
+**What a player will notice.** Levelling after the first map is about a third as fast as it was in regions 1–5, and unchanged by region 8. That is five stat cards and five skill points between every 45-second fight becoming one or two. If that feels too slow in play, the lever is `LEVELS_PER_FIGHT` and the anchors that follow from it — one number, with the gate re-run.
+
+**Also fixed.** The boss room has no depth, and the XP site filed it under map 1 — so region 1's boss paid the onboarding room's ×1.7.
+
+**How it is held.** `tools/level_curve_gate.mjs` plays every map and every boss in every region with a character at the expected level and asserts 1.0–2.0 levels, and that each region's six fights arrive within 1.5 levels of the next anchor. 55 checks; driven red by putting one map back at ×1.
+
+## R-8 — The world axis, re-measured against characters that exist
+
+**14 Nov. GDD §4.3. Code: `REGION_HP_MULT`, `REGION_DMG_MULT` in `js/regions.js`.**
+
+The axis read ×1.00 / 2.13 / 3.84 / 4.33 / 5.29 / 6.02 / 7.35 / 7.36. It was measured carefully, against the wrong character three ways: four classes of fourteen; anchors two regions below where players were; and built by assigning `p.level`, which grants a level's skill points and none of its stat cards.
+
+Re-measured across all fourteen classes at the paid anchors, on characters built through the game's own level-up path:
+
+| Region | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| Median output | 16.3 | 77.1 | 163.1 | 155.9 | 197.7 | 237.9 | 276.9 | 340.0 |
+| HP × | 1.00 | 4.74 | 10.04 | 10.04 | 12.16 | 14.64 | 17.04 | 20.92 |
+| damage × | 1.00 | 2.57 | 4.06 | 4.06 | 4.56 | 5.11 | 5.60 | 6.34 |
+
+**A region-8 character puts out about 21× a level-1 one; the axis said 7.36.** Landmarks, specials, elites, pylons and nests were a third as tough as flat time-to-kill asks by the end of the run — the game got easier the longer it ran.
+
+Damage keeps `HP^0.608`. With stat cards spent, a build taking damage and vitality evenly grows its effective HP about ×7–9 by region 8, so the inherited exponent lands where a measured one would.
+
+**Bosses.** Their health is authored, not on the axis. Against real characters at the level a player meets them, median time-to-kill across fourteen classes is 40 / 43 / 56 / 53 / 53 / 88 / 77 / 145 s. Regions 1–5 and 7 are unchanged. Koschei drops to 2,800 HP because the walk to his ward is a third of the fight and is paid in time. Megalania rises to 13,000: at 8,000 the last boss died in 91 s, which is one more fight rather than the endurance test.
+
+## What every earlier measurement was standing on
+
+`tools/lib/build_char.mjs` is new and the three rulings above depend on it. Every harness that wanted "a level-28 character" set `p.level = 28`. That is a character with level 28's skills and level 1's body — no stat cards — and two harnesses sent `{kind: 'levelUp'}` to spend them, for an action the sim spells `levelup`. The builder grants levels through `_grantLevel`, spends points through `spendSkillPoint`, and resolves the banked cards through the real offer path by a stated policy.
+
+`tools/lib/room_bot.mjs` is the other half: a bot that stands where its slotted skills connect and picks up what drops. Its first version held a flat 190-unit ring and reported the five melee classes getting *worse* with level; it was standing outside sword reach. Its second stood still once nothing was alive and reported a boss room paying 0.02 levels.
+
+## Findings logged for the class pass
+
+- **Two classes put out six to eight times the roster median.** On the dummy ring at level 68: Necromancer 2,307 and Savage 860–1,198 against a median of 340. The Necromancer kills region 7's boss in 18 s where the median takes 77.
+- **Crowd-clearing barely grows with level for half the roster.** Samurai, Monk, Assassin, Bard and Blacksmith clear 5–6.5 fodder a second in region 8, about what they manage in region 1.
+- **Boss time-to-kill spreads 5–10× across classes** (region 8: 38 s to 314 s).
+- **Region 1's first map dips to two or fewer alive for up to 9% of the wave** for its thinnest class, against a 5% bar. Pre-existing and previously accepted as noise at 5.2%.

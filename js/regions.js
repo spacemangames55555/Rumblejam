@@ -76,9 +76,75 @@ export function depthMult(column) { return 1 + DEPTH_MULT_PER_COLUMN * (column -
 // region 8's difficulty comes from — it is "deliberately even, so the endgame
 // demands full party coverage rather than one counter-build" — and the Regent
 // carries its own ×10.
-export const REGION_ANCHOR_LEVEL = [1, 10, 19, 28, 37, 46, 55, 64];
-export const REGION_HP_MULT = [1.00, 2.13, 3.84, 4.33, 5.29, 6.02, 7.35, 7.36];
-export const REGION_DMG_MULT = [1.00, 1.59, 2.26, 2.44, 2.75, 2.98, 3.36, 3.36];
+// THE LEVEL A PLAYER ARRIVES AT, PER REGION (§4.2, §4.3; rulings R-7).
+//
+// These read 1, 10, 19 … 64 — nine levels a region, from "1–2 levels per map"
+// over six fights — and the game never paid that. Measured on main at 22419eb
+// (tools/region_pace.mjs, the XP a plain combat room credits): region 1's five
+// maps pay about 1,250 XP, which buys level 23, and by the same arithmetic a
+// player reached region 4 at about level 50 against an anchor of 28. Every
+// enemy number in the game is measured AT these anchors, so the world axis was
+// scaling bodies for a character two regions weaker than the one in the room.
+// The only map whose exit level anybody asserted was the first.
+//
+// The curve is now held where §4.2 says it is, and the first map keeps the
+// one deliberate exception it was given on 2 Nov: region 1's map 1 is the
+// onboarding room and leaves a character at level 6–7 with three slots. So
+// region 1 runs 1 → 6.5, then 1.5 a fight, and arrives at region 2 at 14;
+// every later region is 1.5 a fight over six fights. The run ends at 77,
+// which is the "level 80" docs/power-curve-phase1.md confirmed as the design
+// assumption.
+//
+// `MAP_XP_MULT` (js/arenas.js) is what makes the game pay this, and
+// tools/level_curve_gate.mjs plays every map in every region and asserts it.
+export const REGION_ANCHOR_LEVEL = [1, 14, 23, 32, 41, 50, 59, 68];
+export const LEVELS_PER_FIGHT = 1.5;
+export const FIGHTS_PER_REGION = 6;          // five maps and the boss (§2.2)
+export const MAP1_EXIT_LEVEL = 6.5;          // region 1's first map: the 6–7 window
+// The level a character is expected to carry INTO fight `depth` of a region:
+// 0–4 are the five maps, 5 is the boss.
+export function expectedLevelAt(regionIndex, depth) {
+  const d = Math.max(0, depth | 0);
+  if ((regionIndex | 0) <= 1) return d === 0 ? 1 : MAP1_EXIT_LEVEL + LEVELS_PER_FIGHT * (d - 1);
+  return REGION_ANCHOR_LEVEL[Math.min(REGION_ANCHOR_LEVEL.length, regionIndex | 0) - 1] + LEVELS_PER_FIGHT * d;
+}
+// RE-MEASURED 14 Nov 2026 (rulings R-8), `node tools/region_curve.mjs`. The
+// table above this comment's predecessor read
+//
+//   HP ×  1.00  2.13  3.84  4.33  5.29  6.02  7.35  7.36
+//
+// and was measured honestly against a character that does not exist: four
+// classes, at anchors the XP economy overshot by two regions, built by
+// assigning `p.level` — which grants a level's skill points and none of its
+// stat cards. By region 8 that fixture was missing sixty-three cards, most of
+// a character's Damage stat. Re-measured at the anchors the game now actually
+// pays (REGION_ANCHOR_LEVEL above), across all fourteen classes, on
+// characters built through the game's own level-up path:
+//
+//   region      1     2      3      4      5      6      7      8
+//   level       1    14     23     32     41     50     59     68
+//   median dps 16.3  77.1  163.1  155.9  197.7  237.9  276.9  340.0
+//
+// So a region-8 character puts out about 21× a level-1 one, and the axis said
+// 7.36. Everything that rides this table — landmarks, specials, elites,
+// pylons, nests — was a third as tough as flat time-to-kill asks by the end
+// of the run. That is the "run gets easier the longer it runs" shape the
+// four-floor curve was replaced for, arrived at by a different road.
+//
+// Region 4 measures a hair UNDER region 3 (155.9 against 163.1): the level-32
+// loadout window opens a slot the breadth-first build fills with a utility
+// skill. The axis may flatten and never reverse (asserted below), so region 4
+// holds region 3's value rather than inventing a dip.
+//
+// DAMAGE keeps the relationship stated above, HP^0.608. It is no longer
+// unmeasurable — with stat cards spent, effective HP for a build that takes
+// damage and vitality evenly grows ×7 to ×9 by region 8, against ×6.34 here —
+// so the inherited exponent lands where a measured one would, and is kept
+// because it is the documented rule. A build that takes ONLY damage cards
+// grows its effective HP ×1.2 and will find region 8 lethal; that is the
+// card's price, not a tuning error.
+export const REGION_HP_MULT = [1.00, 4.74, 10.04, 10.04, 12.16, 14.64, 17.04, 20.92];
+export const REGION_DMG_MULT = [1.00, 2.57, 4.06, 4.06, 4.56, 5.11, 5.60, 6.34];
 
 // ------------------------------------------------ the fodder axis (§4.3, §2.6)
 //
@@ -182,7 +248,7 @@ export const REGIONS = [
   {
     id: 'central_america', index: 2, name: 'Central America',
     nativeClass: 'savage',
-    expectedLevel: 10,
+    expectedLevel: 14,
     // The flip from physical to spiritual is the first real test of the
     // triangle: a party built entirely for region 1 should feel this push back.
     domainSkew: { primary: 'spiritual', secondary: null, maxShare: 0.60 },
@@ -197,7 +263,7 @@ export const REGIONS = [
   {
     id: 'great_britain', index: 3, name: 'Great Britain',
     nativeClass: 'bard',
-    expectedLevel: 19,
+    expectedLevel: 23,
     // Mental after spiritual: the triangle turns a second time, so a party
     // that re-specced for region 2 is pushed again rather than rewarded.
     domainSkew: { primary: 'mental', secondary: null, maxShare: 0.60 },
@@ -214,7 +280,7 @@ export const REGIONS = [
   {
     id: 'egypt', index: 4, name: 'Egypt',
     nativeClass: 'wizard',
-    expectedLevel: 28,
+    expectedLevel: 32,
     // Back to spiritual, with mental second: region 2's answer works again,
     // but only for half the crowd.
     domainSkew: { primary: 'spiritual', secondary: 'mental', maxShare: 0.60 },
@@ -229,7 +295,7 @@ export const REGIONS = [
   {
     id: 'central_africa', index: 5, name: 'Central Africa',
     nativeClass: 'witch_doctor',
-    expectedLevel: 37,
+    expectedLevel: 41,
     domainSkew: { primary: 'spiritual', secondary: 'physical', maxShare: 0.60 },
     tileset: 'delta',
     hazard: 'rot_pool',                // standing water that rots: do not fight in it
@@ -242,7 +308,7 @@ export const REGIONS = [
   {
     id: 'northern_russia', index: 6, name: 'Northern Russia',
     nativeClass: 'necromancer',
-    expectedLevel: 46,
+    expectedLevel: 50,
     domainSkew: { primary: 'physical', secondary: 'mental', maxShare: 0.60 },
     tileset: 'tundra',
     hazard: 'black_ice',               // ground you cannot stop on
@@ -255,7 +321,7 @@ export const REGIONS = [
   {
     id: 'off_indonesia', index: 7, name: 'Off Indonesia',
     nativeClass: 'sundian',
-    expectedLevel: 55,
+    expectedLevel: 59,
     domainSkew: { primary: 'mental', secondary: null, maxShare: 0.60 },
     tileset: 'abyss',
     hazard: 'riptide',                 // a current that carries you
@@ -268,7 +334,7 @@ export const REGIONS = [
   {
     id: 'australian_outback', index: 8, name: 'Australian Outback',
     nativeClass: 'hunter',
-    expectedLevel: 64,
+    expectedLevel: 68,
     // EVEN, and the cap says so: 40% where every other region allows 60%.
     // §3.2 — "the endgame demands full party coverage rather than one
     // counter-build". `primary` names the plurality; it leads by four points.
@@ -394,6 +460,17 @@ function assertRegions() {
     for (let i = 1; i < arr.length; i++) {
       if (arr[i] < arr[i - 1]) problems.push(`${name} falls from ${arr[i - 1]} to ${arr[i]} at region ${i + 1} — the world axis may flatten, never reverse`);
     }
+  }
+  // THE LEVEL CURVE IS ONE STATEMENT MADE IN THREE PLACES — the anchor table,
+  // each region's `expectedLevel`, and "1.5 a fight over six fights" — and
+  // three places is how the anchors came to describe a game nobody was
+  // playing. They are held to each other here.
+  for (const r of REGIONS) {
+    if (r.expectedLevel !== REGION_ANCHOR_LEVEL[r.index - 1]) problems.push(`${r.id}: expectedLevel ${r.expectedLevel} is not its anchor ${REGION_ANCHOR_LEVEL[r.index - 1]}`);
+  }
+  for (let i = 1; i < TOTAL_REGIONS; i++) {
+    const out = expectedLevelAt(i, FIGHTS_PER_REGION);
+    if (Math.abs(out - REGION_ANCHOR_LEVEL[i]) > 1e-9) problems.push(`region ${i} ends at level ${out} after ${FIGHTS_PER_REGION} fights and region ${i + 1}'s anchor is ${REGION_ANCHOR_LEVEL[i]} — the curve does not join`);
   }
   if (REGION_HP_MULT[0] !== 1 || REGION_DMG_MULT[0] !== 1) {
     problems.push('region 1 must be exactly ×1 on both world-axis multipliers — it is the baseline every number in the game was tuned against');

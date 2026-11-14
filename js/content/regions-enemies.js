@@ -78,7 +78,7 @@ export const COMMITTING_BEHAVIORS = new Set(['brute', 'warden', 'dasher']);
 
 export const REGION_ENEMIES = {
   pacific_northwest: { enemies: PNW_ENEMIES, boss: PNW_BOSS, horde: true },
-  central_america: { enemies: XIB_ENEMIES, boss: XIB_BOSS },
+  central_america: { enemies: XIB_ENEMIES, boss: XIB_BOSS, horde: true },
   great_britain: { enemies: GB_ENEMIES, boss: GB_BOSS, horde: true },
   egypt: { enemies: EG_ENEMIES, boss: EG_BOSS, horde: true },
   central_africa: { enemies: CAF_ENEMIES, boss: CAF_BOSS, horde: true },

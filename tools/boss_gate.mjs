@@ -30,9 +30,8 @@
 //
 // Usage: node tools/boss_gate.mjs [regionIndex ...] [--verbose]
 import { Sim } from '../js/game.js';
-import { TREES, TREES_BY_CLASS, slotsAtLevel } from '../js/skills.js';
-import * as SKILLSIM from '../js/skillsim.js';
-import { REGIONS, anchorLevel } from '../js/regions.js';
+import { REGIONS, expectedLevelAt } from '../js/regions.js';
+import { buildCharacter } from './lib/build_char.mjs';
 import { REGION_ENEMIES, BOSS_BLOCK_PARAMS } from '../js/content/regions-enemies.js';
 import { BOSS_BLOCKS } from '../js/entities/enemies.js';
 
@@ -42,9 +41,16 @@ const bad = (m) => { checks++; fails++; console.log(`✗ ${m}`); };
 const VERBOSE = process.argv.includes('--verbose');
 const only = process.argv.slice(2).map(Number).filter(n => n > 0);
 const CAP_S = 420;
-// A class with dependable single-target output at every anchor, so "it can be
-// killed" is a statement about the boss rather than about a build.
-const CLASS = 'toh_necromancer';
+// A MEDIAN class, so the fight lasts long enough to be a fight. This was the
+// Necromancer, chosen for "dependable single-target output" — and with its
+// stat cards actually spent it killed the Drowned King's first phase in under
+// nine seconds, before the vortex that phase declares had come off cooldown
+// once. The gate then reported a boss missing its mechanic; what it had found
+// was a class putting out six to eight times the roster median (see
+// tools/region_curve.mjs), which is the balance pass's problem and must not
+// be allowed to decide whether a boss works. The Wizard sits at the median
+// of the fourteen on every boss (tools/boss_ttk_probe.mjs).
+const CLASS = 'toh_wizard';
 
 console.log('REGION BOSSES, FOUGHT\n');
 
@@ -55,30 +61,18 @@ console.log('REGION BOSSES, FOUGHT\n');
   else bad(`block lists differ — sim runs [${a}], content validates [${b}]. A block in one and not the other is either unvalidated or unreachable`);
 }
 
+// Built by tools/lib/build_char.mjs at the level a player MEETS the boss —
+// the sixth fight of the region (expectedLevelAt) — with its stat cards
+// spent. The first version assigned `p.level` at the region's ARRIVAL level
+// and spent no cards, so "it can be killed" was being asked of a character
+// seven levels and thirty cards short of the one in the room.
 function build(regionIndex, seed) {
-  const level = anchorLevel(regionIndex);
   const sim = new Sim({ seed, regionIndex, party: [{ idx: 0, key: 'k', name: 'C', charId: CLASS, color: '#fff' }] });
   sim.god = true;
-  const p = sim.players[0];
-  if (p.openingOffer) sim.uiAction(0, { kind: 'opening', id: p.openingOffer[0].id });
-  p.level = level;
-  const skills = TREES_BY_CLASS[CLASS].flatMap(t => TREES[t].skills).sort((a, b) => a.tier - b.tier);
-  let budget = level - 1;
-  for (let pass = 0; pass < 12 && budget > 0; pass++) {
-    let spent = 0;
-    for (const sk of skills) {
-      if (budget <= 0) break;
-      p.skillPoints++;
-      if (SKILLSIM.spendSkillPoint(sim, p, sk.id)) { budget--; spent++; } else p.skillPoints--;
-    }
-    if (!spent) break;
-  }
-  const slots = slotsAtLevel(level);
-  const learned = skills.filter(s => s.type === 'active' && (p.skillRanks[s.id] || 0) >= 1).map(s => s.id);
-  if (learned.length) { p.loadout = new Array(8).fill(null); for (let i = 0; i < slots && i < learned.length; i++) p.loadout[i] = learned[i]; }
-  sim._recomputeStats(p);
+  const { p } = buildCharacter(sim, { level: bossLevel(regionIndex) });
   return { sim, p };
 }
+const bossLevel = (regionIndex) => Math.floor(expectedLevelAt(regionIndex, 5));
 
 function fight(region) {
   const def = REGION_ENEMIES[region.id].boss;
@@ -110,7 +104,11 @@ function fight(region) {
     }
     sim.tick();
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
-    if (p.pendingOffer && p.pendingOffer.length) sim.uiAction(0, { kind: 'levelUp', id: p.pendingOffer[0].id });
+    // A warded boss is fought AT THE WARD: where the character stands is its
+    // only input, so the gate's fighter walks there as a player would.
+    { const wd = b.bs && b.bs.wardId ? sim.enemyById(b.bs.wardId) : null;
+      if (wd) { const dd = Math.hypot(wd.x - p.x, wd.y - p.y) || 1; sim.setInput(0, dd > 90 ? { mx: (wd.x - p.x) / dd, my: (wd.y - p.y) / dd } : { mx: 0, my: 0 }); }
+      else sim.setInput(0, { mx: 0, my: 0 }); }
     seen.travelled += Math.hypot(b.x - lx, b.y - ly); lx = b.x; ly = b.y;
     const ph2 = b.bs && b.bs.phase2 ? 2 : 1;
     if (ph2 === 2 && seen.p2At === null) seen.p2At = sim.time - t0;
@@ -200,7 +198,7 @@ for (const region of REGIONS) {
     else bad(`${def.id} ward: a blow lands at ×${s.wardRatio === null ? '?' : s.wardRatio.toFixed(2)} with the ward up, want ×${want.toFixed(2)}`);
   }
 
-  if (r.dead) ok(`${def.id} can be killed — ${r.ttk.toFixed(0)}s by a level-${anchorLevel(region.index)} ${CLASS.replace('toh_', '')} in god mode (${r.maxHp} HP)`);
+  if (r.dead) ok(`${def.id} can be killed — ${r.ttk.toFixed(0)}s by a level-${bossLevel(region.index)} ${CLASS.replace('toh_', '')} in god mode (${r.maxHp} HP)`);
   else bad(`${def.id} was not down after ${CAP_S}s — either it cannot be killed or its mechanic cannot be answered by a build that only attacks`);
   console.log('');
 }

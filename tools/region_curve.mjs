@@ -27,8 +27,8 @@
 // Usage: node tools/region_curve.mjs [--verbose]
 import { Sim } from '../js/game.js';
 import { TREES, TREES_BY_CLASS, slotsAtLevel } from '../js/skills.js';
-import * as SKILLSIM from '../js/skillsim.js';
 import { REGION_ANCHOR_LEVEL } from '../js/regions.js';
+import { buildCharacter } from './lib/build_char.mjs';
 
 const VERBOSE = process.argv.includes('--verbose');
 // Points the trees could not absorb. A level whose extra points are unspendable
@@ -46,9 +46,18 @@ const TICKS = SECONDS * 60;
 // ring goes inside the shortest reach in the game rather than near it.
 const DUMMY_R = 70;
 
-// The four classes sim_test drives through a full run, so the curve is derived
-// from builds that are known to be able to finish the game.
-const CLASSES = ['toh_blacksmith', 'toh_wizard', 'toh_necromancer', 'toh_druid'];
+// ALL FOURTEEN, and the median of them. This read four — the classes sim_test
+// drove through a full run when only four could finish one — and a world axis
+// that is "the median class's output" has to be taken over the classes that
+// exist. `--classes=ref` reproduces the old four.
+const REF = ['toh_blacksmith', 'toh_wizard', 'toh_necromancer', 'toh_druid'];
+const CLASSES = process.argv.includes('--classes=ref') ? REF : Object.keys(TREES_BY_CLASS);
+// `--picks=none` reproduces the body the axis was FIRST measured against: a
+// character with its level's skills and level 1's statline, because the
+// fixture assigned `p.level` and a level-up's stat card is banked by the
+// level-up path, not by the number. By region 8 that is sixty-seven cards —
+// most of a character's damage stat — missing from the denominator.
+const PICKS = (process.argv.find(a => a.startsWith('--picks=')) || '--picks=sensible').split('=')[1];
 
 // STAGED GENEROUSLY, on purpose — the same ruling `tree_dps`'s supply pass
 // makes. The question here is what a character at this level CAN put out, so
@@ -80,26 +89,17 @@ function measure(classId, level, window) {
   sim.wave.done = true; sim.spawnQueue.length = 0;
   for (const e of [...sim.enemyPool]) sim.enemyPool.release(e);
 
-  const p = sim.players[0];
-  p.level = level;
-  // (level - 1) points, spent breadth-first across the class's trees in tier
-  // order — the shape a player who levelled naturally would have, rather than
-  // one tree taken to its capstone and the rest empty.
+  // BUILT THE WAY THE GAME BUILDS ONE (tools/lib/build_char.mjs): levels
+  // through `_grantLevel`, points spent breadth-first across the class's trees
+  // in tier order — the shape a player who levelled naturally would have — and
+  // the banked stat cards actually spent. `loadout: 'none'` because the
+  // windows below pin it.
   const skills = (TREES_BY_CLASS[classId] || [])
     .flatMap(t => TREES[t].skills)
     .sort((a, b) => a.tier - b.tier);
-  let budget = level - 1;
-  for (let pass = 0; pass < 12 && budget > 0; pass++) {
-    let spentThisPass = 0;
-    for (const sk of skills) {
-      if (budget <= 0) break;
-      p.skillPoints++;
-      if (SKILLSIM.spendSkillPoint(sim, p, sk.id)) { budget--; spentThisPass++; }
-      else p.skillPoints--;
-    }
-    if (!spentThisPass) break;   // nothing else is learnable; the rest is unspendable
-  }
-  unspent[`${classId}@${level}`] = budget;
+  const built = buildCharacter(sim, { level, picks: PICKS, loadout: 'none' });
+  const p = built.p;
+  unspent[`${classId}@${level}`] = built.unspent;
 
   // PIN THE LOADOUT TO WHAT WAS ACTUALLY LEARNED, one WINDOW of it at a time.
   // The ranks live in `p.skillRanks`; the first version filtered on `p.spent`,
@@ -174,8 +174,8 @@ function median(xs) {
 const DMG_EXP = Math.log(1.20) / Math.log(1.35);
 
 console.log(`THE WORLD AXIS — composed output at each of §4.3's ${REGION_ANCHOR_LEVEL.length} level anchors`);
-console.log(`${CLASSES.length} classes, ${SECONDS}s window, median across classes\n`);
-console.log('region  level   ' + CLASSES.map(c => c.replace('toh_', '').padStart(9)).join('') + '     median   HP×    dmg×');
+console.log(`${CLASSES.length} classes, ${SECONDS}s window, stat cards '${PICKS}', median across classes\n`);
+console.log('region  level   ' + CLASSES.map(c => c.replace('toh_', '').slice(0, 8).padStart(9)).join('') + '     median   HP×    dmg×');
 
 const rows = [];
 for (let r = 0; r < REGION_ANCHOR_LEVEL.length; r++) {
