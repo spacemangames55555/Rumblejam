@@ -692,6 +692,17 @@ never loads them:
   it should — raised bodies, projectiles, pools, a live vortex, turning
   lanes, a pylon and the damage it refuses. Its first run found a ring born
   inside the player (sixteen bolts landing in the tick they spawned).
+- `node tools/glyph_gate.mjs [--verbose]` — **every monster is a creature,
+  not a polygon, and its picture is where its hitbox is.** No enemy has a
+  painted sprite yet, so each is a code-drawn glyph (`js/glyphs.js`). The gate
+  holds coverage (every region enemy and boss, the borrowed nest, brood and
+  pylon), that every glyph stays inside its cached cell in all eight frames,
+  that its mass sits on the disc that gets hit, that no two bodies in a region
+  share a silhouette, and — against a recording canvas — that the renderer
+  paints them, ring under body, one cached cell per frame and facing.
+  `tools/glyph_sheet.html` (serve the repo root, open
+  `/tools/glyph_sheet.html`) shows every one at the size it is drawn in play,
+  beside the polygon it replaced.
 - `node tools/curse_gate.mjs` — **every curse changes the room it is cast
   on.** For each of the eight region curses, a cursed node and a plain one are
   staged in the same region and the lever is read off the running Sim, with

@@ -1,0 +1,123 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Rumblejam — code-drawn monsters</title>
+<!--
+  Every code-drawn monster (js/glyphs.js), per region, at three sizes:
+    · large, so the drawing itself can be judged
+    · at the size and on the floor it is drawn in play, with its domain ring
+    · facing left, and the polygon it replaces
+
+  Serve the repo root and open this page:
+      python3 -m http.server 8080      →  http://localhost:8080/tools/glyph_sheet.html
+  Add ?still to freeze the animation (tools/glyph_gate.mjs photographs it that way).
+-->
+<style>
+  :root { --bg:#14161f; --grid:#1b1e2b; --ink:#c8cde8; --dim:#8a90ad; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:0 0 40px; font:12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--ink); background:var(--bg); }
+  header { padding:12px 16px; border-bottom:1px solid #2b2f45; background:#0c0d13; }
+  h1 { font-size:14px; margin:0 0 2px; letter-spacing:2px; color:#ffd45e; }
+  header p { margin:0; color:var(--dim); }
+  section { padding:14px 16px 0; }
+  h2 { font-size:12px; letter-spacing:2px; color:var(--dim); margin:0 0 8px; text-transform:uppercase; font-weight:normal; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; }
+  figure { margin:0; padding:6px 6px 5px; border:1px solid #2b2f45; background:#171a26; width:230px; }
+  canvas { display:block; background-color:var(--bg);
+           background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+           background-size:32px 32px; }
+  figcaption { margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  figcaption b { color:#fff; font-weight:normal; }
+  figcaption span { color:var(--dim); display:block; }
+</style>
+<header>
+  <h1>CODE-DRAWN MONSTERS</h1>
+  <p>js/glyphs.js — top: the drawing · bottom: in play (right-facing, left-facing, the polygon it replaces)</p>
+</header>
+<main id="main"></main>
+<script type="module">
+  import { GLYPHS, GLYPH_FRAMES, drawGlyph, glyphFrame } from '../js/glyphs.js';
+  import { REGION_ENEMIES } from '../js/content/regions-enemies.js';
+  import { REGIONS } from '../js/regions.js';
+  import { DOMAIN_COLOR } from '../js/domains.js';
+  import { PALETTE } from '../js/config.js';
+  import { ENEMY_BY_ID } from '../js/content/enemies.js';
+  import { PYLON_SPRITE } from '../js/content/sprites.js';
+
+  const still = new URLSearchParams(location.search).has('still');
+  const W = 216, H = 204, DPR = Math.max(1, window.devicePixelRatio || 1);
+  const cells = [];
+
+  function polygon(g, shape, r) {
+    const n = { triangle: 3, square: 4, pentagon: 5, hex: 6, diamond: 4 }[shape] || 24;
+    const rot = shape === 'square' ? Math.PI / 4 : -Math.PI / 2;
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const a = rot + i * Math.PI * 2 / n, x = Math.cos(a) * r, y = Math.sin(a) * r;
+      if (i) g.lineTo(x, y); else g.moveTo(x, y);
+    }
+    g.closePath();
+  }
+
+  function ring(g, def, r) {
+    const col = DOMAIN_COLOR[def.domain];
+    if (!col) return;
+    g.strokeStyle = col; g.lineWidth = 4;
+    g.beginPath(); g.arc(0, 0, r + 3, 0, Math.PI * 2); g.stroke();
+  }
+
+  function paint(c, t) {
+    const { g, def, id } = c;
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    g.clearRect(0, 0, W, H);
+    const frame = still ? 2 : glyphFrame(t, c.n);
+    const o = { color: def.color, outline: PALETTE.outline };
+    // the drawing, large
+    const big = 38;
+    g.save(); g.translate(W / 2, 62);
+    drawGlyph(g, id, big, { ...o, lw: Math.max(2, big * 0.07), frame, dir: 1 });
+    g.restore();
+    // in play: at the body's own radius (a boss is shown at half size to fit)
+    const r = def.radius > 34 ? def.radius * 0.5 : def.radius;
+    const lw = Math.max(2, r * 0.14);
+    const y = 162;
+    g.save(); g.translate(46, y); ring(g, def, r); drawGlyph(g, id, r, { ...o, lw, frame, dir: 1 }); g.restore();
+    g.save(); g.translate(136, y); ring(g, def, r); drawGlyph(g, id, r, { ...o, lw, frame, dir: -1 }); g.restore();
+    g.save(); g.translate(196, y);
+    g.fillStyle = def.color; g.strokeStyle = PALETTE.outline; g.lineWidth = Math.max(2, Math.min(r, 14) * 0.14);
+    polygon(g, def.shape, Math.min(r, 14)); g.fill(); g.stroke();
+    g.restore();
+  }
+
+  const main = document.getElementById('main');
+  let n = 0;
+  const shared = ['flit', 'wombden'].map(id => ENEMY_BY_ID[id]).filter(Boolean);
+  shared.push({ name: 'Ward Pylon', behavior: 'structure', spriteId: PYLON_SPRITE, shape: 'square', color: '#c05eff', radius: 26, domain: null });
+  const groups = [...Object.entries(REGION_ENEMIES), ['In every region', { enemies: shared, boss: null }]];
+  for (const [key, pop] of groups) {
+    const region = REGIONS.find(x => x.id === key) || REGIONS[Object.keys(REGION_ENEMIES).indexOf(key)];
+    const sec = document.createElement('section');
+    sec.innerHTML = `<h2>${region ? region.name : key}</h2>`;
+    const row = document.createElement('div'); row.className = 'row';
+    for (const def of [...pop.enemies, ...(pop.boss ? [{ ...pop.boss, boss: true }] : [])]) {
+      const id = def.spriteId;
+      const fig = document.createElement('figure');
+      const cv = document.createElement('canvas');
+      cv.width = W * DPR; cv.height = H * DPR; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+      fig.appendChild(cv);
+      const cap = document.createElement('figcaption');
+      cap.innerHTML = `<b>${def.name}</b><span>${def.boss ? 'boss' : def.behavior} · ${GLYPHS[id] ? GLYPHS[id].anim : 'NO GLYPH'}</span>`;
+      fig.appendChild(cap);
+      row.appendChild(fig);
+      cells.push({ g: cv.getContext('2d'), def, id, n: n++ });
+    }
+    sec.appendChild(row);
+    main.appendChild(sec);
+  }
+
+  function tick(ms) {
+    for (const c of cells) paint(c, ms / 1000);
+    if (!still) requestAnimationFrame(tick);
+  }
+  tick(0);
+  document.body.dataset.ready = String(cells.length);
+</script>

@@ -128,9 +128,17 @@ const res = await H.exec(`
   performance.now = realNow;
   // how many enemies took the fast path
   const fastN = v.enemies.filter(e => !e.elite && !e.fusing && !e.flash).length;
+  // WHAT THE BODIES WERE PAINTED FROM. A cell in the primitive cache is keyed
+  // by the body's sprite id when it was painted from a code-drawn glyph
+  // (js/glyphs.js) and by its polygon shape when it was not. Every body in MIX
+  // has a glyph, so no polygon cell may exist. (With painted sheets installed
+  // the primitive cache is simply empty, and both counts are zero.)
+  const primKeys = [...(R._primCache || new Map()).keys()];
+  const glyphCells = primKeys.filter(k => /^(enemy|boss)\./.test(k)).length;
+  const polyCells = primKeys.length - glyphCells;
   return { canvas: cv.width + 'x' + cv.height, enemiesInView: v.enemies.length, fastEligible: fastN,
     plagued: v.enemies.filter(e => e.plagued).length, chilled: v.enemies.filter(e => e.slowed).length, chasing: v.enemies.filter(e => e.straggle).length,
-    tokens: (v.tokens || []).length, precedenceMismatches: prec,
+    tokens: (v.tokens || []).length, precedenceMismatches: prec, glyphCells, polyCells,
     pixels: a.length / 4, noisePx: noise, diffPx: diff, diffPct: +(100 * diff / (a.length / 4)).toFixed(3), worstDelta: worst,
     diffOver32Px: diff32, diffOver32Pct: +(100 * diff32 / (a.length / 4)).toFixed(3),
     movedBeyond1pxPx: beyond1, movedBeyond1pxPct: +(100 * beyond1 / (a.length / 4)).toFixed(4),
@@ -148,7 +156,11 @@ if (OUT) {
 // region-1 fodder sheets: isolated single texels of 1-px art details that a
 // different nearest-neighbour phase keeps or drops), and no floor pixel moves by more than a
 // 32-level delta (the seam differences are low-contrast texel ties).
+// And no body in the scene was painted as a bare polygon: all four have a
+// code-drawn glyph, and a body that falls through to `def.shape` is the state
+// tools/glyph_gate.mjs exists to end.
 const ok = summary.noisePx === 0 && summary.precedenceMismatches === 0 && summary.movedBeyond1pxPct < 0.25
-  && summary.floorWorst <= 32;
+  && summary.floorWorst <= 32 && summary.polyCells === 0;
+if (summary.polyCells) console.log(`✗ ${summary.polyCells} body cell(s) were painted as bare polygons — the renderer is not drawing glyphs`);
 console.log(ok ? 'PARITY OK' : 'PARITY FAIL');
 H.close(); relay.proc.kill(); process.exit(ok ? 0 : 1);
