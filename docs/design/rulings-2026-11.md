@@ -164,6 +164,28 @@ Damage keeps `HP^0.608`. With stat cards spent, a build taking damage and vitali
 
 **Bosses.** Their health is authored, not on the axis. Against real characters at the level a player meets them, median time-to-kill across fourteen classes is 40 / 43 / 56 / 53 / 53 / 88 / 77 / 145 s. Regions 1–5 and 7 are unchanged. Koschei drops to 2,800 HP because the walk to his ward is a third of the fight and is paid in time. Megalania rises to 13,000: at 8,000 the last boss died in 91 s, which is one more fight rather than the endurance test.
 
+## R-9 — Every monster is drawn in code until it is painted (15 Nov)
+
+U-4 asked for a distinct animated code-drawn silhouette per monster now, painted sprites from Grokbot later. This is that.
+
+**What was there.** No enemy sheet is on disk, so the renderer fell through to `def.shape`. Forty-eight monsters and eight bosses were six polygons in different colours.
+
+**What is there now.** `js/glyphs.js`: fifty-nine glyphs — every region enemy and boss, plus the three bodies every region borrows (the nest, its brood, the ward pylon). Each is a handful of vector parts in a unit box, shaded from the unit's own colour, mirrored to face the way it moves, on an eight-frame whole-body motion phased by id so a pack does not step in unison. `tools/glyph_sheet.html` shows all of them at the size they are drawn in play.
+
+**Decisions inside it, each mine to make under U-1:**
+
+- **The glyph is a fallback, not the art.** A painted sprite still wins the moment one is installed; nothing about the sprite pipeline changes. The drawings follow the notes in `docs/silhouettes.json`, the same notes the prompts in `docs/prompts.json` are built from, so what Grokbot paints replaces a placeholder of the same creature.
+- **Same cost as a polygon.** A glyph is painted once into the renderer's existing cached cell, per frame and facing — 16 cells where the rotating triangle already kept 96 — and copied. The hit-flash is its own cached cell, so a horde under fire costs a copy per flash.
+- **The domain ring goes under the body.** Over it, the ring is struck through every antler and spear. Under it, the frost and the wind-up ring (which draw over the body) no longer need a separate ring-less cell.
+- **The radius stays the truth.** A glyph may overhang its hitbox — antlers, a tail — but its mass must sit on the disc that gets hit. Megalania is drawn from above for this reason alone: side-on, the picture covered 34% of a 56-unit hitbox and the party would have been shooting floor.
+
+**Measured.**
+
+- `tools/glyph_gate.mjs`, 29 checks: coverage, well-formed parts, every glyph inside its cell in every frame (furthest reach 1.46 radii of a 1.55 cell), every picture on its hitbox (thinnest covers 19% of the disc, the Tide Eel), no two bodies in a region sharing a silhouette (closest pair 58% overlap; the cap is 62%, placed between that and a planted "same body minus its headdress" at 67%), and the renderer actually painting them. Thirteen planted defects, thirteen caught.
+- `tools/render_parity_test.mjs` compares the cached path with a direct draw of the same scene. Pixels that differ by more than a whole-pixel snap: **5 of 840,960**, against 830 on the polygons this replaces. The first version of the glyph path measured 1,690 — the status tint was being laid on part by part, so wherever a limb crossed a body it was tinted twice. The outline, the tint and the flash are now each one path around the whole silhouette. The parity test also now fails if any body in its scene was painted as a bare polygon.
+
+**Left for Grokbot.** The painted sprites themselves (59 prompts are written and each names its silhouette), and judging the glyphs' motion by eye in a real fight — I can verify a frame, not a feel.
+
 ## What every earlier measurement was standing on
 
 `tools/lib/build_char.mjs` is new and the three rulings above depend on it. Every harness that wanted "a level-28 character" set `p.level = 28`. That is a character with level 28's skills and level 1's body — no stat cards — and two harnesses sent `{kind: 'levelUp'}` to spend them, for an action the sim spells `levelup`. The builder grants levels through `_grantLevel`, spends points through `spendSkillPoint`, and resolves the banked cards through the real offer path by a stated policy.

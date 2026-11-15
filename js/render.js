@@ -28,6 +28,7 @@ import { BIOMES, tileSpriteIds, tileVariant } from './biomes.js';
 import { DOMAIN_COLOR } from './domains.js';
 import { clamp, angDiff } from './util.js';
 import { fxSpec, SHAPE } from './content/skillfx.js';
+import { GLYPHS, GLYPH_FRAMES, GLYPH_CELL_REACH, drawGlyph, glyphFrame, hasGlyph } from './glyphs.js';
 
 // Minion and soul-token presentation. Rule 14: no inline constants in
 // behaviour code, and a renderer is behaviour code that happens to draw.
@@ -200,6 +201,9 @@ const FLOOR_CHUNK = 512;
 const FLOOR_CHUNK_MAX = 64;
 // Rotating-triangle primitive cells per 120-degree period (Renderer._primitiveCell).
 const TRI_STEPS = 96;
+// The hit-flash for a code-drawn body: the same silhouette, whitened, as one
+// cached cell — so a horde under fire costs a copy per flash, not a redraw.
+const FLASH_TINT = { tint: '#ffffff', tintStrength: 1 };
 // Cache prewarm (Renderer.prewarm, run in idle time): idle ms a first job
 // needs before it starts, and the margin kept; world units of floor beyond
 // the opening view (the camera lookahead clamps at 130); floor tile rows and
@@ -526,7 +530,8 @@ export class Renderer {
       for (const def of plan.roster || []) {
         const r = def.radius;
         const ringCol = def.domain ? DOMAIN_COLOR[def.domain] : null;
-        const proto = { shape: def.shape, color: def.color, id: 0 };
+        const proto = { shape: def.shape, color: def.color, id: 0, spriteId: def.spriteId };
+        const glyph = hasGlyph(def.spriteId);
         let step = 0;
         add(ti === 0 ? 1 : 3, () => {
           if (!Assets.ready) return NOT_READY;
@@ -546,11 +551,17 @@ export class Renderer {
           }
           // primitive body: every rotation step of a triangle, the ring-merged
           // cell, and the ring-less one a chilled body draws (frost between)
-          const steps = def.shape === 'triangle' ? TRI_STEPS : 1;
+          // A code-drawn body: every frame in both facings, ring merged (its
+          // ring is under it, so it never needs the ring-less cell), and the
+          // whitened hit-flash cell every struck body shows.
+          const steps = glyph ? GLYPH_FRAMES * 2 : def.shape === 'triangle' ? TRI_STEPS : 1;
           if (step >= steps) return true;
           for (let n = 0; n < WARM_PRIM_BATCH && step < steps; n++, step++) {
             if (ring) this._primitiveCell(proto, r, tint, M.a, M.d, ring, step);
-            if (!ring || (tint && ti <= 2)) this._primitiveCell(proto, r, tint, M.a, M.d, null, step);
+            if (glyph) {
+              if (!ring) this._primitiveCell(proto, r, tint, M.a, M.d, null, step);
+              if (ti === 0) this._primitiveCell(proto, r, FLASH_TINT, M.a, M.d, null, step);
+            } else if (!ring || (tint && ti <= 2)) this._primitiveCell(proto, r, tint, M.a, M.d, null, step);
           }
           return step >= steps ? true : 'again';
         });
@@ -1765,9 +1776,20 @@ export class Renderer {
   // the tip for a radius-14 body), so it still turns smoothly.
   // `ring` (optional) is painted on top, after the body, exactly as the
   // separate domain stroke would be, when nothing draws between them.
+  //
+  // A CODE-DRAWN BODY (glyphs.js) rides the same cache: one cell per animation
+  // frame and facing, GLYPH_FRAMES * 2 where the triangle already keeps
+  // TRI_STEPS. Its domain ring goes UNDER the body rather than over it — a
+  // creature standing on its ring instead of a ring struck through its antlers
+  // — which also means the frost and the wind-up ring, which draw over the
+  // body, never need the ring-less cell: a glyph's ring is always merged.
   _primitiveCell(e, r, bodyTint, a, d, ring, qWarm) {
-    let rot = 0, q = 0;
-    if (e.shape === 'triangle') {
+    const glyph = e.spriteId && GLYPHS[e.spriteId] ? e.spriteId : null;
+    let rot = 0, q = 0, dir = 1;
+    if (glyph) {
+      if (qWarm !== undefined) { q = qWarm % GLYPH_FRAMES; dir = qWarm >= GLYPH_FRAMES ? -1 : 1; }   // prewarm: frame, then facing
+      else { q = glyphFrame(this.t, e.id); dir = this._glyphDir(e.id); }
+    } else if (e.shape === 'triangle') {
       const P = Math.PI * 2 / 3;
       if (qWarm !== undefined) q = qWarm;   // prewarm: one rotation step by index
       else {
@@ -1778,13 +1800,13 @@ export class Renderer {
     }
     const pc = this._primCache || (this._primCache = new Map());
     if (this._primAt !== a * 1e4 + d) { pc.clear(); this._primAt = a * 1e4 + d; }
-    const key = `${e.shape}|${e.color}|${r}|${bodyTint ? bodyTint.tint + bodyTint.tintStrength : ''}|${q}|${ring ? ring.color : ''}`;
+    const key = `${glyph ? glyph + (dir < 0 ? '<' : '>') : e.shape}|${e.color}|${r}|${bodyTint ? bodyTint.tint + bodyTint.tintStrength : ''}|${q}|${ring ? ring.color : ''}`;
     let c = pc.get(key);
     if (c !== undefined) return c;
     c = null;
     try {
       const lw = Math.max(2, r * 0.14);
-      const ext = Math.max(r * 1.25 + lw, ring ? r + 3 + 2 : 0);   // star/cross reach r; outline adds lw/2
+      const ext = Math.max(r * (glyph ? GLYPH_CELL_REACH : 1.25) + lw, ring ? r + 3 + 2 : 0);   // star/cross reach r; outline adds lw/2
       const half = Math.ceil(ext * Math.max(a, d)) + 2;
       const cv = document.createElement('canvas');
       cv.width = cv.height = half * 2;
@@ -1794,21 +1816,35 @@ export class Renderer {
         g.lineWidth = lw;
         g.strokeStyle = PALETTE.outline;
         g.fillStyle = e.color;
-        if (e.shape === 'triangle') poly(g, 0, 0, r, 3, rot); else drawShape(g, e.shape, r, 0);
-        g.fill();
-        g.stroke();
-        if (bodyTint) {
-          g.globalAlpha = bodyTint.tintStrength;
-          g.fillStyle = bodyTint.tint;
+        if (glyph) {
+          if (ring) {
+            g.strokeStyle = ring.color;
+            g.lineWidth = 4;
+            g.beginPath();
+            g.arc(0, 0, r + 3, 0, Math.PI * 2);
+            g.stroke();
+          }
+          drawGlyph(g, glyph, r, {
+            color: e.color, outline: PALETTE.outline, lw, frame: q, dir,
+            tint: bodyTint ? bodyTint.tint : null, tintStrength: bodyTint ? bodyTint.tintStrength : 0,
+          });
+        } else {
+          if (e.shape === 'triangle') poly(g, 0, 0, r, 3, rot); else drawShape(g, e.shape, r, 0);
           g.fill();
-          g.globalAlpha = 1;
-        }
-        if (ring) {
-          g.strokeStyle = ring.color;
-          g.lineWidth = 4;
-          g.beginPath();
-          g.arc(0, 0, r + 3, 0, Math.PI * 2);
           g.stroke();
+          if (bodyTint) {
+            g.globalAlpha = bodyTint.tintStrength;
+            g.fillStyle = bodyTint.tint;
+            g.fill();
+            g.globalAlpha = 1;
+          }
+          if (ring) {
+            g.strokeStyle = ring.color;
+            g.lineWidth = 4;
+            g.beginPath();
+            g.arc(0, 0, r + 3, 0, Math.PI * 2);
+            g.stroke();
+          }
         }
         c = { cv, half };
       }
@@ -1852,7 +1888,8 @@ export class Renderer {
     const toWorld = () => { if (!world) { ctx.setTransform(M.a, 0, 0, M.d, px, py); world = true; } };
     let prim = null;
     if (!cell && !Assets.get(e.spriteId)) {
-      const withRing = ring && !e.slowed && !e.winding;
+      // a code-drawn body stands on its ring, so nothing draws between them
+      const withRing = ring && (hasGlyph(e.spriteId) || (!e.slowed && !e.winding));
       prim = this._primitiveCell(e, r, bodyTint, M.a, M.d, withRing ? ring : null);
       if (prim) {
         ctx.drawImage(prim.cv, Math.round(px) - prim.half, Math.round(py) - prim.half);
@@ -1864,7 +1901,7 @@ export class Renderer {
       ctx.lineWidth = Math.max(2, r * 0.14);
       ctx.strokeStyle = PALETTE.outline;
       ctx.fillStyle = e.color;
-      if (!drawSprite(ctx, e.spriteId, 0, 0, opt)) {
+      if (!drawSprite(ctx, e.spriteId, 0, 0, opt) && !this._glyphDirect(ctx, e, r, bodyTint, 1, null, null)) {
         drawShape(ctx, e.shape, r, this.t + (e.id || 0));
         ctx.fill();
         ctx.stroke();
@@ -1926,6 +1963,72 @@ export class Renderer {
     return true;
   }
 
+  // Which way a code-drawn body faces: left or right, from the heading
+  // _faceAngle already keeps. The dead band is deliberate — a body walking
+  // straight up the screen would otherwise flip on every frame of jitter — and
+  // a body never yet seen moving faces right.
+  _glyphDir(id) {
+    const f = this._facing.get(this._enemyKey(id));
+    if (!f) return 1;
+    const c = Math.cos(f.a);
+    if (c > 0.25) f.gd = 1; else if (c < -0.25) f.gd = -1;
+    return f.gd || 1;
+  }
+
+  // Where a body is in device pixels, and at what scale, from inside the full
+  // path (whose context sits at the world transform translated to the body).
+  // Null when the transform is not a plain scale — nothing can be copied then.
+  // `own` reads it from the context itself, for the callers that have no
+  // `_worldM` (the legacy path the parity test compares against).
+  _glyphSpace(ctx, e, own) {
+    const s = this._gs || (this._gs = { a: 1, d: 1, px: 0, py: 0 });
+    const M = this._worldM;
+    if (M) { s.a = M.a; s.d = M.d; s.px = M.a * e.x + M.e; s.py = M.d * e.y + M.f; return s; }
+    if (!own || typeof ctx.getTransform !== 'function') return null;
+    const T = ctx.getTransform();
+    if (!T || T.b !== 0 || T.c !== 0 || !(T.a > 0) || !(T.d > 0)) return null;
+    s.a = T.a; s.d = T.d; s.px = T.e; s.py = T.f;
+    return s;
+  }
+
+  // A code-drawn body's cached cell copied at the body's position. The copy is
+  // made at identity — the cell is already in device pixels — and the
+  // transform put back. False if there is no cell to copy.
+  _glyphBlit(ctx, s, e, r, tint, ring, alpha) {
+    const c = this._primitiveCell(e, r, tint, s.a, s.d, ring);
+    if (!c) return false;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(c.cv, Math.round(s.px) - c.half, Math.round(s.py) - c.half);
+    ctx.globalAlpha = 1;
+    ctx.setTransform(s.a, 0, 0, s.d, s.px, s.py);
+    return true;
+  }
+
+  // A code-drawn body painted straight onto `ctx` (origin on the body): the
+  // path with no cached cell — no document to make one in, or the legacy path
+  // the parity test holds the cells against. The origin is snapped to a whole
+  // device pixel first, as a copied cell is, so the two are the same picture
+  // and not the same picture half a pixel apart. `under` (optional) is painted
+  // first at the same snapped origin: the domain ring. False if no glyph.
+  _glyphDirect(ctx, e, r, bodyTint, alpha, flat, under) {
+    if (!hasGlyph(e.spriteId)) return false;
+    const T = typeof ctx.getTransform === 'function' ? ctx.getTransform() : null;
+    const snap = !!T && T.b === 0 && T.c === 0;
+    if (snap) ctx.setTransform(T.a, 0, 0, T.d, Math.round(T.e), Math.round(T.f));
+    if (under) under();
+    const sb = ctx.shadowBlur;
+    ctx.shadowBlur = 0;        // per-part glow would stack; the ring carries it
+    drawGlyph(ctx, e.spriteId, r, {
+      color: e.color, outline: PALETTE.outline, lw: Math.max(2, r * 0.14),
+      frame: glyphFrame(this.t, e.id), dir: this._glyphDir(e.id), alpha, flat,
+      tint: bodyTint ? bodyTint.tint : null, tintStrength: bodyTint ? bodyTint.tintStrength : 0,
+    });
+    ctx.shadowBlur = sb;
+    if (snap) ctx.setTransform(T);
+    return true;
+  }
+
   // `e${id}` interned: the facing map is keyed by string, and building a fresh
   // one per enemy per frame was measurable JS on a throttled host.
   _enemyKey(id) {
@@ -1978,7 +2081,34 @@ export class Renderer {
       opt.alpha = inWall ? (((Math.floor(this.t * 8) + e.id) & 1) ? 0.8 : 0.5) : 1;
     }
     const drew = drawSprite(ctx, e.spriteId, 0, 0, opt);
-    if (!drew) {
+    // A CODE-DRAWN BODY: the same cached cell the fast path copies, ring
+    // included (under the body), so an elite's glow is cast once by the whole
+    // silhouette and a body leaving the fast path for a hit-flash does not
+    // change by a pixel.
+    // A translucent body (a chaser flickering in a wall) is ALWAYS the cell:
+    // drawn part by part its overlaps would show through each other.
+    let glyph = false, glyphRing = false, gs = null;
+    if (!drew && hasGlyph(e.spriteId)) {
+      const alpha = opt.alpha != null ? opt.alpha : 1;
+      const ringCol = e.domain ? DOMAIN_COLOR[e.domain] : null;
+      gs = this._glyphSpace(ctx, e, alpha < 1);
+      const ring = gs && ringCol ? this._domainRing(ringCol, r, gs.a, gs.d) : null;
+      if (gs && this._glyphBlit(ctx, gs, e, r, bodyTint, ring, alpha)) { glyph = true; glyphRing = !!ring; }
+      else {
+        gs = null;
+        glyph = this._glyphDirect(ctx, e, r, bodyTint, alpha, null, ringCol ? () => {
+          ctx.globalAlpha = alpha;
+          ctx.strokeStyle = ringCol;
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(0, 0, r + 3, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        } : null);
+        glyphRing = !!ringCol;
+      }
+    }
+    if (!drew && !glyph) {
       if (opt.alpha != null && opt.alpha !== 1) ctx.globalAlpha = opt.alpha;
       drawShape(ctx, e.shape, r, this.t + (e.id || 0));
       ctx.fill();
@@ -2016,7 +2146,7 @@ export class Renderer {
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    if (e.domain && DOMAIN_COLOR[e.domain]) {
+    if (e.domain && DOMAIN_COLOR[e.domain] && !glyphRing) {
       ctx.strokeStyle = DOMAIN_COLOR[e.domain];
       ctx.lineWidth = 4;
       ctx.beginPath();
@@ -2037,6 +2167,8 @@ export class Renderer {
         ctx.globalCompositeOperation = 'lighter';
         drawSprite(ctx, e.spriteId, 0, 0, opt);
         ctx.globalCompositeOperation = 'source-over';
+      } else if (glyph) {
+        if (!(gs && this._glyphBlit(ctx, gs, e, r, FLASH_TINT, null, a))) this._glyphDirect(ctx, e, r, null, a, '#fff');
       } else {
         ctx.fillStyle = '#fff';
         drawShape(ctx, e.shape, r, e.fusing ? this.t : this.t + (e.id || 0));
