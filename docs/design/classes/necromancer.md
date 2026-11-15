@@ -3,6 +3,16 @@
 Mechanical fields carried from the code export unchanged. Eight judgment
 fields authored. Class-wide rulings stated once here.
 
+> **MAGNITUDES IN THIS DOCUMENT ARE NOT WHAT SHIPS (15 Nov 2026, ruling R-11 in
+> `docs/design/rulings-2026-11.md`).** The damage, cooldown and per-rank figures
+> in the blocks below are this document's originals. Built as written, the
+> class dealt 6.8x the roster median — nothing here was ever reconciled with
+> the other thirteen classes. The shipped numbers are in
+> `js/content/skills/necro_*.js`, each with its old value in a comment beside
+> it, and ranks are the roster's 4% rather than the flat additions below.
+> What each skill DOES — shape, riders, ranges, triggers, targeting — is still
+> this document's, and is still the source for it.
+
 ---
 
 ## TREE RULING (settled)

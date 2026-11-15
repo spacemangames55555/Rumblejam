@@ -260,7 +260,15 @@ function tickCascade(sim, p, dt) {
     p.cascade = Math.max(0, p.cascade - CONFIG.CASCADE_DECAY_PER_SEC * dt);
     if (p.cascade === 0) p.cascadeLast = null;
   }
-  p.engines.cascade = Math.floor(p.cascade);
+  p.engines.cascade = cascadePublished(p);
+}
+
+// WHAT A SKILL IS PAID FOR. The chain itself (`p.cascade`) is uncapped and
+// `cascadeCooldown` reads it whole — that term is asymptotic and safe at any
+// depth. The published number every `scaleWith: 'cascade'` step multiplies by
+// is linear, so it stops at the reference (CONFIG.CASCADE_SCALE_CAP, and why).
+export function cascadePublished(p) {
+  return Math.min(Math.floor(p.cascade || 0), CONFIG.CASCADE_SCALE_CAP);
 }
 
 // Called on every fire, before the cooldown is written — so the cast that
@@ -282,7 +290,7 @@ export function cascadeAdvance(sim, p, skillId) {
   }
   p.cascadeLast = skillId;
   p.cascadeLastT = sim.time;
-  p.engines.cascade = Math.floor(p.cascade);
+  p.engines.cascade = cascadePublished(p);
 }
 
 // §8.3's cooldown term, exactly as specified: each rank removes CASCADE_CD_RATE

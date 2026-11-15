@@ -186,6 +186,48 @@ U-4 asked for a distinct animated code-drawn silhouette per monster now, painted
 
 **Left for Grokbot.** The painted sprites themselves (59 prompts are written and each names its silhouette), and judging the glyphs' motion by eye in a real fight — I can verify a frame, not a feel.
 
+## R-10 — The Savage's cascade pays a bounded amount (15 Nov)
+
+**Found.** `tools/class_breakdown.mjs savage`: the eight slotted skills, each alone, sum to 183 on the ring; together they measured 860 — a ×4.7 "synergy" that is one engine. In real rooms (five regions, map 3, the room bot): the cascade chain read 43 / 121 / 275 / 428 at 10 / 20 / 40 / 60 s against a design reference of 18, broke zero or one time per room, and a region-4 Savage's damage went from 172 a second in the first ten seconds to 4,754 a second in the last twenty. §13 rule 90 had described exactly this and nothing had acted on it.
+
+**Ruled.**
+
+- What a `scaleWith: 'cascade'` step is paid for stops at `CASCADE_SCALE_CAP = 18`. The chain itself stays uncapped and the cooldown term still reads all of it.
+- `CASCADE_CD_FLOOR` 0.5 → 0.85 and the engine's contribution 0.50 → 0.25. Swept on the ring at five anchors (floor × contribution): with the cap alone the class read ×1.54–2.17 of the median; with no engine at all, ×0.84–1.07 — so the Savage's skills are already at the median without it, and the engine is the premium. 0.8 / 0.30 was the first choice (×1.11–1.44) and `sim_test`'s three-slot table moved it: there the class read +54% of its anchor, against a ±40% band, and +30% at 0.85 / 0.25.
+
+**After.** Ring ×1.05–1.35 across the anchors from region 2 on (was ×2.2–4.7). Boss time-to-kill ×0.89–0.98 of the median. Real rooms: 6.8 / 9.7 / 5.7 kills a second in regions 2 / 5 / 8 against medians of 6.6 / 9.3 / 5.7.
+
+**Not fixed, and not mine to fix in a numbers pass:** a chain that never breaks is a ramp, not a decision. KNOWN-DEFECTS #19 — repoint the Savage's skills at the trait's own capped momentum engine — is still the design answer.
+
+## R-11 — The Necromancer is put on the roster's scale (15 Nov)
+
+**Found.** ×6.8 the roster median at level 68 (×5.7 at 14). `class_breakdown --roster`: Spiked Punch, a tier-1 node, alone in one slot, measured 990 where the median class's *whole loadout* measures 340 and the median class's strongest single skill 99. Bone Nova 792, the Monster 761. The three Necromancer files say why in their own headers: the trees were transcribed from the conversion document and "no ruling ever reconciled DAMAGE… taken as authored and the consequence reported rather than tuned away."
+
+Three separate things were off the roster's scale, and each is fixed where it lives:
+
+| | Necromancer | the other thirteen |
+|---|---|---|
+| rank growth | 13–17% a rank, 50% on the Blip (`rankPer`, the document's flat "+5 per rank") | 4–4.5% |
+| a tier-1 melee | 30 damage, 1.2 s, full circle | 4–13 damage, 0.8–1.6 s, a 90° arc |
+| a tier-4 melee | 24 damage, 1.2 s, a 165 circle | 5–18 damage, 1.8–4.5 s, an arc to 122 |
+| a summon's swing | × Ferocity × Ingenuity × two passives = ×15.6 at level 68 | a caster's own strike: × Ferocity = ×3.7 |
+
+**Ruled.** Ranks go on the roster's 4%. Each damaging constant goes to what the roster pays for that primitive at that tier, by the table `class_breakdown` and a survey of all 274 damaging steps give; the old value is in a comment beside every new one. A straight fit to a target number was tried first and rejected: it put Spiked Punch at 2 damage, which cannot kill map-1 fodder in a hit (`opener_gate`), so the full-circle skills take the cut in **cadence** and keep a hit that kills. Shapes, riders, ranges, triggers and what each node *does* are the document's and untouched. Entropy Cascade is not retuned: it carries its own earlier ruling and it was not what was over.
+
+Two fixtures then disagreed with the first pass, and both were right. `tree_dps` compares a class's three trees with each other: Dark Matter read +283% of the class's own median, because Marrow's circles (reach 72 and 84) do not span that fixture's ring and Internal Collapse and the Rift were still carrying the tree. And `sim_test`'s three-slot table read the class at −50%. So Collapse and the Rift came down again, Marrow's ranged pieces came up, the Blip went back from 6 to 7, and the Monster and the two summon passives were trimmed once the class's own breakdown showed the Monster at 43% of its best slotting. The trees now read 70 / 45 / 27 in `tree_dps` (all inside ±60%).
+
+**After.** Ring ×1.09–1.28 across the anchors from region 2 on. Boss time-to-kill 44 / 47 / 54 / 119 s in regions 2 / 5 / 7 / 8 against medians of 44 / 53 / 77 / 145 (region 7 was 18 s). Real rooms 5.9 / 9.0 / 5.8 kills a second against medians 6.6 / 9.3 / 5.7. The roster median did not move at any anchor — both outliers were above it — so `REGION_HP_MULT` and every boss's health stand as measured.
+
+**Left open.** A summon is multiplied by two stats where a strike gets one. That is true for the Druid and the Hunter too, they are in band with it, and changing it is a change to the stat system rather than to a class. `docs/design/classes/necromancer.md` still carries the document's original magnitudes, now with a note at its head.
+
+## One gate made stricter on the way
+
+`tools/rider_gate.mjs` reported the retuned Dark Matter Bomb's splash as never landing. The splash was landing on every cast. The fixture stood one bystander beside one of three staged targets, and a `lowest_hp` bolt keeps hitting whichever target it wounded first: the old Bomb passed only because it killed that target inside the window and moved on. There is now a bystander beside every target, and the check compares against the same skill with the rider stripped rather than against zero — because with `skillSplash` planted to deal nothing, three of the game's five splash skills still read as landing under the old check (a piercing bolt hits a bystander without any splash). Under the new one all five fail.
+
+## The gate both rulings leave behind
+
+`tools/class_band_gate.mjs`, 13 checks on the same ring the world axis is measured on: every class within ×0.5–2.0 of the roster median at every anchor from region 2 on (measured ×0.68–1.91); no single skill worth more than 0.75 of a median loadout (strongest 0.52; Spiked Punch was 2.9); no class's second ten seconds paying more than ×2.5 its first ten (steepest ×1.93; the uncapped cascade was ×4.9); the cascade's published value stopping at its cap while the chain runs past it; and no damaging active ranking above 6% a rank. The band is a backstop set just outside what ships, not a target.
+
 ## What every earlier measurement was standing on
 
 `tools/lib/build_char.mjs` is new and the three rulings above depend on it. Every harness that wanted "a level-28 character" set `p.level = 28`. That is a character with level 28's skills and level 1's body — no stat cards — and two harnesses sent `{kind: 'levelUp'}` to spend them, for an action the sim spells `levelup`. The builder grants levels through `_grantLevel`, spends points through `spendSkillPoint`, and resolves the banked cards through the real offer path by a stated policy.
@@ -194,7 +236,7 @@ U-4 asked for a distinct animated code-drawn silhouette per monster now, painted
 
 ## Findings logged for the class pass
 
-- **Two classes put out six to eight times the roster median.** On the dummy ring at level 68: Necromancer 2,307 and Savage 860–1,198 against a median of 340. The Necromancer kills region 7's boss in 18 s where the median takes 77.
+- ~~**Two classes put out six to eight times the roster median.**~~ **Closed by R-10 and R-11.** As found: On the dummy ring at level 68: Necromancer 2,307 and Savage 860–1,198 against a median of 340. The Necromancer kills region 7's boss in 18 s where the median takes 77.
 - **Crowd-clearing barely grows with level for half the roster.** Samurai, Monk, Assassin, Bard and Blacksmith clear 5–6.5 fodder a second in region 8, about what they manage in region 1.
 - **Boss time-to-kill spreads 5–10× across classes** (region 8: 38 s to 314 s).
 - **Region 1's first map dips to two or fewer alive for up to 9% of the wave** for its thinnest class, against a 5% bar. Pre-existing and previously accepted as noise at 5.2%.

@@ -15,43 +15,53 @@
 
 import { docTrigger, rankPer, RANK_NONE, pctRemaining, pctToFraction } from '../doc_conversion.js';
 
+// MAGNITUDES ARE THE ROSTER'S (R-11, 15 Nov 2026). This tree was transcribed
+// from the conversion document, whose damage and cadence were never reconciled
+// with the other thirteen classes — and measured, the class dealt 6.8× the
+// roster median with three of its skills each out-damaging another class's
+// whole loadout. Each number below is now what the roster pays for the same
+// primitive at the same tier (a bolt 6–13 on 0.8–3 s, a cone 8–11 on 3–4.4 s,
+// a hazard about 40 a cast on 5 s, a plague 4–8 a tick on 2.4–6 s). Shapes,
+// riders, ranges and triggers are the document's and unchanged. The old value
+// is beside each new one.
 export const TUNING = {
   // tier_code 0 — Dark Energy Blip
-  blipDamage: 9, blipSpeed: 520, blipRange: 480, blipCd: 700, blipPierce: 3,   // pace-spec §12.1, Designer 2 Nov 2026: pierce 3, cd 700 (was 1000, no riders)
+  blipDamage: 7, blipSpeed: 520, blipRange: 480, blipCd: 700, blipPierce: 3,   // pace-spec §12.1, Designer 2 Nov 2026: pierce 3, cd 700 (was 1000, no riders). Damage read 9 at rank 1 on a 50%-a-rank step (a base of 6 plus the step); 7 on the roster's 4% — either kills map-1 fodder in a hit and the special in two, which is all §12.1 measured
   // tier_code 1 — Dark Matter Bomb
-  bombDamage: 30, bombSpeed: 500, bombRange: 420, bombCd: 1200,
-  bombSplash: 12, bombSplashRadius: 60,
+  bombDamage: 10, bombSpeed: 500, bombRange: 420, bombCd: 2400,   // was 30 on 1200
+  bombSplash: 4, bombSplashRadius: 60,                            // was 12
   // tier_code 2 — Tainted Dark Matter
-  taintDamage: 22, taintSpeed: 500, taintRange: 460, taintCd: 2000,
+  taintDamage: 9, taintSpeed: 500, taintRange: 460, taintCd: 2600,   // was 22 on 2000
   taintVulnPct: 20, taintVulnDur: 1400,
   // tier_code 3 — Hex of Entropy
   hexDamage: 4, hexRadius: 70, hexRange: 360, hexCd: 2000, hexTick: 400,
   hexSlowPct: 50, hexWeakenPct: 40, hexDur: 1400,
   // tier_code 4 — Abyssal Blast
-  abyssDamage: 34, abyssAngle: 1.22, abyssRange: 200, abyssCd: 2000,   // 70° total
+  abyssDamage: 13, abyssAngle: 1.22, abyssRange: 200, abyssCd: 3200,   // 70° total; was 34 on 2000
   // tier_code 5 — Dark Energy Rift
-  riftDamage: 30, riftRadius: 90, riftRange: 300, riftCd: 2000, riftTick: 400,
+  riftDamage: 10, riftRadius: 90, riftRange: 300, riftCd: 3000, riftTick: 400,   // was 30 on 2000
   // tier_code 6 — Blight (aura, pulsed — ruling 7)
   blightRadius: 120, blightRadiusPerRank: 12,
-  blightPulseMs: 4200, blightPulseDamage: 30,
+  blightPulseMs: 4200, blightPulseDamage: 10,                     // was 30 — a passive, so it costs no slot
   blightSlowMult: 0.7, blightSlowDur: 800,
   // tier_code 7 — Internal Collapse
-  collapseDamage: 10, collapseTick: 600, collapseDur: 3000, collapseRange: 360, collapseCd: 1200,
+  collapseDamage: 3, collapseTick: 600, collapseDur: 3000, collapseRange: 360, collapseCd: 2800,   // was 10 on 1200
   collapseSpread: 150,
   // tier_code 8 — Dark Energy Beam
-  beamDamage: 16, beamTick: 500, beamDur: 10000, beamRange: 360, beamCd: 4000,
+  beamDamage: 5, beamTick: 500, beamDur: 10000, beamRange: 360, beamCd: 4000,   // was 16
   // tier_code 9 — Singularity
-  singDamage: 22, singRadius: 200, singRange: 200, singPulses: 8, singTick: 400,
+  singDamage: 8, singRadius: 200, singRange: 200, singPulses: 8, singTick: 400,   // was 22
   singPull: 14, singCd: 25000, singCrowdRadius: 250, singCrowdCount: 8,
 };
 
 const T = TUNING;
-// Rank 1 deals base * (1 + add/base), which is base + add. The card reads that
-// same rank-1 number, so the compose base sits `add` below blipDamage and both
-// follow the tuning value. Rank 2 is blipDamage + add, and so on. The add is
-// the tree's rank step, not a second copy of the damage.
-const BLIP_RANK_ADD = 3;
-const BLIP_BASE = T.blipDamage - BLIP_RANK_ADD;
+// RANKS ARE THE ROSTER'S, NOT THE DOCUMENT'S (R-11, 15 Nov 2026). Every node
+// here took its rank from `rankPer(add, base)` — the conversion document's flat
+// "+5 damage per rank" as a fraction of the base — which came out at 13–17% a
+// rank across the tree and 50% on the Blip, where the other thirteen classes
+// all rank at 4%. Deep-ranked, that is a different game from theirs. `rankPer`
+// stays for the one thing here that still needs it: a rank that grows nothing.
+const R = { damage: 0.04, duration: 0.03 };
 // The field's lifetime is its pulse count times its cadence — 8 x 400ms of
 // hazard beside 8 pulses of pull, so the two steps end together.
 const SING_DUR = T.singPulses * T.singTick;
@@ -64,8 +74,8 @@ export const NECRO_DARK_MATTER = [
     select: 'nearest',
     trigger: docTrigger('NEAREST_IN_RANGE', { range: T.blipRange }),
     cooldown: T.blipCd,
-    compose: [{ kind: 'bolt', damage: BLIP_BASE, speed: T.blipSpeed, range: T.blipRange, riders: { pierce: T.blipPierce } }],
-    ranks: rankPer(BLIP_RANK_ADD, BLIP_BASE),
+    compose: [{ kind: 'bolt', damage: T.blipDamage, speed: T.blipSpeed, range: T.blipRange, riders: { pierce: T.blipPierce } }],
+    ranks: R,
   },
   {
     id: 'necro_dark_matter_bomb', tree: 'necro_dark_matter', tier: 2, name: 'Dark Matter Bomb',
@@ -84,7 +94,7 @@ export const NECRO_DARK_MATTER = [
     // bought at rather than seven ranks later.
     compose: [{ kind: 'bolt', damage: T.bombDamage, speed: T.bombSpeed, range: T.bombRange,
       riders: { splash: { damage: T.bombSplash, radius: T.bombSplashRadius } } }],
-    ranks: rankPer(5, T.bombDamage),
+    ranks: R,
   },
   {
     id: 'necro_tainted_dark_matter', tree: 'necro_dark_matter', tier: 3, name: 'Tainted Dark Matter',
@@ -102,7 +112,7 @@ export const NECRO_DARK_MATTER = [
     // 20% more is a multiplier of 1/1.2.
     compose: [{ kind: 'bolt', damage: T.taintDamage, speed: T.taintSpeed, range: T.taintRange,
       riders: { defenseDown: { mult: +(1 / (1 + T.taintVulnPct / 100)).toFixed(4), dur: T.taintVulnDur } } }],
-    ranks: rankPer(3, T.taintDamage),
+    ranks: R,
   },
   {
     id: 'necro_hex_of_entropy', tree: 'necro_dark_matter', tier: 4, name: 'Hex of Entropy',
@@ -139,7 +149,7 @@ export const NECRO_DARK_MATTER = [
     trigger: docTrigger('DENSEST_CLUSTER', { range: T.abyssRange }),
     cooldown: T.abyssCd,
     compose: [{ kind: 'cone', damage: T.abyssDamage, angle: T.abyssAngle, range: T.abyssRange, riders: {} }],
-    ranks: rankPer(5, T.abyssDamage),
+    ranks: R,
   },
   {
     id: 'necro_dark_energy_rift', tree: 'necro_dark_matter', tier: 6, name: 'Dark Energy Rift',
@@ -151,7 +161,7 @@ export const NECRO_DARK_MATTER = [
     // The same single-tick `hazard` as Hex, and the same divergence.
     compose: [{ kind: 'hazard', damage: T.riftDamage, radius: T.riftRadius,
       duration: T.riftTick, tickMs: T.riftTick, riders: {} }],
-    ranks: rankPer(5, T.riftDamage),
+    ranks: R,
   },
   {
     id: 'necro_blight', tree: 'necro_dark_matter', tier: 7, name: 'Blight',
@@ -188,7 +198,7 @@ export const NECRO_DARK_MATTER = [
     // its neighbours, and the stack count is reported, not faked.
     compose: [{ kind: 'plague', damage: T.collapseDamage, duration: T.collapseDur,
       tick: T.collapseTick, spreadRadius: T.collapseSpread }],
-    ranks: rankPer(2, T.collapseDamage),
+    ranks: R,
   },
   {
     id: 'necro_dark_energy_beam', tree: 'necro_dark_matter', tier: 9, name: 'Dark Energy Beam',
@@ -201,7 +211,7 @@ export const NECRO_DARK_MATTER = [
     // tree pays for channelling and this one just does damage.
     compose: [{ kind: 'channel', damage: T.beamDamage, range: T.beamRange,
       tickMs: T.beamTick, duration: T.beamDur, cdFromEnd: true }],
-    ranks: rankPer(3, T.beamDamage),
+    ranks: R,
   },
   {
     id: 'necro_singularity', tree: 'necro_dark_matter', tier: 10, name: 'Singularity',
@@ -223,6 +233,6 @@ export const NECRO_DARK_MATTER = [
       { kind: 'gravity_pull', radius: T.singRadius, distance: T.singPull,
         range: T.singRange, duration: SING_DUR },
     ],
-    ranks: rankPer(4, T.singDamage),
+    ranks: R,
   },
 ];
