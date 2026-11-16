@@ -195,6 +195,8 @@ U-4 asked for a distinct animated code-drawn silhouette per monster now, painted
 - What a `scaleWith: 'cascade'` step is paid for stops at `CASCADE_SCALE_CAP = 18`. The chain itself stays uncapped and the cooldown term still reads all of it.
 - `CASCADE_CD_FLOOR` 0.5 → 0.85 and the engine's contribution 0.50 → 0.25. Swept on the ring at five anchors (floor × contribution): with the cap alone the class read ×1.54–2.17 of the median; with no engine at all, ×0.84–1.07 — so the Savage's skills are already at the median without it, and the engine is the premium. 0.8 / 0.30 was the first choice (×1.11–1.44) and `sim_test`'s three-slot table moved it: there the class read +54% of its anchor, against a ±40% band, and +30% at 0.85 / 0.25.
 
+- **Aftermath's capstone comes down with it**: Flashover 16 → 13, Detonate 13 → 12. Neither rides the cascade, so bounding the engine took output from Primal Fury and Bloodbound and none from Aftermath, which then read +67% of the class's own median in `tree_dps` (band ±60%). Flashover alone carried 36 of that tree's 99.
+
 **After.** Ring ×1.05–1.35 across the anchors from region 2 on (was ×2.2–4.7). Boss time-to-kill ×0.89–0.98 of the median. Real rooms: 6.8 / 9.7 / 5.7 kills a second in regions 2 / 5 / 8 against medians of 6.6 / 9.3 / 5.7.
 
 **Not fixed, and not mine to fix in a numbers pass:** a chain that never breaks is a ramp, not a decision. KNOWN-DEFECTS #19 — repoint the Savage's skills at the trait's own capped momentum engine — is still the design answer.
@@ -210,7 +212,7 @@ Three separate things were off the roster's scale, and each is fixed where it li
 | rank growth | 13–17% a rank, 50% on the Blip (`rankPer`, the document's flat "+5 per rank") | 4–4.5% |
 | a tier-1 melee | 30 damage, 1.2 s, full circle | 4–13 damage, 0.8–1.6 s, a 90° arc |
 | a tier-4 melee | 24 damage, 1.2 s, a 165 circle | 5–18 damage, 1.8–4.5 s, an arc to 122 |
-| a summon's swing | × Ferocity × Ingenuity × two passives = ×15.6 at level 68 | a caster's own strike: × Ferocity = ×3.7 |
+| a summon's swing | × Damage × Summons × two passives = ×15.6 at level 68 | a caster's own strike: × Damage = ×3.7 |
 
 **Ruled.** Ranks go on the roster's 4%. Each damaging constant goes to what the roster pays for that primitive at that tier, by the table `class_breakdown` and a survey of all 274 damaging steps give; the old value is in a comment beside every new one. A straight fit to a target number was tried first and rejected: it put Spiked Punch at 2 damage, which cannot kill map-1 fodder in a hit (`opener_gate`), so the full-circle skills take the cut in **cadence** and keep a hit that kills. Shapes, riders, ranges, triggers and what each node *does* are the document's and untouched. Entropy Cascade is not retuned: it carries its own earlier ruling and it was not what was over.
 

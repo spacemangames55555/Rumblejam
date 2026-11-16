@@ -63,9 +63,14 @@ export const TUNING = {
   backdraftDamage: 10, backdraftArc: 1.8, backdraftRange: 290, backdraftCd: 5200,
   backdraftWeight: 1.25,
   emberfallWeight: 0.18,
-  detonateDamage: 13, detonateReach: 150, detonateArc: 2.6, detonateCd: 7400,
+  // Detonate 13 -> 12 and Flashover 16 -> 13 (R-10, 15 Nov 2026). Neither rides
+  // the cascade, so when the engine's pay was bounded this tree kept all of its
+  // output while Primal Fury and Bloodbound lost theirs, and it read +67% of
+  // the class's own median (tree_dps, band 60). Flashover alone carried 36 of
+  // the tree's 99.
+  detonateDamage: 12, detonateReach: 150, detonateArc: 2.6, detonateCd: 7400,
   detonateKnock: 240, detonateWeight: 1.25,
-  flashoverDamage: 16, flashoverArc: 2.9, flashoverReach: 155, flashoverCd: 9600,
+  flashoverDamage: 13, flashoverArc: 2.9, flashoverReach: 155, flashoverCd: 9600,
   flashoverPulses: 2, flashoverWeight: 1.3,
 
   // ---- branch B: Bedrock (what is still there afterwards) ----
