@@ -25,7 +25,7 @@ export const TUNING = {
   stingDamage: 5, stingReach: 100, stingArc: 1.5, stingRadius: 125,
   stingCount: 1, stingCd: 1600,
   // tier 2 — Refrain
-  refrainAmount: 15, refrainCd: 5600,
+  refrainAmount: 15, refrainRadius: 220, refrainCd: 5600,
   // tier 3 — Traveling Song
   travelAmount: 20, travelDuration: 4400, travelCd: 7200,
   // tier 4 — Cutting Remark
@@ -76,6 +76,9 @@ export const BARD_ENSEMBLE = [
     cooldown: T.refrainCd,
     compose: [{
       kind: 'heal', amount: T.refrainAmount,
+      // THE ENSEMBLE, NOT THE SOLOIST (R-12, 16 Nov 2026): the party tree's
+      // heal reached only the Bard. Everyone inside 220 hears the refrain.
+      selection: 'all_in_range', shape: 'point', searchRadius: T.refrainRadius,
       scaleWith: 'rhythm',
     }],
     ranks: R,

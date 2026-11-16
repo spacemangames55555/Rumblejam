@@ -228,7 +228,7 @@ export const SMITH_CRYSTAL = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 60 },
     cooldown: T.seamCd,
-    compose: [{ kind: 'heal', amount: T.seamAmount }],
+    compose: [{ kind: 'heal', amount: T.seamAmount, selection: 'self', shape: 'point' }],
     ranks: R,
   },
   {

@@ -176,7 +176,7 @@ export const SAV_PRIMAL_FURY = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 45 },
     cooldown: T.windCd,
-    compose: [{ kind: 'heal', amount: T.windAmount }],
+    compose: [{ kind: 'heal', amount: T.windAmount, selection: 'self', shape: 'point' }],
     ranks: R,
   },
   {

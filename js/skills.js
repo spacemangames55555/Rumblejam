@@ -365,11 +365,15 @@ export function canLearn(p, skill) {
 //
 // Delete a name here the moment its skill declares a radius. When the list is
 // empty, delete the list.
-export const HEAL_RADIUS_PENDING = new Set([
-  'wiz_arcane_recovery', 'pri_intercession', 'bard_refrain', 'sun_brine_draught',
-  'hun_feed_the_pack', 'monk_gathering_breath', 'monk_mend', 'monk_quiet_the_body',
-  'sav_second_wind', 'smith_mend_the_seam',
-]);
+//
+// EMPTY SINCE 16 NOV 2026 (ruling R-12). All ten fired on the caster's own
+// health and healed the caster, and for eight of them that is what the skill
+// is — Second Wind, Gathering Breath, Mend, Quiet the Body, Arcane Recovery,
+// Brine Draught, Mend the Seam, Feed the Pack — so they now SAY so:
+// `selection: 'self'`, `shape: 'point'`. The other two are the first heal of a
+// support tree (the Priest's Grace, the Bard's Ensemble) and reach the party.
+// The set stays, empty, because that is what a ratchet is.
+export const HEAL_RADIUS_PENDING = new Set([]);
 
 // A CONTAGION THAT DOES NOT SPREAD IS A DOT WITH A MISLEADING NAME.
 //

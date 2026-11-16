@@ -230,6 +230,23 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 `tools/class_band_gate.mjs`, 13 checks on the same ring the world axis is measured on: every class within ×0.5–2.0 of the roster median at every anchor from region 2 on (measured ×0.68–1.91); no single skill worth more than 0.75 of a median loadout (strongest 0.52; Spiked Punch was 2.9); no class's second ten seconds paying more than ×2.5 its first ten (steepest ×1.93; the uncapped cascade was ×4.9); the cascade's published value stopping at its cap while the chain runs past it; and no damaging active ranking above 6% a rank. The band is a backstop set just outside what ships, not a target.
 
+## R-12 — Ten heals say who they reach (16 Nov)
+
+`heal_gate` was red on a list the code itself called a design decision waiting to be made: ten heals with no declared reach. All ten fire on the caster's own health and healed the caster.
+
+**Ruled.** Eight are self-heals by name and by trigger, and now say so (`selection: 'self'`, `shape: 'point'`): Second Wind, Gathering Breath, Mend, Quiet the Body, Arcane Recovery, Brine Draught, Mend the Seam, Feed the Pack. Two are the first heal of a support tree and reach the party: the Priest's **Intercession** (everyone within 240) and the Bard's **Refrain** (everyone within 220). In a co-op game the healing class's first heal healing only the healer is the one case a second player would call a bug. 240 is wider than Solace's 140 on purpose — Reckoning heals who is fighting beside the Priest, Grace heals who is in the room. Amounts and cooldowns are unchanged.
+
+## Four red gates that were broken tests, and what each was hiding (16 Nov)
+
+Ten gates were red on `main` when this push began. Four turned out to be the test, not the game — and three of those were also reporting working things as broken, which is its own kind of harm: a list of "dead" skills nobody believes.
+
+- **`skill_sweep` (9 lines → 0).** Four skills *crashed* the sweep: a persistent node (Marrownaut, the Blacksmith's three forms) has no trigger, and the sweep read `skill.trigger.kind`. Two form-gated skills "never fired" because the sweep looked for the form only as a compose step and the Blacksmith's forms moved to `persist` nodes in September. Blight read "wired to nothing" because an aura is an object and the sweep summed numbers. Both channels read "wired to nothing" because the sweep stopped watching half a second after a cast and a channel pays on its first tick. Each now has a real check — a persistent node's form, aura, shield and stat block must be *standing* once slotted; an aura must hurt a body stood inside it; a channel is watched through its tick — and four planted defects (an aura that registers and deals nothing, a shield that never arrives, a form that changes no stat, a channel that never ticks) are each caught.
+- **`item_gate` (1 → 0).** "Two item modifiers are sold and do nothing." Both are read. The pierce probe stood three targets in a line, and the Necromancer's opener has pierced three since 2 November: with or without the item it hit all of them. The domain probe ran in map 1, which the onboarding ruling later made domain-neutral. Eight targets, and the triangle switched on; with each read site deleted in turn, each probe reads DEAD.
+- **`statname_gate` (1 → 0).** Three lines of prose used a stat's retired label.
+- **`rider_gate`** — see R-11 above.
+
+Still red, and real or unported: `combat_gate` (it cannot stage a Druid pack because the pack is dead — `tools/minion_uptime.mjs` was written to measure that, and it is the next patch), `patch_gate` (2), `region_test` (3), `tree_dps` (`bard_ensemble`), `browser_test` (a 3,900-line suite written against a roster that no longer exists; it fails at its first character click).
+
 ## What every earlier measurement was standing on
 
 `tools/lib/build_char.mjs` is new and the three rulings above depend on it. Every harness that wanted "a level-28 character" set `p.level = 28`. That is a character with level 28's skills and level 1's body — no stat cards — and two harnesses sent `{kind: 'levelUp'}` to spend them, for an action the sim spells `levelup`. The builder grants levels through `_grantLevel`, spends points through `spendSkillPoint`, and resolves the banked cards through the real offer path by a stated policy.

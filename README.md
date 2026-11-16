@@ -701,6 +701,13 @@ never loads them:
   only up to its cap, and one rank model across the roster. Written after the
   Necromancer measured ×6.8 the median and the Savage ×2.5–4 with every gate
   green.
+- `node tools/minion_uptime.mjs [--regions=…] [--classes=…] [--seeds=N]` —
+  **do a summoner's minions live?** Every output probe runs the player in god
+  mode, and a minion is not the player. For each summoner in a real room of
+  each region: each minion's health against one hit from that region's fodder,
+  the share of the wave it spent standing, and how often it went down. Found
+  the Druid's pack down for most of every room and the Hunter's hounds
+  reviving in seven milliseconds.
 - `node tools/class_breakdown.mjs <class> [--level=68] [--picks=…]` — **why a
   class puts out what it does.** Its statline, what the stat cards are worth,
   and every learned skill alone in one slot with its share of the class's

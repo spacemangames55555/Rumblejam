@@ -94,8 +94,22 @@ function arena(skill) {
     p.form = null; p.formT = 0; p.formStats = null;
     if (p.engines) p.engines.form = 0;
   } else if (skill.form) {
-    const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === skill.form));
-    const step = src && src.compose.find(c => c.kind === 'form');
+    // THE FORM NOW LIVES IN TWO PLACES. It used to arrive only as a `form`
+    // compose step; the Blacksmith's three are `persist` nodes since
+    // 2026-09-09 and carry their stats there, so a lookup that searched only
+    // compose found nothing, and — worse — `applyPersistents` tears down a
+    // hand-pinned form whenever its LEARNED persist node is out of the bar,
+    // which in this fixture it always is. `smith_anvil_strike` and
+    // `smith_refraction` read as dead triggers for exactly that reason.
+    // tools/rider_gate.mjs met the same thing and this is its fix: the node
+    // is dropped to rank 0, where the door ignores it and the pin holds.
+    const src = ALL_SKILLS.find(x => (x.compose || []).some(c => c.kind === 'form' && c.form === skill.form))
+      || ALL_SKILLS.find(x => x.persist && x.persist.form === skill.form);
+    const step = src && ((src.compose || []).find(c => c.kind === 'form') || src.persist || null);
+    for (const id of Object.keys(p.skillRanks || {})) {
+      const s2 = SKILL_BY_ID[id];
+      if (s2 && s2.persist && s2.persist.form === skill.form) p.skillRanks[id] = 0;
+    }
     p.form = skill.form;
     p.formT = 30;
     p.formStats = step ? step.stats || null : null;
@@ -241,9 +255,60 @@ for (const skill of ALL_SKILLS) {
       // definition has a `passive` block.
       const keys = Object.keys(skill.passive || {});
       if (!keys.length) { fail(`${skill.id}: passive with no effect block`); continue; }
-      const live = keys.filter(k => SK.passiveSum(p, k) > 0);
-      if (live.length === keys.length) ok(`${skill.id} (passive) — ${keys.map(k => `${k}=${SK.passiveSum(p, k)}`).join(', ')} readable at rank 1`);
+      // AN `aura` IS NOT A NUMBER. `passiveSum` adds up scalar keys; an
+      // always-on aura is an object the room-start door turns into a standing
+      // field (`startRoomMinions`), so the sum read 0 and the sweep reported
+      // the Necromancer's Blight as wired to nothing for as long as it has
+      // existed. Its runtime path is the field, and what the field does: so
+      // the door is run, a body is stood inside it, and the body has to be
+      // hurt (or, for an aura that declares no damage, the field has to stand).
+      const auraNote = [];
+      const liveKey = (k) => {
+        if (k !== 'aura') return SK.passiveSum(p, k) > 0;
+        SK.startRoomMinions(g, p);
+        const field = g.auraFor(p, skill.id);
+        if (!field) return false;
+        const a = skill.passive.aura;
+        if (!(a.damage > 0 || a.dps > 0)) { auraNote.push('aura standing'); return true; }
+        const e = dummy(g, p.x + Math.min(40, (a.radius || 60) * 0.5), p.y);
+        const hp0 = e.hp;
+        for (let i = 0; i < 60 * 6 && e.hp >= hp0; i++) { g.setInput(0, { mx: 0, my: 0 }); g.tick(); }
+        if (e.hp < hp0) auraNote.push(`aura pulsed for ${Math.round(hp0 - e.hp)}`);
+        return e.hp < hp0;
+      };
+      const live = keys.filter(liveKey);
+      if (live.length === keys.length) ok(`${skill.id} (passive) — ${keys.map(k => k === 'aura' ? auraNote.join(', ') : `${k}=${SK.passiveSum(p, k)}`).join(', ')} at rank 1`);
       else fail(`${skill.id}: passive key(s) ${keys.filter(k => !live.includes(k)).join(', ')} read as 0 — defined but wired to nothing`);
+      continue;
+    }
+
+    if (skill.persist) {
+      // A PERSISTENT ACTIVE HAS NO TRIGGER TO STAGE. It never fires: slotting
+      // it is the whole act (§5.x, `applyPersistents`), and this sweep read
+      // `skill.trigger.kind` on a node that has none — so Marrownaut and the
+      // Blacksmith's three forms did not fail the sweep, they crashed it. The
+      // runtime path of a persistent node is that everything its `persist`
+      // block declares is STANDING once it is in the bar.
+      SK.applyPersistents(g, p);
+      const q = skill.persist, got = [], missing = [];
+      if (q.form) (p.form === q.form ? got : missing).push(`form ${q.form}`);
+      if (q.aura) (g.auraFor(p, skill.id) ? got : missing).push('aura');
+      if (q.field) (g.auraFor(p, skill.id) ? got : missing).push('field');
+      if (q.shield) (p.shield > 0 ? got : missing).push(`shield ${Math.round(p.shield || 0)}`);
+      if (q.stats) {
+        // the form's stat block has to reach the sheet, not merely be declared
+        const k = Object.keys(q.stats).find(key => q.stats[key] !== 0);
+        if (k) {
+          const withForm = p.stats[k];
+          const keep = [...p.loadout]; p.loadout.fill(null); SK.applyPersistents(g, p);
+          const without = p.stats[k];
+          p.loadout = keep; SK.applyPersistents(g, p);
+          (withForm !== without ? got : missing).push(`${k} ${without} -> ${withForm}`);
+        }
+      }
+      if (!got.length && !missing.length) fail(`${skill.id}: a persistent node whose \`persist\` block declares nothing`);
+      else if (missing.length) fail(`${skill.id}: slotted, and ${missing.join(', ')} did not arrive — a persistent node wired to nothing`);
+      else ok(`${skill.id} (persistent) — slotted: ${got.join(', ')}`);
       continue;
     }
 
@@ -253,6 +318,7 @@ for (const skill of ALL_SKILLS) {
 
     // real ticks, through the real trigger loop — nothing is called directly
     let fired = false;
+    const channels = (skill.compose || []).some(c => c.kind === 'channel');
     for (let i = 0; i < 60 * 6; i++) {
       // MOVEMENT IS A HELD CONDITION, NOT A STAMPED ONE — both directions.
       //
@@ -277,7 +343,11 @@ for (const skill of ALL_SKILLS) {
       g.tick();
       for (const e of foes) { e.x = e.spawnX ??= e.x; e.y = e.spawnY ??= e.y; }
       if (p.fireLog.length) fired = true;
-      if (fired && i > 30) break;
+      // A CHANNEL PAYS ON ITS TICK, NOT ON ITS CAST. The window used to close
+      // half a second in, and both channels in the game tick every 500 ms —
+      // so they fired, the sweep stopped watching one tick before the first
+      // damage, and reported them as wired to nothing.
+      if (fired && i > (channels ? 120 : 30)) break;
     }
     const after = observe(g, p, foes);
 

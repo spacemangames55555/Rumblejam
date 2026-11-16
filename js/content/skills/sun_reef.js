@@ -88,6 +88,7 @@ export const SUN_REEF = [
     cooldown: T.draughtCd,
     compose: [{
       kind: 'heal', amount: T.draughtAmount,
+      selection: 'self', shape: 'point',
       scaleWith: 'drench', scaleWeight: T.draughtWeight,
     }],
     ranks: R,

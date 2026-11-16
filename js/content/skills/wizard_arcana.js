@@ -110,7 +110,7 @@ export const WIZARD_ARCANA = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
     cooldown: T.recoveryCd,
-    compose: [{ kind: 'heal', amount: T.recoveryAmount }],
+    compose: [{ kind: 'heal', amount: T.recoveryAmount, selection: 'self', shape: 'point' }],
     ranks: R,
   },
   {
