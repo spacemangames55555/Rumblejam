@@ -17,30 +17,40 @@
 
 import { docTrigger, rankPer, RANK_NONE } from '../doc_conversion.js';
 
+// MAGNITUDES ARE THE ROSTER'S (R-11, 15 Nov 2026) — see necro_dark_matter.js.
+// A summon's swing is multiplied by Ferocity AND Ingenuity AND the summon
+// passives below, where a caster's own skill gets Ferocity alone: at level 68
+// that stack was 15.6x on a skeleton against 3.7x on another class's strike,
+// and the Monster alone measured 761 on the ring where the roster's strongest
+// single skills measure 100–180. So the bases come down to where a level-3
+// skeleton still kills map-1 fodder in a swing, and the two damage passives
+// come down with them. The old value is beside each new one. Entropy Cascade
+// is NOT retuned: its cadence and damage were ruled on their own ("1300 is 13
+// trigger ticks. Damage stays 8.") and it is not what was over.
 export const TUNING = {
   // tier_code 0 — Summon Skeleton
   skelHp: 60, skelRadius: 13, skelSpawnRadius: 44, skelCd: 1200, skelCap: 3,
-  skelDamage: 9, skelArc: 1.4, skelReach: 46, skelAtkCd: 1100,   // ms
+  skelDamage: 4, skelArc: 1.4, skelReach: 46, skelAtkCd: 1100,   // ms; damage was 9
   skelTaunt: 1600,
   // ON_TOKEN: the reach for a soul token, and the flight of the throw that
   // reaches it. §8.5 row 4.
   skelTokenRange: 320, skelSeedSpeed: 620, skelSeedRadius: 6,
   // tier_code 1 — Unleash the Monster
   monsterHp: 220, monsterRadius: 22, monsterSpawnRadius: 54, monsterCd: 8000,
-  monsterDamage: 26, monsterArc: 1.6, monsterReach: 70, monsterAtkCd: 1100,   // ms
+  monsterDamage: 6, monsterArc: 1.6, monsterReach: 70, monsterAtkCd: 1100,   // ms; damage was 26
   monsterTaunt: 3000,                 // the widest on the ladder — MAGNET aggro r300
   // tier_code 2 — Unyielding Beast (passive)
   beastHp: 50,
   // tier_code 3 — Necrotic Presence (passive)
-  presenceDmg: 20, presenceHp: 20,
+  presenceDmg: 8, presenceHp: 20,     // damage was 20
   // tier_code 5a — Blood Skeleton (passive)
-  bloodDmg: 50,
+  bloodDmg: 16,                        // was 50
   // tier_code 5b — Marrow Skeleton (passive)
   marrowSkelHp: 40,
   // tier_code 6 — Tentacles of Dark Matter (passive)
   tentacleReach: 24,
   // tier_code 7 — Death Channel
-  channelDamage: 14, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 1200,
+  channelDamage: 6, channelTick: 500, channelDur: 10000, channelRange: 360, channelCd: 2600,   // was 14 on 1200
   // tier_code 8 — Entropy Cascade
   // 1300 is 13 trigger ticks. Damage stays 8. The hand-off is how far a dying
   // host can pass the SAME plague; it is not a spread and it is not a slow.
@@ -49,10 +59,12 @@ export const TUNING = {
   // tier_code 9 — Army of the Dead
   armyHp: 45, armyRadius: 13, armySpawnRadius: 66, armyCount: 6,
   armyDuration: 20000, armyCd: 25000, armyCrowdRadius: 400, armyCrowdCount: 10,
-  armyDamage: 8, armyArc: 1.4, armyReach: 44, armyAtkCd: 1000,   // ms
+  armyDamage: 3.5, armyArc: 1.4, armyReach: 44, armyAtkCd: 1000,   // ms; damage was 8
 };
 
 const T = TUNING;
+// The roster's rank for a damaging node (R-11) — see necro_dark_matter.js.
+const R = { damage: 0.04, duration: 0.03 };
 
 export const NECRO_SUMMONS = [
   {
@@ -209,7 +221,7 @@ export const NECRO_SUMMONS = [
     // it. The two are different facts about the same cooldown.
     compose: [{ kind: 'channel', damage: T.channelDamage, range: T.channelRange,
       tickMs: T.channelTick, duration: T.channelDur, cdFromEnd: true }],
-    ranks: rankPer(2, T.channelDamage),
+    ranks: R,
   },
   {
     id: 'necro_entropy_cascade', tree: 'necro_summons', tier: 1, name: 'Entropy Cascade',
@@ -229,7 +241,7 @@ export const NECRO_SUMMONS = [
     // `handoff` moves this same plague when the host dies. It does not copy.
     compose: [{ kind: 'plague', damage: T.cascadeDamage, duration: T.cascadeDur,
       tick: T.cascadeTick, spreadRadius: 0, preferClean: true, handoff: T.cascadeHandoff }],
-    ranks: rankPer(2, T.cascadeDamage),
+    ranks: R,
   },
   {
     id: 'necro_army_of_the_dead', tree: 'necro_summons', tier: 10, name: 'Army of the Dead',

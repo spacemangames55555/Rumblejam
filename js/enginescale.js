@@ -56,6 +56,11 @@ export const ENGINE_SCALE = {
   crystal: { max: 10, hard: true, contribution: 0.40, src: "singularity trait crystalCap (characters-toh.js)" },
   killbox: { max: CONFIG.TRAP_CAP,   hard: true, contribution: 0.36, src: "CONFIG.TRAP_CAP" },
   spread:  { max: CONFIG.SPREAD_CAP, hard: true, contribution: 0.36, src: "CONFIG.SPREAD_CAP" },
+  // The CHAIN is uncapped (§8.3) and the cooldown term reads all of it; what a
+  // `scaleWith` step is paid for stops here. It sat among the design references
+  // below until 15 Nov 2026, when a real room measured the chain at 428 against
+  // this 18 (R-10) — `cascadePublished` in js/engines.js is the clamp.
+  cascade: { max: CONFIG.CASCADE_SCALE_CAP, hard: true, contribution: 0.25, src: "CONFIG.CASCADE_SCALE_CAP" },
   // The step is part of the ceiling: `chiPublished` returns 0 at zero Chi and
   // `min(CHI_CAP, chi) + CHI_FOCUS_STEP` above it, so a full pool publishes 45.
   chi:     { max: CONFIG.CHI_CAP + CONFIG.CHI_FOCUS_STEP, hard: true, contribution: 0.54, src: "CONFIG.CHI_CAP + CONFIG.CHI_FOCUS_STEP" },
@@ -69,7 +74,6 @@ export const ENGINE_SCALE = {
   // to reach in a hard room, back-calculated from the scaling the older trees
   // were authored to; `cascade` in particular is uncapped on purpose (§8.3) and
   // a room that runs long will exceed it.
-  cascade: { max: 18, hard: false, contribution: 0.50, src: "uncapped by §8.3 — reference is a long varied chain" },
   drench:  { max: 14, hard: false, contribution: 0.49, src: "12 per enemy, uncapped room-wide sum" },
   shift:   { max: 8,  hard: false, contribution: 0.48, src: "domainShifts per room, no clamp" },
   marks:   { max: 7,  hard: false, contribution: 0.49, src: "one per marked enemy, no clamp" },

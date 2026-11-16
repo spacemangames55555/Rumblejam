@@ -692,6 +692,22 @@ never loads them:
   it should — raised bodies, projectiles, pools, a live vortex, turning
   lanes, a pylon and the damage it refuses. Its first run found a ring born
   inside the player (sixteen bolts landing in the tick they spawned).
+- `node tools/class_band_gate.mjs [--verbose]` — **no class is a different
+  game.** On the dummy ring the world axis is measured on: every class within
+  ×0.5–2.0 of the roster median at every level anchor from region 2 on, no
+  single skill worth more than three-quarters of a median loadout, no class's
+  output growing with the clock (the second ten seconds against the first —
+  an engine with no ceiling shows up as a slope), the Savage's cascade paid
+  only up to its cap, and one rank model across the roster. Written after the
+  Necromancer measured ×6.8 the median and the Savage ×2.5–4 with every gate
+  green.
+- `node tools/class_breakdown.mjs <class> [--level=68] [--picks=…]` — **why a
+  class puts out what it does.** Its statline, what the stat cards are worth,
+  and every learned skill alone in one slot with its share of the class's
+  best slotting. `--roster` prints each class's two strongest single skills
+  side by side, which is how a skill from a different scale is found. Shares
+  its fixture with `region_curve` (`tools/lib/dummy_ring.mjs`), so the two
+  cannot disagree about the same character.
 - `node tools/glyph_gate.mjs [--verbose]` — **every monster is a creature,
   not a polygon, and its picture is where its hitbox is.** No enemy has a
   painted sprite yet, so each is a code-drawn glyph (`js/glyphs.js`). The gate

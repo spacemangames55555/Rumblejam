@@ -173,7 +173,28 @@ export const CONFIG = {
   // no-cooldown-reduction rule (§4.2, §9.2). A linear 8%-of-base per rank would
   // cross zero at rank 12.5; this one is still above half at rank 1000.
   CASCADE_CD_RATE: 0.08,
-  CASCADE_CD_FLOOR: 0.5,
+  // 0.85, was 0.5 (R-10, 15 Nov 2026). The floor is reached in the first few
+  // seconds of every room and never left — the chain does not break — so it is
+  // not a limit on a rare peak, it is the Savage's standing cooldown. At 0.5
+  // that was every skill twice as often, on top of the damage term.
+  CASCADE_CD_FLOOR: 0.85,
+  // THE DAMAGE TERM IS NOT THE COOLDOWN TERM, AND ONLY ONE OF THEM WAS SAFE.
+  //
+  // "Uncapped" was argued for the cooldown, where the asymptote above bounds
+  // it. But a step carrying `scaleWith: 'cascade'` is paid LINEARLY per rank
+  // (js/compose.js engineScale), with no asymptote and no ceiling — §13 rule
+  // 90 said so and nothing acted on it. Measured 15 Nov 2026 in real rooms
+  // (R-10): the chain does not break. Eight slots almost never fire the same
+  // skill twice running, so across a 60-second wave it read 43, 121, 275, 428
+  // at 10/20/40/60 s against a design reference of 18, and a region-4 Savage's
+  // damage went from 172 a second in the first ten seconds to 4,754 a second
+  // in the last twenty.
+  //
+  // So the chain is still uncapped, and still shortens cooldowns toward the
+  // floor for as long as it is held; what a skill is PAID for stops at the
+  // reference. `p.cascade` is the chain. `p.engines.cascade` — the number
+  // every `scaleWith` reads — is min(chain, this).
+  CASCADE_SCALE_CAP: 18,
 
   // RANK SHORTENS THE SKILL'S OWN COOLDOWN, and §4.2 was rewritten to allow it.
   //

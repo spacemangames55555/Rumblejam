@@ -1021,6 +1021,15 @@ leaves uncapped, so this also closes an uncapped scaling term.
 class-conversion revision (`docs/design/classes/engines-doc-vs-built.md`),
 which ruled the document's Momentum as the Savage's engine.
 
+**15 Nov 2026 — the uncapped half is closed, the repoint is not.** Measured in
+real rooms the chain reached 428 ranks in a 60-second wave and the class's
+damage grew 27x across one room. `CASCADE_SCALE_CAP` now clamps what a
+`scaleWith: 'cascade'` step is paid for at 18 ranks, the cooldown floor is 0.85
+and the contribution 0.25 (ruling R-10, `docs/design/rulings-2026-11.md`;
+`tools/class_band_gate.mjs` holds it). The Savage's skills still read `cascade`
+rather than the trait's heat, and a chain that never breaks is still a ramp
+rather than a decision: everything above this note still stands.
+
 ---
 
 ## 20. Two Druid trees are named for each other's contents

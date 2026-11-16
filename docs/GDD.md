@@ -718,7 +718,7 @@ The older trees were never following a `0.05` convention. Read against their eng
 |---|---|---|
 | `max` | what the engine publishes when full | `chi` 45 = `CHI_CAP 40` + `CHI_FOCUS_STEP 5` |
 | `contribution` | how much of a skill's damage a full engine is worth | `chi` +54% → a Monk at 45 Chi deals ×1.54 |
-| `hard` | whether `max` is enforced or a design reference | eight enforced; `cascade`, `drench`, `shift`, `marks`, `pack`, `armor` have no clamp in the code at all |
+| `hard` | whether `max` is enforced or a design reference | nine enforced (`cascade` joined them on 15 Nov 2026 — its *chain* is still uncapped, what a step is paid for is not; §8.3); `drench`, `shift`, `marks`, `pack`, `armor` have no clamp in the code at all |
 
 Content declares **which** engine and, optionally, a dimensionless `scaleWeight` whose default is 1 — a multiple of that engine's standard. Copying `1` from a chi tree to a form tree is correct, which is the property `scalePer` could never have. The whole roster spans 0.5–1.6.
 
@@ -952,7 +952,7 @@ Every class has a mechanical engine no other class has. Each must interact with 
 
 | Class | Engine |
 |---|---|
-| Savage | **Cascade** — firing something DIFFERENT from the last thing banks uncapped ranks; the same skill twice running breaks the whole chain. Each rank shortens every cooldown by 8% of the *remaining reducible* part, floored at 50% of base. **Ruled from "an ordered 3-skill sequence" after measurement** — see below |
+| Savage | **Cascade** — firing something DIFFERENT from the last thing banks uncapped ranks; the same skill twice running breaks the whole chain. Each rank shortens every cooldown by 8% of the *remaining reducible* part, floored at **85%** of base, and pays `scaleWith` steps up to **18** ranks (both re-ruled 15 Nov 2026 after measurement — the chain does not break, see below). **Ruled from "an ordered 3-skill sequence" after measurement** — see below |
 | Sundian | **Drench stacks** — its own status, applied by `drench` and cashed by `sluice`. The engine counts STACKS across the room, and spending them is the class's own best move |
 | Mage | **Crystallize** — damage TAKEN accumulates crystal; crystal drives melee output. The only engine filled by the enemy rather than by the player's own action, and **the only one two defensive stats fight**. Defense is the named cost — crystal accrues off MITIGATED damage, so armour means less crystal. **Dodge is the sharper one and nothing documents it:** the dodge branch returns at `js/game.js:2886`, before `tohOnHurt` at `:2911`, so a dodged hit yields ZERO crystal rather than reduced crystal. A Mage buying Dodge also buys hidden crit and switches their own engine off. |
 | Witch Doctor | **Voodoo doll** — damage to a doll mirrors onto a distant target |
@@ -1258,11 +1258,23 @@ That is §4.2's breadth-versus-depth pressure turned into a class engine. Depth 
 
 **THE BUILT-IN COST IS THE ENGINE'S OWN FEEDBACK, not a bolt-on.** Each rank shortens every cooldown, so the *fastest* skill returns soonest, so it is the likeliest to be the one that fires twice and breaks the chain. **The deeper the cascade, the harder it is to hold** — which is precisely what lets the ranks be uncapped.
 
+#### RE-RULED 15 Nov 2026 (R-10): the chain does not break, so what it pays is capped
+
+The table above was measured on an earlier Savage. Measured again on the finished class in **real rooms**, not on a fixture: across a 60-second wave the chain read **43, 121, 275 and 428** ranks at 10, 20, 40 and 60 seconds, with **zero or one break per room**. The built-in cost does not bind — with eight slots the same skill almost never fires twice running. And the damage term was linear in ranks with no ceiling (§13 rule 90 had said so): a region-4 Savage dealt **172 a second in the first ten seconds of a room and 4,754 a second in the last twenty**. On the dummy ring the class read ×2.5–4 the roster median, and the answer depended on how long the window was.
+
+Three numbers changed, and the mechanic did not:
+
+- **The chain is still uncapped** and still shortens cooldowns for as long as it is held. `p.cascade` is the chain.
+- **What a `scaleWith: 'cascade'` step is paid for stops at 18 ranks** (`CONFIG.CASCADE_SCALE_CAP`, the engine's own design reference). `p.engines.cascade = min(chain, 18)`.
+- **The cooldown floor is 85% of base, not 50%, and the engine's contribution is 0.25, not 0.50.** With the cap alone the class still read ×1.5–2.2: an engine that is always on, halving every cooldown *and* adding half again to every hit, is a ×3 multiplier where every other class's engine is worth about ×1.5. With no engine at all the Savage's skills already read ×0.84–1.07 of the median, so the engine is the premium and nothing else. At 0.85 and 0.25 the class reads ×1.05–1.35 across the anchors from region 2 on, kills bosses at ×0.89–0.98 the median time, and clears real rooms inside the pack.
+
+**What this does not fix, and is the design question left open:** a chain that never breaks is a ramp, not a decision. The engine now pays a bounded amount for a state the player reaches in five seconds and never loses. KNOWN-DEFECTS #19 (repoint the Savage's skills at the trait's own momentum engine) is still the real answer and still its own patch.
+
 **It gets its own memory.** `p.trigEvents.lastFired` already holds exactly the id this needs, and its only readers are the debug overlay and four test harnesses. Reading it here would make a diagnostic load-bearing — which is how `sim.summons` became D-29 — so `p.cascadeLast` is one field that owes nothing to an instrument.
 
 #### The floor is asserted three ways, because the bound alone cannot see the mechanic
 
-`cd = base × (0.5 + 0.5 × 0.92^ranks)`. A **clamped-linear** reduction satisfies "never below 50% of base" exactly as well and is a different mechanic — the same trap as the Monk's cliff-versus-slope, where the bound was true of both and only the ratio told them apart. So:
+`cd = base × (F + (1 − F) × 0.92^ranks)` with `F = CASCADE_CD_FLOOR` (0.85 since 15 Nov 2026; 0.5 before). A **clamped-linear** reduction satisfies "never below the floor" exactly as well and is a different mechanic — the same trap as the Monk's cliff-versus-slope, where the bound was true of both and only the ratio told them apart. So:
 
 1. **Monotonic** across 0–60 ranks — deeper is never worse.
 2. **Strictly above the floor at rank 40**, where a linear 8%-of-base would read **−2310ms**, having crossed zero at rank 13.
@@ -2222,7 +2234,7 @@ The re-pin is not free and the cost is the point: four Statue Test reds cleared 
 
 89. **Staging a trigger must not cost the thing being staged.** The first fixture for MOVEMENT drove a slow circle — genuine travel, genuine `movingT`. It also walked characters away from their own pets and placed effects: a level-82 hunter read 8114 DPS standing and 417 circling, a 19× collapse that says nothing about movement. Flipping the input axis every frame (`mx: i % 2 ? 1 : -1`) keeps `p.moving` true at ~0 net displacement, and costs a kit with no movement node 1%. Check the staging against a subject that should not care: if the control moves, you are measuring the harness.
 
-90. **An engine that is uncapped BY DESIGN is only bounded on the term its safety argument covers.** `cascade` is deliberately uncapped (§8.3), and the reasoning is sound for the cooldown term: `cd = base * (FLOOR + (1 − FLOOR)(1 − RATE)^ranks)` is asymptotic to `CASCADE_CD_FLOOR`, still above half at rank 1000. But `js/compose.js:54` turns any engine into a *linear* damage multiplier with no ceiling, and 12 savage steps carry `scaleWith: 'cascade'`. Measured on mortal targets, a level-82 savage runs 4325 → 19896 DPS across 120 s and is still rising, cascade 1155. Fed by firing VARIETY rather than kills, decaying only after `CASCADE_IDLE_SECONDS` of total silence, so no target arrangement bounds it.
+90. **An engine that is uncapped BY DESIGN is only bounded on the term its safety argument covers.** `cascade` is deliberately uncapped (§8.3), and the reasoning is sound for the cooldown term: `cd = base * (FLOOR + (1 − FLOOR)(1 − RATE)^ranks)` is asymptotic to `CASCADE_CD_FLOOR`, still above half at rank 1000. But `js/compose.js:54` turns any engine into a *linear* damage multiplier with no ceiling, and 12 savage steps carry `scaleWith: 'cascade'`. Measured on mortal targets, a level-82 savage runs 4325 → 19896 DPS across 120 s and is still rising, cascade 1155. Fed by firing VARIETY rather than kills, decaying only after `CASCADE_IDLE_SECONDS` of total silence, so no target arrangement bounds it. **Closed 15 Nov 2026 (R-10):** the damage term is clamped at `CASCADE_SCALE_CAP`, and `class_band_gate` check C fails any class whose second ten seconds on the ring pay more than ×2.5 its first ten — the rule, asserted for every engine rather than remembered for one.
 
 Two consequences. The measurement one: a savage number is meaningless without its window, so every fixture states one (`MEASURE_SECONDS`, matched to a ~45 s room). The design one is **reported, not fixed** — whether an unbounded damage term is intended is a tuning ruling, not a fixture's call.
 
@@ -2793,6 +2805,7 @@ Note also that `js/regions.js` declares **2 regions, not 8**. §3.2 names all ei
 | Roster | **One roster.** Classic 33 archived; selectability derived from trees |
 | Regions built | **8 of 8 playable** — 48 enemies, 8 two-phase bosses (§3.7). All eight run at horde pace, each at a measured fodder rate (§2.6) |
 | Region tilesets, hazards | **Tilesets: 7 of 8** wear a biome (Great Britain has no tile art and draws the flat fill). **Hazards: all eight named, none implemented** — `undergrowth`, `bloodmire`, `fae_ring`, `quicksand`, `rot_pool`, `black_ice`, `riptide`, `bushfire`. One engine feature, not eight |
+| Class band | **Held 15 Nov 2026** — the Necromancer (×6.8 the roster median) and the Savage (×2.5–4, growing with the clock) are retuned onto the roster's scale (R-10, R-11). On the dummy ring every class is within ×0.68–1.91 of the median at every anchor from region 2 on (Necromancer ×1.09–1.28, Savage ×1.05–1.35); the roster median did not move at any anchor and median boss time-to-kill is unchanged (44 / 53 / 77 / 145 s for regions 2, 5, 7, 8), so the world axis stands. `class_band_gate` holds the band, that no one skill is worth a loadout, that no class's output grows with the clock, and one rank model. **Not yet done:** Priest, Witch Doctor and Mage kill bosses ×1.5–2.2 slower than the median (their engines count enemies and a boss is one); Samurai and Druid run ×1.5–1.9 on the ring |
 | Regions 4–8 | **Built 14 Nov 2026** — horde rosters, five bosses with signature blocks, five curses each read at one site, all gated (`roster_weight_gate`, `boss_gate`, `curse_gate`). **Drawn 15 Nov 2026** — every enemy and boss in all eight regions, plus the borrowed nest, its brood and the ward pylon, is a code-drawn glyph rather than a polygon (`js/glyphs.js`, `glyph_gate`). **Not yet done:** nest archetypes (all eight regions still borrow `wombden`), painted sprites (the glyphs are the fallback; silhouette notes and prompts are written — `docs/silhouettes.json`, `docs/prompts.json`) |
 | Level curve | **Held and gated** — 1.5 levels a fight in every region, level 77 at the end (§4.2). `MAP_XP_MULT` is measured; `level_curve_gate.mjs` plays all 48 fights. Before 14 Nov the curve was asserted on one map and overshot the anchors by two regions |
 | World axis | **Re-measured 14 Nov 2026** against real characters at the paid anchors, all fourteen classes: ×20.92 by region 8, where it read ×7.36 (§4.3) |

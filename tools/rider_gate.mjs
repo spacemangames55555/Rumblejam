@@ -269,7 +269,12 @@ const OBSERVERS = {
   // the rider deleted. Measured against the same skill stripped of the rider.
   knockback:     { what: 'an enemy is pushed further than collision alone',
                    displacement: true, stripped: true },
-  splash:        { what: 'a bystander takes damage',       bystander: true },
+  // AGAINST THE SAME SKILL WITH THE RIDER STRIPPED, not against zero. "A
+  // bystander took damage" is true of any bolt that pierces or picks the
+  // bystander itself: with `skillSplash` planted to deal nothing, three of the
+  // five splash skills still read as landing (15 Nov 2026). What the rider
+  // adds is the difference.
+  splash:        { what: 'a bystander takes damage the bolt alone would not deal', bystander: true, stripped: true },
   // THE JUDGMENT MARK IS TWO CLAIMS, and the second is the one that matters.
   // "An enemy carries a mark" is a flag; "the mark detonates on death and heals
   // nearby allies" is the mechanic. Watching only the flag would be the trap
@@ -398,7 +403,23 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
   holdAlly();
   const allyHp0 = ally ? ally.hp : 0;
   const from = es.map(e => ({ x: e.x, y: e.y }));
-  const bystander = obs.bystander ? target(g, p.x + 120, p.y) : null;
+  // A BYSTANDER BESIDE EVERY STAGED TARGET, not one beside the first. There was
+  // one, at +120 on the x axis, in reach of exactly one of the three bodies a
+  // threshold trigger stages — and a `lowest_hp` bolt keeps hitting whichever
+  // body it wounded first until that body dies. Dark Matter Bomb passed this
+  // check only for as long as it hit hard enough to kill its first target
+  // inside the window and move on; retuned to the roster's scale (R-11) it
+  // does not, and a splash that lands on every cast read DROPPED. The
+  // observable is the rider, not the kill speed, so the bystanders go where
+  // the impacts are: 40 units behind each target, inside the tightest splash
+  // radius in the game (60) and further from the caster than the target, so a
+  // `nearest` bolt still picks the target.
+  const bystanders = obs.bystander
+    ? [target(g, p.x + 120, p.y), ...es.map(e => {
+        const d = Math.hypot(e.x - p.x, e.y - p.y) || 1;
+        return target(g, e.x + (e.x - p.x) / d * 40, e.y + (e.y - p.y) / d * 40);
+      })].filter(Boolean)
+    : null;
   let peak = 0, firstDamageT = -1;
   const hp0 = es.reduce((a, e) => a + e.hp, 0);
   p.carryX0 = p.x; p.carryY0 = p.y;    // origin for `carry`, stamped where the run starts
@@ -424,7 +445,7 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
     holdAlly();
   }
   if (obs.displacement) peak = es.reduce((a, e, i) => a + Math.hypot(e.x - from[i].x, e.y - from[i].y), 0);
-  if (obs.bystander) peak = bystander ? Math.round(1e9 - bystander.hp) : NaN;
+  if (obs.bystander) peak = bystanders.length ? Math.round(bystanders.reduce((a, b) => a + (1e9 - b.hp), 0)) : NaN;
   if (obs.player) peak = obs.player(g, p);
   if (obs.pierceLine) peak = Math.round(lineHp0 - line.reduce((a, e) => a + (e ? e.hp : 0), 0));
   if (obs.markHeal) {
@@ -432,7 +453,7 @@ function run(skillId, obs, strip = null, add = null, charOverride = null) {
     for (const e of es) if (e.active) g.damageEnemy(e, 1e13, { owner: p });
     peak = Math.round((ally ? ally.hp : 0) - allyHp0);
   }
-  if (obs.stripped && !obs.displacement) peak = obs.timing ? firstDamageT : Math.round(hp0 - es.reduce((a, e) => a + e.hp, 0));
+  if (obs.stripped && !obs.displacement && !obs.bystander) peak = obs.timing ? firstDamageT : Math.round(hp0 - es.reduce((a, e) => a + e.hp, 0));
   if (strip || add) { SKILL_BY_ID[skillId] = sk; for (const t of Object.values(TREES)) { const i = t.skills.findIndex(s => s.id === skillId); if (i >= 0) t.skills[i] = sk; } }
   return peak;
 }
