@@ -66,12 +66,12 @@ export const TUNING = {
   vespersAmount: 46, vespersDuration: 5400, vespersReflect: 0.30, vespersPct: 40, vespersCd: 8800,
 
   // ---- branch B: Reckoning (collect your own debts) ----
-  tallyDamage: 17, tallyReach: 118, tallyArc: 1.9, tallyCd: 2400,
+  tallyDamage: 25, tallyReach: 118, tallyArc: 1.9, tallyCd: 2400,
   tallyMark: { heal: 7, dur: 6000, radius: 150 },
   arrearsWeight: 0.18,
-  distraintDamage: 21, distraintArc: 1.7, distraintRange: 280, distraintCd: 4300,
+  distraintDamage: 30, distraintArc: 1.7, distraintRange: 280, distraintCd: 4300,
   distraintMark: { heal: 8, dur: 6500, radius: 160 },
-  forecloseDamage: 20, forecloseReach: 145, forecloseArc: 2.8, forecloseCd: 7600,
+  forecloseDamage: 29, forecloseReach: 145, forecloseArc: 2.8, forecloseCd: 7600,
   foreclosePulses: 2, forecloseMark: { heal: 11, dur: 7000, radius: 180 },
 
   rankDamage: 0.04, rankDuration: 0.03,

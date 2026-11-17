@@ -102,12 +102,14 @@ should play each of these and say whether it is right:
 
 Measured and not yet fixed:
 
-- **Priest, Witch Doctor, Mage and now Hunter kill bosses 1.2–2.2× slower
-  than the median** (Megalania: 314 s, 260 s, 228 s, 218 s against 145 s).
+- **Priest, Witch Doctor, Mage and Hunter kill bosses 1.4–2.0× slower
+  than the median** (Megalania: 313 s, 260 s, 228 s, 218 s against 156 s).
   The first three's engines count marked or afflicted *enemies*, and a boss
   is one enemy; the Hunter's hounds die to boss slams.
-- **The Samurai runs ×1.5–1.8** of the median on the dummy ring (the Druid
-  was there too and was brought to ×1.3–1.5 by R-13).
+- **Every class is now within ×0.72–1.58 of the median** on the dummy ring
+  (R-10, R-11, R-13, R-16 brought down the Necromancer, Savage, Druid and
+  Samurai and brought up the Priest). The Witch Doctor and Mage remain strong
+  in crowds and weak alone — an identity, but a steep one on bosses.
 - **Crowd-clearing barely grows with level** for about half the roster, so
   the horde cannot grow across the run. `HORDE_REGION_RATE` in `js/arenas.js`
   was fitted around that and should be re-measured once it is fixed.

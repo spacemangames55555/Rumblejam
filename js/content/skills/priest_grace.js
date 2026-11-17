@@ -24,23 +24,23 @@ export const TUNING = {
   // tier 3 — Warding Hand
   wardingAmount: 22, wardingDuration: 4200, wardingCd: 7000,
   // tier 4 — Smite
-  smiteDamage: 12, smiteSpeed: 510, smiteRange: 250, smiteCd: 3000,
+  smiteDamage: 17.5, smiteSpeed: 510, smiteRange: 250, smiteCd: 3000,
   // tier 5 — Litany
-  litanyDamage: 10, litanyRange: 230, litanyHealPct: 0.55, litanyCd: 3400,
+  litanyDamage: 14.5, litanyRange: 230, litanyHealPct: 0.55, litanyCd: 3400,
   // tier 6 — Hallowed Ground
-  hallowDamage: 6, hallowRadius: 140, hallowCount: 3, hallowDuration: 3600,
+  hallowDamage: 9, hallowRadius: 140, hallowCount: 3, hallowDuration: 3600,
   hallowTickMs: 420, hallowCd: 5200, hallowSlowMult: 0.72, hallowSlowDur: 1100,
   // tier 7 — Staff of Office
-  staffDamage: 13, staffReach: 112, staffArc: 1.9, staffRadius: 145,
+  staffDamage: 19, staffReach: 112, staffArc: 1.9, staffRadius: 145,
   staffCount: 2, staffCd: 3800, staffKnock: 220,
   // tier 8 — Vigil
   vigilAmount: 30, vigilDuration: 5200, vigilReflect: 0.4, vigilCd: 9000,
   // tier 9 — Procession
-  processionDamage: 11, processionWidth: 34, processionLength: 360,
+  processionDamage: 16, processionWidth: 34, processionLength: 360,
   processionRadius: 205, processionCount: 3, processionCd: 5800,
   processionRoot: 1400,
   // tier 10 — Benediction
-  benedictionDamage: 16, benedictionAngle: 2.5, benedictionRange: 245,
+  benedictionDamage: 24, benedictionAngle: 2.5, benedictionRange: 245,
   benedictionRadius: 215, benedictionCount: 4, benedictionCd: 10000,
   benedictionHealPerHit: 6,
   // rank increments — linear, never compounding
