@@ -1,6 +1,6 @@
 # Handoff — where Rumblejam stands, and what is left
 
-Written 15 November 2026 for whoever picks this up next (the owner, and Grokbot).
+Written 15 November 2026, last updated 17 November, for whoever picks this up next (the owner, and Grokbot).
 It covers the November push: eight regions, the level curve, the world tuning,
 the monsters' drawings, and the first class-balance pass. It says what was
 done, what was measured, what is left, and — honestly — what I could not judge.
@@ -21,7 +21,8 @@ node tools/run_gates.mjs --browser --baseline=BASELINE.json --save=RUN.json
 - It runs every `tools/*_gate.mjs` and `*_test.mjs` in parallel (about 10 minutes
   with `--browser`; set `PEERJS_LOCAL` to a local `peerjs.min.js` for the co-op
   tests).
-- **`main` is not all green.** Ten gates are red today (§5). So "is it green?"
+- **`main` is not all green.** One gate is red today, `browser_test`, an
+  unported suite (§5); ten were red when this push began. So "is it green?"
   is the wrong question; "did I add a failing line?" is the right one.
   `--baseline` compares your run to a saved run of `main`, line by line, and
   prints `N new failure(s), M fixed`. Zero new is the bar.
@@ -51,13 +52,15 @@ failures.
 | | State | Where to look |
 |---|---|---|
 | **Eight regions** | Built. Six monsters and a boss each, themed to the place, on the horde pacing. Each region asks one new thing of the player (GDD §3.7). | `js/content/enemies-*.js`, `roster_weight_gate`, `region_wire_gate` |
-| **Eight bosses** | Regions 4–8 have a signature mechanic each (raised dead, rotting ground, a ward on the far side of the room, a vortex, turning beams). Median time to kill 44 / 53 / 77 / 145 s for regions 2 / 5 / 7 / 8. | `boss_gate`, `tools/boss_ttk_probe.mjs` |
-| **Eight curses** | Each is one lever read at one place in the code. | `curse_gate` |
+| **Eight bosses** | Every one has a signature mechanic (R-18 gave regions 1–3 theirs: saplings; a blood-moon ring then pools; elf-shot then the Wild Hunt). Median time to kill 44 / 53 / 77 / 145 s for regions 2 / 5 / 7 / 8. | `boss_gate`, `tools/boss_ttk_probe.mjs` |
+| **Eight curses** | Each is one lever read at one place in the code; Gloom, the last with no effect, shrouds your sight (R-19). | `curse_gate` |
+| **Eight ground hazards** | Brush, bloodmire, fae rings, quicksand, rot pools, black ice, riptides and a sweeping bushfire, from five primitives; players only, plain fights only (R-20). | `js/hazards.js`, `hazard_gate` |
+| **Eight nests** | Every Nest Purge besieges its region's own nest, which births the region's commonest creature (R-21). | `region_wire_gate` |
 | **Level curve** | Every fight pays about 1.5 levels; a run ends near level 77. | `level_curve_gate` (plays all 48 fights) |
 | **Enemy health and damage** | Follow the level a party actually arrives at, measured against fourteen real builds. Fodder dies to one hit everywhere. | `tools/region_curve.mjs`, `js/regions.js` |
 | **Horde density** | Rooms stay full without pinning at the cap, eight regions × three maps × fourteen classes. | `tools/region_pace.mjs` |
-| **Monster drawings** | All 59 bodies are drawn in code as creatures (no sprites exist yet). | `js/glyphs.js`, `glyph_gate`, open `tools/glyph_sheet.html` |
-| **Class balance, first pass** | The two classes that were far outside the roster (Necromancer ×6.8, Savage ×2.5–4) are back inside it. Every class is within ×0.68–1.91 of the median. | `class_band_gate`, `tools/class_breakdown.mjs` |
+| **Monster drawings** | All 59 bodies, and the eight nests, are drawn in code as creatures (no sprites exist yet). | `js/glyphs.js`, `glyph_gate`, open `tools/glyph_sheet.html` |
+| **Class balance, first pass** | The classes that were far outside the roster (Necromancer ×6.8, Savage ×2.5–4, Samurai, Priest, Druid) are back inside it. Every class is within ×0.72–1.58 of the median on the dummy ring (R-10, R-11, R-13, R-16). | `class_band_gate`, `tools/class_breakdown.mjs` |
 
 ---
 
