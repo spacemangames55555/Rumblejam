@@ -46,7 +46,7 @@ export const TUNING = {
   apexPulses: 2, apexKnock: 240,
 
   // ---- branch B: Earth's Wrath (what is left when the pack is not) ----
-  thornDamage: 14, thornRadius: 155, thornDuration: 3600, thornTickMs: 400,
+  thornDamage: 8.5, thornRadius: 155, thornDuration: 3600, thornTickMs: 400,
   thornPct: 65, thornCd: 4600, thornSlowMult: 0.55, thornSlowDur: 2000,
   rootsWeight: 0.18,
   // A REFLECT IS A FRACTION. This was authored as a whole number and read as

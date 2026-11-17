@@ -99,23 +99,25 @@ should play each of these and say whether it is right:
 
 Measured and not yet fixed:
 
-- **Priest, Witch Doctor and Mage kill bosses 1.5–2.2× slower than the
-  median** (Megalania: 314 s, 260 s, 228 s against 145 s). Their engines count
-  marked or afflicted *enemies*, and a boss is one enemy.
-- **Samurai and Druid run ×1.5–1.9** of the median on the dummy ring.
+- **Priest, Witch Doctor, Mage and now Hunter kill bosses 1.2–2.2× slower
+  than the median** (Megalania: 314 s, 260 s, 228 s, 218 s against 145 s).
+  The first three's engines count marked or afflicted *enemies*, and a boss
+  is one enemy; the Hunter's hounds die to boss slams.
+- **The Samurai runs ×1.5–1.8** of the median on the dummy ring (the Druid
+  was there too and was brought to ×1.3–1.5 by R-13).
 - **Crowd-clearing barely grows with level** for about half the roster, so
   the horde cannot grow across the run. `HORDE_REGION_RATE` in `js/arenas.js`
   was fitted around that and should be re-measured once it is fixed.
 - **Survival has not been measured.** Everything above is output, in god
   mode. `node tools/region_pace.mjs --mortal` is the tool; nobody has yet
   asked whether each class *lives* through each region.
-- **Summoned creatures mostly do not live.** `node tools/minion_uptime.mjs`
-  measures it. The Druid's wolf, bear and hawk stand for 15–67% of a room
-  depending on region (a region-8 hawk dies to about two hits, then waits 23
-  seconds to come back). The Hunter's hounds have the opposite problem: their
-  revive time was typed in seconds where the engine reads milliseconds, so
-  they return in seven thousandths of a second and are effectively immortal.
-  The Necromancer's skeletons are fine.
+- **Summoned animals now live (R-13), at a cost to the Hunter.** The Druid's
+  pack stood 15–67% of a room and now stands 48–100%; the Hunter's hounds
+  were immortal by a units bug and now die and return on their authored
+  seven seconds. The Hunter is therefore slower against bosses (×1.2–1.5 of
+  the median). `node tools/minion_uptime.mjs` measures it. Survival of the
+  *player* is still unmeasured, and the Necromancer's skeletons (≈1,200
+  health, taunting) may turn out to make it the safest class in the game.
 - `bard_ensemble` reads −61% of its own class in `tree_dps` (red on `main`).
 
 `node tools/class_breakdown.mjs <class>` shows a class's statline, what its
@@ -182,11 +184,13 @@ Ten were red when this push began. None was caused by it. Each was either a
 real finding or a broken test, and the difference matters — a test that
 reports working things as broken teaches everyone to ignore it.
 
-**Repaired in this push (the test was wrong, and each repair was proved by
-planting the defect it should catch):**
+**Green now.** Most were broken tests, each repair proved by planting the
+defect it should catch. One was a design call nobody had made, and one was
+the game:
 
 | Gate | What it said | What was actually wrong |
 |---|---|---|
+| `combat_gate` | The Druid pack fixture never stages | **The game was wrong, not the test**: the pack was dead most of every room. Fixed in R-13; green. |
 | `skill_sweep` | Four skills crash; two never fire; three "wired to nothing" | The sweep crashed on skills that have no trigger, looked for forms in the wrong place, could not read an aura, and stopped watching before a channel's first tick. All nine skills work. |
 | `item_gate` | Two item modifiers are "sold and do nothing" | Both work. One probe lined up three targets for a bolt that already pierces three; the other ran in the one room where damage types are switched off. |
 | `heal_gate` | Ten heals never declared who they reach | A design call nobody had made. Made in ruling R-12: eight are self-heals, two (Priest's Intercession, Bard's Refrain) now reach the party. |
@@ -197,7 +201,6 @@ planting the defect it should catch):**
 
 | Gate | What it says | What it is |
 |---|---|---|
-| `combat_gate` | The Druid pack fixture never stages | **Real, and bigger than the test.** The Druid's beasts are down for most of every room; see §3.3. |
 | `tree_dps` | `bard_ensemble` is −61% of its own class | **Real**, balance. |
 | `region_test` (3) | Map 1 leaves one seed at level 8 where 6–7 is wanted; two payout figures off | The expectation predates the level curve of R-7. Re-derive the expectation or retune map 1. |
 | `patch_gate` (2) | A coral planted with nothing to hit; no bounty mark in 20 s | Not investigated. |

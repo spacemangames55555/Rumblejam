@@ -55,14 +55,17 @@ function run(regionIndex, classId, seed) {
     if (!(sim.wave && !sim.wave.done)) { if (sim.enemyPool.count === 0 && sim.spawnQueue.length === 0) break; continue; }
     ticks++;
     for (const m of p.minions) {
+      // Standing share is pooled per archetype; a DOWN is counted per body.
+      // Keyed per archetype alone, two wolves alternating read as hundreds of
+      // deaths a room — the first version of this tool did exactly that.
       const k = m.arch || m.kind || 'minion';
       let s = by.get(k);
-      if (!s) by.set(k, s = { up: 0, seen: 0, downs: 0, wasDown: false, maxHp: 0 });
+      if (!s) by.set(k, s = { up: 0, seen: 0, downs: 0, was: new Map(), maxHp: 0 });
       s.seen++; s.maxHp = Math.max(s.maxHp, m.maxHp || 0);
       const down = !!(m.down || m.dead);
       if (!down) s.up++;
-      if (down && !s.wasDown) s.downs++;
-      s.wasDown = down;
+      if (down && !s.was.get(m)) s.downs++;
+      s.was.set(m, down);
     }
   }
   return { level, ticks, by, ingenuity: p.stats.ingenuity, vitality: p.stats.vitality };

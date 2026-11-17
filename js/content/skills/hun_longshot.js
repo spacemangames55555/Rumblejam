@@ -41,9 +41,9 @@ export const TUNING = {
   // tier 1 — Sighting Shot
   sightDamage: 5, sightSpeed: 540, sightRange: 260, sightCd: 700, sightPierce: 4,   // pace-spec §12.1, Designer 2 Nov 2026: pierce 4, cd 700 (was 1100)
   // tier 2 — Falconer (the beast: the engine's other body)
-  falconHp: 26, falconRadius: 11, falconSpawn: 60, falconAtkCd: 1150,
+  falconHp: 34, falconRadius: 11, falconSpawn: 60, falconAtkCd: 1150,
   falconDamage: 4, falconArc: 1.5, falconReach: 46,
-  falconReviveBase: 6, falconRevivePer: 1.5, falconCd: 4000,
+  falconReviveBase: 6000, falconRevivePer: 1500, falconCd: 4000,
   // tier 3 — Spotter's Call
   callDamage: 7, callSpeed: 530, callRange: 255, callCd: 2600, callWeight: 0.83,
   // tier 4 — Enfilade

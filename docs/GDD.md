@@ -1461,23 +1461,25 @@ What falls out: a new archetype is a row of data. `js/minions.js` does not know 
 - **A dead animal revives at the Druid's current position** after a timer.
 
 ```
-reviveMs = 15000 + 4000 × (totalAnimals − 1)
+reviveMs = 6000 + 2000 × (totalAnimals − 1)
 ```
 
 | Animals | Revive |
 |---|---|
-| 1 | 15s |
-| 2 | 19s |
-| 3 | 23s |
-| 4 | 27s |
-| 5 | 31s |
-| 6 | 35s |
+| 1 | 6s |
+| 2 | 8s |
+| 3 | 10s |
+| 4 | 12s |
+| 5 | 14s |
+| 6 | 16s |
+
+*Re-ruled 16 Nov 2026 (R-13); it was `15000 + 4000 × (N−1)`. Measured in real rooms with `tools/minion_uptime.mjs`, a three-animal pack stood 15–67% of a fight and less every region: enemy damage rides the world axis (×6.34 by region 8) and an animal's health did not. A pack that is down most of the fight is not a cost the player weighs, it is a class that does not work. The shape — owned not alive, one more step per animal — is unchanged.*
 
 **`totalAnimals` counts animals owned, not animals alive.** If it counted the living, losing the whole pack would make revives fastest — the cost would invert exactly when the player is most punished. Each dead animal runs its own independent timer at the same N-derived duration.
 
 **The engine's built-in cost is opportunity, not the timer.** Points spent on animals are points not spent on the Druid's own offence, so a Druid whose pack is down has to survive on badly reduced damage output. The revive scale exists so that going wide has a price at the moment it matters: a six-animal Druid waits more than twice as long as a one-animal Druid to get anything back.
 
-**Depth versus breadth, expressed as shape.** Six animal skills at rank 1 is six weak pets on a 35s revive. One animal at rank 20 is a single strong pet back in 15s. Neither is obviously correct, which is the test.
+**Depth versus breadth, expressed as shape.** Six animal skills at rank 1 is six weak pets on a 16s revive. One animal at rank 20 is a single strong pet back in 6s. Neither is obviously correct, which is the test.
 
 #### Necromancer — soul tokens
 
@@ -1528,7 +1530,7 @@ All eight rows are closed. The summoning engine now matches this section; the lo
 | 5 | Skeletons wipe every room | Asserted across a **real node transition**, never a timer — a wipe that happened to look right because a duration expired would pass a timer check and fail a player walking through a door |
 | 6 | No cap beyond rank | `SUMMON_SLOTS_BASE` and `SUMMON_SLOT_CAP` deleted. Asserted at **rank 12**, chosen because the old ceiling of 8 would have bitten: 12 slots granted and 12 skeletons standing |
 | 7 | Animals present at map start, fully restored | Restored at the room-start HP restore, where this section puts it. Asserted by downing an animal, travelling, and checking it arrives standing at full HP |
-| 8 | `15000 + 4000 × (N−1)` | Asserted at **five** pack sizes with slope and intercept checked separately — one sample cannot see a wrong slope, and two cannot tell a wrong slope from a wrong intercept |
+| 8 | `6000 + 2000 × (N−1)` (was `15000 + 4000`, R-13) | Asserted at **five** pack sizes with slope and intercept checked separately — one sample cannot see a wrong slope, and two cannot tell a wrong slope from a wrong intercept |
 
 **`SUMMON_SLOTS_BASE` is gone and must not return.** It was invented to give the Druid somewhere to put an animal. This section solves that differently: a Druid's pack size is how many animal skills it took, its animals are **not slotted at all**, and the Necromancer's capacity is rank alone. A shared pool would couple two engines this section keeps deliberately opposite. If a future class needs standing capacity, it belongs to that class's own engine.
 

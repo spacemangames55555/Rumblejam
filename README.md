@@ -707,7 +707,7 @@ never loads them:
   each region: each minion's health against one hit from that region's fodder,
   the share of the wave it spent standing, and how often it went down. Found
   the Druid's pack down for most of every room and the Hunter's hounds
-  reviving in seven milliseconds.
+  reviving in seven milliseconds (both fixed by ruling R-13).
 - `node tools/class_breakdown.mjs <class> [--level=68] [--picks=…]` — **why a
   class puts out what it does.** Its statline, what the stat cards are worth,
   and every learned skill alone in one slot with its share of the class's
