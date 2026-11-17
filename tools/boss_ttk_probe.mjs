@@ -6,7 +6,13 @@
 // at bossDown. Siege adds are culled every tick so the number is the BOSS's
 // time to kill, not the room's.
 //
-// Usage: node tools/boss_ttk_probe.mjs [regionIndex ...]
+// THE MAGE'S CRYSTAL FILLS FROM DAMAGE TAKEN, and this probe runs in god
+// mode, so here it never fills: the Mage read ×1.15–1.47 the median when a
+// Mage being hit by the boss — which is every Mage fighting one — carries a
+// full crystal and reads ×0.90–0.94 (R-22). `--crystal` pins every crystal
+// trait at its cap for the fight, which is the honest reading for that class.
+//
+// Usage: node tools/boss_ttk_probe.mjs [regionIndex ...] [--ref] [--crystal]
 import { Sim } from '../js/game.js';
 import { TREES, TREES_BY_CLASS, slotsAtLevel } from '../js/skills.js';
 import * as SKILLSIM from '../js/skillsim.js';
@@ -14,6 +20,7 @@ import { REGIONS, expectedLevelAt, bossForRegion } from '../js/regions.js';
 import { buildCharacter } from './lib/build_char.mjs';
 
 const CLASSES = process.argv.includes('--ref') ? ['toh_blacksmith', 'toh_wizard', 'toh_necromancer', 'toh_druid'] : Object.keys(TREES_BY_CLASS);
+const PIN_CRYSTAL = process.argv.includes('--crystal');
 const SEEDS = [5];
 const CAP_S = 600;
 const args = process.argv.slice(2).filter(a => !a.startsWith('--')).map(Number).filter(n => n > 0);
@@ -46,6 +53,7 @@ function run(regionIndex, classId, seed) {
     const ward = b.bs && b.bs.wardId ? sim.enemyById(b.bs.wardId) : null;
     if (ward) { const d = Math.hypot(ward.x - p.x, ward.y - p.y) || 1; sim.setInput(0, d > 90 ? { mx: (ward.x - p.x) / d, my: (ward.y - p.y) / d } : { mx: 0, my: 0 }); }
     else sim.setInput(0, { mx: 0, my: 0 });
+    if (PIN_CRYSTAL && p.char.trait && p.char.trait.crystalCap) p.crystal = p.char.trait.crystalCap;
     sim.tick();
     if (p.boonOffer) sim.uiAction(0, { kind: 'boon', id: p.boonOffer[0].id });
     if (p2At === null && b.bs && b.bs.phase2) p2At = sim.time - t0;

@@ -463,7 +463,8 @@ export function tickSkills(sim, dt) {
     let drenched = 0;
     for (const e of sim.enemyPool) {
       if (!e.active) continue;
-      if (e.markT > 0 && e.markBy === p.idx) marked++;
+      // a marked BOSS is a room's worth of judgment (R-22, CONFIG.BOSS_MARK_WEIGHT)
+      if (e.markT > 0 && e.markBy === p.idx) marked += e.boss ? CONFIG.BOSS_MARK_WEIGHT : 1;
       if (e.drenchT > 0 && e.drenchBy === p.idx) drenched += e.drench || 0;
     }
     p.engines.marks = marked;

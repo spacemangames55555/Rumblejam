@@ -262,6 +262,23 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-22 — A marked boss is a room's worth of judgment (17 Nov)
+
+**Found.** Four classes kill bosses well behind the roster. Boss time-to-kill, all fourteen classes, built at the level a player meets each boss (`tools/boss_ttk_probe.mjs`, god mode, adds culled). Medians are **44.4 / 56.3 / 154.6 s** for regions 2 / 5 / 8:
+
+| Class | Regions 2 / 5 / 8 | Why |
+|---|---|---|
+| Priest | ×1.52 / 1.66 / 2.03 | The marks engine counts marked *enemies*. A lone boss is one, so the engine sits at 1 of its 7. |
+| Witch Doctor | ×1.37 / 1.46 / 1.68 | Not the engine: the doll binds to the boss and loads well. Its kit is built for crowds. |
+| Mage | ×1.15 / 1.25 / 1.47 | **The probe, not the class.** The crystal fills from damage *taken*, and the probe runs in god mode, so it never fills. With the crystal pinned at its cap — what a Mage under a boss's fire carries — ×0.91 / 0.90 / 0.94. |
+| Hunter | ×1.22 / 1.33 / 1.41 | The hounds die to boss slams (the recorded cost of R-13). |
+
+**Ruled.** `CONFIG.BOSS_MARK_WEIGHT = 7`: a marked boss counts as seven marks — the engine's reference maximum, a full room of judgment. Nothing changes outside a boss fight, so no ring, tree or room measurement moved.
+
+**After.** Priest ×1.18 / 1.20 / 1.34 (52.6 / 67.3 / 207.1 s, from 67.6 / 93.7 / 313.2). The weights tried: 4 gave ×1.34 / 1.39 / 1.61; 7 is the first that puts the Priest inside ×1.4 everywhere, and it is the number the engine already names as full.
+
+**Left alone, on purpose.** The Mage: its figure is the probe's blind spot, recorded rather than "fixed" by a buff it does not need. `boss_ttk_probe` now takes `--crystal` to read it honestly. The Witch Doctor and the Hunter: both inside ×2 of the median, and both are slow for reasons of identity (a crowd kit; animals that die) rather than an arithmetic hole. They are the next balance question, not this ruling's.
+
 ## R-21 — Every region's Nest Purge has its own nest (17 Nov)
 
 **Found.** `nestIdFor` resolved the keep from the region since November, and no region had authored one, so every Nest Purge in the game besieged the base roster's Wombden and fought its Flit brood — moths pouring out of a star in a cedar forest. `region_wire_gate` reported it as a content gap.

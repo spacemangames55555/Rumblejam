@@ -84,6 +84,11 @@ export const CONFIG = {
   MINION_HEEL_RANGE: 70,       // with nothing to fight, this close to the owner is close enough
   MINION_ORBIT_RATE: 1.6,      // rad/s for orbiters
   MINION_ORBIT_LERP: 8,        // how hard an orbiter corrects toward its station
+  // How many of the Priest's marks a marked BOSS counts as (R-22, 17 Nov 2026).
+  // The marks engine counts marked ENEMIES, so against a lone boss it sat at 1
+  // of its 7, and the Priest took ×1.5–2.0 the roster's time to kill a boss. A
+  // boss is a room's worth of judgment: 7 is the engine's reference maximum.
+  BOSS_MARK_WEIGHT: 7,
   MINION_CONTACT_CD: 1.5,      // s between contact hits onto one minion (1 until R-13: a body in a crowd took a full hit every second)
   // A TELEGRAPHED HIT IS A QUESTION ASKED OF THE PLAYER'S FEET, and a minion
   // cannot answer it. A zone fills, the player reads it and steps out; a wolf
