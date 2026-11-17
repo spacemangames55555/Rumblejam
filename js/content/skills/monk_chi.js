@@ -91,7 +91,7 @@ export const MONK_CHI = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 70 },
     cooldown: T.breathCd,
-    compose: [{ kind: 'heal', amount: T.breathAmount }],
+    compose: [{ kind: 'heal', amount: T.breathAmount, selection: 'self', shape: 'point' }],
     ranks: R,
   },
   {
@@ -113,7 +113,7 @@ export const MONK_CHI = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 55 },
     cooldown: T.mendCd,
-    compose: [{ kind: 'heal', amount: T.mendAmount }],
+    compose: [{ kind: 'heal', amount: T.mendAmount, selection: 'self', shape: 'point' }],
     ranks: R,
   },
   {
@@ -171,7 +171,7 @@ export const MONK_CHI = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 40 },
     cooldown: T.quietCd,
-    compose: [{ kind: 'heal', amount: T.quietAmount }],
+    compose: [{ kind: 'heal', amount: T.quietAmount, selection: 'self', shape: 'point' }],
     ranks: R,
   },
   {

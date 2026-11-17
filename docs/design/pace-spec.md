@@ -68,7 +68,7 @@ Map 1 draws only thornhound, sapling and cedar warden. That table is `_onboardin
 | Sundian | Spindrift | 1150 | 6 | 0.40 · 1.2 s | **1.00** | 0.70 |
 | Hunter | Sighting Shot | 1100 | 5 | 0.10 · 0.2 s† | **0.60** | 0.37 |
 
-\* A packet under 8 still one-shots, which suggests a Ferocity or crit multiplier. Treat this as a probe reading. † The Hunter's single-target figure looks fixture-bound (one target at 90 u), so read only its pack figure.
+\* A packet under 8 still one-shots, which suggests a Damage or crit multiplier. Treat this as a probe reading. † The Hunter's single-target figure looks fixture-bound (one target at 90 u), so read only its pack figure.
 **What this shows:** strike openers already cleave and reach 1.8–4.4 kills/s on a pack, while the bolt openers (Bard, Sundian, Necromancer, Wizard, Hunter) top out near one kill per cast. That gap is the §9 problem.
 
 **Every constant that controls map-1 pace (file:line on `7e189e5`):**
@@ -279,7 +279,7 @@ Use the `map1_bot` kite and the clumsy bot, solo Standard, the default 5 seeds, 
 
 Shared rules (GDD §5.10): the rank-1 opener one-shots map-1 fodder. Every class has a way to clear a **pack** by its tier-1 or tier-2 node, using the existing `pierce`/`splash` bolt riders for bolt trees. Every kill visibly pops. Each class clears in its own *shape*, and its engine decides *when* that shape peaks. Engines are from `docs/design/classes/*.md` and GDD §8.3.
 
-- **Samurai (Footing):** wide close-range arcs that already clear packs (4.4 kills/s, the best in the probe). The horde fantasy is wading in and sweeping. Footing pays as a burst on the first step after holding (§6.1b, decided 2026-11-02 (user)). Grit and shield stay only as flat values that don't grow with time stood still (ruled 2026-11-02, Designer, §11.7), a released iaido-style sweep through the crowd, not as standing safety. Distinct shape: the 360° / long-arc cut.
+- **Samurai (Footing):** wide close-range arcs that already clear packs (4.4 kills/s, the best in the probe). The horde fantasy is wading in and sweeping. Footing pays as a burst on the first step after holding (§6.1b, decided 2026-11-02 (user)). Defense and shield stay only as flat values that don't grow with time stood still (ruled 2026-11-02, Designer, §11.7), a released iaido-style sweep through the crowd, not as standing safety. Distinct shape: the 360° / long-arc cut.
 - **Priest (Conviction / judgment marks):** Rebuke one-shots, and marks should **chain-detonate** through a pack on death (a mark kill heals and pops neighbours). Distinct shape: chain reactions spreading outward from one kill, with holy light bursts.
 - **Monk (Chi loop):** fast palm combos that cleave (3.2 kills/s). Spending Chi should release a shockwave ring, and Stone Garden traps should be a crowd funnel. Distinct shape: rhythmic close bursts and rings, with the Monk weaving through the horde.
 - **Druid (the pack):** Rake one-shots. The fantasy is **your animals versus their horde**: wolves and the pack should hunt fodder on their own, with pounces that scatter packs. Distinct shape: allied bodies carving lanes, so pet count and pet uptime are the clear.

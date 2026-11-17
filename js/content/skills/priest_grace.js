@@ -20,7 +20,7 @@ export const TUNING = {
   consecrateDamage: 8, consecrateAngle: 1.6, consecrateRange: 200,
   consecrateRadius: 160, consecrateCount: 2, consecrateCd: 1100,
   // tier 2 — Intercession
-  intercessionAmount: 14, intercessionCd: 5000, intercessionWeight: 1.14,
+  intercessionAmount: 14, intercessionRadius: 240, intercessionCd: 5000, intercessionWeight: 1.14,
   // tier 3 — Warding Hand
   wardingAmount: 22, wardingDuration: 4200, wardingCd: 7000,
   // tier 4 — Smite
@@ -74,6 +74,12 @@ export const PRIEST_GRACE = [
     cooldown: T.intercessionCd,
     compose: [{
       kind: 'heal', amount: T.intercessionAmount,
+      // THE PARTY, NOT THE PRIEST (R-12, 16 Nov 2026). Grace is the healing tree
+      // of the healing class and its first heal reached only its caster — in a
+      // co-op game, the one heal a second player most expects to receive. 240
+      // is wider than Solace's 140 on purpose: Reckoning heals who stands with
+      // the Priest in the fight, Grace heals who is in the room with her.
+      selection: 'all_in_range', shape: 'point', searchRadius: T.intercessionRadius,
       scaleWith: 'marks', scaleWeight: T.intercessionWeight,
     }],
     ranks: R,

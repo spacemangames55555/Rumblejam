@@ -390,11 +390,21 @@ const HOOKS = {
     // ONLY THE NECROMANCER HAS `bolt` SKILLS. A samurai fixture would measure a
     // pierce item in a class with no projectile and report a working item dead
     // — the same shape as Ingenuity's probe measuring the player's own damage.
-    what: 'total damage across three targets standing in a line',
+    //
+    // AND THE LINE HAS TO BE LONGER THAN THE BOLT ALREADY REACHES. This stood
+    // three targets in a row, which was a fair test while the fixture's bolt
+    // stopped at the first. On 2 Nov 2026 the Necromancer's opener was given
+    // pierce 3 (pace-spec §12.1): it now passes through all three with no item
+    // at all, the probe read the same number with and without one, and a
+    // working modifier was reported SOLD AND DOING NOTHING. Eight in a row is
+    // more than base pierce reaches and no more than base pierce plus the
+    // payload does, so the two runs differ by exactly what the item adds.
+    what: 'total damage across eight targets standing in a line',
     char: NECRO,
     payload: { add: 6 },
     run: ({ g, p }) => {
-      const es = [target(g, p.x + 60, p.y), target(g, p.x + 120, p.y), target(g, p.x + 180, p.y)];
+      const es = [];
+      for (let i = 0; i < 8; i++) es.push(target(g, p.x + 60 + i * 45, p.y));
       if (es.some(e => !e)) return NaN;
       const before = es.reduce((a, e) => a + e.hp, 0);
       tickFor(g, 8, es);
@@ -491,6 +501,13 @@ const HOOKS = {
     run: ({ g, p }) => {
       const e = target(g, p.x + 60, p.y);
       if (!e) return NaN;
+      // AND THE ROOM HAS TO BE ONE WHERE THE TRIANGLE APPLIES. The fixture walks
+      // into the first fight on the map, and since the onboarding ruling that
+      // room is domain-NEUTRAL: every matchup is ×1 there by design, so a
+      // modifier whose whole effect is a better matchup read identical with and
+      // without it. `domainNeutral = 0` is the sim's own override for "the
+      // triangle is on" (tools/tree_dps.mjs uses it for the same reason).
+      g.domainNeutral = 0;
       e.domain = 'spiritual';           // physical beats spiritual; spiritual does not
       const b = e.hp;
       tickFor(g, 8, [e]);

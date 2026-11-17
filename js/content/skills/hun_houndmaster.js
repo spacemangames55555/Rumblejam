@@ -139,7 +139,7 @@ export const HUN_HOUNDMASTER = [
     select: 'self',   // writes the caster, picks no target (§5.3)
     trigger: { kind: 'SELF_THRESHOLD', pct: 65 },
     cooldown: T.feedCd,
-    compose: [{ kind: 'heal', amount: T.feedAmount }],
+    compose: [{ kind: 'heal', amount: T.feedAmount, selection: 'self', shape: 'point' }],
     ranks: R,
   },
   {
