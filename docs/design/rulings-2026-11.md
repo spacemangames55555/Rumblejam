@@ -262,6 +262,16 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-17 — Map 1 leaves a perfect player at level 7, not 8 (17 Nov)
+
+**Found.** `region_test` (red on `main`) clears map 1 perfectly — every enemy dies the tick it spawns — and holds the onboarding promise of 9 Nov: leave map 1 at **level 6–7** with three slots, paying about what it paid then (95 materials on seed 777, 90 on `0xa11ce`, ±15%). It measured level **8** and **119 / 104**. Map 1's payout is one hand-set number, `HORDE_MAP1_YIELD` (`js/arenas.js`), measured rather than derived, and the room had drifted under it.
+
+**Ruled.** `HORDE_MAP1_YIELD` 0.58 → **0.5**.
+
+**After.** A perfect clear leaves at level 7 with 97 / 91 materials. The `map1_bot` kite (no god mode, five seeds) leaves the Wizard, Samurai, Necromancer and Priest at level 6, one Samurai seed at 7, and none of them needed the map-1 catch-up top-up. `level_curve_gate`: map 1 pays 5.44 levels (window 5–6.5) and region 1's six fights carry level 1 to 14.0, where region 2 expects 14. `econ_gate` green.
+
+**Why lower the payout rather than widen the test.** The window is a design promise (three slots and a level-up card after the first fight, not a fourth); the test was right. A normal player now sits at the floor of it — the catch-up rule already guarantees level 6 to anyone short, so nobody leaves map 1 under-levelled.
+
 ## R-16 — The strongest and weakest class meet the roster (17 Nov)
 
 **Found.** With a dummy-count option on the shared ring (`tools/lib/dummy_ring.mjs`, `dummies: 1`), each class against one target and against six at level 59: the **Samurai** was ×1.59 the median alone and ×1.79 in a crowd — the strongest at everything; the **Priest** ×0.66 and ×0.71 — the weakest at everything. (The Witch Doctor and Mage are ×0.70 alone but ×1.0–1.1 in a crowd: an area class that is slow on bosses, which is an identity, not an error — left alone and recorded.)
@@ -309,7 +319,7 @@ Ten gates were red on `main` when this push began. Four turned out to be the tes
 
 - **`patch_gate` (2 → 0, 17 Nov).** The coral check's "nothing to hit" arm was a live horde room: the fixture killed what stood at the door and the wave kept spawning, so the Sundian was planting coral off real hits. The bounty check's fixed seed draws a map with no bounty node, so it ticked a room that had never asked for a mark. The wave is stopped for the first; seeds are walked until a bounty is drawn for the second. A planted defect (coral appearing without a hit) is caught.
 
-Still red, and real or unported: ~~`combat_gate`~~ (it could not stage a Druid pack because the pack was dead — fixed in the game by R-13, and green), `region_test` (3), `tree_dps` (`bard_ensemble`), `browser_test` (a 3,900-line suite written against a roster that no longer exists; it fails at its first character click).
+Still red, and real or unported: ~~`combat_gate`~~ (it could not stage a Druid pack because the pack was dead — fixed in the game by R-13, and green), ~~`region_test` (3)~~ (real — map 1 overpaid; R-17), ~~`tree_dps` (`bard_ensemble`)~~ (real — R-16), `browser_test` (a 3,900-line suite written against a roster that no longer exists; it fails at its first character click).
 
 ## What every earlier measurement was standing on
 

@@ -36,7 +36,7 @@ that has never been seen to fail proves nothing. When you add a check, break
 the thing on purpose and watch it go red.
 
 **Decisions are written down.** `docs/design/rulings-2026-11.md` holds every
-balance call made in this push (R-1 … R-11), each with the measurement behind
+balance call made in this push (R-1 … R-17), each with the measurement behind
 it, and the owner's four instructions (U-1 … U-4). Read it before changing a
 number it set. `docs/GDD.md` is the design; `docs/KNOWN-DEFECTS.md` is what is
 known to be wrong.
@@ -185,12 +185,18 @@ Full text and measurements: `docs/design/rulings-2026-11.md`.
 | R-9 | Every monster is drawn in code until it is painted. |
 | R-10 | The Savage's cascade pays a bounded amount. |
 | R-11 | The Necromancer is put on the roster's scale. |
+| R-12 | Ten heals say who they reach (eight self, two party). |
+| R-13 | Summoned animals live long enough to matter. |
+| R-14 | A player can see their own attacks (skill FX at play scale). |
+| R-15 | A hit costs the same share of your health in regions 1–4. |
+| R-16 | The strongest (Samurai) and weakest (Priest) class meet the roster; Bard's Ensemble tree raised. |
+| R-17 | Map 1 leaves a perfect player at level 7, not 8. |
 
 ---
 
 ## 5. The gates that are red on `main`
 
-Ten were red when this push began. None was caused by it. Each was either a
+Ten were red when this push began; one is left (`browser_test`, an unported suite). None was caused by it. Each was either a
 real finding or a broken test, and the difference matters — a test that
 reports working things as broken teaches everyone to ignore it.
 
@@ -208,12 +214,12 @@ the game:
 | `patch_gate` (2) | A coral planted with nothing to hit; no bounty mark in 20 s | Both fixtures. The "nothing to hit" room was a live horde room that kept spawning; the bounty check's seed draws a map with no bounty node. |
 | `tree_dps` | `bard_ensemble` is −61% of its own class | Real, balance: its damage ×1.25 (R-16), now −51%. |
 | `rider_gate` | (went red during the Necromancer retune) | Its splash check could not tell splash from a piercing bolt. Stricter now. |
+| `region_test` (3) | A perfect map 1 leaves at level 8, paying 119 / 104 materials | Real: map 1's hand-set payout had drifted. `HORDE_MAP1_YIELD` 0.58 → 0.5 (R-17): level 7, 97 / 91. |
 
 **Still red:**
 
 | Gate | What it says | What it is |
 |---|---|---|
-| `region_test` (3) | Map 1 leaves one seed at level 8 where 6–7 is wanted; two payout figures off | The expectation predates the level curve of R-7. Re-derive the expectation or retune map 1. |
 | `browser_test` (11) | Every case fails clicking a character card | **Broken test.** A 3,900-line browser suite written against a roster that no longer exists (`bulwark`, `facet`, `vesper`…). Porting it is its own job. |
 | `trait_gate` | Green today, and should not be trusted | The Blacksmith's `crystal_infusion` check passes or fails depending on an unrelated Necromancer number that leaks into its control run. |
 
