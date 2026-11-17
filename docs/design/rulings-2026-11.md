@@ -299,10 +299,10 @@ Each is the Wombden's numbers exactly (the objective already scales the keep ×2
 | 4 | Quicksand | speed ×0.5 | Ground that holds you while the lane is drawn. |
 | 5 | Rot Pool | speed ×0.85 and 6 damage/s | Do not fight in it. |
 | 6 | Black Ice | you cannot stop: let go and you keep going | Ground you cannot stop on. |
-| 7 | Riptide | a 120 u/s current along the patch's heading, resisted by Grit like a pull | Water that carries you. |
+| 7 | Riptide | a 120 u/s current along the patch's heading, resisted by Defense like a pull | Water that carries you. |
 | 8 | Bushfire | a 90-wide burning band sweeps the room in 14 s, rests 6 s, its entry edge glows 2 s before it comes; 8 damage/s | A front that moves across the room. |
 
-Damage is × the region's damage multiplier, so a second in the ground costs about the same share of health everywhere, and it is the level's **true damage** (as the storm objective's burn): no dodge, no Grit, and **no i-frames**. Routed through the normal hit path first, each quarter-second tick handed out 0.3 s of invulnerability, and standing in bloodmire made a body immune to the horde — `hazard_gate` now fails on that.
+Damage is × the region's damage multiplier, so a second in the ground costs about the same share of health everywhere, and it is the level's **true damage** (as the storm objective's burn): no dodge, no Defense, and **no i-frames**. Routed through the normal hit path first, each quarter-second tick handed out 0.3 s of invulnerability, and standing in bloodmire made a body immune to the horde — `hazard_gate` now fails on that.
 
 **Scope, on purpose.** Players only: enemies cross untouched, so hazards change where you stand and how you route and never how fast the horde arrives, and no pace, density or level-curve measurement moved. Plain fights only (combat, elite, cursed): not region 1's map 1, which teaches the wind-up alone; not objective rooms, which already say where to stand; not sieges. Placement draws from its own sub-stream, never the sim's RNG, and keeps each patch off the drop point, off the walls and off the other patches. The movement half is one function, `hazardMoveAt`, called by the host's movement step and by a guest's own prediction on the patch list the guest already receives, for Deep Winter's reason.
 
