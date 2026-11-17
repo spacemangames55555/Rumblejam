@@ -92,8 +92,11 @@ should play each of these and say whether it is right:
 - Whether the Savage still feels like a Savage after R-10 (its engine now pays
   a bounded amount; see §4).
 - Skill effects: every skill fire draws a class-coloured shape
-  (`js/content/skillfx.js`, 18 shapes × 14 class palettes). Whether they are
-  *good* is a judgment I have not made.
+  (`js/content/skillfx.js`, 18 shapes × 14 class palettes). R-14 made them
+  *visible* at play scale — a filled crescent for melee, larger casts, wider
+  beams. Whether they *feel* good in motion at horde density is a judgment I
+  could not make from frozen frames. `tools/fx_gallery.mjs` draws every shape
+  at a chosen moment for review; painted effect sprites drop in on top.
 
 ### 3.3 Class balance — the rest of the pass
 
@@ -195,6 +198,7 @@ the game:
 | `item_gate` | Two item modifiers are "sold and do nothing" | Both work. One probe lined up three targets for a bolt that already pierces three; the other ran in the one room where damage types are switched off. |
 | `heal_gate` | Ten heals never declared who they reach | A design call nobody had made. Made in ruling R-12: eight are self-heals, two (Priest's Intercession, Bard's Refrain) now reach the party. |
 | `statname_gate` | Three doc lines use a retired stat name | They did. |
+| `patch_gate` (2) | A coral planted with nothing to hit; no bounty mark in 20 s | Both fixtures. The "nothing to hit" room was a live horde room that kept spawning; the bounty check's seed draws a map with no bounty node. |
 | `rider_gate` | (went red during the Necromancer retune) | Its splash check could not tell splash from a piercing bolt. Stricter now. |
 
 **Still red:**
@@ -203,7 +207,6 @@ the game:
 |---|---|---|
 | `tree_dps` | `bard_ensemble` is −61% of its own class | **Real**, balance. |
 | `region_test` (3) | Map 1 leaves one seed at level 8 where 6–7 is wanted; two payout figures off | The expectation predates the level curve of R-7. Re-derive the expectation or retune map 1. |
-| `patch_gate` (2) | A coral planted with nothing to hit; no bounty mark in 20 s | Not investigated. |
 | `browser_test` (11) | Every case fails clicking a character card | **Broken test.** A 3,900-line browser suite written against a roster that no longer exists (`bulwark`, `facet`, `vesper`…). Porting it is its own job. |
 | `trait_gate` | Green today, and should not be trusted | The Blacksmith's `crystal_infusion` check passes or fails depending on an unrelated Necromancer number that leaks into its control run. |
 

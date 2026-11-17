@@ -715,6 +715,13 @@ never loads them:
   side by side, which is how a skill from a different scale is found. Shares
   its fixture with `region_curve` (`tools/lib/dummy_ring.mjs`), so the two
   cannot disagree about the same character.
+- `node --experimental-websocket tools/fx_gallery.mjs out.png [progress]` —
+  **every skill effect, frozen at one moment.** Boots the real game, freezes
+  the sim and draws one effect of every shape the catalog uses, each from a
+  different class, at the same point of its animation, on the real floor at
+  play scale. An effect lasts a third of a second and a screenshot of a fight
+  mostly catches them fading; this is how they are judged. Run it at 0.1, 0.3
+  and 0.7 for the strike, the hold and the fade.
 - `node tools/glyph_gate.mjs [--verbose]` — **every monster is a creature,
   not a polygon, and its picture is where its hitbox is.** No enemy has a
   painted sprite yet, so each is a code-drawn glyph (`js/glyphs.js`). The gate
