@@ -141,10 +141,6 @@ classes side by side. That is how the Necromancer's problem was found.
   implemented. It is one engine feature and eight small pieces of content.
 - **Nests.** A Nest Purge borrows the same nest (`wombden`) and brood
   (`flit`) in every region. No region has its own.
-- **Boss signatures for regions 1–3.** The Cedar Mother, Ixkik and the Hollow
-  King are the same fight at three sizes. The mechanic blocks exist
-  (`BOSS_BLOCKS` in `js/entities/enemies.js`); giving each boss one is a
-  content edit.
 - **Gloom**, region 1's curse, has no effect in the code (KNOWN-DEFECTS #41).
 
 ### 3.5 Open design questions for the owner
@@ -191,6 +187,7 @@ Full text and measurements: `docs/design/rulings-2026-11.md`.
 | R-15 | A hit costs the same share of your health in regions 1–4. |
 | R-16 | The strongest (Samurai) and weakest (Priest) class meet the roster; Bard's Ensemble tree raised. |
 | R-17 | Map 1 leaves a perfect player at level 7, not 8. |
+| R-18 | The region 1–3 bosses each get a signature (saplings; ring then pools; elf-shot then the Wild Hunt). |
 
 ---
 

@@ -262,6 +262,22 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-18 — The first three bosses stop being one fight at three sizes (17 Nov)
+
+**Found.** R-4 made boss mechanics data blocks and regions 4–8 got one each; the Cedar Mother, Ixkik and the Hollow King were left with the shared kit (zone, lane charge, a phase 2 that changes the zone's shape) and nothing else.
+
+**Ruled.** Each gets a signature, chosen so the three teach in order the reads the later bosses combine:
+
+| Boss | Phase 1 | Phase 2 | The read it teaches |
+|---|---|---|---|
+| The Cedar Mother (r1) | — | `adds`: 4 saplings / 10 s, 8 at most | Clear a crowd while the lanes keep coming. Phase 1 stays a lesson in the slam and the lane. |
+| Ixkik, the Blood Moon (r2) | `ring`: 10 bolts / 5 s, speed 220, 10 damage | ring 12 / 4 s at 240; `pools`: 2 / 7 s, r 70, 10 dps, the first under her target | A radial ring is dodged by stepping into a gap, not by running. Then the gap is not safe either. |
+| The Hollow King (r3) | `volley`: aimed fan of 5 over 40° / 3.5 s, speed 300, 10 damage | fan of 7 over 50° / 2.8 s at 320; `adds`: 3 Wild Hunt riders / 9 s, 6 at most | An aimed attack is dodged across its line. `volley` had never been used. |
+
+Damage sits well under each boss's slam (a bolt is 10 against 44 before the region's multiplier); the blocks add reads, not lethality.
+
+**Checked.** `boss_gate` sees every declared block in the phase that declares it (20 checks), and catches a planted dead block (the Hollow King's volley on a 9,000 s cooldown: "declares volley in phase 1 and the world shows nothing"). With the player mortal and the room bot dodging, four classes × two seeds, deaths with and without the blocks: 7/8 and 7/8 (r1), 4/8 and 5/8 (r2), 6/8 and 6/8 (r3); damage taken a second 5.6 → 5.6, 6.2 → 6.2, 9.2 → 10.0. The bot dies to these bosses either way — the survival question of R-15, not something the signatures caused.
+
 ## R-17 — Map 1 leaves a perfect player at level 7, not 8 (17 Nov)
 
 **Found.** `region_test` (red on `main`) clears map 1 perfectly — every enemy dies the tick it spawns — and holds the onboarding promise of 9 Nov: leave map 1 at **level 6–7** with three slots, paying about what it paid then (95 materials on seed 777, 90 on `0xa11ce`, ±15%). It measured level **8** and **119 / 104**. Map 1's payout is one hand-set number, `HORDE_MAP1_YIELD` (`js/arenas.js`), measured rather than derived, and the room had drifted under it.

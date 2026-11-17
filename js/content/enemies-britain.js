@@ -103,9 +103,19 @@ export const GB_BOSS = {
     shape: { kind: 'cone', angle: 120, range: 300 }, damage: 44, domain: 'mental',
   },
   charge: { cd: 5.0, windup: 0.85, dur: 0.75, speed: 660, width: 84, dmg: 44, minDist: 300 },
+  // SIGNATURE — ELF-SHOT, THEN THE HUNT (`volley`, then `adds`; ruling R-18).
+  // In the old belief a sudden pain or a wasting sickness was elf-shot: an
+  // arrow from the hill that no one saw loosed. He looses them in an aimed
+  // fan of five, every three and a half seconds — the first boss that aims
+  // at you rather than at the room, so the answer is to move across his
+  // line, not away from it. At half health the fan widens to seven and the
+  // Wild Hunt rides out of the hill for him, three riders at a time.
+  volley: { cd: 3.5, count: 5, spreadDeg: 40, speed: 300, dmg: 10 },
   p2: {
     atFrac: 0.5, spdMult: 1.2,
     chargeCd: 3.8,
+    volley: { cd: 2.8, count: 7, spreadDeg: 50, speed: 320, dmg: 10 },
+    adds: { cd: 9, count: 3, id: 'gb_hunt_rider', cap: 6 },
     telegraph: {
       windupMs: 470, recoverMs: 400, cooldownMs: 2200, retryFrac: 0.25, recoverFrozen: true,
       shape: { kind: 'circle', radius: 190 }, damage: 40, domain: 'mental',
