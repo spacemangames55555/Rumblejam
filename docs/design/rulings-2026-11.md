@@ -236,6 +236,32 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Ruled.** Eight are self-heals by name and by trigger, and now say so (`selection: 'self'`, `shape: 'point'`): Second Wind, Gathering Breath, Mend, Quiet the Body, Arcane Recovery, Brine Draught, Mend the Seam, Feed the Pack. Two are the first heal of a support tree and reach the party: the Priest's **Intercession** (everyone within 240) and the Bard's **Refrain** (everyone within 220). In a co-op game the healing class's first heal healing only the healer is the one case a second player would call a bug. 240 is wider than Solace's 140 on purpose — Reckoning heals who is fighting beside the Priest, Grace heals who is in the room. Amounts and cooldowns are unchanged.
 
+## R-13 — Summoned animals live long enough to matter (17 Nov)
+
+**Found.** `combat_gate` could not stage a Druid pack, and the reason was not the test: `tools/minion_uptime.mjs` (new) measured the Druid's wolf, bear and hawk standing for **15–67% of a room**, falling every region. Enemy damage rides the world axis (×6.34 by region 8); an animal's health did not keep up, a region-8 hawk died in about two hits, and then waited 23 seconds to come back. Three things made it worse than the numbers alone: a minion took a landmark's telegraphed slam in full (a zone is a question asked of the *player's* feet — a wolf stands in it because standing next to what it bites is its whole job); a taunting animal was hit by every taunted enemy on that enemy's own clock, so the bear's taunt was the quickest way to lose the bear; and the Hunter's revive times were typed in seconds into a field read as milliseconds, so its hounds came back in **seven thousandths of a second** — effectively immortal, the opposite failure.
+
+**Ruled.**
+
+- A minion takes **25%** of a telegraphed hit (`CONFIG.MINION_TELEGRAPH_TAKEN`). Contact damage is untouched.
+- One contact hit per **1.5 s** per minion, from whichever enemy throws it — the taunt path now shares the window the other path always had.
+- The Summons stat raises a minion's health at **twice** the rate it raises damage (`ingenuityHpMult`), so a pack's health grows across a run the way a character's body does through cards.
+- Druid: wolf 34 → 45, bear 78 → 100, hawk 20 → 30 health; revive `15000 + 4000·(N−1)` → **`6000 + 2000·(N−1)`** ms (GDD §8.5 updated).
+- Hunter: revive 7 → **7000** ms, 1.5 → 1500; falcon 6 → 6000. Hound 34 → 45 health, falcon 26 → 34.
+
+**And then the Druid had to come down**, because it had been tuned — by accident — against a pack that was dead most of the time. With animals standing it read ×2.2 the median on the ring and killed Megalania in 80 s against a 145 s median. Zeroing parts one at a time located it: of 432 at level 41, the animals' bites carried ~90, the pack engine (on every Wild Kin skill) ~75, the Druid's own kit ~265. So: bites ×0.6 (wolf 7 → 4, bear 12 → 7, hawk 9 → 5.5), pack engine contribution 0.48 → **0.2**, Thornwall 14 → 8.5, and Cutting Back 13 → 11 (the highest tier-1 strike in the game, and what kept a level-5 Druid at +48% of the early-game anchor).
+
+**After.**
+
+| | Before | After |
+|---|---|---|
+| Druid animals standing, regions 2 / 5 / 8 | 15–37% / 34–67% / 19–23% | 78–100% / 72–92% / 48–67% |
+| Hunter animals standing | 100% (the revive bug) | 66–77% / 75–76% / 49–65% |
+| Druid on the ring | ×1.9 (×2.2 mid-change) | ×1.27–1.52 |
+| Druid boss time-to-kill, regions 2 / 5 / 8 | — | ×0.84 / 1.0 / 0.74 of the median |
+| Druid real-room clear rate | — | 6.9 / 9.8 / 5.9 kills a second against medians 6.6 / 9.2 / 5.8 |
+
+**Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
+
 ## Four red gates that were broken tests, and what each was hiding (16 Nov)
 
 Ten gates were red on `main` when this push began. Four turned out to be the test, not the game — and three of those were also reporting working things as broken, which is its own kind of harm: a list of "dead" skills nobody believes.
@@ -245,7 +271,7 @@ Ten gates were red on `main` when this push began. Four turned out to be the tes
 - **`statname_gate` (1 → 0).** Three lines of prose used a stat's retired label.
 - **`rider_gate`** — see R-11 above.
 
-Still red, and real or unported: `combat_gate` (it cannot stage a Druid pack because the pack is dead — `tools/minion_uptime.mjs` was written to measure that, and it is the next patch), `patch_gate` (2), `region_test` (3), `tree_dps` (`bard_ensemble`), `browser_test` (a 3,900-line suite written against a roster that no longer exists; it fails at its first character click).
+Still red, and real or unported: ~~`combat_gate`~~ (it could not stage a Druid pack because the pack was dead — fixed in the game by R-13, and green), `patch_gate` (2), `region_test` (3), `tree_dps` (`bard_ensemble`), `browser_test` (a 3,900-line suite written against a roster that no longer exists; it fails at its first character click).
 
 ## What every earlier measurement was standing on
 

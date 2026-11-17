@@ -77,7 +77,11 @@ export const ENGINE_SCALE = {
   drench:  { max: 14, hard: false, contribution: 0.49, src: "12 per enemy, uncapped room-wide sum" },
   shift:   { max: 8,  hard: false, contribution: 0.48, src: "domainShifts per room, no clamp" },
   marks:   { max: 7,  hard: false, contribution: 0.49, src: "one per marked enemy, no clamp" },
-  pack:    { max: 6,  hard: false, contribution: 0.48, src: "live minions; MINION_CAP_PER_PLAYER 64 is a runaway backstop, not a design cap" },
+  // 0.48 -> 0.2 (R-13, 16 Nov 2026). The Druid's damage was tuned, by
+  // accident, against a pack that was dead most of every fight; once animals
+  // stood, this engine — on every Wild Kin skill — took the class from x1.9
+  // to x2.2 the median on the ring.
+  pack:    { max: 6,  hard: false, contribution: 0.2, src: "live minions; MINION_CAP_PER_PLAYER 64 is a runaway backstop, not a design cap" },
   armor:   { max: 25, hard: false, contribution: 0.50, src: "max(0, Grit); Grit has no ceiling" },
 };
 

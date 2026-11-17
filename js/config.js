@@ -84,7 +84,17 @@ export const CONFIG = {
   MINION_HEEL_RANGE: 70,       // with nothing to fight, this close to the owner is close enough
   MINION_ORBIT_RATE: 1.6,      // rad/s for orbiters
   MINION_ORBIT_LERP: 8,        // how hard an orbiter corrects toward its station
-  MINION_CONTACT_CD: 1,        // s between contact hits from one enemy onto one minion
+  MINION_CONTACT_CD: 1.5,      // s between contact hits onto one minion (1 until R-13: a body in a crowd took a full hit every second)
+  // A TELEGRAPHED HIT IS A QUESTION ASKED OF THE PLAYER'S FEET, and a minion
+  // cannot answer it. A zone fills, the player reads it and steps out; a wolf
+  // stands in it, because standing next to what it is biting is its whole
+  // behaviour. Taking the hit in full, the pack was deleted by the first
+  // landmark circle of every late room (region 8's are 216-292 a hit against
+  // a 100-health wolf) and then sat out a 23-second revive: measured, the
+  // Druid's beasts stood 19-23% of a region-8 room (R-13, 16 Nov 2026).
+  // So a minion takes this share of a telegraphed hit. Contact damage is
+  // untouched: a body that walks into a crowd pays what the crowd deals.
+  MINION_TELEGRAPH_TAKEN: 0.25,
   // A pack reads as a pack at roughly 3 body-widths apart; minion radius is 10,
   // so bodies touch at 20 and this leaves daylight between them without
   // scattering them off the target. The force is well under MINION_SPEED so

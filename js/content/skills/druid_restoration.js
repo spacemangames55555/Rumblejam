@@ -52,7 +52,7 @@
 // capstones, symmetric.
 
 export const TUNING = {
-  cuttingDamage: 13, cuttingReach: 118, cuttingArc: 1.8, cuttingCd: 1200,
+  cuttingDamage: 11, cuttingReach: 118, cuttingArc: 1.8, cuttingCd: 1200,   // was 13, the highest tier-1 strike in the game (R-13)
   cuttingMend: 4,
   tendingWeight: 0.15,
 

@@ -24,9 +24,9 @@ export const TUNING = {
   whistleDamage: 5, whistleReach: 100, whistleArc: 1.6, whistleRadius: 126,
   whistleCount: 1, whistleCd: 1200,
   // tier 2 — Hound
-  houndHp: 34, houndRadius: 12, houndSpawn: 54, houndAtkCd: 1150,
+  houndHp: 45, houndRadius: 12, houndSpawn: 54, houndAtkCd: 1150,
   houndDamage: 4, houndArc: 1.6, houndReach: 50, houndOrbit: 62,
-  houndReviveBase: 7, houndRevivePer: 1.5, houndCd: 4000,
+  houndReviveBase: 7000, houndRevivePer: 1500, houndCd: 4000,
   // tier 3 — Bay
   bayDamage: 8, bayAngle: 1.8, bayRange: 210, bayRadius: 170, bayCount: 3,
   bayCd: 3200, bayTaunt: 1600,

@@ -140,6 +140,16 @@ const ING_PER_POINT = 0.1;
 export function ingenuityMult(p) {
   return Math.max(0.2, 1 + (p && p.stats ? Math.max(-8, p.stats.ingenuity) : 0) * ING_PER_POINT);
 }
+// HEALTH RIDES THE SAME STAT AT TWICE THE RATE (R-13, 16 Nov 2026). At one rate
+// for both, a summon's health grew x2.7-3.7 across a run while the hit it takes
+// grew x6.34 with the world axis: a wolf that survived six of region 2's hits
+// survived under four of region 8's. A character's own body keeps pace through
+// Vitality and Defense cards; this is the pack's equivalent, on the stat a
+// summoner already takes.
+const ING_HP_PER_POINT = 0.2;
+export function ingenuityHpMult(p) {
+  return Math.max(0.2, 1 + (p && p.stats ? Math.max(-8, p.stats.ingenuity) : 0) * ING_HP_PER_POINT);
+}
 
 // §9.2 magnitude, the summoner's half: `summonBoost` items. Ingenuity is the
 // STAT that scales a minion and this is the ITEM that does, and they are kept
@@ -289,8 +299,8 @@ export function spawnMinions(sim, p, skill, step, rank, origin = null) {
       // instead moved the number and not the shape — a rank-11 wolf still died
       // as fast as a rank-1 one, which is what made depth strictly worse than
       // breadth for the Druid. Ingenuity multiplies the same term.
-      hp: rankedDuration(step.hp, skill, rank) * ingenuityMult(p) * summonHpMult(p),
-      maxHp: rankedDuration(step.hp, skill, rank) * ingenuityMult(p) * summonHpMult(p),
+      hp: rankedDuration(step.hp, skill, rank) * ingenuityHpMult(p) * summonHpMult(p),
+      maxHp: rankedDuration(step.hp, skill, rank) * ingenuityHpMult(p) * summonHpMult(p),
       ttl: step.duration ? step.duration / MS : 0,     // 0 = permanent
       slotted: !!step.slotted,
       revives: !!step.revives,

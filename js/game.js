@@ -4384,8 +4384,16 @@ export class Sim {
       if (e.tauntT > 0 && e.contactCd <= 0 && this._tauntHolderAlive(e.tauntBy) && e.tauntBy.arch !== undefined) {
         const m = e.tauntBy;
         const rr = e.radius + m.radius + CONFIG.MINION_CONTACT_REACH;
-        if (dist2(e.x, e.y, m.x, m.y) <= rr * rr) {
+        // ONE HIT PER WINDOW, WHOEVER THROWS IT (R-13, 16 Nov 2026). A player in
+        // a crowd is hit at most once per `INVULN_AFTER_HIT`; a minion's own
+        // contact check (`contactDamage`, js/minions.js) is paced the same way
+        // by `m.contactCd`. This path was not: every taunted enemy swung on its
+        // own cooldown, so a bear that taunted ten bodies took ten hits per
+        // 0.8 s — the taunt was the fastest way in the game to lose the bear.
+        // It reads and stamps the minion's window now, like the other path.
+        if (!(m.contactCd > 0) && dist2(e.x, e.y, m.x, m.y) <= rr * rr) {
           e.contactCd = CONFIG.CONTACT_COOLDOWN;
+          m.contactCd = CONFIG.MINION_CONTACT_CD;
           MIN.hurtMinion(this, m, e.dmg);
         }
       }

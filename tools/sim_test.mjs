@@ -6135,7 +6135,7 @@ try {
     // wrong slope and two cannot tell a wrong intercept from a wrong slope.
     {
       const step = SK_BY_ID['druid_call_wolf'].compose[0];
-      const want = n => (15000 + 4000 * Math.max(0, n - 1)) / 1000;
+      const want = n => (6000 + 2000 * Math.max(0, n - 1)) / 1000;
       const rows = [1, 2, 3, 4, 6].map(n => [n, reviveSeconds(step, n)]);
       const bad = rows.filter(([n, got]) => Math.abs(got - want(n)) > 1e-9);
       if (!bad.length) {
@@ -6146,10 +6146,10 @@ try {
       // slope and intercept checked separately — a curve can have the right
       // first point and the wrong step, which is exactly what one sample misses
       const slope = rows[1][1] - rows[0][1];
-      if (Math.abs(slope - 4) < 1e-9) ok(`each animal past the first adds 4 s (slope from a 3+ point curve)`);
-      else fail(`per-animal step is ${slope}s, want 4s`);
-      if (Math.abs(rows[0][1] - 15) < 1e-9) ok('a lone animal costs the base 15 s, with no per-animal term applied');
-      else fail(`a pack of one costs ${rows[0][1]}s, want 15s — the (n-1) term is missing`);
+      if (Math.abs(slope - 2) < 1e-9) ok(`each animal past the first adds 2 s (slope from a 3+ point curve)`);
+      else fail(`per-animal step is ${slope}s, want 2s`);
+      if (Math.abs(rows[0][1] - 6) < 1e-9) ok('a lone animal costs the base 6 s, with no per-animal term applied');
+      else fail(`a pack of one costs ${rows[0][1]}s, want 6s — the (n-1) term is missing`);
     }
 
     // ROW 2: tokens render per-player, and the rule is derived from tree data
@@ -6192,8 +6192,8 @@ try {
 
   // -- Druid: the pack, and THE REVIVE COST --
   {
-    // 150s, not 60. §8.5's revive curve is 15 s at one animal and 23 s at
-    // three, so a 60-second window could see two animals die and legitimately
+    // 150s, not 60. §8.5's revive curve was 15 s at one animal and 23 s at
+    // three (6 s and 10 s since R-13), so a 60-second window could see two animals die and legitimately
     // report "none revived" — the window was sized for the first-guess 4 s
     // curve and became too short the moment the curve became correct.
     const { g, p } = armTree('toh_druid', 'druid_beasts', { level: 42 });

@@ -17,6 +17,7 @@
 import { inZone } from './compose.js';
 import { hurtMinion } from './minions.js';
 import { domainMult } from './domains.js';
+import { CONFIG } from './config.js';
 // ALL_ENEMY_DEFS, not ENEMIES: region populations are registered in the same
 // table and must be covered by the same assertions. Reading the base twelve
 // here would have let a region enemy ship with a 200ms wind-up unchecked.
@@ -298,7 +299,7 @@ function resolveTelegraph(sim, e, t) {
     for (const m of p.minions || []) {
       if (m.down || m.dead || !(m.hp > 0)) continue;
       if (inZone(z, m.x, m.y, m.radius) && zoneSees(sim, z, m.x, m.y)) {
-        hurtMinion(sim, m, (e.telDamage ?? t.damage) * domainMult(z.domain, null));
+        hurtMinion(sim, m, (e.telDamage ?? t.damage) * domainMult(z.domain, null) * CONFIG.MINION_TELEGRAPH_TAKEN);
       }
     }
   }

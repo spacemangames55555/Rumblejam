@@ -30,20 +30,23 @@ export const TUNING = {
   // the rank rule and not the constant. Reverted to the first guesses now that
   // rankedDuration scales them.
   // tier 2 — Call Wolf (the first animal)
-  wolfHp: 34, wolfRadius: 11, wolfDamage: 7, wolfReach: 48, wolfArc: 1.5,
+  wolfHp: 45, wolfRadius: 11, wolfDamage: 4, wolfReach: 48, wolfArc: 1.5,
   wolfAtkCd: 950, wolfSpawnRadius: 48, wolfCd: 3000,
   wolfTrigRadius: 320, wolfTrigCount: 1,
-  // THE REVIVE CURVE, from §8.5: 15000 + 4000 x (totalAnimals - 1), measured
-  // against animals OWNED. One animal is 15 s; three is 23 s; six is 35 s.
-  // Going wide has a price at the moment it matters.
-  reviveBase: 15000, revivePerAnimal: 4000,
+  // THE REVIVE CURVE, from §8.5: 6000 + 2000 x (totalAnimals - 1), measured
+  // against animals OWNED. One animal is 6 s; three is 10 s; six is 16 s.
+  // Going wide has a price at the moment it matters. It was 15000 + 4000 until
+  // R-13 (16 Nov 2026): measured in real rooms, the pack stood 15-67% of a
+  // fight, and a region-8 hawk died in two hits and waited 23 s to return.
+  // Health came up with it (wolf 34 -> 45, bear 78 -> 100, hawk 20 -> 30).
+  reviveBase: 6000, revivePerAnimal: 2000,
   // tier 3 — Bramble
   brambleDamage: 5, brambleRadius: 130, brambleDuration: 4500, brambleTickMs: 500,
   brambleSlowMult: 0.6, brambleSlowDur: 1400, brambleCd: 6500, brambleTrigCount: 3,
   // tier 4 — Pack Bond (passive)
   bondWeight: 0.63,
   // tier 5 — Call Bear
-  bearHp: 78, bearRadius: 15, bearDamage: 12, bearReach: 60, bearArc: 1.8,
+  bearHp: 100, bearRadius: 15, bearDamage: 7, bearReach: 60, bearArc: 1.8,
   bearAtkCd: 1500, bearSpawnRadius: 56, bearCd: 7000, bearTaunt: 2200,
   bearTrigRadius: 240, bearTrigCount: 3,
   // tier 6 — Maul
@@ -51,7 +54,7 @@ export const TUNING = {
   // tier 7 — Rejuvenate
   rejuvAmount: 16, rejuvRadius: 260, rejuvCd: 9000, rejuvPct: 55,
   // tier 8 — Call Hawk
-  hawkHp: 20, hawkRadius: 8, hawkDamage: 9, hawkSpeed: 520, hawkRange: 280,
+  hawkHp: 30, hawkRadius: 8, hawkDamage: 5.5, hawkSpeed: 520, hawkRange: 280,
   hawkAtkCd: 1000, hawkOrbit: 74, hawkCd: 6000, hawkTrigRange: 300,
   // tier 9 — Stampede
   stampedeDamage: 19, stampedeWidth: 66, stampedeLength: 340, stampedeCd: 8500,
