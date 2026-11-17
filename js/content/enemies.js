@@ -23,7 +23,7 @@
 // shape drives the silhouette in render.js; behavior keys are implemented in
 // entities/enemies.js.
 
-import { ALL_REGION_ENEMIES } from './regions-enemies.js';
+import { ALL_REGION_ENEMIES, ALL_REGION_NESTS } from './regions-enemies.js';
 
 export const ENEMIES = [
   { id: 'skulker', domain: 'physical',   name: 'Skulker',   behavior: 'chaser',   hp: 8,  spd: 125, dmg: 4,  radius: 14, mats: 1,
@@ -77,7 +77,8 @@ export const ENEMIES = [
 // assertion covers it automatically, which is the point of not keeping a second
 // table. The base twelve keep index 0..11 so ENEMY_INDEX, which goes on the
 // wire as an i8, is unchanged for them.
-export const ALL_ENEMY_DEFS = [...ENEMIES, ...ALL_REGION_ENEMIES];
+// Region nests (Nest Purge's keep, R-21) last, so no earlier index moves.
+export const ALL_ENEMY_DEFS = [...ENEMIES, ...ALL_REGION_ENEMIES, ...ALL_REGION_NESTS];
 
 export const ENEMY_BY_ID = Object.fromEntries(ALL_ENEMY_DEFS.map(e => [e.id, e]));
 export const ENEMY_INDEX = Object.fromEntries(ALL_ENEMY_DEFS.map((e, i) => [e.id, i]));

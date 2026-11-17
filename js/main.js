@@ -38,6 +38,7 @@ import { ENEMIES, ALL_ENEMY_DEFS } from './content/enemies.js';
 import { ALL_BOSS_DEFS } from './content/bosses.js';
 import { bossForRegion, TOTAL_REGIONS, REGION_BY_INDEX, REGIONS } from './regions.js';
 import { telegraphRevealMsFor, playerSpdMultFor, sightMultFor } from './nodebehaviour.js';
+import { hazardMoveAt, pullResistFor, HAZARD_IDS } from './hazards.js';
 import { unpackTelZones } from './telegraphs.js';
 import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
 import { projSpriteFor, PYLON_SPRITE } from './content/sprites.js';
@@ -1943,6 +1944,8 @@ function viewFromSnaps(dtFrame) {
     beams: (s1.beams || []).map(bm => ({ x: bm.x, y: bm.y, a: bm.a, len: bm.len, w: bm.w })),
     hazards: (s1.hazards || []).map(hz => hz[0] === 's'
       ? { type: 'spikes', x: hz[1], y: hz[2], w: hz[3], h: hz[4], state: hz[5] }
+      : hz[0] === 'g' ? { type: 'region', id: HAZARD_IDS[hz[1]], x: hz[2], y: hz[3], r: hz[4], a: hz[5] }
+      : hz[0] === 'f' ? { type: 'region', id: HAZARD_IDS[hz[1]], front: 1, x: hz[2], w: hz[3], on: hz[4], warn: hz[5], dir: hz[6] }
       : { type: 'lava', x: hz[1], y: hz[2], r: hz[3] }),
     boss: s1.boss,
     auras: (s1.auras || []).map(a => ({ idx: a[0], r: a[1] })),
@@ -1967,9 +1970,16 @@ function predictSelf(dtFrame, serverP, chr) {
   // The room's curse can slow the body (Deep Winter). The host applies the
   // same multiplier from the same function; without it here a guest predicts
   // at full speed and is pulled back every snapshot for the whole room.
-  const spd = Math.max(60, CONFIG.BASE_SPEED * (1 + tempo / 100) * playerSpdMultFor(app.arena && app.arena.curse));
-  pr.x += lastMove.mx * spd * dtFrame;
-  pr.y += lastMove.my * spd * dtFrame;
+  // The region's ground (js/hazards.js): the same function the host's
+  // movement step calls, on the patch list the guest has from st.arena.
+  const hz = hazardMoveAt(app.arena && app.arena.hazards, pr.x, pr.y);
+  const spd = Math.max(60, CONFIG.BASE_SPEED * (1 + tempo / 100) * playerSpdMultFor(app.arena && app.arena.curse)) * hz.spd;
+  let mx = lastMove.mx, my = lastMove.my;
+  if (mx !== 0 || my !== 0) { pr.slideX = mx; pr.slideY = my; }
+  else if (hz.ice && (pr.slideX || pr.slideY)) { mx = pr.slideX; my = pr.slideY; }
+  const resist = (hz.dx || hz.dy) ? pullResistFor(chr && chr.trait && chr.trait.key, app.meta ? app.meta.stats.grit : 0) : 0;
+  pr.x += (mx * spd + hz.dx * resist) * dtFrame;
+  pr.y += (my * spd + hz.dy * resist) * dtFrame;
   // clamp to the CURRENT arena's bounds (obstacles reconcile via the server)
   const aw = app.arena ? app.arena.w : 1280, ah = app.arena ? app.arena.h : 720;
   pr.x = clamp(pr.x, WALL + radius, aw - WALL - radius);

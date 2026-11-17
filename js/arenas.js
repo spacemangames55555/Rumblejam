@@ -10,6 +10,8 @@
 import { subRng } from './rng.js';
 import { CONFIG } from './config.js';
 import { biomeFor } from './biomes.js';
+import { placeHazards } from './hazards.js';
+import { REGION_BY_INDEX } from './regions.js';
 
 // ---------------- the five arena shapes ----------------
 // Each is a spotlight for a different build family; every floor's fight
@@ -700,10 +702,14 @@ export function buildArena(seed, regionIndex, node, playerCount = 1) {
   }
   const t = ARENA_TEMPLATES[node.template];
   const rng = subRng(seed, 'arena', regionIndex, node.id);
+  const obstacles = t.obstacles(rng).map(o => scaleRect(o, kx, ky));
+  const region = REGION_BY_INDEX[regionIndex];
   return {
     w: bounds.w, h: bounds.h, name: t.name,
-    obstacles: t.obstacles(rng).map(o => scaleRect(o, kx, ky)),
-    hazards: t.hazards(rng).map(h => scaleHazard(h, kx, ky)),
+    obstacles,
+    // the template's own spikes and lava, then the REGION's ground (js/hazards.js)
+    hazards: t.hazards(rng).map(h => scaleHazard(h, kx, ky))
+      .concat(placeHazards(seed, regionIndex, node, region && region.hazard, bounds.w, bounds.h, obstacles)),
     mutations: null,
     biome: biomeId,
   };

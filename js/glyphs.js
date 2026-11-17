@@ -556,6 +556,24 @@ export const GLYPHS = {
   ] },
 };
 
+// THE EIGHT REGION NESTS (ruling R-21) share one drawing, in their own
+// region's colour, until each is painted: a low mound, rooted at its foot,
+// split at the crown, with a lit mouth — a place things come OUT of, where the
+// Wombden is a creature. (They first borrowed the Wombden's star outright,
+// and glyph_gate found it 63% the shape of Central Africa's Elder Mask.)
+// Listed by sprite id rather than imported, because this module must not
+// import content; glyph_gate checks the list against the content.
+const NEST_GLYPH = { anim: 'pulse', parts: [
+  spoke(D, 62, 0.55, 1.3, 13), spoke(D, 90, 0.6, 1.36, 12), spoke(D, 118, 0.55, 1.3, 13),
+  spoke(D, 25, 0.6, 1.18, 11), spoke(D, 155, 0.6, 1.18, 11),
+  e(B, 0, 0.18, 1.12, 0.74),
+  spoke(L, 245, 0.45, 1.05, 16), spoke(L, 270, 0.45, 1.18, 14), spoke(L, 295, 0.45, 1.05, 16),
+  e(D, 0, 0.26, 0.42, 0.3),
+  e(A, 0, 0.3, 0.2, 0.13),
+] };
+export const NEST_GLYPHS = ['enemy.pnw_burl', 'enemy.xib_cave_mouth', 'enemy.gb_fairy_mound', 'enemy.eg_sealed_tomb', 'enemy.caf_mire_spring', 'enemy.ru_kurgan', 'enemy.ind_spawning_reef', 'enemy.aus_dingo_den'];
+for (const id of NEST_GLYPHS) GLYPHS[id] = NEST_GLYPH;
+
 // ---------------------------------------------------------------- drawing
 
 const toneCache = new Map();

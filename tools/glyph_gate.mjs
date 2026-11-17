@@ -30,8 +30,8 @@
 //
 // Usage: node tools/glyph_gate.mjs [--verbose]
 import { readFileSync } from 'fs';
-import { GLYPHS, GLYPH_FRAMES, GLYPH_CELL_REACH, GLYPH_ANIMS, glyphPose, glyphFrame, hasGlyph } from '../js/glyphs.js';
-import { REGION_ENEMIES } from '../js/content/regions-enemies.js';
+import { GLYPHS, GLYPH_FRAMES, GLYPH_CELL_REACH, GLYPH_ANIMS, glyphPose, glyphFrame, hasGlyph, NEST_GLYPHS } from '../js/glyphs.js';
+import { REGION_ENEMIES, ALL_REGION_NESTS } from '../js/content/regions-enemies.js';
 import { ENEMY_BY_ID } from '../js/content/enemies.js';
 import { PYLON_SPRITE } from '../js/content/sprites.js';
 import { REGIONS } from '../js/regions.js';
@@ -50,7 +50,7 @@ const SHARED = [
 ];
 const groups = Object.entries(REGION_ENEMIES).map(([key, pop], i) => ({
   name: (REGIONS[i] && REGIONS[i].name) || key,
-  units: [...pop.enemies, pop.boss].map(d => ({ id: d.id, spriteId: d.spriteId, def: d })),
+  units: [...pop.enemies, pop.boss, ...(pop.nest ? [pop.nest] : [])].map(d => ({ id: d.id, spriteId: d.spriteId, def: d })),
 }));
 groups.push({ name: 'in every region', units: SHARED });
 const wanted = new Map();
@@ -70,6 +70,14 @@ for (const g of groups) {
   const unbriefed = Object.keys(GLYPHS).filter(k => typeof notes[k] !== 'string' || !notes[k].trim());
   if (!unbriefed.length) ok('every glyph has a silhouette note for the painted sprite that will replace it');
   else bad(`glyph(s) with no silhouette note in docs/silhouettes.json: ${unbriefed.join(', ')}`);
+}
+
+// The region nests (R-21) borrow the Wombden's drawing through a list in
+// glyphs.js, which cannot import content; the list and the content are one set.
+{
+  const want = ALL_REGION_NESTS.map(n => n.spriteId).sort().join(','), got = [...NEST_GLYPHS].sort().join(',');
+  if (want === got) ok(`the ${NEST_GLYPHS.length} region nests' glyph list matches the nests the content defines`);
+  else bad(`NEST_GLYPHS [${got}] is not the content's nests [${want}]`);
 }
 
 // ---- 2. well-formed -------------------------------------------------------

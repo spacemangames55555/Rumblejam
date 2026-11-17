@@ -242,7 +242,12 @@ for (const { d, r } of rows) {
   // Rooms are what add enemies. Each seed rolls a different arena from the same
   // setting, so summing over ROOMS grows the denominator without changing what
   // is being asked.
-  const XP_ROOMS = 5;
+  // 5 → 15 rooms (17 Nov 2026). At five the sample's own noise was 9% against
+  // this 10% band on a working game (Gentle 0.91, Measured 1.00 on main), and
+  // the region ground hazards (R-20), by changing which enemies the bot reaches
+  // first, tipped it to 10.0%. At fifteen the same game reads 2–3%, and a
+  // planted XP-by-difficulty defect of +15% a step reads 38% and fails.
+  const XP_ROOMS = 15;
   const xpRows = DIFFICULTIES.map(d => {
     const runs = Array.from({ length: XP_ROOMS }, (_, i) => room(d.id, SEED + i * 7919, SECONDS * 2))
       .filter(r => !r.noRoom);

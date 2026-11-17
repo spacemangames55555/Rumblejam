@@ -63,6 +63,7 @@ const regionOf = {};
 for (const [regionId, pop] of Object.entries(REGION_ENEMIES)) {
   const name = REGION_BY_ID[regionId]?.name || regionId;
   for (const e of pop.enemies) regionOf[e.id] = name;
+  if (pop.nest) regionOf[pop.nest.id] = name;     // Nest Purge's keep (R-21)
   regionOf[pop.boss.id] = name;
 }
 
