@@ -111,9 +111,15 @@ Measured and not yet fixed:
 - **Crowd-clearing barely grows with level** for about half the roster, so
   the horde cannot grow across the run. `HORDE_REGION_RATE` in `js/arenas.js`
   was fitted around that and should be re-measured once it is fixed.
-- **Survival has not been measured.** Everything above is output, in god
-  mode. `node tools/region_pace.mjs --mortal` is the tool; nobody has yet
-  asked whether each class *lives* through each region.
+- **Survival is the biggest open question, and I could not answer it.** With
+  the player mortal (`node tools/region_pace.mjs --mortal`), the room bot dies
+  in most rooms of regions 1–5 with most classes; the tanky and self-healing
+  ones (Necromancer, Savage, Blacksmith, Priest) live. But the bot dies in
+  *region 1* too, so it cannot tell "too lethal" from "the bot doesn't dodge
+  like a person". R-15 fixed the one thing the arithmetic proves: regions 2–4
+  were hitting 1.2–1.6× harder, relative to health, than region 1. **Play
+  region 1–2 with a fragile class first.** If it is unfair, 45–80% of what
+  kills is telegraphed slams from specials and landmarks.
 - **Summoned animals now live (R-13), at a cost to the Hunter.** The Druid's
   pack stood 15–67% of a room and now stands 48–100%; the Hunter's hounds
   were immortal by a units bug and now die and return on their authored

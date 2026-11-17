@@ -262,6 +262,18 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-15 — A hit costs the same share of your health in regions 1–4 (17 Nov)
+
+**Found while measuring survival.** With the player mortal (`tools/region_pace.mjs --mortal`, the room bot dodging), 10 of 14 classes died in all three region-2 rooms tried, most still died in region 5, and almost none in region 8 — the reverse of a difficulty curve. Damage taken was 45–80% telegraphed slams the bot tries to dodge.
+
+**The arithmetic.** `REGION_DMG_MULT` was `REGION_HP_MULT^0.608`, and `REGION_HP_MULT` tracks *output*. Effective health (health × armour × dodge; median of fourteen classes × four seeds, stat cards spent) grows ×1.80 / 2.54 / 3.48 / 5.53 / 6.79 / 8.62 / 8.31 at the region anchors. Against the old table, a hit cost **1.43× / 1.60× / 1.17×** its region-1 share of a character's health in regions 2 / 3 / 4, and **0.83× / 0.75× / 0.65× / 0.76×** in regions 5–8.
+
+**Ruled.** Regions 2–4 take effective-health growth: `[1.00, 1.80, 2.54, 3.48, 4.56, 5.11, 5.60, 6.34]` (were 2.57 / 4.06 / 4.06). Regions 5–8 are unchanged.
+
+**Why not the whole curve.** Matching all eight would raise regions 5–8 by 21–36%, and I have no evidence a player survives that. I tried to get it: the same survey run with the full health-tracking table shows the bot dying in **region 1** with nearly every class — including the Necromancer, which never died elsewhere — and region 1's multiplier is 1.0 and was not touched. So the bot cannot survive low-level horde rooms in any region, and its death counts cannot separate "too lethal" from "bot too simple". The early fix only makes things easier where the arithmetic says they were harsher than region 1; the late question is open and needs human play or a better bot.
+
+**What the owner should play first:** region 1 maps 2–3 and region 2, with a fragile class (Wizard, Bard, Witch Doctor). If those feel unfair, the problem is the telegraph damage of the specials and landmarks, not the fodder.
+
 ## R-14 — A player can see their own attacks (17 Nov)
 
 U-3's third priority was skill animations. The pipeline was already complete — every active skill sends a fire to the renderer and every one of the 18 effect shapes has a code-drawn, class-coloured drawing (`js/content/skillfx.js`, `js/render.js`). What was wrong is that at play scale most of them could not be seen. Captured in the running game, a Samurai's sword arcs were a faint grey curve, a Priest's attacks barely registered, a Witch Doctor's bolt was a speck. Half of all activations in the game are melee arcs.
