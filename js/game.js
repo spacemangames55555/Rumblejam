@@ -22,6 +22,7 @@ import { ITEMS, ITEM_BY_ID } from './content/items.js';
 import { ENEMIES, ENEMY_BY_ID, ENEMY_INDEX, ELITE_MODS, FLOOR_TABLES, ONBOARDING_TABLE } from './content/enemies.js';
 import { REGION_ENEMIES, telegraphWeight, enemyRole } from './content/regions-enemies.js';
 import { nodePopulation, nodeModifiers, shrineOffer, applyShrine, NODE_TUNING, playerSpdMultFor } from './nodebehaviour.js';
+import { hazardMoveAt, hazardDpsAt, frontAt, pullResistFor, HAZARD_IDS } from './hazards.js';
 import { REGION_BY_INDEX, depthMult, regionHpMult, regionDmgMult, enemyHpAxis, bossForRegion, TOTAL_REGIONS } from './regions.js';
 import { difficultyOf, DEFAULT_DIFFICULTY } from './worldmap.js';
 
@@ -871,6 +872,7 @@ export class Sim {
     this.biome = arena.biome || null;   // cosmetic: the renderer's only input
     this.obstacles = arena.obstacles;
     this.hazards = arena.hazards.map(h => ({ ...h }));
+    this.hazardT0 = this.time;        // a sweeping front's clock (js/hazards.js frontAt)
     this.cleared = false;
     this.hatch = null; this.extract = null;
     this.afterSiege = node.kind === 'siege';
@@ -1047,7 +1049,10 @@ export class Sim {
   _serializeHazardDefs() {
     return (this.hazards || []).map(h => h.type === 'spikes'
       ? { type: 'spikes', x: h.x, y: h.y, w: h.w, h: h.h }
-      : { type: 'lava', x: h.x, y: h.y, r: h.r });
+      : h.type === 'region'
+        // a guest predicts its own movement from these (js/hazards.js)
+        ? (h.front ? { type: 'region', id: h.id, front: 1, dir: h.dir, w: h.w, phase: h.phase } : { type: 'region', id: h.id, x: h.x, y: h.y, r: h.r, a: h.a })
+        : { type: 'lava', x: h.x, y: h.y, r: h.r });
   }
 
   // Budget-curve spawning: rate ramps r0→r1 over rampT, runs for dur seconds
@@ -2552,9 +2557,17 @@ export class Sim {
     spd *= playerSpdMultFor(this.fightMods && this.fightMods.cursed && this.fightMods.cursed.id);
     spd = Math.max(60, spd);
     if (this.carryingRelic(p)) spd *= 0.8; // a relic is heavy: −20% move speed
-    const pullResist = (t.key === 'immovable' || t.key === 'crystal_infusion') ? 0 : CONFIG.ARMOR_K / (CONFIG.ARMOR_K + Math.max(0, p.stats.grit));
-    p.x += (p.mx * spd + p.pullX * pullResist) * dt;
-    p.y += (p.my * spd + p.pullY * pullResist) * dt;
+    const pullResist = pullResistFor(t.key, p.stats.grit);
+    // THE REGION'S GROUND (js/hazards.js, ruling R-20): brush and sand slow
+    // you, a current carries you (Grit resists it as it resists a pull), and on
+    // ice you cannot stop. A guest's prediction calls the same function.
+    const hz = hazardMoveAt(this.hazards, p.x, p.y);
+    spd *= hz.spd;
+    let mx = p.mx, my = p.my;
+    if (mx !== 0 || my !== 0) { p.slideX = mx; p.slideY = my; }
+    else if (hz.ice && (p.slideX || p.slideY)) { mx = p.slideX; my = p.slideY; }
+    p.x += (mx * spd + (p.pullX + hz.dx) * pullResist) * dt;
+    p.y += (my * spd + (p.pullY + hz.dy) * pullResist) * dt;
     p.pullX = p.pullY = 0;
     p.x = clamp(p.x, WALL + p.radius, this.W - WALL - p.radius);
     p.y = clamp(p.y, WALL + p.radius, this.H - WALL - p.radius);
@@ -4429,6 +4442,30 @@ export class Sim {
 
   _tickHazards(dt) {
     if (!this.hazards) return;
+    // THE REGION'S GROUND that hurts (bloodmire, the fae ring, a rot pool, the
+    // bushfire front). On a quarter-second cadence per player, × the region's
+    // damage multiplier, so standing in it costs the same share of health in
+    // every region. A front moves first, so it burns where it now stands.
+    let regionBurn = false;
+    for (const hz of this.hazards) {
+      if (hz.type !== 'region') continue;
+      if (hz.front) { const f = frontAt(hz, this.time - (this.hazardT0 || 0), this.W); hz.x = f.x; hz.on = f.on; hz.warn = f.warn; }
+      regionBurn = true;
+    }
+    if (regionBurn) {
+      for (const p of this.livePlayers()) {
+        if (p.downed) continue;
+        p.hzT = (p.hzT || 0) + dt;
+        if (p.hzT < 0.25) continue;
+        const dps = hazardDpsAt(this.hazards, p.x, p.y);
+        // The LEVEL, not an attacker (as the storm's burn): true damage, so a
+        // tick grants no i-frames — through hurtPlayer's normal path every
+        // quarter-second tick handed out 0.3 s of invulnerability, and standing
+        // in bloodmire made a body immune to the horde.
+        if (dps > 0) this.hurtPlayer(p, dps * p.hzT * regionDmgMult(this.regionIndex), null, { trueDamage: true });
+        p.hzT = 0;
+      }
+    }
     for (const hz of this.hazards) {
       if (hz.type === 'spikes') {
         // spike STRIPS: banded rects on the old safe/warn/fire cycle
@@ -6000,7 +6037,10 @@ export class Sim {
       fx: this.fxBatch || this._emptyFx(),
       hazards: (this.hazards || []).map(h => h.type === 'spikes'
         ? ['s', r(h.x), r(h.y), r(h.w), r(h.h), h.state]
-        : ['l', r(h.x), r(h.y), r(h.r)]),
+        : h.type === 'region'
+          ? (h.front ? ['f', HAZARD_IDS.indexOf(h.id), r(h.x), h.w, h.on ? 1 : 0, h.warn ? 1 : 0, h.dir]
+            : ['g', HAZARD_IDS.indexOf(h.id), h.x, h.y, h.r, h.a])
+          : ['l', r(h.x), r(h.y), r(h.r)]),
       // trait visuals — rendered on every screen (visibility is the trait)
       auras: this._snapAuras(),
       tethers: this._snapTethers(),

@@ -4,6 +4,7 @@
 // Both regions here and the six that follow are the same shape, so adding
 // region three is an entry in REGIONS and nothing else.
 //
+// (`hazard` is built now — js/hazards.js, ruling R-20 — and asserted below.)
 // WHAT IS DATA-ONLY IN THIS PATCH: `enemies`, `boss`, `tileset`, `hazard` and
 // `cursedModifier` name content that does not exist yet. They are declared so
 // the systems around them — node trees, domain skew, depth scaling, saves — can
@@ -14,6 +15,7 @@
 import { DOMAINS } from './domains.js';
 import { REGION_ENEMY_BY_ID, REGION_BOSS_BY_ID, REGION_ENEMIES, enemyRole } from './content/regions-enemies.js';
 import { BOSS_BY_ID, ALL_BOSS_DEFS } from './content/bosses.js';
+import { REGION_HAZARDS } from './hazards.js';
 
 export const CROSS_LINK_CHANCE = 0.45;
 
@@ -446,6 +448,7 @@ function assertRegions() {
       if (!REGION_BOSS_BY_ID[r.boss]) problems.push(`${r.id}: boss "${r.boss}" is not defined in any region population`);
     }
     if (!r.hazard) problems.push(`${r.id}: no hazard`);
+    else if (!REGION_HAZARDS[r.hazard]) problems.push(`${r.id}: hazard "${r.hazard}" is not in js/hazards.js REGION_HAZARDS`);
     if (!r.cursedModifier) problems.push(`${r.id}: no cursed modifier`);
     const sk = r.domainSkew;
     if (!sk || !DOMAINS.includes(sk.primary)) problems.push(`${r.id}: domainSkew.primary ${JSON.stringify(sk && sk.primary)} is not a domain`);

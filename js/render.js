@@ -29,6 +29,7 @@ import { DOMAIN_COLOR } from './domains.js';
 import { clamp, angDiff } from './util.js';
 import { fxSpec, SHAPE } from './content/skillfx.js';
 import { GLYPHS, GLYPH_FRAMES, GLYPH_CELL_REACH, drawGlyph, glyphFrame, hasGlyph } from './glyphs.js';
+import { REGION_HAZARDS } from './hazards.js';
 
 // Minion and soul-token presentation. Rule 14: no inline constants in
 // behaviour code, and a renderer is behaviour code that happens to draw.
@@ -1636,6 +1637,7 @@ export class Renderer {
 
   _drawHazards(ctx, view, inView) {
     for (const hz of view.hazards || []) {
+      if (hz.type === 'region') { this._drawRegionHazard(ctx, hz, view, inView); continue; }
       if (hz.type === 'lava') {
         if (!inView(hz.x, hz.y, hz.r + 10)) continue;
         if (drawSprite(ctx, PROP.lava, hz.x, hz.y, { scale: spriteScaleFor(PROP.lava, (hz.r + 4) * 2) })) continue;
@@ -1678,6 +1680,103 @@ export class Renderer {
         }
       }
     }
+  }
+
+  // THE REGION'S GROUND (js/hazards.js). Code-drawn, one look per hazard, all
+  // of it under the bodies. Decoration is placed by angle from the patch's own
+  // heading, never Math.random, so a patch looks the same every frame and on
+  // every screen.
+  _drawRegionHazard(ctx, hz, view, inView) {
+    const def = REGION_HAZARDS[hz.id];
+    if (!def) return;
+    const t = this.t;
+    if (hz.front) {
+      const H = view.ah || VIEW_H;
+      if (hz.on) {
+        const x0 = hz.x - hz.w / 2;
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = def.color; ctx.fillRect(x0 - 30, 0, hz.w + 60, H);   // smoke ahead and behind
+        ctx.globalAlpha = 0.75 + 0.15 * Math.sin(t * 9);
+        ctx.fillStyle = def.edge; ctx.fillRect(x0, 0, hz.w, H);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffd36b';
+        for (let y = 20, k = 0; y < H; y += 46, k++) {
+          const fx = hz.x + Math.sin(t * 7 + k * 1.7) * hz.w * 0.3;
+          ctx.beginPath();
+          ctx.moveTo(fx - 9, y + 14); ctx.lineTo(fx, y - 12 - 6 * Math.sin(t * 11 + k)); ctx.lineTo(fx + 9, y + 14);
+          ctx.closePath(); ctx.fill();
+        }
+      } else if (hz.warn) {
+        // the last seconds before it comes: its entry edge glows
+        const ex = hz.dir > 0 ? 8 : (view.aw || VIEW_W) - 8;
+        ctx.globalAlpha = 0.35 + 0.35 * Math.sin(t * 10);
+        ctx.fillStyle = def.edge; ctx.fillRect(ex - 8, 0, 16, H);
+        ctx.globalAlpha = 1;
+      }
+      return;
+    }
+    if (!inView(hz.x, hz.y, hz.r + 10)) return;
+    const a0 = (hz.a || 0) * Math.PI / 180;
+    ctx.save();
+    ctx.globalAlpha = hz.id === 'fae_ring' ? 0.4 : 0.82;
+    ctx.fillStyle = def.color;
+    circle(ctx, hz.x, hz.y, hz.r); ctx.fill();
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = def.edge; ctx.lineWidth = 3;
+    if (hz.id === 'black_ice' || hz.id === 'riptide') ctx.setLineDash([14, 8]);
+    circle(ctx, hz.x, hz.y, hz.r); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = def.edge; ctx.strokeStyle = def.edge;
+    if (hz.id === 'undergrowth') {
+      ctx.lineWidth = 2.5;
+      for (let i = 0; i < 9; i++) {
+        const a = a0 + i * 2.39, d = hz.r * (0.25 + 0.6 * ((i * 37) % 10) / 10);
+        const x = hz.x + Math.cos(a) * d, y = hz.y + Math.sin(a) * d, sway = Math.sin(t * 2 + i) * 2;
+        ctx.beginPath(); ctx.moveTo(x - 7, y - 9 + sway); ctx.lineTo(x, y + 4); ctx.lineTo(x + 7 + sway, y - 10); ctx.stroke();
+      }
+    } else if (hz.id === 'bloodmire' || hz.id === 'rot_pool') {
+      ctx.globalAlpha = 0.35 + 0.15 * Math.sin(t * 2);
+      circle(ctx, hz.x, hz.y, hz.r * 0.62); ctx.fill();
+      ctx.globalAlpha = 0.85;
+      for (let i = 0; i < 4; i++) {
+        const ph = (t * 0.6 + i * 0.25) % 1, a = a0 + i * 1.9, d = hz.r * 0.55;
+        ctx.lineWidth = 2;
+        circle(ctx, hz.x + Math.cos(a) * d * (0.4 + 0.5 * ((i * 3) % 4) / 4), hz.y + Math.sin(a) * d * 0.7, 3 + 7 * ph); ctx.stroke();
+      }
+    } else if (hz.id === 'fae_ring') {
+      for (let i = 0; i < 12; i++) {
+        const a = a0 + i * Math.PI / 6;
+        ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 3 + i * 0.9);
+        circle(ctx, hz.x + Math.cos(a) * hz.r * 0.9, hz.y + Math.sin(a) * hz.r * 0.9, 6); ctx.fill();
+      }
+    } else if (hz.id === 'quicksand') {
+      ctx.lineWidth = 2.5; ctx.globalAlpha = 0.7;
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath(); ctx.arc(hz.x, hz.y, hz.r * (0.25 + 0.22 * k), a0 + t * (0.6 + 0.2 * k), a0 + t * (0.6 + 0.2 * k) + 3.6); ctx.stroke();
+      }
+    } else if (hz.id === 'black_ice') {
+      ctx.lineWidth = 2; ctx.globalAlpha = 0.75;
+      for (let i = 0; i < 5; i++) {
+        const a = a0 + i * 1.3, d = hz.r * 0.5, x = hz.x + Math.cos(a) * d * 0.8, y = hz.y + Math.sin(a) * d * 0.8;
+        ctx.beginPath(); ctx.moveTo(x - 12, y + 6); ctx.lineTo(x + 12, y - 6); ctx.stroke();
+      }
+      ctx.globalAlpha = 0.5 + 0.5 * Math.max(0, Math.sin(t * 1.5 + a0));
+      circle(ctx, hz.x + Math.cos(a0) * hz.r * 0.3, hz.y + Math.sin(a0) * hz.r * 0.3, 3); ctx.fill();
+    } else if (hz.id === 'riptide') {
+      // chevrons flowing along the current's heading
+      const ca = Math.cos(a0), sa = Math.sin(a0);
+      ctx.lineWidth = 3;
+      for (let row = -1; row <= 1; row++) for (let k = 0; k < 3; k++) {
+        const s = ((t * 0.5 + k / 3) % 1) * 2 - 1;
+        const along = s * hz.r * 0.7, across = row * hz.r * 0.38;
+        const x = hz.x + ca * along - sa * across, y = hz.y + sa * along + ca * across;
+        ctx.globalAlpha = 0.8 * (1 - Math.abs(s));
+        ctx.beginPath();
+        ctx.moveTo(x - ca * 9 - sa * 9, y - sa * 9 + ca * 9); ctx.lineTo(x + ca * 6, y + sa * 6); ctx.lineTo(x - ca * 9 + sa * 9, y - sa * 9 - ca * 9);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 
   // the extraction portal (fights) / descent portal (post-siege)

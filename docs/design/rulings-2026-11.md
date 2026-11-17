@@ -262,6 +262,31 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-20 — Every region's ground does something (17 Nov)
+
+**Found.** GDD §2.2 rule 3 gives each region "one environmental hazard that changes how players move". All eight were named in `js/regions.js` and none existed.
+
+**Ruled.** One module, `js/hazards.js`, five primitives, eight hazards:
+
+| Region | Hazard | Does | Read |
+|---|---|---|---|
+| 1 | Undergrowth | speed ×0.7 | Kite around the brush, not through it. |
+| 2 | Bloodmire | 5 damage/s | Route around it; do not cross. |
+| 3 | Fae Ring | speed ×0.45 and 2 damage/s | A ring you should not step into. |
+| 4 | Quicksand | speed ×0.5 | Ground that holds you while the lane is drawn. |
+| 5 | Rot Pool | speed ×0.85 and 6 damage/s | Do not fight in it. |
+| 6 | Black Ice | you cannot stop: let go and you keep going | Ground you cannot stop on. |
+| 7 | Riptide | a 120 u/s current along the patch's heading, resisted by Grit like a pull | Water that carries you. |
+| 8 | Bushfire | a 90-wide burning band sweeps the room in 14 s, rests 6 s, its entry edge glows 2 s before it comes; 8 damage/s | A front that moves across the room. |
+
+Damage is × the region's damage multiplier, so a second in the ground costs about the same share of health everywhere, and it is the level's **true damage** (as the storm objective's burn): no dodge, no Grit, and **no i-frames**. Routed through the normal hit path first, each quarter-second tick handed out 0.3 s of invulnerability, and standing in bloodmire made a body immune to the horde — `hazard_gate` now fails on that.
+
+**Scope, on purpose.** Players only: enemies cross untouched, so hazards change where you stand and how you route and never how fast the horde arrives, and no pace, density or level-curve measurement moved. Plain fights only (combat, elite, cursed): not region 1's map 1, which teaches the wind-up alone; not objective rooms, which already say where to stand; not sieges. Placement draws from its own sub-stream, never the sim's RNG, and keeps each patch off the drop point, off the walls and off the other patches. The movement half is one function, `hazardMoveAt`, called by the host's movement step and by a guest's own prediction on the patch list the guest already receives, for Deep Winter's reason.
+
+**Checked.** `hazard_gate` (34 checks): each effect measured on a running Sim against open floor (speed ×0.70 / 0.45 / 0.50 / 0.85 exactly; burns of 19, 11 and 58 health over two seconds in regions 2, 3 and 5; a current carrying a body 16.7 units in a quarter second along its heading; a body let go on ice travelling 30 units in a tenth of a second where open floor stops it; the front sweeping, burning 27 and resting); the rooms that carry none; a guest's copy matching the host's at every sampled point. Five planted defects are each caught: a slow ignored, the burn through the i-frame path, headings sent to the guest in radians, ice ignored, a front that never rests. Every look was captured in the real renderer.
+
+**Left for Grokbot and the owner.** Painted ground (the patches are code-drawn); whether the numbers feel right in play — they are first numbers, chosen to be readable rather than lethal; and whether enemies should be slowed by brush too (more interesting, but it moves every pace measurement).
+
 ## R-19 — Gloom shrouds your sight, and what will hurt you shows through (17 Nov)
 
 **Found.** Region 1's curse declared `sightMult: 0.55` and nothing read it (KNOWN-DEFECTS #41): a Gloom room was a plain room with the generic cursed-node multipliers. The defect asked for a design call on what "sight" means in a game that draws the whole room.

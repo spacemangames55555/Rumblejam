@@ -733,6 +733,14 @@ never loads them:
   `tools/glyph_sheet.html` (serve the repo root, open
   `/tools/glyph_sheet.html`) shows every one at the size it is drawn in play,
   beside the polygon it replaced.
+- `node tools/hazard_gate.mjs` — **every region's ground does what it
+  says.** A character is stood on the real floor of a plain fight in each
+  region with the wave stopped: a slow is timed against open floor, a burn is
+  counted as it lands (and must grant no i-frames), a current's drift and
+  heading are measured, ice must not let a body stop, the bushfire front must
+  sweep, burn and rest. The rooms that carry none (map 1, objectives, sieges)
+  are checked as hard, and a guest's copy of the room, through the wire codec,
+  must move a body exactly as the host's.
 - `node tools/curse_gate.mjs` — **every curse changes the room it is cast
   on.** For each of the eight region curses, a cursed node and a plain one are
   staged in the same region and the lever is read off the running Sim, with
