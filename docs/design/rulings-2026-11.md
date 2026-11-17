@@ -268,6 +268,8 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Ruled.** Every Samurai damage constant ×0.8. Every Priest damage constant from tier 4 up ×1.45; its tier 1–2 skills unchanged, because the early Priest was already +14% of the early-game anchor and a flat raise put it at +49% (`sim_test`'s level-5 table, band ±40%). Rank growth untouched — a first version of the script caught `rankDamage` by name and turned the 4% step into 50%; `class_band_gate` check E would have failed it, but it was caught first by the measurement going the wrong way.
 
+**And the Bard's Ensemble tree** (its party-support tree) read −61% of the Bard's own median in `tree_dps`, against a band of 60 — red on `main` since before this push. Its damage constants ×1.25: −51%, the early Bard unchanged.
+
 **After.** Samurai ×1.26 alone / ×1.42 in a crowd; boss time-to-kill ×0.99–1.11 of the median. Priest ×0.83 / ×0.99 on its best slotting. The Priest's boss time in the probe is still ×1.5–2.0, because the probe slots skills in tier order and the Priest's early skills — deliberately unchanged — fill most of that loadout; it is a healer, and its co-op value is not in any of these numbers.
 
 ## R-15 — A hit costs the same share of your health in regions 1–4 (17 Nov)

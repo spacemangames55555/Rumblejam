@@ -129,7 +129,6 @@ Measured and not yet fixed:
   the median). `node tools/minion_uptime.mjs` measures it. Survival of the
   *player* is still unmeasured, and the Necromancer's skeletons (≈1,200
   health, taunting) may turn out to make it the safest class in the game.
-- `bard_ensemble` reads −61% of its own class in `tree_dps` (red on `main`).
 
 `node tools/class_breakdown.mjs <class>` shows a class's statline, what its
 stat cards are worth, and every skill alone in one slot. `--roster` puts the
@@ -207,13 +206,13 @@ the game:
 | `heal_gate` | Ten heals never declared who they reach | A design call nobody had made. Made in ruling R-12: eight are self-heals, two (Priest's Intercession, Bard's Refrain) now reach the party. |
 | `statname_gate` | Three doc lines use a retired stat name | They did. |
 | `patch_gate` (2) | A coral planted with nothing to hit; no bounty mark in 20 s | Both fixtures. The "nothing to hit" room was a live horde room that kept spawning; the bounty check's seed draws a map with no bounty node. |
+| `tree_dps` | `bard_ensemble` is −61% of its own class | Real, balance: its damage ×1.25 (R-16), now −51%. |
 | `rider_gate` | (went red during the Necromancer retune) | Its splash check could not tell splash from a piercing bolt. Stricter now. |
 
 **Still red:**
 
 | Gate | What it says | What it is |
 |---|---|---|
-| `tree_dps` | `bard_ensemble` is −61% of its own class | **Real**, balance. |
 | `region_test` (3) | Map 1 leaves one seed at level 8 where 6–7 is wanted; two payout figures off | The expectation predates the level curve of R-7. Re-derive the expectation or retune map 1. |
 | `browser_test` (11) | Every case fails clicking a character card | **Broken test.** A 3,900-line browser suite written against a roster that no longer exists (`bulwark`, `facet`, `vesper`…). Porting it is its own job. |
 | `trait_gate` | Green today, and should not be trusted | The Blacksmith's `crystal_infusion` check passes or fails depending on an unrelated Necromancer number that leaks into its control run. |

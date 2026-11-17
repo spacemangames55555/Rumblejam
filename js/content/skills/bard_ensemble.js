@@ -22,30 +22,30 @@
 
 export const TUNING = {
   // tier 1 — Sting
-  stingDamage: 5, stingReach: 100, stingArc: 1.5, stingRadius: 125,
+  stingDamage: 6, stingReach: 100, stingArc: 1.5, stingRadius: 125,
   stingCount: 1, stingCd: 1600,
   // tier 2 — Refrain
   refrainAmount: 15, refrainRadius: 220, refrainCd: 5600,
   // tier 3 — Traveling Song
   travelAmount: 20, travelDuration: 4400, travelCd: 7200,
   // tier 4 — Cutting Remark
-  remarkDamage: 7, remarkSpeed: 500, remarkRange: 255, remarkCd: 4200,
+  remarkDamage: 9, remarkSpeed: 500, remarkRange: 255, remarkCd: 4200,
   remarkWeakenMult: 0.78, remarkWeakenDur: 2600,
   // tier 5 — Answering Chorus
-  chorusDamage: 6, chorusRange: 235, chorusHealPct: 0.5, chorusCd: 4400,
+  chorusDamage: 7.5, chorusRange: 235, chorusHealPct: 0.5, chorusCd: 4400,
   // tier 6 — Dirge
-  dirgeDamage: 4, dirgeRadius: 145, dirgeCount: 3, dirgeDuration: 3800,
+  dirgeDamage: 5, dirgeRadius: 145, dirgeCount: 3, dirgeDuration: 3800,
   dirgeTickMs: 440, dirgeCd: 6400, dirgeSlowMult: 0.74, dirgeSlowDur: 1300,
   // tier 7 — Rondo
-  rondoDamage: 8, rondoAngle: 2.0, rondoRange: 225, rondoRadius: 180,
+  rondoDamage: 10, rondoAngle: 2.0, rondoRange: 225, rondoRadius: 180,
   rondoCount: 3, rondoCd: 5400, rondoHealPerHit: 5,
   // tier 8 — Standing Ovation
   ovationAmount: 32, ovationDuration: 5400, ovationReflect: 0.35, ovationCd: 9200,
   // tier 9 — Marching Order
-  marchDamage: 7, marchWidth: 36, marchLength: 370, marchRadius: 205,
+  marchDamage: 9, marchWidth: 36, marchLength: 370, marchRadius: 205,
   marchCount: 3, marchCd: 6600, marchRoot: 1300,
   // tier 10 — Finale
-  finaleDamage: 10, finaleAngle: 2.6, finaleRange: 245, finaleRadius: 215,
+  finaleDamage: 12.5, finaleAngle: 2.6, finaleRange: 245, finaleRadius: 215,
   finaleCount: 4, finaleCd: 11000, finaleKnock: 260, finaleHealPerHit: 6,
   // rank increments — linear, never compounding
   rankDamage: 0.045, rankDuration: 0.035,
