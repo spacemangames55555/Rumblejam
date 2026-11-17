@@ -20,7 +20,8 @@
 //
 // Usage: node tools/curse_gate.mjs
 import { Sim } from '../js/game.js';
-import { CURSED_MODIFIERS, CURSE_EFFECT_FIELDS, telegraphRevealMsFor, playerSpdMultFor } from '../js/nodebehaviour.js';
+import { CURSED_MODIFIERS, CURSE_EFFECT_FIELDS, telegraphRevealMsFor, playerSpdMultFor, sightMultFor } from '../js/nodebehaviour.js';
+import { CONFIG } from '../js/config.js';
 import { waveConfig } from '../js/arenas.js';
 import { REGION_ENEMIES, enemyRole } from '../js/content/regions-enemies.js';
 import { REGIONS } from '../js/regions.js';
@@ -86,6 +87,64 @@ console.log('CURSES, MEASURED IN PLAY\n');
     else bad(`control: region 2 plain fight left HP at ${plain.after}/${plain.max}`);
     if (gloom.curse === 'pnw_gloom' && gloom.after === gloom.max) ok(`control: region 1 cursed node (gloom, no noRoomHeal) still restores to ${gloom.after}/${gloom.max}`);
     else bad(`control: region 1 cursed node curse ${gloom.curse}, HP ${gloom.after}/${gloom.max}`);
+  }
+}
+
+// ---- 1b. Gloom: region 1's cursed room shrouds the local player's sight ----
+// Render-only (KNOWN-DEFECTS #41, ruling R-19). Held here: the curse id rides
+// the wire so host and guest shroud alike, the shroud's numbers, that only
+// Gloom shrouds, and that the work a view does for it never reaches the Sim.
+{
+  const stage = (kind) => {
+    for (let s = 0; s < 20; s++) {
+      const g = make(5300 + s * 173, 1);
+      const node = nodeOf(g, kind);
+      if (!node) continue;
+      g._travelTo(node.id);
+      g.god = true;
+      return g;
+    }
+    return null;
+  };
+  const cg = stage('cursed'), pg = stage('combat');
+  if (!cg || !pg) bad('could not stage region-1 cursed and plain fights for Gloom');
+  else {
+    const host = sightMultFor(cg._arena && cg._arena.curse);
+    cg.tick();
+    const snap = decodeSnap(encodeSnap(cg.getSnapshot()));
+    const onWire = snap.st && snap.st.arena ? snap.st.arena.curse : undefined;
+    const guest = sightMultFor(onWire);
+    if (host === 0.55 && onWire === 'pnw_gloom' && guest === host) ok(`region 1 cursed node arms gloom: sight ×${host} on the host and, from the curse id on the wire, on the guest`);
+    else bad(`gloom: host sight ${host}, curse on the wire ${JSON.stringify(onWire)}, guest sight ${guest}`);
+    const plain = sightMultFor(pg._arena && pg._arena.curse);
+    if (plain === 1 && R.gloomRadius(plain, CONFIG.ROOM_W, CONFIG.ROOM_H) === null) ok('control: a plain region-1 fight keeps full sight and draws no shroud');
+    else bad(`control: plain region-1 fight sight ${plain}`);
+  }
+  const others = Object.values(CURSED_MODIFIERS).filter(m => m.id !== 'pnw_gloom' && sightMultFor(m.id) !== 1);
+  if (!others.length) ok('only Gloom shrouds sight');
+  else bad(`${others.map(m => m.id).join(', ')} also shroud sight`);
+  const Rg = R.gloomRadius(0.55, CONFIG.ROOM_W, CONFIG.ROOM_H);
+  const a0 = R.gloomAlpha(0, Rg), aIn = R.gloomAlpha(Rg * 0.69, Rg), aEdge = R.gloomAlpha(Rg, Rg), aFar = R.gloomAlpha(Rg * 2, Rg);
+  if (Rg > 300 && Rg < 500 && a0 === 0 && aIn === 0 && aEdge >= 0.85 && aFar >= 0.85) ok(`the shroud: clear to ${Math.round(Rg * R.GLOOM_CLEAR)} units, ${Math.round(aEdge * 100)}% dark from ${Math.round(Rg)} (a full room-screen reaches ${Math.round(Math.hypot(CONFIG.ROOM_W, CONFIG.ROOM_H) / 2)})`);
+  else bad(`the shroud's numbers: radius ${Rg}, alpha ${a0}/${aIn}/${aEdge}/${aFar}`);
+  // Render-only: the same cursed fight with and without the per-tick view work.
+  const runOnce = (viewWork) => {
+    const g = stage('cursed');
+    for (let i = 0; i < 60 * 20 && g.phase === 'arena'; i++) {
+      g.tick();
+      if (viewWork) {
+        const r = R.gloomRadius(sightMultFor(g._arena.curse), CONFIG.ROOM_W, CONFIG.ROOM_H);
+        const me = g.players[0];
+        for (const e of g.enemyPool) R.gloomAlpha(Math.hypot(e.x - me.x, e.y - me.y), r);
+      }
+    }
+    const s2 = g.getSnapshot(); delete s2.t;
+    return JSON.stringify(s2);
+  };
+  if (cg) {
+    const a = runOnce(false), b = runOnce(true);
+    if (a === b) ok(`render-only: 20s of a gloom fight is byte-identical with and without the per-tick shroud work (${(a.length / 1024).toFixed(0)} KB compared)`);
+    else bad('the gloom view work changed the simulation');
   }
 }
 

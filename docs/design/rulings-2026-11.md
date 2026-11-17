@@ -262,6 +262,42 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-19 — Gloom shrouds your sight, and what will hurt you shows through (17 Nov)
+
+**Found.** Region 1's curse declared `sightMult: 0.55` and nothing read it (KNOWN-DEFECTS #41): a Gloom room was a plain room with the generic cursed-node multipliers. The defect asked for a design call on what "sight" means in a game that draws the whole room.
+
+**Ruled: render-only, like Glamour.** A near-black shroud around your own character — clear to 283 units, 90% dark from 404 (0.55 of the room-screen's half-diagonal of 734) — over the ground, the bodies and the players. **Committed zones, boss telegraphs and enemy shots are drawn again on top of it.** So Gloom hides what is *coming* (bodies, and where the crowd is thick) and never what will *hurt* you; the rule that every committed attack is readable holds in the dark. Targeting, the sim and its rng are untouched, so co-op guests shroud from the curse id they already receive and nothing can desync. The curse's card text now says this: "Sight closes in. The wind-ups and the shots still show through the dark; the bodies behind them do not."
+
+**Why not a targeting range.** It would make region 1's cursed room a damage nerf to ranged classes on the one map that teaches the game, and auto-fire aimed into the dark is what makes a horde game feel fair when you cannot see.
+
+**Checked.** `curse_gate` (5 new checks): host and guest read ×0.55 from the curse id on the wire; a plain region-1 room draws no shroud; no other curse shrouds; the shroud's numbers; 20 s of a Gloom fight byte-identical with and without the shroud work. A planted dead reader fails it. A real frame of a Gloom room was captured in the browser and looked at.
+
+## R-18 — The first three bosses stop being one fight at three sizes (17 Nov)
+
+**Found.** R-4 made boss mechanics data blocks and regions 4–8 got one each; the Cedar Mother, Ixkik and the Hollow King were left with the shared kit (zone, lane charge, a phase 2 that changes the zone's shape) and nothing else.
+
+**Ruled.** Each gets a signature, chosen so the three teach in order the reads the later bosses combine:
+
+| Boss | Phase 1 | Phase 2 | The read it teaches |
+|---|---|---|---|
+| The Cedar Mother (r1) | — | `adds`: 4 saplings / 10 s, 8 at most | Clear a crowd while the lanes keep coming. Phase 1 stays a lesson in the slam and the lane. |
+| Ixkik, the Blood Moon (r2) | `ring`: 10 bolts / 5 s, speed 220, 10 damage | ring 12 / 4 s at 240; `pools`: 2 / 7 s, r 70, 10 dps, the first under her target | A radial ring is dodged by stepping into a gap, not by running. Then the gap is not safe either. |
+| The Hollow King (r3) | `volley`: aimed fan of 5 over 40° / 3.5 s, speed 300, 10 damage | fan of 7 over 50° / 2.8 s at 320; `adds`: 3 Wild Hunt riders / 9 s, 6 at most | An aimed attack is dodged across its line. `volley` had never been used. |
+
+Damage sits well under each boss's slam (a bolt is 10 against 44 before the region's multiplier); the blocks add reads, not lethality.
+
+**Checked.** `boss_gate` sees every declared block in the phase that declares it (20 checks), and catches a planted dead block (the Hollow King's volley on a 9,000 s cooldown: "declares volley in phase 1 and the world shows nothing"). With the player mortal and the room bot dodging, four classes × two seeds, deaths with and without the blocks: 7/8 and 7/8 (r1), 4/8 and 5/8 (r2), 6/8 and 6/8 (r3); damage taken a second 5.6 → 5.6, 6.2 → 6.2, 9.2 → 10.0. The bot dies to these bosses either way — the survival question of R-15, not something the signatures caused.
+
+## R-17 — Map 1 leaves a perfect player at level 7, not 8 (17 Nov)
+
+**Found.** `region_test` (red on `main`) clears map 1 perfectly — every enemy dies the tick it spawns — and holds the onboarding promise of 9 Nov: leave map 1 at **level 6–7** with three slots, paying about what it paid then (95 materials on seed 777, 90 on `0xa11ce`, ±15%). It measured level **8** and **119 / 104**. Map 1's payout is one hand-set number, `HORDE_MAP1_YIELD` (`js/arenas.js`), measured rather than derived, and the room had drifted under it.
+
+**Ruled.** `HORDE_MAP1_YIELD` 0.58 → **0.5**.
+
+**After.** A perfect clear leaves at level 7 with 97 / 91 materials. The `map1_bot` kite (no god mode, five seeds) leaves the Wizard, Samurai, Necromancer and Priest at level 6, one Samurai seed at 7, and none of them needed the map-1 catch-up top-up. `level_curve_gate`: map 1 pays 5.44 levels (window 5–6.5) and region 1's six fights carry level 1 to 14.0, where region 2 expects 14. `econ_gate` green.
+
+**Why lower the payout rather than widen the test.** The window is a design promise (three slots and a level-up card after the first fight, not a fourth); the test was right. A normal player now sits at the floor of it — the catch-up rule already guarantees level 6 to anyone short, so nobody leaves map 1 under-levelled.
+
 ## R-16 — The strongest and weakest class meet the roster (17 Nov)
 
 **Found.** With a dummy-count option on the shared ring (`tools/lib/dummy_ring.mjs`, `dummies: 1`), each class against one target and against six at level 59: the **Samurai** was ×1.59 the median alone and ×1.79 in a crowd — the strongest at everything; the **Priest** ×0.66 and ×0.71 — the weakest at everything. (The Witch Doctor and Mage are ×0.70 alone but ×1.0–1.1 in a crowd: an area class that is slow on bosses, which is an identity, not an error — left alone and recorded.)
@@ -309,7 +345,7 @@ Ten gates were red on `main` when this push began. Four turned out to be the tes
 
 - **`patch_gate` (2 → 0, 17 Nov).** The coral check's "nothing to hit" arm was a live horde room: the fixture killed what stood at the door and the wave kept spawning, so the Sundian was planting coral off real hits. The bounty check's fixed seed draws a map with no bounty node, so it ticked a room that had never asked for a mark. The wave is stopped for the first; seeds are walked until a bounty is drawn for the second. A planted defect (coral appearing without a hit) is caught.
 
-Still red, and real or unported: ~~`combat_gate`~~ (it could not stage a Druid pack because the pack was dead — fixed in the game by R-13, and green), `region_test` (3), `tree_dps` (`bard_ensemble`), `browser_test` (a 3,900-line suite written against a roster that no longer exists; it fails at its first character click).
+Still red, and real or unported: ~~`combat_gate`~~ (it could not stage a Druid pack because the pack was dead — fixed in the game by R-13, and green), ~~`region_test` (3)~~ (real — map 1 overpaid; R-17), ~~`tree_dps` (`bard_ensemble`)~~ (real — R-16), `browser_test` (a 3,900-line suite written against a roster that no longer exists; it fails at its first character click).
 
 ## What every earlier measurement was standing on
 

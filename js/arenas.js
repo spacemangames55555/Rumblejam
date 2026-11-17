@@ -483,7 +483,12 @@ function hordeWaveUnits(regionIndex, depth) {
 // seed 777 level 7 / 94 materials (was 95), 0xa11ce level 7 / 94 (was 90).
 // 0.62 → ~0.58 with the §14 thin-field pack so Wizard's exit stays in 6–7
 // (pace-spec §14; Designer 9 Nov 2026). Re-measure on region_test / map1_bot.
-export const HORDE_MAP1_YIELD = 0.58;
+// 0.58 → 0.5 (ruling R-17, 17 Nov 2026): map 1 had drifted since 9 Nov, and a
+// perfect clear left at level 8 with 119 / 104 materials. At 0.5 a perfect
+// clear leaves at 7 (97 / 91), the map1_bot kite leaves Wizard, Samurai,
+// Necromancer and Priest at 6–7 with no catch-up top-up, and region 1 still
+// pays level 1 → 14.0 (level_curve_gate).
+export const HORDE_MAP1_YIELD = 0.5;
 export function hordeYieldScale(regionIndex, depth) {
   if (!isHordeRegion(regionIndex)) return 1;
   if (regionIndex === 1 && depth === 0) return HORDE_MAP1_YIELD;

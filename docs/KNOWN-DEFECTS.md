@@ -1996,7 +1996,7 @@ that does not exist.)
 
 **Still open:** Gloom's `sightMult` is split out as #41.
 
-## #41 — (Low) Region 1's Gloom curse (`sightMult: 0.55`) has no reader
+## #41 — (Low) Region 1's Gloom curse (`sightMult: 0.55`) has no reader — FIXED 17 Nov 2026 (R-19)
 
 **Split from #40.** The game has no player sight radius to multiply: enemies are
 drawn arena-wide and attacks are limited only by line of sight through walls.
@@ -2006,8 +2006,18 @@ render-only vignette, an enemy-draw cull for the local player, or a targeting
 range). It should be render-only, like Glamour, unless the design wants it to
 change targeting.
 
-**Not fixed.** `tools/curse_gate.mjs` uses Gloom as the control for "a cursed
-node that is not Bloodprice still restores HP".
+**Fixed 17 Nov 2026 (ruling R-19): a render-only vignette.** `sightMultFor` in
+`js/nodebehaviour.js` turns the curse id into the share of sight kept; the host
+view reads it from `sim._arena.curse` and the guest view from `st.arena.curse`,
+as Glamour does. `render.js` `_drawGloom` draws a near-black shroud around the
+local player (clear to 70% of 0.55 × the room-screen's half-diagonal, 90% dark
+from there out) over the ground, bodies and players, then draws committed
+zones and boss telegraphs again on top of it, and draws shots after it — what
+will hurt you is never hidden. Targeting is untouched. `curse_gate` holds the
+host and guest reading, the shroud's numbers, that only Gloom shrouds, and the
+sim byte-identical with and without the view work; a planted dead reader is
+caught. Gloom is still the control for "a cursed node that is not Bloodprice
+restores HP".
 
 ## #42 — Savage DPS depends on skill firing order: a 50 ms cooldown move on the same grid jumps Cascade DPS +149%
 

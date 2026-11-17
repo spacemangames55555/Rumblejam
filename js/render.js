@@ -125,6 +125,21 @@ export function zoneTint(domain, msLeft, revealMs) {
   return DOMAIN_COLOR[domain] || '#ff5d6c';
 }
 
+// Gloom's shroud. `sightMult` < 1 shrinks the radius the local player sees to
+// that share of the room-screen's half-diagonal; the dark starts at
+// GLOOM_CLEAR of that radius and is GLOOM_DARK opaque at it and beyond. Pure
+// and render-only, so curse_gate can hold the numbers without a canvas.
+export const GLOOM_CLEAR = 0.7, GLOOM_DARK = 0.9;
+export function gloomRadius(sightMult, viewW, viewH) {
+  if (!(sightMult > 0 && sightMult < 1)) return null;
+  return sightMult * Math.hypot(viewW, viewH) / 2;
+}
+export function gloomAlpha(d, R) {
+  if (!R) return 0;
+  const f = (d / R - GLOOM_CLEAR) / (1 - GLOOM_CLEAR);
+  return f <= 0 ? 0 : GLOOM_DARK * Math.min(1, f);
+}
+
 export function enemyBodyTint(e, view) {
   if (!e) return null;
   if (e.straggle) {
@@ -793,6 +808,9 @@ export class Renderer {
     this._markBatch = null;
     if (marks && marks.length) { drawSpriteBatch(ctx, FX.plagueMark, marks); marks.length = 0; }
     for (const p of view.players || []) if (!p.gone) this._drawPlayer(ctx, p, view);
+    // GLOOM goes over the ground, the bodies and the players, and under the
+    // shots. What will hurt you is drawn again on top of it.
+    this._drawGloom(ctx, view, me, vw, vh, inView);
     // projectiles
     for (const pr of view.projs || []) {
       if (!inView(pr.x, pr.y)) continue;
@@ -845,6 +863,31 @@ export class Renderer {
     // time as a SEPARATE number: one rising without the other tells you which
     // half of the design is the problem
     this.frameMs = (typeof performance !== 'undefined' ? performance.now() : 0) - _t0;
+  }
+
+  // Gloom (region 1's curse, render-only). A radial shroud around MY player;
+  // then committed zones and boss telegraphs are drawn again, clipped to the
+  // shrouded part, so a wind-up is never hidden. Shots are drawn after this
+  // by the caller. Allies and the boss keep their edge arrows.
+  _drawGloom(ctx, view, me, vw, vh, inView) {
+    this.gloomDrawn = 0;
+    const R = gloomRadius(view.sightMult, VIEW_W, VIEW_H);
+    if (!R || !me) return;
+    const x0 = this.camX - vw / 2 - 4, y0 = this.camY - vh / 2 - 4, w = vw + 8, h = vh + 8;
+    const g = ctx.createRadialGradient(me.x, me.y, R * GLOOM_CLEAR, me.x, me.y, R);
+    g.addColorStop(0, 'rgba(4,6,10,0)');
+    g.addColorStop(1, `rgba(4,6,10,${GLOOM_DARK})`);
+    ctx.save();
+    ctx.fillStyle = g;
+    ctx.fillRect(x0, y0, w, h);
+    ctx.beginPath();
+    ctx.rect(x0, y0, w, h);
+    ctx.arc(me.x, me.y, R * GLOOM_CLEAR, 0, Math.PI * 2, true);
+    ctx.clip('evenodd');
+    if (view.telZones && view.telZones.length) this._drawTelegraphZones(ctx, view.telZones, view.telRevealMs || 0);
+    this._drawTelegraphs(ctx, view, inView);
+    ctx.restore();
+    this.gloomDrawn = R;
   }
 
   // Off-screen indicators: allies always (downed ones scream for help),

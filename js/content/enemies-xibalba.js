@@ -146,9 +146,18 @@ export const XIB_BOSS = {
   // already reaches 300, so the lane starts further out (minDist 300, not 210)
   // — the charge answers kiting, it does not duplicate the cone.
   charge: { cd: 5.0, windup: 0.85, dur: 0.75, speed: 660, width: 84, dmg: 44, minDist: 300 },
+  // SIGNATURE — THE MOON'S HALO, THEN ITS BLOOD (`ring`, then `pools`; ruling
+  // R-18). The first boss that fills the room. A slow ring of ten leaves her
+  // rim every five seconds; the gaps between bolts are wider than a body, so
+  // the read is "step into a gap", not "outrun it". At half health the ring
+  // tightens to twelve and blood pools fall — the first under whoever she
+  // hunts — so standing in a gap is no longer enough either.
+  ring: { cd: 5, count: 10, speed: 220, dmg: 10 },
   p2: {
     atFrac: 0.5, spdMult: 1.2,
     chargeCd: 3.8,
+    ring: { cd: 4, count: 12, speed: 240, dmg: 10 },
+    pools: { cd: 7, count: 2, radius: 70, windup: 1.0, dps: 10, dur: 4 },
     telegraph: {
       windupMs: 470, recoverMs: 400, cooldownMs: 2200, retryFrac: 0.25, recoverFrozen: true,
       shape: { kind: 'line', width: 95, length: 460 }, damage: 40, domain: 'spiritual',

@@ -178,8 +178,14 @@ export const PNW_BOSS = {
   // faces exactly what they always faced, and a player who stood at 700 units
   // faces the same number instead of nothing at all.
   charge: { cd: 5.2, windup: 0.9, dur: 0.75, speed: 620, width: 78, dmg: 34, minDist: 210 },
+  // SIGNATURE — HER CHILDREN WAKE (`adds`, phase 2 only; ruling R-18). The
+  // first boss of the game teaches two reads, the slam and the lane, and adds
+  // nothing to phase 1. At half health saplings — region 1's commonest body,
+  // 3 hp — rise around her in fours, eight at most: a crowd to clear while the
+  // lanes keep coming, which is the whole game in miniature.
   p2: {
     atFrac: 0.5, spdMult: 1.15,
+    adds: { cd: 10, count: 4, id: 'pnw_sapling', cap: 8 },
     // Phase 2 shortens the gap between lanes rather than widening or
     // strengthening them — same read, less time to sit still between reads.
     chargeCd: 4.0,
