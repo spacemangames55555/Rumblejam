@@ -37,7 +37,7 @@ import { WEAPONS } from './content/weapons.js';
 import { ENEMIES, ALL_ENEMY_DEFS } from './content/enemies.js';
 import { ALL_BOSS_DEFS } from './content/bosses.js';
 import { bossForRegion, TOTAL_REGIONS, REGION_BY_INDEX, REGIONS } from './regions.js';
-import { telegraphRevealMsFor, playerSpdMultFor } from './nodebehaviour.js';
+import { telegraphRevealMsFor, playerSpdMultFor, sightMultFor } from './nodebehaviour.js';
 import { unpackTelZones } from './telegraphs.js';
 import { Assets, SPRITE_MODE, drawSprite } from './assets.js';
 import { projSpriteFor, PYLON_SPRITE } from './content/sprites.js';
@@ -1720,6 +1720,8 @@ function viewFromSim(sim) {
     telZones: sim.telegraphZones(),
     // Glamour: how late the zone tint appears (0 = from commit). Render-only.
     telRevealMs: telegraphRevealMsFor(sim._arena && sim._arena.curse),
+    // Gloom: how much of normal sight the local player keeps. Render-only.
+    sightMult: sightMultFor(sim._arena && sim._arena.curse),
     kind: sim.arenaNode ? sim.arenaNode.kind : null,
     afterSiege: sim.afterSiege,
     obstacles: sim._snapObstacles(),
@@ -1911,6 +1913,7 @@ function viewFromSnaps(dtFrame) {
     // the curse id rides st.arena every snapshot, so a guest that joined late
     // still hides Glamour's tint exactly as the host does
     telRevealMs: telegraphRevealMsFor(app.arena && app.arena.curse),
+    sightMult: sightMultFor(app.arena && app.arena.curse),
     kind: app.arena ? app.arena.kind : null,
     afterSiege: app.arena ? app.arena.kind === 'siege' : false,
     obstacles: app.arena ? app.arena.obstacles : [],

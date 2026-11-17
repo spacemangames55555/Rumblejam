@@ -262,6 +262,16 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-19 — Gloom shrouds your sight, and what will hurt you shows through (17 Nov)
+
+**Found.** Region 1's curse declared `sightMult: 0.55` and nothing read it (KNOWN-DEFECTS #41): a Gloom room was a plain room with the generic cursed-node multipliers. The defect asked for a design call on what "sight" means in a game that draws the whole room.
+
+**Ruled: render-only, like Glamour.** A near-black shroud around your own character — clear to 283 units, 90% dark from 404 (0.55 of the room-screen's half-diagonal of 734) — over the ground, the bodies and the players. **Committed zones, boss telegraphs and enemy shots are drawn again on top of it.** So Gloom hides what is *coming* (bodies, and where the crowd is thick) and never what will *hurt* you; the rule that every committed attack is readable holds in the dark. Targeting, the sim and its rng are untouched, so co-op guests shroud from the curse id they already receive and nothing can desync. The curse's card text now says this: "Sight closes in. The wind-ups and the shots still show through the dark; the bodies behind them do not."
+
+**Why not a targeting range.** It would make region 1's cursed room a damage nerf to ranged classes on the one map that teaches the game, and auto-fire aimed into the dark is what makes a horde game feel fair when you cannot see.
+
+**Checked.** `curse_gate` (5 new checks): host and guest read ×0.55 from the curse id on the wire; a plain region-1 room draws no shroud; no other curse shrouds; the shroud's numbers; 20 s of a Gloom fight byte-identical with and without the shroud work. A planted dead reader fails it. A real frame of a Gloom room was captured in the browser and looked at.
+
 ## R-18 — The first three bosses stop being one fight at three sizes (17 Nov)
 
 **Found.** R-4 made boss mechanics data blocks and regions 4–8 got one each; the Cedar Mother, Ixkik and the Hollow King were left with the shared kit (zone, lane charge, a phase 2 that changes the zone's shape) and nothing else.

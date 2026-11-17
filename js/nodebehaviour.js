@@ -50,7 +50,13 @@ export const SHRINE_CHOICES = ['skillPoint', 'reroll'];
 export const CURSED_MODIFIERS = {
   pnw_gloom: {
     id: 'pnw_gloom', name: 'Gloom',
-    desc: 'Sight closes to arm’s length. The wind-ups are still there; you get less of them.',
+    desc: 'Sight closes in. The wind-ups and the shots still show through the dark; the bodies behind them do not.',
+    // The fraction of the room-screen's half-diagonal a player can see. Beyond
+    // it the world is drawn under a near-black shroud, EXCEPT committed zones,
+    // boss telegraphs and enemy shots, which are drawn again on top: what
+    // will hurt you is always readable, what is coming is not. RENDER-ONLY,
+    // like Glamour: read by render.js from `view.sightMult`; the sim, its
+    // targeting and its rng never see it (KNOWN-DEFECTS #41, ruling R-19).
     sightMult: 0.55,
   },
   // Keyed `bloodprice` because that is the name central_america declares in
@@ -165,6 +171,13 @@ export function cursedModifierFor(region) {
 export function playerSpdMultFor(curseId) {
   const m = curseId ? CURSED_MODIFIERS[curseId] : null;
   return m && m.playerSpdMult > 0 ? m.playerSpdMult : 1;
+}
+
+// Gloom: the share of normal sight the local player keeps, by curse id. 1 is
+// normal sight. Shared by host and guest views for the same reason as above.
+export function sightMultFor(curseId) {
+  const m = curseId ? CURSED_MODIFIERS[curseId] : null;
+  return m && m.sightMult > 0 && m.sightMult < 1 ? m.sightMult : 1;
 }
 
 export function telegraphRevealMsFor(curseId) {
