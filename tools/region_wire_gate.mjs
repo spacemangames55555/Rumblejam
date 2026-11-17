@@ -217,14 +217,45 @@ console.log('THE REGION LAYER, FROM A REAL ENTRY POINT — nothing here assigns 
     + 'every lever that names an id instead of drawing from the table has to be closed');
   else ok(`across ${6 * BUILT.length} seeded regions and every fight node in them, no built region fielded a base-roster enemy outside Nest Purge's own structure — the profile levers resolve their role from the region`);
 
-  // The content gap, named rather than hidden by the exemption above.
-  checks++;
-  if (nestBorrow.length) {
-    console.log(`✓ REPORTED, not failed: region(s) ${nestBorrow.join(', ')} have no enemy with \`behavior: 'nest'\`, so Nest Purge borrows \`wombden\` and its \`flit\` brood. `
-      + 'The wiring is done — `nestIdFor` resolves from the region — and what is missing is a spawner archetype in the roster.');
-  } else {
-    console.log('✓ every built region authors its own nest creature; nothing borrows `wombden`');
+  // Every region authors its own keep now (ruling R-21), so borrowing is a
+  // failure rather than a report.
+  if (nestBorrow.length) bad(`region(s) ${nestBorrow.join(', ')} have no nest of their own, so Nest Purge borrows \`wombden\` and its \`flit\` brood`);
+  else ok('every built region authors its own nest creature; nothing borrows `wombden`');
+
+  // AND IT IS THE ONE IN THE ROOM. A real Nest Purge in each region, ticked:
+  // every keep standing is the region's nest, it births the region's own
+  // brood (bodies of that id that pay nothing), and no Wombden or Flit is ever
+  // on the floor. Resolving the id is not the same claim as spawning it.
+  const wrong = [];
+  const seen = [];
+  for (const R of REGIONS) {
+    const pop = REGION_ENEMIES[R.id];
+    let staged = false;
+    for (let s = 0; s < 40 && !staged; s++) {
+      const g = sim(9100 + s * 613, R.index);
+      const node = g.floor.nodes.find(n => n.kind === 'nest');
+      if (!node) continue;
+      g._travelTo(node.id);
+      if (g.phase !== 'arena' || !g.obj) continue;
+      staged = true;
+      g.god = true;
+      const keeps = new Set(), brood = new Set(), strays = new Set();
+      for (let i = 0; i < 60 * 25 && g.phase === 'arena'; i++) {
+        g.tick();
+        for (const e of g.enemyPool) {
+          if (!e.def) continue;
+          if (e.isNest) keeps.add(e.def.id);
+          if (e.def.id === pop.nest.broodId && e.mats === 0 && !e.mini) brood.add(e.id);
+          if (e.def.id === 'wombden' || e.def.id === 'flit') strays.add(e.def.id);
+        }
+      }
+      if (keeps.size !== 1 || !keeps.has(pop.nest.id) || brood.size === 0 || strays.size) wrong.push(`region ${R.index}: keeps [${[...keeps]}], ${brood.size} ${pop.nest.broodId} brood, strays [${[...strays]}]`);
+      else seen.push(`${R.index}=${pop.nest.name}→${brood.size} ${pop.nest.broodId}`);
+    }
+    if (!staged) wrong.push(`region ${R.index}: no Nest Purge staged in 40 seeds`);
   }
+  if (!wrong.length) ok(`a real Nest Purge in every region besieges the region's own nest, and it births the region's own brood: ${seen.join(', ')}`);
+  else bad(`Nest Purge keeps: ${wrong.join('; ')}`);
 }
 
 // ---- 6. every route passes one shop and one reliquary ----

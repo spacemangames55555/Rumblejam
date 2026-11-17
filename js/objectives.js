@@ -466,7 +466,8 @@ function nestSpots(sim, want) {
 // `region_wire_gate` reports which regions are still borrowing it.
 export function nestIdFor(sim) {
   const pop = sim.region && REGION_ENEMIES[sim.region];
-  const own = pop && pop.enemies.find(e => e.behavior === 'nest');
+  // Every region authors one now (R-21) as `nest`, kept out of the wave roster.
+  const own = pop && (pop.nest || pop.enemies.find(e => e.behavior === 'nest'));
   return own ? own.id : 'wombden';
 }
 

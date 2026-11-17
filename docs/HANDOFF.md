@@ -36,7 +36,7 @@ that has never been seen to fail proves nothing. When you add a check, break
 the thing on purpose and watch it go red.
 
 **Decisions are written down.** `docs/design/rulings-2026-11.md` holds every
-balance call made in this push (R-1 … R-20), each with the measurement behind
+balance call made in this push (R-1 … R-21), each with the measurement behind
 it, and the owner's four instructions (U-1 … U-4). Read it before changing a
 number it set. `docs/GDD.md` is the design; `docs/KNOWN-DEFECTS.md` is what is
 known to be wrong.
@@ -136,8 +136,12 @@ classes side by side. That is how the Necromancer's problem was found.
 
 ### 3.4 Content that is named but not built
 
-- **Nests.** A Nest Purge borrows the same nest (`wombden`) and brood
-  (`flit`) in every region. No region has its own.
+Nothing named is unbuilt now. Hazards (R-20), nests (R-21), the region 1–3
+boss signatures (R-18) and Gloom (R-19) were the last four. What each still
+lacks is art: the hazards are code-drawn patches, and the eight region nests
+share one code-drawn mound glyph in their region's colours (`NEST_GLYPHS` in
+`js/glyphs.js`). Each nest already has its own sprite id, silhouette note and
+prompt in `docs/prompts.json`, so a painted nest drops in like any sprite.
 
 ### 3.5 Open design questions for the owner
 
@@ -186,6 +190,7 @@ Full text and measurements: `docs/design/rulings-2026-11.md`.
 | R-18 | The region 1–3 bosses each get a signature (saplings; ring then pools; elf-shot then the Wild Hunt). |
 | R-19 | Gloom, region 1's curse, shrouds your sight; what will hurt you shows through. |
 | R-20 | Every region's ground hazard is built: a slow, a burn, a current, ice or a sweeping front; players only. |
+| R-21 | Every region's Nest Purge besieges its own nest, which births the region's own commonest creature. |
 
 ---
 

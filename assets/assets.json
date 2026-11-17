@@ -262,6 +262,12 @@
       "h": 128,
       "directions": 8
     },
+    "enemy.aus_dingo_den": {
+      "file": "enemy/aus_dingo_den.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
     "enemy.aus_diprotodon": {
       "file": "enemy/aus_diprotodon.png",
       "w": 128,
@@ -322,6 +328,12 @@
       "h": 128,
       "directions": 8
     },
+    "enemy.caf_mire_spring": {
+      "file": "enemy/caf_mire_spring.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
     "enemy.caf_rot_hippo": {
       "file": "enemy/caf_rot_hippo.png",
       "w": 128,
@@ -348,6 +360,12 @@
     },
     "enemy.eg_mummy": {
       "file": "enemy/eg_mummy.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.eg_sealed_tomb": {
+      "file": "enemy/eg_sealed_tomb.png",
       "w": 128,
       "h": 128,
       "directions": 8
@@ -384,6 +402,12 @@
     },
     "enemy.gb_banshee": {
       "file": "enemy/gb_banshee.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.gb_fairy_mound": {
+      "file": "enemy/gb_fairy_mound.png",
       "w": 128,
       "h": 128,
       "directions": 8
@@ -448,6 +472,12 @@
       "h": 128,
       "directions": 8
     },
+    "enemy.ind_spawning_reef": {
+      "file": "enemy/ind_spawning_reef.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
     "enemy.ind_spearfish": {
       "file": "enemy/ind_spearfish.png",
       "w": 128,
@@ -480,6 +510,12 @@
     },
     "enemy.pnw_bark_hulk": {
       "file": "enemy/pnw_bark_hulk.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.pnw_burl": {
+      "file": "enemy/pnw_burl.png",
       "w": 128,
       "h": 128,
       "directions": 8
@@ -522,6 +558,12 @@
     },
     "enemy.ru_frozen_dead": {
       "file": "enemy/ru_frozen_dead.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.ru_kurgan": {
+      "file": "enemy/ru_kurgan.png",
       "w": 128,
       "h": 128,
       "directions": 8
@@ -588,6 +630,12 @@
     },
     "enemy.xib_bloodpriest": {
       "file": "enemy/xib_bloodpriest.png",
+      "w": 128,
+      "h": 128,
+      "directions": 8
+    },
+    "enemy.xib_cave_mouth": {
+      "file": "enemy/xib_cave_mouth.png",
       "w": 128,
       "h": 128,
       "directions": 8

@@ -364,6 +364,18 @@
       ],
       "prompt": "Bushfire Cinder, a spitter monster, Australian Outback region, a small ball of fire with one tall tongue rising and a trail of sparks behind, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
+    "enemy.aus_dingo_den": {
+      "batch": 3,
+      "subject": "Dingo Den, a nest monster, Australian Outback region",
+      "silhouette": "a low red-earth den mouth under spinifex, rooted and radial",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Dingo Den, a nest monster, Australian Outback region, a low red-earth den mouth under spinifex, rooted and radial, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
     "enemy.aus_diprotodon": {
       "batch": 3,
       "subject": "Diprotodon, a brute monster, Australian Outback region",
@@ -484,6 +496,18 @@
       ],
       "prompt": "Mire Shade, a chaser monster, Central Africa region, a hunched figure rising out of a puddle, long dripping arms hanging to the ground, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
+    "enemy.caf_mire_spring": {
+      "batch": 3,
+      "subject": "Mire Spring, a nest monster, Central Africa region",
+      "silhouette": "a bubbling black spring ringed with reeds, rooted and radial",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Mire Spring, a nest monster, Central Africa region, a bubbling black spring ringed with reeds, rooted and radial, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
     "enemy.caf_rot_hippo": {
       "batch": 3,
       "subject": "Rot Hippo, a brute monster, Central Africa region",
@@ -543,6 +567,18 @@
         128
       ],
       "prompt": "Shambling Mummy, a splitter monster, Egypt region, a stooped shuffling figure with both arms held straight out and loose wrappings trailing behind, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.eg_sealed_tomb": {
+      "batch": 3,
+      "subject": "Sealed Tomb, a nest monster, Egypt region",
+      "silhouette": "a squat sealed tomb of sandstone blocks, rooted and radial, its seal cracked",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Sealed Tomb, a nest monster, Egypt region, a squat sealed tomb of sandstone blocks, rooted and radial, its seal cracked, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.eg_sobek_guard": {
       "batch": 3,
@@ -615,6 +651,18 @@
         128
       ],
       "prompt": "Banshee, a spitter monster, Great Britain region, a floating veiled woman with arms raised and long hair streaming upward, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.gb_fairy_mound": {
+      "batch": 3,
+      "subject": "Fairy Mound, a nest monster, Great Britain region",
+      "silhouette": "a round grassy barrow, rooted and radial, a lit doorway at its foot",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Fairy Mound, a nest monster, Great Britain region, a round grassy barrow, rooted and radial, a lit doorway at its foot, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.gb_hunt_rider": {
       "batch": 3,
@@ -736,6 +784,18 @@
       ],
       "prompt": "Lantern Lure, a spitter monster, Off Indonesia region, a round deep-sea fish with a huge underbite and a lamp dangling on a stalk above its head, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
+    "enemy.ind_spawning_reef": {
+      "batch": 3,
+      "subject": "Spawning Reef, a nest monster, Off Indonesia region",
+      "silhouette": "a knot of branching coral, rooted and radial, eggs clustered in its arms",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Spawning Reef, a nest monster, Off Indonesia region, a knot of branching coral, rooted and radial, eggs clustered in its arms, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
     "enemy.ind_spearfish": {
       "batch": 3,
       "subject": "Sunda Spearfish, a dasher monster, Off Indonesia region",
@@ -807,6 +867,18 @@
         128
       ],
       "prompt": "Bark Hulk, a brute monster, Pacific Northwest region, a squat trunk-bodied mass with two enormous knuckled forelimbs, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.pnw_burl": {
+      "batch": 3,
+      "subject": "Sapling Burl, a nest monster, Pacific Northwest region",
+      "silhouette": "a squat cedar burl, rooted and radial, split open where saplings push out",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Sapling Burl, a nest monster, Pacific Northwest region, a squat cedar burl, rooted and radial, split open where saplings push out, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.pnw_cedar_warden": {
       "batch": 3,
@@ -891,6 +963,18 @@
         128
       ],
       "prompt": "Frozen Dead, a chaser monster, Northern Russia region, a stiff upright corpse with one arm frozen straight out and icicles hanging from it, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.ru_kurgan": {
+      "batch": 3,
+      "subject": "Kurgan, a nest monster, Northern Russia region",
+      "silhouette": "a frost-covered burial mound, rooted and radial, stones heaved up through the snow",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Kurgan, a nest monster, Northern Russia region, a frost-covered burial mound, rooted and radial, stones heaved up through the snow, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.ru_leshy": {
       "batch": 3,
@@ -1023,6 +1107,18 @@
         128
       ],
       "prompt": "Bloodpriest, a warden monster, Central America region, a straight-backed figure under a tall fan-shaped feathered headdress, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
+    },
+    "enemy.xib_cave_mouth": {
+      "batch": 3,
+      "subject": "Cave of Howls, a nest monster, Central America region",
+      "silhouette": "a low cave mouth in pale limestone, rooted and radial, dark at the centre",
+      "directions": 8,
+      "frames": 1,
+      "size": [
+        128,
+        128
+      ],
+      "prompt": "Cave of Howls, a nest monster, Central America region, a low cave mouth in pale limestone, rooted and radial, dark at the centre, grounded naturalistic fantasy, low-key value structure: true black outline and shadow mass at the darkest value in the palette, body in low mid-tones below middle grey, highlights sparing and small in area, never a pale or washed-out body, muted earthy palette of greens browns and leather held low in value, desaturated next to arcade colour, warm highlights on skin cloth and metal, readable silhouette with a distinctive head shape, no glow, no emissive rim, no neon, 8-directional, 128px, transparent background, no ground shadow, no outline glow"
     },
     "enemy.xib_censer": {
       "batch": 3,

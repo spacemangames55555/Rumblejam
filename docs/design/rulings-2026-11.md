@@ -262,6 +262,29 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-21 — Every region's Nest Purge has its own nest (17 Nov)
+
+**Found.** `nestIdFor` resolved the keep from the region since November, and no region had authored one, so every Nest Purge in the game besieged the base roster's Wombden and fought its Flit brood — moths pouring out of a star in a cedar forest. `region_wire_gate` reported it as a content gap.
+
+**Ruled.** Each region gets a nest that births **the region's own commonest creature**, so what pours out of the keep is what the player has been fighting all region:
+
+| Region | Nest | Brood |
+|---|---|---|
+| 1 | Sapling Burl | Sapling |
+| 2 | Cave of Howls | Howler |
+| 3 | Fairy Mound | Sprite |
+| 4 | Sealed Tomb | Shambling Mummy |
+| 5 | Mire Spring | Mire Shade |
+| 6 | Kurgan | Frozen Dead |
+| 7 | Spawning Reef | Tide Eel |
+| 8 | Dingo Den | Dust Dingo |
+
+Each is the Wombden's numbers exactly (the objective already scales the keep ×22 and rings it with walls), so the fight's arithmetic is unchanged. A nest is its own field on the region's population, **not** a roster entry, so no wave can draw one and no pace, density or weight measurement moved (`roster_weight_gate` 74/74). The load assertion requires the brood to be fodder of the nest's own region. Each nest has its own sprite id, silhouette note and art prompt, so one can be painted without touching the others; until then all eight share one code-drawn glyph in their region's colour — a low mound, rooted at its foot, split at the crown, with a lit mouth.
+
+**Caught on the way, by the suite.** The first version pointed all eight nests at `enemy.wombden`'s sprite id. `browser_test`'s content check runs the asset-manifest generator, which refuses two units on one id — so a gate red for an unrelated reason still caught this. Given their own ids and the Wombden's drawing, `glyph_gate` then found the drawing 63% the shape of Central Africa's Elder Mask (cap 62%); the mound replaced it (59% at its closest).
+
+**Checked.** `region_wire_gate`: borrowing is now a failure rather than a report, and a new check runs a real Nest Purge in every region for 25 s and requires the keep to be that region's nest, its brood to be that region's fodder (30–42 bodies born in each), and no Wombden or Flit on the floor. A planted defect (the resolver ignoring the region's nest) fails both checks in all eight regions.
+
 ## R-20 — Every region's ground does something (17 Nov)
 
 **Found.** GDD §2.2 rule 3 gives each region "one environmental hazard that changes how players move". All eight were named in `js/regions.js` and none existed.

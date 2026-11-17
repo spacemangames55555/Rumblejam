@@ -76,21 +76,36 @@ export function enemyRole(def) {
 // either alone is satisfiable by breaking the other.
 export const COMMITTING_BEHAVIORS = new Set(['brute', 'warden', 'dasher']);
 
+// NEST PURGE'S KEEP, ONE PER REGION (ruling R-21). Every region borrowed the
+// base roster's Wombden and its Flit brood, so a Nest Purge in a cedar forest
+// besieged a star-shaped thing birthing moths. A region's nest now births the
+// region's own commonest creature — what pours out is what the player has been
+// fighting all region — and is the Wombden's numbers exactly (the objective
+// scales it ×22 and rings it with walls; nothing about the fight changed).
+//
+// KEPT OUT OF THE WAVE ROSTER on purpose: `nest` is its own field, not one of
+// `enemies`, so no horde table can draw it and no pace, density or weight
+// measurement moved. The body is one code-drawn mound glyph in the region's
+// colour until a painted nest exists (js/glyphs.js NEST_GLYPHS).
+const NEST = { behavior: 'nest', hp: 26, spd: 0, dmg: 4, radius: 22, mats: 3, shape: 'star', w: 1.0, spawnCd: 4, maxBrood: 3 };
+const nest = (id, name, domain, color, broodId) => ({ id, name, domain, color, broodId, ...NEST });
+
 export const REGION_ENEMIES = {
-  pacific_northwest: { enemies: PNW_ENEMIES, boss: PNW_BOSS, horde: true },
-  central_america: { enemies: XIB_ENEMIES, boss: XIB_BOSS, horde: true },
-  great_britain: { enemies: GB_ENEMIES, boss: GB_BOSS, horde: true },
-  egypt: { enemies: EG_ENEMIES, boss: EG_BOSS, horde: true },
-  central_africa: { enemies: CAF_ENEMIES, boss: CAF_BOSS, horde: true },
-  northern_russia: { enemies: RU_ENEMIES, boss: RU_BOSS, horde: true },
-  off_indonesia: { enemies: IND_ENEMIES, boss: IND_BOSS, horde: true },
-  australian_outback: { enemies: AUS_ENEMIES, boss: AUS_BOSS, horde: true },
+  pacific_northwest: { enemies: PNW_ENEMIES, boss: PNW_BOSS, horde: true, nest: nest('pnw_burl', 'Sapling Burl', 'physical', '#6b5a34', 'pnw_sapling') },
+  central_america: { enemies: XIB_ENEMIES, boss: XIB_BOSS, horde: true, nest: nest('xib_cave_mouth', 'Cave of Howls', 'spiritual', '#5a2433', 'xib_howler') },
+  great_britain: { enemies: GB_ENEMIES, boss: GB_BOSS, horde: true, nest: nest('gb_fairy_mound', 'Fairy Mound', 'mental', '#4f6b4a', 'gb_sprite') },
+  egypt: { enemies: EG_ENEMIES, boss: EG_BOSS, horde: true, nest: nest('eg_sealed_tomb', 'Sealed Tomb', 'spiritual', '#a08a5a', 'eg_mummy') },
+  central_africa: { enemies: CAF_ENEMIES, boss: CAF_BOSS, horde: true, nest: nest('caf_mire_spring', 'Mire Spring', 'spiritual', '#3d4a2a', 'caf_mire_shade') },
+  northern_russia: { enemies: RU_ENEMIES, boss: RU_BOSS, horde: true, nest: nest('ru_kurgan', 'Kurgan', 'physical', '#56606b', 'ru_frozen_dead') },
+  off_indonesia: { enemies: IND_ENEMIES, boss: IND_BOSS, horde: true, nest: nest('ind_spawning_reef', 'Spawning Reef', 'mental', '#2f6f73', 'ind_tide_eel') },
+  australian_outback: { enemies: AUS_ENEMIES, boss: AUS_BOSS, horde: true, nest: nest('aus_dingo_den', 'Dingo Den', 'physical', '#8a5a33', 'aus_dust_dingo') },
 };
 
 export const ALL_REGION_ENEMIES = Object.values(REGION_ENEMIES).flatMap(r => r.enemies);
 export const ALL_REGION_BOSSES = Object.values(REGION_ENEMIES).map(r => r.boss);
 export const REGION_ENEMY_BY_ID = Object.fromEntries(ALL_REGION_ENEMIES.map(e => [e.id, e]));
 export const REGION_BOSS_BY_ID = Object.fromEntries(ALL_REGION_BOSSES.map(b => [b.id, b]));
+export const ALL_REGION_NESTS = Object.values(REGION_ENEMIES).map(r => r.nest).filter(Boolean);
 
 // SPRITE IDS, DERIVED — the same two lines enemies.js and bosses.js already run
 // over the base roster, applied to the populations they do not reach.
@@ -107,6 +122,12 @@ export const REGION_BOSS_BY_ID = Object.fromEntries(ALL_REGION_BOSSES.map(b => [
 // that should not be typeable. A new region gets its ids by existing.
 for (const e of ALL_REGION_ENEMIES) e.spriteId = `enemy.${e.id}`;
 for (const b of ALL_REGION_BOSSES) b.spriteId = `boss.${b.id}`;
+// Each region nest has its OWN sprite id, so a painted nest can land for one
+// region without touching the others (and because the asset manifest refuses
+// two units on one id — browser_test's content check caught the first version,
+// which pointed all eight at `enemy.wombden`). Until one is painted its glyph
+// is the shared mound drawing in the region's colour (js/glyphs.js NEST_GLYPHS).
+for (const n of ALL_REGION_NESTS) n.spriteId = `enemy.${n.id}`;
 
 // Telegraphing share of a population, by encounter weight. Exported so the
 // gate and the report read the same number rather than two implementations.
@@ -175,6 +196,17 @@ function assertRegionEnemies() {
   const problems = [];
   const seen = new Set();
 
+  for (const [regionId, { enemies, nest: keep }] of Object.entries(REGION_ENEMIES)) {
+    // The Nest Purge keep: a spawner, birthing a FODDER body of its own region.
+    if (keep) {
+      for (const k of BEHAVIOR_PARAMS.nest || []) if (keep[k] === undefined) problems.push(`${keep.id}: nest reads def.${k} and it is missing`);
+      if (keep.behavior !== 'nest') problems.push(`${keep.id}: a region's nest must have behavior 'nest'`);
+      const brood = enemies.find(e => e.id === keep.broodId);
+      if (!brood) problems.push(`${keep.id}: brood ${keep.broodId} is not one of ${regionId}'s own enemies`);
+      else if (enemyRole(brood) !== 'fodder') problems.push(`${keep.id}: brood ${keep.broodId} is a ${enemyRole(brood)}, and a nest births fodder`);
+      if (!isDomain(keep.domain)) problems.push(`${keep.id}: domain ${JSON.stringify(keep.domain)} is not a domain`);
+    }
+  }
   for (const [regionId, { enemies, boss }] of Object.entries(REGION_ENEMIES)) {
     if (!enemies.length) { problems.push(`${regionId}: no enemies`); continue; }
 
