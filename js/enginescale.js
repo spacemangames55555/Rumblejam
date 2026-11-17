@@ -76,7 +76,7 @@ export const ENGINE_SCALE = {
   // a room that runs long will exceed it.
   drench:  { max: 14, hard: false, contribution: 0.49, src: "12 per enemy, uncapped room-wide sum" },
   shift:   { max: 8,  hard: false, contribution: 0.48, src: "domainShifts per room, no clamp" },
-  marks:   { max: 7,  hard: false, contribution: 0.49, src: "one per marked enemy, no clamp" },
+  marks:   { max: 7,  hard: false, contribution: 0.49, src: "one per marked enemy (a marked boss counts CONFIG.BOSS_MARK_WEIGHT), no clamp" },
   // 0.48 -> 0.2 (R-13, 16 Nov 2026). The Druid's damage was tuned, by
   // accident, against a pack that was dead most of every fight; once animals
   // stood, this engine — on every Wild Kin skill — took the class from x1.9

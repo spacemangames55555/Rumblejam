@@ -37,7 +37,7 @@ that has never been seen to fail proves nothing. When you add a check, break
 the thing on purpose and watch it go red.
 
 **Decisions are written down.** `docs/design/rulings-2026-11.md` holds every
-balance call made in this push (R-1 … R-21), each with the measurement behind
+balance call made in this push (R-1 … R-22), each with the measurement behind
 it, and the owner's four instructions (U-1 … U-4). Read it before changing a
 number it set. `docs/GDD.md` is the design; `docs/KNOWN-DEFECTS.md` is what is
 known to be wrong.
@@ -105,10 +105,15 @@ should play each of these and say whether it is right:
 
 Measured and not yet fixed:
 
-- **Priest, Witch Doctor, Mage and Hunter kill bosses 1.4–2.0× slower
-  than the median** (Megalania: 313 s, 260 s, 228 s, 218 s against 156 s).
-  The first three's engines count marked or afflicted *enemies*, and a boss
-  is one enemy; the Hunter's hounds die to boss slams.
+- **Bosses: two classes are still slow, and two were not what they looked.**
+  Median boss time is 44 / 56 / 155 s for regions 2 / 5 / 8. The Priest was
+  ×1.5–2.0 because its marks engine counts enemies and a boss is one; R-22
+  makes a marked boss count as a full room, and it is now ×1.18–1.34. The
+  Mage read ×1.15–1.47 only because the probe runs in god mode and its
+  crystal fills from damage taken; with it full it is ×0.90–0.94
+  (`boss_ttk_probe --crystal`). **Still slow:** the Witch Doctor
+  (×1.37–1.68, a crowd kit) and the Hunter (×1.22–1.41, hounds die to boss
+  slams).
 - **Every class is now within ×0.72–1.58 of the median** on the dummy ring
   (R-10, R-11, R-13, R-16 brought down the Necromancer, Savage, Druid and
   Samurai and brought up the Priest). The Witch Doctor and Mage remain strong
@@ -194,6 +199,7 @@ Full text and measurements: `docs/design/rulings-2026-11.md`.
 | R-19 | Gloom, region 1's curse, shrouds your sight; what will hurt you shows through. |
 | R-20 | Every region's ground hazard is built: a slow, a burn, a current, ice or a sweeping front; players only. |
 | R-21 | Every region's Nest Purge besieges its own nest, which births the region's own commonest creature. |
+| R-22 | A marked boss counts as a full room of the Priest's marks. |
 
 ---
 

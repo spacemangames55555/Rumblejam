@@ -1028,7 +1028,7 @@ Rhythm is right on identity: the Bard's entire character sheet is Rhythm — sta
 | armor | derived from Defense | no — it is a stat reading |
 | pack | count of standing animals | only by the animals dying |
 | shift | count of casts this room | no — monotonic until the door |
-| marks | count of live marked enemies | only by the marks being paid out |
+| marks | count of live marked enemies; a marked boss counts as 7, a room's worth (R-22) | only by the marks being paid out |
 | **rhythm** | **casts inside a rolling window** | **yes — one gap longer than the window drops every stack at once** |
 
 Every other engine is *spent* or *reset*; rhythm is the only one a player can simply **drop**. That gives it a different relationship to the trigger system: a Bard is not choosing when to cash a resource in, it is choosing whether to keep the chain alive at all, and every cooldown in the build is a threat to it. **That is the property the class is designed around, and it is what a Rhythm tree must be authored against.**
