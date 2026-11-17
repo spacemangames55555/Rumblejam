@@ -29,28 +29,28 @@ export const TUNING = {
   judgeDamage: 9, judgeSpeed: 500, judgeRange: 250, judgeCd: 2800,
   judgeMarkDur: 9000, judgeMarkHeal: 7, judgeMarkRadius: 190,
   // tier 3 — Censure
-  censureDamage: 10, censureAngle: 1.7, censureRange: 220, censureRadius: 170,
+  censureDamage: 14.5, censureAngle: 1.7, censureRange: 220, censureRadius: 170,
   censureCount: 3, censureCd: 4400,
   censureMarkDur: 8000, censureMarkHeal: 5, censureMarkRadius: 170,
   // tier 4 — Weight of Sin
-  weightDamage: 11, weightReach: 108, weightArc: 1.8, weightRadius: 140,
+  weightDamage: 16, weightReach: 108, weightArc: 1.8, weightRadius: 140,
   weightCount: 2, weightCd: 4000, weightWeakenMult: 0.78, weightWeakenDur: 2500,
   // tier 5 — Attend the Fallen (passive)
   attendWeight: 0.286,
   // tier 6 — Sentence
-  sentenceDamage: 14, sentenceSpeed: 520, sentenceRange: 260, sentencePct: 50,
+  sentenceDamage: 20, sentenceSpeed: 520, sentenceRange: 260, sentencePct: 50,
   sentenceCd: 4600, sentenceMarkDur: 7000, sentenceMarkHeal: 12, sentenceMarkRadius: 210,
   // tier 7 — Chorus of the Named
-  chorusDamage: 10, chorusAngle: 2.2, chorusRange: 235, chorusRadius: 195,
+  chorusDamage: 14.5, chorusAngle: 2.2, chorusRange: 235, chorusRadius: 195,
   chorusCount: 4, chorusCd: 5600, chorusWeight: 0.71,
   // tier 8 — Reliquary Ward
   reliquaryAmount: 24, reliquaryDuration: 5000, reliquaryCd: 8500,
   // tier 9 — The Long Ledger
-  ledgerDamage: 12, ledgerWidth: 36, ledgerLength: 380, ledgerRadius: 215,
+  ledgerDamage: 17.5, ledgerWidth: 36, ledgerLength: 380, ledgerRadius: 215,
   ledgerCount: 3, ledgerCd: 6400, ledgerWeight: 0.86,
   ledgerMarkDur: 8000, ledgerMarkHeal: 8, ledgerMarkRadius: 200,
   // tier 10 — Day of Accounts
-  accountsDamage: 17, accountsAngle: 2.8, accountsRange: 255, accountsRadius: 225,
+  accountsDamage: 25, accountsAngle: 2.8, accountsRange: 255, accountsRadius: 225,
   accountsCount: 4, accountsCd: 10500,
   accountsMarkDur: 10000, accountsMarkHeal: 16, accountsMarkRadius: 240,
   // rank increments — linear, never compounding

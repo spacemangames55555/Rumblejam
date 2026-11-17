@@ -54,30 +54,30 @@
 
 export const TUNING = {
   // tier 1 — Quickstep
-  quickDamage: 9, quickReach: 100, quickArc: 1.4, quickCd: 1100, quickMove: 0.35,
+  quickDamage: 7, quickReach: 100, quickArc: 1.4, quickCd: 1100, quickMove: 0.35,
   // tier 2 — Light Feet (passive, the branch point)
   lightAccrual: 0.20,
 
   // ---- branch A: Gale ----
   // tier 4 — Running Cut
-  runDamage: 12, runReach: 105, runArc: 1.6, runCd: 2600, runMove: 0.6, runPulses: 2,
+  runDamage: 9.5, runReach: 105, runArc: 1.6, runCd: 2600, runMove: 0.6, runPulses: 2,
   // tier 6 — Gale Step (passive)
   galeAccrual: 0.30,
   // tier 8 — Hundred Paces
-  hundredDamage: 15, hundredRange: 300, hundredArc: 1.1, hundredCd: 4200, hundredMove: 1.0,
+  hundredDamage: 12, hundredRange: 300, hundredArc: 1.1, hundredCd: 4200, hundredMove: 1.0,
   // tier 10 — Windwalk (capstone)
-  windDamage: 22, windReach: 135, windArc: 2.8, windRadius: 135, windCount: 4,
+  windDamage: 17.5, windReach: 135, windArc: 2.8, windRadius: 135, windCount: 4,
   windPulses: 2, windCd: 9000, windMove: 1.4, windKnock: 260,
 
   // ---- branch B: Edge ----
   // tier 4 — Slip Cut
-  slipDamage: 16, slipReach: 100, slipArc: 1.3, slipCd: 2400, slipWindow: 900,
+  slipDamage: 13, slipReach: 100, slipArc: 1.3, slipCd: 2400, slipWindow: 900,
   // tier 6 — Dancing Edge (passive)
   danceWeight: 0.18,
   // tier 8 — Crescent
-  crescentDamage: 19, crescentReach: 120, crescentArc: 2.6, crescentCd: 4600, crescentWindow: 1000,
+  crescentDamage: 15, crescentReach: 120, crescentArc: 2.6, crescentCd: 4600, crescentWindow: 1000,
   // tier 10 — Moonfall (capstone)
-  moonDamage: 30, moonReach: 130, moonArc: 1.5, moonRadius: 120, moonCount: 3,
+  moonDamage: 24, moonReach: 130, moonArc: 1.5, moonRadius: 120, moonCount: 3,
   moonCd: 9500, moonWindow: 1100, moonStun: 750,
 
   // rank increments — linear, never compounding

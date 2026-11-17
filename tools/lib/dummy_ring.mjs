@@ -32,7 +32,7 @@ export const DUMMY_R = 70;
 // the four classes — not because the builds were identical but because
 // everything the extra points bought was waiting for a kill, a dodge or a
 // status that never came.
-export function measureRing(classId, level, { picks = 'sensible', window = 0, loadout = null, spend = 'breadth', seconds = RING_SECONDS, onBuilt = null } = {}) {
+export function measureRing(classId, level, { picks = 'sensible', window = 0, loadout = null, spend = 'breadth', seconds = RING_SECONDS, onBuilt = null, dummies: nDummies = 6 } = {}) {
   const TICKS = seconds * 60;
   const sim = new Sim({
     seed: 4242, allowUnplayable: true,
@@ -88,8 +88,8 @@ export function measureRing(classId, level, { picks = 'sensible', window = 0, lo
 
   const cx = sim.W / 2, cy = sim.H / 2;
   const dummies = [];
-  for (let i = 0; i < 6; i++) {
-    const a = i * Math.PI * 2 / 6;
+  for (let i = 0; i < nDummies; i++) {
+    const a = i * Math.PI * 2 / nDummies;
     const e = sim.spawnEnemyById('slabjaw', cx + Math.cos(a) * DUMMY_R, cy + Math.sin(a) * DUMMY_R, { noMats: true });
     if (!e) continue;
     e.spd = 0; e.dmg = 0;

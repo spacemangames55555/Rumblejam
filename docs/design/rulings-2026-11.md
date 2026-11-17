@@ -262,6 +262,16 @@ Two fixtures then disagreed with the first pass, and both were right. `tree_dps`
 
 **Cost, recorded rather than hidden.** The Hunter's hounds now die to bosses like everyone else's animals, and the Hunter's boss time-to-kill went from about the median to ×1.2–1.5 of it — it joins the Priest, Witch Doctor and Mage as the classes that are slow against bosses (next pass). Its ring output and room clear rate are unchanged. And the Necromancer's skeletons, which stack several health passives on top of the faster Summons scaling, now carry ~1,200 health — they were already never dying, so this changes no output, but a skeleton that taunts is now a very good wall. Survival is the measurement that will say whether that matters.
 
+## R-16 — The strongest and weakest class meet the roster (17 Nov)
+
+**Found.** With a dummy-count option on the shared ring (`tools/lib/dummy_ring.mjs`, `dummies: 1`), each class against one target and against six at level 59: the **Samurai** was ×1.59 the median alone and ×1.79 in a crowd — the strongest at everything; the **Priest** ×0.66 and ×0.71 — the weakest at everything. (The Witch Doctor and Mage are ×0.70 alone but ×1.0–1.1 in a crowd: an area class that is slow on bosses, which is an identity, not an error — left alone and recorded.)
+
+**Ruled.** Every Samurai damage constant ×0.8. Every Priest damage constant from tier 4 up ×1.45; its tier 1–2 skills unchanged, because the early Priest was already +14% of the early-game anchor and a flat raise put it at +49% (`sim_test`'s level-5 table, band ±40%). Rank growth untouched — a first version of the script caught `rankDamage` by name and turned the 4% step into 50%; `class_band_gate` check E would have failed it, but it was caught first by the measurement going the wrong way.
+
+**And the Bard's Ensemble tree** (its party-support tree) read −61% of the Bard's own median in `tree_dps`, against a band of 60 — red on `main` since before this push. Its damage constants ×1.25: −51%, the early Bard unchanged.
+
+**After.** Samurai ×1.26 alone / ×1.42 in a crowd; boss time-to-kill ×0.99–1.11 of the median. Priest ×0.83 / ×0.99 on its best slotting. The Priest's boss time in the probe is still ×1.5–2.0, because the probe slots skills in tier order and the Priest's early skills — deliberately unchanged — fill most of that loadout; it is a healer, and its co-op value is not in any of these numbers.
+
 ## R-15 — A hit costs the same share of your health in regions 1–4 (17 Nov)
 
 **Found while measuring survival.** With the player mortal (`tools/region_pace.mjs --mortal`, the room bot dodging), 10 of 14 classes died in all three region-2 rooms tried, most still died in region 5, and almost none in region 8 — the reverse of a difficulty curve. Damage taken was 45–80% telegraphed slams the bot tries to dodge.

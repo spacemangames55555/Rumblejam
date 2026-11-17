@@ -99,31 +99,31 @@ export const TUNING = {
   // than reduced.
 
   // tier 1 — Cross Guard Cut
-  cutDamage: 9, cutReach: 100, cutArc: 1.6, cutCd: 800,
+  cutDamage: 7, cutReach: 100, cutArc: 1.6, cutCd: 800,
   // tier 2 — Set Stance (passive). No max-stack bonus any more (see the cap
   // above); it is now purely an accrual passive, and rank-1-only per §1.3.
   stanceAccrualPct: 0.20,
   // tier 3 — Iron Sleeve
   sleeveAmount: 14, sleeveDuration: 4000, sleeveCd: 5000, sleeveWeight: 1.33,
   // tier 4 — Sweeping Guard
-  sweepDamage: 8, sweepReach: 115, sweepArc: 2.6, sweepRadius: 110,
+  sweepDamage: 6.5, sweepReach: 115, sweepArc: 2.6, sweepRadius: 110,
   sweepCount: 3, sweepCd: 4500, sweepKnock: 260,
   // tier 5 — Immovable
   immovableAmount: 20, immovableDuration: 4000, immovableSeconds: 3,
   immovableReflect: 0.35, immovableCd: 8000,
   // tier 6 — Rebuke
-  rebukeDamage: 14, rebukeReach: 100, rebukeArc: 2.0, rebukeWindow: 400,
+  rebukeDamage: 11, rebukeReach: 100, rebukeArc: 2.0, rebukeWindow: 400,
   rebukeStun: 900, rebukeCd: 3500,
   // tier 7 — Weight of Armor (passive)
   weightGritPerStack: 2,
   // tier 8 — Crushing Descent
-  crushDamage: 11, crushReach: 100, crushArc: 1.2, crushPct: 40,
+  crushDamage: 9, crushReach: 100, crushArc: 1.2, crushPct: 40,
   crushPulses: 2, crushCd: 5000,
   // tier 9 — Bulwark
   bulwarkShield: 30, bulwarkShieldDur: 5000, bulwarkWard: 24,
   bulwarkWardDur: 5000, bulwarkReflect: 0.5, bulwarkPct: 35, bulwarkCd: 12000,
   // tier 10 — Unbroken Line
-  unbrokenDamage: 12, unbrokenReach: 130, unbrokenArc: 3.0, unbrokenRadius: 130,
+  unbrokenDamage: 9.5, unbrokenReach: 130, unbrokenArc: 3.0, unbrokenRadius: 130,
   unbrokenCount: 4, unbrokenPulses: 2, unbrokenCd: 9000,
   unbrokenSlowMult: 0.65, unbrokenSlowDur: 1500,
   // rank increments — linear, never compounding

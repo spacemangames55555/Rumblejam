@@ -15,28 +15,28 @@ export const TUNING = {
   // per-stack damage multiplier for a scaleWith step, before Held Edge
   perFootingWeight: 0.67,        // the slower, committed swings pay more for the stance
   // tier 1 — Draw Cut
-  drawDamage: 8, drawReach: 95, drawArc: 1.5, drawCd: 850,
+  drawDamage: 6.5, drawReach: 95, drawArc: 1.5, drawCd: 850,
   // tier 2 — Measured Breath (passive)
   breathAccrualPct: 0.25,
   // tier 3 — Rising Cut
-  risingDamage: 15, risingReach: 100, risingArc: 1.3, risingCd: 3200, risingWindUp: 400,
+  risingDamage: 12, risingReach: 100, risingArc: 1.3, risingCd: 3200, risingWindUp: 400,
   // tier 4 — Two Heavens
-  twinDamage: 7, twinReach: 100, twinArc: 1.8, twinRadius: 100, twinCount: 2,
+  twinDamage: 5.5, twinReach: 100, twinArc: 1.8, twinRadius: 100, twinCount: 2,
   twinPulses: 2, twinCd: 3600,
   // tier 5 — Read the Line
-  readDamage: 12, readReach: 105, readArc: 1.9, readWindow: 400, readCd: 4000,
+  readDamage: 9.5, readReach: 105, readArc: 1.9, readWindow: 400, readCd: 4000,
   readDefMult: 0.75, readDefDur: 2500,
   // tier 6 — Held Edge (passive)
   heldEdgeWeight: 0.167,
   // tier 7 — Severing Arc
-  severDamage: 9, severReach: 125, severArc: 2.9, severRadius: 120, severCount: 3, severCd: 5000,
+  severDamage: 7, severReach: 125, severArc: 2.9, severRadius: 120, severCount: 3, severCd: 5000,
   // tier 8 — Mountain Stance
   mountainAmount: 22, mountainDuration: 5000, mountainSeconds: 4, mountainCd: 9000,
   mountainWeight: 1.56,
   // tier 9 — Killing Ground
-  killDamage: 13, killReach: 100, killArc: 1.2, killPct: 35, killPulses: 2, killCd: 5200,
+  killDamage: 10.5, killReach: 100, killArc: 1.2, killPct: 35, killPulses: 2, killCd: 5200,
   // tier 10 — Unsheathed
-  unsheathedDamage: 14, unsheathedReach: 130, unsheathedArc: 3.0, unsheathedRadius: 130,
+  unsheathedDamage: 11, unsheathedReach: 130, unsheathedArc: 3.0, unsheathedRadius: 130,
   unsheathedCount: 4, unsheathedPulses: 2, unsheathedStun: 700, unsheathedCd: 10000,
   // rank increments — linear, never compounding
   rankDamage: 0.04, rankDuration: 0.03,
