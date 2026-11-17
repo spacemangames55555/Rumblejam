@@ -131,9 +131,20 @@ console.log('THE PATCH, BY EFFECT\n');
   };
 
   // ARM A — nothing to hit. The trigger cannot hold and nothing lands.
+  //
+  // THE ROOM HAS TO STAY EMPTY. `arena()` kills what is standing at the door,
+  // and under horde pacing the wave goes on spawning a second later — so this
+  // arm was a Sundian cutting a live crowd and planting coral off real hits,
+  // and it read as "counting something other than hits" (red on main from
+  // the horde ruling until 16 Nov 2026). The wave is stopped, and anything an
+  // objective or a nest still produces is cleared every tick.
   {
     const { g, p } = t();
-    for (let i = 0; i < 60 * 10; i++) g.tick();
+    g.wave.done = true; g.spawnQueue.length = 0;
+    for (let i = 0; i < 60 * 10; i++) {
+      g.tick();
+      for (const e of [...g.enemyPool]) if (e.active) { e.hp = 0; e.active = false; }
+    }
     if (g.corals.length === 0) ok('10 s of a Sundian with nothing in reach plants 0 coral — misses contribute nothing');
     else bad(`${g.corals.length} coral planted with no enemy and no wall present — the trigger is still counting something other than hits`);
   }
@@ -163,8 +174,15 @@ console.log('THE PATCH, BY EFFECT\n');
 // The RESOLVED mark HP must be 4x the base, not "a multiplier exists". Read off
 // a real spawned mark and divided back out by the same terms the formula uses.
 {
-  const { g } = arena('toh_samurai', { learnAll: false });
-  const node = g.floor.nodes.find(n => n.kind === 'bounty');
+  // A BOUNTY NODE IS ON SOME MAPS AND NOT OTHERS, and the gate's fixed seed
+  // draws a map without one — so this check found no node, ticked nothing and
+  // reported "no mark spawned" for a mark nothing had asked for. Seeds are
+  // walked until a map with a bounty is drawn.
+  let g = null, node = null;
+  for (let k = 0; k < 40 && !node; k++) {
+    ({ g } = arena('toh_samurai', { learnAll: false, seed: 20260817 + k * 7919 }));
+    node = g.floor.nodes.find(n => n.kind === 'bounty');
+  }
   let measured = null;
   if (node) {
     g._travelTo(node.id);

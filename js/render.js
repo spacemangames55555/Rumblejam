@@ -2691,36 +2691,54 @@ export class Renderer {
       ctx.lineTo(a.x + ca * r, a.y + sa * r);
       ctx.stroke();
     } else {
-      // Crescent that WIPES along the swing, then holds and fades. A static
-      // pie of the reach reads as a range wedge; a growing stroke reads as a cut.
+      // A FILLED CRESCENT THAT WIPES ALONG THE SWING (16 Nov 2026). It was a
+      // stroke — an edge line, a colour line and a 2-px core — and on the
+      // floor at play scale it read as a faint grey curve: half of every
+      // activation in the game is a melee arc, and the player could barely
+      // see their own. Now it is a blade-shaped band: thickest mid-swing,
+      // tapering to points at both ends, filled in the class colour with a
+      // bright core along its leading edge. A static pie of the reach reads
+      // as a range wedge; a growing crescent reads as a cut.
       const a0 = a.a - a.arc / 2;
       const wipe = Math.max(0.14, Math.min(1, pr / 0.38));
       const a1 = a0 + a.arc * wipe;
-      ctx.globalAlpha = 0.55 * fade;
-      ctx.strokeStyle = edge;
-      ctx.lineWidth = (a.lw || 7) + 3;
-      ctx.beginPath();
-      ctx.arc(a.x, a.y, r, a0, a1);
-      ctx.stroke();
-      ctx.globalAlpha = Math.min(0.95, (0.62 + 0.1 * stack) * fade);
-      ctx.strokeStyle = a.color;
-      ctx.lineWidth = a.lw || 7;
-      ctx.beginPath();
-      ctx.arc(a.x, a.y, r, a0, a1);
-      ctx.stroke();
-      ctx.strokeStyle = core;
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = 0.75 * fade;
-      ctx.beginPath();
-      ctx.arc(a.x, a.y, r * 0.92, a0 + 0.04, a1 - 0.04);
-      ctx.stroke();
-      if (shape === SHAPE.cleave) {
-        ctx.globalAlpha = 0.35 * fade;
-        ctx.strokeStyle = a.color;
-        ctx.lineWidth = (a.lw || 7) * 0.45;
+      const thick = Math.max(9, a.r * (shape === SHAPE.cleave ? 0.3 : 0.22)) * (1 + 0.12 * (stack - 1));
+      const N = 18;
+      const band = (outer, w) => {
         ctx.beginPath();
-        ctx.arc(a.x, a.y, r * 0.62, a0, a1);
-        ctx.stroke();
+        for (let i = 0; i <= N; i++) {
+          const t = a0 + (a1 - a0) * (i / N);
+          const rr = outer;
+          if (i === 0) ctx.moveTo(a.x + Math.cos(t) * rr, a.y + Math.sin(t) * rr);
+          else ctx.lineTo(a.x + Math.cos(t) * rr, a.y + Math.sin(t) * rr);
+        }
+        for (let i = N; i >= 0; i--) {
+          const u = i / N, t = a0 + (a1 - a0) * u;
+          const rr = outer - w * Math.sin(Math.PI * u);
+          ctx.lineTo(a.x + Math.cos(t) * rr, a.y + Math.sin(t) * rr);
+        }
+        ctx.closePath();
+      };
+      // the body
+      band(r, thick);
+      ctx.globalAlpha = Math.min(0.92, (0.7 + 0.08 * stack) * fade);
+      ctx.fillStyle = a.color;
+      ctx.fill();
+      ctx.globalAlpha = 0.65 * fade;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // the core: the outer third of the blade, bright
+      band(r - thick * 0.08, thick * 0.38);
+      ctx.globalAlpha = 0.9 * fade;
+      ctx.fillStyle = core;
+      ctx.fill();
+      if (shape === SHAPE.cleave) {
+        // a second, inner swath: a cleave is wider than a cut in both senses
+        band(r - thick * 0.9, thick * 0.6);
+        ctx.globalAlpha = 0.4 * fade;
+        ctx.fillStyle = a.color;
+        ctx.fill();
       }
       // class particle ticks along the live edge
       const particle = kit && kit.particle;
@@ -2760,10 +2778,17 @@ export class Renderer {
     const fade = 1 - pr;
     const spec = b.spec;
     const kit = spec && spec.kit;
-    const w = (b.w || 4) * (0.55 + 0.45 * fade) + 1;
+    // A lane, not a thread: at least 10 wide, with a soft glow either side.
+    const w = Math.max(10, b.w || 4) * (0.6 + 0.4 * fade) + 2;
     ctx.save();
     ctx.lineCap = 'round';
-    ctx.globalAlpha = 0.5 * fade;
+    ctx.globalAlpha = 0.28 * fade;
+    ctx.strokeStyle = b.color || '#ff5d6c';
+    ctx.lineWidth = w * 2.4;
+    ctx.beginPath();
+    ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.6 * fade;
     ctx.strokeStyle = kit ? kit.edge : PALETTE.outline;
     ctx.lineWidth = w + 4;
     ctx.beginPath();
@@ -2801,7 +2826,7 @@ export class Renderer {
     const ca = Math.cos(m.a), sa = Math.sin(m.a);
     const x = m.x + ca * 14, y = m.y + sa * 14;
     if (drawSprite(ctx, FX.muzzle, x, y, {
-      scale: spriteScaleFor(FX.muzzle, 16 + 10 * fade),
+      scale: spriteScaleFor(FX.muzzle, 26 + 16 * fade),
       rot: m.a, alpha: fade,
     })) return;
     ctx.save();
@@ -2812,12 +2837,12 @@ export class Renderer {
     ctx.strokeStyle = kit.edge;
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(10, 0); ctx.lineTo(-4, -5); ctx.lineTo(-1, 0); ctx.lineTo(-4, 5);
+    ctx.moveTo(18, 0); ctx.lineTo(-7, -9); ctx.lineTo(-2, 0); ctx.lineTo(-7, 9);
     ctx.closePath();
     ctx.fill(); ctx.stroke();
     ctx.fillStyle = kit.core;
     ctx.beginPath();
-    ctx.moveTo(6, 0); ctx.lineTo(-1, -2.2); ctx.lineTo(-1, 2.2);
+    ctx.moveTo(11, 0); ctx.lineTo(-2, -4); ctx.lineTo(-2, 4);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -2827,9 +2852,9 @@ export class Renderer {
   _drawImpact(ctx, im) {
     const pr = im.t / im.dur;
     const fade = 1 - pr;
-    const r = 4 + 10 * pr;
+    const r = 6 + 16 * pr;
     if (drawSprite(ctx, FX.impact, im.x, im.y, {
-      scale: spriteScaleFor(FX.impact, 12 + 10 * fade),
+      scale: spriteScaleFor(FX.impact, 20 + 14 * fade),
       alpha: fade,
     })) return;
     ctx.save();
@@ -2862,42 +2887,45 @@ export class Renderer {
     ctx.lineCap = 'round';
     switch (shape) {
       case SHAPE.smite: {
-        const h = 28 + 40 * fade;
-        ctx.globalAlpha = 0.35 * fade;
+        // a column of light, then the ground it strikes cracks outward
+        const h = 46 + 60 * fade, w = 18 * (0.6 + 0.4 * fade);
+        ctx.globalAlpha = 0.6 * fade;
         ctx.fillStyle = spec.color;
-        ctx.fillRect(tx - 6, ty - h, 12, h);
-        ctx.globalAlpha = fade;
-        ctx.strokeStyle = kit.edge;
-        ctx.lineWidth = 3;
-        ctx.strokeRect(tx - 6, ty - h, 12, h);
-        ctx.strokeStyle = kit.core;
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(tx, ty - h); ctx.lineTo(tx, ty);
-        ctx.stroke();
+        ctx.fillRect(tx - w / 2, ty - h, w, h);
+        ctx.globalAlpha = 0.95 * fade;
+        ctx.fillStyle = kit.core;
+        ctx.fillRect(tx - w * 0.18, ty - h, w * 0.36, h);
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2;
+        ctx.strokeRect(tx - w / 2, ty - h, w, h);
+        const R0 = 10 + 20 * pr;
+        ctx.globalAlpha = 0.85 * fade;
         ctx.fillStyle = spec.color;
-        circle(ctx, tx, ty, 5 + 4 * pr); ctx.fill();
-        ctx.strokeStyle = kit.edge; ctx.lineWidth = 1.8; ctx.stroke();
+        star(ctx, tx, ty, R0, R0 * 0.45, 7); ctx.fill();
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2; ctx.stroke();
         break;
       }
       case SHAPE.shockwave:
       case SHAPE.ring: {
         const R = (c.reach || 80) * (0.35 + 0.65 * pr);
-        ctx.globalAlpha = 0.7 * fade;
+        // the swept disc first, faint, so the ring has a body behind it
+        ctx.globalAlpha = 0.18 * fade;
+        ctx.fillStyle = spec.color;
+        circle(ctx, x, y, R); ctx.fill();
+        ctx.globalAlpha = 0.85 * fade;
         ctx.strokeStyle = kit.edge;
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 9;
         circle(ctx, x, y, R); ctx.stroke();
         ctx.strokeStyle = spec.color;
-        ctx.lineWidth = 2.6;
+        ctx.lineWidth = 6;
         circle(ctx, x, y, R); ctx.stroke();
         ctx.strokeStyle = kit.core;
-        ctx.lineWidth = 1.2;
-        circle(ctx, x, y, R * 0.86); ctx.stroke();
+        ctx.lineWidth = 2.4;
+        circle(ctx, x, y, R - 1); ctx.stroke();
         break;
       }
       case SHAPE.healPulse: {
-        const R = 22 + 28 * pr;
-        ctx.globalAlpha = 0.28 * fade;
+        const R = 30 + 40 * pr;
+        ctx.globalAlpha = 0.4 * fade;
         ctx.fillStyle = spec.color;
         circle(ctx, x, y, R); ctx.fill();
         ctx.globalAlpha = fade;
@@ -2912,8 +2940,8 @@ export class Renderer {
         break;
       }
       case SHAPE.wardShell: {
-        const R = 22 + 6 * Math.sin(pr * Math.PI);
-        ctx.globalAlpha = 0.22 * fade;
+        const R = 32 + 8 * Math.sin(pr * Math.PI);
+        ctx.globalAlpha = 0.34 * fade;
         ctx.fillStyle = spec.color;
         poly(ctx, x, y, R, 6, this.t * 0.4); ctx.fill();
         ctx.globalAlpha = fade;
@@ -2924,8 +2952,8 @@ export class Renderer {
         break;
       }
       case SHAPE.puddle: {
-        const R = (c.reach || 40) * (0.45 + 0.2 * fade);
-        ctx.globalAlpha = 0.4 * fade;
+        const R = (c.reach || 40) * (0.55 + 0.25 * fade);
+        ctx.globalAlpha = 0.55 * fade;
         ctx.fillStyle = spec.color;
         circle(ctx, tx, ty, R); ctx.fill();
         ctx.globalAlpha = fade;
@@ -2936,7 +2964,10 @@ export class Renderer {
         break;
       }
       case SHAPE.trap: {
-        const s = 10 + 4 * fade;
+        const s = 16 + 6 * fade;
+        ctx.globalAlpha = 0.5 * fade;
+        ctx.strokeStyle = spec.color; ctx.lineWidth = 3;
+        circle(ctx, tx, ty, s * 1.7 + 10 * pr); ctx.stroke();
         ctx.globalAlpha = fade;
         ctx.fillStyle = spec.color;
         diamond(ctx, tx, ty, s); ctx.fill();
@@ -2947,28 +2978,31 @@ export class Renderer {
         break;
       }
       case SHAPE.detonate: {
-        const R = 10 + 22 * pr;
-        ctx.globalAlpha = fade;
-        ctx.strokeStyle = kit.edge; ctx.lineWidth = 3;
-        star(ctx, tx, ty, R, R * 0.45, 6); ctx.stroke();
+        const R = 16 + 34 * pr;
+        ctx.globalAlpha = 0.85 * fade;
         ctx.fillStyle = spec.color;
-        ctx.globalAlpha = 0.45 * fade;
-        star(ctx, tx, ty, R * 0.8, R * 0.35, 6); ctx.fill();
+        star(ctx, tx, ty, R, R * 0.45, 8); ctx.fill();
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2.5; ctx.stroke();
+        ctx.fillStyle = kit.core;
+        ctx.globalAlpha = 0.9 * fade;
+        circle(ctx, tx, ty, R * 0.3); ctx.fill();
         break;
       }
       case SHAPE.tether: {
         ctx.globalAlpha = fade;
-        ctx.strokeStyle = kit.edge; ctx.lineWidth = 4;
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 8;
         ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
-        ctx.strokeStyle = spec.color; ctx.lineWidth = 2;
+        ctx.strokeStyle = spec.color; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.strokeStyle = kit.core; ctx.lineWidth = 1.6;
         ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
         ctx.fillStyle = kit.core;
-        circle(ctx, tx, ty, 4); ctx.fill();
+        circle(ctx, tx, ty, 7); ctx.fill();
         break;
       }
       case SHAPE.blight: {
-        const R = (c.reach || 50) * (0.4 + 0.35 * pr);
-        ctx.globalAlpha = 0.3 * fade;
+        const R = (c.reach || 50) * (0.5 + 0.35 * pr);
+        ctx.globalAlpha = 0.45 * fade;
         ctx.fillStyle = spec.color;
         circle(ctx, tx, ty, R); ctx.fill();
         ctx.globalAlpha = fade;
@@ -2982,15 +3016,20 @@ export class Renderer {
       }
       case SHAPE.summonBurst: {
         ctx.globalAlpha = fade;
-        for (let i = 0; i < 5; i++) {
-          const ang = (i / 5) * Math.PI * 2 + pr * 1.2;
-          const rr = 10 + 16 * pr;
+        ctx.globalAlpha = 0.3 * fade;
+        ctx.fillStyle = spec.color;
+        circle(ctx, x, y, 14 + 22 * pr); ctx.fill();
+        ctx.globalAlpha = fade;
+        for (let i = 0; i < 6; i++) {
+          const ang = (i / 6) * Math.PI * 2 + pr * 1.2;
+          const rr = 16 + 30 * pr;
           ctx.fillStyle = i % 2 ? spec.color : kit.core;
-          diamond(ctx, x + Math.cos(ang) * rr, y + Math.sin(ang) * rr - 8 * pr, 4);
+          diamond(ctx, x + Math.cos(ang) * rr, y + Math.sin(ang) * rr - 12 * pr, 7);
           ctx.fill();
+          ctx.strokeStyle = kit.edge; ctx.lineWidth = 1.5; ctx.stroke();
         }
-        ctx.strokeStyle = kit.edge; ctx.lineWidth = 2;
-        circle(ctx, x, y, 8 + 10 * pr); ctx.stroke();
+        ctx.strokeStyle = kit.edge; ctx.lineWidth = 3;
+        circle(ctx, x, y, 14 + 22 * pr); ctx.stroke();
         break;
       }
       default: {

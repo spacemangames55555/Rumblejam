@@ -92,8 +92,11 @@ should play each of these and say whether it is right:
 - Whether the Savage still feels like a Savage after R-10 (its engine now pays
   a bounded amount; see §4).
 - Skill effects: every skill fire draws a class-coloured shape
-  (`js/content/skillfx.js`, 18 shapes × 14 class palettes). Whether they are
-  *good* is a judgment I have not made.
+  (`js/content/skillfx.js`, 18 shapes × 14 class palettes). R-14 made them
+  *visible* at play scale — a filled crescent for melee, larger casts, wider
+  beams. Whether they *feel* good in motion at horde density is a judgment I
+  could not make from frozen frames. `tools/fx_gallery.mjs` draws every shape
+  at a chosen moment for review; painted effect sprites drop in on top.
 
 ### 3.3 Class balance — the rest of the pass
 
@@ -108,9 +111,15 @@ Measured and not yet fixed:
 - **Crowd-clearing barely grows with level** for about half the roster, so
   the horde cannot grow across the run. `HORDE_REGION_RATE` in `js/arenas.js`
   was fitted around that and should be re-measured once it is fixed.
-- **Survival has not been measured.** Everything above is output, in god
-  mode. `node tools/region_pace.mjs --mortal` is the tool; nobody has yet
-  asked whether each class *lives* through each region.
+- **Survival is the biggest open question, and I could not answer it.** With
+  the player mortal (`node tools/region_pace.mjs --mortal`), the room bot dies
+  in most rooms of regions 1–5 with most classes; the tanky and self-healing
+  ones (Necromancer, Savage, Blacksmith, Priest) live. But the bot dies in
+  *region 1* too, so it cannot tell "too lethal" from "the bot doesn't dodge
+  like a person". R-15 fixed the one thing the arithmetic proves: regions 2–4
+  were hitting 1.2–1.6× harder, relative to health, than region 1. **Play
+  region 1–2 with a fragile class first.** If it is unfair, 45–80% of what
+  kills is telegraphed slams from specials and landmarks.
 - **Summoned animals now live (R-13), at a cost to the Hunter.** The Druid's
   pack stood 15–67% of a room and now stands 48–100%; the Hunter's hounds
   were immortal by a units bug and now die and return on their authored
@@ -195,6 +204,7 @@ the game:
 | `item_gate` | Two item modifiers are "sold and do nothing" | Both work. One probe lined up three targets for a bolt that already pierces three; the other ran in the one room where damage types are switched off. |
 | `heal_gate` | Ten heals never declared who they reach | A design call nobody had made. Made in ruling R-12: eight are self-heals, two (Priest's Intercession, Bard's Refrain) now reach the party. |
 | `statname_gate` | Three doc lines use a retired stat name | They did. |
+| `patch_gate` (2) | A coral planted with nothing to hit; no bounty mark in 20 s | Both fixtures. The "nothing to hit" room was a live horde room that kept spawning; the bounty check's seed draws a map with no bounty node. |
 | `rider_gate` | (went red during the Necromancer retune) | Its splash check could not tell splash from a piercing bolt. Stricter now. |
 
 **Still red:**
@@ -203,7 +213,6 @@ the game:
 |---|---|---|
 | `tree_dps` | `bard_ensemble` is −61% of its own class | **Real**, balance. |
 | `region_test` (3) | Map 1 leaves one seed at level 8 where 6–7 is wanted; two payout figures off | The expectation predates the level curve of R-7. Re-derive the expectation or retune map 1. |
-| `patch_gate` (2) | A coral planted with nothing to hit; no bounty mark in 20 s | Not investigated. |
 | `browser_test` (11) | Every case fails clicking a character card | **Broken test.** A 3,900-line browser suite written against a roster that no longer exists (`bulwark`, `facet`, `vesper`…). Porting it is its own job. |
 | `trait_gate` | Green today, and should not be trusted | The Blacksmith's `crystal_infusion` check passes or fails depending on an unrelated Necromancer number that leaks into its control run. |
 

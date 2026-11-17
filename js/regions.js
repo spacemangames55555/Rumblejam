@@ -144,7 +144,18 @@ export function expectedLevelAt(regionIndex, depth) {
 // grows its effective HP ×1.2 and will find region 8 lethal; that is the
 // card's price, not a tuning error.
 export const REGION_HP_MULT = [1.00, 4.74, 10.04, 10.04, 12.16, 14.64, 17.04, 20.92];
-export const REGION_DMG_MULT = [1.00, 2.57, 4.06, 4.06, 4.56, 5.11, 5.60, 6.34];
+// R-15 (17 Nov 2026): REGIONS 2-4 COME DOWN TO WHAT A CHARACTER'S HEALTH DOES.
+// The exponent above was applied to OUTPUT growth, and early on output grows
+// far faster than health: a character is x4.7 the damage at level 14 and only
+// x1.8 the effective health (health x armour x dodge, median of fourteen
+// classes x four seeds, cards spent). Measured, a hit in region 2 cost 1.43x
+// the share of a character's health it costs in region 1, region 3 1.60x,
+// region 4 1.17x. Those three now track effective-health growth, so a hit costs
+// what it does in region 1. Regions 5-8 already cost LESS than region 1 (0.65-
+// 0.83x) and are left as they are: nothing is made harder without evidence
+// that a player survives it, and the room bot cannot yet supply that (it dies
+// in region 1 too). Was [1.00, 2.57, 4.06, 4.06, ...].
+export const REGION_DMG_MULT = [1.00, 1.80, 2.54, 3.48, 4.56, 5.11, 5.60, 6.34];
 
 // ------------------------------------------------ the fodder axis (§4.3, §2.6)
 //
