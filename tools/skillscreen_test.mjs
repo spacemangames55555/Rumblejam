@@ -478,6 +478,12 @@ try {
       await P.waitFor(`return !document.getElementById('leave-confirm').classList.contains('hidden')?1:0`, 4000, 'confirm');
       await P.exec(`document.getElementById('leave-yes').click(); return 1;`);
       await P.waitFor(`return window.uv.mode==='lobby'?1:0`, 6000, 'lobby');
+      // A NEW CHARACTER OF EACH CLASS. The §5.6 card is the first pick of a
+      // character that has never played; since 18 Nov 2026 a character's build
+      // is SAVED (KNOWN-DEFECTS #43), so the Samurai this suite played above
+      // resumes with its opening pick taken and is — correctly — not offered it
+      // again. The sweep is about the card, so it asks it of fresh characters.
+      await P.exec(`window.uv.characters = window.uv.characters.filter(c => c.class !== '${id}'); return 1;`);
       await P.exec(`document.querySelector('.char-card[data-char="${id}"]').click(); return 1;`);
       await sleep(200);
       await startRun(P);
