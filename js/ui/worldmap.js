@@ -24,6 +24,7 @@ import { worldMapState } from '../worldmap.js';
 import { biomeCoverage, BIOMES } from '../biomes.js';
 import { bossForRegion, regionsWithAuthoredBoss, REGION_ANCHOR_LEVEL } from '../regions.js';
 import { WORLD_MAP, geoFor, pinPct } from '../content/mapgeo.js';
+import { CHAR_BY_ID } from '../content/characters.js';
 
 const $ = id => document.getElementById(id);
 let A = null;
@@ -39,6 +40,16 @@ const STATE_LABEL = {
   locked: 'LOCKED',
   unbuilt: 'NOT BUILT',
 };
+
+// Who is on the map: the class, the level the save holds, and the build's
+// size, so a reload that lost the build would be visible on this screen.
+function charLine(c) {
+  if (!c) return '';
+  const name = (CHAR_BY_ID[c.class] && CHAR_BY_ID[c.class].name) || c.class;
+  const ranks = Object.values((c.points && c.points.spent) || {}).reduce((a, r) => a + r, 0);
+  const gear = (c.items || []).length + ((c.carry && c.carry.weapons) || []).length;
+  return `${name} · level ${c.level || 1} · ${ranks} skill rank${ranks === 1 ? '' : 's'} · ${gear} piece${gear === 1 ? '' : 's'} of gear`;
+}
 
 export function showWorldMap(character, playerStore, opts = {}) {
   const el = $('screen-world');
@@ -67,8 +78,12 @@ export function showWorldMap(character, playerStore, opts = {}) {
         <div>
           <div class="ov-title">THE WORLD</div>
           <div class="ov-sub">${st.built} of ${st.total} regions built · frontier ${st.frontier} · pick the next region on the Earth</div>
+          <div class="world-char small" id="world-char">${escapeHtml(charLine(character))}</div>
         </div>
-        ${opts.canLeave ? '<button id="world-back">Back</button>' : ''}
+        <div class="row world-head-act">
+          ${A && A.resetCharacter ? '<button id="world-reset" title="Start this character over: back to region 1 and level 1, with no skills or gear">Reset character</button>' : ''}
+          ${opts.canLeave ? '<button id="world-back">Back</button>' : ''}
+        </div>
       </div>
       <div class="world-earth" id="world-earth">
         <img class="world-plate" src="${WORLD_MAP}" alt="Earth" onerror="this.style.display='none'">
@@ -138,5 +153,24 @@ export function showWorldMap(character, playerStore, opts = {}) {
   });
   const back = $('world-back');
   if (back) back.onclick = () => { sfx.click(); A.back(); };
+  // RESET ASKS TWICE. It throws away the map and the build together and
+  // cannot be undone, so the first click arms it and says so; a second click
+  // within five seconds does it. Anything else disarms it.
+  const reset = $('world-reset');
+  if (reset) {
+    let armT = null;
+    const disarm = () => { clearTimeout(armT); armT = null; reset.classList.remove('danger'); reset.textContent = 'Reset character'; };
+    reset.onclick = () => {
+      sfx.click();
+      if (!armT) {
+        reset.classList.add('danger');
+        reset.textContent = 'Click again to reset — cannot be undone';
+        armT = setTimeout(disarm, 5000);
+        return;
+      }
+      disarm();
+      A.resetCharacter();
+    };
+  }
   paintDossier(frontier.index);
 }

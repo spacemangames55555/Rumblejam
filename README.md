@@ -780,7 +780,15 @@ never loads them:
   sample — the list read off `Sim.carryState()` so a field added to the engine
   is asserted here without anyone remembering to. It also tests the opening-pick
   guard separately, because a carried player arrives holding unspent points and
-  `skillPoints <= 0` cannot tell that from a new character.
+  `skillPoints <= 0` cannot tell that from a new character. Since 18 Nov 2026
+  it also holds the SAVE: the build stored on a character survives the storage
+  round trip and load validation, a new session entering region 3 from it gets
+  every carried field back, a forged save is refused, and Reset starts over.
+- `node --experimental-websocket tools/save_persist_test.mjs` (browser) — **a
+  character's level, skills and gear are saved with its region progress, in
+  the real page.** Builds a Necromancer, abandons the run, reads localStorage,
+  RELOADS the page, checks the world map and the region start, then resets.
+  KNOWN-DEFECTS #43.
 - `node tools/replay_gate.mjs` — **the same seed replays the same region.** Run
   continuity rests on a wiped party getting its layout back, and reusing the seed
   only guarantees that when nothing else feeds the generator — which this project

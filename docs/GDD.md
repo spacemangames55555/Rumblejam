@@ -1857,11 +1857,16 @@ There is no separate world save. World progress lives on the character:
   points: { spent: {...}, unspent: n },
   items: [...],
   frontier: 2,
-  parked: { region, tree, cleared, difficulty }
+  parked: { region, tree, cleared, difficulty },
+  carry: { level, xp, skillRanks, skillPoints, loadout, items, weapons, boosts, … }
 }
 ```
 
-Opening a character in solo sets the world map to that character's frontier and restores its parked tree. A character can never be in two worlds at once, because the character **is** the world.
+Opening a character in solo sets the world map to that character's frontier, restores its parked tree **and restores its build**. A character can never be in two worlds at once, because the character **is** the world.
+
+**The build is saved with the frontier (18 Nov 2026).** `carry` is the Sim's carry block for the character (`CARRY_FIELDS` in `js/game.js`); `level`, `points` and `items` above are a readable summary of it. Until then nothing wrote them: the frontier was saved at every boss kill and the build lived only in the session, so a reload kept the map and threw away the character — a region-3 frontier with a level-1 body. The host's build is now written at the end of every region (win or wipe), when a region is left halfway, and on every return to the node map, and a later session entering a region starts from it. A guest's build is still session-only, because per-peer saves do not travel yet. `carry_gate` holds the save functions and `save_persist_test` holds the page: play, leave, reload, resume, reset.
+
+**Reset character** (world map) starts the character over — frontier 1, no parked region, level 1, no build — and asks twice. It resets the map and the build together, never one without the other, because one without the other is exactly the state a player cannot recover from.
 
 A separate small player-level store holds unlocked classes and nothing else.
 

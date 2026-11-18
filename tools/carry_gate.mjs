@@ -19,6 +19,8 @@
 // is a single field nobody owns.
 
 import { Sim } from '../js/game.js';
+import { newCharacter, storeProgress, savedCarry, resetCharacter, validateCharacter, onRegionCleared } from '../js/saves.js';
+import { ITEMS } from '../js/content/items.js';
 
 let failures = 0;
 const ok = m => console.log(`✓ ${m}`);
@@ -143,5 +145,49 @@ else fail('a retry re-offered the opening pick');
   }
 }
 
-console.log(failures ? `\n${failures} CARRY GATE FAILURE(S)` : '\nPROGRESSION SURVIVES A REGION BOUNDARY AND A WIPE');
+// ---- PATH 3: the SAVE — close the tab, come back, enter a region ----------
+// Reported 18 Nov 2026: a Necromancer with a region-3 frontier loaded at level
+// 1, because the frontier was saved and the build was not. The save is now
+// what js/main.js writes (storeProgress), serialised exactly as localStorage
+// stores it, validated as a load validates it, and handed to a NEW Sim.
+{
+  // Gear the play-through may not have bought, so the item path is exercised.
+  const geared = { ...carry, items: [...carry.items, ITEMS[0].id] };
+  const c = newCharacter('c_toh_necromancer_1', 'toh_necromancer', { name: 'P' });
+  onRegionCleared(c, 1); onRegionCleared(c, 2);          // a region-3 frontier, as reported
+  storeProgress(c, geared);
+  const loaded = JSON.parse(JSON.stringify(c));           // localStorage round trip
+  const problems = validateCharacter(loaded);
+  if (problems.length) fail(`a saved character fails its own load validation: ${problems.join('; ')}`);
+  else ok(`a saved character survives the storage round trip and load validation (frontier ${loaded.frontier}, level ${loaded.level}, ${Object.keys(loaded.points.spent).length} skill(s) ranked, ${loaded.items.length} item(s))`);
+  const resumed = play(3, 4242, savedCarry(loaded), { run: false }).entered;
+  const want = geared;
+  const bad = FIELDS.filter(k => JSON.stringify(resumed[k]) !== JSON.stringify(want[k]));
+  if (bad.length) fail(`a NEW session entering region 3 from the save lost ${bad.length} field(s): ${bad.slice(0, 4).join(', ')}`);
+  else ok(`a NEW session entering region 3 from the save gets every one of the ${FIELDS.length} carried fields back — level ${resumed.level}, the skills, the loadout, the gear`);
+  if (!resumed.openingOffered) ok('and is not offered the opening pick again');
+  else fail('a character resumed from the save was offered the opening pick again');
+
+  // A save that names something this build does not have is REFUSED, not
+  // applied: it would reach the item code as an unknown id.
+  const forged = JSON.parse(JSON.stringify(loaded));
+  forged.carry.items.push('no_such_item');
+  forged.carry.skillRanks.no_such_skill = 2;
+  const why = validateCharacter(forged);
+  if (why.some(w => w.includes('no_such_item')) && why.some(w => w.includes('no_such_skill'))) ok(`a save naming an unknown item and skill is refused at load (${why.length} problem(s) reported)`);
+  else fail(`a forged save was not refused: ${JSON.stringify(why)}`);
+
+  // ---- RESET: the map and the build, together --------------------------
+  resetCharacter(loaded);
+  const after = play(1, 777, savedCarry(loaded), { run: false }).entered;
+  if (loaded.frontier === 1 && loaded.parked === null && loaded.carry === null && loaded.level === 1
+      && loaded.id === c.id && loaded.class === c.class && validateCharacter(loaded).length === 0
+      && after.level === 1 && after.openingOffered && Object.keys(after.skillRanks).length === 0) {
+    ok('Reset puts the character back to region 1 and level 1 with no skills or gear, keeps its id and class, and the next region offers the opening pick');
+  } else {
+    fail(`reset left frontier ${loaded.frontier}, level ${loaded.level}, carry ${JSON.stringify(loaded.carry)}; the next Sim is level ${after.level}, opening ${after.openingOffered}`);
+  }
+}
+
+console.log(failures ? `\n${failures} CARRY GATE FAILURE(S)` : '\nPROGRESSION SURVIVES A REGION BOUNDARY, A WIPE AND A SAVE');
 process.exit(failures ? 1 : 0);

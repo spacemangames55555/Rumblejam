@@ -2056,3 +2056,15 @@ cooldowns onto 1200 with the rest of the grid. Either way, `sim_test`'s DPS gate
 at 1200 ms is the acceptance check.
 
 **Not fixed** in this pass.
+
+## #43 — (High) A character's level, skills and gear were not saved; only its region progress was — FIXED 18 Nov 2026
+
+**Reported by the owner.** A Necromancer whose save said region 3 (Great Britain) loaded at level 1.
+
+**Cause.** The character save declared `level`, `points` and `items` and nothing ever wrote them. The frontier was written to localStorage at every boss kill. Level, XP, skill ranks and points, loadout, items and weapons were only ever in the session's carry (`app.carry`). That carry was dropped on a page reload, and on purpose on Abandon Run ("a new run starts at level 1"). So the save kept the map and lost the character. `carry_gate` was green throughout because it tested the session carry, which worked. The comment above it said the save was a separate decision; that decision had never been made.
+
+**Fixed.** `js/saves.js` `storeProgress` writes the host's carry block onto the character, and `savedCarry` hands it to a new Sim. `js/main.js` saves at every region end, on leaving a region halfway (beside the parked tree, so a resume is consistent), and on every return to the node map. `validateCharacter` refuses a saved build that names a skill, item or weapon this build does not have. **Reset character** on the world map (two clicks) starts the character over: map and build together.
+
+**Gated.** `carry_gate` adds the save path: store, JSON round trip, validate, a new Sim in region 3 gets all 18 carried fields back, a forged save is refused, and reset. Three planted defects are each caught. `save_persist_test` (browser) plays the real page: build, abandon, check localStorage, **reload**, see the level on the world map, enter with the same build, reset. Two planted wiring defects are each caught.
+
+**A save made before this fix has no build in it.** Its level cannot be recovered, because it was never written. The way forward for such a character is Reset.

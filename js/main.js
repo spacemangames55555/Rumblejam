@@ -26,7 +26,7 @@ import { initGloss } from './ui/gloss.js';
 import { initMapScreen, showMapScreen, hideMapScreen, updateMapScreen, isMapScreenOpen } from './ui/mapscreen.js';
 import { initWorldMap, showWorldMap, hideWorldMap, isWorldMapOpen } from './ui/worldmap.js';
 import { loadAll, saveAll, newCharacter, newPlayerStore, onRegionCleared, recordUnlock, validateCharacter,
-  park, unpark, exportBundle, importBundle, STORAGE_WARNING } from './saves.js';
+  park, unpark, exportBundle, importBundle, STORAGE_WARNING, storeProgress, savedCarry, resetCharacter } from './saves.js';
 import { showHud, updateHud, toast, banner, afterBanners, bannersActive, onBannerShown } from './ui/hud.js';
 import { DEFAULT_DIFFICULTY } from './worldmap.js';
 import { initOverlays, closeAllOverlays, showShop, closeShop, isShopOpen, updateShopMeta, showLevelup, closeLevelup, showTreasure, closeTreasure, showSheet, closeSheet, isSheetOpen, updateSheetMeta, showBoon, closeBoon, showOpening, closeOpening, showSkills, closeSkills, isSkillsOpen, updateSkillsMeta } from './ui/overlays.js';
@@ -150,6 +150,16 @@ initMapScreen({
 initWorldMap({
   enterRegion: hostEnterRegion,
   back: () => { hideWorldMap(); refreshLobby(); },
+  // START THIS CHARACTER OVER: frontier, parked region and build together.
+  resetCharacter: () => {
+    if (app.role === 'client' || !app.character) return;
+    resetCharacter(app.character);
+    app.carry = null;
+    app.objectiveHistory = [];
+    saveAll(app.characters, app.player);
+    showWorldMap(app.character, app.player, { canLeave: true });
+    toast('Character reset — region 1, level 1');
+  },
 });
 
 // ---------------- saves & the world map ----------------
@@ -229,7 +239,8 @@ function hostContinueToWorldMap() {
 //
 // It is true now, and `tools/carry_gate.mjs` is what keeps it true — the
 // progression is snapshotted at the results screen and written back over the
-// new Sim's players. Session only; nothing here is saved to disk.
+// new Sim's players. The host's build is ALSO saved to disk on its character
+// (saveBuild, 18 Nov 2026), so the next session resumes it too.
 function hostRetryRegion() {
   if (app.role !== 'host') return;
   if (app.hostT) app.hostT.broadcast({ t: 'retry', regionIndex: app.regionIndex });
@@ -626,7 +637,23 @@ function parkCurrentRegion() {
   const sim = app.sim;
   if (!sim || !app.character || sim.over) return;
   park(app.character, sim.regionIndex, sim.floor, sim.clearedKeys(), sim.difficulty);
+  // the build the parked nodes were cleared with, so a resume is consistent
+  saveBuild();
   saveAll(app.characters, app.player);
+}
+
+// THE HOST'S CHARACTER IS SAVED WITH ITS BUILD — level, xp, skill ranks and
+// points, loadout, items, weapons, stat boosts, materials. Called at the end of
+// every region (win or wipe), when a region is left halfway, and every time the
+// party returns to the node map after a fight, so closing the tab costs at most
+// the fight in progress. Host-side: the host owns the Sim and its own character;
+// a guest's save does not travel.
+function saveBuild(carry = null) {
+  if (app.role === 'client' || !app.character) return false;
+  const all = carry || (app.sim ? app.sim.carryState() : null);
+  const mine = all && all[app.myIdx];
+  if (!mine || !storeProgress(app.character, mine)) return false;
+  return saveAll(app.characters, app.player);
 }
 
 // A run ending is not the end of the session. The whole party goes back to
@@ -661,9 +688,10 @@ function hostReturnToLobby(clearChars = true) {
   app.snaps = [];
   app.meta = null;
   app.predicted = null;
-  // A NEW RUN STARTS AT LEVEL 1. This is the character-select path, not the
-  // world map — the run is over and the next one must not inherit its build.
-  // Carry survives a region boundary and a retry, and nothing else.
+  // The SESSION carry ends here. The host's build does not: it is saved on the
+  // character (saveBuild) and the next run with that character resumes it.
+  // Starting over at level 1 is the world map's Reset, which resets the map
+  // and the build together.
   app.carry = null;
   app.objectiveHistory = [];
   app.lobby = { code: app.hostT ? app.hostT.code : null, codePending: false, players };
@@ -915,11 +943,16 @@ function hostStartRun(seedOverride = null) {
     const seed = seedOverride ?? fromUrl ?? randomRunSeed();
     app.regionSeed = seed;
     // `carry` rides the party member because that is the only thing `_makePlayer`
-    // is handed. Absent on the first region of a run, which is exactly when a
-    // player SHOULD arrive at level 1 with one point and an opening pick.
+    // is handed. The session's carry first (a region boundary or a retry); then,
+    // for the HOST, the build saved on their character — so a page reload or a
+    // trip back to character select resumes the character the frontier belongs
+    // to, not a level-1 body (js/saves.js storeProgress). Absent only for a
+    // character that has never played, which is exactly when a player SHOULD
+    // arrive at level 1 with one point and an opening pick. A guest's build is
+    // still session-only: per-peer saves do not travel yet.
     app.party = app.lobby.players.map((p, i) => ({
       idx: i, key: p.key, name: p.name, charId: p.charId, color: p.color,
-      carry: (app.carry && app.carry[i]) || null,
+      carry: (app.carry && app.carry[i]) || (p.isHost ? savedCarry(app.character) : null),
     }));
     app.myIdx = 0;
     // The difficulty rides the start message as well as the Sim. Clients do not
@@ -1413,6 +1446,8 @@ function handleEvent(ev) {
         heldShop = null;
       }
       if (app.mode === 'run') showMapScreen(mapScreenState());
+      // Back on the node map after a fight and its shop: the build is saved.
+      if (app.role !== 'client' && app.sim) saveBuild();
       break;
     }
     case 'arena':
@@ -1506,7 +1541,7 @@ function handleEvent(ev) {
       // added later inherits it. Host-side only: the host owns every Sim
       // player, so one capture covers the whole party without any save
       // travelling between peers.
-      if (app.sim && app.role !== 'client') app.carry = app.sim.carryState();
+      if (app.sim && app.role !== 'client') { app.carry = app.sim.carryState(); saveBuild(app.carry); }
       app.mode = 'results';
       showHud(false);
       heldShop = null;

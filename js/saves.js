@@ -10,6 +10,8 @@
 
 import { REGIONS, REGION_BY_INDEX, TOTAL_REGIONS } from './regions.js';
 import { TREES, TREES_BY_CLASS, SKILL_BY_ID } from './skills.js';
+import { ITEM_BY_ID } from './content/items.js';
+import { WEAPON_BY_ID } from './content/weapons.js';
 
 export const SAVE_VERSION = 1;
 const CHAR_KEY = 'rj.characters.v1';
@@ -27,6 +29,10 @@ export function newCharacter(id, classId, opts = {}) {
     items: [],
     frontier: 1,                      // highest region reached
     parked: null,                     // { region, tree, cleared, difficulty }
+    // THE BUILD: the Sim's carry block for this character (js/game.js
+    // CARRY_FIELDS — level, xp, skill ranks and points, loadout, items,
+    // weapons, stat boosts, materials). null until the character has played.
+    carry: null,
   };
 }
 
@@ -34,6 +40,47 @@ export function newPlayerStore() {
   // Deliberately small. Unlocked classes, shared across a player's characters,
   // and nothing else — every other piece of state belongs to a character.
   return { v: SAVE_VERSION, unlockedClasses: [] };
+}
+
+// ---------------------------------------------------------------- the build
+//
+// THE BUILD IS SAVED WITH THE FRONTIER (reported 18 Nov 2026). A Necromancer
+// with a region-3 frontier loaded at level 1: the frontier was written to disk
+// at every boss kill, and level, skills and gear lived only in the session's
+// carry — `level` and `points` above were declared, validated and written by
+// nothing. Closing the tab, or going back to character select, kept the map
+// and threw away the character. The carry block is now part of the save.
+//
+// `level`, `points` and `items` are kept as a readable summary of the same
+// block, so a save file says what the character is without reading the Sim's
+// field names.
+export function storeProgress(character, carry) {
+  if (!character || !carry || typeof carry !== 'object') return false;
+  character.carry = JSON.parse(JSON.stringify(carry));
+  character.level = carry.level >= 1 ? carry.level : 1;
+  const spent = {};
+  for (const [id, rank] of Object.entries(carry.skillRanks || {})) if (rank >= 1) spent[id] = rank;
+  character.points = { spent, unspent: Math.max(0, carry.skillPoints | 0) };
+  character.items = Array.isArray(carry.items) ? [...carry.items] : [];
+  return true;
+}
+
+// What a new region hands this character's player: its saved build, or null
+// for a character that has never played (who should start at level 1 with an
+// opening pick). A copy, so a Sim can never write through to the save.
+export function savedCarry(character) {
+  return character && character.carry ? JSON.parse(JSON.stringify(character.carry)) : null;
+}
+
+// RESET: the character starts over — world map AND build. Both, together,
+// because resetting one without the other is exactly the state a player could
+// not recover from: a region-3 frontier with a level-1 body. Keeps the id,
+// class and name, so the lobby's pick still maps to this character.
+export function resetCharacter(character) {
+  const fresh = newCharacter(character.id, character.class, { name: character.name });
+  for (const k of Object.keys(character)) delete character[k];
+  Object.assign(character, fresh);
+  return character;
 }
 
 // ---------------------------------------------------------------- frontier
@@ -106,9 +153,9 @@ export function validateCharacter(c) {
   if (!TREES_BY_CLASS[c.class]) problems.push(`class "${c.class}" has no trees in this build`);
   if (!(c.level >= 1)) problems.push(`level ${c.level}`);
   if (!(c.frontier >= 1 && c.frontier <= TOTAL_REGIONS)) problems.push(`frontier ${c.frontier} outside 1..${TOTAL_REGIONS}`);
+  const own = new Set((TREES_BY_CLASS[c.class] || []).flatMap(t => TREES[t].skills.map(s => s.id)));
   if (!c.points || typeof c.points.spent !== 'object' || !(c.points.unspent >= 0)) problems.push('points block malformed');
   else {
-    const own = new Set((TREES_BY_CLASS[c.class] || []).flatMap(t => TREES[t].skills.map(s => s.id)));
     for (const [id, rank] of Object.entries(c.points.spent)) {
       if (!SKILL_BY_ID[id]) problems.push(`spent points on unknown skill "${id}"`);
       else if (!own.has(id)) problems.push(`spent points on "${id}", which is not a ${c.class} skill`);
@@ -118,6 +165,24 @@ export function validateCharacter(c) {
   if (c.parked) {
     if (!REGION_BY_INDEX[c.parked.region]) problems.push(`parked in region ${c.parked.region}, which does not exist`);
     if (!Array.isArray(c.parked.cleared)) problems.push('parked.cleared is not an array');
+  }
+  // The saved build is applied straight onto a Sim player, so anything it names
+  // has to exist in THIS build: an item, weapon or skill removed since the save
+  // was written would otherwise reach the item and skill code as an unknown id.
+  if (c.carry != null) {
+    const k = c.carry;
+    if (typeof k !== 'object' || Array.isArray(k)) problems.push('carry is not an object');
+    else {
+      if (!(k.level >= 1)) problems.push(`carry level ${k.level}`);
+      if (k.skillRanks != null && typeof k.skillRanks !== 'object') problems.push('carry.skillRanks is not an object');
+      for (const id of Object.keys(k.skillRanks || {})) if (!own.has(id)) problems.push(`carry ranks "${id}", which is not a ${c.class} skill`);
+      if (k.loadout != null && !Array.isArray(k.loadout)) problems.push('carry.loadout is not an array');
+      for (const id of Array.isArray(k.loadout) ? k.loadout : []) if (id !== null && !own.has(id)) problems.push(`carry slots "${id}", which is not a ${c.class} skill`);
+      if (k.items != null && !Array.isArray(k.items)) problems.push('carry.items is not an array');
+      for (const id of Array.isArray(k.items) ? k.items : []) if (!ITEM_BY_ID[id]) problems.push(`carry holds item "${id}", which this build does not have`);
+      if (k.weapons != null && !Array.isArray(k.weapons)) problems.push('carry.weapons is not an array');
+      for (const w of Array.isArray(k.weapons) ? k.weapons : []) if (!w || !WEAPON_BY_ID[w.id]) problems.push(`carry holds weapon "${w && w.id}", which this build does not have`);
+    }
   }
   return problems;
 }
