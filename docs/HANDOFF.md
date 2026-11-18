@@ -56,6 +56,7 @@ failures.
 | **Eight curses** | Each is one lever read at one place in the code; Gloom, the last with no effect, shrouds your sight (R-19). | `curse_gate` |
 | **Eight ground hazards** | Brush, bloodmire, fae rings, quicksand, rot pools, black ice, riptides and a sweeping bushfire, from five primitives; players only, plain fights only (R-20). | `js/hazards.js`, `hazard_gate` |
 | **Eight nests** | Every Nest Purge besieges its region's own nest, which births the region's commonest creature (R-21). | `region_wire_gate` |
+| **Saves keep the character** | Level, skills, loadout and gear are saved with the region progress, and Reset character (world map) starts both over (KNOWN-DEFECTS #43, reported by the owner 18 Nov). | `carry_gate`, `save_persist_test` |
 | **Level curve** | Every fight pays about 1.5 levels; a run ends near level 77. | `level_curve_gate` (plays all 48 fights) |
 | **Enemy health and damage** | Follow the level a party actually arrives at, measured against fourteen real builds. Fodder dies to one hit everywhere. | `tools/region_curve.mjs`, `js/regions.js` |
 | **Horde density** | Rooms stay full without pinning at the cap, eight regions × three maps × fourteen classes. | `tools/region_pace.mjs` |

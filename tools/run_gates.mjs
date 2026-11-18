@@ -38,7 +38,7 @@ const ALSO = ['skill_sweep.mjs', 'phase2_gates.mjs', 'tree_dps.mjs'];
 // Need a real browser (Chromium via Playwright) — run with --browser.
 const BROWSER = new Set([
   'browser_test.mjs', 'skillscreen_test.mjs', 'coop_guest_view_test.mjs',
-  'mapscreen_gate.mjs', 'render_parity_test.mjs',
+  'mapscreen_gate.mjs', 'render_parity_test.mjs', 'save_persist_test.mjs',
 ]);
 // Need arguments to mean anything; listed with the arguments that make them a gate.
 const WITH_ARGS = { 'validate_items.mjs': ['js/content/items.js'] };

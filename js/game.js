@@ -323,10 +323,11 @@ export class Sim {
   // player earned is captured before the old Sim is dropped and written back
   // over the fresh one here.
   //
-  // THIS IS SESSION STATE, NOT A SAVE. Nothing here is persisted: the character
-  // save's `level` and `points` fields remain what they have always been —
-  // declared, validated, and written by nothing. Quitting still loses the
-  // character. That is existing behaviour and a separate decision.
+  // SAVED SINCE 18 NOV 2026. js/main.js writes the host's block onto its
+  // character (js/saves.js storeProgress) at every region end, on leaving a
+  // region halfway and on every return to the node map, and hands it back here
+  // when a later session enters a region. The Sim itself still knows nothing
+  // of saves: a carry block in, a carry block out.
   //
   // ONE LIST, READ AND WRITTEN BY THE SAME CONSTANT, because the failure this
   // fixes was two lists disagreeing about who owned a field.
